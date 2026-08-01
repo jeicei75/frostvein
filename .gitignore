@@ -1,0 +1,25 @@
+# --- BMad: vendored core is ignored; only our own surface is tracked ---
+_bmad/*
+!_bmad/scripts/
+_bmad/scripts/*
+!_bmad/scripts/session_tokens.py
+!_bmad/scripts/tests/
+_bmad/scripts/tests/*
+!_bmad/scripts/tests/test_session_tokens.py
+!_bmad/custom/
+_bmad/custom/*
+!_bmad/custom/bmad-create-story.toml
+!_bmad/custom/bmad-dev-story.toml
+!_bmad/custom/bmad-code-review.toml
+.claude/
+.agents/
+
+# --- Rust ---
+target/
+
+# --- secrets ---
+.env*
+*secret*
+*token*
+*.pem
+*.key
