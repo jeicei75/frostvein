@@ -23,3 +23,7 @@ target/
 *token*
 *.pem
 *.key
+
+# --- re-includes that must come AFTER the secret patterns (*token* matches these) ---
+!_bmad/scripts/session_tokens.py
+!_bmad/scripts/tests/test_session_tokens.py
