@@ -4,7 +4,7 @@ baseline_commit: 5675630825df557cb829b1427ad4d54075f38ba3
 
 # Story 1.2: The Daemon Serves the World
 
-Status: review
+Status: done
 
 ## Story
 
@@ -54,6 +54,66 @@ so that any client can receive the full world state on connect.
   - [x] `malformed_input_is_dropped_and_daemon_survives` — after reading the snapshot, send `not json\n` and `{"type":"bogus"}\n`, drop the connection, then open a **new** connection and assert it still receives a valid `Snapshot`.
   - [x] `client_disconnect_does_not_kill_daemon` — connect and drop immediately without reading, then assert a fresh connection is still served.
 - [x] **Green gate** (AC: 9) — run the four commands under Verification and fix whatever they surface.
+
+### Review Findings (2026-08-02)
+
+All 9 ACs verified MET (gate re-run independently; wire contents decoded live and cross-checked
+against world physics). No scope creep: `crates/tui/` untouched, dependency set matches the spec
+table exactly, no deferred-story feature implemented. Findings below are test-coverage holes and
+robustness limits, not AC failures.
+
+**Decisions needed**
+
+- [x] [Review][Decision] No resource bounds on a misbehaving local client — five confirmed, one root cause: (a) `accept` hot-spins forever on a sticky error — under `ulimit -n 128` + 300 connections the daemon wrote 2.3 GB of `accept error: Too many open files` and never recovered [crates/simd/src/main.rs:29-36]; (b) `BufReader::lines()` has no length cap — 200 MB with no `\n` drove RSS 11 MB → 225 MB [main.rs:48]; (c) that same line is echoed verbatim to stderr, ~1:1 log amplification [main.rs:50]; (d) no `set_write_timeout`, so a connected-but-never-reading client pins a thread forever mid-`write_all` on the 6.9 MB line — 20 clients → 21 permanent threads [main.rs:43]; (e) unbounded thread-per-connection and `thread::spawn` is unwrapped on the main thread, so creation failure kills the whole daemon — 1400 idle connections → 1401 live threads, none reclaimed [main.rs:33]. Tension: YAGNI is policy, phase one is localhost-only (NFR1), and the story defers commands to AD-10 — but Story 2.1 makes inbound traffic real, and the only client will be frostvein's own TUI, so a buggy client trips these too.
+- [x] [Review][Decision] Inbound-stream semantics that bite Story 2.1 — (a) one non-UTF-8 byte closes the connection: `lines()` yields `Err(InvalidData)` and the `Err` arm `break`s. Confirmed asymmetry — `not json\n` keeps the connection open (correct per AC6), `\xff\n` sends FIN [main.rs:49-54]; (b) a client half-closing with `shutdown(SHUT_WR)` to signal "I will never send commands" makes `lines()` return `None`, tearing down the read direction it still wants [main.rs:48-56]. Both harmless in 1.2 (nothing follows the snapshot); both cost the client its delta stream in 2.1. Fixing (b) conflicts with bounding idle threads above — hence a decision, not a patch.
+
+**Decision resolutions (Wolf, 2026-08-02)**
+
+- Decision 1 → **fix all five now.** `ACCEPT_BACKOFF` on sticky accept errors, `MAX_LINE_BYTES`
+  (64 KiB) cap, `LOG_EXCERPT_CHARS` (200) truncation with the true byte count, `WRITE_TIMEOUT`
+  (30 s), `MAX_CONNECTIONS` (256), and `thread::Builder::spawn` so a creation failure logs
+  instead of unwinding `main`. Verified live: 5000 bytes of input now yields 251 bytes of log.
+- Decision 2a → **fixed.** Inbound lines are read as bytes and lossily converted, so a stray
+  byte is logged and dropped like any other unrecognized input. Verified live: the connection
+  stays open after `\xff`.
+- Decision 2b → **left as-is with a `// NOTE:`.** Implementing it is not possible as a targeted
+  fix: half-close and full close are indistinguishable at read EOF, so keeping the connection
+  open would park a thread on *every* normal disconnect, and 1.2 has no write path to detect a
+  dead peer. Story 2.1's delta writes supply that reclaim path — the NOTE at
+  `crates/simd/src/main.rs` says so explicitly and hands 2.1 the change.
+
+**Patches** — all applied; re-verified by mutation testing (see below)
+
+- [x] [Review][Patch] Material and tile-variant mapping is never pinned — `snapshot_mirrors_world_grid` asserts `snap.tiles[i] == tile(world.tile(pos))`, running both sides through the function under test, so it proves ordering but not mapping. Confirmed: swapping `Ice`↔`Snow`, or `Solid`↔`Ramp`, leaves all 15 tests green. Same recurring class Story 1.1's review flagged [crates/simd/src/bridge.rs:88]
+- [x] [Review][Patch] Ordering probe cannot detect an x/y transposition — `Dims::DEFAULT` is square (128×128) and the three probes are the first Empty/Solid/Ramp in scan order, which cluster at low x/y; add a probe at a position with x≠y [crates/simd/src/bridge.rs:73-89]
+- [x] [Review][Patch] No test decodes a hand-written JSON literal — a *symmetric* rename (e.g. dropping `#[serde(rename = "type")]`) passes the whole suite while breaking every external client, including Story 1.3's [crates/protocol/src/lib.rs:83-110]
+- [x] [Review][Patch] `protocol_shapes_are_serde_types` asserts nothing — `assert_wire_type` has an empty body (a compile-time bound the derives already guarantee) and `assert_eq!(snapshot.tiles.len(), 2)` restates a literal written two lines above; it also builds an incoherent value (`dims 1×2×3` with 2 tiles) [crates/protocol/src/lib.rs:84-110]
+- [x] [Review][Patch] `snapshot_reads_tick_from_world` is a tautology — both sides are `0`; confirmed that replacing `tick: world.tick()` with `tick: 0`, the exact AD-1 fabrication the field exists to prevent, leaves the suite green [crates/simd/src/bridge.rs:155-160]
+- [x] [Review][Patch] `malformed_input_is_dropped_and_daemon_survives` can pass without the daemon ever reading the bad lines — nothing synchronises before `drop(first)`, and the "logged to stderr" half of AC6 is asserted nowhere (stderr is inherited, not piped). Confirmed a `panic!()` in serve's unrecognized-line arm is invisible to all three e2e tests [crates/simd/tests/serve.rs:84-98]
+- [x] [Review][Patch] AC7 names three disconnect timings, only one is tested — `client_disconnect_does_not_kill_daemon` covers "before reading"; mid-snapshot (partial `write_all` → `BrokenPipe`) and after-snapshot are untested, and mid-snapshot is where the error handling actually matters [crates/simd/tests/serve.rs:101-108]
+- [x] [Review][Patch] `std::env::args()` panics on non-UTF-8 argv before any error handling — confirmed `simd $'\xff'` panics with a raw backtrace instead of an anyhow error; also, port errors name neither the argument nor the valid range (`simd 70000` → "number too large to fit in target type") [crates/simd/src/main.rs:15]
+- [x] [Review][Patch] The wire's row-major invariant is never asserted — `tiles` and `dims` are copied from independent accessors with no check that `tiles.len() == x*y*z`; a client following the documented index formula would read out of bounds if they ever diverge [crates/simd/src/bridge.rs:1-25]
+- [x] [Review][Patch] Test helpers block forever instead of failing — neither `Daemon::spawn`'s stdout read nor `read_snapshot`'s socket read has a timeout, so a daemon that binds but never writes hangs `cargo test` indefinitely rather than failing [crates/simd/tests/serve.rs:24,54]
+- [x] [Review][Patch] Correct the `Vec<()>` invariant note — the Dev Notes claim it "deserializes only from an empty array"; confirmed `[null,null,null]` decodes to a length-3 `Vec<()>` (it does reject `[1,2]`). Story 1.3's client inherits the assumption [crates/protocol/src/lib.rs:70-71]
+
+**Mutation evidence (post-patch).** The review's central finding was that a green suite was not
+proof, so each fix was checked by sabotage rather than by inspection:
+
+| Sabotage | Before | After |
+| --- | --- | --- |
+| `Ice` ↔ `Snow` in `material()` | survived | **killed** |
+| `Solid` ↔ `Ramp` in `tile()` | survived | **killed** |
+| `panic!()` on every inbound line | survived | **killed** |
+| x/y transposed in the row-major index | survived | **killed** |
+| reversed tile order | killed | killed |
+| `tick: world.tick()` → `tick: 0` | survived | **still survives — irreducible** |
+
+The last one cannot be closed in this story: `world.tick()` is always `0` until Story 2.1 advances
+it, so no assertion can distinguish the two. The test that appeared to cover it was deleted rather
+than left as false assurance, and `crates/simd/src/bridge.rs` carries a `// NOTE:` saying AD-1 is
+upheld here by inspection, not by the suite.
+
+**Dismissed as noise (7):** `speed` should be `Paused` not `Normal` (AC3 mandates `normal`; spec wins); `Speed::Paused`/`Fast` unreachable (protocol vocabulary is deliberately complete per the skeleton, used in 2.3); `println!`/`eprintln!` panic when stdio is closed (not a real scenario for a dev daemon); `_ => {}` inside the ordering probe (compiler-required given the arm guards; AC5 governs the conversion functions, which are clean); untasked test module in `sim-core` (harmless and it does pin AC3's tick=0); extra CLI args silently ignored (story mandates a single positional arg, no arg-parsing crate); orphaned `simd` processes (unreproducible across 5 runs; the `Drop` guard is correct).
 
 ## Dev Notes
 
@@ -262,3 +322,4 @@ OpenAI GPT-5 Codex (Völundr)
 | --- | --- |
 | 2026-08-02 | Story created |
 | 2026-08-02 | Implemented protocol snapshots, localhost serving, mutation-sensitive bridge tests, and end-to-end daemon tests; full gate green and status advanced to review. |
+| 2026-08-02 | Addressed code review — 2 decisions resolved, 11 patches applied, 7 findings dismissed. Pinned the wire mapping against an independent oracle and a hand-written JSON literal, bounded what one client can cost the daemon, and bounded every read in the test harness. 15 → 20 tests; gate green; 4 of 5 previously-surviving mutations now killed. |

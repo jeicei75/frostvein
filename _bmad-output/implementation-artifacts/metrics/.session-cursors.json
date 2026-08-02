@@ -1,4 +1,11 @@
 {
+  "03e36670-b55b-4e0a-9ab8-f512226c5c33.jsonl": {
+    "cache_creation": 277584,
+    "cache_read": 2549205,
+    "input": 67,
+    "output": 71625,
+    "turns": 36
+  },
   "495e75d1-6f1e-4ea8-a297-8f7c39578efe.jsonl": {
     "cache_creation": 350908,
     "cache_read": 4974352,
@@ -19,5 +26,19 @@
     "input": 82033,
     "output": 23955,
     "turns": 50
+  },
+  "rollout-2026-08-02T13-16-00-019fc29d-f89f-7d33-8b3f-ac272b7abcaf.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 1430016,
+    "input": 63819,
+    "output": 11412,
+    "turns": 34
+  },
+  "rollout-2026-08-02T13-31-30-019fc2ac-29e4-7de0-9d0a-1302636b74f2.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 1474304,
+    "input": 73282,
+    "output": 15140,
+    "turns": 29
   }
 }
