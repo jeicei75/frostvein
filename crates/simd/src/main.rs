@@ -110,6 +110,11 @@ fn serve(mut stream: TcpStream, snapshot_line: &str) {
             .take(MAX_LINE_BYTES)
             .read_until(b'\n', &mut line)
         {
+            // NOTE: read-side EOF closes the connection. A client that half-closes
+            // (shutdown(SHUT_WR)) to say "I will never send commands" is torn down
+            // with it — the two are indistinguishable here. Story 2.1 should stop
+            // closing on EOF: once deltas are written, a dead peer surfaces as a
+            // write error, which is the reclaim path this story lacks.
             Ok(0) => break,
             Ok(_) => {
                 if !line.ends_with(b"\n") {
