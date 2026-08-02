@@ -3,7 +3,7 @@
 mod worldgen;
 
 use bevy_ecs::{component::Component, world::World as EcsWorld};
-use rand::SeedableRng;
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
@@ -58,6 +58,14 @@ struct IdAllocator {
     next: u32,
 }
 
+impl IdAllocator {
+    fn allocate(&mut self) -> Id {
+        let id = Id(self.next);
+        self.next += 1;
+        id
+    }
+}
+
 pub struct World {
     dims: Dims,
     tiles: Vec<Tile>,
@@ -73,13 +81,15 @@ impl World {
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
 
-        World {
+        let mut world = World {
             dims,
             tiles,
             ecs: EcsWorld::new(),
             ids: IdAllocator::default(),
             seed,
-        }
+        };
+        world.spawn_dwarves(&heights, &mut rng);
+        world
     }
 
     pub fn dims(&self) -> Dims {
@@ -119,5 +129,44 @@ impl World {
             .collect();
         dwarves.sort_by_key(|(id, _)| *id);
         dwarves
+    }
+
+    fn spawn_dwarves(&mut self, heights: &[u32], rng: &mut ChaCha8Rng) {
+        let mut candidates = Vec::new();
+        for y in 0..self.dims.y {
+            for x in 0..self.dims.x {
+                let height = heights[(x + y * self.dims.x) as usize];
+                let is_flat = [
+                    (x as i32 - 1, y as i32),
+                    (x as i32 + 1, y as i32),
+                    (x as i32, y as i32 - 1),
+                    (x as i32, y as i32 + 1),
+                ]
+                .into_iter()
+                .filter(|&(nx, ny)| {
+                    nx >= 0 && ny >= 0 && nx < self.dims.x as i32 && ny < self.dims.y as i32
+                })
+                .all(|(nx, ny)| heights[(nx as u32 + ny as u32 * self.dims.x) as usize] == height);
+                if is_flat
+                    && matches!(
+                        self.tiles[worldgen::index(self.dims, x, y, height)],
+                        Tile::Solid(_)
+                    )
+                {
+                    candidates.push(Pos {
+                        x: x as i32,
+                        y: y as i32,
+                        z: height as i32 + 1,
+                    });
+                }
+            }
+        }
+
+        for _ in 0..5 {
+            let candidate = rng.random_range(0..candidates.len());
+            let pos = candidates.swap_remove(candidate);
+            let id = self.ids.allocate();
+            self.ecs.spawn((Dwarf, id, pos));
+        }
     }
 }
