@@ -1,0 +1,230 @@
+use std::{
+    io::{BufRead, BufReader, ErrorKind, Read, Write},
+    net::{SocketAddr, TcpStream},
+    process::{Child, Command, Stdio},
+    sync::mpsc::{self, Receiver, RecvTimeoutError},
+    thread,
+    time::Duration,
+};
+
+/// Every blocking read in this harness is bounded. A daemon that binds but never
+/// writes, or never logs, must fail the test rather than hang `cargo test` forever.
+const IO_TIMEOUT: Duration = Duration::from_secs(10);
+
+struct Daemon {
+    child: Child,
+    address: SocketAddr,
+    stderr: Receiver<String>,
+}
+
+/// Drains a child pipe on its own thread, so the daemon can never block writing to
+/// a pipe nobody is reading, and so every read here can carry a deadline.
+fn line_channel<R: Read + Send + 'static>(reader: R) -> Receiver<String> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        for line in BufReader::new(reader).lines() {
+            match line {
+                Ok(line) => {
+                    if sender.send(line).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    receiver
+}
+
+impl Daemon {
+    fn spawn() -> Self {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_simd"))
+            .arg("0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("simd must start");
+        let stdout = line_channel(child.stdout.take().expect("simd stdout must be piped"));
+        let stderr = line_channel(child.stderr.take().expect("simd stderr must be piped"));
+
+        let listening_line = match stdout.recv_timeout(IO_TIMEOUT) {
+            Ok(line) => line,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("simd never printed its listening line: {error:?}");
+            }
+        };
+        let port = listening_line
+            .trim_end()
+            .strip_prefix("listening on 127.0.0.1:")
+            .expect("simd must print the expected listening line")
+            .parse()
+            .expect("simd must print a numeric port");
+
+        Self {
+            child,
+            address: SocketAddr::from(([127, 0, 0, 1], port)),
+            stderr,
+        }
+    }
+
+    fn connect(&self) -> TcpStream {
+        let stream = TcpStream::connect(self.address).expect("client must connect to simd");
+        stream
+            .set_read_timeout(Some(IO_TIMEOUT))
+            .expect("read timeout must be settable");
+        stream
+    }
+
+    /// Blocks until the daemon logs a line, proving it actually processed the input —
+    /// without this, an inbound-handling test passes whether or not the daemon read.
+    fn next_log(&self) -> String {
+        match self.stderr.recv_timeout(IO_TIMEOUT) {
+            Ok(line) => line,
+            Err(RecvTimeoutError::Timeout) => panic!("daemon logged nothing within {IO_TIMEOUT:?}"),
+            Err(RecvTimeoutError::Disconnected) => panic!("daemon stderr closed unexpectedly"),
+        }
+    }
+}
+
+impl Drop for Daemon {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn read_snapshot(reader: &mut BufReader<TcpStream>) -> protocol::Snapshot {
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .expect("daemon must send a snapshot line");
+    serde_json::from_str(&line).expect("snapshot line must match the protocol")
+}
+
+#[test]
+fn snapshot_on_connect_and_nothing_more() {
+    let daemon = Daemon::spawn();
+    let mut reader = BufReader::new(daemon.connect());
+
+    let snapshot = read_snapshot(&mut reader);
+    assert_eq!(snapshot.tiles.len(), 524_288);
+    assert_eq!(snapshot.entities.len(), 5);
+
+    reader
+        .get_ref()
+        .set_read_timeout(Some(Duration::from_millis(200)))
+        .unwrap();
+    let mut next_line = String::new();
+    match reader.read_line(&mut next_line) {
+        Err(error) => assert!(
+            matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut),
+            "expected a read timeout, got {error:?}"
+        ),
+        Ok(0) => panic!("daemon closed the connection instead of leaving it idle"),
+        Ok(_) => panic!("daemon sent an unexpected second line: {next_line:?}"),
+    }
+}
+
+#[test]
+fn malformed_input_is_dropped_and_daemon_survives() {
+    let daemon = Daemon::spawn();
+    let mut first = BufReader::new(daemon.connect());
+
+    let _: protocol::Snapshot = read_snapshot(&mut first);
+    first.get_mut().write_all(b"not json\n").unwrap();
+    first
+        .get_mut()
+        .write_all(b"{\"type\":\"bogus\"}\n")
+        .unwrap();
+
+    // AC6 requires the daemon to LOG the unrecognized input, not merely tolerate it.
+    // Waiting for both log lines also synchronises: without it this test could pass
+    // on the second connection alone, having never proven the first was read.
+    assert_eq!(daemon.next_log(), "unrecognized client message: not json");
+    assert_eq!(
+        daemon.next_log(),
+        "unrecognized client message: {\"type\":\"bogus\"}"
+    );
+
+    drop(first);
+
+    let mut second = BufReader::new(daemon.connect());
+    let _: protocol::Snapshot = read_snapshot(&mut second);
+}
+
+#[test]
+fn non_utf8_input_does_not_close_the_connection() {
+    let daemon = Daemon::spawn();
+    let mut client = BufReader::new(daemon.connect());
+
+    let _: protocol::Snapshot = read_snapshot(&mut client);
+    client.get_mut().write_all(b"\xff\xfe\n").unwrap();
+    assert!(
+        daemon
+            .next_log()
+            .starts_with("unrecognized client message:"),
+        "a non-UTF-8 line must be logged and dropped like any other unrecognized input"
+    );
+
+    // Story 2.1 streams deltas down this connection; one stray byte must not cost it.
+    client
+        .get_ref()
+        .set_read_timeout(Some(Duration::from_millis(200)))
+        .unwrap();
+    let mut next = String::new();
+    match client.read_line(&mut next) {
+        Err(error) => assert!(
+            matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut),
+            "expected the connection to stay open and idle, got {error:?}"
+        ),
+        Ok(0) => panic!("daemon closed the connection after a non-UTF-8 line"),
+        Ok(_) => panic!("daemon sent an unexpected line: {next:?}"),
+    }
+}
+
+#[test]
+fn oversized_line_is_refused_without_killing_the_daemon() {
+    let daemon = Daemon::spawn();
+    let mut client = BufReader::new(daemon.connect());
+    let _: protocol::Snapshot = read_snapshot(&mut client);
+
+    // No newline: without a cap the daemon would buffer this until it ran out of memory.
+    let flood = vec![b'a'; 128 * 1024];
+    let _ = client.get_mut().write_all(&flood);
+    assert!(
+        daemon.next_log().contains("exceeded"),
+        "daemon must refuse an unbounded line rather than buffer it"
+    );
+
+    let mut next = BufReader::new(daemon.connect());
+    let _: protocol::Snapshot = read_snapshot(&mut next);
+}
+
+#[test]
+fn client_disconnect_does_not_kill_daemon() {
+    let daemon = Daemon::spawn();
+
+    drop(daemon.connect());
+
+    let mut next = BufReader::new(daemon.connect());
+    let _: protocol::Snapshot = read_snapshot(&mut next);
+}
+
+#[test]
+fn client_disconnect_mid_snapshot_does_not_kill_daemon() {
+    let daemon = Daemon::spawn();
+
+    // Read a fraction of the ~6.9 MB line, then vanish — this is the case where
+    // write_all is mid-flight and the partial-write/BrokenPipe path actually runs.
+    let mut early = daemon.connect();
+    let mut buffer = vec![0u8; 64 * 1024];
+    let prefix = early.read(&mut buffer).expect("client must read a prefix");
+    assert!(prefix > 0, "client must receive part of the snapshot");
+    drop(early);
+
+    let mut next = BufReader::new(daemon.connect());
+    let snapshot = read_snapshot(&mut next);
+    assert_eq!(snapshot.tiles.len(), 524_288);
+}

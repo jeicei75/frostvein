@@ -72,6 +72,7 @@ pub struct World {
     ecs: EcsWorld,
     ids: IdAllocator,
     seed: u64,
+    tick: u64,
 }
 
 impl World {
@@ -102,6 +103,7 @@ impl World {
             ecs: EcsWorld::new(),
             ids: IdAllocator::default(),
             seed,
+            tick: 0,
         };
         world.spawn_dwarves(&heights, &mut rng);
         world
@@ -113,6 +115,11 @@ impl World {
 
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    // NOTE: tick advancement lands in Story 2.1.
+    pub fn tick(&self) -> u64 {
+        self.tick
     }
 
     /// Flat row-major: index = x + y*dims.x + z*dims.x*dims.y
@@ -183,5 +190,17 @@ impl World {
             let id = self.ids.allocate();
             self.ecs.spawn((Dwarf, id, pos));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Dims, World};
+
+    #[test]
+    fn generated_world_starts_at_tick_zero() {
+        let world = World::generate(42, Dims::DEFAULT);
+
+        assert_eq!(world.tick(), 0);
     }
 }

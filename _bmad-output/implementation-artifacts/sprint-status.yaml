@@ -50,7 +50,7 @@ story_location: /workspace/projects/frostvein/_bmad-output/implementation-artifa
 development_status:
   epic-1: in-progress
   1-1-a-seeded-frozen-world-exists: done
-  1-2-the-daemon-serves-the-world: backlog
+  1-2-the-daemon-serves-the-world: done
   1-3-behold-the-frozen-world: backlog
   epic-1-retrospective: optional
   epic-2: backlog
