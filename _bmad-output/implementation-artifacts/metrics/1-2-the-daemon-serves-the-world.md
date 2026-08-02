@@ -7,3 +7,4 @@ Per-phase, per-tool, per-model cost for this story. Rows are **deltas** — each
 | create | claude | claude-opus-5 | 36 | 67 | 277,584 | 2,549,205 | 71,625 | 2,898,481 | $14.40 | `03e36670-b55b-4e0a-9ab8-f512226c5c33.jsonl` | 2026-08-02 13:06 UTC |
 | dev | codex | gpt-5.6-sol | 29 | 73,282 | 0 | 1,474,304 | 15,140 | 1,562,726 | $1.56 | `rollout-2026-08-02T13-31-30-019fc2ac-29e4-7de0-9d0a-1302636b74f2.jsonl` | 2026-08-02 14:00 UTC |
 | dev | codex | gpt-5.6-sol | 34 | 63,819 | 0 | 1,430,016 | 11,412 | 1,505,247 | $1.38 | `rollout-2026-08-02T13-16-00-019fc29d-f89f-7d33-8b3f-ac272b7abcaf.jsonl` | 2026-08-02 14:02 UTC |
+| review | claude | claude-opus-5 | 231 | 419 | 516,623 | 30,748,486 | 268,787 | 31,534,315 | $75.97 | `07434edb-4bb9-4e76-b939-a369c7bcb8ad.jsonl` | 2026-08-02 17:27 UTC |

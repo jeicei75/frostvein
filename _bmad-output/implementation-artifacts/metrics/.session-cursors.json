@@ -6,6 +6,13 @@
     "output": 71625,
     "turns": 36
   },
+  "07434edb-4bb9-4e76-b939-a369c7bcb8ad.jsonl": {
+    "cache_creation": 516623,
+    "cache_read": 30748486,
+    "input": 419,
+    "output": 268787,
+    "turns": 231
+  },
   "495e75d1-6f1e-4ea8-a297-8f7c39578efe.jsonl": {
     "cache_creation": 350908,
     "cache_read": 4974352,
