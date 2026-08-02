@@ -1,5 +1,13 @@
 pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
     let dims = world.dims();
+    // The wire contract tells clients to index tiles as x + y*dims.x + z*dims.x*dims.y
+    // (protocol::Snapshot::tiles). If the two accessors ever disagree that formula
+    // reads out of bounds in the client, so tie them together here.
+    debug_assert_eq!(
+        world.tiles().len(),
+        dims.x as usize * dims.y as usize * dims.z as usize,
+        "tile count must match the dims the wire advertises"
+    );
     protocol::Snapshot {
         msg_type: protocol::MessageType::Snapshot,
         dims: protocol::Dims {
@@ -20,6 +28,10 @@ pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
         designations: Vec::new(),
         zones: Vec::new(),
         speed: protocol::Speed::Normal,
+        // NOTE: tick is read from the sim, never fabricated here (AD-1). No test can
+        // currently prove that — world.tick() is always 0 until Story 2.1 advances it,
+        // so `tick: 0` would be indistinguishable. 2.1 makes this assertable; until
+        // then it is upheld by inspection, not by the suite.
         tick: world.tick(),
     }
 }
@@ -43,7 +55,44 @@ fn material(material: sim_core::Material) -> protocol::Material {
 
 #[cfg(test)]
 mod tests {
-    use super::{snapshot, tile};
+    use super::snapshot;
+
+    /// The wire mapping, restated independently of the code under test.
+    ///
+    /// Deliberately NOT `super::tile`: asserting `snap.tiles[i] == tile(world.tile(p))`
+    /// runs both sides through the function being tested, so it proves ordering but
+    /// never the mapping — swapping two variants stays green. This table is the oracle.
+    fn expected_tile(value: sim_core::Tile) -> protocol::Tile {
+        match value {
+            sim_core::Tile::Empty => protocol::Tile::Empty,
+            sim_core::Tile::Solid(m) => protocol::Tile::Solid(expected_material(m)),
+            sim_core::Tile::Ramp(m) => protocol::Tile::Ramp(expected_material(m)),
+        }
+    }
+
+    fn expected_material(value: sim_core::Material) -> protocol::Material {
+        match value {
+            sim_core::Material::Stone => protocol::Material::Stone,
+            sim_core::Material::Soil => protocol::Material::Soil,
+            sim_core::Material::Ice => protocol::Material::Ice,
+            sim_core::Material::Snow => protocol::Material::Snow,
+        }
+    }
+
+    #[test]
+    fn every_tile_maps_to_its_named_wire_variant() {
+        let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        let snap = snapshot(&world);
+
+        assert_eq!(snap.tiles.len(), world.tiles().len());
+        for (index, world_tile) in world.tiles().iter().enumerate() {
+            assert_eq!(
+                snap.tiles[index],
+                expected_tile(*world_tile),
+                "tile {index} ({world_tile:?}) crossed the bridge as the wrong variant"
+            );
+        }
+    }
 
     #[test]
     fn snapshot_mirrors_world_grid() {
@@ -85,7 +134,24 @@ mod tests {
                 z: z as i32,
             };
 
-            assert_eq!(snap.tiles[index], tile(world.tile(pos).unwrap()));
+            assert_eq!(snap.tiles[index], expected_tile(world.tile(pos).unwrap()));
+        }
+
+        // Dims::DEFAULT is square and the probes above cluster at low x/y, so a
+        // transposed index formula would survive them. These have x != y.
+        for (x, y, z) in [(1usize, 2usize, 0usize), (5, 9, 3), (17, 64, 20)] {
+            let index = x + y * width + z * layer_size;
+            let pos = sim_core::Pos {
+                x: x as i32,
+                y: y as i32,
+                z: z as i32,
+            };
+
+            assert_eq!(
+                snap.tiles[index],
+                expected_tile(world.tile(pos).unwrap()),
+                "row-major index disagrees with world.tile at ({x}, {y}, {z})"
+            );
         }
     }
 
@@ -144,18 +210,25 @@ mod tests {
 
         let tiles = value["tiles"].as_array().expect("tiles must be an array");
         assert!(tiles.iter().any(|tile| tile == "empty"));
-        let solid_material = tiles
-            .iter()
-            .find_map(|tile| tile.get("solid").and_then(serde_json::Value::as_str))
-            .expect("tiles must contain a solid material");
-        assert!(!solid_material.is_empty());
-        assert_eq!(solid_material, solid_material.to_lowercase());
-    }
 
-    #[test]
-    fn snapshot_reads_tick_from_world() {
-        let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
-
-        assert_eq!(snapshot(&world).tick, world.tick());
+        // Every solid/ramp payload must be one of the four named materials — "some
+        // lowercase string" would accept a renamed or swapped variant.
+        let named = ["stone", "soil", "ice", "snow"];
+        let mut saw_solid = false;
+        for tile in tiles {
+            for key in ["solid", "ramp"] {
+                if let Some(material) = tile.get(key) {
+                    let material = material
+                        .as_str()
+                        .unwrap_or_else(|| panic!("{key} payload must be a string"));
+                    assert!(
+                        named.contains(&material),
+                        "{key} carried unknown material {material:?}"
+                    );
+                    saw_solid |= key == "solid";
+                }
+            }
+        }
+        assert!(saw_solid, "world must contain at least one solid tile");
     }
 }
