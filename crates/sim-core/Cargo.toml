@@ -1,0 +1,9 @@
+[package]
+name = "sim-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bevy_ecs.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true

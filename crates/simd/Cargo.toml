@@ -1,0 +1,8 @@
+[package]
+name = "simd"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+protocol = { path = "../protocol" }
+sim-core = { path = "../sim-core" }

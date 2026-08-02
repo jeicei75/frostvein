@@ -15,7 +15,7 @@ _bmad/custom/*
 .agents/
 
 # --- Rust ---
-target/
+/target
 
 # --- secrets ---
 .env*
