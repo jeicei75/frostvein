@@ -67,6 +67,9 @@ pub struct Snapshot {
     pub entities: Vec<Entity>,
     // NOTE: designation and zone shapes land in Story 3.1; `Vec<()>` keeps the
     // wire fields present and always empty without inventing their shape now.
+    // NOTE: `Vec<()>` rejects `[1,2]` but DOES accept `[null,null]` as a length-2
+    // vec — `()` deserializes from JSON null. It is not an "empty array only"
+    // guarantee; Story 3.1 replaces these with real shapes anyway.
     pub designations: Vec<()>,
     pub zones: Vec<()>,
     pub speed: Speed,
@@ -76,36 +79,86 @@ pub struct Snapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Serialize, de::DeserializeOwned};
 
-    fn assert_wire_type<T: Serialize + DeserializeOwned>() {}
+    /// The wire format as an external client sees it, written out by hand.
+    ///
+    /// This is the point of the test: encoding and decoding with our own types
+    /// agrees with itself even if every name changes together, so a symmetric
+    /// rename (dropping `rename = "type"`, or `snake_case`) would pass a
+    /// round-trip test while breaking every client. A literal cannot.
+    const WIRE: &str = r#"{
+        "type": "snapshot",
+        "dims": {"x": 2, "y": 1, "z": 1},
+        "tiles": ["empty", {"solid": "stone"}],
+        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6]}],
+        "designations": [],
+        "zones": [],
+        "speed": "normal",
+        "tick": 9
+    }"#;
+
+    fn decoded() -> Snapshot {
+        serde_json::from_str(WIRE).expect("the documented wire format must decode")
+    }
 
     #[test]
-    fn protocol_shapes_are_serde_types() {
-        assert_wire_type::<MessageType>();
-        assert_wire_type::<Material>();
-        assert_wire_type::<Tile>();
-        assert_wire_type::<EntityKind>();
-        assert_wire_type::<Speed>();
-        assert_wire_type::<Dims>();
-        assert_wire_type::<Entity>();
-        assert_wire_type::<Snapshot>();
+    fn decodes_the_documented_wire_format() {
+        let snapshot = decoded();
 
-        let snapshot = Snapshot {
-            msg_type: MessageType::Snapshot,
-            dims: Dims { x: 1, y: 2, z: 3 },
-            tiles: vec![Tile::Empty, Tile::Solid(Material::Stone)],
-            entities: vec![Entity {
+        assert_eq!(snapshot.msg_type, MessageType::Snapshot);
+        assert_eq!(snapshot.dims, Dims { x: 2, y: 1, z: 1 });
+        assert_eq!(
+            snapshot.tiles,
+            vec![Tile::Empty, Tile::Solid(Material::Stone)]
+        );
+        assert_eq!(
+            snapshot.entities,
+            vec![Entity {
                 id: 7,
                 kind: EntityKind::Dwarf,
                 pos: [4, 5, 6],
-            }],
-            designations: Vec::new(),
-            zones: Vec::new(),
-            speed: Speed::Normal,
-            tick: 0,
-        };
+            }]
+        );
+        assert!(snapshot.designations.is_empty());
+        assert!(snapshot.zones.is_empty());
+        assert_eq!(snapshot.speed, Speed::Normal);
+        assert_eq!(snapshot.tick, 9);
+    }
 
-        assert_eq!(snapshot.tiles.len(), 2);
+    #[test]
+    fn re_encodes_to_the_documented_wire_format() {
+        let expected: serde_json::Value = serde_json::from_str(WIRE).unwrap();
+
+        assert_eq!(serde_json::to_value(decoded()).unwrap(), expected);
+    }
+
+    #[test]
+    fn every_material_and_tile_variant_has_a_pinned_wire_name() {
+        for (value, wire) in [
+            (Material::Stone, "\"stone\""),
+            (Material::Soil, "\"soil\""),
+            (Material::Ice, "\"ice\""),
+            (Material::Snow, "\"snow\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (Tile::Empty, "\"empty\""),
+            (Tile::Solid(Material::Ice), "{\"solid\":\"ice\"}"),
+            (Tile::Ramp(Material::Snow), "{\"ramp\":\"snow\"}"),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (Speed::Paused, "\"paused\""),
+            (Speed::Normal, "\"normal\""),
+            (Speed::Fast, "\"fast\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        assert_eq!(
+            serde_json::to_string(&EntityKind::Dwarf).unwrap(),
+            "\"dwarf\""
+        );
     }
 }
