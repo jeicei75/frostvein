@@ -18,6 +18,11 @@
 # writes outside the workspace). approval_policy=never so it doesn't block on a
 # prompt. Working root /workspace so Codex can read forge-root .runtime/ AND
 # write/commit inside projects/<sub-repo>.
+#
+# .git MUST be listed in writable_roots: workspace-write shields .git by default,
+# so without this `git checkout -b` dies with "cannot lock ref ... Read-only file
+# system" and the story cannot be branched or committed. There is no
+# allow_git_writes config key in codex-cli 0.146.0.
 
 set -uo pipefail
 
@@ -28,6 +33,7 @@ LASTMSG="${3:-/tmp/codex-last.txt}"
 CODEX_HOME=/workspace/.codex codex exec \
   -s workspace-write \
   -c approval_policy="never" \
+  -c 'sandbox_workspace_write.writable_roots=["/workspace/projects/frostvein/.git"]' \
   -C /workspace/projects/frostvein \
   -o "$LASTMSG" \
   - < "$PROMPT" > "$RUNLOG" 2>&1
