@@ -1,0 +1,23 @@
+{
+  "495e75d1-6f1e-4ea8-a297-8f7c39578efe.jsonl": {
+    "cache_creation": 350908,
+    "cache_read": 4974352,
+    "input": 120,
+    "output": 75311,
+    "turns": 64
+  },
+  "bb7aef73-12e3-4304-9761-ecf0e9437260.jsonl": {
+    "cache_creation": 418931,
+    "cache_read": 23660658,
+    "input": 392,
+    "output": 186940,
+    "turns": 216
+  },
+  "rollout-2026-08-02T09-41-39-019fc1d9-ba99-7a70-a34d-175f62bfe74c.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 2293248,
+    "input": 82033,
+    "output": 23955,
+    "turns": 50
+  }
+}

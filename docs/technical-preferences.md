@@ -6,10 +6,13 @@ these win.
 
 ## Stack (decided — record, don't evaluate)
 - **Language**: Rust, stable toolchain, 2021+ edition.
-- **Workspace**: single Cargo workspace, three crates:
+- **Workspace**: single Cargo workspace, four crates:
   - `sim-core` — pure library: world, ECS, jobs, pathfinding. No I/O of any kind.
-  - `simd` (daemon) — binary: tick loop, TCP server, protocol encoding. Depends on sim-core.
-  - `tui` — binary: terminal client. Depends on nothing but the protocol (talks TCP).
+  - `protocol` — pure library: serde wire types only (no logic, no I/O). The single
+    source of truth for message shapes (architecture AD-6).
+  - `simd` (daemon) — binary: tick loop, TCP server, protocol encoding. Depends on
+    sim-core and protocol.
+  - `tui` — binary: terminal client. Depends on protocol only (talks TCP).
 - **ECS**: `bevy_ecs` crate used headless. Not the full Bevy engine.
 - **Async/networking**: prefer std::net + threads for v0. Introduce tokio only if
   a story concretely needs it. Do not build an async abstraction layer.
@@ -27,7 +30,9 @@ these win.
 ## Pre-made ADRs (write these up as-is, one paragraph of rationale each)
 1. Sim core is a pure library; daemon and clients are shells around it.
 2. Fixed-timestep tick loop (10/sec default), decoupled from clients; pause and
-   fast-forward = tick-rate changes; determinism from seed + command log.
+   fast-forward = tick-rate changes (refined by architecture AD-2: the daemon loop
+   never stops — pause freezes sim time, not command intake); determinism from
+   seed + command sequence (a persistent command log is deferred, AD-10).
 3. Protocol v0 is newline-delimited JSON over localhost TCP: snapshot on connect,
    deltas per tick, commands upstream. Optimization deferred until the message
    shapes have stabilized in practice.

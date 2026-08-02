@@ -1,0 +1,32 @@
+{
+  "name": "nidavellir",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "runArgs": [
+    "--network=bifrost",
+    "--network-alias=${localWorkspaceFolderBasename}",
+    "--hostname",
+    "${localWorkspaceFolderBasename}"
+  ],
+  "remoteEnv": {
+    "MISE_GITHUB_TOKEN": "${localEnv:MISE_GITHUB_TOKEN}",
+    "GH_TOKEN": "${localEnv:GH_ASGARD_TOKEN}",
+    "HERMES_PROFILE": "nidavellir",
+    "NIDAVELLIR_PYTHON_VERSION": "3.14"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,Z",
+  "workspaceFolder": "/workspace",
+  "onCreateCommand": "sudo chsh -s /usr/bin/zsh vscode || true",
+  "postCreateCommand": "bash -lc 'mise trust && mise install && scripts/bootstrap.sh || true'",
+  "settings": {
+    "terminal.integrated.defaultProfile.linux": "zsh",
+    "terminal.integrated.profiles.linux": {
+      "zsh": {
+        "path": "/usr/bin/zsh"
+      }
+    },
+    "terminal.integrated.cwd": "/workspace"
+  },
+}

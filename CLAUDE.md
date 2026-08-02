@@ -19,8 +19,9 @@ cargo test
    config/plugin/event systems before a third concrete use; hardcoded constants are
    fine. When torn between simple and general, pick simple + a `// NOTE:` naming
    the limitation.
-2. **Layout is decided:** one Cargo workspace, three crates — `sim-core` (pure lib,
-   zero I/O), `simd` (daemon: tick loop + TCP), `tui` (client, talks TCP only).
+2. **Layout is decided:** one Cargo workspace, four crates — `sim-core` (pure lib,
+   zero I/O), `protocol` (wire types only, the single home of message shapes),
+   `simd` (daemon: tick loop + TCP), `tui` (client, depends on `protocol` only).
    Clients contain zero game logic.
 3. **Determinism is load-bearing.** All sim randomness flows from the world seed;
    scenario tests (build world → inject commands → tick N → assert) depend on it.
