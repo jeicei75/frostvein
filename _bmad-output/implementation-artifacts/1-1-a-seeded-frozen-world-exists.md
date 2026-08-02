@@ -53,6 +53,36 @@ so that every later story builds on a deterministic frozen world with the qualit
   - [x] `five_dwarves_on_walkable_surface` — count, distinctness, unique ids, `Empty` tile with `Solid` below.
 - [x] **Green gate** — run all three gate commands, fix anything they surface.
 
+### Review Findings
+
+Code review 2026-08-02 (4 layers: Blind Hunter, Edge Case Hunter, Acceptance Auditor,
+Feature Auditor). Production code is correct at `Dims::DEFAULT` and every AC holds when
+observed. All findings below concern **test strength** and **non-default `Dims`**, not
+shipped behaviour. Mutation results were re-verified independently by the orchestrator.
+
+- [x] [Review][Decision→Patch] RESOLVED (Wolf, 2026-08-02): document the precondition rather than support small worlds. Added `debug_assert!`s for `dims.z >= 6` and `dims.x/y >= 3` plus a `# Panics` doc and `// NOTE:` on `World::generate`. Original finding: public `World::generate` panics or silently degrades on non-`DEFAULT` dims — three reachable sites, all confirmed by execution: `dims.z <= 4` panics in `f64::clamp` (`min > max`) at `crates/sim-core/src/worldgen.rs:36`; fewer than 5 flat spawn candidates (e.g. `Dims{x:2,y:2}`, or any zero axis) panics `cannot sample empty range` at `crates/sim-core/src/lib.rs:166`; `dims.z == 5` returns a *silently* flat world with zero ramps, making AC4–AC6 false with no error. No current caller passes non-`DEFAULT` dims. DECISION: does `generate` support small worlds (fix the height-clamp maths + spawn guard), or is `Dims::DEFAULT` the documented precondition (`debug_assert!` + `// NOTE:`)? Story 2.x scenario tests may want tiny fast worlds, which is why this is Wolf's call and not an unambiguous patch.
+- [x] [Review][Patch] FIXED — verified: the mutation now FAILS `different_seed_produces_different_world` (was passing). AC9's seed-sensitivity test did not do the job the Dev Notes assign it [crates/sim-core/tests/worldgen.rs:22] — Dev Notes state "AC9 exists precisely to catch an implementation that ignores the seed". VERIFIED by mutation: drawing the height lattice from a hardcoded `ChaCha8Rng::seed_from_u64(1234)` (stream alignment preserved) makes terrain shape identical for every seed, and all 6 tests still pass. `assert_ne!` on the whole tile array passes if any 1 of 524,288 tiles differs — the per-column Snow/Ice coin flip alone satisfies it. Fix: compare height fields across seeds and assert dwarf positions differ too.
+- [x] [Review][Patch] FIXED — verified: the inverted-layering mutation now FAILS `surface_is_icy` (was passing). AC4's layering order and "Air above" were never asserted [crates/sim-core/tests/worldgen.rs:37] — VERIFIED by mutation: inverting the stone/soil predicate at `worldgen.rs:85` (Soil at bedrock, Stone under the snow) keeps all 6 tests green. `surface_is_icy` proves only set-membership, never vertical order; nothing asserts `Empty` above the surface, and the `surface_height` helper defines the surface as the topmost non-`Empty` tile, making that clause tautological. Also unasserted: `tiles().len() == 524288`.
+- [x] [Review][Patch] PARTIALLY FIXED — see note below. AC7's "single monotonic allocator" clause was unverified [crates/sim-core/tests/worldgen.rs:120] — VERIFIED by mutation: replacing the spawn draw with a constant index 0 (dwarves no longer seed-dependent) keeps all 6 tests green; a separate run with random `Id`s also passes. The test asserts only distinctness. Fix: assert `ids == [Id(0), Id(1), Id(2), Id(3), Id(4)]`.
+- [x] [Review][Patch] FIXED — widened to `usize` before multiplying in `index()`, the tile `Vec` allocation, the lattice range, and the heights `with_capacity`. Grid index and volume arithmetic was evaluated in `u32` before the `usize` cast [crates/sim-core/src/worldgen.rs:9, :19, :80] — `(dims.x * dims.y * dims.z) as usize` and `(x + y*dims.x + z*dims.x*dims.y) as usize` overflow in debug and wrap **silently in release**, allocating a wrong-sized `Vec` or addressing the wrong tile. Unreachable at `Dims::DEFAULT` (524,288). Fix is unambiguous and behaviour-preserving: widen to `usize` before multiplying. Note the story deliberately chose `i32` positions "so neighbour arithmetic cannot underflow" — this is the one place that care was not applied.
+- [x] [Review][Patch] FIXED — `height_varies_and_steps_are_at_most_one` now runs at seeds 0, 1, 42, 7777. Previously every property test ran at exactly one seed (42) [crates/sim-core/tests/worldgen.rs] — AC5's "≥3 distinct z-levels" is a statistical claim sampled once. Independently swept seeds 0–40: minimum 9 distinct heights, Snow+Ice present at every seed, so the properties are robust — but the suite would not notice if they stopped being.
+- [x] [Review][Patch] FIXED — `// NOTE:` added at the lattice draw naming the float determinism contract. Float-based determinism carried no `// NOTE:` [crates/sim-core/src/worldgen.rs:16, :27-36] — `rng.random::<f64>()`, `lerp`, `smooth`, `.round()` are the only floating point in the codebase and sit directly on the seed⇒identical-world contract. It is in fact safe (Rust does no FMA contraction; these are correctly-rounded IEEE ops), but house convention applied a `// NOTE:` to the far less consequential ramp limitation and skipped it here.
+- [x] [Review][Patch] FIXED — Debug Log reworded to say the simd RED step was a manual `cargo run`, not an automated assertion. It cited a `simd` smoke assertion that does not exist [story Dev Agent Record] — "simd RED: the smoke assertion saw the original port-only output" implies an automated test; there is no `crates/simd/tests/` in the diff or File List. The RED step was a manual `cargo run -p simd`. Correct the wording so the record is accurate.
+**Post-patch mutation re-run (orchestrator, 2026-08-02).** Four mutations against the
+strengthened suite — 3 of 4 now caught, 1 deliberately left open:
+
+| Mutation | Before | After |
+| --- | --- | --- |
+| Terrain shape ignores the seed (hardcoded lattice RNG) | 6/6 pass | **FAILS** `different_seed_produces_different_world` |
+| Layering inverted (soil at bedrock, stone under snow) | 6/6 pass | **FAILS** `surface_is_icy` |
+| Ids bypass the allocator (random `u32`) | 6/6 pass | **FAILS** `five_dwarves_on_walkable_surface` |
+| Spawn ignores the RNG draw (constant index 0) | 6/6 pass | **still 6/6 pass — OPEN** |
+
+- [x] [Review][Defer] KNOWN OPEN, accepted: a spawn that ignores the RNG draw is still not detected [crates/sim-core/src/lib.rs:166] — the cross-seed dwarf-position assertion added above does NOT catch it, because the candidate *list* is itself terrain-derived and therefore seed-dependent: with a constant index the positions still differ between seeds. Accepted rather than fixed because it violates **no AC** — AC7 requires distinct positions, valid tiles and allocator ids; AC8/AC9 still hold — and contradicts only the task wording "positions chosen from the worldgen stream". Any test that would catch it must assert scan-order properties, which means either duplicating production candidate logic in the test or a brittle clustering heuristic; both are worse than the gap under the project's simplicity policy. Revisit if spawn placement ever becomes gameplay-relevant.
+- [x] [Review][Defer] Single RNG stream couples dwarf positions to terrain's exact draw count [crates/sim-core/src/lib.rs:79-91] — deferred, architectural. `layered_terrain` consumes exactly `dims.x*dims.y` bool draws before spawn reads anything, so any future change to surface-material selection silently relocates all five dwarves and invalidates recorded baselines. The story mandated the single `STREAM_WORLDGEN` stream, so this is compliant; AD-7's "purpose-named streams" is the relevant future decision. Revisit at Story 2.4 (`SaveState` persists RNG state).
+- [x] [Review][Defer] Spawn distribution is biased toward the map border [crates/sim-core/src/lib.rs:143-153] — deferred, no AC. `is_flat` filters out-of-bounds neighbours before `.all()`, so corner columns are judged on 2 neighbours and interior columns on 4, making border columns systematically likelier to qualify. Observed: seed 0 spawns a dwarf at `Pos{x:0,y:26,z:20}`, hard against the wall. Unintended distribution rather than a chosen one.
+- [x] [Review][Defer] Story commits reference five planning docs that are untracked [story References] — deferred, pre-existing. `_bmad-output/planning-artifacts/` and `docs/architecture.md` are untracked in the working tree, so this branch commits an artifact whose entire evidence chain dangles in a fresh clone. Repo-hygiene item for Wolf, not caused by this story.
+
 ## Dev Notes
 
 ### Scope guardrails — do NOT build these here
@@ -177,7 +207,7 @@ OpenAI Codex (GPT-5)
 - Scaffold RED: `cargo build --offline` failed because the root manifest did not exist.
 - Terrain RED: the three initial worldgen tests failed to compile because the contracted world API did not exist.
 - Spawn RED: `five_dwarves_on_walkable_surface` failed with 0 dwarves instead of 5.
-- simd RED: the smoke assertion saw the original port-only output instead of generated world dimensions and dwarf count.
+- simd RED: a manual `cargo run -p simd` printed the original port-only output instead of generated world dimensions and dwarf count. (No automated `simd` test exists; this step was verified by running the binary.)
 - GREEN: `cargo fmt --check`, `cargo clippy --all-targets --offline -- -D warnings`, `cargo test --offline`, and the `tui` dependency-edge probe all passed.
 
 ### Completion Notes List
@@ -193,6 +223,7 @@ OpenAI Codex (GPT-5)
 - `Cargo.lock`
 - `Cargo.toml`
 - `_bmad-output/implementation-artifacts/1-1-a-seeded-frozen-world-exists.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md` (new — code review deferrals)
 - `crates/protocol/Cargo.toml`
 - `crates/protocol/src/lib.rs`
 - `crates/sim-core/Cargo.toml`
@@ -210,3 +241,4 @@ OpenAI Codex (GPT-5)
 | --- | --- |
 | 2026-08-02 | Story created |
 | 2026-08-02 | Implemented and verified the seeded frozen world walking scaffold. |
+| 2026-08-02 | Code review (4 layers). 8 patches applied: strengthened AC4/AC7/AC9 test assertions, multi-seed property check, `usize` index widening, `debug_assert!` + `// NOTE:` on the supported dims range, float-determinism note, Debug Log correction. 3 items deferred, 4 dismissed. Verified by re-running mutations: 3 of 4 previously-undetected mutations now fail the suite; the fourth is documented as knowingly open. |

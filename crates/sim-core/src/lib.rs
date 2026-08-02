@@ -75,7 +75,22 @@ pub struct World {
 }
 
 impl World {
+    /// # Panics
+    ///
+    /// Only `Dims::DEFAULT`-scale worlds are supported. Smaller worlds panic:
+    /// `dims.z <= 4` inverts the height clamp, and a footprint yielding fewer than
+    /// five flat columns exhausts the spawn candidate list.
+    // NOTE: worldgen supports z >= 6 and a footprint with at least 5 flat columns.
+    // z == 5 collapses the height range to a single level: no variation, no ramps.
+    // Small-world support arrives when a scenario test actually needs one.
     pub fn generate(seed: u64, dims: Dims) -> World {
+        debug_assert!(dims.z >= 6, "worldgen needs dims.z >= 6, got {}", dims.z);
+        debug_assert!(
+            dims.x >= 3 && dims.y >= 3,
+            "worldgen needs at least 5 flat columns, got {}x{}",
+            dims.x,
+            dims.y
+        );
         let mut rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_WORLDGEN);
         let heights = worldgen::height_field(dims, &mut rng);
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);

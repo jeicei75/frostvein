@@ -6,17 +6,23 @@ use crate::{Dims, Material, Tile};
 const NOISE_SPACING: u32 = 16;
 
 pub(crate) fn index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
-    (x + y * dims.x + z * dims.x * dims.y) as usize
+    // NOTE: widened to usize before multiplying — the u32 product wraps silently in
+    // release, which would address the wrong tile rather than fail.
+    x as usize + y as usize * dims.x as usize + z as usize * dims.x as usize * dims.y as usize
 }
 
 pub(crate) fn height_field(dims: Dims, rng: &mut ChaCha8Rng) -> Vec<u32> {
     let lattice_x = dims.x.div_ceil(NOISE_SPACING) + 1;
     let lattice_y = dims.y.div_ceil(NOISE_SPACING) + 1;
-    let lattice: Vec<f64> = (0..lattice_x * lattice_y)
+    // NOTE: worldgen determinism rests on f64 here (`random::<f64>`, `lerp`, `smooth`,
+    // `.round()` below). This is reproducible — Rust performs no FMA contraction and
+    // these are correctly-rounded IEEE ops — but it is the only float in the sim, so
+    // any future change here is a determinism change.
+    let lattice: Vec<f64> = (0..lattice_x as usize * lattice_y as usize)
         .map(|_| rng.random::<f64>())
         .collect();
 
-    let mut heights = Vec::with_capacity((dims.x * dims.y) as usize);
+    let mut heights = Vec::with_capacity(dims.x as usize * dims.y as usize);
     for y in 0..dims.y {
         for x in 0..dims.x {
             let lattice_pos_x = x / NOISE_SPACING;
@@ -77,7 +83,7 @@ fn clamp_steps(dims: Dims, heights: &mut [u32]) {
 }
 
 pub(crate) fn layered_terrain(dims: Dims, heights: &[u32], rng: &mut ChaCha8Rng) -> Vec<Tile> {
-    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let mut tiles = vec![Tile::Empty; dims.x as usize * dims.y as usize * dims.z as usize];
     for y in 0..dims.y {
         for x in 0..dims.x {
             let height = heights[(x + y * dims.x) as usize];
