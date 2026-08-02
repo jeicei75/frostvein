@@ -4,7 +4,7 @@ baseline_commit: 1506d05aa4946cceb590431ae536d2eb451944ae
 
 # Story 1.1: A Seeded Frozen World Exists
 
-Status: review
+Status: done
 
 ## Story
 
