@@ -154,6 +154,11 @@ fn wander(
     dwarves.sort_by_key(|(id, ..)| **id);
 
     for (_, mut pos, mut wander, mut state) in dwarves {
+        // NOTE: a resting dwarf never re-checks the tile it is standing on, so terrain
+        // mutated underneath it goes unnoticed until its cooldown expires — it will report
+        // standing inside solid rock, or hovering with no floor, for up to
+        // WANDER_REST_TICKS - 1 ticks. Unreachable while `set_tile` has no production
+        // caller; Story 3.2's dig is the first, and owns the fix along with gravity.
         if wander.cooldown > 0 {
             wander.cooldown -= 1;
             *state = JobState::Idle;
@@ -169,6 +174,10 @@ fn wander(
                 y: here.y + dy,
                 z: here.z,
             })
+            // NOTE: standability only — occupancy is not checked, so two dwarves whose home
+            // boxes overlap can share a tile, and `view::render` draws them in ascending Id
+            // into the same cell, silently hiding the lower one. Tile claiming arrives with
+            // Story 3.2's jobs, which needs a reservation model anyway.
             .filter(|p| {
                 (p.x - wander.home.x).abs() <= WANDER_RADIUS
                     && (p.y - wander.home.y).abs() <= WANDER_RADIUS
@@ -345,6 +354,9 @@ impl World {
                 JobState::Idle,
                 Wander {
                     home: pos,
+                    // NOTE: staggers the spawn phases so the dwarves do not step in lockstep,
+                    // without spending a second RNG draw. It wraps at WANDER_REST_TICKS, so an
+                    // eleventh dwarf would share dwarf 0's phase — harmless at five.
                     cooldown: id.0 % WANDER_REST_TICKS,
                 },
             ));

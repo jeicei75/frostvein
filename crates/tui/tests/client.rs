@@ -53,6 +53,143 @@ fn delta_line(tick: u64) -> String {
     )
 }
 
+const WIDE_DIMS: protocol::Dims = protocol::Dims { x: 16, y: 16, z: 1 };
+
+fn dwarf_at(x: i32) -> protocol::Entity {
+    protocol::Entity {
+        id: 0,
+        kind: protocol::EntityKind::Dwarf,
+        pos: [x, 8, 0],
+        state: protocol::JobState::Idle,
+    }
+}
+
+fn moving_snapshot_line(x: i32) -> String {
+    let snapshot = protocol::Snapshot {
+        msg_type: protocol::MessageType::Snapshot,
+        dims: WIDE_DIMS,
+        tiles: vec![protocol::Tile::Solid(protocol::Material::Ice); 256],
+        entities: vec![dwarf_at(x)],
+        designations: Vec::new(),
+        zones: Vec::new(),
+        speed: protocol::Speed::Normal,
+        tick: SNAPSHOT_TICK,
+    };
+    format!(
+        "{}\n",
+        serde_json::to_string(&snapshot).expect("encode stub snapshot")
+    )
+}
+
+fn moving_delta_line(tick: u64, x: i32) -> String {
+    let delta = protocol::Delta {
+        msg_type: protocol::MessageType::Delta,
+        tick,
+        tiles: Vec::new(),
+        entities: vec![dwarf_at(x)],
+        designations: Vec::new(),
+        zones: Vec::new(),
+        speed: protocol::Speed::Normal,
+    };
+    format!(
+        "{}\n",
+        serde_json::to_string(&delta).expect("encode stub delta")
+    )
+}
+
+/// The column each rendered row places the dwarf glyph at, with the colour escapes
+/// stripped so the measurement survives `NO_COLOR` being set or unset.
+fn glyph_columns(stdout: &str) -> Vec<usize> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let mut column = 0;
+            let mut chars = line.chars();
+            while let Some(c) = chars.next() {
+                if c == '\u{1b}' {
+                    for escape in chars.by_ref() {
+                        if escape.is_ascii_alphabetic() {
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                if c == '☺' {
+                    return Some(column);
+                }
+                column += 1;
+            }
+            None
+        })
+        .collect()
+}
+
+/// The `--frames` instrument is how this project evidences "the world visibly lives",
+/// so it must not render motion as stillness. Recomputing the view state per frame
+/// re-centres the camera on entity 0 every time, pinning that dwarf to the middle of
+/// the screen while the terrain scrolls underneath — the glyph never moves, and an
+/// AC read off that capture would be read off an artefact of the instrument.
+#[test]
+fn streamed_frames_hold_the_camera_still_so_a_moving_dwarf_moves_on_screen() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind stub daemon");
+    let port = listener
+        .local_addr()
+        .expect("read stub daemon address")
+        .port();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("3")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tui");
+
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("tui must connect");
+        stream
+            .write_all(moving_snapshot_line(4).as_bytes())
+            .expect("send stub snapshot");
+        for (tick, x) in (8..=10).zip(5..=7) {
+            stream
+                .write_all(moving_delta_line(tick, x).as_bytes())
+                .expect("send stub delta");
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .read_to_string(&mut stdout)
+        .expect("read tui stdout");
+    let status = child.wait().expect("wait for tui");
+    let mut stderr = String::new();
+    if let Some(mut pipe) = child.stderr.take() {
+        let _ = pipe.read_to_string(&mut stderr);
+    }
+    server.join().expect("stub daemon thread panicked");
+
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+
+    let columns = glyph_columns(&stdout);
+    assert_eq!(
+        columns.len(),
+        3,
+        "expected one dwarf glyph per streamed frame, saw {columns:?}"
+    );
+    assert!(
+        columns.iter().any(|column| *column != columns[0]),
+        "the dwarf walked three tiles but its glyph never left column {}: the camera is \
+         being recomputed per frame, so the instrument renders motion as stillness",
+        columns[0]
+    );
+}
+
 #[test]
 fn the_client_loop_renders_a_frame_per_streamed_delta() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind stub daemon");

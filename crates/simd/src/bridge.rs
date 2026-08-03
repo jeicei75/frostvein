@@ -117,22 +117,30 @@ mod tests {
         }
     }
 
+    /// AD-6's independent oracle. It restates each sim state's hand-written wire NAME and
+    /// decodes that, rather than repeating the production match — a second copy of the same
+    /// arms would pass even when the author got a mapping wrong and copied it.
     fn expected_job_state(value: sim_core::JobState) -> protocol::JobState {
-        match value {
-            sim_core::JobState::Idle => protocol::JobState::Idle,
-            sim_core::JobState::Walk => protocol::JobState::Walk,
-            sim_core::JobState::Work => protocol::JobState::Work,
-        }
+        let wire = match value {
+            sim_core::JobState::Idle => r#""idle""#,
+            sim_core::JobState::Walk => r#""walk""#,
+            sim_core::JobState::Work => r#""work""#,
+        };
+        serde_json::from_str(wire).expect("hand-written wire name must decode")
     }
 
     #[test]
     fn every_job_state_maps_to_its_named_wire_variant() {
-        for value in [
-            sim_core::JobState::Idle,
-            sim_core::JobState::Walk,
-            sim_core::JobState::Work,
+        for (value, wire) in [
+            (sim_core::JobState::Idle, r#""idle""#),
+            (sim_core::JobState::Walk, r#""walk""#),
+            (sim_core::JobState::Work, r#""work""#),
         ] {
-            assert_eq!(super::job_state(value), expected_job_state(value));
+            assert_eq!(
+                serde_json::to_string(&super::job_state(value)).unwrap(),
+                wire,
+                "{value:?} crossed the bridge as the wrong wire state"
+            );
         }
     }
 

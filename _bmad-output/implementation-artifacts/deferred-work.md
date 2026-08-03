@@ -96,3 +96,18 @@ names where it came from and what should trigger revisiting it.
   which is the first time a `TileChange` crosses the wire for real, and the first time this
   plumbing is exercised end to end. Do not read AC6 as evidence that tile streaming has been
   proven [crates/sim-core/src/lib.rs:169-178].
+
+## Deferred from: code review of story 2-2-dwarves-wander-the-frost (2026-08-03)
+
+- **`NO_COLOR` silently deletes the entire visual feature this story shipped.** crossterm gates
+  every colour sequence on the `NO_COLOR` env var, and colour is 2.2's *only* signal for job
+  state — there is no glyph, brightness or marker fallback. With it set, an idle dwarf and a
+  walking dwarf render as the identical uncolourised `☺` and nothing in the client says the
+  distinction has been dropped. This devpod sets `NO_COLOR=1` by default, which already made one
+  round of the dev agent's own colour evidence vacuous until it was rerun with the var unset —
+  so the trap has bitten once. **Not** patched here: a fallback glyph is a design change beyond
+  this story, and "24-bit truecolor from the start, colour as data" is a recorded stack decision
+  in `docs/technical-preferences.md` rather than an oversight. **Revisit when** a story adds a
+  second state signal or the first accessibility pass — and until then, any review or dev agent
+  checking colours live must confirm `NO_COLOR` is unset or the check proves nothing
+  [crates/tui/src/frame.rs:50-60].

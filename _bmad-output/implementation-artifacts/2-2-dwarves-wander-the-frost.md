@@ -4,7 +4,7 @@ baseline_commit: 871a6b42d96247252b6f81a9d04331ab9e68d2f3
 
 # Story 2.2: Dwarves Wander the Frost
 
-Status: review
+Status: done
 
 ## Story
 
@@ -126,6 +126,66 @@ so that the world reads as alive even when I give no orders.
   - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent
         Record (AGENTS.md rule 1).
 - [x] **Green gate** (AC: 13) — `scripts/gate.sh`, then the live check. Report what printed.
+
+### Review Findings
+
+Code review 2026-08-03. Four layers, all of which executed code rather than only reading the
+diff (Blind Hunter + Edge Case Hunter on Sonnet, Acceptance Auditor + Feature Auditor on Opus).
+All 13 ACs were independently verified by execution by the Acceptance Auditor; the gate and the
+mutation set were re-run by the orchestrator and by the auditor separately.
+
+- [x] [Review][Decision → NOTE + Story 3.2] **Two dwarves can occupy one tile and the higher `Id`
+      silently erases the lower** — Wolf's call: name it at the code site and hand the fix to 3.2,
+      whose job system needs a tile-reservation model anyway. `// NOTE:` added at the candidate
+      filter [crates/sim-core/src/lib.rs:171-176]. Original finding: `wander`'s candidate filter
+      tests only `terrain.is_standable`, never occupancy
+      [crates/sim-core/src/lib.rs:171-176], and `render` writes each entity into the framebuffer
+      with a plain indexed assignment in ascending `Id` order [crates/tui/src/view.rs:106-120], so
+      the second dwarf overwrites the first. Reproduced across 200 seeds × 300 ticks: seed 133,
+      ids 0 and 1 (homes 2 tiles apart, overlapping radius-3 boxes) share `(62,36,17)` for ticks
+      133–142 and `(63,35,17)` for ticks 265–274. A dwarf visibly vanishes for ten ticks with no
+      signal — the failure mode the story's own goal ("the world reads as alive") is most exposed
+      to. No AC mentions collision, and no `// NOTE:` marks it as an accepted gap the way the
+      ramp-climbing limit does.
+- [x] [Review][Decision → NOTE + Story 3.2] **`wander` never re-validates the dwarf's own tile** —
+      Wolf's call: `// NOTE:` at the cooldown branch, fix handed to 3.2, since what a dwarf should
+      *do* when its ground vanishes is gravity design this story cannot settle
+      [crates/sim-core/src/lib.rs:156-165]. Original finding: the cooldown branch
+      returns early [crates/sim-core/src/lib.rs:156-161] and the candidate filter checks only
+      destinations, so terrain mutated under a resting dwarf is never noticed. Confirmed by
+      execution through the public API: `set_tile` on a resting dwarf's own tile leaves the sim,
+      the wire and the TUI all reporting a dwarf standing inside `Solid(Stone)` for the rest of its
+      cooldown (up to 9 ticks); removing the floor beneath it leaves it hovering. Unreachable in
+      the shipped product today — `set_tile` has no production caller — but Story 3.2's dig is the
+      first one, which is exactly when this arms.
+- [x] [Review][Decision → Defer] **At a default 80×24 terminal only one of the five dwarves is ever
+      visible** — Wolf's call: record it, decide at a later TUI story. Clustering spawns would move
+      the pinned positions a second time, and this story already spent its one sanctioned
+      worldgen-output change. Original finding: three spawn on other z-levels and the fourth lands
+      outside the viewport, so the
+      headline outcome reads as one dwarf twitching once a second. Live wire positions
+      `[99,64,20] [76,51,17] [14,94,15] [117,49,20] [75,33,15]`; `render` draws an entity only when
+      `entity.pos[2] == state.z` [crates/tui/src/view.rs:107]. No AC is violated and no code is
+      wrong; whether this satisfies "the world reads as alive" is a judgment only Wolf at a
+      terminal can make.
+- [x] [Review][Patch] The `--frames` instrument hides the motion it exists to prove — `initial()`
+      is recomputed per frame, re-centring the camera on entity 0 every time
+      [crates/tui/src/main.rs:254]
+- [x] [Review][Patch] `expected_job_state` is an arm-for-arm copy of the production `job_state`, so
+      it cannot catch a mapping authored wrong and copied [crates/simd/src/bridge.rs:120-126]
+- [x] [Review][Patch] The `id.0 % WANDER_REST_TICKS` spawn stagger is unspecified behaviour that
+      wraps at `id 10` with no `// NOTE:` naming the limit [crates/sim-core/src/lib.rs:348]
+- [x] [Review][Patch] AC12's frame test asserts `assert_ne!` on the whole `Cell`, so it would also
+      pass on a glyph change rather than the colour difference it means to pin
+      [crates/tui/src/view.rs:376]
+- [x] [Review][Patch] The recorded AC3 experiment is the weak form of the inverted sabotage — a
+      draw added at the *end* of `layered_terrain` perturbs nothing downstream; replace the record
+      with the stronger start-of-function evidence [this file, Dev Agent Record]
+- [x] [Review][Defer] **`NO_COLOR` silently deletes the entire visual feature** [crates/tui/src/frame.rs]
+      — crossterm gates every colour sequence on it, and colour is this story's only state signal,
+      so idle and walk render as an identical uncolourised `☺` with nothing telling the user.
+      Deferred: a glyph fallback is a design change beyond this story, and "colour as data" is a
+      recorded stack decision.
 
 ## Dev Notes
 
@@ -383,6 +443,27 @@ OpenAI Codex (GPT-5)
   `layered_terrain`, then ran `cargo test --offline -p sim-core
   spawn_positions_for_seed_42_are_pinned`; result stayed GREEN: `1 passed; 0 failed`. Reverted the
   throwaway draw afterward.
+  **Corrected at code review (2026-08-03): this is the weak form of the experiment.** A draw added
+  at the *end* of `layered_terrain` perturbs nothing downstream — nothing else reads that stream on
+  this branch — so a green result proves decoupling without ever demonstrating that the draw moved
+  the worldgen stream at all. The review re-ran it in the strong form, inserting
+  `let _sabotage_draw: bool = rng.random::<bool>();` at the **start** of `layered_terrain` in a
+  throwaway `git archive` tree, and compared three trees:
+
+  ```text
+  main      terrain_digest=0xf3ecc0ec0daf79e4  counts=[245266,229870,32768,6417,6270,0,0,1881,1816]
+  branch    terrain_digest=0xf3ecc0ec0daf79e4  counts=[245266,229870,32768,6417,6270,0,0,1881,1816]
+  sabotage  terrain_digest=0xf8f6b6509cc3070d  counts=[245266,229870,32768,6408,6279,0,0,1891,1806]
+
+  branch    dwarves=[(0,115,84,15),(1,20,102,19),(2,121,12,16),(3,51,113,19),(4,102,122,17)]
+  sabotage  dwarves=[(0,115,84,15),(1,20,102,19),(2,121,12,16),(3,51,113,19),(4,102,122,17)]
+  main      dwarves=[(0,80,54,17),(1,49,13,20),(2,39,41,18),(3,106,42,15),(4,82,47,16)]
+  ```
+
+  The draw demonstrably changed terrain (digest differs; ice/snow counts shift by 9 and 10 tiles)
+  and yet left all five spawn positions bit-identical. That is the evidence AC3 asks for. Terrain
+  against `main` is unchanged (AC2), and the spawn positions moved exactly once — the sanctioned
+  change. The five pinned literals were also reproduced from a tree with no knowledge of them.
 - Wander API RED before implementation: unresolved import `super::JobState`, tuple arity mismatch
   (`expected tuple (Id, Pos), found tuple (_, _, _)`), and missing tuple field `.2`; the targeted
   test failed to compile with seven errors.
@@ -465,6 +546,24 @@ OpenAI Codex (GPT-5)
   glyph rows at lines 12, 228, 468, and 708 showed `☺` changing row/column against different terrain.
   This particular 30-frame sample emitted 30 idle-color glyphs; the immediately preceding manual
   run is the observed idle/walk color evidence (27 idle, 3 walk).
+- **Re-taken at code review (2026-08-03), because the instrument itself was defective.**
+  `stream_frames` recomputed `initial()` per frame, re-centring the camera on entity 0 every frame,
+  so the dwarf's glyph was pinned near screen centre while the terrain scrolled underneath — motion
+  rendered as stillness, and any movement read off that capture was reading the instrument rather
+  than the sim. Fixed (camera computed once, as the interactive path already did) and re-run
+  against a live daemon on port 47311 with `NO_COLOR` explicitly unset:
+
+  ```text
+  glyph sightings: 30       distinct columns: [39, 40, 41]
+  distinct colours: [(150,112,62), (214,154,78)]      colour counts: idle 27, walk 3
+  (line, col, fg): (11,40,idle) (35,40,idle) (59,39,walk) (83,39,idle) (107,39,idle) ...
+  ```
+
+  The glyph now changes column across frames, and the walk colour lands on exactly the frames where
+  it moves — the ~1-in-11 cadence `WANDER_REST_TICKS` predicts. This is the AC11/AC12 live
+  evidence of record; the earlier `--frames` observations were taken through the broken camera.
+  A regression test now pins it (`streamed_frames_hold_the_camera_still_so_a_moving_dwarf_moves_on_screen`),
+  and its mutation is in the 2.2 set.
 
 ### Completion Notes List
 
@@ -516,3 +615,4 @@ OpenAI Codex (GPT-5)
 | 2026-08-03 | Wolf's call: fold the 1.1 spawn/terrain RNG-coupling deferral into this story (AC2, AC3) rather than carrying it past 2.4's save baselines. |
 | 2026-08-03 | Implemented deterministic dwarf wandering, wire-visible job state, and state-colored TUI rendering with scenario and live-daemon coverage. |
 | 2026-08-03 | Completed sabotage evidence, seven killed mutations, manual live checks, and a green project gate; moved story to review. |
+| 2026-08-03 | Code review (4 layers, all executing code): 3 decisions resolved, 7 patches applied, 1 deferred, 2 dismissed. Fixed the `--frames` camera so the instrument stops rendering motion as stillness, replaced the shadow `job_state` oracle with a wire-name oracle, tightened AC12's assertion to `fg`, added `// NOTE:`s for dwarf-stacking and stale-own-tile (both handed to 3.2), and re-took the live AC11/AC12 evidence through the fixed instrument. Mutation set grown to 10, all killed. |

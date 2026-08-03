@@ -241,6 +241,10 @@ fn stream_frames(
         .context("could not spawn server reader thread")?;
 
     let (w, h) = frame_size();
+    // The camera is fixed once, exactly as the interactive path does it. Recomputing
+    // `initial` per frame re-centres on entity 0 every time, which pins that dwarf to
+    // the middle of the screen and hides the very motion this instrument exists to show.
+    let state = initial(&snapshot);
     let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
     for _ in 0..count {
         // Bounded like every other read here: a server that connects and then goes
@@ -251,7 +255,6 @@ fn stream_frames(
             Ok(Err(error)) => return Err(error),
             Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
         }
-        let state = initial(&snapshot);
         let framebuffer = render(&snapshot, &state, w, h);
         write_frame(&mut out, &framebuffer, RowEnd::Newline)
             .context("could not write terminal frame")?;

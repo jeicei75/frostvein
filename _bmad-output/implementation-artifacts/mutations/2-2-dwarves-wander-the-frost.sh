@@ -66,3 +66,43 @@ old = "        world.spawn_dwarves(&heights, &mut spawn_rng);\n"
 assert old in s
 p.write_text(s.replace(old, "        world.spawn_dwarves(&heights, &mut rng);\n"))
 PY
+
+# --- Added by code review (2026-08-03). One per review patch: a patch whose test
+# --- survives its own sabotage is the exact failure 2.1's review shipped.
+
+mutation "frames instrument recomputes the camera per frame" tui streamed_frames_hold_the_camera_still_so_a_moving_dwarf_moves_on_screen <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
+old = "        let framebuffer = render(&snapshot, &state, w, h);\n"
+assert old in s
+p.write_text(s.replace(
+    old,
+    "        let state = initial(&snapshot);\n"
+    "        let framebuffer = render(&snapshot, &state, w, h);\n"))
+PY
+
+# The discriminating case for tightening AC12's assertion: a Walk arm that changes the
+# GLYPH while keeping idle's colour. `assert_ne!` on the whole Cell passed this happily.
+mutation "walk is marked by a different glyph instead of a different colour" tui walking_and_idle_dwarves_render_different_colors <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/palette.rs'); s = p.read_text()
+old = """        (EntityKind::Dwarf, JobState::Walk) => Cell {
+            glyph: '☺',
+            fg: (214, 154, 78),
+        },
+"""
+assert old in s
+p.write_text(s.replace(old, """        (EntityKind::Dwarf, JobState::Walk) => Cell {
+            glyph: '☻',
+            fg: (150, 112, 62),
+        },
+"""))
+PY
+
+mutation "bridge maps Walk to the Work wire name" simd every_job_state_maps_to_its_named_wire_variant <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
+old = "        sim_core::JobState::Walk => protocol::JobState::Walk,\n"
+assert old in s
+p.write_text(s.replace(old, "        sim_core::JobState::Walk => protocol::JobState::Work,\n"))
+PY

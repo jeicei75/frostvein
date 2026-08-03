@@ -373,7 +373,11 @@ mod tests {
 
         let framebuffer = render(&snapshot, &state, 3, 2);
 
-        assert_ne!(framebuffer.cell(0, 0), framebuffer.cell(2, 0));
+        // The glyph is deliberately the same for both: what must differ is the colour, so
+        // assert on `fg` alone. Comparing whole cells would also pass on a glyph change.
+        let (idle, walking) = (framebuffer.cell(0, 0), framebuffer.cell(2, 0));
+        assert_eq!(idle.glyph, walking.glyph);
+        assert_ne!(idle.fg, walking.fg);
     }
 
     /// The peek-below cap itself, not just its dimming: ground exactly
