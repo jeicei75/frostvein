@@ -64,9 +64,25 @@ fn main() -> anyhow::Result<()> {
     let mut port = protocol::DEFAULT_PORT;
     let mut port_was_set = false;
     let mut frame_only = false;
+    let mut frames: Option<u32> = None;
+    let mut expect_frame_count = false;
     for arg in std::env::args_os().skip(1) {
+        if expect_frame_count {
+            let text = arg
+                .to_str()
+                .with_context(|| format!("--frames count is not valid UTF-8: {arg:?}"))?;
+            frames = Some(text.parse().with_context(|| {
+                format!("invalid --frames count {text:?}: expected a positive integer")
+            })?);
+            expect_frame_count = false;
+            continue;
+        }
         if arg == "--frame" {
             frame_only = true;
+            continue;
+        }
+        if arg == "--frames" {
+            expect_frame_count = true;
             continue;
         }
         if port_was_set {
@@ -80,6 +96,9 @@ fn main() -> anyhow::Result<()> {
         })?;
         port_was_set = true;
     }
+    if expect_frame_count {
+        bail!("--frames requires a count, e.g. --frames 3");
+    }
 
     let address = format!("127.0.0.1:{port}");
     let stream = TcpStream::connect(("127.0.0.1", port))
@@ -91,11 +110,12 @@ fn main() -> anyhow::Result<()> {
     let mut snapshot = read_snapshot(&mut reader)?;
     let mut state = initial(&snapshot);
 
+    if let Some(count) = frames {
+        return stream_frames(reader, snapshot, count);
+    }
+
     if frame_only {
-        let (w, h) = match terminal::size() {
-            Ok((w, h)) if w > 0 && h > 0 => (w, h),
-            _ => (100, 40),
-        };
+        let (w, h) = frame_size();
         let framebuffer = render(&snapshot, &state, w, h);
         let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
         write_frame(&mut out, &framebuffer, RowEnd::Newline)
@@ -145,9 +165,15 @@ fn main() -> anyhow::Result<()> {
 
         loop {
             match message_rx.try_recv() {
+                // AC8: the daemon sends exactly one snapshot, at connect, and that one
+                // is consumed before this loop starts — so this arm is unreachable
+                // today. If a re-snapshot ever arrives, adopt the world but KEEP the
+                // camera and z-level; resetting them would silently throw away where
+                // the player was looking.
+                // NOTE: assumes dims never change between snapshots, which holds while
+                // the daemon serves one world for its lifetime.
                 Ok(Ok(Msg::Snapshot(next))) => {
                     snapshot = *next;
-                    state = initial(&snapshot);
                     needs_redraw = true;
                 }
                 Ok(Ok(Msg::Delta(delta))) => {
@@ -163,14 +189,73 @@ fn main() -> anyhow::Result<()> {
         }
 
         if needs_redraw {
+            // A terminal reporting 0x0 at startup that never emits a Resize would
+            // otherwise blank the client forever with no diagnostic: deltas keep
+            // setting needs_redraw and this guard keeps skipping. Re-query rather
+            // than trusting the startup reading for the process's lifetime.
+            if size.0 == 0 || size.1 == 0 {
+                size = terminal::size().unwrap_or(size);
+            }
             if size.0 != 0 && size.1 != 0 {
                 let framebuffer = render(&snapshot, &state, size.0, size.1);
                 write_frame(&mut out, &framebuffer, RowEnd::MoveTo)
                     .context("could not write terminal frame")?;
                 out.flush().context("could not flush terminal frame")?;
+                // Left set when the size is still unusable, so the redraw is retried
+                // instead of silently dropped.
+                needs_redraw = false;
             }
-            needs_redraw = false;
         }
+    }
+
+    Ok(())
+}
+
+fn frame_size() -> (u16, u16) {
+    match terminal::size() {
+        Ok((w, h)) if w > 0 && h > 0 => (w, h),
+        _ => (100, 40),
+    }
+}
+
+/// Headless counterpart to the interactive loop, for proving AC10 in the suite.
+///
+/// It runs the REAL reader thread and the real `apply` -> `render` -> `write_frame`
+/// path, emitting one frame per server message and then exiting. `--frame` cannot
+/// stand in for this: it renders the connect snapshot and returns before the reader
+/// thread is ever spawned, so nothing in the suite could catch a client whose loop
+/// had stopped consuming deltas.
+fn stream_frames(
+    mut reader: BufReader<TcpStream>,
+    mut snapshot: Snapshot,
+    count: u32,
+) -> anyhow::Result<()> {
+    reader
+        .get_mut()
+        .set_read_timeout(None)
+        .context("could not clear the snapshot read timeout")?;
+    let (message_tx, message_rx) = mpsc::sync_channel(MESSAGE_QUEUE);
+    thread::Builder::new()
+        .name("server-read".to_string())
+        .spawn(move || read_messages(reader, message_tx))
+        .context("could not spawn server reader thread")?;
+
+    let (w, h) = frame_size();
+    let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
+    for _ in 0..count {
+        // Bounded like every other read here: a server that connects and then goes
+        // quiet must fail, never hang.
+        match message_rx.recv_timeout(SNAPSHOT_READ_TIMEOUT) {
+            Ok(Ok(Msg::Snapshot(next))) => snapshot = *next,
+            Ok(Ok(Msg::Delta(delta))) => apply(&mut snapshot, *delta),
+            Ok(Err(error)) => return Err(error),
+            Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
+        }
+        let state = initial(&snapshot);
+        let framebuffer = render(&snapshot, &state, w, h);
+        write_frame(&mut out, &framebuffer, RowEnd::Newline)
+            .context("could not write terminal frame")?;
+        out.flush().context("could not flush terminal frame")?;
     }
 
     Ok(())
