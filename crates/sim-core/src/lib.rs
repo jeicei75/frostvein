@@ -2,7 +2,13 @@
 
 mod worldgen;
 
-use bevy_ecs::{component::Component, world::World as EcsWorld};
+use bevy_ecs::{
+    component::Component,
+    resource::Resource,
+    schedule::{IntoScheduleConfigs, Schedule},
+    system::ResMut,
+    world::World as EcsWorld,
+};
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -53,6 +59,13 @@ pub struct Id(pub u32);
 #[derive(Component)]
 pub struct Dwarf;
 
+#[derive(Resource)]
+struct Tick(pub u64);
+
+fn advance_tick(mut tick: ResMut<Tick>) {
+    tick.0 += 1;
+}
+
 #[derive(Default)]
 struct IdAllocator {
     next: u32,
@@ -70,9 +83,9 @@ pub struct World {
     dims: Dims,
     tiles: Vec<Tile>,
     ecs: EcsWorld,
+    schedule: Schedule,
     ids: IdAllocator,
     seed: u64,
-    tick: u64,
 }
 
 impl World {
@@ -97,13 +110,18 @@ impl World {
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
 
+        let mut ecs = EcsWorld::new();
+        ecs.insert_resource(Tick(0));
+        let mut schedule = Schedule::default();
+        schedule.add_systems((advance_tick,).chain());
+
         let mut world = World {
             dims,
             tiles,
-            ecs: EcsWorld::new(),
+            ecs,
+            schedule,
             ids: IdAllocator::default(),
             seed,
-            tick: 0,
         };
         world.spawn_dwarves(&heights, &mut rng);
         world
@@ -117,9 +135,12 @@ impl World {
         self.seed
     }
 
-    // NOTE: tick advancement lands in Story 2.1.
     pub fn tick(&self) -> u64 {
-        self.tick
+        self.ecs.resource::<Tick>().0
+    }
+
+    pub fn step(&mut self) {
+        self.schedule.run(&mut self.ecs);
     }
 
     /// Flat row-major: index = x + y*dims.x + z*dims.x*dims.y
@@ -202,5 +223,16 @@ mod tests {
         let world = World::generate(42, Dims::DEFAULT);
 
         assert_eq!(world.tick(), 0);
+    }
+
+    #[test]
+    fn stepping_advances_the_world_tick_once() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+
+        world.step();
+        assert_eq!(world.tick(), 1);
+
+        world.step();
+        assert_eq!(world.tick(), 2);
     }
 }
