@@ -113,7 +113,7 @@ so that the world reads as alive even when I give no orders.
         in `view::render` passes `entity.state`. Extend `every_look_is_pinned` to all three.
   - [x] A `view` test rendering one idle and one walking dwarf in the same frame asserts their
         cells differ.
-- [ ] **Observability instrument** (AC: 11, 12) — the human check for "the world visibly lives".
+- [x] **Observability instrument** (AC: 11, 12) — the human check for "the world visibly lives".
       Use 2.1's existing `tui --frames N` (real reader thread, real `apply` → `render`); do not
       invent a second instrument. Exact commands in Verification; paste what you saw.
 - [ ] **Sabotage + mutation set** (AC: 13)
@@ -427,6 +427,13 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Palette mapping sabotage RED (`Walk` assigned idle RGB): left
   `Cell { glyph: '☺', fg: (150, 112, 62) }`, right
   `Cell { glyph: '☺', fg: (214, 154, 78) }`; result: `FAILED. 0 passed; 1 failed`.
+- Live instrument (manual): `tui --frames 30` wrote 720 lines to `/tmp/wander.txt`; `☺` occupied
+  the captured row at lines 12–156, shifted at line 180, and moved to another row by line 444.
+  The interactive client showed ticks advancing (for example 320 through 356), the glyph changing
+  cells/rows, and exited through `q` then `y`. The environment's `NO_COLOR=1` suppressed RGB in the
+  first run, so the instrument was rerun with only `NO_COLOR` unset: 30 real frames contained 27
+  idle glyphs at `38;2;150;112;62` and 3 walk glyphs at `38;2;214;154;78`; the truecolor
+  interactive run visibly blinked between those states and also exited through `q` then `y`.
 
 ### Completion Notes List
 
@@ -450,6 +457,8 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Made the TUI entity palette exhaustive over `(Dwarf, Idle|Walk|Work)`, pinned three distinct RGB
   values, passed wire state through `view::render`, and proved idle/walking cells differ in one
   rendered frame.
+- Ran the existing real-reader-thread observability path manually; observed both position changes
+  and the idle-to-walk amber blink without adding an instrument or pressing gameplay keys.
 
 ### File List
 
