@@ -190,6 +190,120 @@ fn streamed_frames_hold_the_camera_still_so_a_moving_dwarf_moves_on_screen() {
     );
 }
 
+/// The walk colour from `palette::entity_cell`, as it appears on the wire to the terminal.
+const WALK_SGR: &str = "38;2;214;154;78";
+
+/// Runs the instrument against a stub daemon that streams one walking dwarf, and returns
+/// its `(stdout, stderr)`. `no_color` chooses whether the child sees `NO_COLOR=1` — the
+/// devpod sets it, so a test that did not control it would prove whatever the environment
+/// happened to be that day.
+fn capture_walking_dwarf(no_color: bool) -> (String, String) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind stub daemon");
+    let port = listener
+        .local_addr()
+        .expect("read stub daemon address")
+        .port();
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tui"));
+    command
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if no_color {
+        command.env("NO_COLOR", "1");
+    } else {
+        command.env_remove("NO_COLOR");
+    }
+    let mut child = command.spawn().expect("spawn tui");
+
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("tui must connect");
+        stream
+            .write_all(moving_snapshot_line(4).as_bytes())
+            .expect("send stub snapshot");
+        let walking = protocol::Delta {
+            msg_type: protocol::MessageType::Delta,
+            tick: 8,
+            tiles: Vec::new(),
+            entities: vec![protocol::Entity {
+                id: 0,
+                kind: protocol::EntityKind::Dwarf,
+                pos: [5, 8, 0],
+                state: protocol::JobState::Walk,
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            speed: protocol::Speed::Normal,
+        };
+        stream
+            .write_all(
+                format!(
+                    "{}\n",
+                    serde_json::to_string(&walking).expect("encode walking delta")
+                )
+                .as_bytes(),
+            )
+            .expect("send walking delta");
+        thread::sleep(Duration::from_millis(500));
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .read_to_string(&mut stdout)
+        .expect("read tui stdout");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .read_to_string(&mut stderr)
+        .expect("read tui stderr");
+    let status = child.wait().expect("wait for tui");
+    server.join().expect("stub daemon thread panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+
+    (stdout, stderr)
+}
+
+/// The colour half of the instrument, proven through the real binary rather than through
+/// `render` in isolation: a walking dwarf must actually reach the capture wearing the walk
+/// colour. Nothing tested this end to end before, which is how the story's own colour
+/// evidence came to be taken from a capture that had no colour in it at all.
+#[test]
+fn a_walking_dwarf_reaches_the_capture_wearing_the_walk_colour() {
+    let (stdout, _) = capture_walking_dwarf(false);
+
+    assert!(
+        stdout.contains(WALK_SGR),
+        "no walk colour ({WALK_SGR}) in a capture of a walking dwarf; \
+         the job-state colour does not survive the real client path"
+    );
+}
+
+/// A capture with colour suppressed still looks perfectly well-formed, so the instrument
+/// has to say so itself. Without this warning a colourless capture reads as evidence that
+/// the colours work — the exact way this project's evidence has already been fooled once.
+#[test]
+fn the_instrument_refuses_to_be_silently_colourless() {
+    let (stdout, stderr) = capture_walking_dwarf(true);
+
+    assert!(
+        !stdout.contains(WALK_SGR),
+        "NO_COLOR was set but the capture still carried colour; \
+         the premise of this test no longer holds"
+    );
+    assert!(
+        stderr.contains("NO_COLOR"),
+        "a colourless capture was produced with no warning on stderr; \
+         it would be read as evidence that the state colours work. stderr was: {stderr:?}"
+    );
+}
+
 #[test]
 fn the_client_loop_renders_a_frame_per_streamed_delta() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind stub daemon");

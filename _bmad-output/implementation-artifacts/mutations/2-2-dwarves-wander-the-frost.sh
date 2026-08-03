@@ -106,3 +106,22 @@ old = "        sim_core::JobState::Walk => protocol::JobState::Walk,\n"
 assert old in s
 p.write_text(s.replace(old, "        sim_core::JobState::Walk => protocol::JobState::Work,\n"))
 PY
+
+# --- Observability-instrument hardening (2026-08-03). The instrument is how this project
+# --- evidences "the world visibly lives", so it needs the same sabotage bar as the feature.
+
+mutation "frames capture goes colourless without saying so" tui the_instrument_refuses_to_be_silently_colourless <<'PY'
+import pathlib, re
+p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
+old = re.search(r"    if colour_is_suppressed\(\) \{.*?\n    \}\n", s, re.S)
+assert old, "colour warning block not found"
+p.write_text(s.replace(old.group(0), ""))
+PY
+
+mutation "render drops the entity state and colours every dwarf idle" tui a_walking_dwarf_reaches_the_capture_wearing_the_walk_colour <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = "                entity_cell(entity.kind, entity.state);\n"
+assert old in s
+p.write_text(s.replace(old, "                entity_cell(entity.kind, protocol::JobState::Idle);\n"))
+PY

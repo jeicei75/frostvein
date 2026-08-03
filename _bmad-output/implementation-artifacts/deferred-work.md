@@ -108,6 +108,13 @@ names where it came from and what should trigger revisiting it.
   so the trap has bitten once. **Not** patched here: a fallback glyph is a design change beyond
   this story, and "24-bit truecolor from the start, colour as data" is a recorded stack decision
   in `docs/technical-preferences.md` rather than an oversight. **Revisit when** a story adds a
-  second state signal or the first accessibility pass — and until then, any review or dev agent
-  checking colours live must confirm `NO_COLOR` is unset or the check proves nothing
-  [crates/tui/src/frame.rs:50-60].
+  second state signal or the first accessibility pass.
+  **Partly closed the same day, before story 2.3.** The *evidence* half is fixed: `tui --frames N`
+  now checks `NO_COLOR` itself (mirroring crossterm's rule — set and non-empty) and warns on
+  stderr that the capture cannot evidence job-state colours, so a colourless capture can no longer
+  be mistaken for proof that the colours work. Two tests drive the real binary — one asserts a
+  walking dwarf reaches the capture wearing `38;2;214;154;78`, the other asserts the warning
+  appears when colour is suppressed — and both have mutations in the 2.2 set. What remains
+  deferred is the *product* half: a player who runs with `NO_COLOR` set still gets no state signal
+  at all, because there is no glyph or brightness fallback. That is a design change and still
+  belongs to a later story [crates/tui/src/main.rs, crates/tui/src/frame.rs:50-60].

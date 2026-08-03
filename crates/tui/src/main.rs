@@ -5,6 +5,7 @@ mod palette;
 mod view;
 
 use std::{
+    env,
     io::{self, BufRead, BufReader, BufWriter, Read, Write},
     net::TcpStream,
     sync::mpsc::{self, SyncSender, TryRecvError},
@@ -240,6 +241,17 @@ fn stream_frames(
         .spawn(move || read_messages(reader, message_tx))
         .context("could not spawn server reader thread")?;
 
+    // This mode exists to produce evidence, and colour is the only signal carrying job
+    // state. When crossterm drops every colour sequence the capture still looks perfectly
+    // well-formed, so a colour claim read off it is a claim about nothing — which has
+    // already happened once on this project. Refuse to be silently vacuous.
+    if colour_is_suppressed() {
+        eprintln!(
+            "warning: NO_COLOR is set, so this capture contains no colour and cannot \
+             evidence dwarf job-state colours. Re-run with NO_COLOR unset to check them."
+        );
+    }
+
     let (w, h) = frame_size();
     // The camera is fixed once, exactly as the interactive path does it. Recomputing
     // `initial` per frame re-centres on entity 0 every time, which pins that dwarf to
@@ -262,6 +274,12 @@ fn stream_frames(
     }
 
     Ok(())
+}
+
+/// Mirrors crossterm's own rule (`Colored::ansi_color_disabled`): set and non-empty
+/// disables colour, an empty value does not.
+fn colour_is_suppressed() -> bool {
+    !env::var("NO_COLOR").unwrap_or_default().is_empty()
 }
 
 fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
