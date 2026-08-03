@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod frame;
 mod palette;
 mod view;
 
