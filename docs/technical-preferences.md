@@ -71,7 +71,9 @@ sentence and proceed.
 - Milestone 1 is 8–12 stories. More than that means scope creep — cut, don't plan.
 
 ## Dev workflow
-- Every story: `cargo fmt`, `cargo clippy -D warnings`, `cargo test` green before done.
+- Every story: `scripts/gate.sh` green before done — `cargo fmt --check`, `cargo clippy
+  --all-targets -- -D warnings`, `cargo test`, plus a probe that `tui` has no `sim-core`
+  edge. It exits non-zero, so a green gate is a fact rather than a claim.
 - Dev agent writes the tests for its own story; there is no separate QA gate.
   The walking-skeleton scenario test is the milestone gate.
 - Small commits per story with imperative messages. No long-lived branches.
