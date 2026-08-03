@@ -108,10 +108,23 @@ class DeltaCursorTests(unittest.TestCase):
 
 class PricingTests(unittest.TestCase):
     def test_picks_priced_model_over_synthetic(self):
+        # This test is about SELECTION — skip Claude Code's unpriced `<synthetic>`
+        # pseudo-model and pick the real one. It used to assert `rates["input"] == 15.0`,
+        # which coupled it to a price: when the stale Opus row was corrected $15 -> $5 on
+        # 2026-08-01 the fix shipped WITHOUT its test, and this suite went red and stayed
+        # red, unnoticed, because nothing runs it. Assert the row that was chosen instead.
         rates = st._rates_for(["<synthetic>", "claude-opus-4-8"])
-        self.assertIsNotNone(rates)
-        self.assertEqual(rates["input"], 15.0)
+        self.assertIs(rates, st.PRICES["opus"])
         self.assertIsNone(st._rates_for(["<synthetic>"]))
+
+    def test_current_rates_are_pinned_deliberately(self):
+        # The guard the above test should never have been doing. Prices are a DECISION:
+        # changing one must break a test so it is updated on purpose, not discovered a
+        # month later in a retro. (Every review row recorded before 2026-08-01 is ~3x
+        # overstated precisely because a rate changed with nothing watching.)
+        # Hand-written literals on purpose — never assert PRICES against itself.
+        self.assertEqual(st.PRICES["opus"], {"input": 5.0, "cache_write": 6.25, "cache_read": 0.50, "output": 25.0})
+        self.assertEqual(st.PRICES["fable"], {"input": 10.0, "cache_write": 12.50, "cache_read": 1.0, "output": 50.0})
 
 
 class ClaudeParsingTests(unittest.TestCase):

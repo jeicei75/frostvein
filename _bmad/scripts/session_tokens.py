@@ -57,7 +57,17 @@ PRICES: dict[str, dict[str, float]] = {
     # model name, so specific keys must precede general ones — "gpt-5" matches
     # "gpt-5.6-sol" too, and would silently bill it at a quarter of its real input
     # rate if it came first.
-    "opus": {"input": 15.0, "cache_write": 18.75, "cache_read": 1.5, "output": 75.0},
+    # Claude Fable 5 (story-creation/orchestration model since 2026-08-01): $10 in /
+    # $50 out, cache read 0.1x, cache write at the 5m 1.25x rate per file convention.
+    # (Claude Code sessions actually cache at the 1h TTL = 2x write; writes are a
+    # small share of these sessions, so the understatement is minor — noted, not modeled.)
+    "fable": {"input": 10.0, "cache_write": 12.50, "cache_read": 1.0, "output": 50.0},
+    # Opus (review model). Every CURRENT Opus — 5 / 4.8 / 4.7 / 4.6 — is $5 in / $25
+    # out (cache read 0.1x, write 1.25x). This row previously carried the Opus
+    # 4.1-era $15/$75, so every review figure recorded before 2026-08-01 (e.g. the
+    # us-02 review's $81.60) is OVER-stated ~3x. Historical rows are NOT
+    # retro-corrected — read them as old-opus-rate equivalents.
+    "opus": {"input": 5.0, "cache_write": 6.25, "cache_read": 0.50, "output": 25.0},
     "sonnet": {"input": 3.0, "cache_write": 3.75, "cache_read": 0.30, "output": 15.0},
     "haiku": {"input": 1.0, "cache_write": 1.25, "cache_read": 0.10, "output": 5.0},
     # gpt-5.6 Sol (Codex dev model since 2026-08-01): $5 in / $30 out, cache read at
@@ -356,6 +366,29 @@ def _sum_usd(rows: list[dict]) -> float:
     return sum(r["est_usd"] for r in rows if r["est_usd"] is not None)
 
 
+def _story_label(story: str, epic: str) -> str:
+    """Short per-row label for the rollup table: the story's *identifier*, not words from its slug.
+
+    This used to be ``story.split("-", 4)[3]``, which silently assumed one project's key shape
+    (``ep-NN-us-MM-slug`` → ``01``). On a project keyed ``E-S-slug`` it sliced a word out of the
+    title instead: ``1-1-a-seeded-frozen-world-exists`` → ``seeded``, ``1-2-...`` → ``daemon``.
+    Cosmetic, but the script is shared across projects, so the fix belongs here rather than in a
+    fork (ep-11 retro A2; reported in frostvein's transfer note §C3).
+
+    Rule: drop the leading ``<epic>-`` prefix, then keep the leading identifier tokens — numbers
+    and the ``us`` marker — and stop at the first word of the human slug.
+    ``ep-11-us-01-brain-design-decision-spike`` → ``us-01``;  ``1-1-a-seeded-...`` → ``1``.
+    """
+    rest = story[len(epic) + 1:] if story.startswith(f"{epic}-") else story
+    tokens: list[str] = []
+    for tok in rest.split("-"):
+        if tok.isdigit() or tok == "us":
+            tokens.append(tok)
+        else:
+            break
+    return "-".join(tokens) or rest
+
+
 def render_rollup(roll: dict) -> str:
     per_story: dict[str, list[dict]] = roll["per_story"]
     phases = list(_TRIAD) + sorted(
@@ -391,7 +424,7 @@ def render_rollup(roll: dict) -> str:
                 cells.append(f"${usd:.2f}")
         stot = _sum_usd(rows)
         grand += stot
-        short = story.split("-", 4)[3] if len(story.split("-")) > 3 else story
+        short = _story_label(story, roll["epic"])
         out.append(f"| {short} | " + " | ".join(cells) + f" | ${stot:.2f} |")
     tot_cells = [f"**${phase_tot[p]:.2f}**" if phase_priced[p] else "**n/a**" for p in phases]
     out.append("| **total** | " + " | ".join(tot_cells) + f" | **${grand:.2f}** |")
