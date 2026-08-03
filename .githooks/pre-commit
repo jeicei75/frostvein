@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Runs the frostvein gate before every commit.
+#
+# ENABLE (once per clone):  git config core.hooksPath .githooks
+#
+# `.git/hooks/` is not versioned, so this lives in a tracked directory and is
+# activated by that config line. `git commit --no-verify` still bypasses it —
+# the point is to make green the default and skipping it a deliberate, visible
+# act, not to make it impossible.
+
+exec "$(git rev-parse --show-toplevel)/scripts/gate.sh"
