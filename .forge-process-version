@@ -1,8 +1,9 @@
 # Written by scripts/forge-process.sh — do not hand-edit.
 # SRC lines record the FORGE-SIDE hash at install time, so a later `check`
-# can tell 'upstream moved' apart from 'we changed it locally'.
-VERSION=1.0.1
-SRC f9199bff08b65c9974469d35b0600694f9d4bc2de8da94477adcfce29897c0ae _bmad/scripts/session_tokens.py
+# can tell 'upstream moved' apart from 'we changed it locally'. A TEMPLATE that
+# was kept (not re-installed) keeps its EARLIER hash, so a pending notice survives.
+VERSION=1.0.2
+SRC aecc2339db7728e3faa2af9acc9a0910b7b25202e850973d93c494840ba443ae _bmad/scripts/session_tokens.py
 SRC 545fdee567a0e769aa3da85bda4b02826bae3493ea60d7d4c951e77efd106897 _bmad/scripts/tests/test_session_tokens.py
 SRC 67b6cb035768eb07421381c5e36bc7b0500b4e813e4ac5d6aa62004ffe144cd9 _bmad/custom/bmad-create-story.toml
 SRC a5013e44a711bbbc6427674a351477f970b850c8974a07412864bf8f44c9d91a _bmad/custom/bmad-dev-story.toml
