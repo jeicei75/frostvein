@@ -4,7 +4,7 @@ baseline_commit: 0882d0641f8aba67281d1d87817ba7423643a0f9
 
 # Story 2.1: The World Runs on Its Own Clock
 
-Status: review
+Status: done
 
 ## Story
 
@@ -17,9 +17,10 @@ so that the world exists and moves independent of anyone watching.
 1. `sim-core` owns exactly one `bevy_ecs::schedule::Schedule`, built with an explicit
    `.chain()`, and `World::step()` runs it. `tick` is an ECS resource advanced by a system
    *inside* that schedule; `World::tick()` reports N after N `step()` calls.
-2. `World::set_tile(pos, tile)` replaces that tile and records `pos` in a per-tick dirty
-   set. An out-of-bounds `pos` mutates nothing and returns `false`. `tiles` has no other
-   mutator.
+2. `World::set_tile(pos, tile)` replaces that tile and records `pos` in a dirty set that is
+   emptied only by `drain_dirty` — **per-drain, not per-tick**; `step()` never clears it
+   (amended 2026-08-03 by review decision, pinned by `stepping_does_not_clear_the_dirty_set`).
+   An out-of-bounds `pos` mutates nothing and returns `false`. `tiles` has no other mutator.
 3. `World::drain_dirty()` returns `Vec<(Pos, Tile)>` in ascending `Pos` order and empties
    the set, so one change is never reported twice.
 4. A `sim-core` scenario test that calls `set_tile` then `step()` finds exactly that tile
@@ -110,6 +111,39 @@ so that the world exists and moves independent of anyone watching.
         indefinitely afterwards by design.
 - [x] **Green gate** (AC: 11) — `scripts/gate.sh`, then the live check below; report what it
       printed.
+
+### Review Findings
+
+Code review 2026-08-03 — four layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor,
+Feature Auditor). Both Opus layers independently ran the binaries; AC7's rate, AC9's real
+eviction and AC10 in its entirety were **observed live**, not inferred from the suite.
+
+**Decisions resolved by Wolf, 2026-08-03** (both now carried as patches below):
+
+1. *Dirty set is per-drain, not per-tick.* No system clears `dirty`; only `drain_dirty` empties
+   it (`crates/sim-core/src/lib.rs:180-190`). **Ruling: per-drain is authoritative** — the daemon
+   drains every iteration, so per-drain already *is* per-tick in production, and a clear-system
+   inside the schedule would add a second clearing mechanism whose correctness depends entirely
+   on `.chain()` order (exactly the coupling AD-7 keeps explicit) in exchange for nothing. AC2's
+   wording is amended to match, and the semantics get pinned by a test rather than left implicit.
+2. *The composed `tui` client loop is invisible to the gate.* **Ruling: add the instrument now,
+   in 2.1.** 2.2 and 2.3 both build on this loop; shipping it with no regression net is the Epic 1
+   pattern the retro committed to ending. Accepts a small production affordance added for
+   testability, which also serves as a live observability instrument.
+
+- [x] [Review][Patch] Amend AC2 wording to per-drain and pin it with a test that `step()` does
+      NOT clear the dirty set [crates/sim-core/tests/scenario.rs]
+- [x] [Review][Patch] Add a `--frames N` headless mode running the real reader-thread loop, plus a
+      spawned-binary test asserting two different ticks appear [crates/tui/src/main.rs, crates/tui/tests/]
+- [x] [Review][Patch] A burst of simultaneous connects stalls the fixed timestep [crates/simd/src/main.rs:109-117]
+- [x] [Review][Patch] An evicted client keeps its socket and connection slot for up to ~60 s [crates/simd/src/main.rs:130-139]
+- [x] [Review][Patch] Mid-run snapshot handling silently resets camera and z-level [crates/tui/src/main.rs:148-152]
+- [x] [Review][Patch] A zero-size terminal leaves the client permanently blank with no diagnostic [crates/tui/src/main.rs:116,165-173]
+- [x] [Review][Patch] No behavioural assertion of the 10 Hz cadence [crates/simd/src/main.rs:233-236]
+- [x] [Review][Patch] Dirty-order test cannot detect a tie-break change [crates/sim-core/tests/scenario.rs:52-71]
+- [x] [Review][Patch] `bridge::delta` is destructive and non-idempotent [crates/simd/src/bridge.rs:35-46]
+- [x] [Review][Defer] Status line outgrows an 80-column terminal as the tick gains digits [crates/tui/src/view.rs:131-147] — deferred, pre-existing
+- [x] [Review][Defer] The dirty-tile path is inert in production until Story 3.2 [crates/sim-core/src/lib.rs:169-178] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -390,9 +424,34 @@ assertion `left == right` failed
   TUI connected mid-run at tick 244 (> 0) and later displayed tick 361. Both clients exited
   normally; the daemon continued until stopped manually.
 
+### Review Patch Notes (Claude, 2026-08-03)
+
+Nine patches applied across `sim-core`, `protocol`-adjacent `bridge`, `simd` and `tui`.
+All five mutations below were run through one batched apply/revert script (retro action
+item: "batch mutation testing into one apply/revert script emitting a results table").
+
+| Mutation | Test that must die | Result |
+| --- | --- | --- |
+| Eviction no longer shuts the socket | `full_client_queue_is_removed_from_the_registry_at_sixteen_lines` | KILLED (after fix, below) |
+| Tick loop never sleeps | `deltas_arrive_at_roughly_ten_per_second` | KILLED |
+| Client loop receives deltas but never applies them | `the_client_loop_renders_a_frame_per_streamed_delta` | KILLED |
+| `step()` clears the dirty set | `stepping_does_not_clear_the_dirty_set` | KILLED |
+| `drain_dirty` returns descending order | `dirty_tiles_are_sorted_and_out_of_bounds_writes_do_nothing` | KILLED |
+
+**The first mutation SURVIVED on the first run** — the new socket-shutdown assertion was
+a false positive. Dropping the evicted `Client` dropped its `TcpStream`, which closed the
+socket by itself, so the peer saw EOF with or without the fix under test. Production does
+not behave that way: `serve` still holds the original handle while parked in `write_all`.
+The test now holds a second live clone to model that, and the mutation dies (read timeout
+expires after 5.19s, proving the socket really does stay open without the shutdown). Noted
+because a green suite claimed a fix it was not testing — the exact class this project has
+now hit in 1.1, 1.2, 1.3 and again here.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/2-1-the-world-runs-on-its-own-clock.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `crates/tui/tests/client.rs` (new, review patch)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `crates/protocol/src/lib.rs`
 - `crates/sim-core/src/lib.rs`
@@ -409,3 +468,4 @@ assertion `left == right` failed
 | --- | --- |
 | 2026-08-03 | Story created |
 | 2026-08-03 | Implemented autonomous ticking, delta streaming, bounded clients, and live TUI updates; added sabotage-verified coverage and completed live verification. |
+| 2026-08-03 | Code review (4 layers, 2 of them running the binaries): 2 decisions resolved, 9 patches applied, 2 deferred, 4 dismissed. Gate green, 57 tests. |
