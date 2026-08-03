@@ -4,7 +4,7 @@ baseline_commit: 871a6b42d96247252b6f81a9d04331ab9e68d2f3
 
 # Story 2.2: Dwarves Wander the Frost
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -125,7 +125,7 @@ so that the world reads as alive even when I give no orders.
         and paste the table.
   - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent
         Record (AGENTS.md rule 1).
-- [ ] **Green gate** (AC: 13) — `scripts/gate.sh`, then the live check. Report what printed.
+- [x] **Green gate** (AC: 13) — `scripts/gate.sh`, then the live check. Report what printed.
 
 ## Dev Notes
 
@@ -360,6 +360,8 @@ per green step, imperative messages. Review-gated: no push, no PR.
 
 ### Agent Model Used
 
+OpenAI Codex (GPT-5)
+
 ### Debug Log References
 
 - Terrain RED (before implementation): `error[E0432]: unresolved import super::Terrain` at
@@ -448,6 +450,21 @@ per green step, imperative messages. Review-gated: no push, no PR.
   | spawn consumes the worldgen stream again | KILLED |
 
   Final output: `All mutations killed.` Zero survivors.
+- Final gate output:
+
+  ```text
+  frostvein gate
+    cargo fmt --check           ok
+    cargo clippy -D warnings    ok
+    cargo test                  ok
+    tui has no sim-core edge    ok
+  GATE GREEN
+  ```
+
+- Post-gate live check (manual): `/tmp/wander-final.txt` again contained 30 real frames; sampled
+  glyph rows at lines 12, 228, 468, and 708 showed `☺` changing row/column against different terrain.
+  This particular 30-frame sample emitted 30 idle-color glyphs; the immediately preceding manual
+  run is the observed idle/walk color evidence (27 idle, 3 walk).
 
 ### Completion Notes List
 
@@ -474,6 +491,8 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Ran the existing real-reader-thread observability path manually; observed both position changes
   and the idle-to-walk amber blink without adding an instrument or pressing gameplay keys.
 - Added and ran all seven required mutations; every sabotage was killed with zero survivors.
+- All 13 acceptance criteria are satisfied; `scripts/gate.sh` is green and the post-gate manual
+  live check again showed movement. Story is ready for review.
 
 ### File List
 
@@ -495,3 +514,5 @@ per green step, imperative messages. Review-gated: no push, no PR.
 | --- | --- |
 | 2026-08-03 | Story created |
 | 2026-08-03 | Wolf's call: fold the 1.1 spawn/terrain RNG-coupling deferral into this story (AC2, AC3) rather than carrying it past 2.4's save baselines. |
+| 2026-08-03 | Implemented deterministic dwarf wandering, wire-visible job state, and state-colored TUI rendering with scenario and live-daemon coverage. |
+| 2026-08-03 | Completed sabotage evidence, seven killed mutations, manual live checks, and a green project gate; moved story to review. |
