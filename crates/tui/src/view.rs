@@ -345,40 +345,79 @@ mod tests {
             confirming_quit: false,
         };
 
-        assert_eq!(apply_key(&mut state, KeyCode::Char('>'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('>'), dims),
+            Action::Redraw
+        );
         assert_eq!(state.z, 1);
         assert_eq!(apply_key(&mut state, KeyCode::Right, dims), Action::Redraw);
-        assert_eq!(apply_key(&mut state, KeyCode::Char('l'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('l'), dims),
+            Action::Redraw
+        );
         assert_eq!(state.camera.0, 2);
         assert_eq!(apply_key(&mut state, KeyCode::Down, dims), Action::Redraw);
-        assert_eq!(apply_key(&mut state, KeyCode::Char('j'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('j'), dims),
+            Action::Redraw
+        );
         assert_eq!(state.camera.1, 3);
 
         state.camera = (0, 0);
         state.z = 0;
-        assert_eq!(apply_key(&mut state, KeyCode::Char('<'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('<'), dims),
+            Action::Redraw
+        );
         assert_eq!(state.z, 0);
         assert_eq!(apply_key(&mut state, KeyCode::Left, dims), Action::Redraw);
-        assert_eq!(apply_key(&mut state, KeyCode::Char('h'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('h'), dims),
+            Action::Redraw
+        );
         assert_eq!(state.camera.0, 0);
         assert_eq!(apply_key(&mut state, KeyCode::Up, dims), Action::Redraw);
-        assert_eq!(apply_key(&mut state, KeyCode::Char('k'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('k'), dims),
+            Action::Redraw
+        );
         assert_eq!(state.camera.1, 0);
 
-        assert_eq!(apply_key(&mut state, KeyCode::Char('>'), dims), Action::Redraw);
-        assert_eq!(apply_key(&mut state, KeyCode::Char('l'), dims), Action::Redraw);
-        assert_eq!(apply_key(&mut state, KeyCode::Char('j'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('>'), dims),
+            Action::Redraw
+        );
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('l'), dims),
+            Action::Redraw
+        );
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('j'), dims),
+            Action::Redraw
+        );
         assert_eq!((state.camera, state.z), ((1, 1), 1));
 
-        assert_eq!(apply_key(&mut state, KeyCode::Char('q'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('q'), dims),
+            Action::Redraw
+        );
         assert!(state.confirming_quit);
-        assert_eq!(apply_key(&mut state, KeyCode::Char('y'), dims), Action::Quit);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('y'), dims),
+            Action::Quit
+        );
 
         state.confirming_quit = false;
-        assert_eq!(apply_key(&mut state, KeyCode::Char('q'), dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('q'), dims),
+            Action::Redraw
+        );
         assert_eq!(apply_key(&mut state, KeyCode::Esc, dims), Action::Redraw);
         assert!(!state.confirming_quit);
-        assert_eq!(apply_key(&mut state, KeyCode::Char('x'), dims), Action::Ignore);
+        assert_eq!(
+            apply_key(&mut state, KeyCode::Char('x'), dims),
+            Action::Ignore
+        );
     }
 
     #[test]
