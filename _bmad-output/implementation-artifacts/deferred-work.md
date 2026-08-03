@@ -47,3 +47,18 @@ names where it came from and what should trigger revisiting it.
   artifact while leaving every dependency uncommitted, so a fresh clone gets a story
   whose evidence chain dangles. Pre-existing repo hygiene, not caused by this story.
   **Revisit when** Wolf decides what of `_bmad-output/` belongs in version control.
+
+## Deferred from: code review of story 1-3-behold-the-frozen-world (2026-08-03)
+
+- **A panic in the interactive loop is invisible.** The panic hook prints to stderr while the
+  alternate screen is still active; `TerminalGuard::drop` then issues `LeaveAlternateScreen`, which
+  restores the primary buffer and wipes the message. Observed behaviour is "the client vanished, no
+  error" [crates/tui/src/main.rs:20-27,82].
+- **No SIGTERM/SIGHUP handling.** `TerminalGuard` runs only on return or unwind, so a killed client
+  leaves the terminal in raw mode and the alternate screen, requiring `reset`
+  [crates/tui/src/main.rs:26-35].
+- **AC11's 100×40 fallback is unreachable on Linux.** crossterm's `terminal::size()` shells out to
+  `tput cols`/`tput lines` before returning `Err`, so `unwrap_or((100, 40))` cannot fire while
+  `tput` is on PATH; a no-TTY frame renders at whatever terminfo guesses (verified: 80×24 = 1920
+  cells). Side effect: two forked `tput` processes per `--frame` run. This is a spec-accuracy issue
+  in the AC text, not a code defect [crates/tui/src/main.rs:67].
