@@ -116,14 +116,14 @@ so that the world reads as alive even when I give no orders.
 - [x] **Observability instrument** (AC: 11, 12) — the human check for "the world visibly lives".
       Use 2.1's existing `tui --frames N` (real reader thread, real `apply` → `render`); do not
       invent a second instrument. Exact commands in Verification; paste what you saw.
-- [ ] **Sabotage + mutation set** (AC: 13)
-  - [ ] Write `_bmad-output/implementation-artifacts/mutations/2-2-dwarves-wander-the-frost.sh`
+- [x] **Sabotage + mutation set** (AC: 13)
+  - [x] Write `_bmad-output/implementation-artifacts/mutations/2-2-dwarves-wander-the-frost.sh`
         with at least: wander never moves the dwarf; `random_range` replaced by a constant `0`;
         `cooldown` never reset (steps every tick); `is_standable` drops the below-tile check;
         `bridge` hardcodes `JobState::Idle`; `WANDER_RADIUS` widened to 6; `spawn_dwarves` fed
         the worldgen rng again (must kill the pinned-positions test). Run `scripts/mutate.sh`
         and paste the table.
-  - [ ] Paste the actual RED output for every new mapping/constant test into the Dev Agent
+  - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent
         Record (AGENTS.md rule 1).
 - [ ] **Green gate** (AC: 13) — `scripts/gate.sh`, then the live check. Report what printed.
 
@@ -434,6 +434,20 @@ per green step, imperative messages. Review-gated: no push, no PR.
   first run, so the instrument was rerun with only `NO_COLOR` unset: 30 real frames contained 27
   idle glyphs at `38;2;150;112;62` and 3 walk glyphs at `38;2;214;154;78`; the truecolor
   interactive run visibly blinked between those states and also exited through `q` then `y`.
+- Mutation run (`scripts/mutate.sh
+  _bmad-output/implementation-artifacts/mutations/2-2-dwarves-wander-the-frost.sh`):
+
+  | Mutation | Result |
+  | --- | --- |
+  | wander never assigns the chosen position | KILLED |
+  | wander choice is constant candidate zero | KILLED |
+  | wander cooldown never resets | KILLED |
+  | standability ignores the supporting tile | KILLED |
+  | bridge hardcodes every job state to idle | KILLED |
+  | wander radius widens from three to six | KILLED |
+  | spawn consumes the worldgen stream again | KILLED |
+
+  Final output: `All mutations killed.` Zero survivors.
 
 ### Completion Notes List
 
@@ -459,6 +473,7 @@ per green step, imperative messages. Review-gated: no push, no PR.
   rendered frame.
 - Ran the existing real-reader-thread observability path manually; observed both position changes
   and the idle-to-walk amber blink without adding an instrument or pressing gameplay keys.
+- Added and ran all seven required mutations; every sabotage was killed with zero survivors.
 
 ### File List
 
@@ -472,6 +487,7 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - `crates/tui/src/palette.rs`
 - `crates/tui/src/view.rs`
 - `_bmad-output/implementation-artifacts/2-2-dwarves-wander-the-frost.md`
+- `_bmad-output/implementation-artifacts/mutations/2-2-dwarves-wander-the-frost.sh`
 
 ## Change Log
 
