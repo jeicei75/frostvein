@@ -19,6 +19,20 @@ cd "$(dirname "$0")/.." || exit 1
 # mise installs the toolchain outside a non-interactive shell's PATH.
 [ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
 
+# This folder is reachable at two different absolute paths: /workspace/projects/frostvein
+# in the Nidavellir devpod, and /workspace in the frostvein devpod, which mounts it as the
+# root. `target/` is shared between them, and `CARGO_BIN_EXE_*` is baked into an
+# integration-test binary at COMPILE time — so artifacts built under one path make every
+# test that spawns simd or tui fail `NotFound` in 0.00s under the other, while unit tests
+# stay green. It reads exactly like a code regression and is not one (hit 2026-08-03).
+# Rebuilding only the two binary packages is enough; a full clean is not.
+ROOT_STAMP=target/.frostvein-root
+if [ -f "$ROOT_STAMP" ] && [ "$(cat "$ROOT_STAMP")" != "$PWD" ]; then
+  echo "  build cache came from $(cat "$ROOT_STAMP"); rebuilding simd + tui for $PWD"
+  cargo clean -p simd -p tui
+fi
+mkdir -p target && printf '%s' "$PWD" > "$ROOT_STAMP"
+
 fail=0
 run() {
   local name="$1"; shift
