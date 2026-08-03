@@ -4,7 +4,7 @@ baseline_commit: ebd27dd4e4474cfe8567bf3222aa857e6e374b88
 
 # Story 1.3: Behold the Frozen World
 
-Status: review
+Status: done
 
 ## Story
 
@@ -65,6 +65,49 @@ so that I can behold the fortress site and judge the icy-grim look.
   - [x] Loop: draw, then `event::read()`; on `Event::Key` with `kind == KeyEventKind::Press` call `apply_key` and act on the `Action`; on `Event::Resize` redraw at the new size; ignore everything else.
 
 - [x] **Green gate** (AC: 12) — run the four commands under Verification, then the live check, and report what the live check printed.
+
+### Review Findings
+
+Code review 2026-08-03 — four layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor, Feature
+Auditor). Feature Auditor traced every hop argv → glyph → exit under a real pty: **no capability is
+unwired**, and no scope guardrail was violated. All findings below are at the last hop (bytes → the
+boss's terminal) or in test coverage.
+
+- [x] [Review][Patch] Ctrl-C cannot quit the interactive client — raw mode clears `ISIG`, so Ctrl-C arrives as `KeyCode::Char('c')` and falls into `_ => Action::Ignore` [crates/tui/src/main.rs:98, crates/tui/src/view.rs:143-183] — **Wolf's decision 2026-08-03: bind Ctrl-C to quit immediately**, no y/n confirmation; the keymap widens by one binding because "unkillable app" is the worse trap
+- [x] [Review][Decision] `q` confirmation replaces the entire status line rather than overlaying — **Wolf's decision 2026-08-03: leave it**, full replacement is intended; the prompt is transient and the status returns on cancel
+- [x] [Review][Patch] No `ResetColor` and no trailing newline — every exit leaves the shell painted black-on-black [crates/tui/src/frame.rs:11-45, crates/tui/src/main.rs:28-35]
+- [x] [Review][Patch] Frame has no per-row positioning or row terminators — the story's own `--frame | head -45` check is a no-op (0 newlines in 12 816 bytes) and any width mismatch shears the map [crates/tui/src/frame.rs:16-42]
+- [x] [Review][Patch] `PEEK_DEPTH` cap is pinned by no test — raising it 3→6 leaves all 13 tests green, so the checked "out-of-depth blank" subtask is not actually covered [crates/tui/src/view.rs:214-260]
+- [x] [Review][Patch] Decoded snapshots are never validated against `dims` — a decodable-but-short `tiles` array panics with index-out-of-bounds, and `tile_index` multiplies untrusted u32 dims before widening (verified: both panic) [crates/tui/src/main.rs:116-128, crates/tui/src/view.rs:79,186-188]
+- [x] [Review][Patch] No socket read timeout and unbounded `read_line` — a peer that accepts and stays silent hangs forever; one that streams without a newline drove RSS to 5.4 GB in 4 s [crates/tui/src/main.rs:60-63,117-120]
+- [x] [Review][Patch] Status-line content asserted only 7 characters deep — camera coords, dwarf count and key hints are pinned by nothing [crates/tui/src/view.rs:115-138]
+- [x] [Review][Patch] Key modifiers are discarded — Ctrl-H/J/K/L pan the camera and Ctrl-Q opens the quit prompt [crates/tui/src/main.rs:98, crates/tui/src/view.rs:143-183]
+- [x] [Review][Patch] `BufWriter::new` default 8 KiB splits a frame across 2–4 `write` syscalls, so AC10's "one buffered write per frame" is literally false [crates/tui/src/main.rs:69,83]
+- [x] [Review][Patch] Port error text "0 = OS-assigned" is a `bind` semantic copied from the daemon; for a `connect` client 0 is never valid [crates/tui/src/main.rs:54]
+- [x] [Review][Defer] A panic in the interactive loop is invisible — the message prints to the alternate screen, which `TerminalGuard` then discards [crates/tui/src/main.rs:20-27,82] — deferred
+- [x] [Review][Defer] No SIGTERM/SIGHUP handling — a killed client leaves the terminal in raw mode [crates/tui/src/main.rs:26-35] — deferred
+- [x] [Review][Defer] AC11's documented 100×40 fallback is unreachable on Linux — crossterm shells out to `tput` before returning `Err`, so a no-TTY frame renders at 80×24 (verified: 1920 cells). The AC text describes something unobservable [crates/tui/src/main.rs:67] — deferred, spec-accuracy issue
+
+**Post-patch verification (2026-08-03).** All 10 patches applied and re-verified live, not just by
+suite: `--frame` now emits 24 newline-terminated rows ending in `\x1b[0m` and `--frame | head -45`
+renders the map (it printed one 12 816-byte line before); a snapshot whose `tiles` disagree with
+`dims` exits 1 with `snapshot has 2 tiles but dims 4x4x4 need 64` instead of panicking; a peer that
+accepts and stays silent now fails at 31 s instead of hanging forever; and under a real pty Ctrl-C
+exits 0 with the alternate screen left, cursor shown and colour reset. Sabotage re-checked: widening
+`PEEK_DEPTH` 3→6 now fails `peek_below_stops_at_three_levels` (it left all 13 tests green before),
+and the Ice↔Snow swap fails 3 tests. Gate: fmt clean, clippy clean, **39 tests** (was 33).
+
+**Still unobserved:** FR23 — whether the palette actually reads as icy-grim. That is Wolf's manual
+gate and no agent can stand in for it. Also unexercised live: `initial()`'s no-entity branch (the
+daemon always spawns 5 dwarves) and the `w == 0`/`h == 0` resize guards.
+
+Dismissed as noise (6): `dim()` "panics at depth ≥ 4" (the `[u16; PEEK_DEPTH]` type makes widening a
+compile error, and the sole caller passes 1..=`PEEK_DEPTH`); status-line truncation on narrow
+terminals (cosmetic); uncapped framebuffer allocation on an extreme resize (not reachable);
+`NO_COLOR` stripping truecolor (correct crossterm behaviour — but **Wolf must not have `NO_COLOR`
+set when judging FR23**; note that Codex's sandbox did export it, so its own frame was colourless —
+the orchestrator's live check outside the sandbox did carry full RGB); and a suspected
+self-referential `index` helper in the render test, which Blind Hunter sabotage-tested and cleared.
 
 ## Dev Notes
 
@@ -206,3 +249,4 @@ half of the gate, re-run independently:
 | 2026-08-03 | Story created |
 | 2026-08-03 | Implemented the frozen-world terminal client; final workspace tests remain blocked by sandbox-denied loopback sockets. |
 | 2026-08-03 | Orchestrator re-ran the full gate outside the sandbox (33 tests green) and the live `--frame` check; Green gate checked, Status → review. |
+| 2026-08-03 | Code review (4 layers): 10 patches applied, 2 decisions resolved by Wolf, 3 deferred, 6 dismissed. 39 tests green; live re-verified. |
