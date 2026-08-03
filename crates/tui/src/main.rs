@@ -241,6 +241,10 @@ fn stream_frames(
         .context("could not spawn server reader thread")?;
 
     let (w, h) = frame_size();
+    // The camera is fixed once, exactly as the interactive path does it. Recomputing
+    // `initial` per frame re-centres on entity 0 every time, which pins that dwarf to
+    // the middle of the screen and hides the very motion this instrument exists to show.
+    let state = initial(&snapshot);
     let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
     for _ in 0..count {
         // Bounded like every other read here: a server that connects and then goes
@@ -251,7 +255,6 @@ fn stream_frames(
             Ok(Err(error)) => return Err(error),
             Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
         }
-        let state = initial(&snapshot);
         let framebuffer = render(&snapshot, &state, w, h);
         write_frame(&mut out, &framebuffer, RowEnd::Newline)
             .context("could not write terminal frame")?;
@@ -366,21 +369,21 @@ mod tests {
     use std::io::Cursor;
 
     use protocol::{
-        Delta, Dims, Entity, EntityKind, Material, MessageType, Speed, Tile, TileChange,
+        Delta, Dims, Entity, EntityKind, JobState, Material, MessageType, Speed, Tile, TileChange,
     };
 
     use super::*;
 
     const SNAPSHOT_LINE: &str = concat!(
         r#"{"type":"snapshot","dims":{"x":2,"y":1,"z":1},"#,
-        r#""tiles":["empty",{"solid":"ice"}],"entities":[],"#,
+        r#""tiles":["empty",{"solid":"ice"}],"entities":[{"id":7,"kind":"dwarf","pos":[0,0,0],"state":"idle"}],"#,
         r#""designations":[],"zones":[],"speed":"normal","tick":9}"#,
         "\n"
     );
 
     const DELTA_LINE: &str = concat!(
         r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,0,0],"tile":{"solid":"stone"}}],"#,
-        r#""entities":[{"id":8,"kind":"dwarf","pos":[1,0,0]}],"#,
+        r#""entities":[{"id":8,"kind":"dwarf","pos":[1,0,0],"state":"walk"}],"#,
         r#""designations":[],"zones":[],"speed":"fast"}"#,
         "\n"
     );
@@ -397,6 +400,7 @@ mod tests {
             snapshot.tiles,
             vec![Tile::Empty, Tile::Solid(Material::Ice)]
         );
+        assert_eq!(snapshot.entities[0].state, JobState::Idle);
         assert_eq!(snapshot.tick, 9);
         assert_eq!(reader.position(), SNAPSHOT_LINE.len() as u64);
     }
@@ -412,6 +416,7 @@ mod tests {
         };
         assert_eq!(delta.tick, 10);
         assert_eq!(delta.tiles[0].pos, [1, 0, 0]);
+        assert_eq!(delta.entities[0].state, JobState::Walk);
         assert_eq!(reader.position(), DELTA_LINE.len() as u64);
     }
 
@@ -431,6 +436,7 @@ mod tests {
                 id: 8,
                 kind: EntityKind::Dwarf,
                 pos: [1, 0, 0],
+                state: JobState::Walk,
             }],
             designations: Vec::new(),
             zones: Vec::new(),

@@ -8,13 +8,17 @@ use bevy_ecs::{
     component::Component,
     resource::Resource,
     schedule::{IntoScheduleConfigs, Schedule},
-    system::ResMut,
+    system::{Query, Res, ResMut},
     world::World as EcsWorld,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
+const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
+const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
+const WANDER_RADIUS: i32 = 3;
+const WANDER_REST_TICKS: u32 = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Material {
@@ -61,11 +65,134 @@ pub struct Id(pub u32);
 #[derive(Component)]
 pub struct Dwarf;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Component)]
+pub enum JobState {
+    Idle,
+    Walk,
+    Work,
+}
+
+#[derive(Component)]
+struct Wander {
+    home: Pos,
+    cooldown: u32,
+}
+
+#[derive(Resource)]
+struct WanderRng(ChaCha8Rng);
+
 #[derive(Resource)]
 struct Tick(pub u64);
 
+/// The tile grid lives in the ECS so systems can read it; `World` delegates.
+#[derive(Resource)]
+struct Terrain {
+    dims: Dims,
+    tiles: Vec<Tile>,
+    dirty: BTreeSet<Pos>,
+}
+
+impl Terrain {
+    fn tile(&self, p: Pos) -> Option<Tile> {
+        if p.x < 0
+            || p.y < 0
+            || p.z < 0
+            || p.x >= self.dims.x as i32
+            || p.y >= self.dims.y as i32
+            || p.z >= self.dims.z as i32
+        {
+            return None;
+        }
+
+        Some(self.tiles[worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32)])
+    }
+
+    fn set_tile(&mut self, p: Pos, tile: Tile) -> bool {
+        if self.tile(p).is_none() {
+            return false;
+        }
+
+        let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
+        self.tiles[index] = tile;
+        self.dirty.insert(p);
+        true
+    }
+
+    fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
+        std::mem::take(&mut self.dirty)
+            .into_iter()
+            .map(|pos| {
+                let tile = self
+                    .tile(pos)
+                    .expect("dirty positions must have passed set_tile bounds checking");
+                (pos, tile)
+            })
+            .collect()
+    }
+
+    fn is_standable(&self, p: Pos) -> bool {
+        matches!(self.tile(p), Some(Tile::Empty))
+            && matches!(
+                self.tile(Pos { z: p.z - 1, ..p }),
+                Some(Tile::Solid(_) | Tile::Ramp(_))
+            )
+    }
+}
+
 fn advance_tick(mut tick: ResMut<Tick>) {
     tick.0 += 1;
+}
+
+fn wander(
+    mut rng: ResMut<WanderRng>,
+    terrain: Res<Terrain>,
+    mut dwarves: Query<(&Id, &mut Pos, &mut Wander, &mut JobState)>,
+) {
+    // AD-7: query iteration is archetype order, not Id order, and all dwarves draw from
+    // one stream. Draw order is a sim outcome, so sort before touching the RNG.
+    let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+    dwarves.sort_by_key(|(id, ..)| **id);
+
+    for (_, mut pos, mut wander, mut state) in dwarves {
+        // NOTE: a resting dwarf never re-checks the tile it is standing on, so terrain
+        // mutated underneath it goes unnoticed until its cooldown expires — it will report
+        // standing inside solid rock, or hovering with no floor, for up to
+        // WANDER_REST_TICKS - 1 ticks. Unreachable while `set_tile` has no production
+        // caller; Story 3.2's dig is the first, and owns the fix along with gravity.
+        if wander.cooldown > 0 {
+            wander.cooldown -= 1;
+            *state = JobState::Idle;
+            continue;
+        }
+
+        let here = *pos;
+        // NOTE: fixed order, same z only. Ramp climbing arrives with A* in Story 3.2.
+        let candidates: Vec<Pos> = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            .into_iter()
+            .map(|(dx, dy)| Pos {
+                x: here.x + dx,
+                y: here.y + dy,
+                z: here.z,
+            })
+            // NOTE: standability only — occupancy is not checked, so two dwarves whose home
+            // boxes overlap can share a tile, and `view::render` draws them in ascending Id
+            // into the same cell, silently hiding the lower one. Tile claiming arrives with
+            // Story 3.2's jobs, which needs a reservation model anyway.
+            .filter(|p| {
+                (p.x - wander.home.x).abs() <= WANDER_RADIUS
+                    && (p.y - wander.home.y).abs() <= WANDER_RADIUS
+                    && terrain.is_standable(*p)
+            })
+            .collect();
+        wander.cooldown = WANDER_REST_TICKS;
+        match candidates.len() {
+            0 => *state = JobState::Idle,
+            n => {
+                *pos = candidates[rng.0.random_range(0..n)];
+                *state = JobState::Walk;
+            }
+        }
+    }
 }
 
 #[derive(Default)]
@@ -82,9 +209,6 @@ impl IdAllocator {
 }
 
 pub struct World {
-    dims: Dims,
-    tiles: Vec<Tile>,
-    dirty: BTreeSet<Pos>,
     ecs: EcsWorld,
     schedule: Schedule,
     ids: IdAllocator,
@@ -112,27 +236,31 @@ impl World {
         let heights = worldgen::height_field(dims, &mut rng);
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
+        let mut spawn_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_SPAWN);
 
         let mut ecs = EcsWorld::new();
         ecs.insert_resource(Tick(0));
-        let mut schedule = Schedule::default();
-        schedule.add_systems((advance_tick,).chain());
-
-        let mut world = World {
+        ecs.insert_resource(WanderRng(ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER)));
+        ecs.insert_resource(Terrain {
             dims,
             tiles,
             dirty: BTreeSet::new(),
+        });
+        let mut schedule = Schedule::default();
+        schedule.add_systems((advance_tick, wander).chain());
+
+        let mut world = World {
             ecs,
             schedule,
             ids: IdAllocator::default(),
             seed,
         };
-        world.spawn_dwarves(&heights, &mut rng);
+        world.spawn_dwarves(&heights, &mut spawn_rng);
         world
     }
 
     pub fn dims(&self) -> Dims {
-        self.dims
+        self.ecs.resource::<Terrain>().dims
     }
 
     pub fn seed(&self) -> u64 {
@@ -149,101 +277,115 @@ impl World {
 
     /// Flat row-major: index = x + y*dims.x + z*dims.x*dims.y
     pub fn tiles(&self) -> &[Tile] {
-        &self.tiles
+        &self.ecs.resource::<Terrain>().tiles
     }
 
     pub fn tile(&self, p: Pos) -> Option<Tile> {
-        if p.x < 0
-            || p.y < 0
-            || p.z < 0
-            || p.x >= self.dims.x as i32
-            || p.y >= self.dims.y as i32
-            || p.z >= self.dims.z as i32
-        {
-            return None;
-        }
-
-        Some(self.tiles[worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32)])
+        self.ecs.resource::<Terrain>().tile(p)
     }
 
     pub fn set_tile(&mut self, p: Pos, tile: Tile) -> bool {
-        if self.tile(p).is_none() {
-            return false;
-        }
-
-        let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
-        self.tiles[index] = tile;
-        self.dirty.insert(p);
-        true
+        self.ecs.resource_mut::<Terrain>().set_tile(p, tile)
     }
 
     pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
-        std::mem::take(&mut self.dirty)
-            .into_iter()
-            .map(|pos| {
-                let tile = self
-                    .tile(pos)
-                    .expect("dirty positions must have passed set_tile bounds checking");
-                (pos, tile)
-            })
-            .collect()
+        self.ecs.resource_mut::<Terrain>().drain_dirty()
     }
 
     /// Sorted ascending by `Id` — stable order is required by AD-7.
-    pub fn dwarves(&self) -> Vec<(Id, Pos)> {
+    // NOTE: promote this tuple to a struct at the fourth field (Story 3.2 adds carried item).
+    pub fn dwarves(&self) -> Vec<(Id, Pos, JobState)> {
         let mut dwarves: Vec<_> = self
             .ecs
             .iter_entities()
             .filter(|entity| entity.contains::<Dwarf>())
-            .filter_map(|entity| Some((*entity.get::<Id>()?, *entity.get::<Pos>()?)))
+            .filter_map(|entity| {
+                Some((
+                    *entity.get::<Id>()?,
+                    *entity.get::<Pos>()?,
+                    *entity.get::<JobState>()?,
+                ))
+            })
             .collect();
-        dwarves.sort_by_key(|(id, _)| *id);
+        dwarves.sort_by_key(|(id, ..)| *id);
         dwarves
     }
 
     fn spawn_dwarves(&mut self, heights: &[u32], rng: &mut ChaCha8Rng) {
-        let mut candidates = Vec::new();
-        for y in 0..self.dims.y {
-            for x in 0..self.dims.x {
-                let height = heights[(x + y * self.dims.x) as usize];
-                let is_flat = [
-                    (x as i32 - 1, y as i32),
-                    (x as i32 + 1, y as i32),
-                    (x as i32, y as i32 - 1),
-                    (x as i32, y as i32 + 1),
-                ]
-                .into_iter()
-                .filter(|&(nx, ny)| {
-                    nx >= 0 && ny >= 0 && nx < self.dims.x as i32 && ny < self.dims.y as i32
-                })
-                .all(|(nx, ny)| heights[(nx as u32 + ny as u32 * self.dims.x) as usize] == height);
-                if is_flat
-                    && matches!(
-                        self.tiles[worldgen::index(self.dims, x, y, height)],
-                        Tile::Solid(_)
-                    )
-                {
-                    candidates.push(Pos {
+        let mut candidates = {
+            let terrain = self.ecs.resource::<Terrain>();
+            let dims = terrain.dims;
+            let mut candidates = Vec::new();
+            for y in 0..dims.y {
+                for x in 0..dims.x {
+                    let height = heights[(x + y * dims.x) as usize];
+                    let is_flat = [
+                        (x as i32 - 1, y as i32),
+                        (x as i32 + 1, y as i32),
+                        (x as i32, y as i32 - 1),
+                        (x as i32, y as i32 + 1),
+                    ]
+                    .into_iter()
+                    .filter(|&(nx, ny)| {
+                        nx >= 0 && ny >= 0 && nx < dims.x as i32 && ny < dims.y as i32
+                    })
+                    .all(|(nx, ny)| heights[(nx as u32 + ny as u32 * dims.x) as usize] == height);
+                    let pos = Pos {
                         x: x as i32,
                         y: y as i32,
                         z: height as i32 + 1,
-                    });
+                    };
+                    if is_flat && terrain.is_standable(pos) {
+                        candidates.push(pos);
+                    }
                 }
             }
-        }
+            candidates
+        };
 
         for _ in 0..5 {
             let candidate = rng.random_range(0..candidates.len());
             let pos = candidates.swap_remove(candidate);
             let id = self.ids.allocate();
-            self.ecs.spawn((Dwarf, id, pos));
+            self.ecs.spawn((
+                Dwarf,
+                id,
+                pos,
+                JobState::Idle,
+                Wander {
+                    home: pos,
+                    // NOTE: staggers the spawn phases so the dwarves do not step in lockstep,
+                    // without spending a second RNG draw. It wraps at WANDER_REST_TICKS, so an
+                    // eleventh dwarf would share dwarf 0's phase — harmless at five.
+                    cooldown: id.0 % WANDER_REST_TICKS,
+                },
+            ));
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Dims, World};
+    use std::collections::BTreeSet;
+
+    use super::{Dims, JobState, Material, Pos, Terrain, Tile, World};
+
+    #[test]
+    fn terrain_identifies_standable_tiles() {
+        let terrain = Terrain {
+            dims: Dims { x: 2, y: 1, z: 2 },
+            tiles: vec![
+                Tile::Solid(Material::Stone),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            dirty: BTreeSet::new(),
+        };
+
+        assert!(terrain.is_standable(Pos { x: 0, y: 0, z: 1 }));
+        assert!(!terrain.is_standable(Pos { x: 1, y: 0, z: 1 }));
+    }
 
     #[test]
     fn generated_world_starts_at_tick_zero() {
@@ -261,5 +403,36 @@ mod tests {
 
         world.step();
         assert_eq!(world.tick(), 2);
+    }
+
+    #[test]
+    fn dwarves_spawn_idle_and_wander_in_staggered_id_order() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let before = world.dwarves();
+
+        assert!(before.iter().all(|(_, _, state)| *state == JobState::Idle));
+        world.step();
+        let after = world.dwarves();
+
+        assert_ne!(after[0].1, before[0].1);
+        assert_eq!(after[0].2, JobState::Walk);
+        for index in 1..5 {
+            assert_eq!(after[index].1, before[index].1);
+            assert_eq!(after[index].2, JobState::Idle);
+        }
+    }
+
+    #[test]
+    fn wander_rest_is_ten_ticks() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+
+        world.step();
+        assert_eq!(world.dwarves()[0].2, JobState::Walk);
+        for _ in 0..10 {
+            world.step();
+            assert_eq!(world.dwarves()[0].2, JobState::Idle);
+        }
+        world.step();
+        assert_eq!(world.dwarves()[0].2, JobState::Walk);
     }
 }

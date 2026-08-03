@@ -1,4 +1,4 @@
-use protocol::{EntityKind, Material, Tile};
+use protocol::{EntityKind, JobState, Material, Tile};
 
 pub type Rgb = (u8, u8, u8);
 
@@ -56,11 +56,19 @@ pub fn tile_cell(tile: Tile) -> Cell {
     }
 }
 
-pub fn entity_cell(kind: EntityKind) -> Cell {
-    match kind {
-        EntityKind::Dwarf => Cell {
+pub fn entity_cell(kind: EntityKind, state: JobState) -> Cell {
+    match (kind, state) {
+        (EntityKind::Dwarf, JobState::Idle) => Cell {
+            glyph: '☺',
+            fg: (150, 112, 62),
+        },
+        (EntityKind::Dwarf, JobState::Walk) => Cell {
             glyph: '☺',
             fg: (214, 154, 78),
+        },
+        (EntityKind::Dwarf, JobState::Work) => Cell {
+            glyph: '☺',
+            fg: (236, 186, 96),
         },
     }
 }
@@ -98,13 +106,16 @@ mod tests {
             assert_eq!(tile_cell(tile), Cell { glyph, fg });
         }
 
-        assert_eq!(
-            entity_cell(EntityKind::Dwarf),
-            Cell {
-                glyph: '☺',
-                fg: (214, 154, 78),
-            }
-        );
+        for (state, fg) in [
+            (JobState::Idle, (150, 112, 62)),
+            (JobState::Walk, (214, 154, 78)),
+            (JobState::Work, (236, 186, 96)),
+        ] {
+            assert_eq!(
+                entity_cell(EntityKind::Dwarf, state),
+                Cell { glyph: '☺', fg }
+            );
+        }
     }
 
     #[test]

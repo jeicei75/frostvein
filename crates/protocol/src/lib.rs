@@ -37,6 +37,14 @@ pub enum EntityKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum JobState {
+    Idle,
+    Walk,
+    Work,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Speed {
     Paused,
     Normal,
@@ -55,6 +63,7 @@ pub struct Entity {
     pub id: u32,
     pub kind: EntityKind,
     pub pos: [i32; 3],
+    pub state: JobState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,7 +120,7 @@ mod tests {
         "type": "snapshot",
         "dims": {"x": 2, "y": 1, "z": 1},
         "tiles": ["empty", {"solid": "stone"}],
-        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6]}],
+        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "idle"}],
         "designations": [],
         "zones": [],
         "speed": "normal",
@@ -122,7 +131,7 @@ mod tests {
         "type": "delta",
         "tick": 10,
         "tiles": [{"pos": [1, 2, 3], "tile": {"solid": "ice"}}],
-        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6]}],
+        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "walk"}],
         "designations": [],
         "zones": [],
         "speed": "fast"
@@ -148,7 +157,12 @@ mod tests {
                 id: 7,
                 kind: EntityKind::Dwarf,
                 pos: [4, 5, 6],
+                state: JobState::Idle,
             }]
+        );
+        assert_eq!(
+            serde_json::to_string(&snapshot.entities[0]).unwrap(),
+            r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle"}"#
         );
         assert!(snapshot.designations.is_empty());
         assert!(snapshot.zones.is_empty());
@@ -183,6 +197,7 @@ mod tests {
                 id: 7,
                 kind: EntityKind::Dwarf,
                 pos: [4, 5, 6],
+                state: JobState::Walk,
             }]
         );
         assert!(delta.designations.is_empty());
@@ -211,6 +226,13 @@ mod tests {
             (Speed::Paused, "\"paused\""),
             (Speed::Normal, "\"normal\""),
             (Speed::Fast, "\"fast\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (JobState::Idle, "\"idle\""),
+            (JobState::Walk, "\"walk\""),
+            (JobState::Work, "\"work\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }

@@ -13,6 +13,13 @@
     "output": 268787,
     "turns": 231
   },
+  "2bc9447d-0d2c-4fca-9638-b5fe320285dd.jsonl": {
+    "cache_creation": 585647,
+    "cache_read": 30594198,
+    "input": 405,
+    "output": 200586,
+    "turns": 222
+  },
   "2c1c94e2-1d61-46ed-b568-61e8be5ba702.jsonl": {
     "cache_creation": 538204,
     "cache_read": 25032956,
@@ -55,6 +62,13 @@
     "output": 202052,
     "turns": 187
   },
+  "e7456634-33dd-4c3b-8ccf-6f4e032c768f.jsonl": {
+    "cache_creation": 489651,
+    "cache_read": 6527613,
+    "input": 5853,
+    "output": 110575,
+    "turns": 63
+  },
   "rollout-2026-08-02T09-41-39-019fc1d9-ba99-7a70-a34d-175f62bfe74c.jsonl": {
     "cache_creation": 0,
     "cache_read": 2293248,
@@ -96,5 +110,12 @@
     "input": 182346,
     "output": 40825,
     "turns": 66
+  },
+  "rollout-2026-08-03T16-08-37-019fc862-5dce-73c3-bdd2-983f872e2fcf.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 13743360,
+    "input": 345490,
+    "output": 52527,
+    "turns": 125
   }
 }

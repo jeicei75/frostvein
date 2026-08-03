@@ -19,10 +19,11 @@ pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
         entities: world
             .dwarves()
             .into_iter()
-            .map(|(id, pos)| protocol::Entity {
+            .map(|(id, pos, state)| protocol::Entity {
                 id: id.0,
                 kind: protocol::EntityKind::Dwarf,
                 pos: [pos.x, pos.y, pos.z],
+                state: job_state(state),
             })
             .collect(),
         designations: Vec::new(),
@@ -52,10 +53,11 @@ pub fn delta(world: &mut sim_core::World) -> protocol::Delta {
         entities: world
             .dwarves()
             .into_iter()
-            .map(|(id, pos)| protocol::Entity {
+            .map(|(id, pos, state)| protocol::Entity {
                 id: id.0,
                 kind: protocol::EntityKind::Dwarf,
                 pos: [pos.x, pos.y, pos.z],
+                state: job_state(state),
             })
             .collect(),
         designations: Vec::new(),
@@ -78,6 +80,14 @@ fn material(material: sim_core::Material) -> protocol::Material {
         sim_core::Material::Soil => protocol::Material::Soil,
         sim_core::Material::Ice => protocol::Material::Ice,
         sim_core::Material::Snow => protocol::Material::Snow,
+    }
+}
+
+fn job_state(state: sim_core::JobState) -> protocol::JobState {
+    match state {
+        sim_core::JobState::Idle => protocol::JobState::Idle,
+        sim_core::JobState::Walk => protocol::JobState::Walk,
+        sim_core::JobState::Work => protocol::JobState::Work,
     }
 }
 
@@ -104,6 +114,33 @@ mod tests {
             sim_core::Material::Soil => protocol::Material::Soil,
             sim_core::Material::Ice => protocol::Material::Ice,
             sim_core::Material::Snow => protocol::Material::Snow,
+        }
+    }
+
+    /// AD-6's independent oracle. It restates each sim state's hand-written wire NAME and
+    /// decodes that, rather than repeating the production match — a second copy of the same
+    /// arms would pass even when the author got a mapping wrong and copied it.
+    fn expected_job_state(value: sim_core::JobState) -> protocol::JobState {
+        let wire = match value {
+            sim_core::JobState::Idle => r#""idle""#,
+            sim_core::JobState::Walk => r#""walk""#,
+            sim_core::JobState::Work => r#""work""#,
+        };
+        serde_json::from_str(wire).expect("hand-written wire name must decode")
+    }
+
+    #[test]
+    fn every_job_state_maps_to_its_named_wire_variant() {
+        for (value, wire) in [
+            (sim_core::JobState::Idle, r#""idle""#),
+            (sim_core::JobState::Walk, r#""walk""#),
+            (sim_core::JobState::Work, r#""work""#),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&super::job_state(value)).unwrap(),
+                wire,
+                "{value:?} crossed the bridge as the wrong wire state"
+            );
         }
     }
 
@@ -185,7 +222,8 @@ mod tests {
 
     #[test]
     fn entities_mirror_dwarves() {
-        let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        world.step();
         let snap = snapshot(&world);
         let dwarves = world.dwarves();
 
@@ -204,13 +242,23 @@ mod tests {
                 .collect::<Vec<_>>(),
             dwarves
                 .iter()
-                .map(|(_, pos)| [pos.x, pos.y, pos.z])
+                .map(|(_, pos, _)| [pos.x, pos.y, pos.z])
                 .collect::<Vec<_>>()
         );
         assert!(
             snap.entities
                 .iter()
                 .all(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        );
+        assert_eq!(
+            snap.entities
+                .iter()
+                .map(|entity| entity.state)
+                .collect::<Vec<_>>(),
+            dwarves
+                .iter()
+                .map(|(_, _, state)| expected_job_state(*state))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -287,6 +335,18 @@ mod tests {
             }]
         );
         assert_eq!(update.entities.len(), 5);
+        assert_eq!(
+            update
+                .entities
+                .iter()
+                .map(|entity| entity.state)
+                .collect::<Vec<_>>(),
+            world
+                .dwarves()
+                .iter()
+                .map(|(_, _, state)| expected_job_state(*state))
+                .collect::<Vec<_>>()
+        );
         assert!(update.designations.is_empty());
         assert!(update.zones.is_empty());
         assert_eq!(update.speed, protocol::Speed::Normal);
