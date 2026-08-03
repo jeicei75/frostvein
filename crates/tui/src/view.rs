@@ -213,7 +213,7 @@ fn tile_index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use protocol::{Entity, EntityKind, Material, MessageType, Speed, Tile};
+    use protocol::{Entity, EntityKind, JobState, Material, MessageType, Speed, Tile};
 
     use super::*;
 
@@ -306,11 +306,13 @@ mod tests {
                 id: 1,
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 1],
+                state: JobState::Idle,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
                 pos: [3, 1, 2],
+                state: JobState::Idle,
             },
         ];
         let state = ViewState {
@@ -386,6 +388,7 @@ mod tests {
                 id,
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 30],
+                state: JobState::Idle,
             })
             .collect();
         let state = ViewState {
@@ -577,6 +580,7 @@ mod tests {
             id: 7,
             kind: EntityKind::Dwarf,
             pos: [8, 1, 4],
+            state: JobState::Idle,
         });
         assert_eq!(
             initial(&snapshot),

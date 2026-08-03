@@ -94,14 +94,14 @@ so that the world reads as alive even when I give no orders.
         `a_walled_in_dwarf_stays_idle` (build the wall with `set_tile`).
   - [x] The standability oracle in the test is written out from `World::tile` — do not call the
         production predicate on both sides.
-- [ ] **Wire: state on the entity** (AC: 10)
-  - [ ] `protocol`: `JobState` enum + `Entity.state`; add `"state": "idle"` to the `WIRE` and
+- [x] **Wire: state on the entity** (AC: 10)
+  - [x] `protocol`: `JobState` enum + `Entity.state`; add `"state": "idle"` to the `WIRE` and
         `DELTA_WIRE` literals and assert it decodes to the right variant; extend
         `every_material_and_tile_variant_has_a_pinned_wire_name` with the three state names.
-  - [ ] `simd/src/bridge.rs`: `fn job_state(sim_core::JobState) -> protocol::JobState`,
+  - [x] `simd/src/bridge.rs`: `fn job_state(sim_core::JobState) -> protocol::JobState`,
         exhaustive, no wildcard; both `snapshot` and `delta` fill the field. Test it against a
         restated oracle table like `expected_tile` already does.
-  - [ ] `tui`: add the field to the `SNAPSHOT_LINE` / `DELTA_LINE` literals in `main.rs` tests
+  - [x] `tui`: add the field to the `SNAPSHOT_LINE` / `DELTA_LINE` literals in `main.rs` tests
         and to the `Entity` values built in `view.rs` tests.
 - [ ] **`simd`: prove it end to end** (AC: 11)
   - [ ] `crates/simd/tests/serve.rs`: read a run of consecutive deltas from a live daemon;
@@ -403,6 +403,20 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Walled-in sabotage RED (production standability filter removed): position changed from
   `Pos { x: 115, y: 84, z: 15 }` to `Pos { x: 115, y: 85, z: 15 }`; result:
   `FAILED. 0 passed; 1 failed`.
+- Wire TDD RED before implementation: `protocol::Entity` rejected `state`, `JobState` was
+  undeclared, the bridge oracle could not find `protocol::JobState`/`job_state`, and TUI fixtures
+  could not import or construct the new field; the workspace failed compilation.
+- Protocol state-name mapping sabotage RED (`Idle` renamed to `"rest"`): left `"rest"`, right
+  `"idle"`; result: `FAILED. 0 passed; 1 failed`.
+- Entity wire-order sabotage RED (`state` moved before `pos`): serialized left
+  `{"id":7,"kind":"dwarf","state":"idle","pos":[4,5,6]}`, right
+  `{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle"}`; result:
+  `FAILED. 0 passed; 1 failed`.
+- JobState bridge-oracle sabotage RED (mapping hardcoded to `Idle`): left `Idle`, right `Walk`;
+  result: `FAILED. 0 passed; 1 failed`.
+- Snapshot field sabotage RED (snapshot entity state hardcoded `Idle`): left
+  `[Idle, Idle, Idle, Idle, Idle]`, right `[Walk, Idle, Idle, Idle, Idle]`; result:
+  `FAILED. 0 passed; 1 failed`.
 
 ### Completion Notes List
 
@@ -418,6 +432,9 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Added the four required 200-step/enclosure scenarios. The standability oracle is written directly
   from `World::tile`, radius is a literal 3 in the test, same-seed worlds match on every step, the
   observed movement spans multiple vectors and axes, and a four-wall fixture remains idle.
+- Added protocol `JobState` and ordered `Entity.state`, updated both hand-written wire formats,
+  exhaustively bridged all three sim states into snapshots/deltas against a restated oracle, and
+  updated every TUI wire/entity fixture forced by the new field.
 
 ### File List
 
@@ -425,6 +442,9 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - `crates/sim-core/tests/scenario.rs`
 - `crates/sim-core/tests/worldgen.rs`
 - `crates/simd/src/bridge.rs`
+- `crates/protocol/src/lib.rs`
+- `crates/tui/src/main.rs`
+- `crates/tui/src/view.rs`
 - `_bmad-output/implementation-artifacts/2-2-dwarves-wander-the-frost.md`
 
 ## Change Log
