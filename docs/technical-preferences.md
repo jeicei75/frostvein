@@ -69,6 +69,17 @@ sentence and proceed.
   milestone 1.
 - A story fits one dev-agent session. If it doesn't, split it vertically.
 - Milestone 1 is 8–12 stories. More than that means scope creep — cut, don't plan.
+- **Every story names its observability instrument in a task — and tests the instrument.**
+  The instrument is what a human uses to *see* the headline outcome (a CLI flag, a headless
+  render mode, a wire dump), named with its exact command in Verification. It is not a
+  substitute for the story's tests, and its own test is not optional: an instrument is an
+  evidence channel, and an untested one manufactures false evidence rather than merely
+  missing true evidence — which is worse than having none, because it is believed. Story 2.2
+  named `tui --frames N` as this rule requires and it was broken two ways no test could see:
+  it re-centred the camera every frame (rendering motion as stillness) and went silently
+  colourless under `NO_COLOR`. Both were caught at review, after the story read as done. The
+  instrument's test must show the observable *changes* when the underlying state changes,
+  and — where the environment can suppress the signal — that the instrument says so.
 
 ## Dev workflow
 - Every story: `scripts/gate.sh` green before done — `cargo fmt --check`, `cargo clippy

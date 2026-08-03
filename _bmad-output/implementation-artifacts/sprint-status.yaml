@@ -98,7 +98,7 @@ action_items:
     action: "Every story ships an observability instrument named in its tasks (the --frame lesson)"
     owner: "Amelia"
     status: done
-    note: "Closed at 2.2: the story named its instrument in a task of its own (Observability instrument, AC 11/12) rather than acquiring one at review. Sting in the tail — 2.2's review found the instrument itself was broken (`stream_frames` recomputed the camera per frame, pinning the dwarf to screen centre and rendering motion as stillness), so the live evidence taken through it was an artefact. Fixed, regression-tested and re-taken at review. Naming the instrument is necessary but not sufficient: the instrument needs a test too"
+    note: "Closed at 2.2: the story named its instrument in a task of its own (Observability instrument, AC 11/12) rather than acquiring one at review. Sting in the tail — 2.2's review found the instrument itself was broken (`stream_frames` recomputed the camera per frame, pinning the dwarf to screen centre and rendering motion as stillness), so the live evidence taken through it was an artefact. Fixed, regression-tested and re-taken at review. Naming the instrument is necessary but not sufficient: the instrument needs a test too. ENCODED 2026-08-03 in two places so 2.3 onward inherits it: the TESTED-INSTRUMENT ADDENDUM on the observability rule in _bmad/custom/bmad-create-story.toml (which story-creation actually loads) and the Story rules section of docs/technical-preferences.md"
   - epic: 1
     action: "Set sandbox_workspace_write.network_access=true in scripts/codex-handoff.sh and update its header comment; keep cargo fetch prewarm and --offline builds in the handoff prompt"
     owner: "Amelia"
