@@ -15,6 +15,7 @@ use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
+const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Material {
@@ -164,6 +165,7 @@ impl World {
         let heights = worldgen::height_field(dims, &mut rng);
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
+        let mut spawn_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_SPAWN);
 
         let mut ecs = EcsWorld::new();
         ecs.insert_resource(Tick(0));
@@ -181,7 +183,7 @@ impl World {
             ids: IdAllocator::default(),
             seed,
         };
-        world.spawn_dwarves(&heights, &mut rng);
+        world.spawn_dwarves(&heights, &mut spawn_rng);
         world
     }
 

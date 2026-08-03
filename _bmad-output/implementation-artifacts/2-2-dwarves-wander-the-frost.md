@@ -64,19 +64,19 @@ so that the world reads as alive even when I give no orders.
         still pass unmodified except where a new field forces a construction change.**
   - [x] `spawn_dwarves` reads tiles through the resource: build the candidate `Vec` in an inner
         scope so the immutable borrow of `self.ecs` ends before the `spawn` loop.
-- [ ] **`sim-core`: split spawn off the worldgen stream** (AC: 2, 3)
-  - [ ] `STREAM_SPAWN` constant; `generate` builds a second `ChaCha8Rng::seed_from_u64(seed ^
+- [x] **`sim-core`: split spawn off the worldgen stream** (AC: 2, 3)
+  - [x] `STREAM_SPAWN` constant; `generate` builds a second `ChaCha8Rng::seed_from_u64(seed ^
         STREAM_SPAWN)` and hands *that* to `spawn_dwarves`. The worldgen rng keeps
         `height_field` and `layered_terrain` and nothing else.
-  - [ ] Test `spawn_positions_for_seed_42_are_pinned` with the five positions as literals, and
+  - [x] Test `spawn_positions_for_seed_42_are_pinned` with the five positions as literals, and
         a terrain-unchanged assertion (same seed → the tile vector still matches what the
         existing worldgen tests describe).
-  - [ ] **Record the decoupling experiment**: add one throwaway `rng.random::<bool>()` draw at
+  - [x] **Record the decoupling experiment**: add one throwaway `rng.random::<bool>()` draw at
         the end of `layered_terrain`, run the pinned test, confirm it stays GREEN, revert, and
         paste that into the Dev Agent Record. This is inverted sabotage — the evidence is a
         test that *survives*. Without the split it goes red; that is the future bug this
         closes.
-  - [ ] Dwarf positions for a given seed change once, here. Nothing pins them today (verified:
+  - [x] Dwarf positions for a given seed change once, here. Nothing pins them today (verified:
         no test hardcodes a position), and 2.4's `SaveState` baselines do not exist yet — which
         is why this lands now rather than later.
 - [ ] **`sim-core`: wander stream, state, system** (AC: 1, 2, 4, 5)
@@ -369,16 +369,32 @@ per green step, imperative messages. Review-gated: no push, no PR.
   `assertion failed: !terrain.is_standable(Pos { x: 1, y: 0, z: 1 })`; result:
   `FAILED. 0 passed; 1 failed`. The first sabotage attempt survived because its negative fixture
   was solid rather than unsupported empty; the fixture was corrected before completing the task.
+- Spawn-stream TDD RED before the split showed the old coupled positions beginning
+  `[Pos { x: 80, y: 54, z: 17 }, Pos { x: 49, y: 13, z: 20 }, ...]` instead of the placeholder
+  literals. After the split, the test pinned the independently seeded positions and the full tile
+  vector fingerprint `0xd03e1a262b9cc19d`.
+- Spawn-stream sabotage RED (worldgen RNG fed back into `spawn_dwarves`): left
+  `[Pos { x: 80, y: 54, z: 17 }, Pos { x: 49, y: 13, z: 20 }, Pos { x: 39, y: 41, z: 18 },
+  Pos { x: 106, y: 42, z: 15 }, Pos { x: 82, y: 47, z: 16 }]`; right was the five pinned
+  spawn-stream positions; result: `FAILED. 0 passed; 1 failed`.
+- AC3 inverted sabotage (manual): added `let _ = rng.random::<bool>();` at the end of
+  `layered_terrain`, then ran `cargo test --offline -p sim-core
+  spawn_positions_for_seed_42_are_pinned`; result stayed GREEN: `1 passed; 0 failed`. Reverted the
+  throwaway draw afterward.
 
 ### Completion Notes List
 
 - Moved terrain dimensions, tiles, and dirty tracking into an ECS `Terrain` resource; preserved
   every public `World` signature and made dwarf candidate collection end its terrain borrow before
   spawning. The full offline workspace suite passed.
+- Split dwarf placement from world generation with `STREAM_SPAWN`; pinned all five seed-42 spawn
+  positions as literals and pinned the entire unchanged terrain vector with a deterministic
+  fingerprint. The required extra-worldgen-draw experiment stayed green.
 
 ### File List
 
 - `crates/sim-core/src/lib.rs`
+- `crates/sim-core/tests/worldgen.rs`
 - `_bmad-output/implementation-artifacts/2-2-dwarves-wander-the-frost.md`
 
 ## Change Log

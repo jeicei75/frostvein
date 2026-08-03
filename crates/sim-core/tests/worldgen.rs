@@ -19,6 +19,61 @@ fn same_seed_produces_identical_worlds() {
 }
 
 #[test]
+fn spawn_positions_for_seed_42_are_pinned() {
+    let world = World::generate(42, Dims::DEFAULT);
+    let positions: Vec<_> = world.dwarves().into_iter().map(|(_, pos)| pos).collect();
+    assert_eq!(
+        positions,
+        vec![
+            Pos {
+                x: 115,
+                y: 84,
+                z: 15
+            },
+            Pos {
+                x: 20,
+                y: 102,
+                z: 19
+            },
+            Pos {
+                x: 121,
+                y: 12,
+                z: 16
+            },
+            Pos {
+                x: 51,
+                y: 113,
+                z: 19
+            },
+            Pos {
+                x: 102,
+                y: 122,
+                z: 17
+            },
+        ]
+    );
+
+    let terrain_fingerprint = world
+        .tiles()
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, tile| {
+            let code = match tile {
+                Tile::Empty => 0,
+                Tile::Solid(Material::Stone) => 1,
+                Tile::Solid(Material::Soil) => 2,
+                Tile::Solid(Material::Ice) => 3,
+                Tile::Solid(Material::Snow) => 4,
+                Tile::Ramp(Material::Stone) => 5,
+                Tile::Ramp(Material::Soil) => 6,
+                Tile::Ramp(Material::Ice) => 7,
+                Tile::Ramp(Material::Snow) => 8,
+            };
+            (hash ^ code).wrapping_mul(0x0000_0100_0000_01b3)
+        });
+    assert_eq!(terrain_fingerprint, 0xd03e_1a26_2b9c_c19d);
+}
+
+#[test]
 fn different_seed_produces_different_world() {
     let first = World::generate(42, Dims::DEFAULT);
     let second = World::generate(43, Dims::DEFAULT);
