@@ -23,19 +23,22 @@ pub fn write_frame(mut out: &mut dyn Write, framebuffer: &Framebuffer) -> io::Re
         })
     )?;
     let mut previous_fg = None;
-    for cell in &framebuffer.cells {
-        if previous_fg != Some(cell.fg) {
-            queue!(
-                &mut out,
-                SetForegroundColor(Color::Rgb {
-                    r: cell.fg.0,
-                    g: cell.fg.1,
-                    b: cell.fg.2,
-                })
-            )?;
-            previous_fg = Some(cell.fg);
+    for y in 0..framebuffer.h {
+        for x in 0..framebuffer.w {
+            let cell = framebuffer.cell(x, y);
+            if previous_fg != Some(cell.fg) {
+                queue!(
+                    &mut out,
+                    SetForegroundColor(Color::Rgb {
+                        r: cell.fg.0,
+                        g: cell.fg.1,
+                        b: cell.fg.2,
+                    })
+                )?;
+                previous_fg = Some(cell.fg);
+            }
+            queue!(&mut out, Print(cell.glyph))?;
         }
-        queue!(&mut out, Print(cell.glyph))?;
     }
 
     Ok(())
