@@ -9,6 +9,7 @@ pub const DEFAULT_PORT: u16 = 7373;
 #[serde(rename_all = "snake_case")]
 pub enum MessageType {
     Snapshot,
+    Delta,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,6 +57,12 @@ pub struct Entity {
     pub pos: [i32; 3],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TileChange {
+    pub pos: [i32; 3],
+    pub tile: Tile,
+}
+
 /// Full world state, sent on connect (AD-3). Field order is wire order.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -74,6 +81,20 @@ pub struct Snapshot {
     pub zones: Vec<()>,
     pub speed: Speed,
     pub tick: u64,
+}
+
+/// One per loop iteration (AD-8). `tiles` is the dirty set; everything else is a
+/// full authoritative resend — absence is deletion.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Delta {
+    #[serde(rename = "type")]
+    pub msg_type: MessageType,
+    pub tick: u64,
+    pub tiles: Vec<TileChange>,
+    pub entities: Vec<Entity>,
+    pub designations: Vec<()>,
+    pub zones: Vec<()>,
+    pub speed: Speed,
 }
 
 #[cfg(test)]
@@ -95,6 +116,16 @@ mod tests {
         "zones": [],
         "speed": "normal",
         "tick": 9
+    }"#;
+
+    const DELTA_WIRE: &str = r#"{
+        "type": "delta",
+        "tick": 10,
+        "tiles": [{"pos": [1, 2, 3], "tile": {"solid": "ice"}}],
+        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6]}],
+        "designations": [],
+        "zones": [],
+        "speed": "fast"
     }"#;
 
     fn decoded() -> Snapshot {
@@ -130,6 +161,33 @@ mod tests {
         let expected: serde_json::Value = serde_json::from_str(WIRE).unwrap();
 
         assert_eq!(serde_json::to_value(decoded()).unwrap(), expected);
+    }
+
+    #[test]
+    fn decodes_the_documented_delta_wire_format() {
+        let delta: Delta =
+            serde_json::from_str(DELTA_WIRE).expect("the documented delta wire format must decode");
+
+        assert_eq!(delta.msg_type, MessageType::Delta);
+        assert_eq!(delta.tick, 10);
+        assert_eq!(
+            delta.tiles,
+            vec![TileChange {
+                pos: [1, 2, 3],
+                tile: Tile::Solid(Material::Ice),
+            }]
+        );
+        assert_eq!(
+            delta.entities,
+            vec![Entity {
+                id: 7,
+                kind: EntityKind::Dwarf,
+                pos: [4, 5, 6],
+            }]
+        );
+        assert!(delta.designations.is_empty());
+        assert!(delta.zones.is_empty());
+        assert_eq!(delta.speed, Speed::Fast);
     }
 
     #[test]
