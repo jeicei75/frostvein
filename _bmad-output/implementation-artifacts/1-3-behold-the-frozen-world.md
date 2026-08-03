@@ -4,7 +4,7 @@ baseline_commit: ebd27dd4e4474cfe8567bf3222aa857e6e374b88
 
 # Story 1.3: Behold the Frozen World
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -64,7 +64,7 @@ so that I can behold the fortress site and judge the icy-grim look.
   - [x] Interactive path: a `TerminalGuard` struct whose `Drop` disables raw mode, leaves the alternate screen, and shows the cursor — constructed after `enable_raw_mode` + `EnterAlternateScreen` + `Hide` so every exit path (error, panic unwind, `q`) restores the terminal.
   - [x] Loop: draw, then `event::read()`; on `Event::Key` with `kind == KeyEventKind::Press` call `apply_key` and act on the `Action`; on `Event::Resize` redraw at the new size; ignore everything else.
 
-- [ ] **Green gate** (AC: 12) — run the four commands under Verification, then the live check, and report what the live check printed.
+- [x] **Green gate** (AC: 12) — run the four commands under Verification, then the live check, and report what the live check printed.
 
 ## Dev Notes
 
@@ -170,6 +170,24 @@ OpenAI GPT-5 (Codex)
 - Did not run the prohibited live socket check and did not claim Wolf's FR23 look sign-off.
 - The Green gate remains incomplete only because the sandbox denies the existing `simd` loopback integration tests; no production or test workaround was made.
 
+**Orchestrator verification (Claude, outside the Codex sandbox, 2026-08-03)** — the sandbox-blocked
+half of the gate, re-run independently:
+
+- `cargo fmt --check` — clean.
+- `cargo clippy --all-targets -- -D warnings` — clean.
+- `cargo test` — 33 passed, 0 failed across all crates, including the six `crates/simd/tests/serve.rs`
+  loopback tests Codex could not run. The sandbox failure was environmental, as reported.
+- `cargo tree -p tui | rg sim-core` — no output (AC1). `tui`'s direct deps are exactly `anyhow`,
+  `crossterm 0.29.0`, `protocol`, `serde_json`.
+- Live check (AC2, AC11): `simd` printed `listening on 127.0.0.1:7373`; `tui --frame` exited 0 and
+  emitted a single 12 816-byte frame with no TTY. The frame shows the snow/ice surface in `░`/`▒`,
+  ramps in `▲`, one `☺` at (214,154,78) on the viewed level, peeked-below terrain in dimmed variants
+  (e.g. `(69,95,107)` = ice at depth 1, `(44,60,68)` at depth 2), background `(8,10,14)`, and the
+  status line `z 19/31  camera 34,89  dwarves 5  keys: <> z  arrows/hjkl pan  q quit`.
+- FR23 (icy-grim look) is Wolf's manual sign-off and is NOT claimed here. The interactive path
+  (`<`/`>`, panning, `q`→`y`) needs a TTY and was not driven by either agent — it is covered by unit
+  tests over `apply_key`, not by observation.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/1-3-behold-the-frozen-world.md`
@@ -187,3 +205,4 @@ OpenAI GPT-5 (Codex)
 | --- | --- |
 | 2026-08-03 | Story created |
 | 2026-08-03 | Implemented the frozen-world terminal client; final workspace tests remain blocked by sandbox-denied loopback sockets. |
+| 2026-08-03 | Orchestrator re-ran the full gate outside the sandbox (33 tests green) and the live `--frame` check; Green gate checked, Status → review. |
