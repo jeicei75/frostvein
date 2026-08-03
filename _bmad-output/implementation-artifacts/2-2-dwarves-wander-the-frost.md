@@ -4,7 +4,7 @@ baseline_commit: 871a6b42d96247252b6f81a9d04331ab9e68d2f3
 
 # Story 2.2: Dwarves Wander the Frost
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -55,14 +55,14 @@ so that the world reads as alive even when I give no orders.
 
 ## Tasks / Subtasks
 
-- [ ] **`sim-core`: terrain into the ECS** (AC: 4, 6)
-  - [ ] Add `#[derive(Resource)] struct Terrain { dims, tiles, dirty }` and move the bodies of
+- [x] **`sim-core`: terrain into the ECS** (AC: 4, 6)
+  - [x] Add `#[derive(Resource)] struct Terrain { dims, tiles, dirty }` and move the bodies of
         `World::tile` / `set_tile` / `drain_dirty` onto `impl Terrain`, plus
         `fn is_standable(&self, p: Pos) -> bool`. `World`'s public signatures
         (`dims/tiles/tile/set_tile/drain_dirty/tick/step/seed/generate`) do not change and
         delegate to the resource — **every existing `sim-core`, `simd` and `tui` test must
         still pass unmodified except where a new field forces a construction change.**
-  - [ ] `spawn_dwarves` reads tiles through the resource: build the candidate `Vec` in an inner
+  - [x] `spawn_dwarves` reads tiles through the resource: build the candidate `Vec` in an inner
         scope so the immutable borrow of `self.ecs` ends before the `spawn` loop.
 - [ ] **`sim-core`: split spawn off the worldgen stream** (AC: 2, 3)
   - [ ] `STREAM_SPAWN` constant; `generate` builds a second `ChaCha8Rng::seed_from_u64(seed ^
@@ -362,9 +362,24 @@ per green step, imperative messages. Review-gated: no push, no PR.
 
 ### Debug Log References
 
+- Terrain RED (before implementation): `error[E0432]: unresolved import super::Terrain` at
+  `crates/sim-core/src/lib.rs:248:38`; `cargo test --offline -p sim-core
+  terrain_identifies_standable_tiles` failed to compile.
+- Standability sabotage RED (below-tile check removed):
+  `assertion failed: !terrain.is_standable(Pos { x: 1, y: 0, z: 1 })`; result:
+  `FAILED. 0 passed; 1 failed`. The first sabotage attempt survived because its negative fixture
+  was solid rather than unsupported empty; the fixture was corrected before completing the task.
+
 ### Completion Notes List
 
+- Moved terrain dimensions, tiles, and dirty tracking into an ECS `Terrain` resource; preserved
+  every public `World` signature and made dwarf candidate collection end its terrain borrow before
+  spawning. The full offline workspace suite passed.
+
 ### File List
+
+- `crates/sim-core/src/lib.rs`
+- `_bmad-output/implementation-artifacts/2-2-dwarves-wander-the-frost.md`
 
 ## Change Log
 

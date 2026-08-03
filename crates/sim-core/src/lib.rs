@@ -64,6 +64,61 @@ pub struct Dwarf;
 #[derive(Resource)]
 struct Tick(pub u64);
 
+/// The tile grid lives in the ECS so systems can read it; `World` delegates.
+#[derive(Resource)]
+struct Terrain {
+    dims: Dims,
+    tiles: Vec<Tile>,
+    dirty: BTreeSet<Pos>,
+}
+
+impl Terrain {
+    fn tile(&self, p: Pos) -> Option<Tile> {
+        if p.x < 0
+            || p.y < 0
+            || p.z < 0
+            || p.x >= self.dims.x as i32
+            || p.y >= self.dims.y as i32
+            || p.z >= self.dims.z as i32
+        {
+            return None;
+        }
+
+        Some(self.tiles[worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32)])
+    }
+
+    fn set_tile(&mut self, p: Pos, tile: Tile) -> bool {
+        if self.tile(p).is_none() {
+            return false;
+        }
+
+        let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
+        self.tiles[index] = tile;
+        self.dirty.insert(p);
+        true
+    }
+
+    fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
+        std::mem::take(&mut self.dirty)
+            .into_iter()
+            .map(|pos| {
+                let tile = self
+                    .tile(pos)
+                    .expect("dirty positions must have passed set_tile bounds checking");
+                (pos, tile)
+            })
+            .collect()
+    }
+
+    fn is_standable(&self, p: Pos) -> bool {
+        matches!(self.tile(p), Some(Tile::Empty))
+            && matches!(
+                self.tile(Pos { z: p.z - 1, ..p }),
+                Some(Tile::Solid(_) | Tile::Ramp(_))
+            )
+    }
+}
+
 fn advance_tick(mut tick: ResMut<Tick>) {
     tick.0 += 1;
 }
@@ -82,9 +137,6 @@ impl IdAllocator {
 }
 
 pub struct World {
-    dims: Dims,
-    tiles: Vec<Tile>,
-    dirty: BTreeSet<Pos>,
     ecs: EcsWorld,
     schedule: Schedule,
     ids: IdAllocator,
@@ -115,13 +167,15 @@ impl World {
 
         let mut ecs = EcsWorld::new();
         ecs.insert_resource(Tick(0));
+        ecs.insert_resource(Terrain {
+            dims,
+            tiles,
+            dirty: BTreeSet::new(),
+        });
         let mut schedule = Schedule::default();
         schedule.add_systems((advance_tick,).chain());
 
         let mut world = World {
-            dims,
-            tiles,
-            dirty: BTreeSet::new(),
             ecs,
             schedule,
             ids: IdAllocator::default(),
@@ -132,7 +186,7 @@ impl World {
     }
 
     pub fn dims(&self) -> Dims {
-        self.dims
+        self.ecs.resource::<Terrain>().dims
     }
 
     pub fn seed(&self) -> u64 {
@@ -149,44 +203,19 @@ impl World {
 
     /// Flat row-major: index = x + y*dims.x + z*dims.x*dims.y
     pub fn tiles(&self) -> &[Tile] {
-        &self.tiles
+        &self.ecs.resource::<Terrain>().tiles
     }
 
     pub fn tile(&self, p: Pos) -> Option<Tile> {
-        if p.x < 0
-            || p.y < 0
-            || p.z < 0
-            || p.x >= self.dims.x as i32
-            || p.y >= self.dims.y as i32
-            || p.z >= self.dims.z as i32
-        {
-            return None;
-        }
-
-        Some(self.tiles[worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32)])
+        self.ecs.resource::<Terrain>().tile(p)
     }
 
     pub fn set_tile(&mut self, p: Pos, tile: Tile) -> bool {
-        if self.tile(p).is_none() {
-            return false;
-        }
-
-        let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
-        self.tiles[index] = tile;
-        self.dirty.insert(p);
-        true
+        self.ecs.resource_mut::<Terrain>().set_tile(p, tile)
     }
 
     pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
-        std::mem::take(&mut self.dirty)
-            .into_iter()
-            .map(|pos| {
-                let tile = self
-                    .tile(pos)
-                    .expect("dirty positions must have passed set_tile bounds checking");
-                (pos, tile)
-            })
-            .collect()
+        self.ecs.resource_mut::<Terrain>().drain_dirty()
     }
 
     /// Sorted ascending by `Id` — stable order is required by AD-7.
@@ -202,35 +231,36 @@ impl World {
     }
 
     fn spawn_dwarves(&mut self, heights: &[u32], rng: &mut ChaCha8Rng) {
-        let mut candidates = Vec::new();
-        for y in 0..self.dims.y {
-            for x in 0..self.dims.x {
-                let height = heights[(x + y * self.dims.x) as usize];
-                let is_flat = [
-                    (x as i32 - 1, y as i32),
-                    (x as i32 + 1, y as i32),
-                    (x as i32, y as i32 - 1),
-                    (x as i32, y as i32 + 1),
-                ]
-                .into_iter()
-                .filter(|&(nx, ny)| {
-                    nx >= 0 && ny >= 0 && nx < self.dims.x as i32 && ny < self.dims.y as i32
-                })
-                .all(|(nx, ny)| heights[(nx as u32 + ny as u32 * self.dims.x) as usize] == height);
-                if is_flat
-                    && matches!(
-                        self.tiles[worldgen::index(self.dims, x, y, height)],
-                        Tile::Solid(_)
-                    )
-                {
-                    candidates.push(Pos {
+        let mut candidates = {
+            let terrain = self.ecs.resource::<Terrain>();
+            let dims = terrain.dims;
+            let mut candidates = Vec::new();
+            for y in 0..dims.y {
+                for x in 0..dims.x {
+                    let height = heights[(x + y * dims.x) as usize];
+                    let is_flat = [
+                        (x as i32 - 1, y as i32),
+                        (x as i32 + 1, y as i32),
+                        (x as i32, y as i32 - 1),
+                        (x as i32, y as i32 + 1),
+                    ]
+                    .into_iter()
+                    .filter(|&(nx, ny)| {
+                        nx >= 0 && ny >= 0 && nx < dims.x as i32 && ny < dims.y as i32
+                    })
+                    .all(|(nx, ny)| heights[(nx as u32 + ny as u32 * dims.x) as usize] == height);
+                    let pos = Pos {
                         x: x as i32,
                         y: y as i32,
                         z: height as i32 + 1,
-                    });
+                    };
+                    if is_flat && terrain.is_standable(pos) {
+                        candidates.push(pos);
+                    }
                 }
             }
-        }
+            candidates
+        };
 
         for _ in 0..5 {
             let candidate = rng.random_range(0..candidates.len());
@@ -243,7 +273,26 @@ impl World {
 
 #[cfg(test)]
 mod tests {
-    use super::{Dims, World};
+    use std::collections::BTreeSet;
+
+    use super::{Dims, Material, Pos, Terrain, Tile, World};
+
+    #[test]
+    fn terrain_identifies_standable_tiles() {
+        let terrain = Terrain {
+            dims: Dims { x: 2, y: 1, z: 2 },
+            tiles: vec![
+                Tile::Solid(Material::Stone),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            dirty: BTreeSet::new(),
+        };
+
+        assert!(terrain.is_standable(Pos { x: 0, y: 0, z: 1 }));
+        assert!(!terrain.is_standable(Pos { x: 1, y: 0, z: 1 }));
+    }
 
     #[test]
     fn generated_world_starts_at_tick_zero() {
