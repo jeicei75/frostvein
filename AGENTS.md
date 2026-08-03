@@ -78,6 +78,23 @@ Each one is cheap here and expensive later.
    an acceptable record.
 6. **Respect the story's scope guardrails literally.** If you believe a wire shape or a
    capability is missing, stop and say so rather than adding it.
+7. **Run `codex review --base main` before you hand back.** Not instead of the gate — after
+   it, as the last thing you do. Read what it says with two classes in mind, because Epic 1's
+   review caught them repeatedly and they are cheap to fix now:
+   - **self-referential tests** — a test that proves ordering rather than mapping because
+     both sides run through the function under test;
+   - **unbounded I/O** — any read, write, accept or queue without a bound.
+
+   Fix what it legitimately finds. In your final message, say what it raised and what you did
+   about each item. If you disagree with a finding, say so and why — do not silently drop it.
+
+   Two things to expect. It is **slow**: budget real wall-clock, it ran past ten minutes on
+   story 2.1's ~650-line diff. And if it fails to start for an environmental reason, that is
+   rule 3 territory — report it and leave the production code correct. Story 2.1's attempt
+   died with `Read-only file system (os error 30)` because `CODEX_HOME` sat outside the
+   writable root; `scripts/codex-handoff.sh` now lists it, but that fix has never actually
+   been exercised, so **you may be the first run to prove it works.** Say plainly whether it
+   ran.
 
 ## Command hygiene
 

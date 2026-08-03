@@ -8,10 +8,15 @@ they conflict with your instinct toward thoroughness, **they win**.
 ## The gate (every story, before "done")
 
 ```bash
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+scripts/gate.sh
 ```
+
+Runs `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, and a
+probe that `tui` has not grown a `sim-core` edge. It exits non-zero and is wired to a
+pre-commit hook (`git config core.hooksPath .githooks`, once per clone). **Run the script,
+not the three commands by hand** — it also repairs the build cache when work moves between
+the two devpods, which otherwise makes every binary-spawning test fail while unit tests stay
+green. **Do not report a green gate you have not run.**
 
 ## Ground rules
 

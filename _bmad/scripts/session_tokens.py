@@ -50,6 +50,14 @@ from datetime import datetime, timezone
 # substring matched against the model id. cache_creation priced at the 5m-write rate;
 # cache_read at the cached-input rate. ``gpt-5`` covers Codex (gpt-5.5 / gpt-5-codex),
 # which exposes no separate cache-write tier, so cache_write == input there.
+# Bump this whenever a rate in PRICES changes, and stamp it into every row written
+# afterwards. Without it a ledger silently mixes pricing eras and stops being
+# comparable to itself: every review row recorded before 2026-08-01 was computed at
+# the retired Opus-4.1 $15/$75 and reads ~3x high, which was not discovered until the
+# ep-11 retro re-priced the epic by hand. A row that cannot say which rate table
+# produced it cannot be trusted against its neighbours.
+PRICES_VERSION = "2026-08-01"
+
 PRICES: dict[str, dict[str, float]] = {
     # model-substring: {input, cache_write, cache_read, output} $/Mtok
     #
@@ -303,7 +311,8 @@ def append_ledger(metrics_file: str, story: str, phase: str, tool: str, s: dict,
     row = (
         f"| {phase} | {tool} | {model} | {s['turns']} | {_fmt(s['input'])} | "
         f"{_fmt(s['cache_creation'])} | {_fmt(s['cache_read'])} | {_fmt(s['output'])} | "
-        f"{_fmt(s['total'])} | {_fmt_usd(estimate_usd(s))} | `{transcript_id}` | {when} |\n"
+        f"{_fmt(s['total'])} | {_fmt_usd(estimate_usd(s))} | `{transcript_id}` | "
+        f"{when} · rates {PRICES_VERSION} |\n"
     )
     with open(metrics_file, "a", encoding="utf-8") as fh:
         fh.write(row)
@@ -347,6 +356,20 @@ def build_rollup(metrics_dir: str, epic: str) -> dict:
     files = sorted(
         f for f in glob.glob(os.path.join(metrics_dir, f"{epic}-*.md")) if not f.endswith("-rollup.md")
     )
+    if not files:
+        # Fail loudly. This used to fall through and write a rollup with zero rows whose
+        # summary line read "No gaps — every story carries a priced create/dev/review",
+        # i.e. a green verdict over an empty set. `--rollup 11` instead of `--rollup ep-11`
+        # is an easy slip, and the reassuring output is exactly what stops you noticing.
+        known = sorted({
+            os.path.basename(f).split("-us-")[0]
+            for f in glob.glob(os.path.join(metrics_dir, "*.md"))
+            if "-us-" in os.path.basename(f)
+        })
+        hint = f" Known epic prefixes here: {', '.join(known)}." if known else ""
+        raise SystemExit(
+            f"no story ledgers match '{epic}-*' in {metrics_dir} — nothing to roll up.{hint}"
+        )
     per_story: dict[str, list[dict]] = {}
     for f in files:
         story = os.path.basename(f)[: -len(".md")]
