@@ -2,6 +2,8 @@
 
 mod worldgen;
 
+use std::collections::BTreeSet;
+
 use bevy_ecs::{
     component::Component,
     resource::Resource,
@@ -82,6 +84,7 @@ impl IdAllocator {
 pub struct World {
     dims: Dims,
     tiles: Vec<Tile>,
+    dirty: BTreeSet<Pos>,
     ecs: EcsWorld,
     schedule: Schedule,
     ids: IdAllocator,
@@ -118,6 +121,7 @@ impl World {
         let mut world = World {
             dims,
             tiles,
+            dirty: BTreeSet::new(),
             ecs,
             schedule,
             ids: IdAllocator::default(),
@@ -160,6 +164,29 @@ impl World {
         }
 
         Some(self.tiles[worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32)])
+    }
+
+    pub fn set_tile(&mut self, p: Pos, tile: Tile) -> bool {
+        if self.tile(p).is_none() {
+            return false;
+        }
+
+        let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
+        self.tiles[index] = tile;
+        self.dirty.insert(p);
+        true
+    }
+
+    pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
+        std::mem::take(&mut self.dirty)
+            .into_iter()
+            .map(|pos| {
+                let tile = self
+                    .tile(pos)
+                    .expect("dirty positions must have passed set_tile bounds checking");
+                (pos, tile)
+            })
+            .collect()
     }
 
     /// Sorted ascending by `Id` — stable order is required by AD-7.
