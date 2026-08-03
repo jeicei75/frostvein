@@ -1,6 +1,6 @@
 use std::{
-    io::{BufRead, BufReader, ErrorKind, Read, Write},
-    net::{SocketAddr, TcpStream},
+    io::{BufRead, BufReader, Read, Write},
+    net::{Shutdown, SocketAddr, TcpStream},
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver, RecvTimeoutError},
     thread,
@@ -103,8 +103,16 @@ fn read_snapshot(reader: &mut BufReader<TcpStream>) -> protocol::Snapshot {
     serde_json::from_str(&line).expect("snapshot line must match the protocol")
 }
 
+fn read_delta(reader: &mut BufReader<TcpStream>) -> protocol::Delta {
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .expect("daemon must send a delta line");
+    serde_json::from_str(&line).expect("delta line must match the protocol")
+}
+
 #[test]
-fn snapshot_on_connect_and_nothing_more() {
+fn streams_three_strictly_increasing_deltas() {
     let daemon = Daemon::spawn();
     let mut reader = BufReader::new(daemon.connect());
 
@@ -112,19 +120,79 @@ fn snapshot_on_connect_and_nothing_more() {
     assert_eq!(snapshot.tiles.len(), 524_288);
     assert_eq!(snapshot.entities.len(), 5);
 
-    reader
-        .get_ref()
-        .set_read_timeout(Some(Duration::from_millis(200)))
-        .unwrap();
-    let mut next_line = String::new();
-    match reader.read_line(&mut next_line) {
-        Err(error) => assert!(
-            matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut),
-            "expected a read timeout, got {error:?}"
-        ),
-        Ok(0) => panic!("daemon closed the connection instead of leaving it idle"),
-        Ok(_) => panic!("daemon sent an unexpected second line: {next_line:?}"),
-    }
+    let ticks = [
+        read_delta(&mut reader).tick,
+        read_delta(&mut reader).tick,
+        read_delta(&mut reader).tick,
+    ];
+    assert_eq!(
+        ticks,
+        [snapshot.tick + 1, snapshot.tick + 2, snapshot.tick + 3]
+    );
+}
+
+#[test]
+fn world_advances_before_any_client_connects() {
+    let daemon = Daemon::spawn();
+    thread::sleep(Duration::from_millis(350));
+
+    let mut reader = BufReader::new(daemon.connect());
+    let snapshot = read_snapshot(&mut reader);
+
+    assert!(
+        snapshot.tick >= 2,
+        "late snapshot tick was {}",
+        snapshot.tick
+    );
+}
+
+#[test]
+fn client_connecting_later_gets_current_snapshot_then_tracks() {
+    let daemon = Daemon::spawn();
+    let mut first = BufReader::new(daemon.connect());
+    let _: protocol::Snapshot = read_snapshot(&mut first);
+    let first_tick = read_delta(&mut first).tick;
+    assert!(first_tick > 0);
+
+    let mut later = BufReader::new(daemon.connect());
+    let snapshot = read_snapshot(&mut later);
+    assert!(snapshot.tick > 0);
+    let update = read_delta(&mut later);
+    assert!(update.tick > snapshot.tick);
+}
+
+#[test]
+fn half_closed_client_keeps_receiving() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    stream
+        .shutdown(Shutdown::Write)
+        .expect("client write half must close");
+    let mut reader = BufReader::new(stream);
+
+    let snapshot = read_snapshot(&mut reader);
+    let update = read_delta(&mut reader);
+
+    assert_eq!(update.tick, snapshot.tick + 1);
+}
+
+#[test]
+fn dropped_client_does_not_stop_another_clients_stream() {
+    let daemon = Daemon::spawn();
+    let mut dropped = BufReader::new(daemon.connect());
+    let mut survivor = BufReader::new(daemon.connect());
+    let _: protocol::Snapshot = read_snapshot(&mut dropped);
+    let survivor_snapshot = read_snapshot(&mut survivor);
+    let _: protocol::Delta = read_delta(&mut dropped);
+    drop(dropped);
+
+    let ticks = [
+        read_delta(&mut survivor).tick,
+        read_delta(&mut survivor).tick,
+        read_delta(&mut survivor).tick,
+    ];
+    assert!(ticks[0] > survivor_snapshot.tick);
+    assert!(ticks[0] < ticks[1] && ticks[1] < ticks[2], "{ticks:?}");
 }
 
 #[test]
@@ -168,20 +236,8 @@ fn non_utf8_input_does_not_close_the_connection() {
         "a non-UTF-8 line must be logged and dropped like any other unrecognized input"
     );
 
-    // Story 2.1 streams deltas down this connection; one stray byte must not cost it.
-    client
-        .get_ref()
-        .set_read_timeout(Some(Duration::from_millis(200)))
-        .unwrap();
-    let mut next = String::new();
-    match client.read_line(&mut next) {
-        Err(error) => assert!(
-            matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut),
-            "expected the connection to stay open and idle, got {error:?}"
-        ),
-        Ok(0) => panic!("daemon closed the connection after a non-UTF-8 line"),
-        Ok(_) => panic!("daemon sent an unexpected line: {next:?}"),
-    }
+    let update = read_delta(&mut client);
+    assert!(update.tick > 0);
 }
 
 #[test]

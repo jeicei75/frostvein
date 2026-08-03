@@ -5,16 +5,19 @@ mod bridge;
 use anyhow::Context;
 use std::{
     io::{BufRead, BufReader, Read, Write},
-    net::{TcpListener, TcpStream},
+    net::{Shutdown, TcpListener, TcpStream},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
+        mpsc::{self, Receiver, SyncSender, TrySendError},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const SEED: u64 = 0xF005_7E1A;
+const TICK_PERIOD: Duration = Duration::from_millis(100);
+const CLIENT_QUEUE: usize = 16;
 
 /// Caps on what one misbehaving local client can cost the daemon. Phase one is
 /// localhost-only (NFR1), so these bound accidents — a buggy client — not attacks.
@@ -35,6 +38,10 @@ impl Drop for ConnectionGuard {
     }
 }
 
+struct Client {
+    tx: SyncSender<Arc<String>>,
+}
+
 fn main() -> anyhow::Result<()> {
     // NOTE: args_os, not args — std::env::args panics on non-UTF-8 argv during
     // iteration, which would bypass anyhow and print a raw backtrace.
@@ -49,18 +56,27 @@ fn main() -> anyhow::Result<()> {
         }
         None => protocol::DEFAULT_PORT,
     };
-    let world = sim_core::World::generate(SEED, sim_core::Dims::DEFAULT);
-    // NOTE: the world is static in this story, so the snapshot line is encoded
-    // once and shared. Story 2.1's tick loop re-encodes per connection.
-    let line = Arc::new(format!(
-        "{}\n",
-        serde_json::to_string(&bridge::snapshot(&world))?
-    ));
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("could not bind 127.0.0.1:{port}"))?;
     println!("listening on 127.0.0.1:{}", listener.local_addr()?.port());
 
     let live = Arc::new(AtomicUsize::new(0));
+    let (new_tx, new_rx) = mpsc::channel();
+    let accept_live = Arc::clone(&live);
+    thread::Builder::new()
+        .name("accept".to_string())
+        .spawn(move || accept_connections(listener, new_tx, accept_live))
+        .context("could not spawn accept thread")?;
+
+    let world = sim_core::World::generate(SEED, sim_core::Dims::DEFAULT);
+    tick(world, new_rx, live)
+}
+
+fn accept_connections(
+    listener: TcpListener,
+    new_tx: mpsc::Sender<TcpStream>,
+    live: Arc<AtomicUsize>,
+) {
     for incoming in listener.incoming() {
         match incoming {
             Ok(stream) => {
@@ -69,15 +85,9 @@ fn main() -> anyhow::Result<()> {
                     continue;
                 }
                 live.fetch_add(1, Ordering::Relaxed);
-                let guard = ConnectionGuard(Arc::clone(&live));
-                let line = Arc::clone(&line);
-                // NOTE: Builder::spawn returns Err where thread::spawn panics — and a
-                // panic here would unwind main and take every live connection with it.
-                if let Err(error) = thread::Builder::new().spawn(move || {
-                    let _guard = guard;
-                    serve(stream, line.as_str());
-                }) {
-                    eprintln!("could not spawn connection thread: {error}");
+                if new_tx.send(stream).is_err() {
+                    live.fetch_sub(1, Ordering::Relaxed);
+                    break;
                 }
             }
             Err(error) => {
@@ -86,22 +96,94 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }
-
-    Ok(())
 }
 
-fn serve(mut stream: TcpStream, snapshot_line: &str) {
-    // NOTE: the snapshot is ~6.9 MB, far past any socket send buffer, so write_all
-    // blocks once a client stops reading. Without this the thread is pinned forever.
+fn tick(
+    mut world: sim_core::World,
+    new_rx: Receiver<TcpStream>,
+    live: Arc<AtomicUsize>,
+) -> anyhow::Result<()> {
+    let mut clients = Vec::new();
+    loop {
+        let deadline = Instant::now() + TICK_PERIOD;
+        for stream in new_rx.try_iter() {
+            let snapshot_line = Arc::new(format!(
+                "{}\n",
+                serde_json::to_string(&bridge::snapshot(&world))?
+            ));
+            if let Some(client) = connect_client(stream, snapshot_line, Arc::clone(&live)) {
+                clients.push(client);
+            }
+        }
+
+        world.step();
+        let delta_line = Arc::new(format!(
+            "{}\n",
+            serde_json::to_string(&bridge::delta(&mut world))?
+        ));
+        clients.retain(|client| match client.tx.try_send(Arc::clone(&delta_line)) {
+            Ok(()) => true,
+            Err(TrySendError::Full(_)) => {
+                eprintln!("client delta queue full; disconnecting client");
+                false
+            }
+            Err(TrySendError::Disconnected(_)) => false,
+        });
+
+        thread::sleep(deadline.saturating_duration_since(Instant::now()));
+    }
+}
+
+fn connect_client(
+    stream: TcpStream,
+    snapshot_line: Arc<String>,
+    live: Arc<AtomicUsize>,
+) -> Option<Client> {
+    let (tx, rx) = mpsc::sync_channel(CLIENT_QUEUE);
+    tx.try_send(snapshot_line)
+        .expect("a new client queue must have room for its snapshot");
+    let guard = ConnectionGuard(live);
+    if let Err(error) = thread::Builder::new()
+        .name("client-write".to_string())
+        .spawn(move || serve(stream, rx, guard))
+    {
+        eprintln!("could not spawn connection thread: {error}");
+        return None;
+    }
+    Some(Client { tx })
+}
+
+fn serve(mut stream: TcpStream, lines: Receiver<Arc<String>>, _guard: ConnectionGuard) {
     if let Err(error) = stream.set_write_timeout(Some(WRITE_TIMEOUT)) {
         eprintln!("could not set write timeout: {error}");
         return;
     }
-    if let Err(error) = stream.write_all(snapshot_line.as_bytes()) {
-        eprintln!("client write error: {error}");
+
+    let read_stream = match stream.try_clone() {
+        Ok(read_stream) => read_stream,
+        Err(error) => {
+            eprintln!("could not clone client socket for reads: {error}");
+            return;
+        }
+    };
+    if let Err(error) = thread::Builder::new()
+        .name("client-read".to_string())
+        .spawn(move || read_inbound(read_stream))
+    {
+        eprintln!("could not spawn client reader thread: {error}");
         return;
     }
 
+    for line in lines {
+        if let Err(error) = stream.write_all(line.as_bytes()) {
+            eprintln!("client write error: {error}");
+            break;
+        }
+    }
+    let _ = stream.shutdown(Shutdown::Both);
+}
+
+fn read_inbound(stream: TcpStream) {
     let mut reader = BufReader::new(stream);
     let mut line = Vec::new();
     loop {
@@ -110,15 +192,11 @@ fn serve(mut stream: TcpStream, snapshot_line: &str) {
             .take(MAX_LINE_BYTES)
             .read_until(b'\n', &mut line)
         {
-            // NOTE: read-side EOF closes the connection. A client that half-closes
-            // (shutdown(SHUT_WR)) to say "I will never send commands" is torn down
-            // with it — the two are indistinguishable here. Story 2.1 should stop
-            // closing on EOF: once deltas are written, a dead peer surfaces as a
-            // write error, which is the reclaim path this story lacks.
             Ok(0) => break,
             Ok(_) => {
                 if !line.ends_with(b"\n") {
                     eprintln!("client line exceeded {MAX_LINE_BYTES} bytes; closing connection");
+                    let _ = reader.get_ref().shutdown(Shutdown::Both);
                     break;
                 }
                 // NOTE: lossy, not a UTF-8 error — a single stray byte must not cost the
@@ -128,6 +206,7 @@ fn serve(mut stream: TcpStream, snapshot_line: &str) {
             }
             Err(error) => {
                 eprintln!("client read error: {error}");
+                let _ = reader.get_ref().shutdown(Shutdown::Both);
                 break;
             }
         }
@@ -140,5 +219,28 @@ fn excerpt(line: &str) -> String {
     match line.char_indices().nth(LOG_EXCERPT_CHARS) {
         Some((cut, _)) => format!("{}… ({} bytes total)", &line[..cut], line.len()),
         None => line.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tick_period_is_exactly_ten_hertz() {
+        assert_eq!(TICK_PERIOD, Duration::from_millis(100));
+    }
+
+    #[test]
+    fn client_queue_holds_exactly_sixteen_pending_lines() {
+        let (sender, _receiver) = std::sync::mpsc::sync_channel(CLIENT_QUEUE);
+
+        for line in 0..16 {
+            assert!(sender.try_send(Arc::new(line.to_string())).is_ok());
+        }
+        assert!(matches!(
+            sender.try_send(Arc::new("overflow".to_string())),
+            Err(std::sync::mpsc::TrySendError::Full(_))
+        ));
     }
 }

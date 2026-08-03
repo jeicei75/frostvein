@@ -28,11 +28,34 @@ pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
         designations: Vec::new(),
         zones: Vec::new(),
         speed: protocol::Speed::Normal,
-        // NOTE: tick is read from the sim, never fabricated here (AD-1). No test can
-        // currently prove that — world.tick() is always 0 until Story 2.1 advances it,
-        // so `tick: 0` would be indistinguishable. 2.1 makes this assertable; until
-        // then it is upheld by inspection, not by the suite.
         tick: world.tick(),
+    }
+}
+
+pub fn delta(world: &mut sim_core::World) -> protocol::Delta {
+    protocol::Delta {
+        msg_type: protocol::MessageType::Delta,
+        tick: world.tick(),
+        tiles: world
+            .drain_dirty()
+            .into_iter()
+            .map(|(pos, tile_value)| protocol::TileChange {
+                pos: [pos.x, pos.y, pos.z],
+                tile: tile(tile_value),
+            })
+            .collect(),
+        entities: world
+            .dwarves()
+            .into_iter()
+            .map(|(id, pos)| protocol::Entity {
+                id: id.0,
+                kind: protocol::EntityKind::Dwarf,
+                pos: [pos.x, pos.y, pos.z],
+            })
+            .collect(),
+        designations: Vec::new(),
+        zones: Vec::new(),
+        speed: protocol::Speed::Normal,
     }
 }
 
@@ -55,7 +78,7 @@ fn material(material: sim_core::Material) -> protocol::Material {
 
 #[cfg(test)]
 mod tests {
-    use super::snapshot;
+    use super::{delta, snapshot};
 
     /// The wire mapping, restated independently of the code under test.
     ///
@@ -230,5 +253,40 @@ mod tests {
             }
         }
         assert!(saw_solid, "world must contain at least one solid tile");
+    }
+
+    #[test]
+    fn snapshot_uses_the_current_world_tick() {
+        let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        world.step();
+        world.step();
+
+        assert_eq!(snapshot(&world).tick, 2);
+    }
+
+    #[test]
+    fn delta_carries_dirty_tiles_and_full_authoritative_state() {
+        let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        let pos = sim_core::Pos { x: 1, y: 2, z: 3 };
+        assert!(world.set_tile(pos, sim_core::Tile::Solid(sim_core::Material::Ice)));
+        world.step();
+
+        let update = delta(&mut world);
+        assert_eq!(update.msg_type, protocol::MessageType::Delta);
+        assert_eq!(update.tick, 1);
+        assert_eq!(
+            update.tiles,
+            vec![protocol::TileChange {
+                pos: [1, 2, 3],
+                tile: protocol::Tile::Solid(protocol::Material::Ice),
+            }]
+        );
+        assert_eq!(update.entities.len(), 5);
+        assert!(update.designations.is_empty());
+        assert!(update.zones.is_empty());
+        assert_eq!(update.speed, protocol::Speed::Normal);
+
+        world.step();
+        assert!(delta(&mut world).tiles.is_empty());
     }
 }
