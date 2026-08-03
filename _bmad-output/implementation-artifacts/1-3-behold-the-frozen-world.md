@@ -24,7 +24,7 @@ so that I can behold the fortress site and judge the icy-grim look.
 8. The initial view is centered on the first entity's `(x, y)` at that entity's `z`; with no entities it centers on the world's middle column at `dims.z / 2`.
 9. The bottom row is a status line showing the current z (`z 14/31`), the camera position, the dwarf count, and the active keys. The map occupies every row above it.
 10. A frame reaches the terminal as one buffered write per frame — one function serializes the whole framebuffer into a writer and the caller flushes once. A 2×1 framebuffer emits exactly the byte sequence pinned in its test; no per-cell terminal write exists anywhere.
-11. `tui --frame` renders one frame to stdout with no raw mode and no alternate screen, then exits 0; when the terminal size is unavailable it falls back to 100×40. This is how the view is checked without a TTY.
+11. `tui --frame` renders one frame to stdout with no raw mode and no alternate screen, then exits 0. It renders at the size crossterm reports, falling back to 100×40 only when that call errors or reports a zero dimension (amended 2026-08-03: the original text promised the fallback for a missing TTY, which does not happen on Linux — crossterm shells out to `tput` and gets terminfo's 80×24 guess, so a headless frame is 80×24, not 100×40). This is how the view is checked without a TTY.
 12. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test` pass. Wolf's live sign-off on the icy-grim look (FR23) is a separate manual gate — the dev agent reports the live output, it does not claim the sign-off.
 
 ## Tasks / Subtasks
@@ -255,3 +255,4 @@ half of the gate, re-run independently:
 | 2026-08-03 | Orchestrator re-ran the full gate outside the sandbox (33 tests green) and the live `--frame` check; Green gate checked, Status → review. |
 | 2026-08-03 | Code review (4 layers): 10 patches applied, 2 decisions resolved by Wolf, 3 deferred, 6 dismissed. 39 tests green; live re-verified. |
 | 2026-08-03 | Wolf signed off FR23 (icy-grim look) from a live interactive run. All 12 ACs closed. |
+| 2026-08-03 | AC11's fallback wording corrected to what the code and Linux actually do (deferred spec-accuracy item, closed at 2.2 story creation). No code change. |

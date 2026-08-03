@@ -55,6 +55,13 @@
     "output": 202052,
     "turns": 187
   },
+  "e7456634-33dd-4c3b-8ccf-6f4e032c768f.jsonl": {
+    "cache_creation": 489651,
+    "cache_read": 6527613,
+    "input": 5853,
+    "output": 110575,
+    "turns": 63
+  },
   "rollout-2026-08-02T09-41-39-019fc1d9-ba99-7a70-a34d-175f62bfe74c.jsonl": {
     "cache_creation": 0,
     "cache_read": 2293248,

@@ -28,8 +28,14 @@ names where it came from and what should trigger revisiting it.
   every recorded scenario baseline and save file — with no test failing to explain
   why. Story 1.1 mandated the single `STREAM_WORLDGEN` stream, so the code is
   compliant. AD-7's "purpose-named streams" is the relevant architectural decision.
+  **RESOLVED — scheduled into Story 2.2 (AC2, AC3), Wolf's call 2026-08-03**: spawn draws from
+  its own `STREAM_SPAWN`, and the five positions for seed 42 are pinned as literals so a future
+  terrain-draw change cannot move them silently. Rationale: without the split, a pinned test
+  degrades into pasting over new values whenever terrain changes, which trains the signal away;
+  and 2.4's `SaveState` baselines make the fix costlier from then on. Evidence is inverted
+  sabotage — an extra `layered_terrain` draw must leave the pinned test green.
   ~~**Revisit at Story 2.4**, when `SaveState` must persist RNG stream state.~~
-  **CORRECTED 2026-08-03 (Epic 2 dependency sweep): revisit at Story 2.2, not 2.4.**
+  ~~**CORRECTED 2026-08-03 (Epic 2 dependency sweep): revisit at Story 2.2, not 2.4.**~~
   AD-7 names two purpose-named streams — worldgen and **wander** — and the wander stream
   is born in 2.2. Further, `World` retains no RNG state at all today: the `ChaCha8Rng` is
   a local inside `generate()` and is dropped when it returns [crates/sim-core/src/lib.rs:95].
@@ -64,11 +70,14 @@ names where it came from and what should trigger revisiting it.
 - **No SIGTERM/SIGHUP handling.** `TerminalGuard` runs only on return or unwind, so a killed client
   leaves the terminal in raw mode and the alternate screen, requiring `reset`
   [crates/tui/src/main.rs:26-35].
-- **AC11's 100×40 fallback is unreachable on Linux.** crossterm's `terminal::size()` shells out to
-  `tput cols`/`tput lines` before returning `Err`, so `unwrap_or((100, 40))` cannot fire while
+- ~~**AC11's 100×40 fallback is unreachable on Linux.**~~ **RESOLVED 2026-08-03** (at 2.2 story
+  creation, per the retro item "fix it at the next TUI story"). crossterm's `terminal::size()`
+  shells out to `tput cols`/`tput lines` before returning `Err`, so the fallback cannot fire while
   `tput` is on PATH; a no-TTY frame renders at whatever terminfo guesses (verified: 80×24 = 1920
-  cells). Side effect: two forked `tput` processes per `--frame` run. This is a spec-accuracy issue
-  in the AC text, not a code defect [crates/tui/src/main.rs:67].
+  cells). Side effect: two forked `tput` processes per `--frame` run. This was a spec-accuracy
+  issue in the AC text, not a code defect: story 1.3's AC11 now states that the frame renders at
+  the reported size and falls back to 100×40 only on an error or a zero dimension, which is what
+  `frame_size` does [crates/tui/src/main.rs:214-219]. No code changed.
 
 ## Deferred from: code review of story 2-1-the-world-runs-on-its-own-clock (2026-08-03)
 
@@ -76,8 +85,9 @@ names where it came from and what should trigger revisiting it.
   now prepends `"tick {}  "`, taking the status row from 69 to 78 columns at `tick 87`. Truncation
   is a silent `(0..w).zip(status.chars())`, so at `tick 1000000` (~28 h of uptime at 10 Hz) the row
   reaches 84 columns and pushes `q quit` off screen. Graceful, not a panic. **Revisit when** the
-  next TUI story touches the status line — pair it with the still-open retro item about AC11's
-  unreachable 100×40 fallback spec text [crates/tui/src/view.rs:131-147].
+  next TUI story touches the status line. (The AC11 spec-text item it was once paired with is
+  closed; 2.2 colors dwarves by state and deliberately leaves the status line alone, so this
+  stays open) [crates/tui/src/view.rs:131-147].
 - **The dirty-tile path is inert in production.** `set_tile` has zero production callers — every
   call site is a test — so the schedule's one system touches only `Tick` and `Delta.tiles` is `[]`
   on every real tick (confirmed on a live wire dump: four consecutive deltas, `tiles=[]` each
