@@ -53,8 +53,8 @@ development_status:
   1-2-the-daemon-serves-the-world: done
   1-3-behold-the-frozen-world: done
   epic-1-retrospective: done
-  epic-2: backlog
-  2-1-the-world-runs-on-its-own-clock: backlog
+  epic-2: in-progress
+  2-1-the-world-runs-on-its-own-clock: ready-for-dev
   2-2-dwarves-wander-the-frost: backlog
   2-3-master-of-time: backlog
   2-4-the-world-endures: backlog
@@ -102,19 +102,19 @@ action_items:
   - epic: 1
     action: "BLOCKING 2.1 — resolve the TUI delta-consumption design (event::poll vs reader thread) during 2.1 story-creation; main.rs:121 blocks on event::read()"
     owner: "Winston"
-    status: open
+    status: done
   - epic: 1
     action: "BLOCKING 2.1 — specify the daemon's client registry and per-tick broadcast in 2.1's story; 2.3's two-client AC depends on it"
     owner: "Winston"
-    status: open
+    status: done
   - epic: 1
     action: "Make closing the 'tick: 0' mutation an explicit 2.1 task — Epic 1's one irreducible surviving mutation"
     owner: "Amelia"
-    status: open
+    status: done
   - epic: 1
     action: "Fold the 1.2 half-close / dead-peer reclaim deferral into 2.1's scope (the // NOTE: already hands it to 2.1)"
     owner: "Amelia"
-    status: open
+    status: done
   - epic: 1
     action: "Carry the RNG-stream-coupling and rand_chacha serde-feature debts into 2.4's story notes"
     owner: "Amelia"
