@@ -103,5 +103,12 @@
     "input": 182346,
     "output": 40825,
     "turns": 66
+  },
+  "rollout-2026-08-03T16-08-37-019fc862-5dce-73c3-bdd2-983f872e2fcf.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 13743360,
+    "input": 345490,
+    "output": 52527,
+    "turns": 125
   }
 }
