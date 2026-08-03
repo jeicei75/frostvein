@@ -7,6 +7,8 @@ mod view;
 use std::{
     io::{self, BufRead, BufReader, BufWriter, Read, Write},
     net::TcpStream,
+    sync::mpsc::{self, SyncSender, TryRecvError},
+    thread,
     time::Duration,
 };
 
@@ -18,7 +20,7 @@ use crossterm::{
     style::ResetColor,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use protocol::Snapshot;
+use protocol::{Delta, Snapshot};
 
 use crate::{
     frame::{RowEnd, write_frame},
@@ -28,6 +30,8 @@ use crate::{
 /// Mirrors the daemon's 30 s write timeout. Without it a peer that accepts and
 /// then goes silent leaves the client blocked forever.
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
+const MESSAGE_QUEUE: usize = 16;
 
 /// Caps the snapshot line so a server that never sends a newline cannot grow
 /// the buffer without bound. The 128x128x32 snapshot is ~6.9 MB.
@@ -38,6 +42,11 @@ const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const FRAME_BUFFER_BYTES: usize = 512 * 1024;
 
 struct TerminalGuard;
+
+enum Msg {
+    Snapshot(Box<Snapshot>),
+    Delta(Box<Delta>),
+}
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
@@ -79,7 +88,7 @@ fn main() -> anyhow::Result<()> {
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
         .context("could not set the snapshot read timeout")?;
     let mut reader = BufReader::new(stream);
-    let snapshot = read_snapshot(&mut reader)?;
+    let mut snapshot = read_snapshot(&mut reader)?;
     let mut state = initial(&snapshot);
 
     if frame_only {
@@ -106,8 +115,53 @@ fn main() -> anyhow::Result<()> {
     let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, stdout);
     let mut size = terminal::size().context("could not read terminal size")?;
     let mut needs_redraw = true;
+    reader
+        .get_mut()
+        .set_read_timeout(None)
+        .context("could not clear the snapshot read timeout")?;
+    let (message_tx, message_rx) = mpsc::sync_channel(MESSAGE_QUEUE);
+    thread::Builder::new()
+        .name("server-read".to_string())
+        .spawn(move || read_messages(reader, message_tx))
+        .context("could not spawn server reader thread")?;
 
-    loop {
+    'running: loop {
+        if event::poll(POLL_INTERVAL).context("could not poll terminal events")? {
+            match event::read().context("could not read terminal event")? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    match apply_key(&mut state, key, snapshot.dims) {
+                        Action::Redraw => needs_redraw = true,
+                        Action::Quit => break 'running,
+                        Action::Ignore => {}
+                    }
+                }
+                Event::Resize(w, h) => {
+                    size = (w, h);
+                    needs_redraw = true;
+                }
+                _ => {}
+            }
+        }
+
+        loop {
+            match message_rx.try_recv() {
+                Ok(Ok(Msg::Snapshot(next))) => {
+                    snapshot = *next;
+                    state = initial(&snapshot);
+                    needs_redraw = true;
+                }
+                Ok(Ok(Msg::Delta(delta))) => {
+                    apply(&mut snapshot, *delta);
+                    needs_redraw = true;
+                }
+                Ok(Err(error)) => return Err(error),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    bail!("server reader thread stopped unexpectedly")
+                }
+            }
+        }
+
         if needs_redraw {
             if size.0 != 0 && size.1 != 0 {
                 let framebuffer = render(&snapshot, &state, size.0, size.1);
@@ -117,43 +171,53 @@ fn main() -> anyhow::Result<()> {
             }
             needs_redraw = false;
         }
-
-        match event::read().context("could not read terminal event")? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => {
-                match apply_key(&mut state, key, snapshot.dims) {
-                    Action::Redraw => needs_redraw = true,
-                    Action::Quit => break,
-                    Action::Ignore => {}
-                }
-            }
-            Event::Resize(w, h) => {
-                size = (w, h);
-                needs_redraw = true;
-            }
-            _ => {}
-        }
     }
 
     Ok(())
 }
 
 fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
+    match read_message(reader)? {
+        Some(Msg::Snapshot(snapshot)) => Ok(*snapshot),
+        Some(Msg::Delta(_)) => bail!("server sent a delta before its snapshot"),
+        None => bail!("server closed before sending a snapshot"),
+    }
+}
+
+fn read_message(reader: &mut dyn BufRead) -> anyhow::Result<Option<Msg>> {
     let mut line = String::new();
     let bytes = reader
         .take(MAX_SNAPSHOT_BYTES)
         .read_line(&mut line)
-        .context("could not read snapshot line")?;
+        .context("could not read server message line")?;
     if bytes == 0 {
-        bail!("server closed before sending a snapshot");
+        return Ok(None);
     }
     if !line.ends_with('\n') {
         if bytes as u64 >= MAX_SNAPSHOT_BYTES {
-            bail!("snapshot line exceeded {MAX_SNAPSHOT_BYTES} bytes with no newline");
+            bail!("server message line exceeded {MAX_SNAPSHOT_BYTES} bytes with no newline");
         }
-        bail!("server closed before terminating the snapshot line");
+        bail!("server closed before terminating its message line");
     }
-    let snapshot: Snapshot = serde_json::from_str(&line).context("could not decode snapshot")?;
+    let value: serde_json::Value =
+        serde_json::from_str(&line).context("could not decode server message")?;
+    match value.get("type").and_then(serde_json::Value::as_str) {
+        Some("snapshot") => {
+            let snapshot: Snapshot =
+                serde_json::from_value(value).context("could not decode snapshot")?;
+            validate_snapshot(&snapshot)?;
+            Ok(Some(Msg::Snapshot(Box::new(snapshot))))
+        }
+        Some("delta") => {
+            let delta = serde_json::from_value(value).context("could not decode delta")?;
+            Ok(Some(Msg::Delta(Box::new(delta))))
+        }
+        Some(message_type) => bail!("unknown server message type {message_type:?}"),
+        None => bail!("server message has no string type field"),
+    }
+}
 
+fn validate_snapshot(snapshot: &Snapshot) -> anyhow::Result<()> {
     // A decodable snapshot can still be inconsistent, and `render` indexes
     // `tiles` from `dims` directly — checking here keeps that an error rather
     // than a panic.
@@ -169,14 +233,56 @@ fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
         );
     }
 
-    Ok(snapshot)
+    Ok(())
+}
+
+fn read_messages(mut reader: BufReader<TcpStream>, sender: SyncSender<anyhow::Result<Msg>>) {
+    loop {
+        let message = match read_message(&mut reader) {
+            Ok(Some(message)) => Ok(message),
+            Ok(None) => Err(anyhow::anyhow!("server closed the connection")),
+            Err(error) => Err(error),
+        };
+        let done = message.is_err();
+        if sender.send(message).is_err() || done {
+            return;
+        }
+    }
+}
+
+fn apply(snapshot: &mut Snapshot, delta: Delta) {
+    for change in delta.tiles {
+        let [x, y, z] = change.pos;
+        if x < 0
+            || y < 0
+            || z < 0
+            || x >= snapshot.dims.x as i32
+            || y >= snapshot.dims.y as i32
+            || z >= snapshot.dims.z as i32
+        {
+            continue;
+        }
+        let index = x as usize
+            + y as usize * snapshot.dims.x as usize
+            + z as usize * snapshot.dims.x as usize * snapshot.dims.y as usize;
+        if let Some(tile) = snapshot.tiles.get_mut(index) {
+            *tile = change.tile;
+        }
+    }
+    snapshot.entities = delta.entities;
+    snapshot.designations = delta.designations;
+    snapshot.zones = delta.zones;
+    snapshot.speed = delta.speed;
+    snapshot.tick = delta.tick;
 }
 
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
 
-    use protocol::{Dims, Material, MessageType, Tile};
+    use protocol::{
+        Delta, Dims, Entity, EntityKind, Material, MessageType, Speed, Tile, TileChange,
+    };
 
     use super::*;
 
@@ -184,6 +290,13 @@ mod tests {
         r#"{"type":"snapshot","dims":{"x":2,"y":1,"z":1},"#,
         r#""tiles":["empty",{"solid":"ice"}],"entities":[],"#,
         r#""designations":[],"zones":[],"speed":"normal","tick":9}"#,
+        "\n"
+    );
+
+    const DELTA_LINE: &str = concat!(
+        r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,0,0],"tile":{"solid":"stone"}}],"#,
+        r#""entities":[{"id":8,"kind":"dwarf","pos":[1,0,0]}],"#,
+        r#""designations":[],"zones":[],"speed":"fast"}"#,
         "\n"
     );
 
@@ -201,6 +314,55 @@ mod tests {
         );
         assert_eq!(snapshot.tick, 9);
         assert_eq!(reader.position(), SNAPSHOT_LINE.len() as u64);
+    }
+
+    #[test]
+    fn reads_one_delta_line() {
+        let mut reader = Cursor::new(DELTA_LINE.as_bytes());
+
+        let message = read_message(&mut reader).unwrap().unwrap();
+
+        let Msg::Delta(delta) = message else {
+            panic!("delta line decoded as a snapshot");
+        };
+        assert_eq!(delta.tick, 10);
+        assert_eq!(delta.tiles[0].pos, [1, 0, 0]);
+        assert_eq!(reader.position(), DELTA_LINE.len() as u64);
+    }
+
+    #[test]
+    fn applies_dirty_tiles_and_replaces_authoritative_fields() {
+        let mut snapshot = read_snapshot(&mut Cursor::new(SNAPSHOT_LINE.as_bytes())).unwrap();
+        snapshot.designations = vec![()];
+        snapshot.zones = vec![()];
+        let delta = Delta {
+            msg_type: MessageType::Delta,
+            tick: 10,
+            tiles: vec![TileChange {
+                pos: [1, 0, 0],
+                tile: Tile::Solid(Material::Stone),
+            }],
+            entities: vec![Entity {
+                id: 8,
+                kind: EntityKind::Dwarf,
+                pos: [1, 0, 0],
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            speed: Speed::Fast,
+        };
+
+        apply(&mut snapshot, delta);
+
+        assert_eq!(
+            snapshot.tiles,
+            vec![Tile::Empty, Tile::Solid(Material::Stone)]
+        );
+        assert_eq!(snapshot.entities[0].id, 8);
+        assert!(snapshot.designations.is_empty());
+        assert!(snapshot.zones.is_empty());
+        assert_eq!(snapshot.speed, Speed::Fast);
+        assert_eq!(snapshot.tick, 10);
     }
 
     #[test]
