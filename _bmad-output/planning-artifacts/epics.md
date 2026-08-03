@@ -217,6 +217,8 @@ So that the world exists and moves independent of anyone watching.
 **Then** exactly one `delta` line is emitted — dirty tiles (recorded only via `World::set_tile`) plus ALL small state in full: entities, designations, zones, speed, tick (AD-8)
 **And** full-resend sections are authoritative replacements — the client's set becomes exactly the list sent, absence is deletion.
 
+// NOTE: (Epic 2 dependency sweep, 2026-08-03) nothing mutates a tile until Story 3.2's dig — 2.2's wandering moves entities, which are full-resend — so the dirty-tile section is provably always empty in Epics 2. Wolf's decision 2026-08-03: **build `World::set_tile` + the dirty set here per AD-8 and give it a real test producer** — integration tests call `set_tile` directly and assert the tile appears in that tick's delta and is gone the next. The mechanism ships proven rather than as dead code upheld by inspection (the mistake Epic 1 avoided honestly with the `tick: 0` gap). Also settled here: the TUI blocks on `event::read()` and the daemon has no client registry — see the story file.
+
 **Given** the TUI receiving deltas,
 **Then** a status line shows the current tick climbing live, and the frame keeps pace with no visible stutter on the full 128×128 z-level (NFR2).
 
@@ -232,6 +234,8 @@ So that the world reads as alive even when I give no orders.
 **When** a dwarf is idle,
 **Then** it wanders walkable tiles within ~3 tiles of its position, driven by the seeded wander stream — never wall clock, never unseeded randomness (FR4, AD-7)
 **And** each dwarf carries the idle → walk → work state machine with its current state visible in entity wire data (FR4).
+
+// NOTE: (Epic 2 dependency sweep, 2026-08-03) this story is a WIRE CHANGE, which the text above does not make obvious. "State visible in entity wire data" adds a field to `protocol::Entity` (today `{id, kind, pos}`), so `protocol`, the `simd` bridge, 1.2's hand-written JSON-literal tests and `tui`'s `entity_cell` all move together. It is also where AD-7's purpose-named RNG streams are born: `World` retains no RNG state today (the `ChaCha8Rng` is a local in `generate()`), so 2.2 must split worldgen/wander AND persist both on `World` — see `deferred-work.md`, whose "revisit at 2.4" trigger was corrected to 2.2.
 
 **Given** the TUI attached,
 **When** dwarves wander,
@@ -253,6 +257,8 @@ So that the session bends to my rhythm.
 **Given** the TUI attached,
 **When** I press `Space` (pause/resume) or `+`/`-` (rate step),
 **Then** a `set_speed` command goes upstream, `simd` handles it directly (never the sim queue, AD-10), and the change shows in the next delta within ~200 ms (FR14, FR18, NFR2 — the delta is the ack).
+
+// NOTE: (Epic 2 dependency sweep, 2026-08-03) this is the FIRST story in which the client writes anything. 1.3 deliberately shipped a client that sends zero bytes and left a `// NOTE:` about not closing the write half; `simd` today treats every inbound line as unrecognized by definition and logs-and-drops it. So 2.3 introduces the whole command path — `protocol` has zero command types so far — plus the `Space`/`+`/`-` keys 1.3 deliberately excluded. `protocol::Speed` exists but is entirely unused until here, which is why 1.2's review dismissed "Speed::Paused/Fast unreachable" as noise.
 
 **Given** the sim paused,
 **Then** the loop keeps running: deltas keep flowing, queued commands still apply, only world-advancing systems skip and the tick counter freezes (AD-2)

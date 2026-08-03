@@ -28,7 +28,14 @@ names where it came from and what should trigger revisiting it.
   every recorded scenario baseline and save file — with no test failing to explain
   why. Story 1.1 mandated the single `STREAM_WORLDGEN` stream, so the code is
   compliant. AD-7's "purpose-named streams" is the relevant architectural decision.
-  **Revisit at Story 2.4**, when `SaveState` must persist RNG stream state.
+  ~~**Revisit at Story 2.4**, when `SaveState` must persist RNG stream state.~~
+  **CORRECTED 2026-08-03 (Epic 2 dependency sweep): revisit at Story 2.2, not 2.4.**
+  AD-7 names two purpose-named streams — worldgen and **wander** — and the wander stream
+  is born in 2.2. Further, `World` retains no RNG state at all today: the `ChaCha8Rng` is
+  a local inside `generate()` and is dropped when it returns [crates/sim-core/src/lib.rs:95].
+  So 2.2 must both split the streams and persist them on `World`; 2.4 only serializes what
+  2.2 creates. Acting at 2.4 would mean recording save baselines against a stream layout
+  that 2.2 had already invalidated.
 
 - **Spawn distribution is biased toward the map border**
   (`crates/sim-core/src/lib.rs:143-153`). `is_flat` filters out-of-bounds neighbours
