@@ -2,7 +2,15 @@
 
 mod worldgen;
 
-use bevy_ecs::{component::Component, world::World as EcsWorld};
+use std::collections::BTreeSet;
+
+use bevy_ecs::{
+    component::Component,
+    resource::Resource,
+    schedule::{IntoScheduleConfigs, Schedule},
+    system::ResMut,
+    world::World as EcsWorld,
+};
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -53,6 +61,13 @@ pub struct Id(pub u32);
 #[derive(Component)]
 pub struct Dwarf;
 
+#[derive(Resource)]
+struct Tick(pub u64);
+
+fn advance_tick(mut tick: ResMut<Tick>) {
+    tick.0 += 1;
+}
+
 #[derive(Default)]
 struct IdAllocator {
     next: u32,
@@ -69,10 +84,11 @@ impl IdAllocator {
 pub struct World {
     dims: Dims,
     tiles: Vec<Tile>,
+    dirty: BTreeSet<Pos>,
     ecs: EcsWorld,
+    schedule: Schedule,
     ids: IdAllocator,
     seed: u64,
-    tick: u64,
 }
 
 impl World {
@@ -97,13 +113,19 @@ impl World {
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
 
+        let mut ecs = EcsWorld::new();
+        ecs.insert_resource(Tick(0));
+        let mut schedule = Schedule::default();
+        schedule.add_systems((advance_tick,).chain());
+
         let mut world = World {
             dims,
             tiles,
-            ecs: EcsWorld::new(),
+            dirty: BTreeSet::new(),
+            ecs,
+            schedule,
             ids: IdAllocator::default(),
             seed,
-            tick: 0,
         };
         world.spawn_dwarves(&heights, &mut rng);
         world
@@ -117,9 +139,12 @@ impl World {
         self.seed
     }
 
-    // NOTE: tick advancement lands in Story 2.1.
     pub fn tick(&self) -> u64 {
-        self.tick
+        self.ecs.resource::<Tick>().0
+    }
+
+    pub fn step(&mut self) {
+        self.schedule.run(&mut self.ecs);
     }
 
     /// Flat row-major: index = x + y*dims.x + z*dims.x*dims.y
@@ -139,6 +164,29 @@ impl World {
         }
 
         Some(self.tiles[worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32)])
+    }
+
+    pub fn set_tile(&mut self, p: Pos, tile: Tile) -> bool {
+        if self.tile(p).is_none() {
+            return false;
+        }
+
+        let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
+        self.tiles[index] = tile;
+        self.dirty.insert(p);
+        true
+    }
+
+    pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
+        std::mem::take(&mut self.dirty)
+            .into_iter()
+            .map(|pos| {
+                let tile = self
+                    .tile(pos)
+                    .expect("dirty positions must have passed set_tile bounds checking");
+                (pos, tile)
+            })
+            .collect()
     }
 
     /// Sorted ascending by `Id` — stable order is required by AD-7.
@@ -202,5 +250,16 @@ mod tests {
         let world = World::generate(42, Dims::DEFAULT);
 
         assert_eq!(world.tick(), 0);
+    }
+
+    #[test]
+    fn stepping_advances_the_world_tick_once() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+
+        world.step();
+        assert_eq!(world.tick(), 1);
+
+        world.step();
+        assert_eq!(world.tick(), 2);
     }
 }

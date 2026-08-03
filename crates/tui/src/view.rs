@@ -129,7 +129,8 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
             .filter(|entity| entity.kind == EntityKind::Dwarf)
             .count();
         format!(
-            "z {}/{}  camera {},{}  dwarves {}  keys: <> z  arrows/hjkl pan  q quit",
+            "tick {}  z {}/{}  camera {},{}  dwarves {}  keys: <> z  arrows/hjkl pan  q quit",
+            snapshot.tick,
             state.z,
             snapshot.dims.z.saturating_sub(1),
             state.camera.0,
@@ -277,12 +278,12 @@ mod tests {
             (' ', (8, 10, 14)),
             (' ', (8, 10, 14)),
             (' ', (8, 10, 14)),
-            ('z', (150, 160, 170)),
+            ('t', (150, 160, 170)),
+            ('i', (150, 160, 170)),
+            ('c', (150, 160, 170)),
+            ('k', (150, 160, 170)),
             (' ', (150, 160, 170)),
-            ('2', (150, 160, 170)),
-            ('/', (150, 160, 170)),
-            ('2', (150, 160, 170)),
-            (' ', (150, 160, 170)),
+            ('0', (150, 160, 170)),
             (' ', (150, 160, 170)),
         ];
         let actual: Vec<_> = framebuffer
@@ -379,6 +380,7 @@ mod tests {
             z: 32,
         };
         let mut snapshot = empty_snapshot(dims);
+        snapshot.tick = 87;
         snapshot.entities = (0..3)
             .map(|id| Entity {
                 id,
@@ -392,12 +394,12 @@ mod tests {
             confirming_quit: false,
         };
 
-        let framebuffer = render(&snapshot, &state, 69, 2);
-        let status: String = (0..69).map(|x| framebuffer.cell(x, 1).glyph).collect();
+        let framebuffer = render(&snapshot, &state, 78, 2);
+        let status: String = (0..78).map(|x| framebuffer.cell(x, 1).glyph).collect();
 
         assert_eq!(
             status,
-            "z 19/31  camera 12,34  dwarves 3  keys: <> z  arrows/hjkl pan  q quit"
+            "tick 87  z 19/31  camera 12,34  dwarves 3  keys: <> z  arrows/hjkl pan  q quit"
         );
     }
 

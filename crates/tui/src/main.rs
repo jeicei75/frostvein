@@ -7,6 +7,8 @@ mod view;
 use std::{
     io::{self, BufRead, BufReader, BufWriter, Read, Write},
     net::TcpStream,
+    sync::mpsc::{self, SyncSender, TryRecvError},
+    thread,
     time::Duration,
 };
 
@@ -18,7 +20,7 @@ use crossterm::{
     style::ResetColor,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use protocol::Snapshot;
+use protocol::{Delta, Snapshot};
 
 use crate::{
     frame::{RowEnd, write_frame},
@@ -28,6 +30,8 @@ use crate::{
 /// Mirrors the daemon's 30 s write timeout. Without it a peer that accepts and
 /// then goes silent leaves the client blocked forever.
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
+const MESSAGE_QUEUE: usize = 16;
 
 /// Caps the snapshot line so a server that never sends a newline cannot grow
 /// the buffer without bound. The 128x128x32 snapshot is ~6.9 MB.
@@ -38,6 +42,11 @@ const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const FRAME_BUFFER_BYTES: usize = 512 * 1024;
 
 struct TerminalGuard;
+
+enum Msg {
+    Snapshot(Box<Snapshot>),
+    Delta(Box<Delta>),
+}
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
@@ -55,9 +64,25 @@ fn main() -> anyhow::Result<()> {
     let mut port = protocol::DEFAULT_PORT;
     let mut port_was_set = false;
     let mut frame_only = false;
+    let mut frames: Option<u32> = None;
+    let mut expect_frame_count = false;
     for arg in std::env::args_os().skip(1) {
+        if expect_frame_count {
+            let text = arg
+                .to_str()
+                .with_context(|| format!("--frames count is not valid UTF-8: {arg:?}"))?;
+            frames = Some(text.parse().with_context(|| {
+                format!("invalid --frames count {text:?}: expected a positive integer")
+            })?);
+            expect_frame_count = false;
+            continue;
+        }
         if arg == "--frame" {
             frame_only = true;
+            continue;
+        }
+        if arg == "--frames" {
+            expect_frame_count = true;
             continue;
         }
         if port_was_set {
@@ -71,6 +96,9 @@ fn main() -> anyhow::Result<()> {
         })?;
         port_was_set = true;
     }
+    if expect_frame_count {
+        bail!("--frames requires a count, e.g. --frames 3");
+    }
 
     let address = format!("127.0.0.1:{port}");
     let stream = TcpStream::connect(("127.0.0.1", port))
@@ -79,14 +107,15 @@ fn main() -> anyhow::Result<()> {
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
         .context("could not set the snapshot read timeout")?;
     let mut reader = BufReader::new(stream);
-    let snapshot = read_snapshot(&mut reader)?;
+    let mut snapshot = read_snapshot(&mut reader)?;
     let mut state = initial(&snapshot);
 
+    if let Some(count) = frames {
+        return stream_frames(reader, snapshot, count);
+    }
+
     if frame_only {
-        let (w, h) = match terminal::size() {
-            Ok((w, h)) if w > 0 && h > 0 => (w, h),
-            _ => (100, 40),
-        };
+        let (w, h) = frame_size();
         let framebuffer = render(&snapshot, &state, w, h);
         let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
         write_frame(&mut out, &framebuffer, RowEnd::Newline)
@@ -106,54 +135,174 @@ fn main() -> anyhow::Result<()> {
     let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, stdout);
     let mut size = terminal::size().context("could not read terminal size")?;
     let mut needs_redraw = true;
+    reader
+        .get_mut()
+        .set_read_timeout(None)
+        .context("could not clear the snapshot read timeout")?;
+    let (message_tx, message_rx) = mpsc::sync_channel(MESSAGE_QUEUE);
+    thread::Builder::new()
+        .name("server-read".to_string())
+        .spawn(move || read_messages(reader, message_tx))
+        .context("could not spawn server reader thread")?;
 
-    loop {
+    'running: loop {
+        if event::poll(POLL_INTERVAL).context("could not poll terminal events")? {
+            match event::read().context("could not read terminal event")? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    match apply_key(&mut state, key, snapshot.dims) {
+                        Action::Redraw => needs_redraw = true,
+                        Action::Quit => break 'running,
+                        Action::Ignore => {}
+                    }
+                }
+                Event::Resize(w, h) => {
+                    size = (w, h);
+                    needs_redraw = true;
+                }
+                _ => {}
+            }
+        }
+
+        loop {
+            match message_rx.try_recv() {
+                // AC8: the daemon sends exactly one snapshot, at connect, and that one
+                // is consumed before this loop starts — so this arm is unreachable
+                // today. If a re-snapshot ever arrives, adopt the world but KEEP the
+                // camera and z-level; resetting them would silently throw away where
+                // the player was looking.
+                // NOTE: assumes dims never change between snapshots, which holds while
+                // the daemon serves one world for its lifetime.
+                Ok(Ok(Msg::Snapshot(next))) => {
+                    snapshot = *next;
+                    needs_redraw = true;
+                }
+                Ok(Ok(Msg::Delta(delta))) => {
+                    apply(&mut snapshot, *delta);
+                    needs_redraw = true;
+                }
+                Ok(Err(error)) => return Err(error),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    bail!("server reader thread stopped unexpectedly")
+                }
+            }
+        }
+
         if needs_redraw {
+            // A terminal reporting 0x0 at startup that never emits a Resize would
+            // otherwise blank the client forever with no diagnostic: deltas keep
+            // setting needs_redraw and this guard keeps skipping. Re-query rather
+            // than trusting the startup reading for the process's lifetime.
+            if size.0 == 0 || size.1 == 0 {
+                size = terminal::size().unwrap_or(size);
+            }
             if size.0 != 0 && size.1 != 0 {
                 let framebuffer = render(&snapshot, &state, size.0, size.1);
                 write_frame(&mut out, &framebuffer, RowEnd::MoveTo)
                     .context("could not write terminal frame")?;
                 out.flush().context("could not flush terminal frame")?;
+                // Left set when the size is still unusable, so the redraw is retried
+                // instead of silently dropped.
+                needs_redraw = false;
             }
-            needs_redraw = false;
-        }
-
-        match event::read().context("could not read terminal event")? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => {
-                match apply_key(&mut state, key, snapshot.dims) {
-                    Action::Redraw => needs_redraw = true,
-                    Action::Quit => break,
-                    Action::Ignore => {}
-                }
-            }
-            Event::Resize(w, h) => {
-                size = (w, h);
-                needs_redraw = true;
-            }
-            _ => {}
         }
     }
 
     Ok(())
 }
 
+fn frame_size() -> (u16, u16) {
+    match terminal::size() {
+        Ok((w, h)) if w > 0 && h > 0 => (w, h),
+        _ => (100, 40),
+    }
+}
+
+/// Headless counterpart to the interactive loop, for proving AC10 in the suite.
+///
+/// It runs the REAL reader thread and the real `apply` -> `render` -> `write_frame`
+/// path, emitting one frame per server message and then exiting. `--frame` cannot
+/// stand in for this: it renders the connect snapshot and returns before the reader
+/// thread is ever spawned, so nothing in the suite could catch a client whose loop
+/// had stopped consuming deltas.
+fn stream_frames(
+    mut reader: BufReader<TcpStream>,
+    mut snapshot: Snapshot,
+    count: u32,
+) -> anyhow::Result<()> {
+    reader
+        .get_mut()
+        .set_read_timeout(None)
+        .context("could not clear the snapshot read timeout")?;
+    let (message_tx, message_rx) = mpsc::sync_channel(MESSAGE_QUEUE);
+    thread::Builder::new()
+        .name("server-read".to_string())
+        .spawn(move || read_messages(reader, message_tx))
+        .context("could not spawn server reader thread")?;
+
+    let (w, h) = frame_size();
+    let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
+    for _ in 0..count {
+        // Bounded like every other read here: a server that connects and then goes
+        // quiet must fail, never hang.
+        match message_rx.recv_timeout(SNAPSHOT_READ_TIMEOUT) {
+            Ok(Ok(Msg::Snapshot(next))) => snapshot = *next,
+            Ok(Ok(Msg::Delta(delta))) => apply(&mut snapshot, *delta),
+            Ok(Err(error)) => return Err(error),
+            Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
+        }
+        let state = initial(&snapshot);
+        let framebuffer = render(&snapshot, &state, w, h);
+        write_frame(&mut out, &framebuffer, RowEnd::Newline)
+            .context("could not write terminal frame")?;
+        out.flush().context("could not flush terminal frame")?;
+    }
+
+    Ok(())
+}
+
 fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
+    match read_message(reader)? {
+        Some(Msg::Snapshot(snapshot)) => Ok(*snapshot),
+        Some(Msg::Delta(_)) => bail!("server sent a delta before its snapshot"),
+        None => bail!("server closed before sending a snapshot"),
+    }
+}
+
+fn read_message(reader: &mut dyn BufRead) -> anyhow::Result<Option<Msg>> {
     let mut line = String::new();
     let bytes = reader
         .take(MAX_SNAPSHOT_BYTES)
         .read_line(&mut line)
-        .context("could not read snapshot line")?;
+        .context("could not read server message line")?;
     if bytes == 0 {
-        bail!("server closed before sending a snapshot");
+        return Ok(None);
     }
     if !line.ends_with('\n') {
         if bytes as u64 >= MAX_SNAPSHOT_BYTES {
-            bail!("snapshot line exceeded {MAX_SNAPSHOT_BYTES} bytes with no newline");
+            bail!("server message line exceeded {MAX_SNAPSHOT_BYTES} bytes with no newline");
         }
-        bail!("server closed before terminating the snapshot line");
+        bail!("server closed before terminating its message line");
     }
-    let snapshot: Snapshot = serde_json::from_str(&line).context("could not decode snapshot")?;
+    let value: serde_json::Value =
+        serde_json::from_str(&line).context("could not decode server message")?;
+    match value.get("type").and_then(serde_json::Value::as_str) {
+        Some("snapshot") => {
+            let snapshot: Snapshot =
+                serde_json::from_value(value).context("could not decode snapshot")?;
+            validate_snapshot(&snapshot)?;
+            Ok(Some(Msg::Snapshot(Box::new(snapshot))))
+        }
+        Some("delta") => {
+            let delta = serde_json::from_value(value).context("could not decode delta")?;
+            Ok(Some(Msg::Delta(Box::new(delta))))
+        }
+        Some(message_type) => bail!("unknown server message type {message_type:?}"),
+        None => bail!("server message has no string type field"),
+    }
+}
 
+fn validate_snapshot(snapshot: &Snapshot) -> anyhow::Result<()> {
     // A decodable snapshot can still be inconsistent, and `render` indexes
     // `tiles` from `dims` directly — checking here keeps that an error rather
     // than a panic.
@@ -169,14 +318,56 @@ fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
         );
     }
 
-    Ok(snapshot)
+    Ok(())
+}
+
+fn read_messages(mut reader: BufReader<TcpStream>, sender: SyncSender<anyhow::Result<Msg>>) {
+    loop {
+        let message = match read_message(&mut reader) {
+            Ok(Some(message)) => Ok(message),
+            Ok(None) => Err(anyhow::anyhow!("server closed the connection")),
+            Err(error) => Err(error),
+        };
+        let done = message.is_err();
+        if sender.send(message).is_err() || done {
+            return;
+        }
+    }
+}
+
+fn apply(snapshot: &mut Snapshot, delta: Delta) {
+    for change in delta.tiles {
+        let [x, y, z] = change.pos;
+        if x < 0
+            || y < 0
+            || z < 0
+            || x >= snapshot.dims.x as i32
+            || y >= snapshot.dims.y as i32
+            || z >= snapshot.dims.z as i32
+        {
+            continue;
+        }
+        let index = x as usize
+            + y as usize * snapshot.dims.x as usize
+            + z as usize * snapshot.dims.x as usize * snapshot.dims.y as usize;
+        if let Some(tile) = snapshot.tiles.get_mut(index) {
+            *tile = change.tile;
+        }
+    }
+    snapshot.entities = delta.entities;
+    snapshot.designations = delta.designations;
+    snapshot.zones = delta.zones;
+    snapshot.speed = delta.speed;
+    snapshot.tick = delta.tick;
 }
 
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
 
-    use protocol::{Dims, Material, MessageType, Tile};
+    use protocol::{
+        Delta, Dims, Entity, EntityKind, Material, MessageType, Speed, Tile, TileChange,
+    };
 
     use super::*;
 
@@ -184,6 +375,13 @@ mod tests {
         r#"{"type":"snapshot","dims":{"x":2,"y":1,"z":1},"#,
         r#""tiles":["empty",{"solid":"ice"}],"entities":[],"#,
         r#""designations":[],"zones":[],"speed":"normal","tick":9}"#,
+        "\n"
+    );
+
+    const DELTA_LINE: &str = concat!(
+        r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,0,0],"tile":{"solid":"stone"}}],"#,
+        r#""entities":[{"id":8,"kind":"dwarf","pos":[1,0,0]}],"#,
+        r#""designations":[],"zones":[],"speed":"fast"}"#,
         "\n"
     );
 
@@ -201,6 +399,55 @@ mod tests {
         );
         assert_eq!(snapshot.tick, 9);
         assert_eq!(reader.position(), SNAPSHOT_LINE.len() as u64);
+    }
+
+    #[test]
+    fn reads_one_delta_line() {
+        let mut reader = Cursor::new(DELTA_LINE.as_bytes());
+
+        let message = read_message(&mut reader).unwrap().unwrap();
+
+        let Msg::Delta(delta) = message else {
+            panic!("delta line decoded as a snapshot");
+        };
+        assert_eq!(delta.tick, 10);
+        assert_eq!(delta.tiles[0].pos, [1, 0, 0]);
+        assert_eq!(reader.position(), DELTA_LINE.len() as u64);
+    }
+
+    #[test]
+    fn applies_dirty_tiles_and_replaces_authoritative_fields() {
+        let mut snapshot = read_snapshot(&mut Cursor::new(SNAPSHOT_LINE.as_bytes())).unwrap();
+        snapshot.designations = vec![()];
+        snapshot.zones = vec![()];
+        let delta = Delta {
+            msg_type: MessageType::Delta,
+            tick: 10,
+            tiles: vec![TileChange {
+                pos: [1, 0, 0],
+                tile: Tile::Solid(Material::Stone),
+            }],
+            entities: vec![Entity {
+                id: 8,
+                kind: EntityKind::Dwarf,
+                pos: [1, 0, 0],
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            speed: Speed::Fast,
+        };
+
+        apply(&mut snapshot, delta);
+
+        assert_eq!(
+            snapshot.tiles,
+            vec![Tile::Empty, Tile::Solid(Material::Stone)]
+        );
+        assert_eq!(snapshot.entities[0].id, 8);
+        assert!(snapshot.designations.is_empty());
+        assert!(snapshot.zones.is_empty());
+        assert_eq!(snapshot.speed, Speed::Fast);
+        assert_eq!(snapshot.tick, 10);
     }
 
     #[test]

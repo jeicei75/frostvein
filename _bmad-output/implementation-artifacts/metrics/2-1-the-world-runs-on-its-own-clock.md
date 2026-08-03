@@ -22,3 +22,4 @@ orchestrator session that spans retro → sweep → process wiring → create ca
 the script. The forge hit the same class in ep-02 and annotated rather than guessed. Fix
 would be a `--mark` call at each phase boundary within a session; recorded here rather than
 built, since no story needs it yet.
+| dev | codex | gpt-5.6-sol | 66 | 182,346 | 0 | 6,300,160 | 40,825 | 6,523,331 | $5.29 | `rollout-2026-08-03T11-49-17-019fc774-efc2-70f0-8d50-287db8c6b297.jsonl` | 2026-08-03 12:37 UTC |

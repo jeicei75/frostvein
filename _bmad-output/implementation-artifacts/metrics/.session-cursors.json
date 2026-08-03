@@ -82,5 +82,12 @@
     "input": 7835,
     "output": 139,
     "turns": 2
+  },
+  "rollout-2026-08-03T11-49-17-019fc774-efc2-70f0-8d50-287db8c6b297.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 6300160,
+    "input": 182346,
+    "output": 40825,
+    "turns": 66
   }
 }

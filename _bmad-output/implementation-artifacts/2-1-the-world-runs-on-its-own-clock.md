@@ -4,7 +4,7 @@ baseline_commit: 0882d0641f8aba67281d1d87817ba7423643a0f9
 
 # Story 2.1: The World Runs on Its Own Clock
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -17,9 +17,10 @@ so that the world exists and moves independent of anyone watching.
 1. `sim-core` owns exactly one `bevy_ecs::schedule::Schedule`, built with an explicit
    `.chain()`, and `World::step()` runs it. `tick` is an ECS resource advanced by a system
    *inside* that schedule; `World::tick()` reports N after N `step()` calls.
-2. `World::set_tile(pos, tile)` replaces that tile and records `pos` in a per-tick dirty
-   set. An out-of-bounds `pos` mutates nothing and returns `false`. `tiles` has no other
-   mutator.
+2. `World::set_tile(pos, tile)` replaces that tile and records `pos` in a dirty set that is
+   emptied only by `drain_dirty` — **per-drain, not per-tick**; `step()` never clears it
+   (amended 2026-08-03 by review decision, pinned by `stepping_does_not_clear_the_dirty_set`).
+   An out-of-bounds `pos` mutates nothing and returns `false`. `tiles` has no other mutator.
 3. `World::drain_dirty()` returns `Vec<(Pos, Tile)>` in ascending `Pos` order and empties
    the set, so one change is never reported twice.
 4. A `sim-core` scenario test that calls `set_tile` then `step()` finds exactly that tile
@@ -45,71 +46,104 @@ so that the world exists and moves independent of anyone watching.
 
 ## Tasks / Subtasks
 
-- [ ] **Schedule + tick as sim state** (AC: 1)
-  - [ ] `#[derive(bevy_ecs::resource::Resource)] struct Tick(pub u64);` inserted in
+- [x] **Schedule + tick as sim state** (AC: 1)
+  - [x] `#[derive(bevy_ecs::resource::Resource)] struct Tick(pub u64);` inserted in
         `generate`. Delete the plain `tick: u64` field — `World::tick()` reads the resource.
-  - [ ] `fn advance_tick(mut t: ResMut<Tick>) { t.0 += 1; }`, registered as
+  - [x] `fn advance_tick(mut t: ResMut<Tick>) { t.0 += 1; }`, registered as
         `schedule.add_systems((advance_tick,).chain())`. Keep the tuple + `.chain()` even
         with one system: AD-7 requires the ordering to be explicit, and 2.2 appends to it.
-  - [ ] `World` gains `schedule: Schedule` (use `Schedule::default()`; we never insert it
+  - [x] `World` gains `schedule: Schedule` (use `Schedule::default()`; we never insert it
         into a `Schedules` resource, so the label does not matter). `pub fn step(&mut self)`
         calls `self.schedule.run(&mut self.ecs)` — disjoint field borrows, this compiles.
-  - [ ] Remove the `// NOTE: tick advancement lands in Story 2.1` at
+  - [x] Remove the `// NOTE: tick advancement lands in Story 2.1` at
         `crates/sim-core/src/lib.rs:120`.
-- [ ] **`set_tile` + dirty set** (AC: 2, 3, 4)
-  - [ ] `dirty: BTreeSet<Pos>` on `World`. **`BTreeSet`, not `HashSet`** — AD-7 forbids
+- [x] **`set_tile` + dirty set** (AC: 2, 3, 4)
+  - [x] `dirty: BTreeSet<Pos>` on `World`. **`BTreeSet`, not `HashSet`** — AD-7 forbids
         unordered iteration reaching a sim outcome, and this one reaches the wire.
-  - [ ] `pub fn set_tile(&mut self, p: Pos, t: Tile) -> bool` — bounds-check via the same
+  - [x] `pub fn set_tile(&mut self, p: Pos, t: Tile) -> bool` — bounds-check via the same
         path as `tile()`, write, insert into `dirty`, return `true`; `false` and no
         mutation when out of bounds.
-  - [ ] `pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)>` — ascending `Pos` order
+  - [x] `pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)>` — ascending `Pos` order
         (`BTreeSet` iteration already gives this), clearing as it goes.
-  - [ ] Scenario test `set_tile_shows_up_once_in_the_dirty_set` per AC4. **This is the only
+  - [x] Scenario test `set_tile_shows_up_once_in_the_dirty_set` per AC4. **This is the only
         producer the dirty path has until Story 3.2's dig** — see Key decisions.
-- [ ] **Delta wire types** (AC: 5, 6)
-  - [ ] `protocol`: add `Delta` variant to `MessageType`; add `TileChange` and `Delta` per
+- [x] **Delta wire types** (AC: 5, 6)
+  - [x] `protocol`: add `Delta` variant to `MessageType`; add `TileChange` and `Delta` per
         the skeleton. Keep `type` a plain first field backed by `MessageType` — **never**
         `#[serde(tag = "type")]`, for the reason in `crates/protocol/src/lib.rs`.
-  - [ ] Test decoding a **hand-written JSON literal** of a delta, as 1.2 did for the
+  - [x] Test decoding a **hand-written JSON literal** of a delta, as 1.2 did for the
         snapshot. A symmetric rename passes a round-trip and breaks every client.
-- [ ] **`simd`: tick loop, client registry, broadcast** (AC: 7, 8, 9)
-  - [ ] Move the accept loop to its own thread handing `TcpStream`s to the tick loop over
+- [x] **`simd`: tick loop, client registry, broadcast** (AC: 7, 8, 9)
+  - [x] Move the accept loop to its own thread handing `TcpStream`s to the tick loop over
         an `mpsc::channel`. **The tick loop owns the `World` outright** — no `Mutex`, no
         sharing.
-  - [ ] Per iteration: admit new clients (encode a snapshot from the *current* world for
+  - [x] Per iteration: admit new clients (encode a snapshot from the *current* world for
         each), `world.step()`, encode one delta, `try_send` it to every client, drop those
         that fail, then sleep to the deadline.
-  - [ ] Registry entry holds a **bounded** `SyncSender<Arc<String>>` (`CLIENT_QUEUE = 16`).
+  - [x] Registry entry holds a **bounded** `SyncSender<Arc<String>>` (`CLIENT_QUEUE = 16`).
         `TrySendError::Full` → the client is too slow, disconnect it; `Disconnected` → its
         thread already died, remove it. Unbounded queueing here would reintroduce exactly
         the class 1.2's review made us fix.
-  - [ ] Connection thread: drain its receiver and `write_all` each line; keep the existing
+  - [x] Connection thread: drain its receiver and `write_all` each line; keep the existing
         read-and-drop of inbound lines and all 1.2 bounds (`MAX_LINE_BYTES`,
         `WRITE_TIMEOUT`, `MAX_CONNECTIONS`, `ACCEPT_BACKOFF`, `ConnectionGuard`).
-  - [ ] **Read EOF must no longer close the connection** — now that a write path exists,
+  - [x] **Read EOF must no longer close the connection** — now that a write path exists,
         a half-closing client keeps receiving deltas. Replace the 1.2 `// NOTE:` at
         `crates/simd/src/main.rs` that hands this to 2.1; the thread now ends when the
         *write* fails or the channel closes.
-  - [ ] Delete the encode-once `Arc<String>` snapshot: the world is no longer static.
-  - [ ] e2e in `crates/simd/tests/serve.rs`: assert three consecutive deltas arrive with
+  - [x] Delete the encode-once `Arc<String>` snapshot: the world is no longer static.
+  - [x] e2e in `crates/simd/tests/serve.rs`: assert three consecutive deltas arrive with
         strictly increasing `tick`; assert a client connecting later gets a snapshot whose
         `tick > 0`; assert one client dropped mid-stream leaves a second client still
         receiving.
-- [ ] **`tui`: reader thread + live tick** (AC: 10)
-  - [ ] Spawn a reader thread owning the `BufReader`; it does blocking `read_line`, decodes
+- [x] **`tui`: reader thread + live tick** (AC: 10)
+  - [x] Spawn a reader thread owning the `BufReader`; it does blocking `read_line`, decodes
         into an `enum Msg { Snapshot(Box<Snapshot>), Delta(Box<Delta>) }`, sends on an
         `mpsc::channel`, and exits on EOF or decode error.
-  - [ ] Main loop: `if event::poll(POLL_INTERVAL)? { … }`, then drain the channel with
+  - [x] Main loop: `if event::poll(POLL_INTERVAL)? { … }`, then drain the channel with
         `try_recv()`, then redraw only if a key or a message changed something.
-  - [ ] `fn apply(snapshot: &mut Snapshot, delta: Delta)` — write each `TileChange` into
+  - [x] `fn apply(snapshot: &mut Snapshot, delta: Delta)` — write each `TileChange` into
         `tiles`, then replace `entities`, `designations`, `zones`, `speed`, `tick`
         wholesale. Keep `Snapshot` as the client's world model; do not invent a second type.
-  - [ ] Status line gains the tick. Extend the existing pinned status-line assertion in
+  - [x] Status line gains the tick. Extend the existing pinned status-line assertion in
         `crates/tui/src/view.rs` rather than loosening it.
-  - [ ] Keep the snapshot read timeout for the *first* line only; the reader thread blocks
+  - [x] Keep the snapshot read timeout for the *first* line only; the reader thread blocks
         indefinitely afterwards by design.
-- [ ] **Green gate** (AC: 11) — `scripts/gate.sh`, then the live check below; report what it
+- [x] **Green gate** (AC: 11) — `scripts/gate.sh`, then the live check below; report what it
       printed.
+
+### Review Findings
+
+Code review 2026-08-03 — four layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor,
+Feature Auditor). Both Opus layers independently ran the binaries; AC7's rate, AC9's real
+eviction and AC10 in its entirety were **observed live**, not inferred from the suite.
+
+**Decisions resolved by Wolf, 2026-08-03** (both now carried as patches below):
+
+1. *Dirty set is per-drain, not per-tick.* No system clears `dirty`; only `drain_dirty` empties
+   it (`crates/sim-core/src/lib.rs:180-190`). **Ruling: per-drain is authoritative** — the daemon
+   drains every iteration, so per-drain already *is* per-tick in production, and a clear-system
+   inside the schedule would add a second clearing mechanism whose correctness depends entirely
+   on `.chain()` order (exactly the coupling AD-7 keeps explicit) in exchange for nothing. AC2's
+   wording is amended to match, and the semantics get pinned by a test rather than left implicit.
+2. *The composed `tui` client loop is invisible to the gate.* **Ruling: add the instrument now,
+   in 2.1.** 2.2 and 2.3 both build on this loop; shipping it with no regression net is the Epic 1
+   pattern the retro committed to ending. Accepts a small production affordance added for
+   testability, which also serves as a live observability instrument.
+
+- [x] [Review][Patch] Amend AC2 wording to per-drain and pin it with a test that `step()` does
+      NOT clear the dirty set [crates/sim-core/tests/scenario.rs]
+- [x] [Review][Patch] Add a `--frames N` headless mode running the real reader-thread loop, plus a
+      spawned-binary test asserting two different ticks appear [crates/tui/src/main.rs, crates/tui/tests/]
+- [x] [Review][Patch] A burst of simultaneous connects stalls the fixed timestep [crates/simd/src/main.rs:109-117]
+- [x] [Review][Patch] An evicted client keeps its socket and connection slot for up to ~60 s [crates/simd/src/main.rs:130-139]
+- [x] [Review][Patch] Mid-run snapshot handling silently resets camera and z-level [crates/tui/src/main.rs:148-152]
+- [x] [Review][Patch] A zero-size terminal leaves the client permanently blank with no diagnostic [crates/tui/src/main.rs:116,165-173]
+- [x] [Review][Patch] No behavioural assertion of the 10 Hz cadence [crates/simd/src/main.rs:233-236]
+- [x] [Review][Patch] Dirty-order test cannot detect a tie-break change [crates/sim-core/tests/scenario.rs:52-71]
+- [x] [Review][Patch] `bridge::delta` is destructive and non-idempotent [crates/simd/src/bridge.rs:35-46]
+- [x] [Review][Defer] Status line outgrows an 80-column terminal as the tick gains digits [crates/tui/src/view.rs:131-147] — deferred, pre-existing
+- [x] [Review][Defer] The dirty-tile path is inert in production until Story 3.2 [crates/sim-core/src/lib.rs:169-178] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -283,14 +317,155 @@ one commit per green step, imperative messages. Review-gated: no push, no PR.
 
 ### Agent Model Used
 
+OpenAI Codex (GPT-5)
+
 ### Debug Log References
+
+- Initial RED, schedule/tick: `cargo test --offline -p sim-core
+  stepping_advances_the_world_tick_once` failed to compile because `World::step` did not
+  exist.
+- Initial RED, dirty state: `cargo test --offline -p sim-core --test scenario` failed to
+  compile because `World::set_tile` and `World::drain_dirty` did not exist.
+- Initial RED, delta protocol: `cargo test --offline -p protocol
+  decodes_the_documented_delta_wire_format` failed to compile because `Delta`,
+  `TileChange`, and `MessageType::Delta` did not exist.
+- Initial RED, daemon: `cargo test --offline -p simd` failed to compile because bridge
+  `delta`, `TICK_PERIOD`, and `CLIENT_QUEUE` did not exist.
+- Initial RED, TUI: `cargo test --offline -p tui` failed to compile because `Msg`,
+  `read_message`, and `apply` did not exist.
+
+Sabotage RED evidence (actual failure output):
+
+```text
+test dirty_tiles_are_sorted_and_out_of_bounds_writes_do_nothing ... FAILED
+assertion `left == right` failed
+  left: [(Pos { x: 9, y: 2, z: 3 }, Empty), (Pos { x: 1, y: 2, z: 3 }, Ramp(Snow))]
+ right: [(Pos { x: 1, y: 2, z: 3 }, Ramp(Snow)), (Pos { x: 9, y: 2, z: 3 }, Empty)]
+```
+
+```text
+test tests::decodes_the_documented_delta_wire_format ... FAILED
+the documented delta wire format must decode: Error("unknown variant `delta`, expected `snapshot` or `update`", line: 2, column: 23)
+```
+
+```text
+test tests::tick_period_is_exactly_ten_hertz ... FAILED
+assertion `left == right` failed
+  left: 101ms
+ right: 100ms
+```
+
+```text
+test tests::full_client_queue_is_removed_from_the_registry_at_sixteen_lines ... FAILED
+assertion failed: clients.is_empty()
+```
+
+```text
+test bridge::tests::snapshot_uses_the_current_world_tick ... FAILED
+assertion `left == right` failed
+  left: 0
+ right: 2
+```
+
+```text
+test bridge::tests::delta_carries_dirty_tiles_and_full_authoritative_state ... FAILED
+assertion `left == right` failed
+  left: [TileChange { pos: [1, 2, 3], tile: Empty }]
+ right: [TileChange { pos: [1, 2, 3], tile: Solid(Ice) }]
+```
+
+```text
+test half_closed_client_keeps_receiving ... FAILED
+snapshot line must match the protocol: Error("EOF while parsing a string", line: 1, column: 3062784)
+```
+
+```text
+test tests::reads_one_delta_line ... FAILED
+called `Result::unwrap()` on an `Err` value: unknown server message type "delta"
+```
+
+```text
+test tests::applies_dirty_tiles_and_replaces_authoritative_fields ... FAILED
+assertion `left == right` failed
+  left: [Solid(Stone), Solid(Ice)]
+ right: [Empty, Solid(Stone)]
+```
+
+```text
+test view::tests::status_line_reports_z_camera_and_dwarf_count ... FAILED
+assertion `left == right` failed
+  left: "tick 0  z 19/31  camera 12,34  dwarves 3  keys: <> z  arrows/hjkl pan  q quit "
+ right: "tick 87  z 19/31  camera 12,34  dwarves 3  keys: <> z  arrows/hjkl pan  q quit"
+```
+
+- `codex review --base main` was run but could not initialize its in-process app-server:
+  `Read-only file system (os error 30)`. No sandbox workaround was attempted. Manual review
+  found that the original queue-capacity test did not exercise registry removal; it was
+  replaced with tests through the production broadcast path for full and disconnected
+  queues.
 
 ### Completion Notes List
 
+- Added the single chained ECS schedule, tick resource, deterministic dirty-tile tracking,
+  and direct scenario coverage in `sim-core`.
+- Added the literal-pinned delta wire contract in `protocol`; no command or entity shape was
+  introduced.
+- Reworked `simd` into a 10 Hz world-owning tick loop with a dedicated accept thread,
+  current-world snapshots, per-tick deltas, bounded per-client queues, bounded socket I/O,
+  half-close support, and registry eviction on full/disconnected queues.
+- Added loopback coverage for exact consecutive deltas, zero-client advancement, late-client
+  snapshots, half-closes, and one-client-drop isolation.
+- Added the TUI's dedicated bounded reader thread, responsive event polling, authoritative
+  delta application, and live tick status line.
+- `scripts/gate.sh` printed `GATE GREEN` (fmt, clippy `-D warnings`, tests, and dependency-edge
+  probe all `ok`).
+- Manual live check: daemon ran first with zero clients; the first TUI tick climbed from 57
+  through 77/78 and later 151/152 while an `l` key changed camera x from 34 to 35. A second
+  TUI connected mid-run at tick 244 (> 0) and later displayed tick 361. Both clients exited
+  normally; the daemon continued until stopped manually.
+
+### Review Patch Notes (Claude, 2026-08-03)
+
+Nine patches applied across `sim-core`, `protocol`-adjacent `bridge`, `simd` and `tui`.
+All five mutations below were run through one batched apply/revert script (retro action
+item: "batch mutation testing into one apply/revert script emitting a results table").
+
+| Mutation | Test that must die | Result |
+| --- | --- | --- |
+| Eviction no longer shuts the socket | `full_client_queue_is_removed_from_the_registry_at_sixteen_lines` | KILLED (after fix, below) |
+| Tick loop never sleeps | `deltas_arrive_at_roughly_ten_per_second` | KILLED |
+| Client loop receives deltas but never applies them | `the_client_loop_renders_a_frame_per_streamed_delta` | KILLED |
+| `step()` clears the dirty set | `stepping_does_not_clear_the_dirty_set` | KILLED |
+| `drain_dirty` returns descending order | `dirty_tiles_are_sorted_and_out_of_bounds_writes_do_nothing` | KILLED |
+
+**The first mutation SURVIVED on the first run** — the new socket-shutdown assertion was
+a false positive. Dropping the evicted `Client` dropped its `TcpStream`, which closed the
+socket by itself, so the peer saw EOF with or without the fix under test. Production does
+not behave that way: `serve` still holds the original handle while parked in `write_all`.
+The test now holds a second live clone to model that, and the mutation dies (read timeout
+expires after 5.19s, proving the socket really does stay open without the shutdown). Noted
+because a green suite claimed a fix it was not testing — the exact class this project has
+now hit in 1.1, 1.2, 1.3 and again here.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/2-1-the-world-runs-on-its-own-clock.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `crates/tui/tests/client.rs` (new, review patch)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `crates/protocol/src/lib.rs`
+- `crates/sim-core/src/lib.rs`
+- `crates/sim-core/tests/scenario.rs`
+- `crates/simd/src/bridge.rs`
+- `crates/simd/src/main.rs`
+- `crates/simd/tests/serve.rs`
+- `crates/tui/src/main.rs`
+- `crates/tui/src/view.rs`
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-03 | Story created |
+| 2026-08-03 | Implemented autonomous ticking, delta streaming, bounded clients, and live TUI updates; added sabotage-verified coverage and completed live verification. |
+| 2026-08-03 | Code review (4 layers, 2 of them running the binaries): 2 decisions resolved, 9 patches applied, 2 deferred, 4 dismissed. Gate green, 57 tests. |

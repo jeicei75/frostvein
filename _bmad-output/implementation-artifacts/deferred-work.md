@@ -69,3 +69,20 @@ names where it came from and what should trigger revisiting it.
   `tput` is on PATH; a no-TTY frame renders at whatever terminfo guesses (verified: 80×24 = 1920
   cells). Side effect: two forked `tput` processes per `--frame` run. This is a spec-accuracy issue
   in the AC text, not a code defect [crates/tui/src/main.rs:67].
+
+## Deferred from: code review of story 2-1-the-world-runs-on-its-own-clock (2026-08-03)
+
+- **The status line outgrows an 80-column terminal as the tick counter gains digits.** `view.rs`
+  now prepends `"tick {}  "`, taking the status row from 69 to 78 columns at `tick 87`. Truncation
+  is a silent `(0..w).zip(status.chars())`, so at `tick 1000000` (~28 h of uptime at 10 Hz) the row
+  reaches 84 columns and pushes `q quit` off screen. Graceful, not a panic. **Revisit when** the
+  next TUI story touches the status line — pair it with the still-open retro item about AC11's
+  unreachable 100×40 fallback spec text [crates/tui/src/view.rs:131-147].
+- **The dirty-tile path is inert in production.** `set_tile` has zero production callers — every
+  call site is a test — so the schedule's one system touches only `Tick` and `Delta.tiles` is `[]`
+  on every real tick (confirmed on a live wire dump: four consecutive deltas, `tiles=[]` each
+  time). This is the story's explicit, recorded decision: build the AD-8 mechanism now, prove it
+  with AC4's direct test, first real producer arrives with the dig. **Revisit at Story 3.2** —
+  which is the first time a `TileChange` crosses the wire for real, and the first time this
+  plumbing is exercised end to end. Do not read AC6 as evidence that tile streaming has been
+  proven [crates/sim-core/src/lib.rs:169-178].
