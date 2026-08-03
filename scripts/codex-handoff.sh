@@ -33,6 +33,16 @@
 # which now has its own AGENTS.md — before 2026-08-03 it did not, so Codex silently
 # fell through to the forge's generic copy and never read frostvein's rules at all.
 #
+# CODEX_HOME (/workspace/.codex) must ALSO be writable. It sits outside the `-C`
+# working root, so workspace-write leaves it read-only, and story 2.1's attempt at the
+# `codex review --base main` pre-handback self-gate died with "Read-only file system
+# (os error 30)" when its app-server tried to write there. Codex correctly reported the
+# blocker instead of working around it, so the self-gate simply never ran that story.
+# NOTE: the fix is reasoned from that error plus the path layout — it has not yet been
+# confirmed by a delegated run that actually reaches the self-gate. Verify at 2.2.
+# Separately: `codex review` on a ~650-line diff ran past 10 minutes unsandboxed, so
+# budget real wall-clock for it rather than treating it as a quick gate.
+#
 # .git MUST be listed in writable_roots: workspace-write shields .git by default,
 # so without this `git checkout -b` dies with "cannot lock ref ... Read-only file
 # system" and the story cannot be branched or committed. There is no
@@ -47,7 +57,7 @@ LASTMSG="${3:-/tmp/codex-last.txt}"
 CODEX_HOME=/workspace/.codex codex exec \
   -s workspace-write \
   -c approval_policy="never" \
-  -c 'sandbox_workspace_write.writable_roots=["/workspace/projects/frostvein/.git"]' \
+  -c 'sandbox_workspace_write.writable_roots=["/workspace/projects/frostvein/.git","/workspace/.codex"]' \
   -c sandbox_workspace_write.network_access=true \
   -C /workspace/projects/frostvein \
   -o "$LASTMSG" \
