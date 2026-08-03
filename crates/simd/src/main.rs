@@ -121,17 +121,21 @@ fn tick(
             "{}\n",
             serde_json::to_string(&bridge::delta(&mut world))?
         ));
-        clients.retain(|client| match client.tx.try_send(Arc::clone(&delta_line)) {
-            Ok(()) => true,
-            Err(TrySendError::Full(_)) => {
-                eprintln!("client delta queue full; disconnecting client");
-                false
-            }
-            Err(TrySendError::Disconnected(_)) => false,
-        });
+        broadcast(&mut clients, &delta_line);
 
         thread::sleep(deadline.saturating_duration_since(Instant::now()));
     }
+}
+
+fn broadcast(clients: &mut Vec<Client>, line: &Arc<String>) {
+    clients.retain(|client| match client.tx.try_send(Arc::clone(line)) {
+        Ok(()) => true,
+        Err(TrySendError::Full(_)) => {
+            eprintln!("client delta queue full; disconnecting client");
+            false
+        }
+        Err(TrySendError::Disconnected(_)) => false,
+    });
 }
 
 fn connect_client(
@@ -232,15 +236,27 @@ mod tests {
     }
 
     #[test]
-    fn client_queue_holds_exactly_sixteen_pending_lines() {
+    fn full_client_queue_is_removed_from_the_registry_at_sixteen_lines() {
         let (sender, _receiver) = std::sync::mpsc::sync_channel(CLIENT_QUEUE);
 
         for line in 0..16 {
             assert!(sender.try_send(Arc::new(line.to_string())).is_ok());
         }
-        assert!(matches!(
-            sender.try_send(Arc::new("overflow".to_string())),
-            Err(std::sync::mpsc::TrySendError::Full(_))
-        ));
+        let mut clients = vec![Client { tx: sender }];
+
+        broadcast(&mut clients, &Arc::new("overflow".to_string()));
+
+        assert!(clients.is_empty());
+    }
+
+    #[test]
+    fn disconnected_client_queue_is_removed_from_the_registry() {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(CLIENT_QUEUE);
+        drop(receiver);
+        let mut clients = vec![Client { tx: sender }];
+
+        broadcast(&mut clients, &Arc::new("delta".to_string()));
+
+        assert!(clients.is_empty());
     }
 }
