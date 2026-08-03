@@ -86,11 +86,11 @@ action_items:
   - epic: 1
     action: "Add 'verify by sabotage, paste the red output' as a required task checkbox for every mapping/pinning test in the dev handoff prompt"
     owner: "Amelia"
-    status: open
+    status: done
   - epic: 1
     action: "Runbook: if a story spans multiple Codex sessions, restate RED evidence in the continuation handoff (1.2 lost it across a session boundary)"
     owner: "Amelia"
-    status: open
+    status: done
   - epic: 1
     action: "Every story ships an observability instrument named in its tasks (the --frame lesson)"
     owner: "Amelia"
@@ -98,7 +98,7 @@ action_items:
   - epic: 1
     action: "Set sandbox_workspace_write.network_access=true in scripts/codex-handoff.sh and update its header comment; keep cargo fetch prewarm and --offline builds in the handoff prompt"
     owner: "Amelia"
-    status: open
+    status: done
   - epic: 1
     action: "BLOCKING 2.1 — resolve the TUI delta-consumption design (event::poll vs reader thread) during 2.1 story-creation; main.rs:121 blocks on event::read()"
     owner: "Winston"
@@ -126,11 +126,11 @@ action_items:
   - epic: 1
     action: "Create frostvein/AGENTS.md with the project's durable rules (mirroring CLAUDE.md) plus standing dev-agent rules. Codex reads only the forge's generic /workspace/AGENTS.md today, so project rules never survive a session boundary"
     owner: "Amelia"
-    status: open
+    status: done
   - epic: 1
     action: "Add scripts/gate.sh (fmt, clippy, test, tui dependency-edge probe) exiting non-zero, wired to a pre-commit hook, so a green gate cannot be merely claimed"
     owner: "Amelia"
-    status: open
+    status: done
   - epic: 1
     action: "Add 'codex review --base main' as a pre-handback self-gate, instructed at self-referential tests and unbounded I/O. Measure: 2.1's Opus patch count below 1.3's ten"
     owner: "Amelia"
