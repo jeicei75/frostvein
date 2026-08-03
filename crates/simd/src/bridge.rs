@@ -19,7 +19,7 @@ pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
         entities: world
             .dwarves()
             .into_iter()
-            .map(|(id, pos)| protocol::Entity {
+            .map(|(id, pos, _)| protocol::Entity {
                 id: id.0,
                 kind: protocol::EntityKind::Dwarf,
                 pos: [pos.x, pos.y, pos.z],
@@ -52,7 +52,7 @@ pub fn delta(world: &mut sim_core::World) -> protocol::Delta {
         entities: world
             .dwarves()
             .into_iter()
-            .map(|(id, pos)| protocol::Entity {
+            .map(|(id, pos, _)| protocol::Entity {
                 id: id.0,
                 kind: protocol::EntityKind::Dwarf,
                 pos: [pos.x, pos.y, pos.z],
@@ -204,7 +204,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             dwarves
                 .iter()
-                .map(|(_, pos)| [pos.x, pos.y, pos.z])
+                .map(|(_, pos, _)| [pos.x, pos.y, pos.z])
                 .collect::<Vec<_>>()
         );
         assert!(

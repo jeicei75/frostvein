@@ -8,7 +8,7 @@ use bevy_ecs::{
     component::Component,
     resource::Resource,
     schedule::{IntoScheduleConfigs, Schedule},
-    system::ResMut,
+    system::{Query, Res, ResMut},
     world::World as EcsWorld,
 };
 use rand::{RngExt, SeedableRng};
@@ -16,6 +16,9 @@ use rand_chacha::ChaCha8Rng;
 
 const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
 const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
+const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
+const WANDER_RADIUS: i32 = 3;
+const WANDER_REST_TICKS: u32 = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Material {
@@ -61,6 +64,22 @@ pub struct Id(pub u32);
 
 #[derive(Component)]
 pub struct Dwarf;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Component)]
+pub enum JobState {
+    Idle,
+    Walk,
+    Work,
+}
+
+#[derive(Component)]
+struct Wander {
+    home: Pos,
+    cooldown: u32,
+}
+
+#[derive(Resource)]
+struct WanderRng(ChaCha8Rng);
 
 #[derive(Resource)]
 struct Tick(pub u64);
@@ -124,6 +143,49 @@ fn advance_tick(mut tick: ResMut<Tick>) {
     tick.0 += 1;
 }
 
+fn wander(
+    mut rng: ResMut<WanderRng>,
+    terrain: Res<Terrain>,
+    mut dwarves: Query<(&Id, &mut Pos, &mut Wander, &mut JobState)>,
+) {
+    // AD-7: query iteration is archetype order, not Id order, and all dwarves draw from
+    // one stream. Draw order is a sim outcome, so sort before touching the RNG.
+    let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+    dwarves.sort_by_key(|(id, ..)| **id);
+
+    for (_, mut pos, mut wander, mut state) in dwarves {
+        if wander.cooldown > 0 {
+            wander.cooldown -= 1;
+            *state = JobState::Idle;
+            continue;
+        }
+
+        let here = *pos;
+        // NOTE: fixed order, same z only. Ramp climbing arrives with A* in Story 3.2.
+        let candidates: Vec<Pos> = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            .into_iter()
+            .map(|(dx, dy)| Pos {
+                x: here.x + dx,
+                y: here.y + dy,
+                z: here.z,
+            })
+            .filter(|p| {
+                (p.x - wander.home.x).abs() <= WANDER_RADIUS
+                    && (p.y - wander.home.y).abs() <= WANDER_RADIUS
+                    && terrain.is_standable(*p)
+            })
+            .collect();
+        wander.cooldown = WANDER_REST_TICKS;
+        match candidates.len() {
+            0 => *state = JobState::Idle,
+            n => {
+                *pos = candidates[rng.0.random_range(0..n)];
+                *state = JobState::Walk;
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 struct IdAllocator {
     next: u32,
@@ -169,13 +231,14 @@ impl World {
 
         let mut ecs = EcsWorld::new();
         ecs.insert_resource(Tick(0));
+        ecs.insert_resource(WanderRng(ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER)));
         ecs.insert_resource(Terrain {
             dims,
             tiles,
             dirty: BTreeSet::new(),
         });
         let mut schedule = Schedule::default();
-        schedule.add_systems((advance_tick,).chain());
+        schedule.add_systems((advance_tick, wander).chain());
 
         let mut world = World {
             ecs,
@@ -221,14 +284,21 @@ impl World {
     }
 
     /// Sorted ascending by `Id` — stable order is required by AD-7.
-    pub fn dwarves(&self) -> Vec<(Id, Pos)> {
+    // NOTE: promote this tuple to a struct at the fourth field (Story 3.2 adds carried item).
+    pub fn dwarves(&self) -> Vec<(Id, Pos, JobState)> {
         let mut dwarves: Vec<_> = self
             .ecs
             .iter_entities()
             .filter(|entity| entity.contains::<Dwarf>())
-            .filter_map(|entity| Some((*entity.get::<Id>()?, *entity.get::<Pos>()?)))
+            .filter_map(|entity| {
+                Some((
+                    *entity.get::<Id>()?,
+                    *entity.get::<Pos>()?,
+                    *entity.get::<JobState>()?,
+                ))
+            })
             .collect();
-        dwarves.sort_by_key(|(id, _)| *id);
+        dwarves.sort_by_key(|(id, ..)| *id);
         dwarves
     }
 
@@ -268,7 +338,16 @@ impl World {
             let candidate = rng.random_range(0..candidates.len());
             let pos = candidates.swap_remove(candidate);
             let id = self.ids.allocate();
-            self.ecs.spawn((Dwarf, id, pos));
+            self.ecs.spawn((
+                Dwarf,
+                id,
+                pos,
+                JobState::Idle,
+                Wander {
+                    home: pos,
+                    cooldown: id.0 % WANDER_REST_TICKS,
+                },
+            ));
         }
     }
 }
@@ -277,7 +356,7 @@ impl World {
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{Dims, Material, Pos, Terrain, Tile, World};
+    use super::{Dims, JobState, Material, Pos, Terrain, Tile, World};
 
     #[test]
     fn terrain_identifies_standable_tiles() {
@@ -312,5 +391,36 @@ mod tests {
 
         world.step();
         assert_eq!(world.tick(), 2);
+    }
+
+    #[test]
+    fn dwarves_spawn_idle_and_wander_in_staggered_id_order() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let before = world.dwarves();
+
+        assert!(before.iter().all(|(_, _, state)| *state == JobState::Idle));
+        world.step();
+        let after = world.dwarves();
+
+        assert_ne!(after[0].1, before[0].1);
+        assert_eq!(after[0].2, JobState::Walk);
+        for index in 1..5 {
+            assert_eq!(after[index].1, before[index].1);
+            assert_eq!(after[index].2, JobState::Idle);
+        }
+    }
+
+    #[test]
+    fn wander_rest_is_ten_ticks() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+
+        world.step();
+        assert_eq!(world.dwarves()[0].2, JobState::Walk);
+        for _ in 0..10 {
+            world.step();
+            assert_eq!(world.dwarves()[0].2, JobState::Idle);
+        }
+        world.step();
+        assert_eq!(world.dwarves()[0].2, JobState::Walk);
     }
 }

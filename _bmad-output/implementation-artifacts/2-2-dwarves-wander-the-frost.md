@@ -79,14 +79,14 @@ so that the world reads as alive even when I give no orders.
   - [x] Dwarf positions for a given seed change once, here. Nothing pins them today (verified:
         no test hardcodes a position), and 2.4's `SaveState` baselines do not exist yet — which
         is why this lands now rather than later.
-- [ ] **`sim-core`: wander stream, state, system** (AC: 1, 2, 4, 5)
-  - [ ] `STREAM_WANDER`, `WANDER_RADIUS = 3`, `WANDER_REST_TICKS = 10` as constants at their
+- [x] **`sim-core`: wander stream, state, system** (AC: 1, 2, 4, 5)
+  - [x] `STREAM_WANDER`, `WANDER_RADIUS = 3`, `WANDER_REST_TICKS = 10` as constants at their
         use site; `WanderRng` + `Terrain` inserted in `generate`, `JobState::Idle` and
         `Wander { home: pos, cooldown: id.0 % WANDER_REST_TICKS }` added to the spawn bundle.
         The modulo staggers the five dwarves without a second RNG draw.
-  - [ ] Register `schedule.add_systems((advance_tick, wander).chain())` — order is explicit,
+  - [x] Register `schedule.add_systems((advance_tick, wander).chain())` — order is explicit,
         `advance_tick` first.
-  - [ ] `World::dwarves()` returns the 3-tuple. // NOTE: promote to a struct at the fourth
+  - [x] `World::dwarves()` returns the 3-tuple. // NOTE: promote to a struct at the fourth
         field (3.2 adds the carried item).
 - [ ] **`sim-core`: scenario coverage** (AC: 6, 7, 8, 9)
   - [ ] Extend `crates/sim-core/tests/scenario.rs`: `dwarves_stay_standable_and_near_home`,
@@ -381,6 +381,14 @@ per green step, imperative messages. Review-gated: no push, no PR.
   `layered_terrain`, then ran `cargo test --offline -p sim-core
   spawn_positions_for_seed_42_are_pinned`; result stayed GREEN: `1 passed; 0 failed`. Reverted the
   throwaway draw afterward.
+- Wander API RED before implementation: unresolved import `super::JobState`, tuple arity mismatch
+  (`expected tuple (Id, Pos), found tuple (_, _, _)`), and missing tuple field `.2`; the targeted
+  test failed to compile with seven errors.
+- `WANDER_REST_TICKS` sabotage RED (10 changed to 11): `wander_rest_is_ten_ticks` failed with
+  `left: Idle`, `right: Walk`; result: `FAILED. 0 passed; 1 failed`.
+- Spawn-state mapping sabotage RED (`JobState::Idle` changed to `JobState::Walk`):
+  `assertion failed: before.iter().all(|(_, _, state)| *state == JobState::Idle)`; result:
+  `FAILED. 0 passed; 1 failed`.
 
 ### Completion Notes List
 
@@ -390,11 +398,15 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Split dwarf placement from world generation with `STREAM_SPAWN`; pinned all five seed-42 spawn
   positions as literals and pinned the entire unchanged terrain vector with a deterministic
   fingerprint. The required extra-worldgen-draw experiment stayed green.
+- Added the purpose-named wander stream, `JobState`, per-dwarf home/cooldown, ascending-ID wander
+  system, explicit `(advance_tick, wander).chain()`, and the three-field sorted `dwarves()` API.
+  Unit tests pin idle spawn, the ID stagger, and exactly ten rest ticks.
 
 ### File List
 
 - `crates/sim-core/src/lib.rs`
 - `crates/sim-core/tests/worldgen.rs`
+- `crates/simd/src/bridge.rs`
 - `_bmad-output/implementation-artifacts/2-2-dwarves-wander-the-frost.md`
 
 ## Change Log
