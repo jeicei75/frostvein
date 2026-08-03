@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Dims, EntityKind, Snapshot, Tile};
 
 use crate::palette::{BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, dim, entity_cell, tile_cell};
@@ -31,10 +31,18 @@ pub enum Action {
 }
 
 pub fn initial(snapshot: &Snapshot) -> ViewState {
+    // NOTE: clamped because the entity position is wire data. An out-of-world
+    // entity would otherwise open on a blank map with no way to tell why.
+    let max_x = i64::from(snapshot.dims.x.saturating_sub(1));
+    let max_y = i64::from(snapshot.dims.y.saturating_sub(1));
+    let max_z = i32::try_from(snapshot.dims.z.saturating_sub(1)).unwrap_or(i32::MAX);
     match snapshot.entities.first() {
         Some(entity) => ViewState {
-            camera: (i64::from(entity.pos[0]), i64::from(entity.pos[1])),
-            z: entity.pos[2],
+            camera: (
+                i64::from(entity.pos[0]).clamp(0, max_x),
+                i64::from(entity.pos[1]).clamp(0, max_y),
+            ),
+            z: entity.pos[2].clamp(0, max_z),
             confirming_quit: false,
         },
         None => ViewState {
@@ -42,7 +50,7 @@ pub fn initial(snapshot: &Snapshot) -> ViewState {
                 i64::from(snapshot.dims.x / 2),
                 i64::from(snapshot.dims.y / 2),
             ),
-            z: (snapshot.dims.z / 2) as i32,
+            z: i32::try_from(snapshot.dims.z / 2).unwrap_or(i32::MAX),
             confirming_quit: false,
         },
     }
@@ -68,7 +76,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
                 || wx >= i64::from(snapshot.dims.x)
                 || wy >= i64::from(snapshot.dims.y)
                 || state.z < 0
-                || state.z >= snapshot.dims.z as i32
+                || i64::from(state.z) >= i64::from(snapshot.dims.z)
             {
                 continue;
             }
@@ -99,8 +107,8 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         if entity.pos[2] != state.z
             || entity.pos[0] < 0
             || entity.pos[1] < 0
-            || entity.pos[0] >= snapshot.dims.x as i32
-            || entity.pos[1] >= snapshot.dims.y as i32
+            || i64::from(entity.pos[0]) >= i64::from(snapshot.dims.x)
+            || i64::from(entity.pos[1]) >= i64::from(snapshot.dims.y)
         {
             continue;
         }
@@ -140,9 +148,22 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
     framebuffer
 }
 
-pub fn apply_key(state: &mut ViewState, key: KeyCode, dims: Dims) -> Action {
+pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims) -> Action {
+    // Wolf's call 2026-08-03: Ctrl-C quits outright. Raw mode clears ISIG, so
+    // without this the conventional interrupt does nothing at all and the only
+    // way out is q -> y.
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+        return Action::Quit;
+    }
+    // NOTE: SHIFT is the only modifier the keymap uses (`<` and `>` arrive with
+    // it). Without this, Ctrl-H/J/K/L would pan and Ctrl-Q would open the quit
+    // prompt.
+    if !key.modifiers.difference(KeyModifiers::SHIFT).is_empty() {
+        return Action::Ignore;
+    }
+
     if state.confirming_quit {
-        return if key == KeyCode::Char('y') {
+        return if key.code == KeyCode::Char('y') {
             Action::Quit
         } else {
             state.confirming_quit = false;
@@ -150,7 +171,7 @@ pub fn apply_key(state: &mut ViewState, key: KeyCode, dims: Dims) -> Action {
         };
     }
 
-    match key {
+    match key.code {
         KeyCode::Char('<') => {
             state.z = (state.z - 1).max(0);
             Action::Redraw
@@ -183,8 +204,10 @@ pub fn apply_key(state: &mut ViewState, key: KeyCode, dims: Dims) -> Action {
     }
 }
 
+// NOTE: widened before multiplying — the strides come from the wire, and a u32
+// product would overflow before the caller's bounds check ever sees it.
 fn tile_index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
-    (x + y * dims.x + z * dims.x * dims.y) as usize
+    x as usize + y as usize * dims.x as usize + z as usize * dims.x as usize * dims.y as usize
 }
 
 #[cfg(test)]
@@ -208,6 +231,10 @@ mod tests {
 
     fn index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
         (x + y * dims.x + z * dims.x * dims.y) as usize
+    }
+
+    fn press(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
     }
 
     #[test]
@@ -317,6 +344,101 @@ mod tests {
         );
     }
 
+    /// The peek-below cap itself, not just its dimming: ground exactly
+    /// `PEEK_DEPTH` levels down is drawn, one level deeper is not. Widening
+    /// `PEEK_DEPTH` must turn this red.
+    #[test]
+    fn peek_below_stops_at_three_levels() {
+        let dims = Dims { x: 2, y: 1, z: 8 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.tiles[index(dims, 0, 0, 4)] = Tile::Solid(Material::Snow);
+        snapshot.tiles[index(dims, 1, 0, 3)] = Tile::Solid(Material::Snow);
+        let state = ViewState {
+            camera: (1, 0),
+            z: 7,
+            confirming_quit: false,
+        };
+
+        let framebuffer = render(&snapshot, &state, 4, 2);
+
+        assert_eq!(
+            framebuffer.cell(1, 0),
+            Cell {
+                glyph: '░',
+                fg: (45, 47, 50),
+            }
+        );
+        assert_eq!(framebuffer.cell(2, 0), BLANK);
+    }
+
+    #[test]
+    fn status_line_reports_z_camera_and_dwarf_count() {
+        let dims = Dims {
+            x: 40,
+            y: 40,
+            z: 32,
+        };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.entities = (0..3)
+            .map(|id| Entity {
+                id,
+                kind: EntityKind::Dwarf,
+                pos: [1, 1, 30],
+            })
+            .collect();
+        let state = ViewState {
+            camera: (12, 34),
+            z: 19,
+            confirming_quit: false,
+        };
+
+        let framebuffer = render(&snapshot, &state, 69, 2);
+        let status: String = (0..69).map(|x| framebuffer.cell(x, 1).glyph).collect();
+
+        assert_eq!(
+            status,
+            "z 19/31  camera 12,34  dwarves 3  keys: <> z  arrows/hjkl pan  q quit"
+        );
+    }
+
+    #[test]
+    fn modified_keys_are_ignored_except_ctrl_c_and_shift() {
+        let dims = Dims { x: 3, y: 4, z: 2 };
+        let mut state = ViewState {
+            camera: (1, 1),
+            z: 0,
+            confirming_quit: false,
+        };
+
+        for code in [KeyCode::Char('l'), KeyCode::Char('j'), KeyCode::Char('q')] {
+            assert_eq!(
+                apply_key(&mut state, KeyEvent::new(code, KeyModifiers::CONTROL), dims),
+                Action::Ignore
+            );
+        }
+        assert_eq!((state.camera, state.confirming_quit), ((1, 1), false));
+
+        // `<` and `>` arrive with SHIFT held on most layouts.
+        assert_eq!(
+            apply_key(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('>'), KeyModifiers::SHIFT),
+                dims
+            ),
+            Action::Redraw
+        );
+        assert_eq!(state.z, 1);
+
+        assert_eq!(
+            apply_key(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+                dims
+            ),
+            Action::Quit
+        );
+    }
+
     #[test]
     fn out_of_world_cells_are_blank() {
         let dims = Dims { x: 3, y: 2, z: 1 };
@@ -346,19 +468,25 @@ mod tests {
         };
 
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('>'), dims),
+            apply_key(&mut state, press(KeyCode::Char('>')), dims),
             Action::Redraw
         );
         assert_eq!(state.z, 1);
-        assert_eq!(apply_key(&mut state, KeyCode::Right, dims), Action::Redraw);
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('l'), dims),
+            apply_key(&mut state, press(KeyCode::Right), dims),
+            Action::Redraw
+        );
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('l')), dims),
             Action::Redraw
         );
         assert_eq!(state.camera.0, 2);
-        assert_eq!(apply_key(&mut state, KeyCode::Down, dims), Action::Redraw);
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('j'), dims),
+            apply_key(&mut state, press(KeyCode::Down), dims),
+            Action::Redraw
+        );
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('j')), dims),
             Action::Redraw
         );
         assert_eq!(state.camera.1, 3);
@@ -366,56 +494,65 @@ mod tests {
         state.camera = (0, 0);
         state.z = 0;
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('<'), dims),
+            apply_key(&mut state, press(KeyCode::Char('<')), dims),
             Action::Redraw
         );
         assert_eq!(state.z, 0);
-        assert_eq!(apply_key(&mut state, KeyCode::Left, dims), Action::Redraw);
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('h'), dims),
+            apply_key(&mut state, press(KeyCode::Left), dims),
+            Action::Redraw
+        );
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('h')), dims),
             Action::Redraw
         );
         assert_eq!(state.camera.0, 0);
-        assert_eq!(apply_key(&mut state, KeyCode::Up, dims), Action::Redraw);
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('k'), dims),
+            apply_key(&mut state, press(KeyCode::Up), dims),
+            Action::Redraw
+        );
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('k')), dims),
             Action::Redraw
         );
         assert_eq!(state.camera.1, 0);
 
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('>'), dims),
+            apply_key(&mut state, press(KeyCode::Char('>')), dims),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('l'), dims),
+            apply_key(&mut state, press(KeyCode::Char('l')), dims),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('j'), dims),
+            apply_key(&mut state, press(KeyCode::Char('j')), dims),
             Action::Redraw
         );
         assert_eq!((state.camera, state.z), ((1, 1), 1));
 
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('q'), dims),
+            apply_key(&mut state, press(KeyCode::Char('q')), dims),
             Action::Redraw
         );
         assert!(state.confirming_quit);
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('y'), dims),
+            apply_key(&mut state, press(KeyCode::Char('y')), dims),
             Action::Quit
         );
 
         state.confirming_quit = false;
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('q'), dims),
+            apply_key(&mut state, press(KeyCode::Char('q')), dims),
             Action::Redraw
         );
-        assert_eq!(apply_key(&mut state, KeyCode::Esc, dims), Action::Redraw);
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Esc), dims),
+            Action::Redraw
+        );
         assert!(!state.confirming_quit);
         assert_eq!(
-            apply_key(&mut state, KeyCode::Char('x'), dims),
+            apply_key(&mut state, press(KeyCode::Char('x')), dims),
             Action::Ignore
         );
     }
