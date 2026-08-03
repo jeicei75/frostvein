@@ -88,11 +88,11 @@ so that the world reads as alive even when I give no orders.
         `advance_tick` first.
   - [x] `World::dwarves()` returns the 3-tuple. // NOTE: promote to a struct at the fourth
         field (3.2 adds the carried item).
-- [ ] **`sim-core`: scenario coverage** (AC: 6, 7, 8, 9)
-  - [ ] Extend `crates/sim-core/tests/scenario.rs`: `dwarves_stay_standable_and_near_home`,
+- [x] **`sim-core`: scenario coverage** (AC: 6, 7, 8, 9)
+  - [x] Extend `crates/sim-core/tests/scenario.rs`: `dwarves_stay_standable_and_near_home`,
         `same_seed_wanders_identically`, `wander_directions_are_not_constant`,
         `a_walled_in_dwarf_stays_idle` (build the wall with `set_tile`).
-  - [ ] The standability oracle in the test is written out from `World::tile` — do not call the
+  - [x] The standability oracle in the test is written out from `World::tile` — do not call the
         production predicate on both sides.
 - [ ] **Wire: state on the entity** (AC: 10)
   - [ ] `protocol`: `JobState` enum + `Entity.state`; add `"state": "idle"` to the `WIRE` and
@@ -389,6 +389,20 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Spawn-state mapping sabotage RED (`JobState::Idle` changed to `JobState::Walk`):
   `assertion failed: before.iter().all(|(_, _, state)| *state == JobState::Idle)`; result:
   `FAILED. 0 passed; 1 failed`.
+- `WANDER_RADIUS` boundary sabotage RED (3 widened to 6):
+  `dwarves_stay_standable_and_near_home` panicked with `dwarf Id(0) escaped in y`; result:
+  `FAILED. 0 passed; 1 failed`.
+- Same-seed sabotage RED (successive worlds deliberately received different wander seeds): the
+  first tick differed at `Id(0)`, left `Pos { x: 115, y: 85, z: 15 }`, right
+  `Pos { x: 114, y: 84, z: 15 }`; result: `FAILED. 0 passed; 1 failed`.
+- Random-choice sabotage RED (`random_range` replaced by constant candidate zero): the first
+  two-vector assertion initially survived because the radius forced an x-axis reversal. The
+  independent step-vector oracle was strengthened to require a y-axis step; it then failed with
+  `constant candidate zero only bounced on the x axis: {(-1, 0, 0), (1, 0, 0)}`; result:
+  `FAILED. 0 passed; 1 failed`.
+- Walled-in sabotage RED (production standability filter removed): position changed from
+  `Pos { x: 115, y: 84, z: 15 }` to `Pos { x: 115, y: 85, z: 15 }`; result:
+  `FAILED. 0 passed; 1 failed`.
 
 ### Completion Notes List
 
@@ -401,10 +415,14 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Added the purpose-named wander stream, `JobState`, per-dwarf home/cooldown, ascending-ID wander
   system, explicit `(advance_tick, wander).chain()`, and the three-field sorted `dwarves()` API.
   Unit tests pin idle spawn, the ID stagger, and exactly ten rest ticks.
+- Added the four required 200-step/enclosure scenarios. The standability oracle is written directly
+  from `World::tile`, radius is a literal 3 in the test, same-seed worlds match on every step, the
+  observed movement spans multiple vectors and axes, and a four-wall fixture remains idle.
 
 ### File List
 
 - `crates/sim-core/src/lib.rs`
+- `crates/sim-core/tests/scenario.rs`
 - `crates/sim-core/tests/worldgen.rs`
 - `crates/simd/src/bridge.rs`
 - `_bmad-output/implementation-artifacts/2-2-dwarves-wander-the-frost.md`

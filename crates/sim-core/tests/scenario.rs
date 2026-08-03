@@ -1,4 +1,102 @@
-use sim_core::{Dims, Material, Pos, Tile, World};
+use std::collections::BTreeSet;
+
+use sim_core::{Dims, JobState, Material, Pos, Tile, World};
+
+#[test]
+fn dwarves_stay_standable_and_near_home() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let homes = world.dwarves();
+
+    for _ in 0..200 {
+        world.step();
+        for (id, pos, _) in world.dwarves() {
+            let home = homes
+                .iter()
+                .find(|(home_id, _, _)| *home_id == id)
+                .expect("every dwarf keeps its spawn home")
+                .1;
+            assert_eq!(world.tile(pos), Some(Tile::Empty));
+            assert!(matches!(
+                world.tile(Pos {
+                    z: pos.z - 1,
+                    ..pos
+                }),
+                Some(Tile::Solid(_) | Tile::Ramp(_))
+            ));
+            assert_eq!(pos.z, home.z);
+            assert!((pos.x - home.x).abs() <= 3, "dwarf {id:?} escaped in x");
+            assert!((pos.y - home.y).abs() <= 3, "dwarf {id:?} escaped in y");
+        }
+    }
+}
+
+#[test]
+fn same_seed_wanders_identically() {
+    let mut first = World::generate(42, Dims::DEFAULT);
+    let mut second = World::generate(42, Dims::DEFAULT);
+
+    for _ in 0..200 {
+        first.step();
+        second.step();
+        assert_eq!(first.dwarves(), second.dwarves());
+    }
+}
+
+#[test]
+fn wander_directions_are_not_constant() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let mut previous = world.dwarves()[0].1;
+    let mut directions = BTreeSet::new();
+
+    for _ in 0..200 {
+        world.step();
+        let current = world.dwarves()[0].1;
+        if current != previous {
+            directions.insert((
+                current.x - previous.x,
+                current.y - previous.y,
+                current.z - previous.z,
+            ));
+            previous = current;
+        }
+    }
+
+    assert!(
+        directions.len() >= 2,
+        "one repeated step vector is not random wandering: {directions:?}"
+    );
+    assert!(
+        directions.iter().any(|(_, dy, _)| *dy != 0),
+        "constant candidate zero only bounced on the x axis: {directions:?}"
+    );
+}
+
+#[test]
+fn a_walled_in_dwarf_stays_idle() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let (id, home, _) = world.dwarves()[0];
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        assert!(world.set_tile(
+            Pos {
+                x: home.x + dx,
+                y: home.y + dy,
+                z: home.z,
+            },
+            Tile::Solid(Material::Stone),
+        ));
+    }
+
+    for _ in 0..25 {
+        world.step();
+        let dwarf = world
+            .dwarves()
+            .into_iter()
+            .find(|(dwarf_id, _, _)| *dwarf_id == id)
+            .expect("walled dwarf remains present");
+        assert_eq!(dwarf.1, home);
+        assert_eq!(dwarf.2, JobState::Idle);
+    }
+}
 
 #[test]
 fn set_tile_shows_up_once_in_the_dirty_set() {
