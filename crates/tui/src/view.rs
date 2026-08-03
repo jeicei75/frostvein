@@ -116,7 +116,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         let sy = i64::from(entity.pos[1]) - state.camera.1 + i64::from(map_h) / 2;
         if sx >= 0 && sx < i64::from(w) && sy >= 0 && sy < i64::from(map_h) {
             framebuffer.cells[sx as usize + sy as usize * usize::from(w)] =
-                entity_cell(entity.kind);
+                entity_cell(entity.kind, entity.state);
         }
     }
 
@@ -327,7 +327,7 @@ mod tests {
             framebuffer.cell(1, 1),
             Cell {
                 glyph: '☺',
-                fg: (214, 154, 78),
+                fg: (150, 112, 62),
             }
         );
         assert_eq!(
@@ -345,6 +345,35 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn walking_and_idle_dwarves_render_different_colors() {
+        let dims = Dims { x: 3, y: 1, z: 1 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.entities = vec![
+            Entity {
+                id: 1,
+                kind: EntityKind::Dwarf,
+                pos: [0, 0, 0],
+                state: JobState::Idle,
+            },
+            Entity {
+                id: 2,
+                kind: EntityKind::Dwarf,
+                pos: [2, 0, 0],
+                state: JobState::Walk,
+            },
+        ];
+        let state = ViewState {
+            camera: (1, 0),
+            z: 0,
+            confirming_quit: false,
+        };
+
+        let framebuffer = render(&snapshot, &state, 3, 2);
+
+        assert_ne!(framebuffer.cell(0, 0), framebuffer.cell(2, 0));
     }
 
     /// The peek-below cap itself, not just its dimming: ground exactly

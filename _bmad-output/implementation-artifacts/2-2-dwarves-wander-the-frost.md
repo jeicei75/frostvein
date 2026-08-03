@@ -108,10 +108,10 @@ so that the world reads as alive even when I give no orders.
         assert some entity's `pos` changes and that both `idle` and `walk` appear in the
         entity states across that run. Keep `bridge::delta`'s single-call-per-iteration
         discipline — it drains the dirty set.
-- [ ] **`tui`: color by state** (AC: 12)
-  - [ ] `palette::entity_cell(kind, state)` with an exhaustive `(kind, state)` match; call site
+- [x] **`tui`: color by state** (AC: 12)
+  - [x] `palette::entity_cell(kind, state)` with an exhaustive `(kind, state)` match; call site
         in `view::render` passes `entity.state`. Extend `every_look_is_pinned` to all three.
-  - [ ] A `view` test rendering one idle and one walking dwarf in the same frame asserts their
+  - [x] A `view` test rendering one idle and one walking dwarf in the same frame asserts their
         cells differ.
 - [ ] **Observability instrument** (AC: 11, 12) — the human check for "the world visibly lives".
       Use 2.1's existing `tui --frames N` (real reader thread, real `apply` → `render`); do not
@@ -421,6 +421,12 @@ per green step, imperative messages. Review-gated: no push, no PR.
   chosen position): `streamed_deltas_show_wandering_positions_and_states` failed after 30
   consecutive deltas with `no entity position changed across 30 consecutive deltas`; result:
   `FAILED. 0 passed; 1 failed`.
+- TUI render RED before state-aware palette implementation: idle and walking cells were both
+  `Cell { glyph: '☺', fg: (214, 154, 78) }`; `assertion left != right failed`; result:
+  `FAILED. 0 passed; 1 failed`.
+- Palette mapping sabotage RED (`Walk` assigned idle RGB): left
+  `Cell { glyph: '☺', fg: (150, 112, 62) }`, right
+  `Cell { glyph: '☺', fg: (214, 154, 78) }`; result: `FAILED. 0 passed; 1 failed`.
 
 ### Completion Notes List
 
@@ -441,6 +447,9 @@ per green step, imperative messages. Review-gated: no push, no PR.
   updated every TUI wire/entity fixture forced by the new field.
 - Added a bounded live-daemon integration test that consumes 30 consecutive deltas once each and
   proves an entity moves while both `Idle` and `Walk` cross the real TCP/protocol path.
+- Made the TUI entity palette exhaustive over `(Dwarf, Idle|Walk|Work)`, pinned three distinct RGB
+  values, passed wire state through `view::render`, and proved idle/walking cells differ in one
+  rendered frame.
 
 ### File List
 
@@ -451,6 +460,7 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - `crates/simd/tests/serve.rs`
 - `crates/protocol/src/lib.rs`
 - `crates/tui/src/main.rs`
+- `crates/tui/src/palette.rs`
 - `crates/tui/src/view.rs`
 - `_bmad-output/implementation-artifacts/2-2-dwarves-wander-the-frost.md`
 
