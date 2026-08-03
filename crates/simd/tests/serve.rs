@@ -132,6 +132,36 @@ fn streams_three_strictly_increasing_deltas() {
 }
 
 #[test]
+fn streamed_deltas_show_wandering_positions_and_states() {
+    let daemon = Daemon::spawn();
+    let mut reader = BufReader::new(daemon.connect());
+    let snapshot = read_snapshot(&mut reader);
+    let mut previous = snapshot.entities;
+    let mut moved = false;
+    let mut saw_idle = false;
+    let mut saw_walk = false;
+
+    for _ in 0..30 {
+        let update = read_delta(&mut reader);
+        for entity in &update.entities {
+            if let Some(old) = previous.iter().find(|old| old.id == entity.id) {
+                moved |= old.pos != entity.pos;
+            }
+            saw_idle |= entity.state == protocol::JobState::Idle;
+            saw_walk |= entity.state == protocol::JobState::Walk;
+        }
+        previous = update.entities;
+    }
+
+    assert!(
+        moved,
+        "no entity position changed across 30 consecutive deltas"
+    );
+    assert!(saw_idle, "no entity reported idle across 30 deltas");
+    assert!(saw_walk, "no entity reported walk across 30 deltas");
+}
+
+#[test]
 fn world_advances_before_any_client_connects() {
     let daemon = Daemon::spawn();
     thread::sleep(Duration::from_millis(350));

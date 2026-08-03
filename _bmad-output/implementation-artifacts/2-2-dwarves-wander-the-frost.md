@@ -103,8 +103,8 @@ so that the world reads as alive even when I give no orders.
         restated oracle table like `expected_tile` already does.
   - [x] `tui`: add the field to the `SNAPSHOT_LINE` / `DELTA_LINE` literals in `main.rs` tests
         and to the `Entity` values built in `view.rs` tests.
-- [ ] **`simd`: prove it end to end** (AC: 11)
-  - [ ] `crates/simd/tests/serve.rs`: read a run of consecutive deltas from a live daemon;
+- [x] **`simd`: prove it end to end** (AC: 11)
+  - [x] `crates/simd/tests/serve.rs`: read a run of consecutive deltas from a live daemon;
         assert some entity's `pos` changes and that both `idle` and `walk` appear in the
         entity states across that run. Keep `bridge::delta`'s single-call-per-iteration
         discipline — it drains the dirty set.
@@ -417,6 +417,10 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Snapshot field sabotage RED (snapshot entity state hardcoded `Idle`): left
   `[Idle, Idle, Idle, Idle, Idle]`, right `[Walk, Idle, Idle, Idle, Idle]`; result:
   `FAILED. 0 passed; 1 failed`.
+- Live-daemon TDD/sabotage RED (wander consumed choices and emitted `Walk` but did not assign the
+  chosen position): `streamed_deltas_show_wandering_positions_and_states` failed after 30
+  consecutive deltas with `no entity position changed across 30 consecutive deltas`; result:
+  `FAILED. 0 passed; 1 failed`.
 
 ### Completion Notes List
 
@@ -435,6 +439,8 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - Added protocol `JobState` and ordered `Entity.state`, updated both hand-written wire formats,
   exhaustively bridged all three sim states into snapshots/deltas against a restated oracle, and
   updated every TUI wire/entity fixture forced by the new field.
+- Added a bounded live-daemon integration test that consumes 30 consecutive deltas once each and
+  proves an entity moves while both `Idle` and `Walk` cross the real TCP/protocol path.
 
 ### File List
 
@@ -442,6 +448,7 @@ per green step, imperative messages. Review-gated: no push, no PR.
 - `crates/sim-core/tests/scenario.rs`
 - `crates/sim-core/tests/worldgen.rs`
 - `crates/simd/src/bridge.rs`
+- `crates/simd/tests/serve.rs`
 - `crates/protocol/src/lib.rs`
 - `crates/tui/src/main.rs`
 - `crates/tui/src/view.rs`
