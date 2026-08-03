@@ -97,9 +97,13 @@ exits 0 with the alternate screen left, cursor shown and colour reset. Sabotage 
 `PEEK_DEPTH` 3→6 now fails `peek_below_stops_at_three_levels` (it left all 13 tests green before),
 and the Ice↔Snow swap fails 3 tests. Gate: fmt clean, clippy clean, **39 tests** (was 33).
 
-**Still unobserved:** FR23 — whether the palette actually reads as icy-grim. That is Wolf's manual
-gate and no agent can stand in for it. Also unexercised live: `initial()`'s no-entity branch (the
-daemon always spawns 5 dwarves) and the `w == 0`/`h == 0` resize guards.
+**FR23 — SIGNED OFF by Wolf 2026-08-03**, after running the interactive client in a real terminal.
+The icy-grim look passes; the palette table ships as tuned. This closes the last AC that no agent
+could close, and it was the only gate standing between `done` and the PR.
+
+**Still unexercised live** (unit-tested only, stated rather than inferred green): `initial()`'s
+no-entity branch — the daemon always spawns 5 dwarves — and the `w == 0` / `h == 0` resize guards,
+which `TIOCSWINSZ` will not accept.
 
 Dismissed as noise (6): `dim()` "panics at depth ≥ 4" (the `[u16; PEEK_DEPTH]` type makes widening a
 compile error, and the sole caller passes 1..=`PEEK_DEPTH`); status-line truncation on narrow
@@ -250,3 +254,4 @@ half of the gate, re-run independently:
 | 2026-08-03 | Implemented the frozen-world terminal client; final workspace tests remain blocked by sandbox-denied loopback sockets. |
 | 2026-08-03 | Orchestrator re-ran the full gate outside the sandbox (33 tests green) and the live `--frame` check; Green gate checked, Status → review. |
 | 2026-08-03 | Code review (4 layers): 10 patches applied, 2 decisions resolved by Wolf, 3 deferred, 6 dismissed. 39 tests green; live re-verified. |
+| 2026-08-03 | Wolf signed off FR23 (icy-grim look) from a live interactive run. All 12 ACs closed. |
