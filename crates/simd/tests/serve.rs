@@ -4,7 +4,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver, RecvTimeoutError},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// Every blocking read in this harness is bounded. A daemon that binds but never
@@ -143,6 +143,39 @@ fn world_advances_before_any_client_connects() {
         snapshot.tick >= 2,
         "late snapshot tick was {}",
         snapshot.tick
+    );
+}
+
+/// AC7's *rate*, which no unit test can reach. `tick_period_is_exactly_ten_hertz` pins
+/// the constant against its own literal; only a running daemon shows the loop actually
+/// sleeps to it. Deleting the `thread::sleep` in `tick` leaves that unit test green and
+/// this one red.
+#[test]
+fn deltas_arrive_at_roughly_ten_per_second() {
+    const SAMPLES: u64 = 20;
+
+    let daemon = Daemon::spawn();
+    let mut reader = BufReader::new(daemon.connect());
+    let _ = read_snapshot(&mut reader);
+
+    let first = read_delta(&mut reader).tick;
+    let started = Instant::now();
+    let mut last = first;
+    for _ in 0..SAMPLES {
+        last = read_delta(&mut reader).tick;
+    }
+    let elapsed = started.elapsed();
+
+    assert_eq!(
+        last - first,
+        SAMPLES,
+        "one delta per tick, no gaps or repeats"
+    );
+    // 20 ticks at 10Hz is 2.0s. The window is wide enough to survive a loaded CI box
+    // and narrow enough that a TICK_PERIOD wrong by 5x either way fails.
+    assert!(
+        elapsed >= Duration::from_millis(1200) && elapsed <= Duration::from_millis(4500),
+        "{SAMPLES} deltas took {elapsed:?}, expected ~2s at 10Hz"
     );
 }
 

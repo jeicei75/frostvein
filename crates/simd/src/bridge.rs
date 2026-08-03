@@ -32,6 +32,11 @@ pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
     }
 }
 
+/// NOTE: destructive and NOT idempotent — it drains the dirty set as a side effect of
+/// encoding. Calling it twice for the same tick silently yields an empty `tiles` the
+/// second time and loses those changes for good. Safe today because the tick loop
+/// encodes once and shares the resulting `Arc<String>`; Story 2.2 is the first to have
+/// a real producer of dirty tiles, so keep the single-call discipline.
 pub fn delta(world: &mut sim_core::World) -> protocol::Delta {
     protocol::Delta {
         msg_type: protocol::MessageType::Delta,

@@ -40,6 +40,11 @@ impl Drop for ConnectionGuard {
 
 struct Client {
     tx: SyncSender<Arc<String>>,
+    /// Cloned purely so eviction can force the socket shut. Dropping `tx` alone ends
+    /// the write thread only once it unblocks, and a client that has stopped reading
+    /// leaves `serve` parked in `write_all` for up to two `WRITE_TIMEOUT` windows —
+    /// squatting a `MAX_CONNECTIONS` slot for ~60s after the daemon declared it gone.
+    stream: TcpStream,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -106,12 +111,27 @@ fn tick(
     let mut clients = Vec::new();
     loop {
         let deadline = Instant::now() + TICK_PERIOD;
+
+        // Encode the connect snapshot at most once per iteration and share it — every
+        // client admitted here connects at the same tick, so one encoding serves them
+        // all. Encoding per stream let a burst of connects stall the timestep (measured
+        // 1.4s for 8 simultaneous connects, and `deadline` never catches the loss back).
+        // NOTE: stays lazy on purpose. Hoisting this unconditionally would serialize the
+        // whole world every tick even with nobody connected.
+        let mut snapshot_line: Option<Arc<String>> = None;
         for stream in new_rx.try_iter() {
-            let snapshot_line = Arc::new(format!(
-                "{}\n",
-                serde_json::to_string(&bridge::snapshot(&world))?
-            ));
-            if let Some(client) = connect_client(stream, snapshot_line, Arc::clone(&live)) {
+            let line = match &snapshot_line {
+                Some(line) => Arc::clone(line),
+                None => {
+                    let encoded = Arc::new(format!(
+                        "{}\n",
+                        serde_json::to_string(&bridge::snapshot(&world))?
+                    ));
+                    snapshot_line = Some(Arc::clone(&encoded));
+                    encoded
+                }
+            };
+            if let Some(client) = connect_client(stream, line, Arc::clone(&live)) {
                 clients.push(client);
             }
         }
@@ -132,8 +152,13 @@ fn broadcast(clients: &mut Vec<Client>, line: &Arc<String>) {
         Ok(()) => true,
         Err(TrySendError::Full(_)) => {
             eprintln!("client delta queue full; disconnecting client");
+            // AC9 says disconnected AND removed. Removing it from the registry is the
+            // cheap half; without this shutdown the socket lingers ESTAB until
+            // `write_all` times out, so force it now.
+            let _ = client.stream.shutdown(Shutdown::Both);
             false
         }
+        // Its write thread has already ended, so the socket is closed with it.
         Err(TrySendError::Disconnected(_)) => false,
     });
 }
@@ -143,10 +168,19 @@ fn connect_client(
     snapshot_line: Arc<String>,
     live: Arc<AtomicUsize>,
 ) -> Option<Client> {
+    // Built first so every early return below still releases the connection slot that
+    // `accept_connections` reserved.
+    let guard = ConnectionGuard(live);
+    let evict_handle = match stream.try_clone() {
+        Ok(handle) => handle,
+        Err(error) => {
+            eprintln!("could not clone client socket for eviction: {error}");
+            return None;
+        }
+    };
     let (tx, rx) = mpsc::sync_channel(CLIENT_QUEUE);
     tx.try_send(snapshot_line)
         .expect("a new client queue must have room for its snapshot");
-    let guard = ConnectionGuard(live);
     if let Err(error) = thread::Builder::new()
         .name("client-write".to_string())
         .spawn(move || serve(stream, rx, guard))
@@ -154,7 +188,10 @@ fn connect_client(
         eprintln!("could not spawn connection thread: {error}");
         return None;
     }
-    Some(Client { tx })
+    Some(Client {
+        tx,
+        stream: evict_handle,
+    })
 }
 
 fn serve(mut stream: TcpStream, lines: Receiver<Arc<String>>, _guard: ConnectionGuard) {
@@ -235,25 +272,61 @@ mod tests {
         assert_eq!(TICK_PERIOD, Duration::from_millis(100));
     }
 
+    /// A real loopback pair: the daemon's end goes into `Client`, the peer end stands in
+    /// for the client program and observes whether eviction really shut the socket.
+    fn socket_pair() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind loopback listener");
+        let addr = listener.local_addr().expect("read loopback address");
+        let peer = TcpStream::connect(addr).expect("connect to loopback listener");
+        let (daemon_side, _) = listener.accept().expect("accept loopback connection");
+        (daemon_side, peer)
+    }
+
     #[test]
     fn full_client_queue_is_removed_from_the_registry_at_sixteen_lines() {
+        let (daemon_side, mut peer) = socket_pair();
+        // Stands in for the handle `serve` owns while parked in `write_all`. Without it
+        // this test is a false positive: dropping the evicted `Client` would close the
+        // socket by itself and the peer would see EOF with or without the shutdown.
+        let held_by_write_thread = daemon_side.try_clone().expect("clone the daemon side");
         let (sender, _receiver) = std::sync::mpsc::sync_channel(CLIENT_QUEUE);
 
+        // Hardcoded 16, deliberately not CLIENT_QUEUE: widening the constant must leave
+        // room here and turn this test red rather than silently still filling the queue.
         for line in 0..16 {
             assert!(sender.try_send(Arc::new(line.to_string())).is_ok());
         }
-        let mut clients = vec![Client { tx: sender }];
+        let mut clients = vec![Client {
+            tx: sender,
+            stream: daemon_side,
+        }];
 
         broadcast(&mut clients, &Arc::new("overflow".to_string()));
 
         assert!(clients.is_empty());
+
+        // AC9's other half: deregistering is not disconnecting. Without the shutdown the
+        // peer stays ESTAB until `write_all` times out ~60s later, holding a slot.
+        peer.set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("set peer read timeout");
+        let mut buf = [0u8; 1];
+        assert_eq!(
+            peer.read(&mut buf).expect("peer read after eviction"),
+            0,
+            "evicting a client must shut its socket, not leave it open until write timeout"
+        );
+        drop(held_by_write_thread);
     }
 
     #[test]
     fn disconnected_client_queue_is_removed_from_the_registry() {
+        let (daemon_side, _peer) = socket_pair();
         let (sender, receiver) = std::sync::mpsc::sync_channel(CLIENT_QUEUE);
         drop(receiver);
-        let mut clients = vec![Client { tx: sender }];
+        let mut clients = vec![Client {
+            tx: sender,
+            stream: daemon_side,
+        }];
 
         broadcast(&mut clients, &Arc::new("delta".to_string()));
 
