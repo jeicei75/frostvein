@@ -74,15 +74,18 @@ action_items:
   - epic: 1
     action: "Retune code-review: Blind Hunter + Edge Case Hunter on Sonnet; Acceptance Auditor, Feature Auditor and triage stay Opus. Control = mutation kill-rate vs 1.3's baseline; revert Lever A if it drops"
     owner: "Amelia"
-    status: open
+    status: in-progress
+    note: "Ran at 2.1. Kill-rate did NOT drop (5/5 mutations killed), so the revert trigger did not fire — but the Sonnet hunters produced no unique finding: all 3 of their issues were also found by the Opus layers, and 2 of their 4 were dismissed as unreachable. Review still cost $66.19 vs Epic 1's $57-76, with 25M cache-read tokens dominating. Verdict pending Wolf: the discriminating variable was running the binaries, not model tier"
   - epic: 1
     action: "Scope each review hunter to its own diff and the ACs it owns, not the full story file + spine + PRD (per-turn context was ~123k)"
     owner: "Amelia"
-    status: open
+    status: done
+    note: "Applied at 2.1's review: hunters got the crates/-only diff, the Acceptance Auditor got an extracted AC+guardrail file instead of story+spine+PRD"
   - epic: 1
     action: "Batch mutation testing into one apply/revert script emitting a results table, replacing ~3 turns per sabotage"
     owner: "Amelia"
-    status: open
+    status: done
+    note: "scripts/mutate.sh + _bmad-output/implementation-artifacts/mutations/<story>.sh; exits non-zero on a survivor. Caught a surviving mutation in 2.1's own review patches"
   - epic: 1
     action: "Add 'verify by sabotage, paste the red output' as a required task checkbox for every mapping/pinning test in the dev handoff prompt"
     owner: "Amelia"
@@ -94,7 +97,8 @@ action_items:
   - epic: 1
     action: "Every story ships an observability instrument named in its tasks (the --frame lesson)"
     owner: "Amelia"
-    status: open
+    status: in-progress
+    note: "2.1's tasks named none; it got `tui --frames N` (real reader-thread loop, headless) at REVIEW instead, which is the wrong end of the process. The gap is in story-creation — 2.2's story must name its instrument in a task"
   - epic: 1
     action: "Set sandbox_workspace_write.network_access=true in scripts/codex-handoff.sh and update its header comment; keep cargo fetch prewarm and --offline builds in the handoff prompt"
     owner: "Amelia"
@@ -134,4 +138,5 @@ action_items:
   - epic: 1
     action: "Add 'codex review --base main' as a pre-handback self-gate, instructed at self-referential tests and unbounded I/O. Measure: 2.1's Opus patch count below 1.3's ten"
     owner: "Amelia"
-    status: open
+    status: in-progress
+    note: "Instructed in 2.1's handoff but it never ran: CODEX_HOME sits outside the -C root, so workspace-write left it read-only and the app-server died (os error 30). codex-handoff.sh now lists /workspace/.codex as writable — UNVERIFIED until a delegated run reaches the self-gate. Measure is unusable for 2.1 (review applied 9 patches with no self-gate having run); re-measure at 2.2. Budget wall-clock: it ran past 10 min on this diff"

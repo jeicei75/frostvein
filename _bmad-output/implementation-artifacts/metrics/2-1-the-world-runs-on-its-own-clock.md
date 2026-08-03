@@ -23,3 +23,29 @@ the script. The forge hit the same class in ep-02 and annotated rather than gues
 would be a `--mark` call at each phase boundary within a session; recorded here rather than
 built, since no story needs it yet.
 | dev | codex | gpt-5.6-sol | 66 | 182,346 | 0 | 6,300,160 | 40,825 | 6,523,331 | $5.29 | `rollout-2026-08-03T11-49-17-019fc774-efc2-70f0-8d50-287db8c6b297.jsonl` | 2026-08-03 12:37 UTC |
+| review | claude | claude-opus-5 | 193 | 354 | 538,204 | 25,032,956 | 247,227 | 25,818,741 | $66.19 | `2c1c94e2-1d61-46ed-b568-61e8be5ba702.jsonl` | 2026-08-03 14:24 UTC |
+
+**The `review` row above is ~3x overstated — read it as an old-Opus-rate equivalent
+(2026-08-03).** It was recorded at 14:24 UTC against a stale `PRICES` table carrying the
+Opus-4.1-era $15/$75. The forge's return note (`docs/forge-return-2026-08-03.md`) landed
+the corrected row ($5 in / $25 out, cache read 0.1x, write 1.25x) into this repo's
+`session_tokens.py` *after* that run. Recomputed from the same token counts at correct
+rates:
+
+| row | as recorded | corrected |
+|---|---|---|
+| review (claude, opus-5) | $66.19 | **$22.06** (exactly 3.00x) |
+| dev (codex, gpt-5.6-sol) | $5.29 | **$5.29** — unaffected, Codex was always priced right |
+
+Not rewritten in place, matching the forge's convention and this file's `create`-row
+precedent: `--rollup` reads the `est_usd` already written, so a silent edit would make the
+rollup disagree with itself. **Two caveats compound on this row:** it is also a mixed
+session — story-2.1 dev orchestration and verification landed on `review` along with the
+review itself, because the script bills a transcript's delta since its last record and
+this transcript had none. So $22.06 is orchestration + verification + a four-layer review
+together, not review alone.
+
+**What this does to the Lever A verdict:** nothing qualitative. Epic 1's corrected review
+spend was $64.32 across three stories (~$21/story) against 2.1's corrected $22.06 — still
+no visible saving from putting the two hunters on Sonnet, and they still produced no unique
+finding. The conclusion held; only the absolute numbers were wrong.

@@ -1,0 +1,10 @@
+# Written by scripts/forge-process.sh — do not hand-edit.
+# SRC lines record the FORGE-SIDE hash at install time, so a later `check`
+# can tell 'upstream moved' apart from 'we changed it locally'.
+VERSION=1.0.1
+SRC f9199bff08b65c9974469d35b0600694f9d4bc2de8da94477adcfce29897c0ae _bmad/scripts/session_tokens.py
+SRC 545fdee567a0e769aa3da85bda4b02826bae3493ea60d7d4c951e77efd106897 _bmad/scripts/tests/test_session_tokens.py
+SRC 67b6cb035768eb07421381c5e36bc7b0500b4e813e4ac5d6aa62004ffe144cd9 _bmad/custom/bmad-create-story.toml
+SRC a5013e44a711bbbc6427674a351477f970b850c8974a07412864bf8f44c9d91a _bmad/custom/bmad-dev-story.toml
+SRC 4b720838bf7f6e1ca306945b1fc4e9e68159fb3541ed11c5f2e28402b3752791 _bmad/custom/bmad-code-review.toml
+SRC 275f037bda0d0616f1742ca5e725963b65b98be4ee30a174cf274fcef0dadb6b scripts/codex-handoff.sh
