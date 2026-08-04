@@ -117,12 +117,12 @@ so that the session bends to my rhythm.
         drives the repaint (NFR2). Add a `// NOTE:` for the known limitation — two presses
         inside one round-trip both compute from the same stale wire speed, so the second is
         a no-op. Optimistic local speed is deliberately not built.
-- [ ] **`tui`: the status line** (AC: 8)
-  - [ ] New format, dropping the camera coordinates to make room:
+- [x] **`tui`: the status line** (AC: 8)
+  - [x] New format, dropping the camera coordinates to make room:
         `tick {t}  {speed}  z {z}/{maxz}  dwarves {n}  <>z hjkl  space +- speed  q quit`
         (74 columns at `tick 9999999`). This closes the recorded deferred overflow item —
         say so in the completion notes.
-  - [ ] `status_line_reports_z_camera_and_dwarf_count` is renamed and its expectation
+  - [x] `status_line_reports_z_camera_and_dwarf_count` is renamed and its expectation
         rewritten. Add the width test: render at `tick 9999999` for each of the three speeds
         and assert the status text is ≤ 80 columns and its last glyph is not truncated.
 - [ ] **Observability instrument** (AC: 10) — the human check for "the session bends to my
@@ -488,12 +488,46 @@ OpenAI Codex (GPT-5)
   test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out
   ```
 
+- Status-line RED before the new format was implemented:
+
+  ```text
+  running 2 tests
+  assertion `left == right` failed
+    left: "tick 87  z 19/31  camera 12,34  dwarves 3  keys: <> z  arrows/hjkl pan  q quit"
+   right: "tick 87  normal  z 19/31  dwarves 3  <>z hjkl  space +- speed  q quit         "
+  assertion `left == right` failed
+    left: 80
+   right: 74
+  test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 22 filtered out
+  ```
+
+- Status-speed omission sabotage RED:
+
+  ```text
+  running 1 test
+  assertion `left == right` failed
+    left: 66
+   right: 74
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 23 filtered out
+  ```
+
+- Status-speed name mapping sabotage RED (`Paused` temporarily rendered as `normal`):
+
+  ```text
+  running 1 test
+  assertion `left == right` failed
+    left: "tick 9999999  normal  z 19/31  dwarves 5  <>z hjkl  space +- speed  q quit"
+   right: "tick 9999999  paused  z 19/31  dwarves 5  <>z hjkl  space +- speed  q quit"
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 23 filtered out
+  ```
+
 ### Completion Notes List
 
 - Added the one-variant, internally tagged `protocol::Command` wire type and pinned its literal `set_speed` JSON contract, including unknown-command rejection.
 - Routed decoded control commands from every connection into the daemon loop; pause now freezes world time while deltas continue at normal cadence, fast changes only the loop period, and snapshots/deltas carry authoritative speed.
 - Proved pause/resume, paused connect snapshots, same-delta two-client propagation, and relative fast timing against the real daemon. Re-ran the three named Story 1.2 input contracts unmodified; all passed.
 - Added the explicit Space/+/− speed-step table, clamped endpoints, and first TUI write half. Commands are computed from authoritative wire speed, written and flushed as one NDJSON line, and rely on the next delta for repaint/ack.
+- Replaced the status line with the compact authoritative speed/z/dwarf/key format and pinned all three wire speed names plus rendered width at tick 9999999. This closes the recorded deferred status-line overflow item.
 
 ### File List
 

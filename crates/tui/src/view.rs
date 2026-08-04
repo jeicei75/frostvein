@@ -129,13 +129,17 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
             .iter()
             .filter(|entity| entity.kind == EntityKind::Dwarf)
             .count();
+        let speed = match snapshot.speed {
+            Speed::Paused => "paused",
+            Speed::Normal => "normal",
+            Speed::Fast => "fast",
+        };
         format!(
-            "tick {}  z {}/{}  camera {},{}  dwarves {}  keys: <> z  arrows/hjkl pan  q quit",
+            "tick {}  {}  z {}/{}  dwarves {}  <>z hjkl  space +- speed  q quit",
             snapshot.tick,
+            speed,
             state.z,
             snapshot.dims.z.saturating_sub(1),
-            state.camera.0,
-            state.camera.1,
             dwarves
         )
     };
@@ -492,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    fn status_line_reports_z_camera_and_dwarf_count() {
+    fn status_line_reports_speed_z_and_dwarf_count() {
         let dims = Dims {
             x: 40,
             y: 40,
@@ -519,8 +523,60 @@ mod tests {
 
         assert_eq!(
             status,
-            "tick 87  z 19/31  camera 12,34  dwarves 3  keys: <> z  arrows/hjkl pan  q quit"
+            "tick 87  normal  z 19/31  dwarves 3  <>z hjkl  space +- speed  q quit         "
         );
+    }
+
+    #[test]
+    fn status_line_fits_eighty_columns_without_truncation_at_large_ticks() {
+        let dims = Dims {
+            x: 40,
+            y: 40,
+            z: 32,
+        };
+        let state = ViewState {
+            camera: (12, 34),
+            z: 19,
+            confirming_quit: false,
+        };
+
+        for (speed, wire_name) in [
+            (Speed::Paused, "paused"),
+            (Speed::Normal, "normal"),
+            (Speed::Fast, "fast"),
+        ] {
+            let mut snapshot = empty_snapshot(dims);
+            snapshot.tick = 9_999_999;
+            snapshot.speed = speed;
+            snapshot.entities = (0..5)
+                .map(|id| Entity {
+                    id,
+                    kind: EntityKind::Dwarf,
+                    pos: [1, 1, 30],
+                    state: JobState::Idle,
+                })
+                .collect();
+            let expected = format!(
+                "tick 9999999  {wire_name}  z 19/31  dwarves 5  <>z hjkl  space +- speed  q quit"
+            );
+
+            let framebuffer = render(&snapshot, &state, 80, 2);
+            let rendered_width = (0..80)
+                .take_while(|x| framebuffer.cell(*x, 1).fg == STATUS_TEXT)
+                .count();
+            let expected_width = expected.chars().count();
+            let rendered: String = (0..expected_width as u16)
+                .map(|x| framebuffer.cell(x, 1).glyph)
+                .collect();
+
+            assert!(
+                rendered_width <= 80,
+                "{speed:?} status was {rendered_width} columns"
+            );
+            assert_eq!(rendered_width, expected_width);
+            assert_eq!(rendered, expected);
+            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, 't');
+        }
     }
 
     #[test]
