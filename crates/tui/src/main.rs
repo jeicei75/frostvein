@@ -16,7 +16,7 @@ use std::{
 use anyhow::{Context, bail};
 use crossterm::{
     cursor::{Hide, Show},
-    event::{self, Event, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute,
     style::ResetColor,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
@@ -31,6 +31,7 @@ use crate::{
 /// Mirrors the daemon's 30 s write timeout. Without it a peer that accepts and
 /// then goes silent leaves the client blocked forever.
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
+const COMMAND_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MESSAGE_QUEUE: usize = 16;
 
@@ -67,6 +68,8 @@ fn main() -> anyhow::Result<()> {
     let mut frame_only = false;
     let mut frames: Option<u32> = None;
     let mut expect_frame_count = false;
+    let mut key = None;
+    let mut expect_key = false;
     for arg in std::env::args_os().skip(1) {
         if expect_frame_count {
             let text = arg
@@ -78,12 +81,29 @@ fn main() -> anyhow::Result<()> {
             expect_frame_count = false;
             continue;
         }
+        if expect_key {
+            let text = arg
+                .to_str()
+                .with_context(|| format!("--key value is not valid UTF-8: {arg:?}"))?;
+            key = Some(match text {
+                "space" => KeyCode::Char(' '),
+                "+" => KeyCode::Char('+'),
+                "-" => KeyCode::Char('-'),
+                _ => bail!("invalid --key value {text:?}: expected space, +, or -"),
+            });
+            expect_key = false;
+            continue;
+        }
         if arg == "--frame" {
             frame_only = true;
             continue;
         }
         if arg == "--frames" {
             expect_frame_count = true;
+            continue;
+        }
+        if arg == "--key" {
+            expect_key = true;
             continue;
         }
         if port_was_set {
@@ -100,6 +120,12 @@ fn main() -> anyhow::Result<()> {
     if expect_frame_count {
         bail!("--frames requires a count, e.g. --frames 3");
     }
+    if expect_key {
+        bail!("--key requires space, +, or -");
+    }
+    if key.is_some() && frames.is_none() {
+        bail!("--key requires --frames");
+    }
 
     let address = format!("127.0.0.1:{port}");
     let stream = TcpStream::connect(("127.0.0.1", port))
@@ -107,12 +133,23 @@ fn main() -> anyhow::Result<()> {
     stream
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
         .context("could not set the snapshot read timeout")?;
+    let mut writer = command_writer(&stream)?;
     let mut reader = BufReader::new(stream);
     let mut snapshot = read_snapshot(&mut reader)?;
     let mut state = initial(&snapshot);
 
     if let Some(count) = frames {
-        return stream_frames(reader, snapshot, count);
+        if let Some(code) = key
+            && let Action::Command(command) = apply_key(
+                &mut state,
+                KeyEvent::new(code, KeyModifiers::NONE),
+                snapshot.dims,
+                snapshot.speed,
+            )
+        {
+            send_command(&mut writer, command)?;
+        }
+        return stream_frames(reader, snapshot, state, count);
     }
 
     if frame_only {
@@ -150,9 +187,20 @@ fn main() -> anyhow::Result<()> {
         if event::poll(POLL_INTERVAL).context("could not poll terminal events")? {
             match event::read().context("could not read terminal event")? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    match apply_key(&mut state, key, snapshot.dims) {
+                    match apply_key(&mut state, key, snapshot.dims, snapshot.speed) {
                         Action::Redraw => needs_redraw = true,
                         Action::Quit => break 'running,
+                        // NOTE: the next speed is derived from the last wire update, so two
+                        // presses inside one round-trip both compute from the same stale
+                        // speed. They do not merely collapse — two *different* keys compose
+                        // into a speed neither implies: at Normal, `+` sends Fast and `-`
+                        // sends Paused, and the daemon's last-write-wins drain settles on
+                        // Paused. Speed is shared, so that pauses every watching terminal.
+                        // Optimistic local speed is deliberately omitted (AD-4); Story 3.1
+                        // owns the fix along with the pause/command-consumption split.
+                        Action::Command(command) => {
+                            send_command(&mut writer, command)?;
+                        }
                         Action::Ignore => {}
                     }
                 }
@@ -212,6 +260,27 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn send_command(writer: &mut TcpStream, command: protocol::Command) -> anyhow::Result<()> {
+    writeln!(
+        writer,
+        "{}",
+        serde_json::to_string(&command).context("could not encode client command")?
+    )
+    .context("could not write client command")?;
+    writer.flush().context("could not flush client command")?;
+    Ok(())
+}
+
+fn command_writer(stream: &TcpStream) -> anyhow::Result<TcpStream> {
+    let writer = stream
+        .try_clone()
+        .context("could not clone the server socket for commands")?;
+    writer
+        .set_write_timeout(Some(COMMAND_WRITE_TIMEOUT))
+        .context("could not set the command write timeout")?;
+    Ok(writer)
+}
+
 fn frame_size() -> (u16, u16) {
     match terminal::size() {
         Ok((w, h)) if w > 0 && h > 0 => (w, h),
@@ -229,6 +298,7 @@ fn frame_size() -> (u16, u16) {
 fn stream_frames(
     mut reader: BufReader<TcpStream>,
     mut snapshot: Snapshot,
+    state: view::ViewState,
     count: u32,
 ) -> anyhow::Result<()> {
     reader
@@ -256,7 +326,6 @@ fn stream_frames(
     // The camera is fixed once, exactly as the interactive path does it. Recomputing
     // `initial` per frame re-centres on entity 0 every time, which pins that dwarf to
     // the middle of the screen and hides the very motion this instrument exists to show.
-    let state = initial(&snapshot);
     let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
     for _ in 0..count {
         // Bounded like every other read here: a server that connects and then goes
@@ -384,7 +453,7 @@ fn apply(snapshot: &mut Snapshot, delta: Delta) {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{io::Cursor, net::TcpListener};
 
     use protocol::{
         Delta, Dims, Entity, EntityKind, JobState, Material, MessageType, Speed, Tile, TileChange,
@@ -512,5 +581,18 @@ mod tests {
         let mut reader = Cursor::new(SNAPSHOT_LINE.trim_end().as_bytes());
 
         assert!(read_snapshot(&mut reader).is_err());
+    }
+
+    #[test]
+    fn command_writer_has_a_thirty_second_timeout() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind loopback listener");
+        let stream = TcpStream::connect(listener.local_addr().unwrap()).expect("connect client");
+
+        let writer = command_writer(&stream).expect("clone bounded command writer");
+
+        assert_eq!(
+            writer.write_timeout().expect("read write timeout"),
+            Some(Duration::from_secs(30))
+        );
     }
 }

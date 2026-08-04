@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+//! Protocol v0 wire types: [`Snapshot`], [`Delta`], and [`Command`].
+
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_PORT: u16 = 7373;
@@ -49,6 +51,12 @@ pub enum Speed {
     Paused,
     Normal,
     Fast,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Command {
+    SetSpeed { speed: Speed },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,6 +145,8 @@ mod tests {
         "speed": "fast"
     }"#;
 
+    const COMMAND_WIRE: &str = r#"{"type":"set_speed","speed":"paused"}"#;
+
     fn decoded() -> Snapshot {
         serde_json::from_str(WIRE).expect("the documented wire format must decode")
     }
@@ -206,6 +216,26 @@ mod tests {
     }
 
     #[test]
+    fn decodes_and_reencodes_the_documented_command_wire_format() {
+        let command: Command = serde_json::from_str(COMMAND_WIRE)
+            .expect("the documented command wire format must decode");
+
+        assert_eq!(
+            command,
+            Command::SetSpeed {
+                speed: Speed::Paused
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(command).unwrap(),
+            serde_json::from_str::<serde_json::Value>(COMMAND_WIRE).unwrap()
+        );
+        assert!(
+            serde_json::from_str::<Command>(r#"{"type":"set_rate","speed":"paused"}"#).is_err()
+        );
+    }
+
+    #[test]
     fn every_material_and_tile_variant_has_a_pinned_wire_name() {
         for (value, wire) in [
             (Material::Stone, "\"stone\""),
@@ -239,6 +269,13 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&EntityKind::Dwarf).unwrap(),
             "\"dwarf\""
+        );
+        assert_eq!(
+            serde_json::to_value(Command::SetSpeed {
+                speed: Speed::Paused
+            })
+            .unwrap()["type"],
+            "set_speed"
         );
     }
 }

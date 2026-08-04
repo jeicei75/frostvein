@@ -17,6 +17,7 @@ use std::{
 
 const SEED: u64 = 0xF005_7E1A;
 const TICK_PERIOD: Duration = Duration::from_millis(100);
+const FAST_TICK_PERIOD: Duration = Duration::from_millis(20);
 const CLIENT_QUEUE: usize = 16;
 
 /// Caps on what one misbehaving local client can cost the daemon. Phase one is
@@ -73,8 +74,9 @@ fn main() -> anyhow::Result<()> {
         .spawn(move || accept_connections(listener, new_tx, accept_live))
         .context("could not spawn accept thread")?;
 
+    let (command_tx, command_rx) = mpsc::channel();
     let world = sim_core::World::generate(SEED, sim_core::Dims::DEFAULT);
-    tick(world, new_rx, live)
+    tick(world, new_rx, live, command_tx, command_rx)
 }
 
 fn accept_connections(
@@ -107,10 +109,18 @@ fn tick(
     mut world: sim_core::World,
     new_rx: Receiver<TcpStream>,
     live: Arc<AtomicUsize>,
+    command_tx: mpsc::Sender<protocol::Command>,
+    command_rx: Receiver<protocol::Command>,
 ) -> anyhow::Result<()> {
     let mut clients = Vec::new();
+    let mut speed = protocol::Speed::Normal;
     loop {
-        let deadline = Instant::now() + TICK_PERIOD;
+        for command in command_rx.try_iter() {
+            match command {
+                protocol::Command::SetSpeed { speed: next } => speed = next,
+            }
+        }
+        let deadline = Instant::now() + period(speed);
 
         // Encode the connect snapshot at most once per iteration and share it — every
         // client admitted here connects at the same tick, so one encoding serves them
@@ -125,25 +135,40 @@ fn tick(
                 None => {
                     let encoded = Arc::new(format!(
                         "{}\n",
-                        serde_json::to_string(&bridge::snapshot(&world))?
+                        serde_json::to_string(&bridge::snapshot(&world, speed))?
                     ));
                     snapshot_line = Some(Arc::clone(&encoded));
                     encoded
                 }
             };
-            if let Some(client) = connect_client(stream, line, Arc::clone(&live)) {
+            if let Some(client) =
+                connect_client(stream, line, Arc::clone(&live), command_tx.clone())
+            {
                 clients.push(client);
             }
         }
 
-        world.step();
+        // NOTE: the whole schedule is world-advancing today, so pausing skips all of it
+        // and freezes the tick with it. Story 3.1 adds a command-consuming system that
+        // must run while paused; that is when this splits into command consumption and
+        // world advancement.
+        if speed != protocol::Speed::Paused {
+            world.step();
+        }
         let delta_line = Arc::new(format!(
             "{}\n",
-            serde_json::to_string(&bridge::delta(&mut world))?
+            serde_json::to_string(&bridge::delta(&mut world, speed))?
         ));
         broadcast(&mut clients, &delta_line);
 
         thread::sleep(deadline.saturating_duration_since(Instant::now()));
+    }
+}
+
+fn period(speed: protocol::Speed) -> Duration {
+    match speed {
+        protocol::Speed::Paused | protocol::Speed::Normal => TICK_PERIOD,
+        protocol::Speed::Fast => FAST_TICK_PERIOD,
     }
 }
 
@@ -167,6 +192,7 @@ fn connect_client(
     stream: TcpStream,
     snapshot_line: Arc<String>,
     live: Arc<AtomicUsize>,
+    command_tx: mpsc::Sender<protocol::Command>,
 ) -> Option<Client> {
     // Built first so every early return below still releases the connection slot that
     // `accept_connections` reserved.
@@ -183,7 +209,7 @@ fn connect_client(
         .expect("a new client queue must have room for its snapshot");
     if let Err(error) = thread::Builder::new()
         .name("client-write".to_string())
-        .spawn(move || serve(stream, rx, guard))
+        .spawn(move || serve(stream, rx, guard, command_tx))
     {
         eprintln!("could not spawn connection thread: {error}");
         return None;
@@ -194,7 +220,12 @@ fn connect_client(
     })
 }
 
-fn serve(mut stream: TcpStream, lines: Receiver<Arc<String>>, _guard: ConnectionGuard) {
+fn serve(
+    mut stream: TcpStream,
+    lines: Receiver<Arc<String>>,
+    _guard: ConnectionGuard,
+    command_tx: mpsc::Sender<protocol::Command>,
+) {
     if let Err(error) = stream.set_write_timeout(Some(WRITE_TIMEOUT)) {
         eprintln!("could not set write timeout: {error}");
         return;
@@ -209,7 +240,7 @@ fn serve(mut stream: TcpStream, lines: Receiver<Arc<String>>, _guard: Connection
     };
     if let Err(error) = thread::Builder::new()
         .name("client-read".to_string())
-        .spawn(move || read_inbound(read_stream))
+        .spawn(move || read_inbound(read_stream, command_tx))
     {
         eprintln!("could not spawn client reader thread: {error}");
         return;
@@ -224,7 +255,7 @@ fn serve(mut stream: TcpStream, lines: Receiver<Arc<String>>, _guard: Connection
     let _ = stream.shutdown(Shutdown::Both);
 }
 
-fn read_inbound(stream: TcpStream) {
+fn read_inbound(stream: TcpStream, command_tx: mpsc::Sender<protocol::Command>) {
     let mut reader = BufReader::new(stream);
     let mut line = Vec::new();
     loop {
@@ -243,7 +274,17 @@ fn read_inbound(stream: TcpStream) {
                 // NOTE: lossy, not a UTF-8 error — a single stray byte must not cost the
                 // client its connection, since Story 2.1 streams deltas down it.
                 let text = String::from_utf8_lossy(&line);
-                eprintln!("unrecognized client message: {}", excerpt(text.trim_end()));
+                let text = text.trim_end();
+                match serde_json::from_str::<protocol::Command>(text) {
+                    Ok(command) => {
+                        if command_tx.send(command).is_err() {
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        eprintln!("unrecognized client message: {}", excerpt(text));
+                    }
+                }
             }
             Err(error) => {
                 eprintln!("client read error: {error}");
@@ -270,6 +311,13 @@ mod tests {
     #[test]
     fn tick_period_is_exactly_ten_hertz() {
         assert_eq!(TICK_PERIOD, Duration::from_millis(100));
+    }
+
+    #[test]
+    fn speed_periods_are_pinned() {
+        assert_eq!(period(protocol::Speed::Paused), Duration::from_millis(100));
+        assert_eq!(period(protocol::Speed::Normal), Duration::from_millis(100));
+        assert_eq!(period(protocol::Speed::Fast), Duration::from_millis(20));
     }
 
     /// A real loopback pair: the daemon's end goes into `Client`, the peer end stands in

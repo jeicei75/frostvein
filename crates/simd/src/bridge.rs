@@ -1,4 +1,4 @@
-pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
+pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Snapshot {
     let dims = world.dims();
     // The wire contract tells clients to index tiles as x + y*dims.x + z*dims.x*dims.y
     // (protocol::Snapshot::tiles). If the two accessors ever disagree that formula
@@ -28,7 +28,7 @@ pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
             .collect(),
         designations: Vec::new(),
         zones: Vec::new(),
-        speed: protocol::Speed::Normal,
+        speed,
         tick: world.tick(),
     }
 }
@@ -38,7 +38,7 @@ pub fn snapshot(world: &sim_core::World) -> protocol::Snapshot {
 /// second time and loses those changes for good. Safe today because the tick loop
 /// encodes once and shares the resulting `Arc<String>`; Story 2.2 is the first to have
 /// a real producer of dirty tiles, so keep the single-call discipline.
-pub fn delta(world: &mut sim_core::World) -> protocol::Delta {
+pub fn delta(world: &mut sim_core::World, speed: protocol::Speed) -> protocol::Delta {
     protocol::Delta {
         msg_type: protocol::MessageType::Delta,
         tick: world.tick(),
@@ -62,7 +62,7 @@ pub fn delta(world: &mut sim_core::World) -> protocol::Delta {
             .collect(),
         designations: Vec::new(),
         zones: Vec::new(),
-        speed: protocol::Speed::Normal,
+        speed,
     }
 }
 
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn every_tile_maps_to_its_named_wire_variant() {
         let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
-        let snap = snapshot(&world);
+        let snap = snapshot(&world, protocol::Speed::Normal);
 
         assert_eq!(snap.tiles.len(), world.tiles().len());
         for (index, world_tile) in world.tiles().iter().enumerate() {
@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn snapshot_mirrors_world_grid() {
         let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
-        let snap = snapshot(&world);
+        let snap = snapshot(&world, protocol::Speed::Normal);
         let mut empty = None;
         let mut solid = None;
         let mut ramp = None;
@@ -224,7 +224,7 @@ mod tests {
     fn entities_mirror_dwarves() {
         let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
         world.step();
-        let snap = snapshot(&world);
+        let snap = snapshot(&world, protocol::Speed::Normal);
         let dwarves = world.dwarves();
 
         assert_eq!(snap.entities.len(), 5);
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn snapshot_json_obeys_wire_conventions() {
         let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
-        let value = serde_json::to_value(snapshot(&world)).unwrap();
+        let value = serde_json::to_value(snapshot(&world, protocol::Speed::Normal)).unwrap();
 
         assert_eq!(value["type"], "snapshot");
         assert_eq!(value["speed"], "normal");
@@ -314,7 +314,7 @@ mod tests {
         world.step();
         world.step();
 
-        assert_eq!(snapshot(&world).tick, 2);
+        assert_eq!(snapshot(&world, protocol::Speed::Normal).tick, 2);
     }
 
     #[test]
@@ -324,7 +324,7 @@ mod tests {
         assert!(world.set_tile(pos, sim_core::Tile::Solid(sim_core::Material::Ice)));
         world.step();
 
-        let update = delta(&mut world);
+        let update = delta(&mut world, protocol::Speed::Fast);
         assert_eq!(update.msg_type, protocol::MessageType::Delta);
         assert_eq!(update.tick, 1);
         assert_eq!(
@@ -349,9 +349,9 @@ mod tests {
         );
         assert!(update.designations.is_empty());
         assert!(update.zones.is_empty());
-        assert_eq!(update.speed, protocol::Speed::Normal);
+        assert_eq!(update.speed, protocol::Speed::Fast);
 
         world.step();
-        assert!(delta(&mut world).tiles.is_empty());
+        assert!(delta(&mut world, protocol::Speed::Fast).tiles.is_empty());
     }
 }

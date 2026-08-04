@@ -118,3 +118,47 @@ names where it came from and what should trigger revisiting it.
   deferred is the *product* half: a player who runs with `NO_COLOR` set still gets no state signal
   at all, because there is no glyph or brightness fallback. That is a design change and still
   belongs to a later story [crates/tui/src/main.rs, crates/tui/src/frame.rs:50-60].
+
+## Deferred from: code review of story 2.3 (2026-08-04)
+
+- **Partial line at EOF is misreported as a 64 KB overflow.** `read_inbound` treats *any*
+  `read_until` result not ending in `\n` as having hit `MAX_LINE_BYTES`, so a client that sends
+  a truncated command and closes is logged as `client line exceeded 65536 bytes; closing
+  connection`. Proved live with 24 bytes + FIN. A real flood and a benign mid-command
+  disconnect are therefore indistinguishable in the logs — an observability defect in a project
+  whose recurring failure class is false evidence. The correct pattern already exists in this
+  repo: `crates/tui/src/main.rs:366` splits the two cases on `bytes as u64 >= MAX_*`. **Not**
+  patched here: it is pre-existing 1.2 code and CLAUDE.md rule 3 forbids improving adjacent code
+  that this story did not break. **Revisit when** a story next touches `read_inbound` — 3.1 adds
+  world-mutating commands and will [crates/simd/src/main.rs:270].
+
+- **A terminal persistently reporting 0×0 renders nothing forever, with no diagnostic.** The
+  startup-0×0 case is already handled and documented — the render guard re-queries the size
+  rather than trusting the startup reading. What remains is that nothing ever *reports* the
+  condition: keypresses still reach the daemon and the daemon still obeys them, but the screen
+  stays blank, which a user reports as "the client is broken". Hit live by a review layer
+  driving the TUI under `script` with redirected output. **Revisit when** the first
+  accessibility/robustness pass lands, or alongside the still-open `NO_COLOR` product-half item
+  above — both are the same shape: the client silently drops its only output channel
+  [crates/tui/src/main.rs:240-251].
+
+- **Fast mode shrinks the client-queue slack fivefold.** `CLIENT_QUEUE` is 16 messages, which is
+  ~1.6 s of buffer at the 100 ms tick but only ~320 ms at the 20 ms fast tick. A terminal that
+  reads slowly is markedly likelier to hit the bounded-queue eviction path while the session is
+  fast-forwarding — precisely when the operator is least likely to be watching that terminal.
+  Not a defect in 2.3: the eviction path is 1.2's and is working as designed. **Revisit when**
+  eviction is observed in practice, or when a story adds reconnect (deliberately out of scope
+  through Epic 2) [crates/simd/src/main.rs:22].
+
+- **Stale-speed compose trap in the TUI keymap (owner: Story 3.1).** Speed for the next command
+  is read from the last delta, never from an optimistic local value. Two *different* keys pressed
+  inside one 100 ms round-trip therefore compose against the same stale baseline and settle on a
+  speed neither implies: at `Normal`, `+` sends `SetSpeed{Fast}` and `-` sends `SetSpeed{Paused}`,
+  and the daemon's last-write-wins drain lands on **Paused**. Because speed is a single shared
+  value broadcast to every client, one operator's fumbled double-tap silently pauses the session
+  for every watching terminal, with no error and no indication why. Found independently by three
+  review layers at 2.3 and reproduced both in isolation and against a live daemon. **Not** patched
+  at 2.3: the fix is optimistic client-side speed, which 2.3's scope guardrails and AD-4
+  explicitly forbid; Wolf's call at review was to accept it now with an accurate `// NOTE:`.
+  **Revisit at Story 3.1**, which already owns the pause/command-consumption split and is the
+  natural home for client-side command state [crates/tui/src/view.rs:180-195].

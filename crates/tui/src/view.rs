@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use protocol::{Dims, EntityKind, Snapshot, Tile};
+use protocol::{Command, Dims, EntityKind, Snapshot, Speed, Tile};
 
 use crate::palette::{BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, dim, entity_cell, tile_cell};
 
@@ -27,6 +27,7 @@ pub struct ViewState {
 pub enum Action {
     Redraw,
     Quit,
+    Command(Command),
     Ignore,
 }
 
@@ -128,13 +129,17 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
             .iter()
             .filter(|entity| entity.kind == EntityKind::Dwarf)
             .count();
+        let speed = match snapshot.speed {
+            Speed::Paused => "paused",
+            Speed::Normal => "normal",
+            Speed::Fast => "fast",
+        };
         format!(
-            "tick {}  z {}/{}  camera {},{}  dwarves {}  keys: <> z  arrows/hjkl pan  q quit",
+            "tick {}  {}  z {}/{}  dwarves {}  <>z hjkl  space +- speed  q quit",
             snapshot.tick,
+            speed,
             state.z,
             snapshot.dims.z.saturating_sub(1),
-            state.camera.0,
-            state.camera.1,
             dwarves
         )
     };
@@ -149,7 +154,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
     framebuffer
 }
 
-pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims) -> Action {
+pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, speed: Speed) -> Action {
     // Wolf's call 2026-08-03: Ctrl-C quits outright. Raw mode clears ISIG, so
     // without this the conventional interrupt does nothing at all and the only
     // way out is q -> y.
@@ -172,7 +177,22 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims) -> Action {
         };
     }
 
+    let command = |speed| Action::Command(Command::SetSpeed { speed });
     match key.code {
+        KeyCode::Char(' ') => command(match speed {
+            Speed::Paused => Speed::Normal,
+            Speed::Normal | Speed::Fast => Speed::Paused,
+        }),
+        KeyCode::Char('+') => match speed {
+            Speed::Paused => command(Speed::Normal),
+            Speed::Normal => command(Speed::Fast),
+            Speed::Fast => Action::Ignore,
+        },
+        KeyCode::Char('-') => match speed {
+            Speed::Fast => command(Speed::Normal),
+            Speed::Normal => command(Speed::Paused),
+            Speed::Paused => Action::Ignore,
+        },
         KeyCode::Char('<') => {
             state.z = (state.z - 1).max(0);
             Action::Redraw
@@ -213,7 +233,7 @@ fn tile_index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use protocol::{Entity, EntityKind, JobState, Material, MessageType, Speed, Tile};
+    use protocol::{Command, Entity, EntityKind, JobState, Material, MessageType, Speed, Tile};
 
     use super::*;
 
@@ -236,6 +256,74 @@ mod tests {
 
     fn press(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn speed_keys_follow_the_pinned_step_table_and_clamp() {
+        let dims = Dims { x: 1, y: 1, z: 1 };
+        for (key, speed, expected) in [
+            (
+                KeyCode::Char(' '),
+                Speed::Paused,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Normal,
+                }),
+            ),
+            (
+                KeyCode::Char(' '),
+                Speed::Normal,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Paused,
+                }),
+            ),
+            (
+                KeyCode::Char(' '),
+                Speed::Fast,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Paused,
+                }),
+            ),
+            (
+                KeyCode::Char('+'),
+                Speed::Paused,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Normal,
+                }),
+            ),
+            (
+                KeyCode::Char('+'),
+                Speed::Normal,
+                Action::Command(Command::SetSpeed { speed: Speed::Fast }),
+            ),
+            (KeyCode::Char('+'), Speed::Fast, Action::Ignore),
+            (
+                KeyCode::Char('-'),
+                Speed::Fast,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Normal,
+                }),
+            ),
+            (
+                KeyCode::Char('-'),
+                Speed::Normal,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Paused,
+                }),
+            ),
+            (KeyCode::Char('-'), Speed::Paused, Action::Ignore),
+        ] {
+            let mut state = ViewState {
+                camera: (0, 0),
+                z: 0,
+                confirming_quit: false,
+            };
+
+            assert_eq!(
+                apply_key(&mut state, press(key), dims, speed),
+                expected,
+                "wrong action for {key:?} at {speed:?}"
+            );
+        }
     }
 
     #[test]
@@ -408,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    fn status_line_reports_z_camera_and_dwarf_count() {
+    fn status_line_reports_speed_z_and_dwarf_count() {
         let dims = Dims {
             x: 40,
             y: 40,
@@ -435,8 +523,60 @@ mod tests {
 
         assert_eq!(
             status,
-            "tick 87  z 19/31  camera 12,34  dwarves 3  keys: <> z  arrows/hjkl pan  q quit"
+            "tick 87  normal  z 19/31  dwarves 3  <>z hjkl  space +- speed  q quit         "
         );
+    }
+
+    #[test]
+    fn status_line_fits_eighty_columns_without_truncation_at_large_ticks() {
+        let dims = Dims {
+            x: 40,
+            y: 40,
+            z: 32,
+        };
+        let state = ViewState {
+            camera: (12, 34),
+            z: 19,
+            confirming_quit: false,
+        };
+
+        for (speed, wire_name) in [
+            (Speed::Paused, "paused"),
+            (Speed::Normal, "normal"),
+            (Speed::Fast, "fast"),
+        ] {
+            let mut snapshot = empty_snapshot(dims);
+            snapshot.tick = 9_999_999;
+            snapshot.speed = speed;
+            snapshot.entities = (0..5)
+                .map(|id| Entity {
+                    id,
+                    kind: EntityKind::Dwarf,
+                    pos: [1, 1, 30],
+                    state: JobState::Idle,
+                })
+                .collect();
+            let expected = format!(
+                "tick 9999999  {wire_name}  z 19/31  dwarves 5  <>z hjkl  space +- speed  q quit"
+            );
+
+            let framebuffer = render(&snapshot, &state, 80, 2);
+            let rendered_width = (0..80)
+                .take_while(|x| framebuffer.cell(*x, 1).fg == STATUS_TEXT)
+                .count();
+            let expected_width = expected.chars().count();
+            let rendered: String = (0..expected_width as u16)
+                .map(|x| framebuffer.cell(x, 1).glyph)
+                .collect();
+
+            assert!(
+                rendered_width <= 80,
+                "{speed:?} status was {rendered_width} columns"
+            );
+            assert_eq!(rendered_width, expected_width);
+            assert_eq!(rendered, expected);
+            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, 't');
+        }
     }
 
     #[test]
@@ -450,7 +590,12 @@ mod tests {
 
         for code in [KeyCode::Char('l'), KeyCode::Char('j'), KeyCode::Char('q')] {
             assert_eq!(
-                apply_key(&mut state, KeyEvent::new(code, KeyModifiers::CONTROL), dims),
+                apply_key(
+                    &mut state,
+                    KeyEvent::new(code, KeyModifiers::CONTROL),
+                    dims,
+                    Speed::Normal,
+                ),
                 Action::Ignore
             );
         }
@@ -461,7 +606,8 @@ mod tests {
             apply_key(
                 &mut state,
                 KeyEvent::new(KeyCode::Char('>'), KeyModifiers::SHIFT),
-                dims
+                dims,
+                Speed::Normal,
             ),
             Action::Redraw
         );
@@ -471,7 +617,8 @@ mod tests {
             apply_key(
                 &mut state,
                 KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
-                dims
+                dims,
+                Speed::Normal,
             ),
             Action::Quit
         );
@@ -506,25 +653,25 @@ mod tests {
         };
 
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('>')), dims),
+            apply_key(&mut state, press(KeyCode::Char('>')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(state.z, 1);
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Right), dims),
+            apply_key(&mut state, press(KeyCode::Right), dims, Speed::Normal),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('l')), dims),
+            apply_key(&mut state, press(KeyCode::Char('l')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(state.camera.0, 2);
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Down), dims),
+            apply_key(&mut state, press(KeyCode::Down), dims, Speed::Normal),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('j')), dims),
+            apply_key(&mut state, press(KeyCode::Char('j')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(state.camera.1, 3);
@@ -532,65 +679,65 @@ mod tests {
         state.camera = (0, 0);
         state.z = 0;
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('<')), dims),
+            apply_key(&mut state, press(KeyCode::Char('<')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(state.z, 0);
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Left), dims),
+            apply_key(&mut state, press(KeyCode::Left), dims, Speed::Normal),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('h')), dims),
+            apply_key(&mut state, press(KeyCode::Char('h')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(state.camera.0, 0);
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Up), dims),
+            apply_key(&mut state, press(KeyCode::Up), dims, Speed::Normal),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('k')), dims),
+            apply_key(&mut state, press(KeyCode::Char('k')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(state.camera.1, 0);
 
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('>')), dims),
+            apply_key(&mut state, press(KeyCode::Char('>')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('l')), dims),
+            apply_key(&mut state, press(KeyCode::Char('l')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('j')), dims),
+            apply_key(&mut state, press(KeyCode::Char('j')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!((state.camera, state.z), ((1, 1), 1));
 
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('q')), dims),
+            apply_key(&mut state, press(KeyCode::Char('q')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert!(state.confirming_quit);
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('y')), dims),
+            apply_key(&mut state, press(KeyCode::Char('y')), dims, Speed::Normal,),
             Action::Quit
         );
 
         state.confirming_quit = false;
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('q')), dims),
+            apply_key(&mut state, press(KeyCode::Char('q')), dims, Speed::Normal,),
             Action::Redraw
         );
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Esc), dims),
+            apply_key(&mut state, press(KeyCode::Esc), dims, Speed::Normal),
             Action::Redraw
         );
         assert!(!state.confirming_quit);
         assert_eq!(
-            apply_key(&mut state, press(KeyCode::Char('x')), dims),
+            apply_key(&mut state, press(KeyCode::Char('x')), dims, Speed::Normal,),
             Action::Ignore
         );
     }

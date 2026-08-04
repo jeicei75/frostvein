@@ -10,11 +10,11 @@
 //! to this package, and hand-rolling the wire keeps the test deterministic and fast.
 
 use std::{
-    io::{Read, Write},
-    net::TcpListener,
+    io::{BufRead, BufReader, ErrorKind, Read, Write},
+    net::{TcpListener, TcpStream},
     process::{Command, Stdio},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const DIMS: protocol::Dims = protocol::Dims { x: 2, y: 2, z: 2 };
@@ -38,6 +38,10 @@ fn snapshot_line() -> String {
 }
 
 fn delta_line(tick: u64) -> String {
+    delta_line_with_speed(tick, protocol::Speed::Normal)
+}
+
+fn delta_line_with_speed(tick: u64, speed: protocol::Speed) -> String {
     let delta = protocol::Delta {
         msg_type: protocol::MessageType::Delta,
         tick,
@@ -45,12 +49,167 @@ fn delta_line(tick: u64) -> String {
         entities: Vec::new(),
         designations: Vec::new(),
         zones: Vec::new(),
-        speed: protocol::Speed::Normal,
+        speed,
     };
     format!(
         "{}\n",
         serde_json::to_string(&delta).expect("encode stub delta")
     )
+}
+
+fn accept_with_timeout(listener: &TcpListener) -> TcpStream {
+    listener
+        .set_nonblocking(true)
+        .expect("stub listener must become nonblocking");
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return stream,
+            Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                panic!("tui did not connect to stub daemon within 3s")
+            }
+            Err(error) => panic!("stub daemon accept failed: {error}"),
+        }
+    }
+}
+
+fn strip_ansi(line: &str) -> String {
+    let mut plain = String::new();
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            for escape in chars.by_ref() {
+                if escape.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            plain.push(c);
+        }
+    }
+    plain
+}
+
+fn capture_speed_frames(key: Option<&str>) -> Vec<String> {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind stub daemon");
+    let port = listener
+        .local_addr()
+        .expect("read stub daemon address")
+        .port();
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tui"));
+    command
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("3")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(key) = key {
+        command.arg("--key").arg(key);
+    }
+    let mut child = command.spawn().expect("spawn tui");
+
+    let expects_command = key.is_some();
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(snapshot_line().as_bytes())
+            .expect("send stub snapshot");
+
+        let speed = if expects_command {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("bound stub command read");
+            let read_stream = stream.try_clone().expect("clone stub read half");
+            let mut reader = BufReader::new(read_stream);
+            let mut line = String::new();
+            let bytes = (&mut reader)
+                .take(4 * 1024)
+                .read_line(&mut line)
+                .expect("read speed command");
+            assert!(
+                bytes > 0 && line.ends_with('\n'),
+                "missing NDJSON command: {line:?}"
+            );
+            assert_eq!(
+                serde_json::from_str::<protocol::Command>(&line).expect("decode speed command"),
+                protocol::Command::SetSpeed {
+                    speed: protocol::Speed::Paused
+                }
+            );
+            protocol::Speed::Paused
+        } else {
+            protocol::Speed::Normal
+        };
+
+        for frame in 0..3 {
+            let tick = if speed == protocol::Speed::Paused {
+                SNAPSHOT_TICK + 1
+            } else {
+                SNAPSHOT_TICK + 1 + frame
+            };
+            stream
+                .write_all(delta_line_with_speed(tick, speed).as_bytes())
+                .expect("send stub delta");
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .read_to_string(&mut stdout)
+        .expect("read tui stdout");
+    let status = child.wait().expect("wait for tui");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .read_to_string(&mut stderr)
+        .expect("read tui stderr");
+    server.join().expect("stub daemon thread panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+
+    stdout
+        .lines()
+        .map(strip_ansi)
+        .filter(|line| line.starts_with("tick "))
+        .collect()
+}
+
+fn captured_ticks(status_lines: &[String]) -> Vec<u64> {
+    status_lines
+        .iter()
+        .map(|line| {
+            line.split_whitespace()
+                .nth(1)
+                .expect("status line must contain a tick")
+                .parse()
+                .expect("status tick must be numeric")
+        })
+        .collect()
+}
+
+#[test]
+fn key_space_freezes_the_streamed_frame_tick_and_reports_paused() {
+    let status_lines = capture_speed_frames(Some("space"));
+
+    assert_eq!(captured_ticks(&status_lines), vec![8, 8, 8]);
+    assert!(status_lines.iter().all(|line| line.contains("paused")));
+}
+
+#[test]
+fn streamed_frame_ticks_climb_when_no_key_is_sent() {
+    let status_lines = capture_speed_frames(None);
+
+    assert_eq!(captured_ticks(&status_lines), vec![8, 9, 10]);
 }
 
 const WIDE_DIMS: protocol::Dims = protocol::Dims { x: 16, y: 16, z: 1 };

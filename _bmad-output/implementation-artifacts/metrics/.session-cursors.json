@@ -62,12 +62,26 @@
     "output": 202052,
     "turns": 187
   },
+  "d72123eb-6b3b-4563-8949-9ea24d62a10e.jsonl": {
+    "cache_creation": 1228810,
+    "cache_read": 21440215,
+    "input": 10253,
+    "output": 143498,
+    "turns": 179
+  },
   "e7456634-33dd-4c3b-8ccf-6f4e032c768f.jsonl": {
     "cache_creation": 489651,
     "cache_read": 6527613,
     "input": 5853,
     "output": 110575,
     "turns": 63
+  },
+  "ff39ce5d-1295-4d05-b2cb-ea5124daf950.jsonl": {
+    "cache_creation": 465870,
+    "cache_read": 4927668,
+    "input": 15322,
+    "output": 76623,
+    "turns": 48
   },
   "rollout-2026-08-02T09-41-39-019fc1d9-ba99-7a70-a34d-175f62bfe74c.jsonl": {
     "cache_creation": 0,
@@ -117,5 +131,12 @@
     "input": 345490,
     "output": 52527,
     "turns": 125
+  },
+  "rollout-2026-08-04T06-14-07-019fcb68-705e-7002-a568-7ac96c24bff6.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 29742592,
+    "input": 608594,
+    "output": 66881,
+    "turns": 259
   }
 }
