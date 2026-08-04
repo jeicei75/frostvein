@@ -190,9 +190,14 @@ fn main() -> anyhow::Result<()> {
                     match apply_key(&mut state, key, snapshot.dims, snapshot.speed) {
                         Action::Redraw => needs_redraw = true,
                         Action::Quit => break 'running,
-                        // NOTE: the next speed is derived from the last wire update. Two
-                        // presses inside one round-trip therefore see the same stale speed
-                        // and the second can be a no-op; optimistic local speed is omitted.
+                        // NOTE: the next speed is derived from the last wire update, so two
+                        // presses inside one round-trip both compute from the same stale
+                        // speed. They do not merely collapse — two *different* keys compose
+                        // into a speed neither implies: at Normal, `+` sends Fast and `-`
+                        // sends Paused, and the daemon's last-write-wins drain settles on
+                        // Paused. Speed is shared, so that pauses every watching terminal.
+                        // Optimistic local speed is deliberately omitted (AD-4); Story 3.1
+                        // owns the fix along with the pause/command-consumption split.
                         Action::Command(command) => {
                             send_command(&mut writer, command)?;
                         }

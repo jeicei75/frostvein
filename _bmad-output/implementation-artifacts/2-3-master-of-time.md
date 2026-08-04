@@ -20,7 +20,10 @@ so that the session bends to my rhythm.
    JSON value; an unknown `type` fails to decode.
 2. `simd` decodes every inbound client line as a `Command`. A decodable `set_speed` changes
    the daemon's speed; every other line keeps 1.2's behaviour exactly — logged, dropped,
-   connection left open, daemon alive (including non-UTF-8 and oversized lines).
+   connection left open, daemon alive (including non-UTF-8). Oversized lines keep 1.2's
+   behaviour too, which is to close the connection — corrected at review 2026-08-04, where
+   the original parenthetical wrongly claimed they stay open and so contradicted this AC's
+   own "keeps 1.2's behaviour exactly".
 3. The daemon's real speed reaches the wire: `bridge::snapshot` and `bridge::delta` take it
    as an argument and the hardcoded `protocol::Speed::Normal` is gone from both. A client
    connecting while the sim is paused receives `"speed":"paused"` in its connect snapshot.
@@ -43,7 +46,10 @@ so that the session bends to my rhythm.
    80 columns at `tick 9999999` in every speed — pinned by a test that asserts the rendered
    width, not just the text.
 9. Two clients connected to one daemon both render the same speed, and a `set_speed` from
-   either appears in the very next delta of both (FR19).
+   either appears on the *same tick* in both (FR19) — corrected at review 2026-08-04. The
+   original "in the very next delta" is unmeetable by construction: the command crosses TCP
+   and the loop drains `command_rx` at iteration top, so it lands on the second delta. Landing
+   on one shared tick for every client is the property FR19 actually requires, and it is met.
 10. `tui --frames N --key <space|+|->` presses that key through `apply_key` before streaming
     frames. Its own tests drive the real binary: with `--key space` the tick in the captured
     status lines stops climbing and the line reads `paused`; with no `--key` the same capture
@@ -151,6 +157,54 @@ so that the session bends to my rhythm.
   - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent
         Record (AGENTS.md rule 1).
 - [x] **Green gate** (AC: 11) — `scripts/gate.sh`, then the live check. Report what printed.
+
+### Review Findings (2026-08-04)
+
+Four layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor, Feature Auditor), all
+executing the binaries. All 11 ACs verified MET, ACs 2–11 by live execution.
+
+- [x] [Review][Decision] **RESOLVED (Wolf, 2026-08-04): accept now, correct the NOTE, hand to 3.1.**
+      Optimistic client-side speed stays forbidden; the trap is recorded in `deferred-work.md`
+      as 3.1-owned. **Stale-speed compose trap is worse than the sanctioned `// NOTE:` says**
+      — found independently by three layers. Two *different* speed keys inside one round-trip
+      both compute from the same stale `snapshot.speed`, so they compose into a speed neither
+      press implies: at `Normal`, `+` → `SetSpeed{Fast}` and `-` → `SetSpeed{Paused}`; the
+      daemon's last-write-wins drain settles on **Paused**. Because speed is one shared value
+      broadcast to every terminal, one user's fumbled double-tap silently pauses the sim for
+      everyone. The story's guardrails explicitly forbid the real fix (optimistic client-side
+      speed), so this needs a product call: accept with an accurate NOTE, or schedule optimistic
+      local speed for 2.4/3.1 [crates/tui/src/view.rs:180-195].
+- [x] [Review][Decision] **RESOLVED (Wolf, 2026-08-04): both ACs corrected in place above.**
+      **Two acceptance criteria were factually wrong and could not be met as
+      written** — AC9 demands the speed change appear in the "very next delta"; the command
+      crosses TCP and the loop drains `command_rx` at iteration top, so it lands on the second
+      delta. The property FR19 actually cares about *is* met (both clients flip on the **same
+      tick**). AC2's parenthetical claims oversized lines leave the connection open; 1.2 closes
+      them, and AC2 also demands "keeps 1.2's behaviour exactly", so the AC contradicts itself.
+      Both are spec-text defects, not code defects.
+- [x] [Review][Patch] **APPLIED.** Corrected the inaccurate stale-speed `// NOTE:` — it claimed
+      "the second can be a no-op", which understated the real consequence proven above. It now
+      states the compose behaviour, that speed is shared across terminals, and that 3.1 owns the
+      fix [crates/tui/src/main.rs:193]
+- [x] [Review][Defer] Partial line at EOF is misreported as a 64 KB overflow — any read not
+      ending in `\n` logs `client line exceeded 65536 bytes`, so a client dropping 24 bytes
+      mid-command is indistinguishable in the logs from a real flood. The correct pattern already
+      exists in this repo at crates/tui/src/main.rs:366 (`bytes >= MAX_*`)
+      [crates/simd/src/main.rs:270] — deferred, pre-existing (1.2 code)
+- [x] [Review][Defer] A terminal persistently reporting 0×0 renders nothing forever with no
+      diagnostic — the re-query guard exists and is documented, but nothing ever *reports* the
+      condition, so "works but shows nothing" reads to a user as a broken client
+      [crates/tui/src/main.rs:240-251] — deferred, pre-existing
+- [x] [Review][Defer] Fast mode shrinks client-queue slack 5× — `CLIENT_QUEUE` of 16 is ~1.6 s
+      of buffer at the 100 ms tick but only ~320 ms at the 20 ms fast tick, so a slow terminal is
+      markedly likelier to be evicted while fast-forwarding [crates/simd/src/main.rs:22] —
+      deferred, a live consequence of this story rather than a defect in it
+
+Dismissed as noise (4): camera readout removal (explicitly directed by this story's Tasks and
+Dev Notes); `Space` at `Fast` "unspecified" (specified in the story's own code skeleton); the
+30 s command write timeout as "backpressure work" (AGENTS.md rule 1 exempts I/O resource bounds
+and mandates them); unbounded inbound `mpsc` (3M messages at ~1M/s failed to reproduce any DoS —
+RSS flat, tick cadence held).
 
 ## Dev Notes
 
