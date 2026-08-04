@@ -125,17 +125,17 @@ so that the session bends to my rhythm.
   - [x] `status_line_reports_z_camera_and_dwarf_count` is renamed and its expectation
         rewritten. Add the width test: render at `tick 9999999` for each of the three speeds
         and assert the status text is ≤ 80 columns and its last glyph is not truncated.
-- [ ] **Observability instrument** (AC: 10) — the human check for "the session bends to my
+- [x] **Observability instrument** (AC: 10) — the human check for "the session bends to my
       rhythm". Extend the existing `tui --frames N` rather than inventing a second
       instrument: add `--key <space|+|->`, which builds the matching `KeyEvent`, runs it
       through the real `apply_key`, sends the resulting command down the real write half,
       then streams N frames as before.
-  - [ ] Two tests in `crates/tui/tests/client.rs` driving the real binary against a stub
+  - [x] Two tests in `crates/tui/tests/client.rs` driving the real binary against a stub
         daemon that freezes its stub tick once it reads a `set_speed` line: with `--key space`
         the captured status lines stop climbing and contain `paused`; with no `--key` they
         climb. The second test is the mutation guard on the first — an instrument that always
         shows a frozen tick would pass the first alone.
-  - [ ] **Known limit, do not fight it:** no automated test can span both binaries.
+  - [x] **Known limit, do not fight it:** no automated test can span both binaries.
         `CARGO_BIN_EXE_simd` is defined only for `simd`'s own tests and `CARGO_BIN_EXE_tui`
         only for `tui`'s, and `tui` may not take `simd` as a dev-dependency (gate.sh probes
         the dependency edges). The client half is proven against a stub daemon, the daemon
@@ -521,6 +521,28 @@ OpenAI Codex (GPT-5)
   test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 23 filtered out
   ```
 
+- `--key space` instrument RED before the argument existed:
+
+  ```text
+  running 1 test
+  thread '<unnamed>' panicked at crates/tui/tests/client.rs:72:17:
+  tui did not connect to stub daemon within 3s
+  thread 'key_space_freezes_the_streamed_frame_tick_and_reports_paused' panicked at crates/tui/tests/client.rs:174:19:
+  stub daemon thread panicked: Any { .. }
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out
+  ```
+
+- Observability mutation-guard RED (delta ticks temporarily ignored):
+
+  ```text
+  running 1 test
+  assertion `left == right` failed
+    left: [7, 7, 7]
+   right: [8, 9, 10]
+  test streamed_frame_ticks_climb_when_no_key_is_sent ... FAILED
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out
+  ```
+
 ### Completion Notes List
 
 - Added the one-variant, internally tagged `protocol::Command` wire type and pinned its literal `set_speed` JSON contract, including unknown-command rejection.
@@ -528,6 +550,7 @@ OpenAI Codex (GPT-5)
 - Proved pause/resume, paused connect snapshots, same-delta two-client propagation, and relative fast timing against the real daemon. Re-ran the three named Story 1.2 input contracts unmodified; all passed.
 - Added the explicit Space/+/− speed-step table, clamped endpoints, and first TUI write half. Commands are computed from authoritative wire speed, written and flushed as one NDJSON line, and rely on the next delta for repaint/ack.
 - Replaced the status line with the compact authoritative speed/z/dwarf/key format and pinned all three wire speed names plus rendered width at tick 9999999. This closes the recorded deferred status-line overflow item.
+- Extended the existing `--frames` evidence channel with `--key <space|+|->`, routing the synthetic key through real `apply_key` and the real socket write path before streaming. Real-binary tests prove Space freezes/reporting paused and that no-key captures still climb.
 
 ### File List
 
@@ -538,6 +561,7 @@ OpenAI Codex (GPT-5)
 - `crates/simd/tests/serve.rs`
 - `crates/tui/src/main.rs`
 - `crates/tui/src/view.rs`
+- `crates/tui/tests/client.rs`
 
 ## Change Log
 
