@@ -141,14 +141,14 @@ so that the session bends to my rhythm.
         the dependency edges). The client half is proven against a stub daemon, the daemon
         half against a real daemon by raw TCP, and the two are joined by the manual live run
         in Verification. Paste what you saw.
-- [ ] **Sabotage + mutation set** (AC: 11)
-  - [ ] `_bmad-output/implementation-artifacts/mutations/2-3-master-of-time.sh` with at
+- [x] **Sabotage + mutation set** (AC: 11)
+  - [x] `_bmad-output/implementation-artifacts/mutations/2-3-master-of-time.sh` with at
         least: pause does not skip `world.step()`; the parsed command is dropped instead of
         applied; `FAST_TICK_PERIOD` equals `TICK_PERIOD`; the bridge hardcodes
         `Speed::Normal` again; `+` at `Fast` wraps to `Paused` instead of clamping; `Space`
         returns `Ignore`; the status line omits the speed. Run `scripts/mutate.sh` and paste
         the table.
-  - [ ] Paste the actual RED output for every new mapping/constant test into the Dev Agent
+  - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent
         Record (AGENTS.md rule 1).
 - [ ] **Green gate** (AC: 11) — `scripts/gate.sh`, then the live check. Report what printed.
 
@@ -543,6 +543,26 @@ OpenAI Codex (GPT-5)
   test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out
   ```
 
+- Required mutation run (`scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/2-3-master-of-time.sh`):
+
+  ```text
+  ================ MUTATION RESULTS ================
+  pause no longer skips world.step                             KILLED
+  parsed speed command is dropped before the loop              KILLED
+  fast period equals normal period                             KILLED
+  paused loop uses the fast period                             KILLED
+  snapshot bridge hardcodes normal speed                       KILLED
+  delta bridge hardcodes normal speed                          KILLED
+  plus at fast wraps to paused                                 KILLED
+  space key is ignored                                         KILLED
+  status line omits the speed                                  KILLED
+  frames instrument ignores incoming ticks                     KILLED
+  frames key path never writes its command                     KILLED
+  set_speed discriminator is renamed                           KILLED
+
+  All mutations killed.
+  ```
+
 ### Completion Notes List
 
 - Added the one-variant, internally tagged `protocol::Command` wire type and pinned its literal `set_speed` JSON contract, including unknown-command rejection.
@@ -551,6 +571,7 @@ OpenAI Codex (GPT-5)
 - Added the explicit Space/+/− speed-step table, clamped endpoints, and first TUI write half. Commands are computed from authoritative wire speed, written and flushed as one NDJSON line, and rely on the next delta for repaint/ack.
 - Replaced the status line with the compact authoritative speed/z/dwarf/key format and pinned all three wire speed names plus rendered width at tick 9999999. This closes the recorded deferred status-line overflow item.
 - Extended the existing `--frames` evidence channel with `--key <space|+|->`, routing the synthetic key through real `apply_key` and the real socket write path before streaming. Real-binary tests prove Space freezes/reporting paused and that no-key captures still climb.
+- Authored and ran twelve production sabotages covering the command wire, daemon decision seam, cadence boundaries, bridge speed, TUI mappings/status, write path, and observability mutation guard; zero survived.
 
 ### File List
 
@@ -562,6 +583,7 @@ OpenAI Codex (GPT-5)
 - `crates/tui/src/main.rs`
 - `crates/tui/src/view.rs`
 - `crates/tui/tests/client.rs`
+- `_bmad-output/implementation-artifacts/mutations/2-3-master-of-time.sh`
 
 ## Change Log
 
