@@ -4,7 +4,7 @@ baseline_commit: 7371508
 
 # Story 2.3: Master of Time
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -629,6 +629,13 @@ OpenAI Codex (GPT-5)
   paused tail: tick 102, 102, 102, 102, 102  paused
   ```
 
+- Final `codex review --base main` raised only P1 (bound the inbound command queue). The
+  finding was not applied: Story 2.3 prescribes `mpsc::Sender<protocol::Command>` and its
+  scope guardrails explicitly forbid backpressure work. Targeted non-network tests passed;
+  the review's nested sandbox again denied loopback binds (`Operation not permitted`), so
+  its full gate could not run there. The project-sandbox gate above remains the authoritative
+  clean rebuild result.
+
 - Manual live check, real `simd` + real `tui` binaries (`NO_COLOR` warned as expected; speed
   and tick are plain glyphs and remained observable):
 
@@ -669,6 +676,7 @@ OpenAI Codex (GPT-5)
 - Authored and ran thirteen production sabotages covering the command wire, daemon decision seam, cadence boundaries, bridge speed, TUI mappings/status, write path/timeout, and observability mutation guard; zero survived.
 - Manual cross-binary verification joined the real daemon and TUI: normal climbed, Space froze tick, + stepped through normal/fast, - stepped through normal/paused, and a persistent second client adopted the controller's speed change.
 - Addressed the valid Codex self-review finding by bounding client command writes at 30 seconds; rejected the inbound bounded-queue finding because Story 2.3 explicitly forbids backpressure work and requires `mpsc::Sender`.
+- Re-ran the Codex self-review after that patch; it raised only the same out-of-scope inbound-queue finding, with no new in-scope issue.
 
 ### File List
 
@@ -681,6 +689,7 @@ OpenAI Codex (GPT-5)
 - `crates/tui/src/view.rs`
 - `crates/tui/tests/client.rs`
 - `_bmad-output/implementation-artifacts/mutations/2-3-master-of-time.sh`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
@@ -689,3 +698,4 @@ OpenAI Codex (GPT-5)
 | 2026-08-04 | Story created |
 | 2026-08-04 | Implemented authoritative pause/normal/fast control across protocol, daemon, and TUI with live-daemon, real-binary instrument, mutation, gate, and manual verification. |
 | 2026-08-04 | Addressed self-review by bounding TUI command writes and adding a killed timeout mutation. |
+| 2026-08-04 | Recorded the final self-review outcome and advanced the story to review. |
