@@ -558,6 +558,7 @@ OpenAI Codex (GPT-5)
   status line omits the speed                                  KILLED
   frames instrument ignores incoming ticks                     KILLED
   frames key path never writes its command                     KILLED
+  client command writer has no timeout                         KILLED
   set_speed discriminator is renamed                           KILLED
 
   All mutations killed.
@@ -579,6 +580,54 @@ OpenAI Codex (GPT-5)
   restored source and git diff were correct. `scripts/mutate.sh` restores source timestamps,
   so Cargo had reused the last mutation build. Removed only the `protocol`, `simd`, and `tui`
   package artifacts, reran the gate from a forced rebuild, and observed the green output above.
+
+- First `codex review --base main` raised two findings. P2 (unbounded TUI command writes)
+  was valid: added a 30-second socket write timeout and the test below. P1 requested a
+  bounded inbound command queue; it was not applied because this story explicitly requires
+  `mpsc::Sender<protocol::Command>` and hard-forbids backpressure work. The review's nested
+  sandbox could not bind loopback (`Operation not permitted`), so its two socket-pair tests
+  failed environmentally; no production/test workaround was made.
+
+- Review-patch RED before `command_writer` configured the production socket:
+
+  ```text
+  error[E0425]: cannot find function `command_writer` in this scope
+     --> crates/tui/src/main.rs:577:22
+  error: could not compile `tui` (bin "tui" test) due to 1 previous error
+  ```
+
+- Command-write-timeout sabotage RED (`set_write_timeout(None)`):
+
+  ```text
+  running 1 test
+  assertion `left == right` failed
+    left: None
+   right: Some(30s)
+  test tests::command_writer_has_a_thirty_second_timeout ... FAILED
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out
+  ```
+
+- Post-review-patch mutation/gate results: all thirteen mutations killed, then package
+  artifacts were force-cleaned before the final gate:
+
+  ```text
+  client command writer has no timeout                         KILLED
+  All mutations killed.
+
+  frostvein gate
+    cargo fmt --check           ok
+    cargo clippy -D warnings    ok
+    cargo test                  ok
+    tui has no sim-core edge    ok
+  GATE GREEN
+  ```
+
+- Post-review-patch manual real-binary capture:
+
+  ```text
+  normal tail: tick 93, 94, 95, 96, 97  normal
+  paused tail: tick 102, 102, 102, 102, 102  paused
+  ```
 
 - Manual live check, real `simd` + real `tui` binaries (`NO_COLOR` warned as expected; speed
   and tick are plain glyphs and remained observable):
@@ -617,8 +666,9 @@ OpenAI Codex (GPT-5)
 - Added the explicit Space/+/− speed-step table, clamped endpoints, and first TUI write half. Commands are computed from authoritative wire speed, written and flushed as one NDJSON line, and rely on the next delta for repaint/ack.
 - Replaced the status line with the compact authoritative speed/z/dwarf/key format and pinned all three wire speed names plus rendered width at tick 9999999. This closes the recorded deferred status-line overflow item.
 - Extended the existing `--frames` evidence channel with `--key <space|+|->`, routing the synthetic key through real `apply_key` and the real socket write path before streaming. Real-binary tests prove Space freezes/reporting paused and that no-key captures still climb.
-- Authored and ran twelve production sabotages covering the command wire, daemon decision seam, cadence boundaries, bridge speed, TUI mappings/status, write path, and observability mutation guard; zero survived.
+- Authored and ran thirteen production sabotages covering the command wire, daemon decision seam, cadence boundaries, bridge speed, TUI mappings/status, write path/timeout, and observability mutation guard; zero survived.
 - Manual cross-binary verification joined the real daemon and TUI: normal climbed, Space froze tick, + stepped through normal/fast, - stepped through normal/paused, and a persistent second client adopted the controller's speed change.
+- Addressed the valid Codex self-review finding by bounding client command writes at 30 seconds; rejected the inbound bounded-queue finding because Story 2.3 explicitly forbids backpressure work and requires `mpsc::Sender`.
 
 ### File List
 
@@ -638,3 +688,4 @@ OpenAI Codex (GPT-5)
 | --- | --- |
 | 2026-08-04 | Story created |
 | 2026-08-04 | Implemented authoritative pause/normal/fast control across protocol, daemon, and TUI with live-daemon, real-binary instrument, mutation, gate, and manual verification. |
+| 2026-08-04 | Addressed self-review by bounding TUI command writes and adding a killed timeout mutation. |

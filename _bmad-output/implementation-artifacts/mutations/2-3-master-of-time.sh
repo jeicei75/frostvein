@@ -106,6 +106,14 @@ assert old in s
 p.write_text(s.replace(old, "", 1))
 PY
 
+mutation "client command writer has no timeout" tui command_writer_has_a_thirty_second_timeout <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
+old = "        .set_write_timeout(Some(COMMAND_WRITE_TIMEOUT))\n"
+assert old in s
+p.write_text(s.replace(old, "        .set_write_timeout(None)\n"))
+PY
+
 mutation "set_speed discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
 import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()

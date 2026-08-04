@@ -31,6 +31,7 @@ use crate::{
 /// Mirrors the daemon's 30 s write timeout. Without it a peer that accepts and
 /// then goes silent leaves the client blocked forever.
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
+const COMMAND_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MESSAGE_QUEUE: usize = 16;
 
@@ -132,9 +133,7 @@ fn main() -> anyhow::Result<()> {
     stream
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
         .context("could not set the snapshot read timeout")?;
-    let mut writer = stream
-        .try_clone()
-        .context("could not clone the server socket for commands")?;
+    let mut writer = command_writer(&stream)?;
     let mut reader = BufReader::new(stream);
     let mut snapshot = read_snapshot(&mut reader)?;
     let mut state = initial(&snapshot);
@@ -265,6 +264,16 @@ fn send_command(writer: &mut TcpStream, command: protocol::Command) -> anyhow::R
     .context("could not write client command")?;
     writer.flush().context("could not flush client command")?;
     Ok(())
+}
+
+fn command_writer(stream: &TcpStream) -> anyhow::Result<TcpStream> {
+    let writer = stream
+        .try_clone()
+        .context("could not clone the server socket for commands")?;
+    writer
+        .set_write_timeout(Some(COMMAND_WRITE_TIMEOUT))
+        .context("could not set the command write timeout")?;
+    Ok(writer)
 }
 
 fn frame_size() -> (u16, u16) {
@@ -439,7 +448,7 @@ fn apply(snapshot: &mut Snapshot, delta: Delta) {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{io::Cursor, net::TcpListener};
 
     use protocol::{
         Delta, Dims, Entity, EntityKind, JobState, Material, MessageType, Speed, Tile, TileChange,
@@ -567,5 +576,18 @@ mod tests {
         let mut reader = Cursor::new(SNAPSHOT_LINE.trim_end().as_bytes());
 
         assert!(read_snapshot(&mut reader).is_err());
+    }
+
+    #[test]
+    fn command_writer_has_a_thirty_second_timeout() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind loopback listener");
+        let stream = TcpStream::connect(listener.local_addr().unwrap()).expect("connect client");
+
+        let writer = command_writer(&stream).expect("clone bounded command writer");
+
+        assert_eq!(
+            writer.write_timeout().expect("read write timeout"),
+            Some(Duration::from_secs(30))
+        );
     }
 }
