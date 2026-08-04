@@ -11,3 +11,4 @@ Per-phase, per-tool, per-model cost for this story. Rows are **deltas** — each
 | dev-selfgate | codex | gpt-5.6-sol | 24 | 105,652 | 0 | 1,374,208 | 16,041 | 1,495,901 | $1.70 | `rollout-2026-08-04T13-45-52-019fcd06-0891-7060-b72c-383ee8cb4a7a.jsonl` | 2026-08-04 14:42 UTC · rates 2026-08-01 |
 | dev-selfgate | codex | gpt-5.6-sol | 24 | 129,352 | 0 | 1,384,448 | 14,680 | 1,528,480 | $1.78 | `rollout-2026-08-04T13-59-50-019fcd12-d2a0-73d1-89ea-44b5cae52e55.jsonl` | 2026-08-04 14:42 UTC · rates 2026-08-01 |
 | dev-selfgate | codex | gpt-5.6-sol | 23 | 131,647 | 0 | 1,510,656 | 11,104 | 1,653,407 | $1.75 | `rollout-2026-08-04T14-11-49-019fcd1d-cbce-7be1-bce7-a14c81b33579.jsonl` | 2026-08-04 14:42 UTC · rates 2026-08-01 |
+| review | claude | claude-opus-5 | 261 | 481 | 1,272,007 | 47,204,849 | 223,551 | 48,700,888 | $37.14 | `a767e12c-02f1-41e6-a218-d52e894e0a74.jsonl` | 2026-08-04 18:38 UTC · rates 2026-08-01 |
