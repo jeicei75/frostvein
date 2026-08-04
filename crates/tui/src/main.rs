@@ -89,7 +89,9 @@ fn main() -> anyhow::Result<()> {
                 "space" => KeyCode::Char(' '),
                 "+" => KeyCode::Char('+'),
                 "-" => KeyCode::Char('-'),
-                _ => bail!("invalid --key value {text:?}: expected space, +, or -"),
+                "S" => KeyCode::Char('S'),
+                "L" => KeyCode::Char('L'),
+                _ => bail!("invalid --key value {text:?}: expected space, +, -, S, or L"),
             });
             expect_key = false;
             continue;
@@ -121,7 +123,7 @@ fn main() -> anyhow::Result<()> {
         bail!("--frames requires a count, e.g. --frames 3");
     }
     if expect_key {
-        bail!("--key requires space, +, or -");
+        bail!("--key requires space, +, -, S, or L");
     }
     if key.is_some() && frames.is_none() {
         bail!("--key requires --frames");

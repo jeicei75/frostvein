@@ -197,6 +197,119 @@ fn captured_ticks(status_lines: &[String]) -> Vec<u64> {
         .collect()
 }
 
+fn capture_load_frames(send_load: bool) -> Vec<String> {
+    const SAVED_TICK: u64 = 3;
+    const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind load stub daemon");
+    let port = listener
+        .local_addr()
+        .expect("read load stub daemon address")
+        .port();
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tui"));
+    command
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("4")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if send_load {
+        command.arg("--key").arg("L");
+    }
+    let mut child = command.spawn().expect("spawn tui load capture");
+
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(snapshot_line().as_bytes())
+            .expect("send initial stub snapshot");
+        stream
+            .write_all(delta_line(SNAPSHOT_TICK + 1).as_bytes())
+            .expect("send pre-load climbing delta");
+
+        if send_load {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("bound load command read");
+            let read_stream = stream.try_clone().expect("clone load stub read half");
+            let mut reader = BufReader::new(read_stream);
+            let mut line = String::new();
+            let bytes = (&mut reader)
+                .take(4 * 1024)
+                .read_line(&mut line)
+                .expect("read load command");
+            assert!(
+                bytes > 0 && line.ends_with('\n'),
+                "missing NDJSON load command: {line:?}"
+            );
+            assert_eq!(
+                serde_json::from_str::<protocol::Command>(&line).expect("decode load command"),
+                protocol::Command::Load
+            );
+
+            let mut saved = serde_json::from_str::<protocol::Snapshot>(&snapshot_line())
+                .expect("decode stub snapshot fixture");
+            saved.tick = SAVED_TICK;
+            stream
+                .write_all(
+                    format!(
+                        "{}\n",
+                        serde_json::to_string(&saved).expect("encode saved stub snapshot")
+                    )
+                    .as_bytes(),
+                )
+                .expect("send load snapshot");
+            for tick in SAVED_TICK + 1..=SAVED_TICK + 2 {
+                stream
+                    .write_all(delta_line(tick).as_bytes())
+                    .expect("send post-load climbing delta");
+            }
+        } else {
+            for tick in SNAPSHOT_TICK + 2..=SNAPSHOT_TICK + 4 {
+                stream
+                    .write_all(delta_line(tick).as_bytes())
+                    .expect("send uninterrupted climbing delta");
+            }
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stdout)
+        .expect("read bounded tui stdout");
+    assert!(
+        stdout.len() as u64 <= MAX_CAPTURE_BYTES,
+        "tui stdout exceeded the capture bound"
+    );
+    let status = child.wait().expect("wait for tui load capture");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stderr)
+        .expect("read bounded tui stderr");
+    assert!(
+        stderr.len() as u64 <= MAX_CAPTURE_BYTES,
+        "tui stderr exceeded the capture bound"
+    );
+    server.join().expect("load stub daemon thread panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+
+    stdout
+        .lines()
+        .map(strip_ansi)
+        .filter(|line| line.starts_with("tick "))
+        .collect()
+}
+
 #[test]
 fn key_space_freezes_the_streamed_frame_tick_and_reports_paused() {
     let status_lines = capture_speed_frames(Some("space"));
@@ -210,6 +323,20 @@ fn streamed_frame_ticks_climb_when_no_key_is_sent() {
     let status_lines = capture_speed_frames(None);
 
     assert_eq!(captured_ticks(&status_lines), vec![8, 9, 10]);
+}
+
+#[test]
+fn key_l_rewinds_captured_ticks_then_they_climb_from_the_saved_tick() {
+    let status_lines = capture_load_frames(true);
+
+    assert_eq!(captured_ticks(&status_lines), vec![8, 3, 4, 5]);
+}
+
+#[test]
+fn load_capable_stub_climbs_monotonically_when_no_key_is_sent() {
+    let status_lines = capture_load_frames(false);
+
+    assert_eq!(captured_ticks(&status_lines), vec![8, 9, 10, 11]);
 }
 
 const WIDE_DIMS: protocol::Dims = protocol::Dims { x: 16, y: 16, z: 1 };

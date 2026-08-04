@@ -170,16 +170,16 @@ so that a session can end without the fortress being lost.
         observable for `S` is the daemon's log line and the file; for `L` it is the tick
         jumping back on screen.
 
-- [ ] **Observability instrument** (AC: 11) — extend `tui --frames N --key`, do not invent a
+- [x] **Observability instrument** (AC: 11) — extend `tui --frames N --key`, do not invent a
       second channel. `--key` accepts `S` and `L` alongside `space`/`+`/`-` (update the parse
       arm and its error text).
-  - [ ] Two tests in `crates/tui/tests/client.rs`, real binary against a stub daemon that
+  - [x] Two tests in `crates/tui/tests/client.rs`, real binary against a stub daemon that
         streams climbing deltas and, on reading a `{"type":"load"}` line, sends a snapshot at
         an earlier tick and then resumes climbing from it: with `--key L` the captured ticks
         jump back to that tick; with no `--key` they climb monotonically and never jump back.
         The second is the mutation guard on the first — an instrument that rendered a stale
         first snapshot forever would satisfy the first alone.
-  - [ ] This is also the only automated proof of AC10: `stream_frames` adopting a mid-stream
+  - [x] This is also the only automated proof of AC10: `stream_frames` adopting a mid-stream
         snapshot is the same arm the interactive loop uses.
 
 - [ ] **Sabotage + mutation set** (AC: 12)
@@ -514,6 +514,22 @@ OpenAI GPT-5 Codex
     right: Command(Load)
   test result: FAILED. 0 passed; 1 failed
   ```
+- Observability instrument RED and sabotage:
+  ```text
+  before --key L parsing: key_l_rewinds_captured_ticks_then_they_climb_from_the_saved_tick ... FAILED
+    tui did not connect to stub daemon within 3s
+  command write removed: key_l_rewinds_captured_ticks_then_they_climb_from_the_saved_tick ... FAILED
+    read load command: Os { code: 11, kind: WouldBlock, message: "Resource temporarily unavailable" }
+  mid-stream snapshot ignored: assertion `left == right` failed
+    left: [8, 8, 4, 5]
+    right: [8, 3, 4, 5]
+  CLI L mapped through S: stub command assertion failed
+    left: Save
+    right: Load
+  streamed deltas ignored (no-key mutation guard): assertion `left == right` failed
+    left: [7, 7, 7, 7]
+    right: [8, 9, 10, 11]
+  ```
 
 ### Completion Notes List
 
@@ -531,6 +547,9 @@ OpenAI GPT-5 Codex
 - Added speed-independent uppercase `S`/`L` actions while preserving local `q` behavior,
   camera and z-level across live snapshots, and the unchanged 80-column status line. All
   TUI unit/integration tests and clippy pass.
+- Extended `--frames --key` through the real keymap and bounded write half for `S`/`L`.
+  The real-binary stub capture proves `[8, 3, 4, 5]` after load versus monotonic
+  `[8, 9, 10, 11]` without a key. All 8 client integration tests pass.
 
 ### File List
 
@@ -547,6 +566,7 @@ OpenAI GPT-5 Codex
 - crates/simd/tests/serve.rs
 - crates/tui/src/main.rs
 - crates/tui/src/view.rs
+- crates/tui/tests/client.rs
 
 ## Change Log
 
