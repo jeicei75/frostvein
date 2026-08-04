@@ -16,6 +16,8 @@ _bmad/custom/*
 
 # --- Rust ---
 /target
+/frostvein.save
+/frostvein.save.tmp
 
 # --- secrets ---
 .env*
