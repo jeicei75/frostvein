@@ -194,6 +194,33 @@ assert old in s
 p.write_text(s.replace(old, ''))
 PY
 
+mutation "load accepts the maximum tick" simd boundary_tick_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        if save.tick == u64::MAX {
+            bail!("save tick {} cannot advance", save.tick);
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts an out-of-bounds dwarf" simd out_of_bounds_dwarf_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = "            if !in_bounds(dwarf.pos) {\n"
+assert old in s
+p.write_text(s.replace(old, "            if false {\n"))
+PY
+
+mutation "load accepts an out-of-bounds dwarf home" simd out_of_bounds_dwarf_home_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = "            if !in_bounds(dwarf.home) {\n"
+assert old in s
+p.write_text(s.replace(old, "            if false {\n"))
+PY
+
 mutation "S maps to Load" tui speed_keys_follow_the_pinned_step_table_and_clamp <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()

@@ -339,6 +339,89 @@ fn inconsistent_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn boundary_tick_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.tick = u64::MAX;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode boundary-tick save fixture"),
+    )
+    .expect("write boundary-tick save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save tick 18446744073709551615 cannot advance"),
+        "unexpected boundary-tick log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn out_of_bounds_dwarf_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[0].pos.x = i32::MAX;
+    state.dwarves[0].cooldown = 0;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds dwarf save fixture"),
+    )
+    .expect("write out-of-bounds dwarf save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save dwarf 0 position 2147483647,84,15 is outside dims 128x128x32"),
+        "unexpected out-of-bounds dwarf log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn out_of_bounds_dwarf_home_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[0].home.x = i32::MIN;
+    state.dwarves[0].cooldown = 0;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds dwarf-home fixture"),
+    )
+    .expect("write out-of-bounds dwarf-home fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save dwarf 0 home -2147483648,84,15 is outside dims 128x128x32"),
+        "unexpected out-of-bounds dwarf-home log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
 fn oversized_save_is_logged_and_the_daemon_keeps_ticking() {
     const OVERSIZED: usize = 16 * 1024 * 1024 + 1;
 

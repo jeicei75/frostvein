@@ -502,6 +502,12 @@ OpenAI GPT-5 Codex
     unexpected oversized-save log: ... EOF while parsing a value at line 1 column 16777217
   tile-count validation absent: inconsistent_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
     unexpected inconsistent-save log:
+  maximum-tick validation absent: boundary_tick_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+    unexpected boundary-tick log:
+  dwarf-position validation absent: out_of_bounds_dwarf_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+    unexpected out-of-bounds dwarf log:
+  dwarf-home validation absent: out_of_bounds_dwarf_home_is_logged_and_the_daemon_keeps_ticking ... FAILED
+    unexpected out-of-bounds dwarf-home log:
   ```
 - TUI keymap RED and mapping sabotage:
   ```text
@@ -552,6 +558,9 @@ OpenAI GPT-5 Codex
   daemon save read limit is widened                            KILLED
   failed load panics the daemon                                KILLED
   load skips tile-count validation                             KILLED
+  load accepts the maximum tick                                KILLED
+  load accepts an out-of-bounds dwarf                          KILLED
+  load accepts an out-of-bounds dwarf home                     KILLED
   S maps to Load                                               KILLED
   L maps to Save                                               KILLED
   frames key path never writes its command                     KILLED
@@ -565,7 +574,7 @@ OpenAI GPT-5 Codex
   ```
 - Final clean gate after mutation artifacts were removed for all four packages:
   ```text
-  Removed 4615 files, 1.4GiB total
+  Removed 4622 files, 1.4GiB total
   frostvein gate
     cargo fmt --check           ok
     cargo clippy -D warnings    ok
@@ -601,15 +610,15 @@ OpenAI GPT-5 Codex
   rejection. All three discriminator mappings were independently sabotaged and went RED.
 - Added bounded atomic daemon saves, bounded loads, authoritative load snapshots to every
   client, and clean quit. A hermetic temp-cwd harness proves rewind, file decode, missing,
-  corrupt, inconsistent, oversized and unwritable failures, continued ticking, EOF, and exit 0. All 24
-  live-daemon tests and `simd` clippy pass.
+  corrupt, inconsistent, boundary-scalar, out-of-bounds entity, oversized and unwritable
+  failures, continued ticking, EOF, and exit 0. All 27 live-daemon tests and `simd` clippy pass.
 - Added speed-independent uppercase `S`/`L` actions while preserving local `q` behavior,
   camera and z-level across live snapshots, and the unchanged 80-column status line. All
   TUI unit/integration tests and clippy pass.
 - Extended `--frames --key` through the real keymap and bounded write half for `S`/`L`.
   The real-binary stub capture proves `[8, 3, 4, 5]` after load versus monotonic
   `[8, 9, 10, 11]` without a key. All 8 client integration tests pass.
-- Authored and ran 24 required/expanded mutations; the final serial run reported zero
+- Authored and ran 27 required/expanded mutations; the final serial run reported zero
   survivors and no apply failures.
 - Ran the clean final gate successfully and manually observed save, rewind, two-client
   broadcast, save-file creation, wire quit, client EOF, and daemon exit 0. The full-screen
@@ -619,6 +628,10 @@ OpenAI GPT-5 Codex
   red-then-green integration test and killed mutation. Its unbounded command-backlog finding
   was not changed because the story explicitly excludes backpressure work and the channel
   predates this story.
+- Re-ran review after that patch; it identified maximum ticks and extreme dwarf coordinates
+  as two remaining post-load panic paths. Maximum-tick, dwarf-position, and dwarf-home guards
+  now reject those files while retaining the old world, each with red-then-green live-daemon
+  evidence and an independently killed mutation.
 
 ### File List
 
@@ -645,3 +658,4 @@ OpenAI GPT-5 Codex
 | 2026-08-04 | Story created |
 | 2026-08-04 | Implemented deterministic save/load, daemon lifecycle commands, TUI controls, live rewind instrumentation, and zero-survivor mutation coverage. |
 | 2026-08-04 | Rejected inconsistent save dimensions after adversarial review and extended the mutation proof to 24 killed cases. |
+| 2026-08-04 | Rejected boundary ticks and out-of-bounds dwarf state after final review and extended the mutation proof to 27 killed cases. |

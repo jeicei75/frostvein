@@ -238,6 +238,45 @@ fn load_world() -> Option<sim_core::World> {
                 save.dims.z
             );
         }
+        if save.tick == u64::MAX {
+            bail!("save tick {} cannot advance", save.tick);
+        }
+        let in_bounds = |pos: sim_core::Pos| {
+            pos.x >= 0
+                && pos.y >= 0
+                && pos.z >= 0
+                && pos.x < i32::MAX
+                && pos.y < i32::MAX
+                && (pos.x as u32) < save.dims.x
+                && (pos.y as u32) < save.dims.y
+                && (pos.z as u32) < save.dims.z
+        };
+        for dwarf in &save.dwarves {
+            if !in_bounds(dwarf.pos) {
+                bail!(
+                    "save dwarf {} position {},{},{} is outside dims {}x{}x{}",
+                    dwarf.id,
+                    dwarf.pos.x,
+                    dwarf.pos.y,
+                    dwarf.pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+            if !in_bounds(dwarf.home) {
+                bail!(
+                    "save dwarf {} home {},{},{} is outside dims {}x{}x{}",
+                    dwarf.id,
+                    dwarf.home.x,
+                    dwarf.home.y,
+                    dwarf.home.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
         Ok(sim_core::World::from_save(save))
     })();
 
