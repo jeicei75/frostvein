@@ -150,7 +150,7 @@ so that the session bends to my rhythm.
         the table.
   - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent
         Record (AGENTS.md rule 1).
-- [ ] **Green gate** (AC: 11) — `scripts/gate.sh`, then the live check. Report what printed.
+- [x] **Green gate** (AC: 11) — `scripts/gate.sh`, then the live check. Report what printed.
 
 ## Dev Notes
 
@@ -563,6 +563,52 @@ OpenAI Codex (GPT-5)
   All mutations killed.
   ```
 
+- Final gate after clearing stale mutation build artifacts (`cargo clean -p protocol -p simd -p tui`):
+
+  ```text
+  frostvein gate
+    cargo fmt --check           ok
+    cargo clippy -D warnings    ok
+    cargo test                  ok
+    tui has no sim-core edge    ok
+  GATE GREEN
+  ```
+
+- Mutation-runner diagnostic: the first post-mutation manual `cargo run` exposed a stale
+  mutated `simd` artifact (`bridge::delta` warned that `speed` was unused) even though the
+  restored source and git diff were correct. `scripts/mutate.sh` restores source timestamps,
+  so Cargo had reused the last mutation build. Removed only the `protocol`, `simd`, and `tui`
+  package artifacts, reran the gate from a forced rebuild, and observed the green output above.
+
+- Manual live check, real `simd` + real `tui` binaries (`NO_COLOR` warned as expected; speed
+  and tick are plain glyphs and remained observable):
+
+  ```text
+  normal capture tail:
+  tick 71  normal
+  tick 72  normal
+  tick 73  normal
+  tick 74  normal
+  tick 75  normal
+
+  paused capture tail after --key space:
+  tick 147  paused
+  tick 147  paused
+  tick 147  paused
+  tick 147  paused
+  tick 147  paused
+
+  --key + from paused tail: tick 186..190  normal
+  second --key + tail:      tick 206..210  fast
+  --key - from fast tail:   tick 232..233  normal
+  second --key - tail:      tick 238       paused (five identical frames)
+
+  simultaneous real clients:
+  observer first: tick 1338 paused (five identical frames)
+  controller tail after +: tick 1349..1353 normal
+  observer later: tick 1529..1538 normal
+  ```
+
 ### Completion Notes List
 
 - Added the one-variant, internally tagged `protocol::Command` wire type and pinned its literal `set_speed` JSON contract, including unknown-command rejection.
@@ -572,6 +618,7 @@ OpenAI Codex (GPT-5)
 - Replaced the status line with the compact authoritative speed/z/dwarf/key format and pinned all three wire speed names plus rendered width at tick 9999999. This closes the recorded deferred status-line overflow item.
 - Extended the existing `--frames` evidence channel with `--key <space|+|->`, routing the synthetic key through real `apply_key` and the real socket write path before streaming. Real-binary tests prove Space freezes/reporting paused and that no-key captures still climb.
 - Authored and ran twelve production sabotages covering the command wire, daemon decision seam, cadence boundaries, bridge speed, TUI mappings/status, write path, and observability mutation guard; zero survived.
+- Manual cross-binary verification joined the real daemon and TUI: normal climbed, Space froze tick, + stepped through normal/fast, - stepped through normal/paused, and a persistent second client adopted the controller's speed change.
 
 ### File List
 
@@ -590,3 +637,4 @@ OpenAI Codex (GPT-5)
 | Date | Change |
 | --- | --- |
 | 2026-08-04 | Story created |
+| 2026-08-04 | Implemented authoritative pause/normal/fast control across protocol, daemon, and TUI with live-daemon, real-binary instrument, mutation, gate, and manual verification. |
