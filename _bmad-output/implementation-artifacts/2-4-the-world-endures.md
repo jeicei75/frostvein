@@ -502,7 +502,7 @@ OpenAI GPT-5 Codex
     unexpected oversized-save log: ... EOF while parsing a value at line 1 column 16777217
   tile-count validation absent: inconsistent_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
     unexpected inconsistent-save log:
-  maximum-tick validation absent: boundary_tick_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+  supported-tick-range validation absent: boundary_tick_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
     unexpected boundary-tick log:
   dwarf-position validation absent: out_of_bounds_dwarf_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
     unexpected out-of-bounds dwarf log:
@@ -558,7 +558,7 @@ OpenAI GPT-5 Codex
   daemon save read limit is widened                            KILLED
   failed load panics the daemon                                KILLED
   load skips tile-count validation                             KILLED
-  load accepts the maximum tick                                KILLED
+  load widens the supported tick range                         KILLED
   load accepts an out-of-bounds dwarf                          KILLED
   load accepts an out-of-bounds dwarf home                     KILLED
   S maps to Load                                               KILLED
@@ -574,7 +574,7 @@ OpenAI GPT-5 Codex
   ```
 - Final clean gate after mutation artifacts were removed for all four packages:
   ```text
-  Removed 4622 files, 1.4GiB total
+  Removed 4633 files, 1.4GiB total
   frostvein gate
     cargo fmt --check           ok
     cargo clippy -D warnings    ok
@@ -632,6 +632,9 @@ OpenAI GPT-5 Codex
   as two remaining post-load panic paths. Maximum-tick, dwarf-position, and dwarf-home guards
   now reject those files while retaining the old world, each with red-then-green live-daemon
   evidence and an independently killed mutation.
+- The next review tightened the tick finding to include near-overflow values. Loads now cap
+  the supported range at `u64::MAX / 2`, leaving roughly 29 billion years of 10 Hz headroom;
+  widening that boundary is independently killed by the boundary-tick test.
 
 ### File List
 
@@ -659,3 +662,4 @@ OpenAI GPT-5 Codex
 | 2026-08-04 | Implemented deterministic save/load, daemon lifecycle commands, TUI controls, live rewind instrumentation, and zero-survivor mutation coverage. |
 | 2026-08-04 | Rejected inconsistent save dimensions after adversarial review and extended the mutation proof to 24 killed cases. |
 | 2026-08-04 | Rejected boundary ticks and out-of-bounds dwarf state after final review and extended the mutation proof to 27 killed cases. |
+| 2026-08-04 | Capped loaded ticks to a safe operational range after review reproduced a near-overflow crash. |

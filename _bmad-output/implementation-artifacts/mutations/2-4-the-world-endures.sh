@@ -194,15 +194,12 @@ assert old in s
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "load accepts the maximum tick" simd boundary_tick_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+mutation "load widens the supported tick range" simd boundary_tick_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''        if save.tick == u64::MAX {
-            bail!("save tick {} cannot advance", save.tick);
-        }
-'''
+old = "const MAX_LOAD_TICK: u64 = u64::MAX / 2;\n"
 assert old in s
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, "const MAX_LOAD_TICK: u64 = u64::MAX;\n"))
 PY
 
 mutation "load accepts an out-of-bounds dwarf" simd out_of_bounds_dwarf_save_is_logged_and_the_daemon_keeps_ticking <<'PY'

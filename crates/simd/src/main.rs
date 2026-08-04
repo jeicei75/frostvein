@@ -22,6 +22,8 @@ const FAST_TICK_PERIOD: Duration = Duration::from_millis(20);
 const CLIENT_QUEUE: usize = 16;
 const SAVE_PATH: &str = "frostvein.save";
 const MAX_SAVE_BYTES: u64 = 16 * 1024 * 1024;
+/// Leaves more than 29 billion years of 10 Hz ticks before arithmetic can overflow.
+const MAX_LOAD_TICK: u64 = u64::MAX / 2;
 
 /// Caps on what one misbehaving local client can cost the daemon. Phase one is
 /// localhost-only (NFR1), so these bound accidents — a buggy client — not attacks.
@@ -238,8 +240,11 @@ fn load_world() -> Option<sim_core::World> {
                 save.dims.z
             );
         }
-        if save.tick == u64::MAX {
-            bail!("save tick {} cannot advance", save.tick);
+        if save.tick > MAX_LOAD_TICK {
+            bail!(
+                "save tick {} exceeds supported maximum {MAX_LOAD_TICK}",
+                save.tick
+            );
         }
         let in_bounds = |pos: sim_core::Pos| {
             pos.x >= 0

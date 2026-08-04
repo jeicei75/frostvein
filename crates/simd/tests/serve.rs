@@ -342,7 +342,7 @@ fn inconsistent_save_is_logged_and_the_daemon_keeps_ticking() {
 fn boundary_tick_save_is_logged_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
-    state.tick = u64::MAX;
+    state.tick = u64::MAX - 1;
     fs::write(
         daemon.save_path(),
         serde_json::to_vec(&state).expect("encode boundary-tick save fixture"),
@@ -356,7 +356,9 @@ fn boundary_tick_save_is_logged_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let log = daemon.next_log();
     assert!(
-        log.contains("save tick 18446744073709551615 cannot advance"),
+        log.contains(
+            "save tick 18446744073709551614 exceeds supported maximum 9223372036854775807"
+        ),
         "unexpected boundary-tick log: {log}"
     );
 
