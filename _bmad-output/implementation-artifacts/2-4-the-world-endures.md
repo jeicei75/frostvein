@@ -4,7 +4,7 @@ baseline_commit: 7362850
 
 # Story 2.4: The World Endures
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -195,7 +195,7 @@ so that a session can end without the fortress being lost.
   - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent
         Record (AGENTS.md rule 1).
 
-- [ ] **Green gate** (AC: 12) — `scripts/gate.sh`, then the live check. Report what printed.
+- [x] **Green gate** (AC: 12) — `scripts/gate.sh`, then the live check. Report what printed.
 
 ## Dev Notes
 
@@ -560,6 +560,32 @@ OpenAI GPT-5 Codex
 
   All mutations killed.
   ```
+- Final clean gate after mutation artifacts were removed for all four packages:
+  ```text
+  Removed 5861 files, 1.7GiB total
+  frostvein gate
+    cargo fmt --check           ok
+    cargo clippy -D warnings    ok
+    cargo test                  ok
+    tui has no sim-core edge    ok
+  GATE GREEN
+  ```
+- Manual live instrument observation (real `simd` + real `tui` binaries):
+  ```text
+  --frames 5 --key S: 110, 111, 112, 113, 114
+  daemon log: saved tick 114 to frostvein.save
+  --frames 20 (no key): 284 through 303
+  --frames 20 --key L: 354, 355, 356, 357, 358, 114, 115 ... 128
+  frostvein.save: 6,910,454 bytes
+  two bounded raw clients: before [435, 435], load snapshots [114, 114]
+  raw quit client: EOF after 6,910,881 buffered bytes
+  daemon log: shutting down on client quit
+  daemon process exit: 0
+  ```
+- Manual full-screen interactive TUI (`cargo run -p tui`, physical S/L keypresses) was not
+  observed because this handoff terminal is non-interactive. The real binary headless key
+  path and two-client raw path above were observed; the full-screen visual step remains
+  explicitly unobserved.
 
 ### Completion Notes List
 
@@ -582,6 +608,9 @@ OpenAI GPT-5 Codex
   `[8, 9, 10, 11]` without a key. All 8 client integration tests pass.
 - Authored and ran 23 required/expanded mutations; the final serial run reported zero
   survivors and no apply failures.
+- Ran the clean final gate successfully and manually observed save, rewind, two-client
+  broadcast, save-file creation, wire quit, client EOF, and daemon exit 0. The full-screen
+  interactive rendering step was not observed in this non-interactive handoff.
 
 ### File List
 
@@ -606,3 +635,4 @@ OpenAI GPT-5 Codex
 | Date | Change |
 | --- | --- |
 | 2026-08-04 | Story created |
+| 2026-08-04 | Implemented deterministic save/load, daemon lifecycle commands, TUI controls, live rewind instrumentation, and zero-survivor mutation coverage. |
