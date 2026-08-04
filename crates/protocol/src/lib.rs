@@ -57,6 +57,9 @@ pub enum Speed {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
     SetSpeed { speed: Speed },
+    Save,
+    Load,
+    Quit,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -217,22 +220,29 @@ mod tests {
 
     #[test]
     fn decodes_and_reencodes_the_documented_command_wire_format() {
-        let command: Command = serde_json::from_str(COMMAND_WIRE)
-            .expect("the documented command wire format must decode");
-
-        assert_eq!(
-            command,
-            Command::SetSpeed {
-                speed: Speed::Paused
-            }
-        );
-        assert_eq!(
-            serde_json::to_value(command).unwrap(),
-            serde_json::from_str::<serde_json::Value>(COMMAND_WIRE).unwrap()
-        );
+        for (wire, expected) in [
+            (
+                COMMAND_WIRE,
+                Command::SetSpeed {
+                    speed: Speed::Paused,
+                },
+            ),
+            (r#"{"type":"save"}"#, Command::Save),
+            (r#"{"type":"load"}"#, Command::Load),
+            (r#"{"type":"quit"}"#, Command::Quit),
+        ] {
+            let command: Command =
+                serde_json::from_str(wire).expect("the documented command wire format must decode");
+            assert_eq!(command, expected);
+            assert_eq!(
+                serde_json::to_value(command).unwrap(),
+                serde_json::from_str::<serde_json::Value>(wire).unwrap()
+            );
+        }
         assert!(
             serde_json::from_str::<Command>(r#"{"type":"set_rate","speed":"paused"}"#).is_err()
         );
+        assert!(serde_json::from_str::<Command>(r#"{"type":"store"}"#).is_err());
     }
 
     #[test]
@@ -277,5 +287,12 @@ mod tests {
             .unwrap()["type"],
             "set_speed"
         );
+        for (value, wire) in [
+            (Command::Save, "save"),
+            (Command::Load, "load"),
+            (Command::Quit, "quit"),
+        ] {
+            assert_eq!(serde_json::to_value(value).unwrap()["type"], wire);
+        }
     }
 }

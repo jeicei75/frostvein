@@ -104,53 +104,53 @@ so that a session can end without the fortress being lost.
   - [x] Do NOT add a hand-written save-format literal test. Save-format stability is an
         explicit project non-goal; the round-trip through the real types is the contract.
 
-- [ ] **`protocol`: three unit commands** (AC: 4)
-  - [ ] `Command` gains `Save`, `Load`, `Quit` (internally tagged unit variants encode as
+- [x] **`protocol`: three unit commands** (AC: 4)
+  - [x] `Command` gains `Save`, `Load`, `Quit` (internally tagged unit variants encode as
         `{"type":"save"}`). Extend the existing literal test and
         `every_material_and_tile_variant_has_a_pinned_wire_name` with the three new `type`
         names, and keep the `{"type":"store"}` rejection assertion.
 
-- [ ] **`simd`: file I/O, broadcast-on-load, clean exit** (AC: 5, 6, 7, 8)
-  - [ ] `const SAVE_PATH: &str = "frostvein.save";` at use site (spine convention). The path
+- [x] **`simd`: file I/O, broadcast-on-load, clean exit** (AC: 5, 6, 7, 8)
+  - [x] `const SAVE_PATH: &str = "frostvein.save";` at use site (spine convention). The path
         is working-directory-relative and never comes from the client — a client-supplied
         path is a write-anywhere primitive.
-  - [ ] Extend the command drain's `match` with the three arms (skeleton below). `Quit`
+  - [x] Extend the command drain's `match` with the three arms (skeleton below). `Quit`
         returns `Ok(())` from `tick()`; `main` returns and the process exits 0, closing every
         client socket with it. Log `shutting down on client quit` first so `next_log()` has a
         signal.
-  - [ ] `save`: encode `world.to_save()`, write `{SAVE_PATH}.tmp`, `fs::rename` onto
+  - [x] `save`: encode `world.to_save()`, write `{SAVE_PATH}.tmp`, `fs::rename` onto
         `SAVE_PATH`. Rename is atomic on one filesystem, so a daemon killed mid-write leaves
         the previous save intact rather than a truncated file that decodes as nothing.
-  - [ ] `load`: decode the file into `sim_core::SaveState`, `World::from_save`, assign over
+  - [x] `load`: decode the file into `sim_core::SaveState`, `World::from_save`, assign over
         `world`, then encode one snapshot and `broadcast` it to `clients` immediately —
         before the accept loop and before the delta. New clients admitted later in the same
         iteration already encode from the new world (the accept loop runs after the drain).
-  - [ ] Both are fallible and neither may kill the daemon: on any error `eprintln!` and carry
+  - [x] Both are fallible and neither may kill the daemon: on any error `eprintln!` and carry
         on with the world untouched. Never `?` a save/load error out of `tick()`.
-  - [ ] `// NOTE:` the two known costs: encoding ~524k tiles stalls that one iteration
+  - [x] `// NOTE:` the two known costs: encoding ~524k tiles stalls that one iteration
         (~0.2 s, the same order as the connect snapshot), and speed is `simd` state so a load
         while paused leaves the loop paused on the loaded tick.
 
-- [ ] **`simd`: prove it against the live daemon** (AC: 5, 6, 7, 8) — `crates/simd/tests/serve.rs`
-  - [ ] Make the `Daemon` harness hermetic: spawn with `current_dir` set to a fresh unique
+- [x] **`simd`: prove it against the live daemon** (AC: 5, 6, 7, 8) — `crates/simd/tests/serve.rs`
+  - [x] Make the `Daemon` harness hermetic: spawn with `current_dir` set to a fresh unique
         directory under `std::env::temp_dir()`, keep the path on `Daemon`, remove it in
         `Drop`. No test may write into the repo tree, and two tests must never share one save
         file. Build the unique name from the bound port plus `process::id()` — no new crate.
-  - [ ] `save_then_load_rewinds_every_client`: two clients; one sends `save`; read the
+  - [x] `save_then_load_rewinds_every_client`: two clients; one sends `save`; read the
         `saved tick {t} to ...` log line and parse `t`; read deltas past `t + 10`; send
         `load`; assert **both** clients then receive a line whose `type` is `snapshot` with
         `tick == t`, strictly below the last delta tick each had seen. The logged tick is
         what makes this exact instead of racy.
-  - [ ] `saved_file_decodes_as_a_save_state`: read `frostvein.save` from the daemon's temp
+  - [x] `saved_file_decodes_as_a_save_state`: read `frostvein.save` from the daemon's temp
         cwd and `serde_json::from_str::<sim_core::SaveState>`; its tick equals the logged
         tick. (`simd`'s tests may use `sim_core` — the package depends on it.)
-  - [ ] `load_without_a_save_file_is_logged_and_the_daemon_keeps_ticking`: send `load` first
+  - [x] `load_without_a_save_file_is_logged_and_the_daemon_keeps_ticking`: send `load` first
         thing in a fresh cwd; assert an error log, then that deltas keep arriving with the
         tick still climbing and no snapshot line in between.
-  - [ ] `quit_exits_the_daemon_cleanly`: send `quit`; assert the client's socket reaches EOF
+  - [x] `quit_exits_the_daemon_cleanly`: send `quit`; assert the client's socket reaches EOF
         and the child exits with success within `IO_TIMEOUT` (add a `wait_for_exit` helper;
         `Drop`'s `kill()` on an already-exited child is a harmless `Err`).
-  - [ ] Re-run unmodified: `malformed_input_is_dropped_and_daemon_survives`,
+  - [x] Re-run unmodified: `malformed_input_is_dropped_and_daemon_survives`,
         `non_utf8_input_does_not_close_the_connection`,
         `oversized_line_is_refused_without_killing_the_daemon`, and 2.3's speed tests. If any
         needs editing, an earlier contract has been broken.
@@ -469,6 +469,38 @@ OpenAI GPT-5 Codex
     left: [4, 3, 2, 1, 0]
     right: [0, 1, 2, 3, 4]
   ```
+- Protocol command API RED (`cargo test --offline -p protocol
+  decodes_and_reencodes_the_documented_command_wire_format`):
+  ```text
+  error[E0599]: no variant, associated function, or constant named `Save` found for enum `Command`
+  error[E0599]: no variant, associated function, or constant named `Load` found for enum `Command`
+  error[E0599]: no variant, associated function, or constant named `Quit` found for enum `Command`
+  error: could not compile `protocol` (lib test) due to 6 previous errors
+  ```
+- Wire-discriminator sabotage REDs:
+  ```text
+  Save renamed to store: unknown variant `save`, expected one of `set_speed`, `store`, `load`, `quit`
+  Load renamed to restore: unknown variant `load`, expected one of `set_speed`, `save`, `restore`, `quit`
+  Quit renamed to exit: unknown variant `quit`, expected one of `set_speed`, `save`, `load`, `exit`
+  test result: FAILED. 0 passed; 1 failed
+  ```
+- Daemon behavior RED and decision-seam sabotage:
+  ```text
+  decoded-but-ignored Save: saved_file_decodes_as_a_save_state ... FAILED
+    daemon logged nothing within 10s
+  Load without snapshot broadcast: save_then_load_rewinds_every_client ... FAILED
+    daemon did not broadcast a snapshot within four lines
+  ignored Quit: quit_exits_the_daemon_cleanly ... FAILED
+    daemon logged nothing within 10s
+  panicking corrupt-load path: undecodable_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+    unexpected corrupt-save log
+  panicking unwritable-save path: unwritable_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+    unexpected save error log
+  SAVE_PATH changed to other.save: saved_file_decodes_as_a_save_state ... FAILED
+    saved file must exist: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+  MAX_SAVE_BYTES widened 16 MiB -> 17 MiB: oversized_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+    unexpected oversized-save log: ... EOF while parsing a value at line 1 column 16777217
+  ```
 
 ### Completion Notes List
 
@@ -477,6 +509,12 @@ OpenAI GPT-5 Codex
 - Added the exact `SaveState`/`SavedDwarf` state, a shared world assembly path, and faithful
   save/load restoration. The public-API 200-tick scenario, allocator, clean-dirty-set, and
   stable dwarf ordering tests pass; every hidden restoration seam was sabotaged and went RED.
+- Added the literal `save`, `load`, and `quit` command discriminators plus explicit `store`
+  rejection. All three discriminator mappings were independently sabotaged and went RED.
+- Added bounded atomic daemon saves, bounded loads, authoritative load snapshots to every
+  client, and clean quit. A hermetic temp-cwd harness proves rewind, file decode, missing,
+  corrupt, oversized and unwritable failures, continued ticking, EOF, and exit 0. All 23
+  live-daemon tests and `simd` clippy pass.
 
 ### File List
 
@@ -488,6 +526,9 @@ OpenAI GPT-5 Codex
 - crates/sim-core/src/lib.rs
 - crates/sim-core/src/save.rs
 - crates/sim-core/tests/save_load.rs
+- crates/protocol/src/lib.rs
+- crates/simd/src/main.rs
+- crates/simd/tests/serve.rs
 
 ## Change Log
 
