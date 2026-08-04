@@ -162,3 +162,25 @@ names where it came from and what should trigger revisiting it.
   explicitly forbid; Wolf's call at review was to accept it now with an accurate `// NOTE:`.
   **Revisit at Story 3.1**, which already owns the pause/command-consumption split and is the
   natural home for client-side command state [crates/tui/src/view.rs:180-195].
+
+## Deferred from: code review of 2-4-the-world-endures (2026-08-04)
+
+- **No in-UI affordance for `Command::Quit` (owner: Story 3.1).** The wire command, the daemon arm
+  and the clean shutdown all work — `quit` logs `shutting down on client quit`, exits 0, and every
+  connected client sees EOF. But nothing in the shipped client can send it: AC9 deliberately forbids
+  a client quit key, because a shared daemon must not die from one viewer's keypress. The result is
+  that the status line advertises only `q quit`, `q` closes the client while the daemon keeps
+  ticking, and the only way to stop the daemon is a raw TCP client (the story's own Verification
+  section uses `nc`). Spec-sanctioned, so not patched at 2.4. **Revisit at Story 3.1**, which owns
+  FR21's hint bar and is the natural place to either surface a shutdown affordance or state plainly
+  that the daemon outlives the client [crates/tui/src/view.rs:222].
+
+- **`MAX_SAVE_BYTES` and `Dims::DEFAULT` are not tied together.** The read cap and the write refusal
+  share one constant, so those two cannot diverge by edit — but neither is connected to world size.
+  The live save is 6,910,452 bytes against a 16,777,216-byte cap: 2.4x headroom. Grow the default
+  world past roughly that factor and `save_world` starts refusing every save while still logging,
+  so the fortress silently stops being savable. The suite does catch it —
+  `saved_file_decodes_as_a_save_state` fails with `saved file must exist` — but that message points
+  at the wrong thing entirely, so whoever bumps `Dims::DEFAULT` will not learn why. **Revisit when a
+  story changes world dimensions**; the cheap fix is one assertion tying the default world's encoded
+  size to the cap [crates/simd/src/main.rs:24].

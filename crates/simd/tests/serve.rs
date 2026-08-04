@@ -1,10 +1,13 @@
 use std::{
     fs,
     io::{BufRead, BufReader, Read, Write},
-    net::{Shutdown, SocketAddr, TcpListener, TcpStream},
+    net::{Shutdown, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::mpsc::{self, Receiver, RecvTimeoutError},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc::{self, Receiver, RecvTimeoutError},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -41,18 +44,19 @@ fn line_channel<R: Read + Send + 'static>(reader: R) -> Receiver<String> {
 
 impl Daemon {
     fn spawn() -> Self {
-        let reservation = TcpListener::bind(("127.0.0.1", 0)).expect("reserve daemon port");
-        let port = reservation
-            .local_addr()
-            .expect("read reserved daemon port")
-            .port();
-        drop(reservation);
+        // NOTE: let the daemon bind port 0 itself rather than reserving a port here and passing
+        // the number on. Reserving meant dropping the listener before the child could bind it,
+        // and with this many daemon tests running in parallel another test claimed that port in
+        // the gap often enough to turn the gate red about one run in four. The listening line is
+        // parsed below either way, so nothing here needs to know the port in advance.
+        static NEXT_DAEMON: AtomicUsize = AtomicUsize::new(0);
+        let unique = NEXT_DAEMON.fetch_add(1, Ordering::Relaxed);
         let dir =
-            std::env::temp_dir().join(format!("frostvein-simd-{}-{port}", std::process::id()));
+            std::env::temp_dir().join(format!("frostvein-simd-{}-{unique}", std::process::id()));
         fs::create_dir(&dir).expect("create unique daemon working directory");
 
         let mut child = Command::new(env!("CARGO_BIN_EXE_simd"))
-            .arg(port.to_string())
+            .arg("0")
             .current_dir(&dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -331,6 +335,33 @@ fn inconsistent_save_is_logged_and_the_daemon_keeps_ticking() {
     assert!(
         log.contains("save has 524287 tiles but dims 128x128x32 need 524288"),
         "unexpected inconsistent-save log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[1].id = state.dwarves[0].id;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode duplicate-id save fixture"),
+    )
+    .expect("write duplicate-id save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save reuses dwarf id 0"),
+        "unexpected duplicate-id log: {log}"
     );
 
     let first = read_delta(&mut reader).tick;

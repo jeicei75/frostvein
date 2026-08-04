@@ -358,6 +358,38 @@ mod tests {
         }
     }
 
+    // A real terminal can only deliver an uppercase `S`/`L` with SHIFT held, so the table above
+    // (which presses with `KeyModifiers::NONE`) does not exercise the path a user actually takes.
+    // Without this, tightening the modifier gate in `apply_key` would leave every test green while
+    // save and load stopped working in front of a human.
+    #[test]
+    fn save_and_load_keys_still_map_when_shift_is_held() {
+        let dims = Dims { x: 1, y: 1, z: 1 };
+        for (key, expected) in [
+            (KeyCode::Char('S'), Action::Command(Command::Save)),
+            (KeyCode::Char('L'), Action::Command(Command::Load)),
+        ] {
+            for speed in [Speed::Paused, Speed::Normal, Speed::Fast] {
+                let mut state = ViewState {
+                    camera: (0, 0),
+                    z: 0,
+                    confirming_quit: false,
+                };
+
+                assert_eq!(
+                    apply_key(
+                        &mut state,
+                        KeyEvent::new(key, KeyModifiers::SHIFT),
+                        dims,
+                        speed
+                    ),
+                    expected,
+                    "wrong action for SHIFT+{key:?} at {speed:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn renders_the_viewed_level() {
         let dims = Dims { x: 5, y: 3, z: 3 };

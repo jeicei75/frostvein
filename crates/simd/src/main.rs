@@ -4,6 +4,7 @@ mod bridge;
 
 use anyhow::{Context, bail};
 use std::{
+    collections::BTreeSet,
     fs,
     io::{BufRead, BufReader, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
@@ -250,13 +251,15 @@ fn load_world() -> Option<sim_core::World> {
             pos.x >= 0
                 && pos.y >= 0
                 && pos.z >= 0
-                && pos.x < i32::MAX
-                && pos.y < i32::MAX
                 && (pos.x as u32) < save.dims.x
                 && (pos.y as u32) < save.dims.y
                 && (pos.z as u32) < save.dims.z
         };
+        let mut seen_ids = BTreeSet::new();
         for dwarf in &save.dwarves {
+            if !seen_ids.insert(dwarf.id) {
+                bail!("save reuses dwarf id {}", dwarf.id);
+            }
             if !in_bounds(dwarf.pos) {
                 bail!(
                     "save dwarf {} position {},{},{} is outside dims {}x{}x{}",

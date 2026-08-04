@@ -4,7 +4,7 @@ baseline_commit: 7362850
 
 # Story 2.4: The World Endures
 
-Status: review
+Status: done
 
 ## Story
 
@@ -196,6 +196,40 @@ so that a session can end without the fortress being lost.
         Record (AGENTS.md rule 1).
 
 - [x] **Green gate** (AC: 12) — `scripts/gate.sh`, then the live check. Report what printed.
+
+### Review Findings
+
+- [x] [Review][Decision] **A save with duplicate dwarf ids is silently accepted and served forever** —
+      `load_world` validates dims/tile-count, `MAX_LOAD_TICK` and dwarf pos/home bounds, but never
+      that `save.dwarves` ids are unique; `World::from_save` spawns one entity per `SavedDwarf`
+      with no collision check. Reproduced independently three times (Edge Case Hunter live, Blind
+      Hunter by inspection, and by the reviewer): a save with `dwarves[1].id` rewritten to match
+      `dwarves[0]` loads clean and every subsequent snapshot and delta carries ids
+      `[0, 0, 2, 3, 4]` — no rejection log, no panic, indefinitely. Harmless today because `Id` is
+      never a map key and `next_id` is never consulted after load, so this is a semantic gap, not
+      a crash. The decision is scope, not mechanism: the fix is ~5 lines mirroring the checks
+      already beside it, but those checks are themselves beyond-spec, and YAGNI is policy here
+      [crates/simd/src/main.rs:259-284, crates/sim-core/src/lib.rs:313-344].
+- [x] [Review][Patch] Pinned keymap table asserts `S`/`L` with `KeyModifiers::NONE`, but a real
+      terminal only ever delivers uppercase with SHIFT — tighten the modifier gate and every test
+      stays green while the feature dies silently [crates/tui/src/view.rs:259,317-342]
+- [x] [Review][Patch] `--key S` has no automated test; only `--key L` and the no-key guard are
+      covered, though AC11 names both [crates/tui/tests/client.rs:218]
+- [x] [Review][Patch] Two unreachable conditions in `in_bounds` (`pos.x < i32::MAX`,
+      `pos.y < i32::MAX`) with no matching `pos.z` guard — the dims comparison below already
+      rejects everything they would [crates/simd/src/main.rs:249-258]
+- [x] [Review][Patch] `to_save`'s `filter_map` uses `?` on each component get, so a `Dwarf` entity
+      missing `Id`/`Pos`/`JobState`/`Wander` vanishes from the save with no diagnostic. Unreachable
+      today (both construction sites attach the full set); wants a `// NOTE:` naming the
+      precondition rather than a guard [crates/sim-core/src/lib.rs:283-299]
+- [x] [Review][Defer] No in-UI affordance for `Command::Quit` — deferred to Story 3.1. Correct per
+      AC9 (a shared daemon must not die from one viewer's keypress), but the status line advertises
+      only `q quit` and `q` leaves the daemon running with no in-client way to stop it
+      [crates/tui/src/view.rs:222]
+- [x] [Review][Defer] `MAX_SAVE_BYTES` (16 MiB) and `Dims::DEFAULT` can drift apart — deferred.
+      The live save is 6.9 MB, 2.4x headroom; grow the default world past that and `save_world`
+      refuses every save. The suite does catch it (`saved_file_decodes_as_a_save_state` fails on a
+      missing file) but with a message that never mentions the cap [crates/simd/src/main.rs:24]
 
 ## Dev Notes
 
@@ -653,6 +687,7 @@ OpenAI GPT-5 Codex
 - crates/tui/src/view.rs
 - crates/tui/tests/client.rs
 - _bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh
+- _bmad-output/implementation-artifacts/deferred-work.md
 
 ## Change Log
 
@@ -663,3 +698,5 @@ OpenAI GPT-5 Codex
 | 2026-08-04 | Rejected inconsistent save dimensions after adversarial review and extended the mutation proof to 24 killed cases. |
 | 2026-08-04 | Rejected boundary ticks and out-of-bounds dwarf state after final review and extended the mutation proof to 27 killed cases. |
 | 2026-08-04 | Capped loaded ticks to a safe operational range after review reproduced a near-overflow crash. |
+| 2026-08-04 | Applied code review: reject duplicate dwarf ids on load, pin the SHIFT keymap path, add a `--key S` instrument test, cut two unreachable bounds conditions, note `to_save`'s component precondition. |
+| 2026-08-04 | Fixed an intermittently red gate: the test harness reserved a port and dropped it before the daemon could bind, losing the race about one run in four. |

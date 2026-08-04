@@ -325,6 +325,106 @@ fn streamed_frame_ticks_climb_when_no_key_is_sent() {
     assert_eq!(captured_ticks(&status_lines), vec![8, 9, 10]);
 }
 
+// AC11 names `--key <S|L>`, so `S` needs its own proof that the real `apply_key` and the real
+// write half carry it to the daemon. `L` is proven by the rewind it causes; `S` changes nothing
+// the client can see, so the stub asserting the exact wire command is the only observable.
+fn capture_save_command() -> (protocol::Command, Vec<u64>) {
+    const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind save stub daemon");
+    let port = listener
+        .local_addr()
+        .expect("read save stub daemon address")
+        .port();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("3")
+        .arg("--key")
+        .arg("S")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tui save capture");
+
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(snapshot_line().as_bytes())
+            .expect("send stub snapshot");
+
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("bound save command read");
+        let read_stream = stream.try_clone().expect("clone save stub read half");
+        let mut reader = BufReader::new(read_stream);
+        let mut line = String::new();
+        let bytes = (&mut reader)
+            .take(4 * 1024)
+            .read_line(&mut line)
+            .expect("read save command");
+        assert!(
+            bytes > 0 && line.ends_with('\n'),
+            "missing NDJSON save command: {line:?}"
+        );
+        let command =
+            serde_json::from_str::<protocol::Command>(&line).expect("decode save command");
+
+        for tick in SNAPSHOT_TICK + 1..=SNAPSHOT_TICK + 3 {
+            stream
+                .write_all(delta_line(tick).as_bytes())
+                .expect("send post-save climbing delta");
+        }
+        thread::sleep(Duration::from_millis(500));
+        command
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stdout)
+        .expect("read bounded tui stdout");
+    assert!(
+        stdout.len() as u64 <= MAX_CAPTURE_BYTES,
+        "tui stdout exceeded the capture bound"
+    );
+    let status = child.wait().expect("wait for tui save capture");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stderr)
+        .expect("read bounded tui stderr");
+    assert!(
+        stderr.len() as u64 <= MAX_CAPTURE_BYTES,
+        "tui stderr exceeded the capture bound"
+    );
+    let command = server.join().expect("save stub daemon thread panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+
+    let status_lines: Vec<String> = stdout
+        .lines()
+        .map(strip_ansi)
+        .filter(|line| line.starts_with("tick "))
+        .collect();
+    (command, captured_ticks(&status_lines))
+}
+
+#[test]
+fn key_s_sends_save_and_leaves_the_streamed_ticks_climbing() {
+    let (command, ticks) = capture_save_command();
+
+    assert_eq!(command, protocol::Command::Save);
+    // The connect snapshot is the first captured frame; `save` must not disturb the stream.
+    assert_eq!(ticks, vec![8, 9, 10]);
+}
+
 #[test]
 fn key_l_rewinds_captured_ticks_then_they_climb_from_the_saved_tick() {
     let status_lines = capture_load_frames(true);

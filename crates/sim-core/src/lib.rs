@@ -286,6 +286,10 @@ impl World {
             .ecs
             .iter_entities()
             .filter(|entity| entity.contains::<Dwarf>())
+            // NOTE: a `Dwarf` missing any of these components is skipped rather than reported, so
+            // it would vanish from the save silently. Both construction sites (`spawn_dwarves` and
+            // `from_save`) attach the whole set together, so that cannot happen today; a story
+            // that spawns dwarves a third way must keep the set intact.
             .filter_map(|entity| {
                 let wander = entity.get::<Wander>()?;
                 Some(SavedDwarf {

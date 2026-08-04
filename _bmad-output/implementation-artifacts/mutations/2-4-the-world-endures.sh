@@ -281,3 +281,30 @@ old = "    Quit,\n"
 assert old in s
 p.write_text(s.replace(old, '    #[serde(rename = "exit")]\n    Quit,\n'))
 PY
+
+mutation "load skips the dwarf-id uniqueness check" simd duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = """            if !seen_ids.insert(dwarf.id) {
+                bail!("save reuses dwarf id {}", dwarf.id);
+            }
+"""
+assert old in s
+p.write_text(s.replace(old, "            seen_ids.insert(dwarf.id);\n"))
+PY
+
+mutation "apply_key rejects SHIFT" tui save_and_load_keys_still_map_when_shift_is_held <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = "    if !key.modifiers.difference(KeyModifiers::SHIFT).is_empty() {\n"
+assert old in s
+p.write_text(s.replace(old, "    if !key.modifiers.is_empty() {\n"))
+PY
+
+mutation "the frames key path sends save as load" tui key_s_sends_save_and_leaves_the_streamed_ticks_climbing <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
+old = '"S" => KeyCode::Char(\'S\'),'
+assert old in s
+p.write_text(s.replace(old, '"S" => KeyCode::Char(\'L\'),'))
+PY
