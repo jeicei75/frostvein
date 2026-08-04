@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
+mod save;
 mod worldgen;
+
+pub use save::{SaveState, SavedDwarf};
 
 use std::collections::BTreeSet;
 
@@ -13,6 +16,7 @@ use bevy_ecs::{
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use serde::{Deserialize, Serialize};
 
 const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
 const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
@@ -20,7 +24,7 @@ const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Material {
     Stone,
     Soil,
@@ -29,21 +33,21 @@ pub enum Material {
 }
 
 /// A voxel. `Empty` is air; `Solid` is wall/floor; `Ramp` is a walkable slope.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tile {
     Empty,
     Solid(Material),
     Ramp(Material),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Component)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Component, Serialize, Deserialize)]
 pub struct Pos {
     pub x: i32,
     pub y: i32,
     pub z: i32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dims {
     pub x: u32,
     pub y: u32,
@@ -65,7 +69,7 @@ pub struct Id(pub u32);
 #[derive(Component)]
 pub struct Dwarf;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Component)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Component, Serialize, Deserialize)]
 pub enum JobState {
     Idle,
     Walk,
@@ -215,6 +219,32 @@ pub struct World {
     seed: u64,
 }
 
+fn assemble(
+    seed: u64,
+    dims: Dims,
+    tiles: Vec<Tile>,
+    tick: u64,
+    wander_rng: ChaCha8Rng,
+    ids: IdAllocator,
+) -> World {
+    let mut ecs = EcsWorld::new();
+    ecs.insert_resource(Tick(tick));
+    ecs.insert_resource(WanderRng(wander_rng));
+    ecs.insert_resource(Terrain {
+        dims,
+        tiles,
+        dirty: BTreeSet::new(),
+    });
+    let mut schedule = Schedule::default();
+    schedule.add_systems((advance_tick, wander).chain());
+    World {
+        ecs,
+        schedule,
+        ids,
+        seed,
+    }
+}
+
 impl World {
     /// # Panics
     ///
@@ -238,24 +268,78 @@ impl World {
         worldgen::place_ramps(dims, &heights, &mut tiles);
         let mut spawn_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_SPAWN);
 
-        let mut ecs = EcsWorld::new();
-        ecs.insert_resource(Tick(0));
-        ecs.insert_resource(WanderRng(ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER)));
-        ecs.insert_resource(Terrain {
+        let mut world = assemble(
+            seed,
             dims,
             tiles,
-            dirty: BTreeSet::new(),
-        });
-        let mut schedule = Schedule::default();
-        schedule.add_systems((advance_tick, wander).chain());
-
-        let mut world = World {
-            ecs,
-            schedule,
-            ids: IdAllocator::default(),
-            seed,
-        };
+            0,
+            ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER),
+            IdAllocator::default(),
+        );
         world.spawn_dwarves(&heights, &mut spawn_rng);
+        world
+    }
+
+    pub fn to_save(&self) -> SaveState {
+        let terrain = self.ecs.resource::<Terrain>();
+        let mut dwarves: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| {
+                let wander = entity.get::<Wander>()?;
+                Some(SavedDwarf {
+                    id: entity.get::<Id>()?.0,
+                    pos: *entity.get::<Pos>()?,
+                    state: *entity.get::<JobState>()?,
+                    home: wander.home,
+                    cooldown: wander.cooldown,
+                })
+            })
+            .collect();
+        dwarves.sort_by_key(|dwarf| dwarf.id);
+
+        SaveState {
+            seed: self.seed,
+            tick: self.tick(),
+            dims: terrain.dims,
+            tiles: terrain.tiles.clone(),
+            wander_rng: self.ecs.resource::<WanderRng>().0.clone(),
+            next_id: self.ids.next,
+            dwarves,
+        }
+    }
+
+    pub fn from_save(save: SaveState) -> World {
+        let SaveState {
+            seed,
+            tick,
+            dims,
+            tiles,
+            wander_rng,
+            next_id,
+            dwarves,
+        } = save;
+        let mut world = assemble(
+            seed,
+            dims,
+            tiles,
+            tick,
+            wander_rng,
+            IdAllocator { next: next_id },
+        );
+        for dwarf in dwarves {
+            world.ecs.spawn((
+                Dwarf,
+                Id(dwarf.id),
+                dwarf.pos,
+                dwarf.state,
+                Wander {
+                    home: dwarf.home,
+                    cooldown: dwarf.cooldown,
+                },
+            ));
+        }
         world
     }
 

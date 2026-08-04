@@ -74,34 +74,34 @@ so that a session can end without the fortress being lost.
   - [x] `.gitignore`: add `/frostvein.save` and `/frostvein.save.tmp` — a live run drops the
         save beside `Cargo.toml`.
 
-- [ ] **`sim-core`: `SaveState`, `to_save`, `from_save`** (AC: 1, 3)
-  - [ ] New `crates/sim-core/src/save.rs` with `SaveState` + `SavedDwarf` (skeleton below).
+- [x] **`sim-core`: `SaveState`, `to_save`, `from_save`** (AC: 1, 3)
+  - [x] New `crates/sim-core/src/save.rs` with `SaveState` + `SavedDwarf` (skeleton below).
         Derive `Serialize`/`Deserialize` on the sim types it carries: `Material`, `Tile`,
         `Pos`, `Dims`, `JobState`. These are **not** wire types — AD-6 governs the protocol,
         and the save file is `sim-core`'s own format with no external consumer. Do not import
         `protocol` into `sim-core` and do not build the save out of `protocol::Snapshot`
         (AD-11 names it "a separate, lossy client projection", never used for saving).
-  - [ ] `dwarves` in the save are sorted ascending by id, and `from_save` spawns them in that
+  - [x] `dwarves` in the save are sorted ascending by id, and `from_save` spawns them in that
         order (AD-7 stable order).
-  - [ ] **Extract the one place the world is assembled.** `generate` and `from_save` must not
+  - [x] **Extract the one place the world is assembled.** `generate` and `from_save` must not
         each wire the schedule: a system added to one chain and not the other diverges
         silently and only ever shows up as a scenario mismatch nobody can explain. Both call
         a private `assemble(...)` that inserts `Tick`, `WanderRng`, `Terrain` (with an empty
         dirty set) and chains `(advance_tick, wander)`.
-  - [ ] `to_save` reads the live `WanderRng` (clone the `ChaCha8Rng`, do not reseed), the
+  - [x] `to_save` reads the live `WanderRng` (clone the `ChaCha8Rng`, do not reseed), the
         `Terrain` tiles, `Tick`, `ids.next`, and each dwarf's `Wander { home, cooldown }` —
         `World::dwarves()` does not expose `Wander`, so iterate entities directly the way it
         does.
 
-- [ ] **`sim-core`: the gate test** (AC: 2, 3) — new `crates/sim-core/tests/save_load.rs`
-  - [ ] `save_load_then_tick_matches_never_saved`: seed 42, **tick 37 before saving** and
+- [x] **`sim-core`: the gate test** (AC: 2, 3) — new `crates/sim-core/tests/save_load.rs`
+  - [x] `save_load_then_tick_matches_never_saved`: seed 42, **tick 37 before saving** and
         `set_tile` one tile first. Ticking first is not decoration — at tick 0 a `from_save`
         that reseeded the wander stream from the seed and reset every cooldown to its spawn
         value would pass. Compare against a never-saved control for 200 further steps,
         asserting `tick()`, `dwarves()` and the mutated tile after **each** step.
-  - [ ] `loading_does_not_reuse_entity_ids`: after save → load, `to_save().next_id == 5`.
-  - [ ] `loading_starts_with_no_dirty_tiles`: after save → load, `drain_dirty()` is empty.
-  - [ ] Do NOT add a hand-written save-format literal test. Save-format stability is an
+  - [x] `loading_does_not_reuse_entity_ids`: after save → load, `to_save().next_id == 5`.
+  - [x] `loading_starts_with_no_dirty_tiles`: after save → load, `drain_dirty()` is empty.
+  - [x] Do NOT add a hand-written save-format literal test. Save-format stability is an
         explicit project non-goal; the round-trip through the real types is the contract.
 
 - [ ] **`protocol`: three unit commands** (AC: 4)
@@ -434,10 +434,49 @@ OpenAI GPT-5 Codex
 
 ### Debug Log References
 
+- Initial save API RED (`cargo test --offline -p sim-core --test save_load`):
+  ```text
+  error[E0599]: no associated function or constant named `from_save` found for struct `World`
+  error[E0599]: no method named `to_save` found for struct `World` in the current scope
+  error: could not compile `sim-core` (test "save_load") due to 6 previous errors
+  ```
+- Save restoration sabotage REDs (`save_load_then_tick_matches_never_saved` unless noted):
+  ```text
+  cooldown=0: test save_load_then_tick_matches_never_saved ... FAILED
+    left:  [(Id(0), Pos { x: 113, y: 85, z: 15 }, Walk), ...]
+    right: [(Id(0), Pos { x: 113, y: 86, z: 15 }, Idle), ...]
+  home=position: test save_load_then_tick_matches_never_saved ... FAILED
+    left:  [(Id(0), Pos { x: 113, y: 88, z: 15 }, Walk), ...]
+    right: [(Id(0), Pos { x: 113, y: 86, z: 15 }, Walk), ...]
+  reseed wander RNG: test save_load_then_tick_matches_never_saved ... FAILED
+    left dwarf 4:  Pos { x: 101, y: 123, z: 17 }
+    right dwarf 4: Pos { x: 101, y: 121, z: 17 }
+  loaded schedule omits wander: test save_load_then_tick_matches_never_saved ... FAILED
+    left dwarf 4:  Pos { x: 101, y: 122, z: 17 }, Idle
+    right dwarf 4: Pos { x: 101, y: 121, z: 17 }, Walk
+  regenerated terrain: assertion `left == right` failed
+    left: Some(Solid(Stone))
+    right: Some(Empty)
+  tick=0: assertion `left == right` failed
+    left: 1
+    right: 38
+  loading_does_not_reuse_entity_ids with allocator reset: FAILED
+    left: 0
+    right: 5
+  loading_starts_with_no_dirty_tiles with a restored dirty entry: FAILED
+    assertion failed: loaded.drain_dirty().is_empty()
+  save_orders_dwarves_by_id with sorting removed: FAILED
+    left: [4, 3, 2, 1, 0]
+    right: [0, 1, 2, 3, 4]
+  ```
+
 ### Completion Notes List
 
 - Enabled `ChaCha8Rng` serde support, added serde derive support to `sim-core`, and ignored
   the daemon's working-directory save artifacts. `cargo check --offline -p sim-core` passed.
+- Added the exact `SaveState`/`SavedDwarf` state, a shared world assembly path, and faithful
+  save/load restoration. The public-API 200-tick scenario, allocator, clean-dirty-set, and
+  stable dwarf ordering tests pass; every hidden restoration seam was sabotaged and went RED.
 
 ### File List
 
@@ -446,6 +485,9 @@ OpenAI GPT-5 Codex
 - Cargo.toml
 - _bmad-output/implementation-artifacts/2-4-the-world-endures.md
 - crates/sim-core/Cargo.toml
+- crates/sim-core/src/lib.rs
+- crates/sim-core/src/save.rs
+- crates/sim-core/tests/save_load.rs
 
 ## Change Log
 
