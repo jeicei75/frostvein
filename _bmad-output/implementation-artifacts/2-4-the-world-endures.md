@@ -500,6 +500,8 @@ OpenAI GPT-5 Codex
     saved file must exist: Os { code: 2, kind: NotFound, message: "No such file or directory" }
   MAX_SAVE_BYTES widened 16 MiB -> 17 MiB: oversized_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
     unexpected oversized-save log: ... EOF while parsing a value at line 1 column 16777217
+  tile-count validation absent: inconsistent_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+    unexpected inconsistent-save log:
   ```
 - TUI keymap RED and mapping sabotage:
   ```text
@@ -549,6 +551,7 @@ OpenAI GPT-5 Codex
   daemon save path is renamed                                  KILLED
   daemon save read limit is widened                            KILLED
   failed load panics the daemon                                KILLED
+  load skips tile-count validation                             KILLED
   S maps to Load                                               KILLED
   L maps to Save                                               KILLED
   frames key path never writes its command                     KILLED
@@ -562,7 +565,7 @@ OpenAI GPT-5 Codex
   ```
 - Final clean gate after mutation artifacts were removed for all four packages:
   ```text
-  Removed 5861 files, 1.7GiB total
+  Removed 4615 files, 1.4GiB total
   frostvein gate
     cargo fmt --check           ok
     cargo clippy -D warnings    ok
@@ -598,7 +601,7 @@ OpenAI GPT-5 Codex
   rejection. All three discriminator mappings were independently sabotaged and went RED.
 - Added bounded atomic daemon saves, bounded loads, authoritative load snapshots to every
   client, and clean quit. A hermetic temp-cwd harness proves rewind, file decode, missing,
-  corrupt, oversized and unwritable failures, continued ticking, EOF, and exit 0. All 23
+  corrupt, inconsistent, oversized and unwritable failures, continued ticking, EOF, and exit 0. All 24
   live-daemon tests and `simd` clippy pass.
 - Added speed-independent uppercase `S`/`L` actions while preserving local `q` behavior,
   camera and z-level across live snapshots, and the unchanged 80-column status line. All
@@ -606,11 +609,16 @@ OpenAI GPT-5 Codex
 - Extended `--frames --key` through the real keymap and bounded write half for `S`/`L`.
   The real-binary stub capture proves `[8, 3, 4, 5]` after load versus monotonic
   `[8, 9, 10, 11]` without a key. All 8 client integration tests pass.
-- Authored and ran 23 required/expanded mutations; the final serial run reported zero
+- Authored and ran 24 required/expanded mutations; the final serial run reported zero
   survivors and no apply failures.
 - Ran the clean final gate successfully and manually observed save, rewind, two-client
   broadcast, save-file creation, wire quit, client EOF, and daemon exit 0. The full-screen
   interactive rendering step was not observed in this non-interactive handoff.
+- Ran `codex review --base main`; it identified malformed-but-decodable save dimensions as
+  a daemon panic path, which is now rejected by checked tile-count validation with a
+  red-then-green integration test and killed mutation. Its unbounded command-backlog finding
+  was not changed because the story explicitly excludes backpressure work and the channel
+  predates this story.
 
 ### File List
 
@@ -636,3 +644,4 @@ OpenAI GPT-5 Codex
 | --- | --- |
 | 2026-08-04 | Story created |
 | 2026-08-04 | Implemented deterministic save/load, daemon lifecycle commands, TUI controls, live rewind instrumentation, and zero-survivor mutation coverage. |
+| 2026-08-04 | Rejected inconsistent save dimensions after adversarial review and extended the mutation proof to 24 killed cases. |

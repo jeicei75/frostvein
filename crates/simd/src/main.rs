@@ -223,8 +223,21 @@ fn load_world() -> Option<sim_core::World> {
         if encoded.len() as u64 > MAX_SAVE_BYTES {
             bail!("save exceeds {MAX_SAVE_BYTES}-byte limit");
         }
-        let save = serde_json::from_slice(&encoded)
+        let save: sim_core::SaveState = serde_json::from_slice(&encoded)
             .with_context(|| format!("could not decode {SAVE_PATH}"))?;
+        let tile_count = u64::from(save.dims.x)
+            .checked_mul(u64::from(save.dims.y))
+            .and_then(|area| area.checked_mul(u64::from(save.dims.z)))
+            .context("save dimensions overflow the tile count")?;
+        if save.tiles.len() as u64 != tile_count {
+            bail!(
+                "save has {} tiles but dims {}x{}x{} need {tile_count}",
+                save.tiles.len(),
+                save.dims.x,
+                save.dims.y,
+                save.dims.z
+            );
+        }
         Ok(sim_core::World::from_save(save))
     })();
 

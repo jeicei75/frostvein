@@ -173,6 +173,27 @@ p.write_text(s.replace(old, """        Err(error) => {
 """))
 PY
 
+mutation "load skips tile-count validation" simd inconsistent_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        let tile_count = u64::from(save.dims.x)
+            .checked_mul(u64::from(save.dims.y))
+            .and_then(|area| area.checked_mul(u64::from(save.dims.z)))
+            .context("save dimensions overflow the tile count")?;
+        if save.tiles.len() as u64 != tile_count {
+            bail!(
+                "save has {} tiles but dims {}x{}x{} need {tile_count}",
+                save.tiles.len(),
+                save.dims.x,
+                save.dims.y,
+                save.dims.z
+            );
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
 mutation "S maps to Load" tui speed_keys_follow_the_pinned_step_table_and_clamp <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()

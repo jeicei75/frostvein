@@ -312,6 +312,33 @@ fn undecodable_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn inconsistent_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.tiles.pop();
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode inconsistent save fixture"),
+    )
+    .expect("write inconsistent save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save has 524287 tiles but dims 128x128x32 need 524288"),
+        "unexpected inconsistent-save log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
 fn oversized_save_is_logged_and_the_daemon_keeps_ticking() {
     const OVERSIZED: usize = 16 * 1024 * 1024 + 1;
 
