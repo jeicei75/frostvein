@@ -179,6 +179,8 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, speed: Speed)
 
     let command = |speed| Action::Command(Command::SetSpeed { speed });
     match key.code {
+        KeyCode::Char('S') => Action::Command(Command::Save),
+        KeyCode::Char('L') => Action::Command(Command::Load),
         KeyCode::Char(' ') => command(match speed {
             Speed::Paused => Speed::Normal,
             Speed::Normal | Speed::Fast => Speed::Paused,
@@ -311,6 +313,36 @@ mod tests {
                 }),
             ),
             (KeyCode::Char('-'), Speed::Paused, Action::Ignore),
+            (
+                KeyCode::Char('S'),
+                Speed::Paused,
+                Action::Command(Command::Save),
+            ),
+            (
+                KeyCode::Char('S'),
+                Speed::Normal,
+                Action::Command(Command::Save),
+            ),
+            (
+                KeyCode::Char('S'),
+                Speed::Fast,
+                Action::Command(Command::Save),
+            ),
+            (
+                KeyCode::Char('L'),
+                Speed::Paused,
+                Action::Command(Command::Load),
+            ),
+            (
+                KeyCode::Char('L'),
+                Speed::Normal,
+                Action::Command(Command::Load),
+            ),
+            (
+                KeyCode::Char('L'),
+                Speed::Fast,
+                Action::Command(Command::Load),
+            ),
         ] {
             let mut state = ViewState {
                 camera: (0, 0),

@@ -214,11 +214,8 @@ fn main() -> anyhow::Result<()> {
 
         loop {
             match message_rx.try_recv() {
-                // AC8: the daemon sends exactly one snapshot, at connect, and that one
-                // is consumed before this loop starts — so this arm is unreachable
-                // today. If a re-snapshot ever arrives, adopt the world but KEEP the
-                // camera and z-level; resetting them would silently throw away where
-                // the player was looking.
+                // Adopt the world but KEEP the camera and z-level; resetting them would
+                // silently throw away where the player was looking.
                 // NOTE: assumes dims never change between snapshots, which holds while
                 // the daemon serves one world for its lifetime.
                 Ok(Ok(Msg::Snapshot(next))) => {

@@ -155,17 +155,17 @@ so that a session can end without the fortress being lost.
         `oversized_line_is_refused_without_killing_the_daemon`, and 2.3's speed tests. If any
         needs editing, an earlier contract has been broken.
 
-- [ ] **`tui`: two keys and a live snapshot arm** (AC: 9, 10)
-  - [ ] `apply_key`: `KeyCode::Char('S')` → `Action::Command(Command::Save)`,
+- [x] **`tui`: two keys and a live snapshot arm** (AC: 9, 10)
+  - [x] `apply_key`: `KeyCode::Char('S')` → `Action::Command(Command::Save)`,
         `KeyCode::Char('L')` → `Action::Command(Command::Load)`. Uppercase arrives with SHIFT
         and `apply_key` already lets SHIFT through, so no modifier change. Extend the pinned
         keymap table test with both, asserted at all three speeds to pin that they do not
         depend on speed. `q` and the confirm path are untouched.
-  - [ ] Delete the "this arm is unreachable today" half of the `Msg::Snapshot` NOTE in
+  - [x] Delete the "this arm is unreachable today" half of the `Msg::Snapshot` NOTE in
         `main`'s message loop — the load broadcast makes it live — and keep the rest: adopt
         the world, **keep** `state.camera` and `state.z`. Never call `initial()` there; that
         would throw away where the player was looking on every load.
-  - [ ] Status line and hint text are unchanged. FR21's hint bar is Story 3.1's, and the
+  - [x] Status line and hint text are unchanged. FR21's hint bar is Story 3.1's, and the
         80-column budget pinned by 2.3's width test has no room for a save/load hint. The
         observable for `S` is the daemon's log line and the file; for `L` it is the tick
         jumping back on screen.
@@ -501,6 +501,19 @@ OpenAI GPT-5 Codex
   MAX_SAVE_BYTES widened 16 MiB -> 17 MiB: oversized_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
     unexpected oversized-save log: ... EOF while parsing a value at line 1 column 16777217
   ```
+- TUI keymap RED and mapping sabotage:
+  ```text
+  before implementation: wrong action for Char('S') at Paused
+    left: Ignore
+    right: Command(Save)
+  S mapped to Load: wrong action for Char('S') at Paused
+    left: Command(Load)
+    right: Command(Save)
+  L mapped to Save: wrong action for Char('L') at Paused
+    left: Command(Save)
+    right: Command(Load)
+  test result: FAILED. 0 passed; 1 failed
+  ```
 
 ### Completion Notes List
 
@@ -515,6 +528,9 @@ OpenAI GPT-5 Codex
   client, and clean quit. A hermetic temp-cwd harness proves rewind, file decode, missing,
   corrupt, oversized and unwritable failures, continued ticking, EOF, and exit 0. All 23
   live-daemon tests and `simd` clippy pass.
+- Added speed-independent uppercase `S`/`L` actions while preserving local `q` behavior,
+  camera and z-level across live snapshots, and the unchanged 80-column status line. All
+  TUI unit/integration tests and clippy pass.
 
 ### File List
 
@@ -529,6 +545,8 @@ OpenAI GPT-5 Codex
 - crates/protocol/src/lib.rs
 - crates/simd/src/main.rs
 - crates/simd/tests/serve.rs
+- crates/tui/src/main.rs
+- crates/tui/src/view.rs
 
 ## Change Log
 
