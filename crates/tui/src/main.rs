@@ -89,7 +89,9 @@ fn main() -> anyhow::Result<()> {
                 "space" => KeyCode::Char(' '),
                 "+" => KeyCode::Char('+'),
                 "-" => KeyCode::Char('-'),
-                _ => bail!("invalid --key value {text:?}: expected space, +, or -"),
+                "S" => KeyCode::Char('S'),
+                "L" => KeyCode::Char('L'),
+                _ => bail!("invalid --key value {text:?}: expected space, +, -, S, or L"),
             });
             expect_key = false;
             continue;
@@ -121,7 +123,7 @@ fn main() -> anyhow::Result<()> {
         bail!("--frames requires a count, e.g. --frames 3");
     }
     if expect_key {
-        bail!("--key requires space, +, or -");
+        bail!("--key requires space, +, -, S, or L");
     }
     if key.is_some() && frames.is_none() {
         bail!("--key requires --frames");
@@ -214,11 +216,8 @@ fn main() -> anyhow::Result<()> {
 
         loop {
             match message_rx.try_recv() {
-                // AC8: the daemon sends exactly one snapshot, at connect, and that one
-                // is consumed before this loop starts — so this arm is unreachable
-                // today. If a re-snapshot ever arrives, adopt the world but KEEP the
-                // camera and z-level; resetting them would silently throw away where
-                // the player was looking.
+                // Adopt the world but KEEP the camera and z-level; resetting them would
+                // silently throw away where the player was looking.
                 // NOTE: assumes dims never change between snapshots, which holds while
                 // the daemon serves one world for its lifetime.
                 Ok(Ok(Msg::Snapshot(next))) => {

@@ -2,8 +2,10 @@
 
 mod bridge;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use std::{
+    collections::BTreeSet,
+    fs,
     io::{BufRead, BufReader, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
     sync::{
@@ -19,6 +21,10 @@ const SEED: u64 = 0xF005_7E1A;
 const TICK_PERIOD: Duration = Duration::from_millis(100);
 const FAST_TICK_PERIOD: Duration = Duration::from_millis(20);
 const CLIENT_QUEUE: usize = 16;
+const SAVE_PATH: &str = "frostvein.save";
+const MAX_SAVE_BYTES: u64 = 16 * 1024 * 1024;
+/// Leaves more than 29 billion years of 10 Hz ticks before arithmetic can overflow.
+const MAX_LOAD_TICK: u64 = u64::MAX / 2;
 
 /// Caps on what one misbehaving local client can cost the daemon. Phase one is
 /// localhost-only (NFR1), so these bound accidents — a buggy client — not attacks.
@@ -118,6 +124,26 @@ fn tick(
         for command in command_rx.try_iter() {
             match command {
                 protocol::Command::SetSpeed { speed: next } => speed = next,
+                // NOTE: encoding ~524k tiles stalls this iteration by roughly the same
+                // amount as a connect snapshot. Save is an explicit operator action, so
+                // no worker thread or async write is warranted yet.
+                protocol::Command::Save => save_world(&world),
+                protocol::Command::Load => {
+                    // NOTE: speed belongs to the daemon, not the saved sim. Loading while
+                    // paused therefore leaves the loop paused on the restored tick.
+                    if let Some(loaded) = load_world() {
+                        world = loaded;
+                        let line = Arc::new(format!(
+                            "{}\n",
+                            serde_json::to_string(&bridge::snapshot(&world, speed))?
+                        ));
+                        broadcast(&mut clients, &line);
+                    }
+                }
+                protocol::Command::Quit => {
+                    eprintln!("shutting down on client quit");
+                    return Ok(());
+                }
             }
         }
         let deadline = Instant::now() + period(speed);
@@ -162,6 +188,112 @@ fn tick(
         broadcast(&mut clients, &delta_line);
 
         thread::sleep(deadline.saturating_duration_since(Instant::now()));
+    }
+}
+
+fn save_world(world: &sim_core::World) {
+    let tick = world.tick();
+    let result = (|| -> anyhow::Result<()> {
+        let encoded = serde_json::to_vec(&world.to_save()).context("could not encode world")?;
+        if encoded.len() as u64 > MAX_SAVE_BYTES {
+            bail!(
+                "encoded save is {} bytes; limit is {MAX_SAVE_BYTES}",
+                encoded.len()
+            );
+        }
+        let temporary = format!("{SAVE_PATH}.tmp");
+        fs::write(&temporary, encoded)
+            .with_context(|| format!("could not write temporary save {temporary}"))?;
+        fs::rename(&temporary, SAVE_PATH)
+            .with_context(|| format!("could not rename {temporary} to {SAVE_PATH}"))?;
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => eprintln!("saved tick {tick} to {SAVE_PATH}"),
+        Err(error) => eprintln!("could not save {SAVE_PATH}: {error:#}"),
+    }
+}
+
+fn load_world() -> Option<sim_core::World> {
+    let result = (|| -> anyhow::Result<sim_core::World> {
+        let file =
+            fs::File::open(SAVE_PATH).with_context(|| format!("could not open {SAVE_PATH}"))?;
+        let mut encoded = Vec::new();
+        file.take(MAX_SAVE_BYTES + 1)
+            .read_to_end(&mut encoded)
+            .with_context(|| format!("could not read {SAVE_PATH}"))?;
+        if encoded.len() as u64 > MAX_SAVE_BYTES {
+            bail!("save exceeds {MAX_SAVE_BYTES}-byte limit");
+        }
+        let save: sim_core::SaveState = serde_json::from_slice(&encoded)
+            .with_context(|| format!("could not decode {SAVE_PATH}"))?;
+        let tile_count = u64::from(save.dims.x)
+            .checked_mul(u64::from(save.dims.y))
+            .and_then(|area| area.checked_mul(u64::from(save.dims.z)))
+            .context("save dimensions overflow the tile count")?;
+        if save.tiles.len() as u64 != tile_count {
+            bail!(
+                "save has {} tiles but dims {}x{}x{} need {tile_count}",
+                save.tiles.len(),
+                save.dims.x,
+                save.dims.y,
+                save.dims.z
+            );
+        }
+        if save.tick > MAX_LOAD_TICK {
+            bail!(
+                "save tick {} exceeds supported maximum {MAX_LOAD_TICK}",
+                save.tick
+            );
+        }
+        let in_bounds = |pos: sim_core::Pos| {
+            pos.x >= 0
+                && pos.y >= 0
+                && pos.z >= 0
+                && (pos.x as u32) < save.dims.x
+                && (pos.y as u32) < save.dims.y
+                && (pos.z as u32) < save.dims.z
+        };
+        let mut seen_ids = BTreeSet::new();
+        for dwarf in &save.dwarves {
+            if !seen_ids.insert(dwarf.id) {
+                bail!("save reuses dwarf id {}", dwarf.id);
+            }
+            if !in_bounds(dwarf.pos) {
+                bail!(
+                    "save dwarf {} position {},{},{} is outside dims {}x{}x{}",
+                    dwarf.id,
+                    dwarf.pos.x,
+                    dwarf.pos.y,
+                    dwarf.pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+            if !in_bounds(dwarf.home) {
+                bail!(
+                    "save dwarf {} home {},{},{} is outside dims {}x{}x{}",
+                    dwarf.id,
+                    dwarf.home.x,
+                    dwarf.home.y,
+                    dwarf.home.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+        Ok(sim_core::World::from_save(save))
+    })();
+
+    match result {
+        Ok(world) => Some(world),
+        Err(error) => {
+            eprintln!("could not load {SAVE_PATH}: {error:#}");
+            None
+        }
     }
 }
 

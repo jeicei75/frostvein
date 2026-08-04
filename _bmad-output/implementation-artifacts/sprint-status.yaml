@@ -57,7 +57,7 @@ development_status:
   2-1-the-world-runs-on-its-own-clock: done
   2-2-dwarves-wander-the-frost: done
   2-3-master-of-time: done
-  2-4-the-world-endures: backlog
+  2-4-the-world-endures: done
   epic-2-retrospective: optional
   epic-3: backlog
   3-1-give-the-order: backlog
@@ -122,7 +122,8 @@ action_items:
   - epic: 1
     action: "Carry the RNG-stream-coupling and rand_chacha serde-feature debts into 2.4's story notes"
     owner: "Amelia"
-    status: open
+    status: done
+    note: "Closed at 2.4 story creation (2026-08-04), both re-verified against source rather than inherited. RNG-stream coupling: already RESOLVED at 2.2 — STREAM_WORLDGEN/STREAM_SPAWN/STREAM_WANDER exist at crates/sim-core/src/lib.rs:17-19 and only the wander stream is retained on World, so 2.4 serializes one stream and says so. rand_chacha serde feature: still open and now scheduled — the workspace pins `rand_chacha = \"0.10.0\"` with no features, the feature is optional (rand_chacha-0.10.0/Cargo.toml:53), and ChaCha8Rng only derives Serialize/Deserialize with it; 2.4's first task turns it on"
   - epic: 1
     action: "Fix AC11's unreachable 100x40 fallback spec text at the next TUI story"
     owner: "Amelia"

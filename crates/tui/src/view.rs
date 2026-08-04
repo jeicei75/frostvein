@@ -179,6 +179,8 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, speed: Speed)
 
     let command = |speed| Action::Command(Command::SetSpeed { speed });
     match key.code {
+        KeyCode::Char('S') => Action::Command(Command::Save),
+        KeyCode::Char('L') => Action::Command(Command::Load),
         KeyCode::Char(' ') => command(match speed {
             Speed::Paused => Speed::Normal,
             Speed::Normal | Speed::Fast => Speed::Paused,
@@ -311,6 +313,36 @@ mod tests {
                 }),
             ),
             (KeyCode::Char('-'), Speed::Paused, Action::Ignore),
+            (
+                KeyCode::Char('S'),
+                Speed::Paused,
+                Action::Command(Command::Save),
+            ),
+            (
+                KeyCode::Char('S'),
+                Speed::Normal,
+                Action::Command(Command::Save),
+            ),
+            (
+                KeyCode::Char('S'),
+                Speed::Fast,
+                Action::Command(Command::Save),
+            ),
+            (
+                KeyCode::Char('L'),
+                Speed::Paused,
+                Action::Command(Command::Load),
+            ),
+            (
+                KeyCode::Char('L'),
+                Speed::Normal,
+                Action::Command(Command::Load),
+            ),
+            (
+                KeyCode::Char('L'),
+                Speed::Fast,
+                Action::Command(Command::Load),
+            ),
         ] {
             let mut state = ViewState {
                 camera: (0, 0),
@@ -323,6 +355,38 @@ mod tests {
                 expected,
                 "wrong action for {key:?} at {speed:?}"
             );
+        }
+    }
+
+    // A real terminal can only deliver an uppercase `S`/`L` with SHIFT held, so the table above
+    // (which presses with `KeyModifiers::NONE`) does not exercise the path a user actually takes.
+    // Without this, tightening the modifier gate in `apply_key` would leave every test green while
+    // save and load stopped working in front of a human.
+    #[test]
+    fn save_and_load_keys_still_map_when_shift_is_held() {
+        let dims = Dims { x: 1, y: 1, z: 1 };
+        for (key, expected) in [
+            (KeyCode::Char('S'), Action::Command(Command::Save)),
+            (KeyCode::Char('L'), Action::Command(Command::Load)),
+        ] {
+            for speed in [Speed::Paused, Speed::Normal, Speed::Fast] {
+                let mut state = ViewState {
+                    camera: (0, 0),
+                    z: 0,
+                    confirming_quit: false,
+                };
+
+                assert_eq!(
+                    apply_key(
+                        &mut state,
+                        KeyEvent::new(key, KeyModifiers::SHIFT),
+                        dims,
+                        speed
+                    ),
+                    expected,
+                    "wrong action for SHIFT+{key:?} at {speed:?}"
+                );
+            }
         }
     }
 

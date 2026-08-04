@@ -1,8 +1,13 @@
 use std::{
+    fs,
     io::{BufRead, BufReader, Read, Write},
     net::{Shutdown, SocketAddr, TcpStream},
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::mpsc::{self, Receiver, RecvTimeoutError},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc::{self, Receiver, RecvTimeoutError},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -15,6 +20,7 @@ struct Daemon {
     child: Child,
     address: SocketAddr,
     stderr: Receiver<String>,
+    dir: PathBuf,
 }
 
 /// Drains a child pipe on its own thread, so the daemon can never block writing to
@@ -38,8 +44,20 @@ fn line_channel<R: Read + Send + 'static>(reader: R) -> Receiver<String> {
 
 impl Daemon {
     fn spawn() -> Self {
+        // NOTE: let the daemon bind port 0 itself rather than reserving a port here and passing
+        // the number on. Reserving meant dropping the listener before the child could bind it,
+        // and with this many daemon tests running in parallel another test claimed that port in
+        // the gap often enough to turn the gate red about one run in four. The listening line is
+        // parsed below either way, so nothing here needs to know the port in advance.
+        static NEXT_DAEMON: AtomicUsize = AtomicUsize::new(0);
+        let unique = NEXT_DAEMON.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("frostvein-simd-{}-{unique}", std::process::id()));
+        fs::create_dir(&dir).expect("create unique daemon working directory");
+
         let mut child = Command::new(env!("CARGO_BIN_EXE_simd"))
             .arg("0")
+            .current_dir(&dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -66,6 +84,7 @@ impl Daemon {
             child,
             address: SocketAddr::from(([127, 0, 0, 1], port)),
             stderr,
+            dir,
         }
     }
 
@@ -86,12 +105,28 @@ impl Daemon {
             Err(RecvTimeoutError::Disconnected) => panic!("daemon stderr closed unexpectedly"),
         }
     }
+
+    fn save_path(&self) -> PathBuf {
+        self.dir.join("frostvein.save")
+    }
+
+    fn wait_for_exit(&mut self) -> std::process::ExitStatus {
+        let deadline = Instant::now() + IO_TIMEOUT;
+        loop {
+            match self.child.try_wait().expect("query simd exit status") {
+                Some(status) => return status,
+                None if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+                None => panic!("simd did not exit within {IO_TIMEOUT:?}"),
+            }
+        }
+    }
 }
 
 impl Drop for Daemon {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        let _ = fs::remove_dir_all(&self.dir);
     }
 }
 
@@ -121,6 +156,53 @@ fn send_speed(stream: &mut TcpStream, speed: protocol::Speed) {
     stream.flush().expect("speed command must flush");
 }
 
+fn send_literal(stream: &mut TcpStream, line: &[u8]) {
+    stream.write_all(line).expect("command must write");
+    stream.flush().expect("command must flush");
+}
+
+fn parse_saved_tick(line: &str) -> u64 {
+    line.strip_prefix("saved tick ")
+        .and_then(|rest| rest.split_once(" to "))
+        .expect("save log must name its tick and path")
+        .0
+        .parse()
+        .expect("saved tick must be numeric")
+}
+
+fn read_snapshot_after_load(reader: &mut BufReader<TcpStream>) -> protocol::Snapshot {
+    for _ in 0..4 {
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .expect("daemon must keep streaming after load");
+        let value: serde_json::Value = serde_json::from_str(&line).expect("valid daemon line");
+        match value["type"].as_str() {
+            Some("snapshot") => {
+                return serde_json::from_value(value).expect("load snapshot must match protocol");
+            }
+            Some("delta") => {}
+            other => panic!("unexpected daemon message before load snapshot: {other:?}"),
+        }
+    }
+    panic!("daemon did not broadcast a snapshot within four lines");
+}
+
+fn read_save_state(path: &Path) -> sim_core::SaveState {
+    const MAX_TEST_SAVE_BYTES: u64 = 16 * 1024 * 1024;
+
+    let file = fs::File::open(path).expect("saved file must exist");
+    let mut bytes = Vec::new();
+    file.take(MAX_TEST_SAVE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .expect("saved file must be readable");
+    assert!(
+        bytes.len() as u64 <= MAX_TEST_SAVE_BYTES,
+        "saved file exceeded the test read bound"
+    );
+    serde_json::from_slice(&bytes).expect("saved file must decode as SaveState")
+}
+
 fn read_delta_with_speed(
     reader: &mut BufReader<TcpStream>,
     expected: protocol::Speed,
@@ -134,6 +216,311 @@ fn read_delta_with_speed(
         }
     }
     panic!("daemon never reported {expected:?}; observed {observed:?}");
+}
+
+#[test]
+fn save_then_load_rewinds_every_client() {
+    let daemon = Daemon::spawn();
+    let first_stream = daemon.connect();
+    let mut first_writer = first_stream
+        .try_clone()
+        .expect("first client write half must clone");
+    let mut first = BufReader::new(first_stream);
+    let mut second = BufReader::new(daemon.connect());
+    let _ = read_snapshot(&mut first);
+    let _ = read_snapshot(&mut second);
+
+    send_literal(&mut first_writer, b"{\"type\":\"save\"}\n");
+    let saved_tick = parse_saved_tick(&daemon.next_log());
+
+    let target = saved_tick + 10;
+    let mut first_tick = 0;
+    let mut second_tick = 0;
+    while first_tick <= target || second_tick <= target {
+        if first_tick <= target {
+            first_tick = read_delta(&mut first).tick;
+        }
+        if second_tick <= target {
+            second_tick = read_delta(&mut second).tick;
+        }
+    }
+
+    send_literal(&mut first_writer, b"{\"type\":\"load\"}\n");
+    let first_loaded = read_snapshot_after_load(&mut first);
+    let second_loaded = read_snapshot_after_load(&mut second);
+
+    assert_eq!(first_loaded.tick, saved_tick);
+    assert_eq!(second_loaded.tick, saved_tick);
+    assert!(first_loaded.tick < first_tick);
+    assert!(second_loaded.tick < second_tick);
+}
+
+#[test]
+fn saved_file_decodes_as_a_save_state() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"save\"}\n");
+    let saved_tick = parse_saved_tick(&daemon.next_log());
+    let state = read_save_state(&daemon.save_path());
+
+    assert_eq!(state.tick, saved_tick);
+}
+
+#[test]
+fn load_without_a_save_file_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.starts_with("could not load frostvein.save:"),
+        "unexpected load error log: {log}"
+    );
+
+    let ticks = [
+        read_delta(&mut reader).tick,
+        read_delta(&mut reader).tick,
+        read_delta(&mut reader).tick,
+    ];
+    assert!(ticks[0] > snapshot.tick);
+    assert!(ticks[0] < ticks[1] && ticks[1] < ticks[2], "{ticks:?}");
+}
+
+#[test]
+fn undecodable_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    fs::write(daemon.save_path(), b"not json").expect("write corrupt save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("could not decode frostvein.save"),
+        "unexpected corrupt-save log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn inconsistent_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.tiles.pop();
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode inconsistent save fixture"),
+    )
+    .expect("write inconsistent save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save has 524287 tiles but dims 128x128x32 need 524288"),
+        "unexpected inconsistent-save log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[1].id = state.dwarves[0].id;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode duplicate-id save fixture"),
+    )
+    .expect("write duplicate-id save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save reuses dwarf id 0"),
+        "unexpected duplicate-id log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn boundary_tick_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.tick = u64::MAX - 1;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode boundary-tick save fixture"),
+    )
+    .expect("write boundary-tick save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains(
+            "save tick 18446744073709551614 exceeds supported maximum 9223372036854775807"
+        ),
+        "unexpected boundary-tick log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn out_of_bounds_dwarf_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[0].pos.x = i32::MAX;
+    state.dwarves[0].cooldown = 0;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds dwarf save fixture"),
+    )
+    .expect("write out-of-bounds dwarf save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save dwarf 0 position 2147483647,84,15 is outside dims 128x128x32"),
+        "unexpected out-of-bounds dwarf log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn out_of_bounds_dwarf_home_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[0].home.x = i32::MIN;
+    state.dwarves[0].cooldown = 0;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds dwarf-home fixture"),
+    )
+    .expect("write out-of-bounds dwarf-home fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save dwarf 0 home -2147483648,84,15 is outside dims 128x128x32"),
+        "unexpected out-of-bounds dwarf-home log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn oversized_save_is_logged_and_the_daemon_keeps_ticking() {
+    const OVERSIZED: usize = 16 * 1024 * 1024 + 1;
+
+    let daemon = Daemon::spawn();
+    fs::write(daemon.save_path(), vec![b' '; OVERSIZED]).expect("write oversized save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save exceeds 16777216-byte limit"),
+        "unexpected oversized-save log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn unwritable_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    fs::create_dir(daemon.dir.join("frostvein.save.tmp"))
+        .expect("make the temporary save path unwritable as a file");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"save\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.starts_with("could not save frostvein.save:"),
+        "unexpected save error log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn quit_exits_the_daemon_cleanly() {
+    let mut daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"quit\"}\n");
+    assert_eq!(daemon.next_log(), "shutting down on client quit");
+    let status = daemon.wait_for_exit();
+    assert!(status.success(), "simd exited with {status}");
+
+    let deadline = Instant::now() + IO_TIMEOUT;
+    let mut buffer = [0u8; 8192];
+    loop {
+        match reader.read(&mut buffer).expect("read client socket to EOF") {
+            0 => break,
+            _ if Instant::now() < deadline => {}
+            _ => panic!("client socket did not reach EOF within {IO_TIMEOUT:?}"),
+        }
+    }
 }
 
 #[test]

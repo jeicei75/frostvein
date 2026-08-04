@@ -13,6 +13,13 @@
     "output": 268787,
     "turns": 231
   },
+  "282b7e6e-af14-475f-b2e6-1de13aefe9c3.jsonl": {
+    "cache_creation": 685065,
+    "cache_read": 5622908,
+    "input": 6967,
+    "output": 123207,
+    "turns": 53
+  },
   "2bc9447d-0d2c-4fca-9638-b5fe320285dd.jsonl": {
     "cache_creation": 585647,
     "cache_read": 30594198,
@@ -47,6 +54,13 @@
     "input": 6009,
     "output": 285357,
     "turns": 215
+  },
+  "a767e12c-02f1-41e6-a218-d52e894e0a74.jsonl": {
+    "cache_creation": 167673,
+    "cache_read": 2671591,
+    "input": 78,
+    "output": 26541,
+    "turns": 41
   },
   "bb7aef73-12e3-4304-9761-ecf0e9437260.jsonl": {
     "cache_creation": 418931,
@@ -138,5 +152,68 @@
     "input": 608594,
     "output": 66881,
     "turns": 259
+  },
+  "rollout-2026-08-04T13-05-08-019fcce0-be7f-7393-9872-5a33f35e5e93.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 38829824,
+    "input": 724852,
+    "output": 87486,
+    "turns": 325
+  },
+  "rollout-2026-08-04T13-33-28-019fccfa-ae72-7b72-9ebc-2db72798a61d.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 0,
+    "input": 0,
+    "output": 0,
+    "turns": 0
+  },
+  "rollout-2026-08-04T13-33-28-019fccfa-af6a-7cf0-b847-732e48ccc90e.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 1453056,
+    "input": 143501,
+    "output": 11751,
+    "turns": 25
+  },
+  "rollout-2026-08-04T13-45-52-019fcd06-07a1-7782-8003-d29d7dce44ea.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 0,
+    "input": 0,
+    "output": 0,
+    "turns": 0
+  },
+  "rollout-2026-08-04T13-45-52-019fcd06-0891-7060-b72c-383ee8cb4a7a.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 1374208,
+    "input": 105652,
+    "output": 16041,
+    "turns": 24
+  },
+  "rollout-2026-08-04T13-59-50-019fcd12-d1aa-7ad1-8595-7f7c8826c940.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 0,
+    "input": 0,
+    "output": 0,
+    "turns": 0
+  },
+  "rollout-2026-08-04T13-59-50-019fcd12-d2a0-73d1-89ea-44b5cae52e55.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 1384448,
+    "input": 129352,
+    "output": 14680,
+    "turns": 24
+  },
+  "rollout-2026-08-04T14-11-49-019fcd1d-cac8-7f61-b6fb-f3512af2836e.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 0,
+    "input": 0,
+    "output": 0,
+    "turns": 0
+  },
+  "rollout-2026-08-04T14-11-49-019fcd1d-cbce-7be1-bce7-a14c81b33579.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 1510656,
+    "input": 131647,
+    "output": 11104,
+    "turns": 23
   }
 }
