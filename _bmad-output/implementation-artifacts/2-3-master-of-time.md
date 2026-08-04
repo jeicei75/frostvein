@@ -102,18 +102,18 @@ so that the session bends to my rhythm.
         `non_utf8_input_does_not_close_the_connection` and
         `oversized_line_is_refused_without_killing_the_daemon`. If any needs editing, the
         1.2 contract has been broken.
-- [ ] **`tui`: the keymap and the write half** (AC: 6, 7)
-  - [ ] `apply_key(&mut state, key, dims, speed: protocol::Speed) -> Action` — new fourth
+- [x] **`tui`: the keymap and the write half** (AC: 6, 7)
+  - [x] `apply_key(&mut state, key, dims, speed: protocol::Speed) -> Action` — new fourth
         argument, passed `snapshot.speed` at the call site. `Action` gains
         `Command(protocol::Command)`. Every existing `apply_key` call in `view.rs` tests takes
         the new argument.
-  - [ ] `Space` / `+` / `-` arms returning `Action::Command`; the step tables written out as
+  - [x] `Space` / `+` / `-` arms returning `Action::Command`; the step tables written out as
         explicit `match speed` arms, not arithmetic on a derived ordinal.
-  - [ ] `main`: `stream.try_clone()` for a write half *before* `BufReader::new(stream)` — the
+  - [x] `main`: `stream.try_clone()` for a write half *before* `BufReader::new(stream)` — the
         reader is moved into the reader thread and cannot be borrowed back. On
         `Action::Command(c)`, `writeln!` the encoded JSON and flush. Delete 1.3's `// NOTE:`
         saying the client sends zero bytes and never closes its write half.
-  - [ ] No redraw is forced on send: the delta that carries the new speed is the ack and
+  - [x] No redraw is forced on send: the delta that carries the new speed is the ack and
         drives the repaint (NFR2). Add a `// NOTE:` for the known limitation — two presses
         inside one round-trip both compute from the same stale wire speed, so the second is
         a no-op. Optimistic local speed is deliberately not built.
@@ -458,11 +458,42 @@ OpenAI Codex (GPT-5)
   test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out
   ```
 
+- TUI keymap RED before `Action::Command` and the speed argument existed:
+
+  ```text
+  error[E0599]: no variant, associated function, or constant named `Command` found for enum `view::Action` in the current scope
+     --> crates/tui/src/view.rs:248:25
+  error[E0061]: this function takes 3 arguments but 4 arguments were supplied
+     --> crates/tui/src/view.rs:302:17
+  error: could not compile `tui` (bin "tui" test) due to 8 previous errors
+  ```
+
+- Fast-endpoint clamp sabotage RED (`+` at Fast temporarily wrapped to Paused):
+
+  ```text
+  running 1 test
+  assertion `left == right` failed: wrong action for Char('+') at Fast
+    left: Command(SetSpeed { speed: Paused })
+   right: Ignore
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out
+  ```
+
+- Space mapping sabotage RED (Space temporarily returned `Ignore`):
+
+  ```text
+  running 1 test
+  assertion `left == right` failed: wrong action for Char(' ') at Paused
+    left: Ignore
+   right: Command(SetSpeed { speed: Normal })
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out
+  ```
+
 ### Completion Notes List
 
 - Added the one-variant, internally tagged `protocol::Command` wire type and pinned its literal `set_speed` JSON contract, including unknown-command rejection.
 - Routed decoded control commands from every connection into the daemon loop; pause now freezes world time while deltas continue at normal cadence, fast changes only the loop period, and snapshots/deltas carry authoritative speed.
 - Proved pause/resume, paused connect snapshots, same-delta two-client propagation, and relative fast timing against the real daemon. Re-ran the three named Story 1.2 input contracts unmodified; all passed.
+- Added the explicit Space/+/− speed-step table, clamped endpoints, and first TUI write half. Commands are computed from authoritative wire speed, written and flushed as one NDJSON line, and rely on the next delta for repaint/ack.
 
 ### File List
 
@@ -471,6 +502,8 @@ OpenAI Codex (GPT-5)
 - `crates/simd/src/bridge.rs`
 - `crates/simd/src/main.rs`
 - `crates/simd/tests/serve.rs`
+- `crates/tui/src/main.rs`
+- `crates/tui/src/view.rs`
 
 ## Change Log
 

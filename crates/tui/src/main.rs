@@ -107,6 +107,9 @@ fn main() -> anyhow::Result<()> {
     stream
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
         .context("could not set the snapshot read timeout")?;
+    let mut writer = stream
+        .try_clone()
+        .context("could not clone the server socket for commands")?;
     let mut reader = BufReader::new(stream);
     let mut snapshot = read_snapshot(&mut reader)?;
     let mut state = initial(&snapshot);
@@ -150,9 +153,22 @@ fn main() -> anyhow::Result<()> {
         if event::poll(POLL_INTERVAL).context("could not poll terminal events")? {
             match event::read().context("could not read terminal event")? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    match apply_key(&mut state, key, snapshot.dims) {
+                    match apply_key(&mut state, key, snapshot.dims, snapshot.speed) {
                         Action::Redraw => needs_redraw = true,
                         Action::Quit => break 'running,
+                        // NOTE: the next speed is derived from the last wire update. Two
+                        // presses inside one round-trip therefore see the same stale speed
+                        // and the second can be a no-op; optimistic local speed is omitted.
+                        Action::Command(command) => {
+                            writeln!(
+                                writer,
+                                "{}",
+                                serde_json::to_string(&command)
+                                    .context("could not encode client command")?
+                            )
+                            .context("could not write client command")?;
+                            writer.flush().context("could not flush client command")?;
+                        }
                         Action::Ignore => {}
                     }
                 }
