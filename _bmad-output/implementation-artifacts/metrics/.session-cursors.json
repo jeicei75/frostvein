@@ -56,11 +56,11 @@
     "turns": 215
   },
   "a767e12c-02f1-41e6-a218-d52e894e0a74.jsonl": {
-    "cache_creation": 167673,
-    "cache_read": 2671591,
-    "input": 78,
-    "output": 26541,
-    "turns": 41
+    "cache_creation": 1439680,
+    "cache_read": 49876440,
+    "input": 559,
+    "output": 250092,
+    "turns": 302
   },
   "bb7aef73-12e3-4304-9761-ecf0e9437260.jsonl": {
     "cache_creation": 418931,
