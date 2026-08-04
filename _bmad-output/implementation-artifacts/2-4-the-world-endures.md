@@ -182,8 +182,8 @@ so that a session can end without the fortress being lost.
   - [x] This is also the only automated proof of AC10: `stream_frames` adopting a mid-stream
         snapshot is the same arm the interactive loop uses.
 
-- [ ] **Sabotage + mutation set** (AC: 12)
-  - [ ] `_bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`, at least:
+- [x] **Sabotage + mutation set** (AC: 12)
+  - [x] `_bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`, at least:
         `from_save` drops the wander cooldown; drops the wander home; reseeds the wander RNG
         from the seed instead of restoring it; `assemble` wires only `advance_tick` for the
         loaded world; `from_save` regenerates terrain from the seed instead of restoring
@@ -192,7 +192,7 @@ so that a session can end without the fortress being lost.
         `Load` arm replaces the world but skips the snapshot broadcast; the `Quit` arm is
         ignored; `S` maps to `Load`; the `--key` path never writes its command; the `save`
         discriminator is renamed. Run `scripts/mutate.sh` and paste the table.
-  - [ ] Paste the actual RED output for every new mapping/constant test into the Dev Agent
+  - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent
         Record (AGENTS.md rule 1).
 
 - [ ] **Green gate** (AC: 12) — `scripts/gate.sh`, then the live check. Report what printed.
@@ -530,6 +530,36 @@ OpenAI GPT-5 Codex
     left: [7, 7, 7, 7]
     right: [8, 9, 10, 11]
   ```
+- Mutation run (`scripts/mutate.sh
+  _bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`):
+  ```text
+  ================ MUTATION RESULTS ================
+  from_save drops the wander cooldown                          KILLED
+  from_save drops the wander home                              KILLED
+  from_save reseeds the wander RNG                             KILLED
+  loaded world schedule omits wander                           KILLED
+  from_save regenerates terrain from the seed                  KILLED
+  from_save resets the id allocator                            KILLED
+  from_save marks every tile dirty                             KILLED
+  to_save records tick zero                                    KILLED
+  to_save leaves dwarves in ECS order                          KILLED
+  daemon Save arm parses but writes nothing                    KILLED
+  daemon Load arm skips snapshot broadcast                     KILLED
+  daemon Quit arm is ignored                                   KILLED
+  daemon save path is renamed                                  KILLED
+  daemon save read limit is widened                            KILLED
+  failed load panics the daemon                                KILLED
+  S maps to Load                                               KILLED
+  L maps to Save                                               KILLED
+  frames key path never writes its command                     KILLED
+  frames instrument ignores load snapshots                     KILLED
+  frames instrument ignores deltas                             KILLED
+  save discriminator is renamed                                KILLED
+  load discriminator is renamed                                KILLED
+  quit discriminator is renamed                                KILLED
+
+  All mutations killed.
+  ```
 
 ### Completion Notes List
 
@@ -550,6 +580,8 @@ OpenAI GPT-5 Codex
 - Extended `--frames --key` through the real keymap and bounded write half for `S`/`L`.
   The real-binary stub capture proves `[8, 3, 4, 5]` after load versus monotonic
   `[8, 9, 10, 11]` without a key. All 8 client integration tests pass.
+- Authored and ran 23 required/expanded mutations; the final serial run reported zero
+  survivors and no apply failures.
 
 ### File List
 
@@ -567,6 +599,7 @@ OpenAI GPT-5 Codex
 - crates/tui/src/main.rs
 - crates/tui/src/view.rs
 - crates/tui/tests/client.rs
+- _bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh
 
 ## Change Log
 
