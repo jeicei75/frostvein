@@ -63,42 +63,42 @@ so that the session bends to my rhythm.
         `to_value(decoded) == from_str(LITERAL)`, and assert `{"type":"set_rate",...}` fails
         to decode. Extend `every_material_and_tile_variant_has_a_pinned_wire_name` with the
         command's `type` name.
-- [ ] **`simd`: parse inbound, drive the loop** (AC: 2, 3, 4, 5)
-  - [ ] `read_inbound` gains a `mpsc::Sender<protocol::Command>` (cloned per connection
+- [x] **`simd`: parse inbound, drive the loop** (AC: 2, 3, 4, 5)
+  - [x] `read_inbound` gains a `mpsc::Sender<protocol::Command>` (cloned per connection
         through `connect_client` → `serve`). On `serde_json::from_str::<Command>(text)` Ok →
         `send`; on Err → the existing `eprintln!("unrecognized client message: {}", excerpt(..))`
         path, unchanged. Keep the lossy-UTF-8 read and the `MAX_LINE_BYTES` cap as they are.
-  - [ ] `tick()` owns `let mut speed = protocol::Speed::Normal;`. At iteration start, before
+  - [x] `tick()` owns `let mut speed = protocol::Speed::Normal;`. At iteration start, before
         accepting new clients, drain the command channel with `try_iter()` and apply each
         `SetSpeed` in arrival order (AD-10: control commands are handled by `simd` directly,
         never a sim queue — there is no sim queue yet).
-  - [ ] `if speed != Speed::Paused { world.step(); }` — the whole schedule is skipped, which
+  - [x] `if speed != Speed::Paused { world.step(); }` — the whole schedule is skipped, which
         freezes the tick because `advance_tick` lives inside it. Add a `// NOTE:` that Story
         3.1's command-consuming system must run *while paused* (AD-2), which is when this
         single `if` splits into "consume commands" + "advance world".
-  - [ ] Period from speed: `Normal`/`Paused` → `TICK_PERIOD` (100 ms), `Fast` →
+  - [x] Period from speed: `Normal`/`Paused` → `TICK_PERIOD` (100 ms), `Fast` →
         `FAST_TICK_PERIOD` (20 ms), as an exhaustive `match` with no wildcard arm. Paused
         keeps the 100 ms cadence so deltas keep flowing. Compute the deadline from the
         *current* iteration's speed so a `set_speed fast` takes effect on that iteration's
         sleep.
-  - [ ] `bridge::snapshot(&world, speed)` / `bridge::delta(&mut world, speed)`; delete both
+  - [x] `bridge::snapshot(&world, speed)` / `bridge::delta(&mut world, speed)`; delete both
         hardcoded `Speed::Normal` literals. Keep `delta`'s single-call-per-iteration
         discipline — it drains the dirty set.
-- [ ] **`simd`: prove it against the live daemon** (AC: 2, 3, 4, 5, 9)
-  - [ ] `crates/simd/tests/serve.rs`, following the existing `Daemon` harness: a raw TCP
+- [x] **`simd`: prove it against the live daemon** (AC: 2, 3, 4, 5, 9)
+  - [x] `crates/simd/tests/serve.rs`, following the existing `Daemon` harness: a raw TCP
         client writes `{"type":"set_speed","speed":"paused"}\n`, then reads 10 consecutive
         deltas and asserts one identical `tick` and unchanged entity positions across all of
         them — **this is the seam assertion; it must fail if the decoded command's decision
         were parsed and discarded.** Then send `normal` and assert the tick resumes from the
         frozen value.
-  - [ ] Connect a second client while paused and assert its snapshot carries
+  - [x] Connect a second client while paused and assert its snapshot carries
         `"speed":"paused"` (AC3).
-  - [ ] Two clients, speed change sent by one, both observe it in their next delta (AC9).
-  - [ ] Rate test in the shape of `deltas_arrive_at_roughly_ten_per_second`: time 20 deltas
+  - [x] Two clients, speed change sent by one, both observe it in their next delta (AC9).
+  - [x] Rate test in the shape of `deltas_arrive_at_roughly_ten_per_second`: time 20 deltas
         at normal, send `fast`, time 20 more, assert the second span is under half the first.
         Compare the two measured spans rather than against an absolute clock — a loaded
         devpod must not make this flake.
-  - [ ] Re-run, unmodified, `malformed_input_is_dropped_and_daemon_survives`,
+  - [x] Re-run, unmodified, `malformed_input_is_dropped_and_daemon_survives`,
         `non_utf8_input_does_not_close_the_connection` and
         `oversized_line_is_refused_without_killing_the_daemon`. If any needs editing, the
         1.2 contract has been broken.
@@ -390,14 +390,87 @@ OpenAI Codex (GPT-5)
   test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out
   ```
 
+- Daemon decision-seam RED before the loop handled commands:
+
+  ```text
+  running 1 test
+  thread 'paused_daemon_freezes_tick_and_entities_then_resumes' panicked at crates/simd/tests/serve.rs:162:5:
+  every observed delta after the command must acknowledge paused
+  test paused_daemon_freezes_tick_and_entities_then_resumes ... FAILED
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out
+  ```
+
+- Parsed-command-drop sabotage RED:
+
+  ```text
+  running 1 test
+  thread 'speed_change_from_either_client_reaches_both_on_the_same_delta' panicked at crates/simd/tests/serve.rs:136:5:
+  daemon never reported Paused; observed [(2, Normal), (3, Normal), (4, Normal), (5, Normal), (6, Normal)]
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out
+  ```
+
+- Paused snapshot bridge sabotage RED (`snapshot` temporarily hardcoded `Normal`):
+
+  ```text
+  running 1 test
+  thread 'client_connecting_while_paused_receives_paused_snapshot' panicked at crates/simd/tests/serve.rs:225:5:
+  assertion `left == right` failed
+    left: Normal
+   right: Paused
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out
+  ```
+
+- Pause-branch sabotage RED (`world.step()` temporarily unconditional):
+
+  ```text
+  running 1 test
+  thread 'paused_daemon_freezes_tick_and_entities_then_resumes' panicked at crates/simd/tests/serve.rs:196:5:
+  paused ticks changed: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out
+  ```
+
+- Fast-period boundary sabotage RED (`FAST_TICK_PERIOD` temporarily 100 ms):
+
+  ```text
+  running 1 test
+  thread 'fast_deltas_arrive_in_under_half_the_normal_span' panicked at crates/simd/tests/serve.rs:363:5:
+  fast span 2.002124622s was not under half normal span 1.78344666s
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out
+  ```
+
+- Paused-period mapping sabotage RED (`Paused` temporarily used the 20 ms period):
+
+  ```text
+  running 1 test
+  thread 'paused_daemon_freezes_tick_and_entities_then_resumes' panicked at crates/simd/tests/serve.rs:209:5:
+  paused span 180.964739ms did not keep normal cadence relative to 688.222106ms
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out
+  ```
+
+- Delta bridge sabotage RED (`delta` temporarily hardcoded `Normal`):
+
+  ```text
+  running 1 test
+  thread 'bridge::tests::delta_carries_dirty_tiles_and_full_authoritative_state' panicked at crates/simd/src/bridge.rs:352:9:
+  assertion `left == right` failed
+    left: Normal
+   right: Fast
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out
+  ```
+
 ### Completion Notes List
 
 - Added the one-variant, internally tagged `protocol::Command` wire type and pinned its literal `set_speed` JSON contract, including unknown-command rejection.
+- Routed decoded control commands from every connection into the daemon loop; pause now freezes world time while deltas continue at normal cadence, fast changes only the loop period, and snapshots/deltas carry authoritative speed.
+- Proved pause/resume, paused connect snapshots, same-delta two-client propagation, and relative fast timing against the real daemon. Re-ran the three named Story 1.2 input contracts unmodified; all passed.
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/2-3-master-of-time.md`
 - `crates/protocol/src/lib.rs`
+- `crates/simd/src/bridge.rs`
+- `crates/simd/src/main.rs`
+- `crates/simd/tests/serve.rs`
 
 ## Change Log
 

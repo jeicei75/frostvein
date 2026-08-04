@@ -111,6 +111,31 @@ fn read_delta(reader: &mut BufReader<TcpStream>) -> protocol::Delta {
     serde_json::from_str(&line).expect("delta line must match the protocol")
 }
 
+fn send_speed(stream: &mut TcpStream, speed: protocol::Speed) {
+    let line = match speed {
+        protocol::Speed::Paused => b"{\"type\":\"set_speed\",\"speed\":\"paused\"}\n".as_slice(),
+        protocol::Speed::Normal => b"{\"type\":\"set_speed\",\"speed\":\"normal\"}\n".as_slice(),
+        protocol::Speed::Fast => b"{\"type\":\"set_speed\",\"speed\":\"fast\"}\n".as_slice(),
+    };
+    stream.write_all(line).expect("speed command must write");
+    stream.flush().expect("speed command must flush");
+}
+
+fn read_delta_with_speed(
+    reader: &mut BufReader<TcpStream>,
+    expected: protocol::Speed,
+) -> protocol::Delta {
+    let mut observed = Vec::new();
+    for _ in 0..5 {
+        let update = read_delta(reader);
+        observed.push((update.tick, update.speed));
+        if update.speed == expected {
+            return update;
+        }
+    }
+    panic!("daemon never reported {expected:?}; observed {observed:?}");
+}
+
 #[test]
 fn streams_three_strictly_increasing_deltas() {
     let daemon = Daemon::spawn();
@@ -129,6 +154,116 @@ fn streams_three_strictly_increasing_deltas() {
         ticks,
         [snapshot.tick + 1, snapshot.tick + 2, snapshot.tick + 3]
     );
+}
+
+#[test]
+fn paused_daemon_freezes_tick_and_entities_then_resumes() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+
+    let _ = read_snapshot(&mut reader);
+    let _ = read_delta(&mut reader);
+    let normal_started = Instant::now();
+    for _ in 0..9 {
+        let _ = read_delta(&mut reader);
+    }
+    let normal_span = normal_started.elapsed();
+    send_speed(&mut writer, protocol::Speed::Paused);
+
+    let first_paused = read_delta_with_speed(&mut reader, protocol::Speed::Paused);
+    let paused_started = Instant::now();
+    let mut updates = vec![first_paused];
+    updates.extend((1..10).map(|_| read_delta(&mut reader)));
+    let paused_span = paused_started.elapsed();
+    let frozen_tick = updates[0].tick;
+    let frozen_positions: Vec<_> = updates[0]
+        .entities
+        .iter()
+        .map(|entity| (entity.id, entity.pos))
+        .collect();
+    assert!(
+        updates
+            .iter()
+            .all(|update| update.speed == protocol::Speed::Paused),
+        "every observed delta after the command must acknowledge paused: {:?}",
+        updates
+            .iter()
+            .map(|update| (update.tick, update.speed))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        updates.iter().all(|update| update.tick == frozen_tick),
+        "paused ticks changed: {:?}",
+        updates.iter().map(|update| update.tick).collect::<Vec<_>>()
+    );
+    assert!(updates.iter().all(|update| {
+        update
+            .entities
+            .iter()
+            .map(|entity| (entity.id, entity.pos))
+            .collect::<Vec<_>>()
+            == frozen_positions
+    }));
+    assert!(
+        paused_span > normal_span / 2 && paused_span < normal_span * 2,
+        "paused span {paused_span:?} did not keep normal cadence relative to {normal_span:?}"
+    );
+
+    send_speed(&mut writer, protocol::Speed::Normal);
+    let resumed = read_delta_with_speed(&mut reader, protocol::Speed::Normal);
+    assert_eq!(resumed.speed, protocol::Speed::Normal);
+    assert_eq!(resumed.tick, frozen_tick + 1);
+}
+
+#[test]
+fn client_connecting_while_paused_receives_paused_snapshot() {
+    let daemon = Daemon::spawn();
+    let first_stream = daemon.connect();
+    let mut writer = first_stream
+        .try_clone()
+        .expect("client write half must clone");
+    let mut first = BufReader::new(first_stream);
+    let _ = read_snapshot(&mut first);
+    let _ = read_delta(&mut first);
+
+    send_speed(&mut writer, protocol::Speed::Paused);
+    let paused = read_delta_with_speed(&mut first, protocol::Speed::Paused);
+
+    let mut second = BufReader::new(daemon.connect());
+    let snapshot = read_snapshot(&mut second);
+    assert_eq!(snapshot.speed, protocol::Speed::Paused);
+    assert_eq!(snapshot.tick, paused.tick);
+}
+
+#[test]
+fn speed_change_from_either_client_reaches_both_on_the_same_delta() {
+    let daemon = Daemon::spawn();
+    let first_stream = daemon.connect();
+    let mut first = BufReader::new(first_stream);
+    let _ = read_snapshot(&mut first);
+    let mut first_current = read_delta(&mut first);
+
+    let second_stream = daemon.connect();
+    let mut second_writer = second_stream
+        .try_clone()
+        .expect("second client write half must clone");
+    let mut second = BufReader::new(second_stream);
+    let _ = read_snapshot(&mut second);
+    let second_current = read_delta(&mut second);
+    while first_current.tick < second_current.tick {
+        first_current = read_delta(&mut first);
+    }
+    assert_eq!(first_current.tick, second_current.tick);
+
+    send_speed(&mut second_writer, protocol::Speed::Paused);
+    let second_update = read_delta_with_speed(&mut second, protocol::Speed::Paused);
+    let first_update = read_delta_with_speed(&mut first, protocol::Speed::Paused);
+
+    assert_eq!(first_update.speed, protocol::Speed::Paused);
+    assert_eq!(second_update.speed, protocol::Speed::Paused);
+    assert_eq!(first_update.tick, second_update.tick);
 }
 
 #[test]
@@ -206,6 +341,39 @@ fn deltas_arrive_at_roughly_ten_per_second() {
     assert!(
         elapsed >= Duration::from_millis(1200) && elapsed <= Duration::from_millis(4500),
         "{SAMPLES} deltas took {elapsed:?}, expected ~2s at 10Hz"
+    );
+}
+
+#[test]
+fn fast_deltas_arrive_in_under_half_the_normal_span() {
+    const SAMPLES: usize = 20;
+
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+    let _ = read_delta(&mut reader);
+
+    let normal_started = Instant::now();
+    for _ in 0..SAMPLES {
+        let update = read_delta(&mut reader);
+        assert_eq!(update.speed, protocol::Speed::Normal);
+    }
+    let normal_span = normal_started.elapsed();
+
+    send_speed(&mut writer, protocol::Speed::Fast);
+    let _ = read_delta_with_speed(&mut reader, protocol::Speed::Fast);
+    let fast_started = Instant::now();
+    for _ in 0..SAMPLES {
+        let update = read_delta(&mut reader);
+        assert_eq!(update.speed, protocol::Speed::Fast);
+    }
+    let fast_span = fast_started.elapsed();
+
+    assert!(
+        fast_span < normal_span / 2,
+        "fast span {fast_span:?} was not under half normal span {normal_span:?}"
     );
 }
 
