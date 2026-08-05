@@ -466,8 +466,11 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
     let mut command = Command::new(env!("CARGO_BIN_EXE_tui"));
     command
         .arg(port.to_string())
+        // 21 = the 17 queued prelude deltas below plus the 4 that carry the consequence. The
+        // capture must simply outlast the backlog; story 3.1 briefly solved this with a
+        // client-side drain sized to simd's queue, removed at review as a layering breach.
         .arg("--frames")
-        .arg("4")
+        .arg("21")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(key) = key {
@@ -478,30 +481,31 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
     let expects_command = key.is_some();
     let server = thread::spawn(move || {
         let mut stream = accept_with_timeout(&listener);
+        // AC14 demands the negative control be the *identical* run. Both captures therefore get
+        // the same large snapshot, the same 17-delta backlog and the same tick range; the only
+        // difference is the key sequence, and hence whether the final deltas carry designations.
         let mut prelude = mark_snapshot_line();
-        if expects_command {
-            for tick in 8..=24 {
-                let delta = protocol::Delta {
-                    msg_type: protocol::MessageType::Delta,
-                    tick,
-                    tiles: if tick == 8 {
-                        vec![
-                            protocol::TileChange {
-                                pos: [0, 0, 0],
-                                tile: protocol::Tile::Solid(protocol::Material::Ice),
-                            };
-                            512
-                        ]
-                    } else {
-                        Vec::new()
-                    },
-                    entities: Vec::new(),
-                    designations: Vec::new(),
-                    zones: Vec::new(),
-                    speed: protocol::Speed::Normal,
-                };
-                prelude.push_str(&format!("{}\n", serde_json::to_string(&delta).unwrap()));
-            }
+        for tick in 8..=24 {
+            let delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick,
+                tiles: if tick == 8 {
+                    vec![
+                        protocol::TileChange {
+                            pos: [0, 0, 0],
+                            tile: protocol::Tile::Solid(protocol::Material::Ice),
+                        };
+                        512
+                    ]
+                } else {
+                    Vec::new()
+                },
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                speed: protocol::Speed::Normal,
+            };
+            prelude.push_str(&format!("{}\n", serde_json::to_string(&delta).unwrap()));
         }
         stream
             .write_all(prelude.as_bytes())
@@ -538,8 +542,7 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
             Vec::new()
         };
 
-        let ticks = if expects_command { 25..=28 } else { 8..=11 };
-        for tick in ticks {
+        for tick in 25..=28 {
             let delta = protocol::Delta {
                 msg_type: protocol::MessageType::Delta,
                 tick,

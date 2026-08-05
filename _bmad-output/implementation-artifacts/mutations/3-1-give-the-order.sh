@@ -455,18 +455,8 @@ assert old in s
 p.write_text(s.replace(old, new))
 PY
 
-mutation "keyed capture drain bound is zero" tui key_sequence_designates_and_the_echoed_marker_reaches_expected_columns <<'PY'
-import pathlib
-p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
-old = 'const WORLD_COMMAND_CAPTURE_DRAIN: usize = 17;'
-assert old in s
-p.write_text(s.replace(old, 'const WORLD_COMMAND_CAPTURE_DRAIN: usize = 0;'))
-PY
-
-mutation "keyed capture drain refuses a partial record" tui key_sequence_designates_and_the_echoed_marker_reaches_expected_columns <<'PY'
-import pathlib
-p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
-old = '                        Ok(buffer) => !buffer.is_empty(),'
-assert old in s
-p.write_text(s.replace(old, "                        Ok(buffer) => buffer.contains(&b'\\n'),"))
-PY
+# NOTE: the two "keyed capture drain" mutations that stood here were removed at 3.1's code
+# review together with the production drain they protected (a client-side constant encoding
+# simd's CLIENT_QUEUE depth inside `tui`, which depends on `protocol` alone). The instrument
+# now simply requests more frames than the delta backlog, so there is no drain to sabotage.
+# Mutation count is 33 by design, not by attrition.

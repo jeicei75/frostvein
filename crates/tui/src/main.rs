@@ -34,10 +34,6 @@ const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const COMMAND_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MESSAGE_QUEUE: usize = 16;
-// simd can have CLIENT_QUEUE messages plus one write in flight behind its large
-// snapshot. A keyed evidence capture drains that bounded pre-command window.
-// NOTE: this is instrument-only; the wire has no command acknowledgement in phase one.
-const WORLD_COMMAND_CAPTURE_DRAIN: usize = 17;
 
 /// Caps the snapshot line so a server that never sends a newline cannot grow
 /// the buffer without bound. The 128x128x32 snapshot is ~6.9 MB.
@@ -147,61 +143,11 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(count) = frames {
         let viewport = frame_size();
-        let replays_world_command = keys
-            .iter()
-            .any(|key| matches!(key, KeyCode::Char('d' | 'c' | 'p' | 'x')));
-        if replays_world_command {
-            reader
-                .get_mut()
-                .set_nonblocking(true)
-                .context("could not make the keyed capture drain nonblocking")?;
-            let drain_result = (|| -> anyhow::Result<()> {
-                for _ in 0..WORLD_COMMAND_CAPTURE_DRAIN {
-                    let has_queued_bytes = match reader.fill_buf() {
-                        Ok(buffer) => !buffer.is_empty(),
-                        Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
-                        Err(error) => {
-                            return Err(error).context("could not inspect queued server messages");
-                        }
-                    };
-                    if !has_queued_bytes {
-                        break;
-                    }
-                    // Once any bytes of a pre-command record are queued, finish that record
-                    // under the existing bounded snapshot timeout. Returning it to the normal
-                    // stream would let a large delta consume one of the requested evidence frames.
-                    reader
-                        .get_mut()
-                        .set_nonblocking(false)
-                        .context("could not finish a queued server message")?;
-                    let message_result = read_message(&mut reader);
-                    let resume_result = reader
-                        .get_mut()
-                        .set_nonblocking(true)
-                        .context("could not resume the nonblocking keyed capture drain");
-                    let message = message_result?;
-                    resume_result?;
-                    match message {
-                        Some(Msg::Snapshot(next)) => {
-                            snapshot = *next;
-                            state.speed = snapshot.speed;
-                        }
-                        Some(Msg::Delta(delta)) => {
-                            apply(&mut snapshot, *delta);
-                            state.speed = snapshot.speed;
-                        }
-                        None => break,
-                    }
-                }
-                Ok(())
-            })();
-            let restore_result = reader
-                .get_mut()
-                .set_nonblocking(false)
-                .context("could not restore blocking reads after the keyed capture drain");
-            drain_result?;
-            restore_result?;
-        }
+        // NOTE: deltas already queued behind the connect snapshot are consumed as ordinary frames,
+        // so a keyed capture wanting to see its own command's consequence must simply ask for more
+        // frames than that backlog. Story 3.1 briefly shipped a nonblocking pre-command drain here
+        // sized to simd's CLIENT_QUEUE; it was removed at review because it put knowledge of daemon
+        // internals in the client, which depends on `protocol` alone.
         for code in keys {
             match apply_key(
                 &mut state,
