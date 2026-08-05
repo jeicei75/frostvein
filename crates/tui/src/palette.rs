@@ -1,4 +1,6 @@
-use protocol::{EntityKind, JobState, Material, Tile};
+use protocol::{DesignationKind, EntityKind, JobState, Material, Tile};
+
+use crate::view::Mode;
 
 pub type Rgb = (u8, u8, u8);
 
@@ -73,6 +75,55 @@ pub fn entity_cell(kind: EntityKind, state: JobState) -> Cell {
     }
 }
 
+pub fn designation_cell(kind: DesignationKind) -> Cell {
+    match kind {
+        DesignationKind::Dig => Cell {
+            glyph: '×',
+            fg: (232, 176, 72),
+        },
+        DesignationKind::Channel => Cell {
+            glyph: '▼',
+            fg: (92, 174, 224),
+        },
+    }
+}
+
+pub fn zone_cell() -> Cell {
+    Cell {
+        glyph: '≡',
+        fg: (88, 190, 118),
+    }
+}
+
+pub fn cursor_cell() -> Cell {
+    Cell {
+        glyph: '+',
+        fg: (246, 242, 226),
+    }
+}
+
+pub fn pending_rect_cell(mode: Mode) -> Cell {
+    match mode {
+        Mode::Dig => Cell {
+            glyph: 'd',
+            fg: (218, 142, 54),
+        },
+        Mode::Channel => Cell {
+            glyph: 'c',
+            fg: (70, 148, 202),
+        },
+        Mode::Stockpile => Cell {
+            glyph: 'p',
+            fg: (64, 166, 96),
+        },
+        Mode::Remove => Cell {
+            glyph: '-',
+            fg: (218, 82, 82),
+        },
+        Mode::Normal => BLANK,
+    }
+}
+
 pub fn dim(fg: Rgb, depth: u8) -> Rgb {
     if depth == 0 {
         return fg;
@@ -116,6 +167,69 @@ mod tests {
                 Cell { glyph: '☺', fg }
             );
         }
+
+        let markers = [
+            designation_cell(DesignationKind::Dig),
+            designation_cell(DesignationKind::Channel),
+            zone_cell(),
+            cursor_cell(),
+            pending_rect_cell(Mode::Dig),
+            pending_rect_cell(Mode::Channel),
+            pending_rect_cell(Mode::Stockpile),
+            pending_rect_cell(Mode::Remove),
+        ];
+        assert_eq!(
+            markers,
+            [
+                Cell {
+                    glyph: '×',
+                    fg: (232, 176, 72),
+                },
+                Cell {
+                    glyph: '▼',
+                    fg: (92, 174, 224),
+                },
+                Cell {
+                    glyph: '≡',
+                    fg: (88, 190, 118),
+                },
+                Cell {
+                    glyph: '+',
+                    fg: (246, 242, 226),
+                },
+                Cell {
+                    glyph: 'd',
+                    fg: (218, 142, 54),
+                },
+                Cell {
+                    glyph: 'c',
+                    fg: (70, 148, 202),
+                },
+                Cell {
+                    glyph: 'p',
+                    fg: (64, 166, 96),
+                },
+                Cell {
+                    glyph: '-',
+                    fg: (218, 82, 82),
+                },
+            ]
+        );
+
+        let existing_glyphs = ['█', '▓', '▒', '░', '▲', ' ', '☺'];
+        let marker_glyphs: std::collections::BTreeSet<_> =
+            markers.iter().map(|cell| cell.glyph).collect();
+        assert_eq!(
+            marker_glyphs.len(),
+            markers.len(),
+            "every marker must remain distinct by glyph alone"
+        );
+        assert!(
+            marker_glyphs
+                .iter()
+                .all(|glyph| !existing_glyphs.contains(glyph)),
+            "marker glyphs must not collide with terrain or entities"
+        );
     }
 
     #[test]

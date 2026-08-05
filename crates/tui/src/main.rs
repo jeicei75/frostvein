@@ -146,7 +146,7 @@ fn main() -> anyhow::Result<()> {
                 &mut state,
                 KeyEvent::new(code, KeyModifiers::NONE),
                 snapshot.dims,
-                snapshot.speed,
+                frame_size(),
             )
         {
             send_command(&mut writer, command)?;
@@ -189,19 +189,18 @@ fn main() -> anyhow::Result<()> {
         if event::poll(POLL_INTERVAL).context("could not poll terminal events")? {
             match event::read().context("could not read terminal event")? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    match apply_key(&mut state, key, snapshot.dims, snapshot.speed) {
+                    match apply_key(&mut state, key, snapshot.dims, size) {
                         Action::Redraw => needs_redraw = true,
                         Action::Quit => break 'running,
-                        // NOTE: the next speed is derived from the last wire update, so two
-                        // presses inside one round-trip both compute from the same stale
-                        // speed. They do not merely collapse — two *different* keys compose
-                        // into a speed neither implies: at Normal, `+` sends Fast and `-`
-                        // sends Paused, and the daemon's last-write-wins drain settles on
-                        // Paused. Speed is shared, so that pauses every watching terminal.
-                        // Optimistic local speed is deliberately omitted (AD-4); Story 3.1
-                        // owns the fix along with the pause/command-consumption split.
+                        // The local speed is updated optimistically by `apply_key`; the next
+                        // snapshot or delta overwrites it above, keeping the daemon authoritative.
                         Action::Command(command) => {
                             send_command(&mut writer, command)?;
+                        }
+                        Action::Commands(commands) => {
+                            for command in commands {
+                                send_command(&mut writer, command)?;
+                            }
                         }
                         Action::Ignore => {}
                     }
@@ -222,10 +221,12 @@ fn main() -> anyhow::Result<()> {
                 // the daemon serves one world for its lifetime.
                 Ok(Ok(Msg::Snapshot(next))) => {
                     snapshot = *next;
+                    state.speed = snapshot.speed;
                     needs_redraw = true;
                 }
                 Ok(Ok(Msg::Delta(delta))) => {
                     apply(&mut snapshot, *delta);
+                    state.speed = snapshot.speed;
                     needs_redraw = true;
                 }
                 Ok(Err(error)) => return Err(error),
@@ -297,7 +298,7 @@ fn frame_size() -> (u16, u16) {
 fn stream_frames(
     mut reader: BufReader<TcpStream>,
     mut snapshot: Snapshot,
-    state: view::ViewState,
+    mut state: view::ViewState,
     count: u32,
 ) -> anyhow::Result<()> {
     reader
@@ -330,8 +331,14 @@ fn stream_frames(
         // Bounded like every other read here: a server that connects and then goes
         // quiet must fail, never hang.
         match message_rx.recv_timeout(SNAPSHOT_READ_TIMEOUT) {
-            Ok(Ok(Msg::Snapshot(next))) => snapshot = *next,
-            Ok(Ok(Msg::Delta(delta))) => apply(&mut snapshot, *delta),
+            Ok(Ok(Msg::Snapshot(next))) => {
+                snapshot = *next;
+                state.speed = snapshot.speed;
+            }
+            Ok(Ok(Msg::Delta(delta))) => {
+                apply(&mut snapshot, *delta);
+                state.speed = snapshot.speed;
+            }
             Ok(Err(error)) => return Err(error),
             Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
         }

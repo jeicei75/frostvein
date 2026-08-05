@@ -161,49 +161,49 @@ so that my directives are recorded in the world, visibly, the moment I issue the
         the next delta carries it and the tick is still frozen); and a partial-line test asserting the
         log line is NOT the overflow message.
 
-- [ ] **`tui`: modes, cursor, hint bar, optimistic speed** (AC: 9, 10, 11, 12)
-  - [ ] `ViewState` gains `mode: Mode`, `cursor: (i64, i64)`, `anchor: Option<(i64, i64)>` and
+- [x] **`tui`: modes, cursor, hint bar, optimistic speed** (AC: 9, 10, 11, 12)
+  - [x] `ViewState` gains `mode: Mode`, `cursor: (i64, i64)`, `anchor: Option<(i64, i64)>` and
         `speed: Speed`. `apply_key`'s signature becomes
         `apply_key(&mut ViewState, KeyEvent, Dims, viewport: (u16, u16)) -> Action` — the `speed`
         parameter is **replaced** by `state.speed`, and the viewport is what lets the camera follow
         the cursor. Both signature changes land together; every existing keymap test updates
         mechanically.
-  - [ ] `initial(&snapshot)` sets the new fields: `Mode::Normal`, `cursor` = the camera it just
+  - [x] `initial(&snapshot)` sets the new fields: `Mode::Normal`, `cursor` = the camera it just
         computed, `anchor: None`, `speed` = `snapshot.speed`. Its existing test pins the whole
         `ViewState`, so it fails until this is done — that is the intended order.
-  - [ ] Markers draw only on the viewed z-level, the same guard entities already use
+  - [x] Markers draw only on the viewed z-level, the same guard entities already use
         [view.rs:107-115]. A designation one level down must not appear on this one.
-  - [ ] Mode entry (`d`/`c`/`p`/`x`) only from `Mode::Normal`; in a mode those keys are ignored and
+  - [x] Mode entry (`d`/`c`/`p`/`x`) only from `Mode::Normal`; in a mode those keys are ignored and
         `Esc` is the way out. Cursor starts at the camera position. Speed keys, `S`/`L` and `q`
         remain global and work in every mode.
-  - [ ] `<`/`>` change z (and the cursor with it) while un-anchored; while anchored they are ignored
+  - [x] `<`/`>` change z (and the cursor with it) while un-anchored; while anchored they are ignored
         — the rect is single-z by construction rather than by validation.
-  - [ ] Camera follow: after a cursor move, pan the camera by the minimum needed to keep the cursor
+  - [x] Camera follow: after a cursor move, pan the camera by the minimum needed to keep the cursor
         inside the visible window (`w` columns, `h - 2` map rows, centred on the camera). Test the
         boundary: a cursor walked to the window edge and one step past it moves the camera by exactly
         one.
-  - [ ] Commit on the second `Enter`: emit `Command::Designate { kind, rect }` or
+  - [x] Commit on the second `Enter`: emit `Command::Designate { kind, rect }` or
         `PlaceStockpile { rect }` with `min`/`max` from anchor and cursor at `state.z`, then clear
         the anchor and stay in the mode. `x` mode emits **two** commands for the same rect,
         `CancelDesignation` then `RemoveStockpile`.
-  - [ ] `Action` carries one command today. Give `x` its second without inventing a general
+  - [x] `Action` carries one command today. Give `x` its second without inventing a general
         multi-command mechanism: the narrowest change is an `Action::Commands([Command; 2])` variant
         or a second `Action` returned alongside — pick one, keep the single-command path untouched,
         and `// NOTE:` that two is the only arity anything needs. Do not build a command queue in the
         client.
-  - [ ] Optimistic speed: on emitting a `SetSpeed`, write the requested speed into `state.speed`
+  - [x] Optimistic speed: on emitting a `SetSpeed`, write the requested speed into `state.speed`
         immediately; on every applied snapshot/delta, overwrite `state.speed` from the wire. Test the
         exact 2.3 trap: at `Normal`, `+` then `-` with no wire update in between yields `Fast` then
         `Normal`. That assertion fails if the fix is reverted — it is the point of the test.
-  - [ ] Render: `map_h = h - 2`; row `h-2` is the status line (tick, speed, z, dwarves — the key
+  - [x] Render: `map_h = h - 2`; row `h-2` is the status line (tick, speed, z, dwarves — the key
         hints move out of it), row `h-1` is the hint bar. Layer order terrain → zones → designations
         → entities → pending rect → cursor.
-  - [ ] `palette.rs`: `designation_cell(DesignationKind)`, `zone_cell()`, `cursor_cell()` and the
+  - [x] `palette.rs`: `designation_cell(DesignationKind)`, `zone_cell()`, `cursor_cell()` and the
         pending-rect look, each pinned in `every_look_is_pinned`. Suggested glyphs — dig `×`, channel
         `▼`, stockpile `≡`, cursor `+`, remove-mode preview `-`; the exact RGB is yours, but every
         glyph must be absent from the existing tile/entity table and the test must assert the whole
         set is pairwise distinct.
-  - [ ] Hint-bar test: for every mode and both anchor states the hint is ≤ 80 columns, names that
+  - [x] Hint-bar test: for every mode and both anchor states the hint is ≤ 80 columns, names that
         mode's keys, and the normal-mode hint contains `q quit client`. `x` mode's hint must say it
         clears both marks and stockpiles — one key doing two things is only discoverable if the hint
         bar says so.
@@ -615,6 +615,75 @@ OpenAI Codex (GPT-5), acting as Völundr.
   test unterminated_partial_line_is_not_reported_as_overflow ... FAILED
   partial line was falsely reported as overflow: client line exceeded 65536 bytes; closing connection
   ```
+- Two-row layout RED:
+  ```text
+  test view::tests::status_and_hint_occupy_the_bottom_two_rows ... FAILED
+  assertion failed: status.starts_with("tick 0  normal  z 0/0  dwarves 0")
+  ```
+- Initial view-state RED:
+  ```text
+  error[E0560]: struct `view::ViewState` has no field named `mode`
+  error[E0560]: struct `view::ViewState` has no field named `cursor`
+  error[E0560]: struct `view::ViewState` has no field named `anchor`
+  error[E0560]: struct `view::ViewState` has no field named `speed`
+  ```
+- Marker z-filter RED:
+  ```text
+  test view::tests::marks_draw_only_on_the_viewed_level ... FAILED
+    left: ' '
+   right: '×'
+  ```
+- Mode/anchor and z-lock REDs:
+  ```text
+  test view::tests::mode_keys_enter_only_from_normal_and_escape_backs_out_one_level ... FAILED
+    left: Ignore
+   right: Redraw
+
+  test view::tests::z_keys_work_unanchored_and_are_ignored_while_anchored ... FAILED
+    left: Redraw
+   right: Ignore
+  ```
+- Cursor/camera boundary RED:
+  ```text
+  test view::tests::cursor_moves_clamps_and_pans_camera_only_after_crossing_the_window_edge ... FAILED
+    left: (5, 5)
+   right: (7, 5)
+  ```
+- Commit/action REDs:
+  ```text
+  test view::tests::second_enter_commits_each_single_command_mode_and_stays_in_mode ... FAILED
+    left: Ignore
+   right: Redraw
+
+  error[E0599]: no variant, associated function, or constant named `Commands` found for enum `view::Action`
+  ```
+- Optimistic-speed sabotage RED:
+  ```text
+  test view::tests::optimistic_speed_keys_compose_before_a_wire_update ... FAILED
+    left: Normal
+   right: Fast
+  ```
+- Layer-order RED:
+  ```text
+  test view::tests::marker_layers_follow_terrain_zone_designation_entity_pending_cursor_order ... FAILED
+    left: '☺'
+   right: 'd'
+  ```
+- Palette collision sabotage RED:
+  ```text
+  test palette::tests::every_look_is_pinned ... FAILED
+  left: [... Cell { glyph: '×', fg: (246, 242, 226) }, ...]
+  right: [... Cell { glyph: '+', fg: (246, 242, 226) }, ...]
+  ```
+- Hint/global-key REDs:
+  ```text
+  test view::tests::hint_bar_names_every_modes_keys_and_fits_eighty_columns ... FAILED
+  assertion failed: hint.starts_with("dig:")
+
+  test view::tests::speed_save_load_and_quit_keys_remain_global_in_every_mode ... FAILED
+    left: Ignore
+   right: Command(Save)
+  ```
 
 ### Completion Notes List
 
@@ -627,6 +696,9 @@ OpenAI Codex (GPT-5), acting as Völundr.
 - AC5–AC7/AC13: replaced wire placeholders with pinned typed shapes and four commands; added
   exhaustive bridge conversions, iteration-top command consumption, authoritative mark lists,
   two-client consequence tests, paused-intake coverage, and honest partial-line EOF handling.
+- AC9–AC12: added modal rectangle input, clamped cursor/camera follow, one-level escape, narrow
+  two-command erasure, optimistic local speed with wire overwrite, two-row status/hints, ordered
+  marker layers, and a glyph-distinct pinned palette. TUI tests and clippy are green.
 
 ### File List
 
@@ -639,6 +711,8 @@ OpenAI Codex (GPT-5), acting as Völundr.
 - crates/simd/src/main.rs
 - crates/simd/tests/serve.rs
 - crates/tui/src/main.rs
+- crates/tui/src/palette.rs
+- crates/tui/src/view.rs
 
 ## Change Log
 
