@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-08-04
+# last_updated: 2026-08-05
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-04
+last_updated: 2026-08-05
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -58,9 +58,9 @@ development_status:
   2-2-dwarves-wander-the-frost: done
   2-3-master-of-time: done
   2-4-the-world-endures: done
-  epic-2-retrospective: optional
-  epic-3: backlog
-  3-1-give-the-order: backlog
+  epic-2-retrospective: done
+  epic-3: in-progress
+  3-1-give-the-order: ready-for-dev
   3-2-the-dig: backlog
   3-3-the-haul-and-the-skeleton-walks: backlog
   epic-3-retrospective: optional
@@ -142,3 +142,72 @@ action_items:
     owner: "Amelia"
     status: done
     note: "VERIFIED at 2.2: the self-gate ran for the first time — the writable-CODEX_HOME fix in codex-handoff.sh works. It returned 'No actionable defects were found' on the ~1200-line diff and requested no code changes. Cost: ~15 min of wall-clock after the last commit, producing no commits, and it re-printed the full branch diff each poll turn (185k-line run log). Its nested sandbox denied loopback, so it skipped two simd tests as environmental. MEASURE MET: 2.2's review applied 7 patches against 1.3's ten — but read it carefully, because the self-gate found NOTHING and all 7 came from the review layers, so the drop is not evidence the self-gate works. Its true value is still unmeasured; the honest read is that ~15 min of wall-clock bought a clean bill of health that four later layers contradicted"
+
+# Appended by the Epic 2 retrospective (2026-08-05).
+# Full context: epic-2-retro-2026-08-05.md
+  - epic: 2
+    action: "Encode a hard per-layer review time-box in bmad-code-review.toml: 20 min/layer, orchestrator kills and continues, a timed-out layer is reported as a COVERAGE HOLE never a clean result, a growing transcript is explicitly not a progress signal, 60 min whole-review ceiling"
+    owner: "Amelia"
+    status: done
+    note: "Applied 2026-08-05 as the LAYER TIME-BOX persistent fact. Origin: story 2.4, where a hunter layer hung ~2.5h (43% of that story's wall-clock) and was only caught when Wolf returned. Verified at the retro that the in-session fixes had never been written to any config file, so Epic 3 would have inherited the trap unchanged"
+  - epic: 2
+    action: "Add tokens and wall-clock to session_tokens.py alongside cost: ledger `minutes` column, cursor last_ts so each phase's duration is billed over its own delta window, and a rollup Spend-shape table (turns, tokens, cache-read %, output, minutes)"
+    owner: "Amelia"
+    status: done
+    note: "Applied 2026-08-05. `minutes` is appended LAST so the 20 historical rows still parse (they read as blank rather than being re-aligned by a column). Also fixed a parsing defect found while doing it: annotation tables inside a ledger were parsed as data rows, inventing phantom rollup phases (`row`, `dev (codex, gpt-5.6-sol)`). First finding off the new table: 96% of every token processed is a cache read, in BOTH epics"
+  - epic: 2
+    action: "Apply the review restructure: R1 give each hunter a disjoint territory (Blind Hunter = sim-core, Edge Case Hunter = the shells) while both Opus auditors keep whole-diff scope; R2 one verification pass per review instead of one per patch"
+    owner: "Amelia"
+    status: open
+    note: "Proposed at the retro on Wolf's 'we need to try something different'; awaiting his approval of the shape before encoding. Diagnosis: review costs turns x context x rate, is 96% re-read context, and no lever so far touched turns or orchestrator context. Evidence for R1 is convergence -- the stale-speed trap (2.3) and duplicate dwarf ids (2.4) were each found independently by THREE layers. Control = mutation kill-rate against 1.3's baseline; revert R1 (keep R2) if a defect is later found whose site sat inside a hunter's excluded territory. Measure = turns and cache-read tokens per review against Epic 2's 537 turns / 72.7M tokens per story. NOTE the humility clause: Epic 1's retro predicted review $193 -> $39 and delivered a small INCREASE, so this is measured on turns, not promised in dollars"
+  - epic: 2
+    action: "Record which review layer raised each finding, in every triage"
+    owner: "Amelia"
+    status: open
+    note: "Cheap, and it is what R1 rests on -- convergence was only visible this epic because three layers happened to be named in two story files. Makes it measured rather than inferred at the Epic 3 retro"
+  - epic: 2
+    action: "Add an AC-authoring check to story-creation: every AC must name an observation that can actually occur, and must not restate an earlier story's contract inaccurately"
+    owner: "Amelia"
+    status: done
+    note: "Applied 2026-08-05 at 3.1's story creation, on Wolf's yes. Encoded as a persistent fact in _bmad/custom/bmad-create-story.toml, merging this item with the forge's ep-11 A6 rule that frostvein had never taken (forge-process check reported bmad-create-story.toml UPSTREAM CHANGED). Two checks per AC: (1) CAN IT HAPPEN -- trace the observation through the real code path before writing it; (2) OUTCOME NOT MECHANISM, with the named legitimate exceptions (determinism invariants, byte-exact wire contracts, architectural edges, reuse-don't-rebuild). It fired on its first use: 3.1's draft AC4 said a designate command sent while paused appears in 'the very next delta' -- the identical defect to 2.3's AC9, since the command crosses TCP and lands on a later iteration. Rewritten to 'within a bounded number of deltas, every one carrying the frozen tick' before the story was saved. The forge's MODEL POLICY fact was deliberately NOT taken (frostvein has no Fable history); that side of the reconciliation is still open"
+    note: "Spec-text defects are now their own recurring class with no mechanical guard: 1.3's unreachable 100x40 fallback, 2.1's AC2 amended at review, and 2.3 shipping TWO unmeetable ACs (AC9 demanded a speed change in the 'very next delta' when the command crosses TCP and lands on the second; AC2 contradicted itself about oversized lines). Four instances in seven stories, all authored in create-story, all caught by review. Baseline for Epic 3: zero"
+  - epic: 2
+    action: "RESOLVED (Wolf, 2026-08-05) -- the AD-10 command consumer is OPTION C: a plain `&mut self` method on World, called by simd at iteration top BEFORE the conditional world.step(). Carry it into 3.1 story-creation"
+    owner: "Amelia"
+    status: open
+    note: "THE PROBLEM: simd pauses with `if speed != Speed::Paused { world.step(); }` at crates/simd/src/main.rs:181-183, which skips the ENTIRE schedule (crates/sim-core/src/lib.rs:239). That satisfies AD-2 only by accident today, because every system in the schedule happens to be world-advancing. 3.1 adds the AD-10 queue whose commands MUST apply while paused, or the player pauses, marks a rectangle and sees nothing until unpause. WHY C over the alternatives: (A) a second always-run schedule breaks AD-7's single chained schedule and doubles what 2.4's single assemble() must keep in step -- the exact divergence it was built to prevent; (B) bevy run-conditions on a Paused resource make sim-core learn pause, contradicting 2.3's no-sim-core-change guardrail. C matches the existing precedent: World::set_tile at lib.rs:375 already mutates sim state as a plain method, not a system. One schedule, one assemble, pause stays in simd, and AD-10's `consumed at loop-iteration start` is literally the call site. C's COST, which needs a // NOTE: in 3.1 -- command ordering is explicit by call-site rather than by .chain(). TWO THINGS 3.1 MUST SETTLE ALONGSIDE IT: (1) where the still-applies-while-paused line falls -- a designation appears in the next delta while paused YES, but does designation-to-job conversion run while paused, does the reaction-delay counter tick? Those are world-advancing and should skip; 3.2 adds both, and if 3.1 does not draw the line 3.2 draws it by accident. (2) 3.1 IS A WIRE CHANGE and its own epic text does not say so -- designations and zones are still Vec<()> at crates/protocol/src/lib.rs:100-101 and 115-116, so protocol + the simd bridge + the pinned JSON literals + tui move in ONE commit or the suite is red between them, exactly as 2.2 had to for Entity.state"
+  - epic: 2
+    action: "Story 3.2 stays ONE story (Wolf, 2026-08-05, declining the proposed 3.2a/3.2b split). Fold the size mitigations into its story-creation and handoff instead"
+    owner: "Amelia"
+    status: open
+    note: "Risk accepted deliberately, not overlooked. 3.2 carries FR5, FR6, FR8, FR11, FR12 plus the AD-12 job market, the SaveState extension, the first-ever production set_tile caller, and the dwarf-collision fix deferred from 2.2. Calibration: 2.4 was the largest story so far (12 ACs, 30 mutations, $83, ~6h) and is the one that HUNG. MITIGATIONS, all belonging to story-creation and the handoff prompt: (1) the review half is already protected by the new layer time-box, which is what actually failed at 2.4; (2) a story this size may span two Codex sessions, so the standing rule -- restate RED evidence in the continuation handoff -- must be explicit in the prompt, since Epic 1 Pattern 4 was TDD discipline lost at exactly that boundary; (3) commit-per-green-step stops being style and becomes the recovery mechanism, letting a stalled run resume from the last green commit; (4) budget a cargo clean -p step for a 40+ mutation set, since mutate.sh is not concurrency-safe and both 2.3 and 2.4 hit stale mutated binaries; (5) more ACs means more chances of an unmeetable one -- 2.3 shipped two on a story a third this size"
+  - epic: 2
+    action: "Author an explicit dwarf-occupancy / tile-reservation AC into the dig story"
+    owner: "Amelia"
+    status: open
+    note: "Deferred to 3.2 by Wolf at 2.2's review, but epics.md's 3.2 text says nothing about occupancy, so today no AC anywhere covers it. Reproduced at 2.2: seed 133, ids 0 and 1 share (62,36,17) for ticks 133-142; render writes entities in ascending Id so the second erases the first and a dwarf silently vanishes for ten ticks. With A* and jobs, dwarves CONVERGE on dig sites, so the failure gets far likelier"
+  - epic: 2
+    action: "Schedule the three 3.1-owned deferred items into 3.1's story rather than re-deferring them"
+    owner: "Amelia"
+    status: open
+    note: "The stale-speed compose trap (crates/tui/src/view.rs:180-195), read_inbound's partial-line-as-overflow misreport (crates/simd/src/main.rs:270), and the missing in-UI affordance for Command::Quit (crates/tui/src/view.rs:222)"
+  - epic: 2
+    action: "Re-check FR23's motion sign-off at Story 3.3, with the full designate -> dig -> haul loop visible"
+    owner: "Wolf"
+    status: open
+    note: "FR23's motion half did NOT close at Epic 2. Wolf's verdict: happy in the early stories, then 'the world didn't change after that, so it was a bit boring'. Predicted verbatim by 2.2's review and deferred: at 80x24 only one of five dwarves is ever visible, Walk is a one-tick pulse in eleven, and the dirty-tile path is inert so every Epic 2 delta carried tiles=[]. Wolf's call at this retro: do NOT spend a TUI story on it -- Epic 3 fixes it by construction (3.1's cursor puts the camera where the work is, 3.2's dig is the first thing that visibly changes the world). Stays OPEN until 3.3"
+  - epic: 2
+    action: "Hand the Epic 2 process changes to Nidavellir via a docs/forge-transfer-*.md note"
+    owner: "Amelia"
+    status: done
+    note: "docs/forge-transfer-2026-08-05.md, following the 2026-08-03 convention: read-only, split by evidence class, every claim naming the file or command that verifies it. NOTE this is the NOTE only -- the actual forge-process propagation is deliberately held until after story 3.1, see the next item"
+  - epic: 2
+    action: "AFTER STORY 3.1 IS DONE: propagate the Epic 2 process changes into the forge via forge-process, then re-install into every consumer"
+    owner: "Wolf + Amelia"
+    status: open
+    note: "TRIGGER: story 3.1 complete (dev + review). Wolf, 2026-08-05: 'I want to test at least the first story before moving to forge-process' -- the time-box and the new metrics columns should prove themselves on a real story first. WHY THIS IS EASY TO FORGET AND HOW IT FIRES ANYWAY: a STEP C was added to on_complete in _bmad/custom/bmad-code-review.toml that surfaces this at the END of 3.1's review, and instructs its own removal once done. THE EXACT STEPS, verified live at the retro by running `./scripts/forge-process.sh check projects/frostvein` from /workspace: (1) copy _bmad/scripts/session_tokens.py and _bmad/scripts/tests/test_session_tokens.py back into the FORGE at /workspace/_bmad/scripts/ -- both are manifest FILE entries and must be byte-identical, and frostvein is currently the side that is ahead (verified: the ENTIRE diff between the two copies is this retro's work, no pre-existing divergence, so the old PRICES defect really was closed); (2) bump VERSION=1.0.2 to 1.1.0 in /workspace/forge-process.manifest -- new capability, not a fix; (3) re-run check, those two entries should go ok; (4) `scripts/forge-process.sh install projects/<name>` for every other consumer; (5) add a History line to /workspace/docs/forge-process-upgrade-runbook.md. SEPARATE AND HARDER: the LAYER TIME-BOX rule lives in bmad-code-review.toml, a TEMPLATE, so `check` can only ever say `upstream moved, go look`. The runbook's own Known-limitation section already says the unit that wants sharing is the RULE not the FILE, and names the trigger: revisit at a third project, or the first time a shared rule is hand-merged TWICE. The time-box is a universal rule (it is about fan-out orchestration, nothing to do with Rust), so hand-merging it is MERGE 1 OF 2 -- Wolf is on the clock for a decision he already recorded. ALSO PENDING, pre-existing and unrelated to this retro: check reports UPSTREAM CHANGED on all three _bmad/custom/*.toml files -- the forge has improvements frostvein never took, and create-story + dev-story shape how 3.1 and 3.2 get written, so clear them BEFORE 3.1 rather than after"
+  - epic: 2
+    action: "Wire the metrics-ledger tests into scripts/gate.sh as a fifth check"
+    owner: "Amelia"
+    status: done
+    note: "Applied 2026-08-05 on Wolf's yes. `run \"metrics ledger tests\" python3 -m unittest discover -s _bmad/scripts/tests` -- stdlib unittest deliberately, no pytest and no venv, so the pre-commit hook cannot break on a missing dev dependency. WHY: that suite existed, was thorough, and NOTHING ran it; its own docstring records that it went red after the 2026-08-01 PRICES fix and stayed red unnoticed. Every cost conclusion in the retro comes out of that script and it is a forge-process FILE, so a defect in it propagates to every sibling project. SABOTAGE-VERIFIED before being believed, per the standing rule that a green check is not evidence: (1) PRICES reverted to the retired $15/$75 Opus row, (2) rollup preservation of hand-written analysis disabled, (3) phase duration billed from session start instead of from its cursor -- each turned the gate RED, and restoring turned it green"

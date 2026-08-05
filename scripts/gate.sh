@@ -8,9 +8,17 @@
 #
 # USAGE:  scripts/gate.sh
 #
-# The four checks are the ones docs/technical-preferences.md and every story's
+# The first four checks are the ones docs/technical-preferences.md and every story's
 # Verification block name. The `cargo tree` probe guards AC1's architectural rule
 # that `tui` must never gain a `sim-core` edge — clients hold zero game logic.
+#
+# The fifth is not about the Rust product at all: it runs the metrics-ledger tests.
+# Added at the Epic 2 retro (2026-08-05) because that suite had NO runner — its own
+# docstring records that it "went red and stayed red, unnoticed, because nothing runs
+# it" after the 2026-08-01 PRICES fix shipped without it, and every cost conclusion
+# this project draws comes out of that script. It is also a forge-process `FILE`, so a
+# defect here propagates to every sibling project. Stdlib unittest on purpose: no
+# pytest, no venv, so the pre-commit hook cannot break on a missing dev dependency.
 
 set -uo pipefail
 
@@ -67,6 +75,8 @@ else
   printf '%s\n' "$tree" | tail -10
   fail=1
 fi
+
+run "metrics ledger tests" python3 -m unittest discover -s _bmad/scripts/tests
 
 if [ "$fail" -ne 0 ]; then
   echo "GATE RED"

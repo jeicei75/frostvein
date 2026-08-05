@@ -48,6 +48,14 @@
     "output": 75311,
     "turns": 64
   },
+  "4d12c2fa-c5f4-40af-af73-1132ea7b814a.jsonl": {
+    "cache_creation": 643943,
+    "cache_read": 16762349,
+    "input": 8087,
+    "last_ts": "2026-08-05T08:56:02.380Z",
+    "output": 121989,
+    "turns": 106
+  },
   "63c3bc41-0883-4b82-b8cc-a08beb60669c.jsonl": {
     "cache_creation": 605450,
     "cache_read": 42243873,

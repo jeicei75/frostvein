@@ -7,6 +7,8 @@ transcripts in tmp dirs — never touches real ledgers.
 Run: python3 -m unittest discover -s _bmad/scripts/tests
 """
 
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -140,8 +142,60 @@ class ClaudeParsingTests(unittest.TestCase):
             s = st.sum_claude_transcript(str(path))
             self.assertEqual((s["turns"], s["input"], s["cache_read"]), (2, 15, 1500))
             self.assertEqual(
-                set(s), {"turns", "models", "input", "cache_creation", "cache_read", "output", "total"}
+                set(s),
+                {
+                    "turns", "models", "input", "cache_creation", "cache_read", "output", "total",
+                    # wall-clock span of the counted turns (ep-02 retro): cost cannot tell an
+                    # expensive phase from a stalled one, and a 2.5h hung agent is nearly free.
+                    "first_ts", "last_ts",
+                },
             )
+
+
+class DurationTests(unittest.TestCase):
+    def test_minutes_between_handles_missing_and_backwards(self):
+        self.assertEqual(st._minutes_between("2026-08-04T13:05:08Z", "2026-08-04T14:42:08Z"), 97.0)
+        self.assertIsNone(st._minutes_between(None, "2026-08-04T14:42:08Z"))
+        self.assertIsNone(st._minutes_between("2026-08-04T13:05:08Z", None))
+        # A clock that ran backwards must report nothing rather than a negative duration.
+        self.assertIsNone(st._minutes_between("2026-08-04T14:42:08Z", "2026-08-04T13:05:08Z"))
+
+    def test_delta_window_starts_where_the_previous_record_stopped(self):
+        # The point of billing duration per phase: a review that follows a create on the same
+        # transcript must not inherit the create's elapsed time.
+        cumulative = st._as_summary(
+            100, ["claude-opus-4-8"],
+            {"input": 10, "cache_creation": 20, "cache_read": 30, "output": 40},
+            ("2026-08-04T10:00:00Z", "2026-08-04T12:00:00Z"),
+        )
+        prev = {"turns": 40, "input": 4, "cache_creation": 8, "cache_read": 12, "output": 16,
+                "last_ts": "2026-08-04T11:00:00Z"}
+        delta, reset = st.delta_since_cursor(cumulative, prev)
+        self.assertFalse(reset)
+        self.assertEqual(delta["turns"], 60)
+        self.assertEqual(st._minutes_between(delta["first_ts"], delta["last_ts"]), 60.0)
+
+    def test_cursor_written_before_last_ts_existed_yields_no_duration(self):
+        cumulative = st._as_summary(
+            10, ["claude-opus-4-8"], {"input": 1, "cache_creation": 1, "cache_read": 1, "output": 1},
+            ("2026-08-04T10:00:00Z", "2026-08-04T12:00:00Z"),
+        )
+        legacy = {"turns": 5, "input": 0, "cache_creation": 0, "cache_read": 0, "output": 0}
+        delta, _ = st.delta_since_cursor(cumulative, legacy)
+        self.assertIsNone(st._minutes_between(delta["first_ts"], delta["last_ts"]))
+
+    def test_ledger_row_round_trips_minutes(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "led.md")
+            s = st._as_summary(
+                3, ["claude-opus-4-8"], {"input": 1, "cache_creation": 2, "cache_read": 3, "output": 4},
+                ("2026-08-04T10:00:00Z", "2026-08-04T10:30:00Z"),
+            )
+            st.append_ledger(path, "ep-09-us-01-demo", "review", "claude", s, "t.jsonl")
+            rows = st.parse_ledger_rows(path)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["minutes"], 30.0)
+            self.assertEqual(rows[0]["phase"], "review")
 
 
 _LEDGER = (
@@ -204,3 +258,75 @@ class RollupTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PreservationTests(unittest.TestCase):
+    """A rollup accumulates hand-written analysis the generator cannot reproduce.
+    `--rollup` used to overwrite it silently — which is the exact "rewriting recorded
+    history" failure the ledgers themselves warn against (ep-02 retro, caught after it
+    ate a rate-correction table)."""
+
+    def test_tail_after_the_marker_survives_regeneration(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "1-rollup.md")
+            Path(path).write_text(
+                "# old generated\n\n" + st._SENTINEL + "\n\n**Hand-written analysis.**\n"
+            )
+            merged = st._merge_preserved(path, "# fresh generated\n\n" + st._SENTINEL + "\n")
+            self.assertIn("# fresh generated", merged)
+            self.assertIn("**Hand-written analysis.**", merged)
+            self.assertNotIn("# old generated", merged)
+            self.assertEqual(merged.count(st._SENTINEL), 1, "the marker must not accumulate")
+
+    def test_regeneration_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "1-rollup.md")
+            gen = "# generated\n\n" + st._SENTINEL + "\n"
+            Path(path).write_text(gen + "\n**Kept.**\n")
+            for _ in range(3):
+                merged = st._merge_preserved(path, gen)
+                Path(path).write_text(merged)
+            self.assertEqual(merged.count(st._SENTINEL), 1)
+            self.assertEqual(merged.count("**Kept.**"), 1)
+
+    def test_file_predating_the_marker_is_backed_up_and_announced(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "1-rollup.md")
+            Path(path).write_text("# old\n\n**Analysis with no marker.**\n")
+            said = io.StringIO()
+            with contextlib.redirect_stdout(said):
+                merged = st._merge_preserved(path, "# fresh\n\n" + st._SENTINEL + "\n")
+            self.assertNotIn("**Analysis with no marker.**", merged)
+            backup = Path(path + ".prev.md")
+            self.assertTrue(backup.exists(), "unmergeable content must be backed up, never lost")
+            self.assertIn("**Analysis with no marker.**", backup.read_text())
+            # Backing it up silently would still lose it in practice — nobody reads a file
+            # they were never told about.
+            self.assertIn("1-rollup.md.prev.md", said.getvalue())
+
+
+class LedgerWidthGuardTests(unittest.TestCase):
+    """Ledgers legitimately carry prose tables (rate corrections, annotations). Parsing
+    those as metric rows invented phantom rollup phases like `row` and
+    `review (claude, opus-5)`."""
+
+    def test_narrow_prose_tables_are_not_parsed_as_rows(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "led.md")
+            Path(path).write_text(
+                _LEDGER
+                + "\n**Rates were corrected; the row above reads 3x high.**\n\n"
+                + "| row | as recorded | corrected |\n|---|---|---|\n"
+                + "| review (claude, opus-5) | $66.19 | **$22.06** |\n"
+            )
+            rows = st.parse_ledger_rows(path)
+            self.assertEqual([r["phase"] for r in rows], ["create", "dev", "review"])
+
+    def test_legacy_twelve_cell_rows_still_parse_without_shifting(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "led.md")
+            Path(path).write_text(_LEDGER)
+            rows = st.parse_ledger_rows(path)
+            self.assertEqual(rows[0]["est_usd"], 16.92)
+            self.assertEqual(rows[0]["total"], 3455878)
+            self.assertIsNone(rows[0]["minutes"], "a pre-minutes row must read blank, not shifted")
