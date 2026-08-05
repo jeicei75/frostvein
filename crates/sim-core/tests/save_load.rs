@@ -1,4 +1,4 @@
-use sim_core::{Dims, Pos, Tile, World};
+use sim_core::{DesignationKind, Dims, Pos, Rect, SimCommand, Tile, World};
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
 
@@ -6,6 +6,24 @@ const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
 fn save_load_then_tick_matches_never_saved() {
     let mut saved = World::generate(42, Dims::DEFAULT);
     let mut control = World::generate(42, Dims::DEFAULT);
+    let designation = SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: Rect {
+            min: Pos { x: 4, y: 3, z: 2 },
+            max: Pos { x: 2, y: 1, z: 2 },
+        },
+    };
+    let stockpile_pos = saved.dwarves()[0].1;
+    let stockpile = SimCommand::PlaceStockpile {
+        rect: Rect {
+            min: stockpile_pos,
+            max: stockpile_pos,
+        },
+    };
+    saved.apply_command(designation);
+    control.apply_command(designation);
+    saved.apply_command(stockpile);
+    control.apply_command(stockpile);
 
     for _ in 0..37 {
         saved.step();
@@ -22,6 +40,8 @@ fn save_load_then_tick_matches_never_saved() {
         assert_eq!(loaded.dwarves(), control.dwarves());
         assert_eq!(loaded.tile(MUTATED_POS), Some(Tile::Empty));
         assert_eq!(loaded.tile(MUTATED_POS), control.tile(MUTATED_POS));
+        assert_eq!(loaded.designations(), control.designations());
+        assert_eq!(loaded.zones(), control.zones());
     }
 }
 

@@ -245,6 +245,9 @@ pub struct World {
     seed: u64,
 }
 
+// The one assembly site intentionally receives every deterministic state component so generate
+// and load cannot diverge; wrapping them solely to satisfy the argument-count lint adds no model.
+#[allow(clippy::too_many_arguments)]
 fn assemble(
     seed: u64,
     dims: Dims,
@@ -252,12 +255,14 @@ fn assemble(
     tick: u64,
     wander_rng: ChaCha8Rng,
     ids: IdAllocator,
+    designations: BTreeMap<Pos, DesignationKind>,
+    zones: BTreeSet<Pos>,
 ) -> World {
     let mut ecs = EcsWorld::new();
     ecs.insert_resource(Tick(tick));
     ecs.insert_resource(WanderRng(wander_rng));
-    ecs.insert_resource(Designations::default());
-    ecs.insert_resource(Zones::default());
+    ecs.insert_resource(Designations(designations));
+    ecs.insert_resource(Zones(zones));
     ecs.insert_resource(Terrain {
         dims,
         tiles,
@@ -303,6 +308,8 @@ impl World {
             0,
             ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER),
             IdAllocator::default(),
+            BTreeMap::new(),
+            BTreeSet::new(),
         );
         world.spawn_dwarves(&heights, &mut spawn_rng);
         world
@@ -339,6 +346,8 @@ impl World {
             wander_rng: self.ecs.resource::<WanderRng>().0.clone(),
             next_id: self.ids.next,
             dwarves,
+            designations: self.designations(),
+            zones: self.zones(),
         }
     }
 
@@ -351,6 +360,8 @@ impl World {
             wander_rng,
             next_id,
             dwarves,
+            designations,
+            zones,
         } = save;
         let mut world = assemble(
             seed,
@@ -359,6 +370,8 @@ impl World {
             tick,
             wander_rng,
             IdAllocator { next: next_id },
+            designations.into_iter().collect(),
+            zones.into_iter().collect(),
         );
         for dwarf in dwarves {
             world.ecs.spawn((

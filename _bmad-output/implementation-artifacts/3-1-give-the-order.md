@@ -121,11 +121,11 @@ so that my directives are recorded in the world, visibly, the moment I issue the
   - [x] Determinism test: `apply_command` then 200 `step()`s from seed 42 twice yields identical
         `dwarves()`, `designations()` and `zones()`.
 
-- [ ] **`sim-core`: designations and zones survive save/load** (AC: 8)
-  - [ ] `SaveState` gains `designations: Vec<(Pos, DesignationKind)>` and `zones: Vec<Pos>`, both
+- [x] **`sim-core`: designations and zones survive save/load** (AC: 8)
+  - [x] `SaveState` gains `designations: Vec<(Pos, DesignationKind)>` and `zones: Vec<Pos>`, both
         sorted ascending. `DesignationKind` derives `Serialize`/`Deserialize` like the other sim
         types in the save.
-  - [ ] Extend `crates/sim-core/tests/save_load.rs`'s gate test: designate a rect, place a stockpile,
+  - [x] Extend `crates/sim-core/tests/save_load.rs`'s gate test: designate a rect, place a stockpile,
         tick 37, `set_tile` one tile, save, load, then compare against a never-saved control for 200
         steps asserting `tick()`, `dwarves()`, the mutated tile, `designations()` and `zones()` after
         **each** step. Do not add a save-format literal test (format stability is a project non-goal).
@@ -546,6 +546,23 @@ OpenAI Codex (GPT-5), acting as Völundr.
   test each_eraser_leaves_the_other_mark_kind_untouched ... FAILED
   assertion failed: world.zones().is_empty()
   ```
+- Save/load initial RED and four persistence-seam sabotages:
+  ```text
+  test save_load_then_tick_matches_never_saved ... FAILED
+  assertion `left == right` failed
+    left: []
+   right: [(Pos { x: 2, y: 1, z: 2 }, Channel), ..., (Pos { x: 4, y: 3, z: 2 }, Channel)]
+
+  # to_save drops zones / from_save discards zones (each run independently)
+  assertion `left == right` failed
+    left: []
+   right: [Pos { x: 115, y: 84, z: 15 }]
+
+  # to_save drops designations / from_save discards designations (each run independently)
+  assertion `left == right` failed
+    left: []
+   right: [(Pos { x: 2, y: 1, z: 2 }, Channel), ..., (Pos { x: 4, y: 3, z: 2 }, Channel)]
+  ```
 
 ### Completion Notes List
 
@@ -553,10 +570,14 @@ OpenAI Codex (GPT-5), acting as Völundr.
   application, standability-filtered stockpiles, independent erasers, readers, pause-safe plain
   `World::apply_command`, and deterministic scenario coverage. `cargo test --offline -p sim-core`
   and sim-core clippy are green.
+- AC8: `SaveState` now carries sorted designation and zone lists through the single `assemble`
+  path; the AD-11 gate compares both lists against a never-saved control after each of 200 steps.
 
 ### File List
 
 - crates/sim-core/src/lib.rs
+- crates/sim-core/src/save.rs
+- crates/sim-core/tests/save_load.rs
 - crates/sim-core/tests/scenario.rs
 
 ## Change Log
