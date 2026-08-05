@@ -696,6 +696,14 @@ OpenAI Codex (GPT-5), acting as Völundr.
     left: Some(Char('l'))
    right: Some(Char('h'))
   ```
+- Live-instrument queued-delta RED, reproduced first against the real daemon and then pinned in the
+  stub by placing four unmarked deltas behind the connect snapshot:
+  ```text
+  test key_sequence_designates_and_the_echoed_marker_reaches_expected_columns ... FAILED
+  send mark delta: Os { code: 32, kind: BrokenPipe, message: "Broken pipe" }
+  mark stub daemon thread panicked: Any { .. }
+  test result: FAILED. 0 passed; 1 failed; 10 filtered out
+  ```
 
 ### Completion Notes List
 
@@ -715,8 +723,13 @@ OpenAI Codex (GPT-5), acting as Völundr.
   the stub-daemon positive capture verifies the exact command and echoed marker columns, while the
   no-key negative control proves markers are not unconditional. The `NO_COLOR` warning now states
   that glyph-distinct markers remain valid evidence.
-- AC15 development mutation pass: all 31 authored sabotages were killed. The prescribed clean,
+- AC15 development mutation pass: all 32 authored sabotages were killed. The prescribed clean,
   final gate, final mutation pass, live checks, and self-review remain before review status.
+- Live verification found that four deltas already buffered with the large connect snapshot could
+  consume the entire keyed capture before the command consequence arrived. The headless instrument
+  now drains only complete already-buffered messages before replaying world-mutating key sequences;
+  its existing save/load and speed capture semantics remain unchanged. The strengthened positive
+  test and a 32nd mutation pin the seam.
 - AD-10 under-listing: `remove_stockpile` is a fourth world-mutating command added on Wolf's call,
   so `epics.md` and the architecture spine's command table now list three where there are four.
   Those two planning documents were deliberately not reconciled inside this implementation story;

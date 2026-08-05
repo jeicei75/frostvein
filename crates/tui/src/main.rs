@@ -143,6 +143,28 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(count) = frames {
         let viewport = frame_size();
+        let replays_world_command = keys
+            .iter()
+            .any(|key| matches!(key, KeyCode::Char('d' | 'c' | 'p' | 'x')));
+        if replays_world_command {
+            // The daemon may have queued deltas behind its large connect snapshot before
+            // the client can send an instrumented key sequence. Consume only complete
+            // messages already held by this BufReader so the requested frame count starts
+            // after the command, without waiting for or predicting a wire acknowledgement.
+            while reader.buffer().contains(&b'\n') {
+                match read_message(&mut reader)? {
+                    Some(Msg::Snapshot(next)) => {
+                        snapshot = *next;
+                        state.speed = snapshot.speed;
+                    }
+                    Some(Msg::Delta(delta)) => {
+                        apply(&mut snapshot, *delta);
+                        state.speed = snapshot.speed;
+                    }
+                    None => bail!("server closed while draining queued messages"),
+                }
+            }
+        }
         for code in keys {
             match apply_key(
                 &mut state,

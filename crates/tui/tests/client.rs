@@ -475,9 +475,24 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
     let expects_command = key.is_some();
     let server = thread::spawn(move || {
         let mut stream = accept_with_timeout(&listener);
+        let mut prelude = mark_snapshot_line();
+        if expects_command {
+            for tick in 8..=11 {
+                let delta = protocol::Delta {
+                    msg_type: protocol::MessageType::Delta,
+                    tick,
+                    tiles: Vec::new(),
+                    entities: Vec::new(),
+                    designations: Vec::new(),
+                    zones: Vec::new(),
+                    speed: protocol::Speed::Normal,
+                };
+                prelude.push_str(&format!("{}\n", serde_json::to_string(&delta).unwrap()));
+            }
+        }
         stream
-            .write_all(mark_snapshot_line().as_bytes())
-            .expect("send mark snapshot");
+            .write_all(prelude.as_bytes())
+            .expect("send mark snapshot and queued deltas");
 
         let designations = if expects_command {
             stream
@@ -510,7 +525,8 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
             Vec::new()
         };
 
-        for tick in 8..=11 {
+        let ticks = if expects_command { 12..=15 } else { 8..=11 };
+        for tick in ticks {
             let delta = protocol::Delta {
                 msg_type: protocol::MessageType::Delta,
                 tick,

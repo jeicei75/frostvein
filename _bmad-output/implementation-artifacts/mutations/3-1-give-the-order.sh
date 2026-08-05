@@ -412,3 +412,33 @@ new = '''                if !line.ends_with(b"\\n") {
 assert old in s
 p.write_text(s.replace(old, new))
 PY
+
+mutation "instrument replays keys before draining queued deltas" tui key_sequence_designates_and_the_echoed_marker_reaches_expected_columns <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
+old = '''        let replays_world_command = keys
+            .iter()
+            .any(|key| matches!(key, KeyCode::Char('d' | 'c' | 'p' | 'x')));
+        if replays_world_command {
+            // The daemon may have queued deltas behind its large connect snapshot before
+            // the client can send an instrumented key sequence. Consume only complete
+            // messages already held by this BufReader so the requested frame count starts
+            // after the command, without waiting for or predicting a wire acknowledgement.
+            while reader.buffer().contains(&b'\\n') {
+                match read_message(&mut reader)? {
+                    Some(Msg::Snapshot(next)) => {
+                        snapshot = *next;
+                        state.speed = snapshot.speed;
+                    }
+                    Some(Msg::Delta(delta)) => {
+                        apply(&mut snapshot, *delta);
+                        state.speed = snapshot.speed;
+                    }
+                    None => bail!("server closed while draining queued messages"),
+                }
+            }
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
