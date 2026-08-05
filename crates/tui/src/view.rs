@@ -63,11 +63,11 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         h,
         cells: vec![BLANK; usize::from(w) * usize::from(h)],
     };
-    if w == 0 || h == 0 {
+    if w == 0 || h < 2 {
         return framebuffer;
     }
 
-    let map_h = h - 1;
+    let map_h = h - 2;
     for sy in 0..map_h {
         let wy = state.camera.1 + i64::from(sy) - i64::from(map_h) / 2;
         for sx in 0..w {
@@ -135,7 +135,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
             Speed::Fast => "fast",
         };
         format!(
-            "tick {}  {}  z {}/{}  dwarves {}  <>z hjkl  space +- speed  q quit",
+            "tick {}  {}  z {}/{}  dwarves {}",
             snapshot.tick,
             speed,
             state.z,
@@ -143,9 +143,18 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
             dwarves
         )
     };
-    let status_y = h - 1;
+    let status_y = h - 2;
     for (x, glyph) in (0..w).zip(status.chars()) {
         framebuffer.cells[usize::from(x) + usize::from(status_y) * usize::from(w)] = Cell {
+            glyph,
+            fg: STATUS_TEXT,
+        };
+    }
+
+    let hint = "d dig  c channel  p stockpile  x clear  <> z  hjkl move  q quit client";
+    let hint_y = h - 1;
+    for (x, glyph) in (0..w).zip(hint.chars()) {
+        framebuffer.cells[usize::from(x) + usize::from(hint_y) * usize::from(w)] = Cell {
             glyph,
             fg: STATUS_TEXT,
         };
@@ -423,19 +432,19 @@ mod tests {
             (' ', (8, 10, 14)),
             ('▲', (86, 92, 104)),
             (' ', (8, 10, 14)),
-            (' ', (8, 10, 14)),
-            (' ', (8, 10, 14)),
-            (' ', (8, 10, 14)),
-            ('▒', (126, 174, 196)),
-            (' ', (8, 10, 14)),
-            (' ', (8, 10, 14)),
-            (' ', (8, 10, 14)),
             ('t', (150, 160, 170)),
             ('i', (150, 160, 170)),
             ('c', (150, 160, 170)),
             ('k', (150, 160, 170)),
             (' ', (150, 160, 170)),
             ('0', (150, 160, 170)),
+            (' ', (150, 160, 170)),
+            ('d', (150, 160, 170)),
+            (' ', (150, 160, 170)),
+            ('d', (150, 160, 170)),
+            ('i', (150, 160, 170)),
+            ('g', (150, 160, 170)),
+            (' ', (150, 160, 170)),
             (' ', (150, 160, 170)),
         ];
         let actual: Vec<_> = framebuffer
@@ -523,7 +532,7 @@ mod tests {
             confirming_quit: false,
         };
 
-        let framebuffer = render(&snapshot, &state, 3, 2);
+        let framebuffer = render(&snapshot, &state, 3, 3);
 
         // The glyph is deliberately the same for both: what must differ is the colour, so
         // assert on `fg` alone. Comparing whole cells would also pass on a glyph change.
@@ -547,7 +556,7 @@ mod tests {
             confirming_quit: false,
         };
 
-        let framebuffer = render(&snapshot, &state, 4, 2);
+        let framebuffer = render(&snapshot, &state, 4, 3);
 
         assert_eq!(
             framebuffer.cell(1, 0),
@@ -582,13 +591,32 @@ mod tests {
             confirming_quit: false,
         };
 
-        let framebuffer = render(&snapshot, &state, 78, 2);
+        let framebuffer = render(&snapshot, &state, 78, 3);
         let status: String = (0..78).map(|x| framebuffer.cell(x, 1).glyph).collect();
 
         assert_eq!(
             status,
-            "tick 87  normal  z 19/31  dwarves 3  <>z hjkl  space +- speed  q quit         "
+            "tick 87  normal  z 19/31  dwarves 3                                           "
         );
+    }
+
+    #[test]
+    fn status_and_hint_occupy_the_bottom_two_rows() {
+        let snapshot = empty_snapshot(Dims { x: 3, y: 3, z: 1 });
+        let state = ViewState {
+            camera: (1, 1),
+            z: 0,
+            confirming_quit: false,
+        };
+
+        let framebuffer = render(&snapshot, &state, 80, 4);
+        let status: String = (0..80).map(|x| framebuffer.cell(x, 2).glyph).collect();
+        let hint: String = (0..80).map(|x| framebuffer.cell(x, 3).glyph).collect();
+
+        assert!(status.starts_with("tick 0  normal  z 0/0  dwarves 0"));
+        assert!(!status.contains("hjkl"));
+        assert!(hint.contains("hjkl"));
+        assert!(hint.contains("q quit client"));
     }
 
     #[test]
@@ -620,11 +648,9 @@ mod tests {
                     state: JobState::Idle,
                 })
                 .collect();
-            let expected = format!(
-                "tick 9999999  {wire_name}  z 19/31  dwarves 5  <>z hjkl  space +- speed  q quit"
-            );
+            let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5");
 
-            let framebuffer = render(&snapshot, &state, 80, 2);
+            let framebuffer = render(&snapshot, &state, 80, 3);
             let rendered_width = (0..80)
                 .take_while(|x| framebuffer.cell(*x, 1).fg == STATUS_TEXT)
                 .count();
@@ -639,7 +665,7 @@ mod tests {
             );
             assert_eq!(rendered_width, expected_width);
             assert_eq!(rendered, expected);
-            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, 't');
+            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, '5');
         }
     }
 
@@ -845,7 +871,7 @@ mod tests {
             confirming_quit: true,
         };
 
-        let framebuffer = render(&snapshot, &state, 11, 2);
+        let framebuffer = render(&snapshot, &state, 11, 3);
         let status: String = (0..11).map(|x| framebuffer.cell(x, 1).glyph).collect();
 
         assert_eq!(status, "quit? (y/n)");
