@@ -274,6 +274,32 @@ fn load_world() -> Option<sim_core::World> {
                 && (pos.y as u32) < save.dims.y
                 && (pos.z as u32) < save.dims.z
         };
+        for (pos, _) in &save.designations {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save designation position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+        for pos in &save.zones {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save zone position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
         let mut seen_ids = BTreeSet::new();
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {

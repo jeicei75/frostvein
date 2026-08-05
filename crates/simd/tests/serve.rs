@@ -475,6 +475,67 @@ fn out_of_bounds_dwarf_home_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn out_of_bounds_designation_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.designations.push((
+        sim_core::Pos { x: -1, y: 0, z: 0 },
+        sim_core::DesignationKind::Dig,
+    ));
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds designation fixture"),
+    )
+    .expect("write out-of-bounds designation fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save designation position -1,0,0 is outside dims 128x128x32"),
+        "unexpected out-of-bounds designation log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn out_of_bounds_zone_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.zones.push(sim_core::Pos {
+        x: i32::MAX,
+        y: 0,
+        z: 0,
+    });
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds zone fixture"),
+    )
+    .expect("write out-of-bounds zone fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save zone position 2147483647,0,0 is outside dims 128x128x32"),
+        "unexpected out-of-bounds zone log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
 fn oversized_save_is_logged_and_the_daemon_keeps_ticking() {
     const OVERSIZED: usize = 16 * 1024 * 1024 + 1;
 

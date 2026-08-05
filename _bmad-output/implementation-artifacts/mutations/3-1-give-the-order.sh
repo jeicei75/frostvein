@@ -140,6 +140,48 @@ assert old in s
 p.write_text(s.replace(old, '            BTreeSet::new(),\n'))
 PY
 
+mutation "load accepts an out-of-bounds designation" simd out_of_bounds_designation_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        for (pos, _) in &save.designations {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save designation position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts an out-of-bounds zone" simd out_of_bounds_zone_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        for pos in &save.zones {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save zone position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
 mutation "designate discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
 import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()
