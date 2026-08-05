@@ -455,7 +455,8 @@ mod tests {
     use std::{io::Cursor, net::TcpListener};
 
     use protocol::{
-        Delta, Dims, Entity, EntityKind, JobState, Material, MessageType, Speed, Tile, TileChange,
+        Delta, Designation, DesignationKind, Dims, Entity, EntityKind, JobState, Material,
+        MessageType, Speed, Tile, TileChange, Zone,
     };
 
     use super::*;
@@ -509,8 +510,11 @@ mod tests {
     #[test]
     fn applies_dirty_tiles_and_replaces_authoritative_fields() {
         let mut snapshot = read_snapshot(&mut Cursor::new(SNAPSHOT_LINE.as_bytes())).unwrap();
-        snapshot.designations = vec![()];
-        snapshot.zones = vec![()];
+        snapshot.designations = vec![Designation {
+            pos: [0, 0, 0],
+            kind: DesignationKind::Dig,
+        }];
+        snapshot.zones = vec![Zone { pos: [0, 0, 0] }];
         let delta = Delta {
             msg_type: MessageType::Delta,
             tick: 10,

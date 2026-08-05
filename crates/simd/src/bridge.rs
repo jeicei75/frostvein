@@ -26,8 +26,19 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
                 state: job_state(state),
             })
             .collect(),
-        designations: Vec::new(),
-        zones: Vec::new(),
+        designations: world
+            .designations()
+            .into_iter()
+            .map(|(pos, kind)| protocol::Designation {
+                pos: pos_out(pos),
+                kind: designation_kind_out(kind),
+            })
+            .collect(),
+        zones: world
+            .zones()
+            .into_iter()
+            .map(|pos| protocol::Zone { pos: pos_out(pos) })
+            .collect(),
         speed,
         tick: world.tick(),
     }
@@ -60,8 +71,19 @@ pub fn delta(world: &mut sim_core::World, speed: protocol::Speed) -> protocol::D
                 state: job_state(state),
             })
             .collect(),
-        designations: Vec::new(),
-        zones: Vec::new(),
+        designations: world
+            .designations()
+            .into_iter()
+            .map(|(pos, kind)| protocol::Designation {
+                pos: pos_out(pos),
+                kind: designation_kind_out(kind),
+            })
+            .collect(),
+        zones: world
+            .zones()
+            .into_iter()
+            .map(|pos| protocol::Zone { pos: pos_out(pos) })
+            .collect(),
         speed,
     }
 }
@@ -91,9 +113,42 @@ fn job_state(state: sim_core::JobState) -> protocol::JobState {
     }
 }
 
+pub(crate) fn designation_kind_in(kind: protocol::DesignationKind) -> sim_core::DesignationKind {
+    match kind {
+        protocol::DesignationKind::Dig => sim_core::DesignationKind::Dig,
+        protocol::DesignationKind::Channel => sim_core::DesignationKind::Channel,
+    }
+}
+
+fn designation_kind_out(kind: sim_core::DesignationKind) -> protocol::DesignationKind {
+    match kind {
+        sim_core::DesignationKind::Dig => protocol::DesignationKind::Dig,
+        sim_core::DesignationKind::Channel => protocol::DesignationKind::Channel,
+    }
+}
+
+pub(crate) fn rect_in(rect: protocol::Rect) -> sim_core::Rect {
+    sim_core::Rect {
+        min: pos_in(rect.min),
+        max: pos_in(rect.max),
+    }
+}
+
+fn pos_in(pos: [i32; 3]) -> sim_core::Pos {
+    sim_core::Pos {
+        x: pos[0],
+        y: pos[1],
+        z: pos[2],
+    }
+}
+
+fn pos_out(pos: sim_core::Pos) -> [i32; 3] {
+    [pos.x, pos.y, pos.z]
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{delta, snapshot};
+    use super::{delta, designation_kind_in, snapshot};
 
     /// The wire mapping, restated independently of the code under test.
     ///
@@ -141,6 +196,22 @@ mod tests {
                 wire,
                 "{value:?} crossed the bridge as the wrong wire state"
             );
+        }
+    }
+
+    #[test]
+    fn every_designation_kind_maps_to_its_named_wire_variant() {
+        for (value, wire) in [
+            (sim_core::DesignationKind::Dig, r#""dig""#),
+            (sim_core::DesignationKind::Channel, r#""channel""#),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&super::designation_kind_out(value)).unwrap(),
+                wire
+            );
+            let protocol_kind: protocol::DesignationKind =
+                serde_json::from_str(wire).expect("hand-written wire name must decode");
+            assert_eq!(designation_kind_in(protocol_kind), value);
         }
     }
 
@@ -353,5 +424,40 @@ mod tests {
 
         world.step();
         assert!(delta(&mut world, protocol::Speed::Fast).tiles.is_empty());
+    }
+
+    #[test]
+    fn snapshot_and_delta_carry_the_worlds_real_marks() {
+        let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        let designation_pos = sim_core::Pos { x: 3, y: 2, z: 1 };
+        let zone_pos = world.dwarves()[0].1;
+        world.apply_command(sim_core::SimCommand::Designate {
+            kind: sim_core::DesignationKind::Channel,
+            rect: sim_core::Rect {
+                min: designation_pos,
+                max: designation_pos,
+            },
+        });
+        world.apply_command(sim_core::SimCommand::PlaceStockpile {
+            rect: sim_core::Rect {
+                min: zone_pos,
+                max: zone_pos,
+            },
+        });
+        let expected_designations = vec![protocol::Designation {
+            pos: [3, 2, 1],
+            kind: protocol::DesignationKind::Channel,
+        }];
+        let expected_zones = vec![protocol::Zone {
+            pos: [zone_pos.x, zone_pos.y, zone_pos.z],
+        }];
+
+        let snap = snapshot(&world, protocol::Speed::Normal);
+        assert_eq!(snap.designations, expected_designations);
+        assert_eq!(snap.zones, expected_zones);
+
+        let update = delta(&mut world, protocol::Speed::Normal);
+        assert_eq!(update.designations, expected_designations);
+        assert_eq!(update.zones, expected_zones);
     }
 }

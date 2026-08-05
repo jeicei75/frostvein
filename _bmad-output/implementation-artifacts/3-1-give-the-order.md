@@ -130,32 +130,32 @@ so that my directives are recorded in the world, visibly, the moment I issue the
         steps asserting `tick()`, `dwarves()`, the mutated tile, `designations()` and `zones()` after
         **each** step. Do not add a save-format literal test (format stability is a project non-goal).
 
-- [ ] **`protocol`: the wire change** (AC: 5)
-  - [ ] Add `DesignationKind`, `Rect`, `Designation`, `Zone`; replace `designations: Vec<()>` and
+- [x] **`protocol`: the wire change** (AC: 5)
+  - [x] Add `DesignationKind`, `Rect`, `Designation`, `Zone`; replace `designations: Vec<()>` and
         `zones: Vec<()>` in `Snapshot` and `Delta`; delete the two `Vec<()>` NOTEs they made
         obsolete. Add the four `Command` variants.
-  - [ ] Extend the hand-written literal tests (`WIRE`, `DELTA_WIRE`, the command table, and
+  - [x] Extend the hand-written literal tests (`WIRE`, `DELTA_WIRE`, the command table, and
         `every_material_and_tile_variant_has_a_pinned_wire_name`) with the new shapes and the three
         new `type` names, and keep the existing `{"type":"store"}` rejection alongside a new
         `"kind":"mine"` rejection. Literals, not round-trips — a symmetric rename must stay red.
 
-- [ ] **`simd`: consume the queue at iteration top, emit the real lists** (AC: 6, 7, 13)
-  - [ ] Extend the iteration-top `match` with the four arms, each bridging into
+- [x] **`simd`: consume the queue at iteration top, emit the real lists** (AC: 6, 7, 13)
+  - [x] Extend the iteration-top `match` with the four arms, each bridging into
         `world.apply_command(...)` (skeleton below). It sits above the `if speed != Paused` guard, so
         pause never blocks command intake — that placement is the AD-2/AD-10 contract, not a detail.
-  - [ ] Rewrite the NOTE at `crates/simd/src/main.rs:177-180`, which predicts this split: say what
+  - [x] Rewrite the NOTE at `crates/simd/src/main.rs:177-180`, which predicts this split: say what
         now holds (commands apply while paused; the schedule stays entirely world-advancing; job
         conversion and reaction delays are 3.2's and belong in the schedule).
-  - [ ] `bridge.rs`: `designation_kind` in both directions plus `rect`/`pos` conversions; exhaustive
+  - [x] `bridge.rs`: `designation_kind` in both directions plus `rect`/`pos` conversions; exhaustive
         `match`, no wildcard. `snapshot()` and `delta()` map `world.designations()` and
         `world.zones()`. Add the independent-oracle test in the existing style — hand-written wire
         names decoded, never a second copy of the production match.
-  - [ ] Fix `read_inbound`'s partial-line report [main.rs:401-405]: log the overflow only when the
+  - [x] Fix `read_inbound`'s partial-line report [main.rs:401-405]: log the overflow only when the
         read actually hit `MAX_LINE_BYTES`; otherwise treat the unterminated tail as a closed
         connection. Mirror the split at `crates/tui/src/main.rs:370-374`. This is the one piece of
         adjacent code this story is authorized to touch — it is assigned here in
         `deferred-work.md`.
-  - [ ] Live-daemon tests in `crates/simd/tests/serve.rs`, extending the `Daemon` harness: the
+  - [x] Live-daemon tests in `crates/simd/tests/serve.rs`, extending the `Daemon` harness: the
         AC7 designate → stockpile → cancel → remove-stockpile sequence with two clients; the paused-intake test (send
         `set_speed` paused, read two deltas to confirm the tick is frozen, send `designate`, assert
         the next delta carries it and the tick is still frozen); and a partial-line test asserting the
@@ -563,6 +563,58 @@ OpenAI Codex (GPT-5), acting as Völundr.
     left: []
    right: [(Pos { x: 2, y: 1, z: 2 }, Channel), ..., (Pos { x: 4, y: 3, z: 2 }, Channel)]
   ```
+- Protocol wire initial RED:
+  ```text
+  error[E0422]: cannot find struct, variant or union type `Designation` in this scope
+  error[E0599]: no variant named `Designate` found for enum `Command`
+  error: could not compile `protocol` (lib test) due to 26 previous errors
+  ```
+- Atomic wire-migration seam RED:
+  ```text
+  error[E0004]: non-exhaustive patterns: `protocol::Command::Designate { .. }`,
+  `protocol::Command::CancelDesignation { .. }`, `protocol::Command::PlaceStockpile { .. }`
+  and 1 more not covered
+  error[E0308]: mismatched types: expected `Designation`, found `()`
+  ```
+- Protocol designation-kind mapping sabotage RED:
+  ```text
+  test tests::every_material_and_tile_variant_has_a_pinned_wire_name ... FAILED
+  assertion `left == right` failed
+    left: "\"channel\""
+   right: "\"dig\""
+  ```
+- Protocol command discriminator sabotages RED (each rename run independently):
+  ```text
+  unknown variant `designate`, expected ... `mark` ...
+  unknown variant `cancel_designation`, expected ... `erase` ...
+  unknown variant `place_stockpile`, expected ... `store` ...
+  unknown variant `remove_stockpile`, expected ... `unstore`
+  missing field `mode`
+  ```
+- Bridge direction sabotages RED:
+  ```text
+  test bridge::tests::every_designation_kind_maps_to_its_named_wire_variant ... FAILED
+    left: "\"channel\""
+   right: "\"dig\""
+
+  test bridge::tests::every_designation_kind_maps_to_its_named_wire_variant ... FAILED
+    left: Channel
+   right: Dig
+  ```
+- Daemon decision-seam REDs with decoded commands deliberately discarded:
+  ```text
+  test designation_and_stockpile_changes_reach_both_clients ... FAILED
+  daemon never emitted expected marks; observed [(1, [], []), (2, [], []), (3, [], []),
+  (4, [], []), (5, [], []), (6, [], []), (7, [], []), (8, [], []), (9, [], []), (10, [], [])]
+
+  test designation_is_applied_while_tick_is_paused ... FAILED
+  paused daemon discarded designation
+  ```
+- Partial-line reporting RED:
+  ```text
+  test unterminated_partial_line_is_not_reported_as_overflow ... FAILED
+  partial line was falsely reported as overflow: client line exceeded 65536 bytes; closing connection
+  ```
 
 ### Completion Notes List
 
@@ -572,6 +624,9 @@ OpenAI Codex (GPT-5), acting as Völundr.
   and sim-core clippy are green.
 - AC8: `SaveState` now carries sorted designation and zone lists through the single `assemble`
   path; the AD-11 gate compares both lists against a never-saved control after each of 200 steps.
+- AC5–AC7/AC13: replaced wire placeholders with pinned typed shapes and four commands; added
+  exhaustive bridge conversions, iteration-top command consumption, authoritative mark lists,
+  two-client consequence tests, paused-intake coverage, and honest partial-line EOF handling.
 
 ### File List
 
@@ -579,6 +634,11 @@ OpenAI Codex (GPT-5), acting as Völundr.
 - crates/sim-core/src/save.rs
 - crates/sim-core/tests/save_load.rs
 - crates/sim-core/tests/scenario.rs
+- crates/protocol/src/lib.rs
+- crates/simd/src/bridge.rs
+- crates/simd/src/main.rs
+- crates/simd/tests/serve.rs
+- crates/tui/src/main.rs
 
 ## Change Log
 

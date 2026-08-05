@@ -54,12 +54,29 @@ pub enum Speed {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DesignationKind {
+    Dig,
+    Channel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rect {
+    pub min: [i32; 3],
+    pub max: [i32; 3],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
     SetSpeed { speed: Speed },
     Save,
     Load,
     Quit,
+    Designate { kind: DesignationKind, rect: Rect },
+    CancelDesignation { rect: Rect },
+    PlaceStockpile { rect: Rect },
+    RemoveStockpile { rect: Rect },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,6 +100,17 @@ pub struct TileChange {
     pub tile: Tile,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Designation {
+    pub pos: [i32; 3],
+    pub kind: DesignationKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Zone {
+    pub pos: [i32; 3],
+}
+
 /// Full world state, sent on connect (AD-3). Field order is wire order.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -92,13 +120,8 @@ pub struct Snapshot {
     /// Flat row-major: index = x + y*dims.x + z*dims.x*dims.y
     pub tiles: Vec<Tile>,
     pub entities: Vec<Entity>,
-    // NOTE: designation and zone shapes land in Story 3.1; `Vec<()>` keeps the
-    // wire fields present and always empty without inventing their shape now.
-    // NOTE: `Vec<()>` rejects `[1,2]` but DOES accept `[null,null]` as a length-2
-    // vec — `()` deserializes from JSON null. It is not an "empty array only"
-    // guarantee; Story 3.1 replaces these with real shapes anyway.
-    pub designations: Vec<()>,
-    pub zones: Vec<()>,
+    pub designations: Vec<Designation>,
+    pub zones: Vec<Zone>,
     pub speed: Speed,
     pub tick: u64,
 }
@@ -112,8 +135,8 @@ pub struct Delta {
     pub tick: u64,
     pub tiles: Vec<TileChange>,
     pub entities: Vec<Entity>,
-    pub designations: Vec<()>,
-    pub zones: Vec<()>,
+    pub designations: Vec<Designation>,
+    pub zones: Vec<Zone>,
     pub speed: Speed,
 }
 
@@ -132,8 +155,8 @@ mod tests {
         "dims": {"x": 2, "y": 1, "z": 1},
         "tiles": ["empty", {"solid": "stone"}],
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "idle"}],
-        "designations": [],
-        "zones": [],
+        "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
+        "zones": [{"pos": [1, 2, 4]}],
         "speed": "normal",
         "tick": 9
     }"#;
@@ -143,8 +166,8 @@ mod tests {
         "tick": 10,
         "tiles": [{"pos": [1, 2, 3], "tile": {"solid": "ice"}}],
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "walk"}],
-        "designations": [],
-        "zones": [],
+        "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
+        "zones": [{"pos": [1, 2, 4]}],
         "speed": "fast"
     }"#;
 
@@ -177,8 +200,14 @@ mod tests {
             serde_json::to_string(&snapshot.entities[0]).unwrap(),
             r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle"}"#
         );
-        assert!(snapshot.designations.is_empty());
-        assert!(snapshot.zones.is_empty());
+        assert_eq!(
+            snapshot.designations,
+            vec![Designation {
+                pos: [1, 2, 3],
+                kind: DesignationKind::Dig,
+            }]
+        );
+        assert_eq!(snapshot.zones, vec![Zone { pos: [1, 2, 4] }]);
         assert_eq!(snapshot.speed, Speed::Normal);
         assert_eq!(snapshot.tick, 9);
     }
@@ -213,8 +242,14 @@ mod tests {
                 state: JobState::Walk,
             }]
         );
-        assert!(delta.designations.is_empty());
-        assert!(delta.zones.is_empty());
+        assert_eq!(
+            delta.designations,
+            vec![Designation {
+                pos: [1, 2, 3],
+                kind: DesignationKind::Dig,
+            }]
+        );
+        assert_eq!(delta.zones, vec![Zone { pos: [1, 2, 4] }]);
         assert_eq!(delta.speed, Speed::Fast);
     }
 
@@ -230,6 +265,43 @@ mod tests {
             (r#"{"type":"save"}"#, Command::Save),
             (r#"{"type":"load"}"#, Command::Load),
             (r#"{"type":"quit"}"#, Command::Quit),
+            (
+                r#"{"type":"designate","kind":"dig","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
+                Command::Designate {
+                    kind: DesignationKind::Dig,
+                    rect: Rect {
+                        min: [1, 2, 3],
+                        max: [4, 5, 3],
+                    },
+                },
+            ),
+            (
+                r#"{"type":"cancel_designation","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
+                Command::CancelDesignation {
+                    rect: Rect {
+                        min: [1, 2, 3],
+                        max: [4, 5, 3],
+                    },
+                },
+            ),
+            (
+                r#"{"type":"place_stockpile","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
+                Command::PlaceStockpile {
+                    rect: Rect {
+                        min: [1, 2, 3],
+                        max: [4, 5, 3],
+                    },
+                },
+            ),
+            (
+                r#"{"type":"remove_stockpile","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
+                Command::RemoveStockpile {
+                    rect: Rect {
+                        min: [1, 2, 3],
+                        max: [4, 5, 3],
+                    },
+                },
+            ),
         ] {
             let command: Command =
                 serde_json::from_str(wire).expect("the documented command wire format must decode");
@@ -243,6 +315,12 @@ mod tests {
             serde_json::from_str::<Command>(r#"{"type":"set_rate","speed":"paused"}"#).is_err()
         );
         assert!(serde_json::from_str::<Command>(r#"{"type":"store"}"#).is_err());
+        assert!(
+            serde_json::from_str::<Command>(
+                r#"{"type":"designate","kind":"mine","rect":{"min":[0,0,0],"max":[0,0,0]}}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -280,6 +358,12 @@ mod tests {
             serde_json::to_string(&EntityKind::Dwarf).unwrap(),
             "\"dwarf\""
         );
+        for (value, wire) in [
+            (DesignationKind::Dig, "\"dig\""),
+            (DesignationKind::Channel, "\"channel\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
         assert_eq!(
             serde_json::to_value(Command::SetSpeed {
                 speed: Speed::Paused
@@ -291,6 +375,47 @@ mod tests {
             (Command::Save, "save"),
             (Command::Load, "load"),
             (Command::Quit, "quit"),
+        ] {
+            assert_eq!(serde_json::to_value(value).unwrap()["type"], wire);
+        }
+        for (value, wire) in [
+            (
+                Command::Designate {
+                    kind: DesignationKind::Dig,
+                    rect: Rect {
+                        min: [0, 0, 0],
+                        max: [0, 0, 0],
+                    },
+                },
+                "designate",
+            ),
+            (
+                Command::CancelDesignation {
+                    rect: Rect {
+                        min: [0, 0, 0],
+                        max: [0, 0, 0],
+                    },
+                },
+                "cancel_designation",
+            ),
+            (
+                Command::PlaceStockpile {
+                    rect: Rect {
+                        min: [0, 0, 0],
+                        max: [0, 0, 0],
+                    },
+                },
+                "place_stockpile",
+            ),
+            (
+                Command::RemoveStockpile {
+                    rect: Rect {
+                        min: [0, 0, 0],
+                        max: [0, 0, 0],
+                    },
+                },
+                "remove_stockpile",
+            ),
         ] {
             assert_eq!(serde_json::to_value(value).unwrap()["type"], wire);
         }

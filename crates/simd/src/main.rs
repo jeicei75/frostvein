@@ -144,6 +144,27 @@ fn tick(
                     eprintln!("shutting down on client quit");
                     return Ok(());
                 }
+                protocol::Command::Designate { kind, rect } => {
+                    world.apply_command(sim_core::SimCommand::Designate {
+                        kind: bridge::designation_kind_in(kind),
+                        rect: bridge::rect_in(rect),
+                    });
+                }
+                protocol::Command::CancelDesignation { rect } => {
+                    world.apply_command(sim_core::SimCommand::CancelDesignation {
+                        rect: bridge::rect_in(rect),
+                    });
+                }
+                protocol::Command::PlaceStockpile { rect } => {
+                    world.apply_command(sim_core::SimCommand::PlaceStockpile {
+                        rect: bridge::rect_in(rect),
+                    });
+                }
+                protocol::Command::RemoveStockpile { rect } => {
+                    world.apply_command(sim_core::SimCommand::RemoveStockpile {
+                        rect: bridge::rect_in(rect),
+                    });
+                }
             }
         }
         let deadline = Instant::now() + period(speed);
@@ -174,10 +195,8 @@ fn tick(
             }
         }
 
-        // NOTE: the whole schedule is world-advancing today, so pausing skips all of it
-        // and freezes the tick with it. Story 3.1 adds a command-consuming system that
-        // must run while paused; that is when this splits into command consumption and
-        // world advancement.
+        // NOTE: commands apply above while paused. The schedule remains entirely
+        // world-advancing; Story 3.2's job conversion and reaction delays belong there.
         if speed != protocol::Speed::Paused {
             world.step();
         }
@@ -399,8 +418,12 @@ fn read_inbound(stream: TcpStream, command_tx: mpsc::Sender<protocol::Command>) 
             Ok(0) => break,
             Ok(_) => {
                 if !line.ends_with(b"\n") {
-                    eprintln!("client line exceeded {MAX_LINE_BYTES} bytes; closing connection");
-                    let _ = reader.get_ref().shutdown(Shutdown::Both);
+                    if line.len() as u64 >= MAX_LINE_BYTES {
+                        eprintln!(
+                            "client line exceeded {MAX_LINE_BYTES} bytes; closing connection"
+                        );
+                        let _ = reader.get_ref().shutdown(Shutdown::Both);
+                    }
                     break;
                 }
                 // NOTE: lossy, not a UTF-8 error — a single stray byte must not cost the
