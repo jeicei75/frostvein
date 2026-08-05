@@ -220,7 +220,7 @@ so that my directives are recorded in the world, visibly, the moment I issue the
   - [x] Keep the `NO_COLOR` warning. Markers are glyph-distinct by design (AC11), so this capture is
         real evidence even under `NO_COLOR` — say so where the warning is emitted.
 
-- [ ] **Sabotage + mutation set** (AC: 15)
+- [x] **Sabotage + mutation set** (AC: 15)
   - [x] `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`, at least:
         `apply_command` skips normalization; skips bounds clipping; `PlaceStockpile` ignores
         `is_standable`; `CancelDesignation` also clears zones; `RemoveStockpile` also clears
@@ -236,12 +236,12 @@ so that my directives are recorded in the world, visibly, the moment I issue the
         optimistic speed is reverted to reading the wire value; the hint bar is dropped; the
         designation layer is drawn under the terrain; `read_inbound` reports every unterminated line
         as an overflow.
-  - [ ] `cargo clean -p protocol -p simd -p tui` before the final gate — `mutate.sh` is not
+  - [x] `cargo clean -p protocol -p simd -p tui` before the final gate — `mutate.sh` is not
         concurrency-safe and both 2.3 and 2.4 hit a stale mutated binary afterwards.
   - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent Record
         (AGENTS.md rule 1).
 
-- [ ] **Green gate** (AC: 15) — `scripts/gate.sh`, then the live check. Report what printed.
+- [x] **Green gate** (AC: 15) — `scripts/gate.sh`, then the live check. Report what printed.
 
 ## Dev Notes
 
@@ -705,6 +705,90 @@ OpenAI Codex (GPT-5), acting as Völundr.
   mark stub daemon thread panicked: Any { .. }
   test result: FAILED. 0 passed; 1 failed; 10 filtered out
   ```
+- Final clean and gate:
+  ```text
+  $ cargo clean -p protocol -p simd -p tui
+       Removed 1891 files, 607.7MiB total
+
+  $ scripts/gate.sh
+  frostvein gate
+    cargo fmt --check           ok
+    cargo clippy -D warnings    ok
+    cargo test                  ok
+    tui has no sim-core edge    ok
+    metrics ledger tests        ok
+  GATE GREEN
+  ```
+- Final mutation table (`scripts/mutate.sh
+  _bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`):
+  ```text
+  apply_command skips rectangle normalization                  KILLED
+  apply_command skips bounds clipping                          KILLED
+  PlaceStockpile ignores is_standable                          KILLED
+  CancelDesignation also clears zones                          KILLED
+  RemoveStockpile also clears designations                     KILLED
+  RemoveStockpile is a no-op                                   KILLED
+  Designate refuses to overwrite an existing kind              KILLED
+  to_save drops designations                                   KILLED
+  to_save drops zones                                          KILLED
+  from_save discards designations                              KILLED
+  from_save discards zones                                     KILLED
+  designate discriminator is renamed                           KILLED
+  cancel_designation discriminator is renamed                  KILLED
+  place_stockpile discriminator is renamed                     KILLED
+  remove_stockpile discriminator is renamed                    KILLED
+  designate kind field is renamed                              KILLED
+  bridge swaps dig and channel outbound                        KILLED
+  bridge delta drops designations                              KILLED
+  bridge delta drops zones                                     KILLED
+  daemon designate arm decodes but discards                    KILLED
+  daemon remove-stockpile arm decodes but discards             KILLED
+  daemon designate intake is blocked while paused              KILLED
+  daemon swaps place and remove stockpile                      KILLED
+  x commits only CancelDesignation                             KILLED
+  second Enter clears anchor without emitting                  KILLED
+  Esc exits mode instead of releasing anchor                   KILLED
+  cursor movement stops following with the camera              KILLED
+  optimistic speed stops updating local state                  KILLED
+  hint bar is dropped                                          KILLED
+  designation layer is covered by terrain                      KILLED
+  read_inbound calls every partial line an overflow            KILLED
+  keyed capture drain bound is zero                            KILLED
+
+  All mutations killed.
+  ```
+- Manual, exact Verification-block sequence against freshly rebuilt binaries:
+  ```text
+  $ rg -c '×' /tmp/before.txt /tmp/dig.txt /tmp/clear.txt
+  /tmp/clear.txt:4
+  /tmp/dig.txt:8
+  $ rg -c '≡' /tmp/pile.txt /tmp/clear.txt
+  # no matches
+  ```
+  The command was run exactly and is recorded honestly, not treated as positive eraser/stockpile
+  evidence: the pile rectangle is a subset of the dig rectangle, so AC11's required designation-over-
+  zone layer hides `≡`; separate client starts also recenter on a moving dwarf, so the later clear rect
+  can drift from the earlier mark. This is a defect in the Verification recipe, not a failed command
+  consequence; the controlled manual observation below removes both confounders.
+- Manual, controlled live outcome on a paused daemon: the initial capture contained no markers;
+  `space,d,enter,l,l,j,enter` produced dig markers while every frame stayed at tick 83; a distinct
+  overlapping `p,enter,h,h,enter` rect produced stockpile markers; and one spanning
+  `x,h,h,enter,l,l,l,l,j,enter` rect removed both kinds:
+  ```text
+  /tmp/paused-dig.txt:8
+  /tmp/controlled-pile.txt:4
+  tick 83
+  # controlled-before and controlled-clear had zero × and zero ≡ matches
+  ```
+- Manual, two clients attached while tick 83 was paused: the observer's first four frames had no dig
+  marker; a designation from the issuer then appeared in both captures:
+  ```text
+  /tmp/issuer.txt:4
+  /tmp/observer.txt:21
+  # first 96 observer lines: zero × matches
+  /tmp/issuer.txt:tick 83
+  /tmp/observer.txt:tick 83
+  ```
 
 ### Completion Notes List
 
@@ -724,8 +808,9 @@ OpenAI Codex (GPT-5), acting as Völundr.
   the stub-daemon positive capture verifies the exact command and echoed marker columns, while the
   no-key negative control proves markers are not unconditional. The `NO_COLOR` warning now states
   that glyph-distinct markers remain valid evidence.
-- AC15 development mutation pass: all 32 authored sabotages were killed. The prescribed clean,
-  final gate, final mutation pass, live checks, and self-review remain before review status.
+- AC15: the prescribed clean rebuild and full gate are green; all 32 authored mutations were killed;
+  the exact live recipe and controlled paused/two-client checks were run manually. The time-boxed
+  Codex self-review remains before review status.
 - Live verification found that four deltas already buffered with the large connect snapshot could
   consume the entire keyed capture before the command consequence arrived. The headless instrument
   now nonblockingly drains up to simd's bounded 16-message client queue plus one in-flight write
@@ -761,3 +846,4 @@ OpenAI Codex (GPT-5), acting as Völundr.
 | --- | --- |
 | 2026-08-05 | Story created |
 | 2026-08-05 | Added stockpile removal on Wolf's call: `remove_stockpile` as a fourth world-mutating command, `x` becomes a two-command eraser. Scope beyond epics.md — the epic text and the spine's command table still list three. |
+| 2026-08-05 | Implemented designation/stockpile state, persistence, protocol and daemon seams, modal TUI controls and rendering, the keyed live instrument, and 32-mutation verification. |
