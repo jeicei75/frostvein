@@ -4,7 +4,7 @@ baseline_commit: 8bf4548
 
 # Story 3.1: Give the Order
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -97,20 +97,20 @@ so that my directives are recorded in the world, visibly, the moment I issue the
 
 ## Tasks / Subtasks
 
-- [ ] **`sim-core`: designation and zone state, and the AD-10 consumer** (AC: 1, 2, 3, 4)
-  - [ ] Add `DesignationKind`, `Rect` and `SimCommand` to `crates/sim-core/src/lib.rs` (skeleton
+- [x] **`sim-core`: designation and zone state, and the AD-10 consumer** (AC: 1, 2, 3, 4)
+  - [x] Add `DesignationKind`, `Rect` and `SimCommand` to `crates/sim-core/src/lib.rs` (skeleton
         below). No new dependency.
-  - [ ] Two new resources inserted by `assemble`: `Designations(BTreeMap<Pos, DesignationKind>)` and
+  - [x] Two new resources inserted by `assemble`: `Designations(BTreeMap<Pos, DesignationKind>)` and
         `Zones(BTreeSet<Pos>)`. `BTreeMap`/`BTreeSet`, not hash containers — AD-7 forbids iteration
         order affecting outcomes, and `designations()`/`zones()` must be ascending by `Pos`.
-  - [ ] `assemble` is still the ONE assembly site: both new resources go in there so `generate` and
+  - [x] `assemble` is still the ONE assembly site: both new resources go in there so `generate` and
         `from_save` cannot diverge. Do not touch `schedule.add_systems`.
-  - [ ] `apply_command` normalizes then clips: `min = componentwise min`, `max = componentwise max`,
+  - [x] `apply_command` normalizes then clips: `min = componentwise min`, `max = componentwise max`,
         then intersect with `0..dims`. Iterate `z`, then `y`, then `x`.
-  - [ ] `PlaceStockpile` filters on the existing `Terrain::is_standable`. Do not write a second
+  - [x] `PlaceStockpile` filters on the existing `Terrain::is_standable`. Do not write a second
         walkability predicate and do not make `is_standable` public if a private call suffices.
         `RemoveStockpile` needs no predicate — it removes whatever zone tiles the rect covers.
-  - [ ] Tests in `crates/sim-core/tests/scenario.rs` (extend, do not replace): a reversed rect
+  - [x] Tests in `crates/sim-core/tests/scenario.rs` (extend, do not replace): a reversed rect
         designates the same tiles as its normalized form; a rect straddling the world edge designates
         only the in-bounds part; a fully out-of-bounds rect is a no-op; `Designate` over an existing
         designation overwrites the kind; `CancelDesignation` removes only designations and leaves
@@ -118,7 +118,7 @@ so that my directives are recorded in the world, visibly, the moment I issue the
         mixed terrain keeps exactly the standable tiles; a stockpile rect with no standable tile
         yields no zone. The two "leaves the other alone" assertions are a matched pair — set up one
         overlapping rect carrying both a designation and a zone, and erase with each command in turn.
-  - [ ] Determinism test: `apply_command` then 200 `step()`s from seed 42 twice yields identical
+  - [x] Determinism test: `apply_command` then 200 `step()`s from seed 42 twice yields identical
         `dwarves()`, `designations()` and `zones()`.
 
 - [ ] **`sim-core`: designations and zones survive save/load** (AC: 8)
@@ -491,11 +491,73 @@ imperative messages. Review-gated: no push, no PR.
 
 ### Agent Model Used
 
+OpenAI Codex (GPT-5), acting as Völundr.
+
 ### Debug Log References
+
+- Initial RED, before sim vocabulary existed (`cargo test --offline -p sim-core --test scenario`):
+  ```text
+  error[E0432]: unresolved imports `sim_core::DesignationKind`, `sim_core::Rect`, `sim_core::SimCommand`
+  error[E0599]: no method named `apply_command` found for struct `World`
+  error: could not compile `sim-core` (test "scenario") due to 35 previous errors
+  ```
+- Normalization sabotage RED:
+  ```text
+  test reversed_rect_designates_the_normalized_inclusive_tiles ... FAILED
+  assertion `left == right` failed
+    left: []
+   right: [(Pos { x: 1, y: 2, z: 4 }, Dig), (Pos { x: 1, y: 3, z: 4 }, Dig), (Pos { x: 2, y: 2, z: 4 }, Dig), (Pos { x: 2, y: 3, z: 4 }, Dig)]
+  ```
+- Bounds-clipping sabotage RED:
+  ```text
+  test designation_rect_clips_to_world_bounds ... FAILED
+  assertion `left == right` failed
+    left: [(Pos { x: -1, y: -1, z: -1 }, Channel), ..., (Pos { x: 1, y: 0, z: 0 }, Channel)]
+   right: [(Pos { x: 0, y: 0, z: 0 }, Channel), (Pos { x: 1, y: 0, z: 0 }, Channel)]
+  ```
+- Overwrite-mapping sabotage RED:
+  ```text
+  test designate_overwrites_the_existing_kind ... FAILED
+  assertion `left == right` failed
+    left: [(Pos { x: 7, y: 8, z: 9 }, Dig)]
+   right: [(Pos { x: 7, y: 8, z: 9 }, Channel)]
+  ```
+- Standability-filter sabotage RED:
+  ```text
+  test stockpile_keeps_exactly_the_standable_tiles ... FAILED
+  assertion `left == right` failed
+    left: [Pos { x: 10, y: 10, z: 10 }, Pos { x: 11, y: 10, z: 10 }, Pos { x: 12, y: 10, z: 10 }]
+   right: [Pos { x: 10, y: 10, z: 10 }, Pos { x: 11, y: 10, z: 10 }]
+  ```
+- Cancel-isolation sabotage RED:
+  ```text
+  test each_eraser_leaves_the_other_mark_kind_untouched ... FAILED
+  assertion `left == right` failed
+    left: []
+   right: [Pos { x: 10, y: 10, z: 10 }]
+  ```
+- Remove-isolation and remove-no-op sabotage REDs:
+  ```text
+  test each_eraser_leaves_the_other_mark_kind_untouched ... FAILED
+  assertion `left == right` failed
+    left: []
+   right: [(Pos { x: 10, y: 10, z: 10 }, Channel)]
+
+  test each_eraser_leaves_the_other_mark_kind_untouched ... FAILED
+  assertion failed: world.zones().is_empty()
+  ```
 
 ### Completion Notes List
 
+- AC1–AC4: added ordered designation/zone resources, normalized and clipped inclusive rectangle
+  application, standability-filtered stockpiles, independent erasers, readers, pause-safe plain
+  `World::apply_command`, and deterministic scenario coverage. `cargo test --offline -p sim-core`
+  and sim-core clippy are green.
+
 ### File List
+
+- crates/sim-core/src/lib.rs
+- crates/sim-core/tests/scenario.rs
 
 ## Change Log
 
