@@ -484,7 +484,17 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 let delta = protocol::Delta {
                     msg_type: protocol::MessageType::Delta,
                     tick,
-                    tiles: Vec::new(),
+                    tiles: if tick == 8 {
+                        vec![
+                            protocol::TileChange {
+                                pos: [0, 0, 0],
+                                tile: protocol::Tile::Solid(protocol::Material::Ice),
+                            };
+                            512
+                        ]
+                    } else {
+                        Vec::new()
+                    },
                     entities: Vec::new(),
                     designations: Vec::new(),
                     zones: Vec::new(),

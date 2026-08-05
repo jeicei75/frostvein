@@ -157,17 +157,31 @@ fn main() -> anyhow::Result<()> {
                 .context("could not make the keyed capture drain nonblocking")?;
             let drain_result = (|| -> anyhow::Result<()> {
                 for _ in 0..WORLD_COMMAND_CAPTURE_DRAIN {
-                    let has_complete_message = match reader.fill_buf() {
-                        Ok(buffer) => buffer.contains(&b'\n'),
+                    let has_queued_bytes = match reader.fill_buf() {
+                        Ok(buffer) => !buffer.is_empty(),
                         Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                         Err(error) => {
                             return Err(error).context("could not inspect queued server messages");
                         }
                     };
-                    if !has_complete_message {
+                    if !has_queued_bytes {
                         break;
                     }
-                    match read_message(&mut reader)? {
+                    // Once any bytes of a pre-command record are queued, finish that record
+                    // under the existing bounded snapshot timeout. Returning it to the normal
+                    // stream would let a large delta consume one of the requested evidence frames.
+                    reader
+                        .get_mut()
+                        .set_nonblocking(false)
+                        .context("could not finish a queued server message")?;
+                    let message_result = read_message(&mut reader);
+                    let resume_result = reader
+                        .get_mut()
+                        .set_nonblocking(true)
+                        .context("could not resume the nonblocking keyed capture drain");
+                    let message = message_result?;
+                    resume_result?;
+                    match message {
                         Some(Msg::Snapshot(next)) => {
                             snapshot = *next;
                             state.speed = snapshot.speed;

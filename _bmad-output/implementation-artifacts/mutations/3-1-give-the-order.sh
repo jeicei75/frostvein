@@ -420,3 +420,11 @@ old = 'const WORLD_COMMAND_CAPTURE_DRAIN: usize = 17;'
 assert old in s
 p.write_text(s.replace(old, 'const WORLD_COMMAND_CAPTURE_DRAIN: usize = 0;'))
 PY
+
+mutation "keyed capture drain refuses a partial record" tui key_sequence_designates_and_the_echoed_marker_reaches_expected_columns <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
+old = '                        Ok(buffer) => !buffer.is_empty(),'
+assert old in s
+p.write_text(s.replace(old, "                        Ok(buffer) => buffer.contains(&b'\\n'),"))
+PY

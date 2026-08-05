@@ -698,7 +698,8 @@ OpenAI Codex (GPT-5), acting as Völundr.
   ```
 - Live-instrument queued-delta RED, reproduced first against the real daemon and then pinned in the
   stub with an aligned large snapshot and the bounded 17-message pre-command window. Setting the
-  production drain bound from 17 to 0 reproduced the same RED:
+  production drain bound from 17 to 0, or refusing to finish a queued record larger than the
+  `BufReader` buffer, reproduced the same RED:
   ```text
   test key_sequence_designates_and_the_echoed_marker_reaches_expected_columns ... FAILED
   send mark delta: Os { code: 32, kind: BrokenPipe, message: "Broken pipe" }
@@ -754,6 +755,7 @@ OpenAI Codex (GPT-5), acting as Völundr.
   designation layer is covered by terrain                      KILLED
   read_inbound calls every partial line an overflow            KILLED
   keyed capture drain bound is zero                            KILLED
+  keyed capture drain refuses a partial record                 KILLED
 
   All mutations killed.
   ```
@@ -789,6 +791,20 @@ OpenAI Codex (GPT-5), acting as Völundr.
   /tmp/issuer.txt:tick 83
   /tmp/observer.txt:tick 83
   ```
+- `codex review --base main` completed in about 12 minutes and raised two P2 findings. Its sandbox
+  denied loopback with `Operation not permitted`, so its socket tests and live daemon could not run;
+  no production workaround was made. The independently run gate and manual checks above had loopback
+  access and remain the feature evidence.
+  - **Fixed:** a queued delta larger than `BufReader`'s buffer could stop the keyed drain at a partial
+    record. The strengthened stub now prequeues a >8 KiB delta; the drain finishes any record whose
+    first bytes are already queued under the existing bounded snapshot timeout, then resumes its
+    nonblocking probe. The pre-fix test and the 33rd mutation both go RED.
+  - **Disagreed / not changed:** the reviewer measured a valid full-world designation save at
+    23,195,995 bytes against the existing 16 MiB cap and recommended raising `MAX_SAVE_BYTES`.
+    Story 3.1 explicitly forbids fixing deferred work other than its assigned three items, and the
+    existing `MAX_SAVE_BYTES`/world-size item is not one of them; AC8 requires persistence coverage,
+    not a maximum-mark-volume guarantee. The measured limitation is reported here rather than
+    silently dropped or patched out of scope.
 
 ### Completion Notes List
 
@@ -808,15 +824,17 @@ OpenAI Codex (GPT-5), acting as Völundr.
   the stub-daemon positive capture verifies the exact command and echoed marker columns, while the
   no-key negative control proves markers are not unconditional. The `NO_COLOR` warning now states
   that glyph-distinct markers remain valid evidence.
-- AC15: the prescribed clean rebuild and full gate are green; all 32 authored mutations were killed;
+- AC15: the prescribed clean rebuild and full gate are green; all 33 authored mutations were killed;
   the exact live recipe and controlled paused/two-client checks were run manually. The time-boxed
-  Codex self-review remains before review status.
+  Codex self-review completed; its actionable partial-record finding was fixed and its out-of-scope
+  save-cap recommendation is documented with the disagreement.
 - Live verification found that four deltas already buffered with the large connect snapshot could
   consume the entire keyed capture before the command consequence arrived. The headless instrument
   now nonblockingly drains up to simd's bounded 16-message client queue plus one in-flight write
-  before replaying world-mutating key sequences; it stops immediately on `WouldBlock` or a partial
-  line, and its existing save/load and speed capture semantics remain unchanged. The strengthened
-  positive test and a 32nd mutation pin the bound.
+  before replaying world-mutating key sequences; it stops immediately on `WouldBlock`, but finishes
+  a record that has already begun under the existing read timeout. Its existing save/load and speed
+  capture semantics remain unchanged. The strengthened positive test and two mutations pin the
+  bound and the cross-buffer record path.
 - AD-10 under-listing: `remove_stockpile` is a fourth world-mutating command added on Wolf's call,
   so `epics.md` and the architecture spine's command table now list three where there are four.
   Those two planning documents were deliberately not reconciled inside this implementation story;
@@ -846,4 +864,4 @@ OpenAI Codex (GPT-5), acting as Völundr.
 | --- | --- |
 | 2026-08-05 | Story created |
 | 2026-08-05 | Added stockpile removal on Wolf's call: `remove_stockpile` as a fourth world-mutating command, `x` becomes a two-command eraser. Scope beyond epics.md — the epic text and the spine's command table still list three. |
-| 2026-08-05 | Implemented designation/stockpile state, persistence, protocol and daemon seams, modal TUI controls and rendering, the keyed live instrument, and 32-mutation verification. |
+| 2026-08-05 | Implemented designation/stockpile state, persistence, protocol and daemon seams, modal TUI controls and rendering, the keyed live instrument, and 33-mutation verification. |
