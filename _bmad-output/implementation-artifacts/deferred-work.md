@@ -194,3 +194,27 @@ names where it came from and what should trigger revisiting it.
   at the wrong thing entirely, so whoever bumps `Dims::DEFAULT` will not learn why. **Revisit when a
   story changes world dimensions**; the cheap fix is one assertion tying the default world's encoded
   size to the cap [crates/simd/src/main.rs:24].
+
+  **UPDATE — this fired at Story 3.1 (2026-08-05), by the other route.** Not a dims change: 3.1
+  added *state*. Designations clip to the whole world, so a legal command produced a 23.2 MB save
+  against the 16 MB cap and the world became unsaveable. The cap was raised to 64 MB (matching the
+  client's `MAX_SNAPSHOT_BYTES`) at 3.1's review. **The underlying defect is unchanged and still
+  open:** the cap is a hand-picked constant, not derived from the largest legal world, so the next
+  story that adds per-tile state can silently re-break it. The prediction above was right about the
+  mechanism and wrong only about which input would grow.
+
+## Deferred from: code review of 3-1-give-the-order (2026-08-05)
+
+- **AD-8's full-resend makes designation volume a wire amplifier.** Every delta carries *every*
+  designation, so cost scales with total marks rather than with what changed. Measured live at
+  3.1's review: one designate command clipping to the whole world (128x128x32 = 524,288 marks) takes
+  a delta from 378 bytes to **16,761,209 bytes**, sustained at **34.7 MB/s** (11 deltas in 5.3 s) to
+  every connected client, with no recovery short of a daemon restart. Reachable from the shipped
+  client, not only a hostile one: the TUI clamps a rect to a single z-level (16,384 marks, ~5 MB/s),
+  so 32 ordinary designate commands reach the full volume. Deliberately not fixed at 3.1 — every
+  candidate fix either changes AD-8's full-resend contract (absence means deletion) or invents a
+  game rule bounding how much may be designated, and both are architecture calls rather than
+  patches. **Owner: Story 3.2**, which adds the job market on top of designations and must revisit
+  this area regardless; it will make marks more numerous, not fewer. Note the interaction already
+  closed: the save half of this same root cause hard-failed and was fixed by raising the cap above
+  [crates/simd/src/bridge.rs:74-92, crates/sim-core/src/lib.rs:445-470].

@@ -537,7 +537,11 @@ fn out_of_bounds_zone_save_is_logged_and_the_daemon_keeps_ticking() {
 
 #[test]
 fn oversized_save_is_logged_and_the_daemon_keeps_ticking() {
-    const OVERSIZED: usize = 16 * 1024 * 1024 + 1;
+    // Tracks `MAX_SAVE_BYTES`, raised from 16 MB to 64 MB at story 3.1's review because a legal
+    // whole-world designation encodes to ~23.2 MB and made the world unsaveable. If this fixture
+    // drifts below the real cap the test stops exercising the refusal and silently checks the
+    // JSON decoder instead — which is exactly how it failed when the cap moved.
+    const OVERSIZED: usize = 64 * 1024 * 1024 + 1;
 
     let daemon = Daemon::spawn();
     fs::write(daemon.save_path(), vec![b' '; OVERSIZED]).expect("write oversized save fixture");
@@ -549,7 +553,7 @@ fn oversized_save_is_logged_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let log = daemon.next_log();
     assert!(
-        log.contains("save exceeds 16777216-byte limit"),
+        log.contains("save exceeds 67108864-byte limit"),
         "unexpected oversized-save log: {log}"
     );
 

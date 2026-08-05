@@ -22,7 +22,12 @@ const TICK_PERIOD: Duration = Duration::from_millis(100);
 const FAST_TICK_PERIOD: Duration = Duration::from_millis(20);
 const CLIENT_QUEUE: usize = 16;
 const SAVE_PATH: &str = "frostvein.save";
-const MAX_SAVE_BYTES: u64 = 16 * 1024 * 1024;
+/// Must exceed the largest *legal* world, not merely a typical one. Story 3.1 added
+/// designations and zones, and a designate command clips to the whole world — 128x128x32
+/// = 524,288 marks encode to ~23.2 MB, over the previous 16 MB cap, so a legal action made
+/// the world unsaveable. Matches the client's `MAX_SNAPSHOT_BYTES` so both ends of the wire
+/// bound at the same number.
+const MAX_SAVE_BYTES: u64 = 64 * 1024 * 1024;
 /// Leaves more than 29 billion years of 10 Hz ticks before arithmetic can overflow.
 const MAX_LOAD_TICK: u64 = u64::MAX / 2;
 
