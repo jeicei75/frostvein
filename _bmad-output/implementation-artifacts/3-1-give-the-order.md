@@ -4,7 +4,7 @@ baseline_commit: 8bf4548
 
 # Story 3.1: Give the Order
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -491,7 +491,7 @@ imperative messages. Review-gated: no push, no PR.
 
 ### Agent Model Used
 
-OpenAI Codex (GPT-5), acting as Völundr.
+OpenAI Codex (GPT-5.6), acting as Völundr.
 
 ### Debug Log References
 
@@ -562,6 +562,15 @@ OpenAI Codex (GPT-5), acting as Völundr.
   assertion `left == right` failed
     left: []
    right: [(Pos { x: 2, y: 1, z: 2 }, Channel), ..., (Pos { x: 4, y: 3, z: 2 }, Channel)]
+  ```
+- Corrupt persisted-mark validation REDs, added after the self-review found that `load_world`
+  accepted mark positions that `apply_command` can never create:
+  ```text
+  test out_of_bounds_designation_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+  unexpected out-of-bounds designation log: client delta queue full; disconnecting client
+
+  test out_of_bounds_zone_save_is_logged_and_the_daemon_keeps_ticking ... FAILED
+  unexpected out-of-bounds zone log: client delta queue full; disconnecting client
   ```
 - Protocol wire initial RED:
   ```text
@@ -709,7 +718,7 @@ OpenAI Codex (GPT-5), acting as Völundr.
 - Final clean and gate:
   ```text
   $ cargo clean -p protocol -p simd -p tui
-       Removed 1891 files, 607.7MiB total
+       Removed 2696 files, 809.9MiB total
 
   $ scripts/gate.sh
   frostvein gate
@@ -734,6 +743,8 @@ OpenAI Codex (GPT-5), acting as Völundr.
   to_save drops zones                                          KILLED
   from_save discards designations                              KILLED
   from_save discards zones                                     KILLED
+  load accepts an out-of-bounds designation                    KILLED
+  load accepts an out-of-bounds zone                           KILLED
   designate discriminator is renamed                           KILLED
   cancel_designation discriminator is renamed                  KILLED
   place_stockpile discriminator is renamed                     KILLED
@@ -800,11 +811,18 @@ OpenAI Codex (GPT-5), acting as Völundr.
     first bytes are already queued under the existing bounded snapshot timeout, then resumes its
     nonblocking probe. The pre-fix test and the 33rd mutation both go RED.
   - **Disagreed / not changed:** the reviewer measured a valid full-world designation save at
-    23,195,995 bytes against the existing 16 MiB cap and recommended raising `MAX_SAVE_BYTES`.
+    roughly 23.2 MiB against the existing 16 MiB cap and recommended raising `MAX_SAVE_BYTES`.
     Story 3.1 explicitly forbids fixing deferred work other than its assigned three items, and the
     existing `MAX_SAVE_BYTES`/world-size item is not one of them; AC8 requires persistence coverage,
     not a maximum-mark-volume guarantee. The measured limitation is reported here rather than
     silently dropped or patched out of scope.
+- The post-partial-record review found one further P2: persisted designations and zones were not
+  checked against save dimensions at the daemon's load boundary. Both invalid-list cases were first
+  observed RED, then fixed in `load_world`; their two new mutations are killed. The final time-boxed
+  review no longer reported that defect or the partial-record defect. It reported only the known
+  save-cap limitation above, reproducing a 23,160,682-byte full-world designation save. Loopback was
+  again denied inside the review sandbox with `Operation not permitted`; the external green gate and
+  earlier manual live observations remain the socket evidence.
 
 ### Completion Notes List
 
@@ -824,10 +842,13 @@ OpenAI Codex (GPT-5), acting as Völundr.
   the stub-daemon positive capture verifies the exact command and echoed marker columns, while the
   no-key negative control proves markers are not unconditional. The `NO_COLOR` warning now states
   that glyph-distinct markers remain valid evidence.
-- AC15: the prescribed clean rebuild and full gate are green; all 33 authored mutations were killed;
+- AC15: the prescribed clean rebuild and full gate are green; all 35 authored mutations were killed;
   the exact live recipe and controlled paused/two-client checks were run manually. The time-boxed
-  Codex self-review completed; its actionable partial-record finding was fixed and its out-of-scope
-  save-cap recommendation is documented with the disagreement.
+  Codex self-reviews completed; their actionable partial-record and corrupt-save findings were fixed,
+  while the out-of-scope save-cap recommendation is documented with the disagreement.
+- Review hardening: `load_world` now rejects out-of-bounds persisted designation and zone positions,
+  logs the exact invalid position, and keeps the current daemon world ticking. Two live-daemon tests
+  and two mutations pin both lists independently.
 - Live verification found that four deltas already buffered with the large connect snapshot could
   consume the entire keyed capture before the command consequence arrived. The headless instrument
   now nonblockingly drains up to simd's bounded 16-message client queue plus one in-flight write
@@ -857,6 +878,7 @@ OpenAI Codex (GPT-5), acting as Völundr.
 - _bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh
 - _bmad-output/implementation-artifacts/deferred-work.md
 - _bmad-output/implementation-artifacts/3-1-give-the-order.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
 
@@ -864,4 +886,4 @@ OpenAI Codex (GPT-5), acting as Völundr.
 | --- | --- |
 | 2026-08-05 | Story created |
 | 2026-08-05 | Added stockpile removal on Wolf's call: `remove_stockpile` as a fourth world-mutating command, `x` becomes a two-command eraser. Scope beyond epics.md — the epic text and the spine's command table still list three. |
-| 2026-08-05 | Implemented designation/stockpile state, persistence, protocol and daemon seams, modal TUI controls and rendering, the keyed live instrument, and 33-mutation verification. |
+| 2026-08-05 | Implemented designation/stockpile state, persistence, protocol and daemon seams, modal TUI controls and rendering, the keyed live instrument, corrupt-save mark validation, and 35-mutation verification. |
