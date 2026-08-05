@@ -91,6 +91,14 @@
     "output": 143498,
     "turns": 179
   },
+  "d80b1bc2-9894-4d56-bd64-1188c9f3d353.jsonl": {
+    "cache_creation": 662652,
+    "cache_read": 56856863,
+    "input": 6049,
+    "last_ts": "2026-08-05T15:47:47.990Z",
+    "output": 263354,
+    "turns": 319
+  },
   "e7456634-33dd-4c3b-8ccf-6f4e032c768f.jsonl": {
     "cache_creation": 489651,
     "cache_read": 6527613,
@@ -223,5 +231,37 @@
     "input": 131647,
     "output": 11104,
     "turns": 23
+  },
+  "rollout-2026-08-05T09-17-02-019fd136-467b-7432-b76f-4b76df35590a.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 44154368,
+    "input": 781730,
+    "last_ts": "2026-08-05T10:43:35.824Z",
+    "output": 129907,
+    "turns": 376
+  },
+  "rollout-2026-08-05T10-12-03-019fd168-a35d-72f3-a0cb-dc8627cb17cd.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 2272768,
+    "input": 130479,
+    "last_ts": "2026-08-05T10:20:35.856Z",
+    "output": 17353,
+    "turns": 34
+  },
+  "rollout-2026-08-05T10-25-29-019fd174-f0f4-7201-b097-7b643c90429a.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 3929600,
+    "input": 194861,
+    "last_ts": "2026-08-05T10:33:45.205Z",
+    "output": 17396,
+    "turns": 42
+  },
+  "rollout-2026-08-05T10-36-20-019fd17e-de15-7242-8a62-818c5aa755d4.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 2271744,
+    "input": 132179,
+    "last_ts": "2026-08-05T10:41:40.137Z",
+    "output": 12114,
+    "turns": 30
   }
 }
