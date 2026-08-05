@@ -208,16 +208,16 @@ so that my directives are recorded in the world, visibly, the moment I issue the
         clears both marks and stockpiles — one key doing two things is only discoverable if the hint
         bar says so.
 
-- [ ] **Observability instrument** (AC: 14) — extend `tui --frames N --key`, do not invent a second
+- [x] **Observability instrument** (AC: 14) — extend `tui --frames N --key`, do not invent a second
       channel. `--key` accepts a comma-separated sequence and presses each through the real
       `apply_key`; single values (`space`, `+`, `-`, `S`, `L`) keep working unchanged. Add the names
       `d`, `c`, `p`, `x`, `h`, `j`, `k`, `l`, `enter`, `esc`, `<`, `>` and update the error text.
-  - [ ] Two tests in `crates/tui/tests/client.rs`, real binary against a stub daemon that echoes the
+  - [x] Two tests in `crates/tui/tests/client.rs`, real binary against a stub daemon that echoes the
         designated rect back in its deltas: with `--key d,enter,l,l,enter` the capture contains the
         dig marker glyph at the expected columns; with no `--key` the identical capture contains
         none. The second is the mutation guard on the first — an instrument that rendered the connect
         snapshot forever would satisfy the first alone.
-  - [ ] Keep the `NO_COLOR` warning. Markers are glyph-distinct by design (AC11), so this capture is
+  - [x] Keep the `NO_COLOR` warning. Markers are glyph-distinct by design (AC11), so this capture is
         real evidence even under `NO_COLOR` — say so where the warning is emitted.
 
 - [ ] **Sabotage + mutation set** (AC: 15)
@@ -682,7 +682,19 @@ OpenAI Codex (GPT-5), acting as Völundr.
 
   test view::tests::speed_save_load_and_quit_keys_remain_global_in_every_mode ... FAILED
     left: Ignore
-   right: Command(Save)
+  right: Command(Save)
+  ```
+- Instrument sequence RED:
+  ```text
+  test key_sequence_designates_and_the_echoed_marker_reaches_expected_columns ... FAILED
+  tui did not connect to stub daemon within 3s
+  ```
+- Instrument key-name mapping sabotage RED:
+  ```text
+  test tests::every_instrument_key_name_is_pinned ... FAILED
+  assertion `left == right` failed: wrong mapping for "h"
+    left: Some(Char('l'))
+   right: Some(Char('h'))
   ```
 
 ### Completion Notes List
@@ -699,6 +711,10 @@ OpenAI Codex (GPT-5), acting as Völundr.
 - AC9–AC12: added modal rectangle input, clamped cursor/camera follow, one-level escape, narrow
   two-command erasure, optimistic local speed with wire overwrite, two-row status/hints, ordered
   marker layers, and a glyph-distinct pinned palette. TUI tests and clippy are green.
+- AC14: `--key` now replays comma-separated named sequences through the real keymap/write path;
+  the stub-daemon positive capture verifies the exact command and echoed marker columns, while the
+  no-key negative control proves markers are not unconditional. The `NO_COLOR` warning now states
+  that glyph-distinct markers remain valid evidence.
 
 ### File List
 
@@ -713,6 +729,7 @@ OpenAI Codex (GPT-5), acting as Völundr.
 - crates/tui/src/main.rs
 - crates/tui/src/palette.rs
 - crates/tui/src/view.rs
+- crates/tui/tests/client.rs
 
 ## Change Log
 

@@ -439,6 +439,158 @@ fn load_capable_stub_climbs_monotonically_when_no_key_is_sent() {
     assert_eq!(captured_ticks(&status_lines), vec![8, 9, 10, 11]);
 }
 
+const MARK_DIMS: protocol::Dims = protocol::Dims { x: 8, y: 5, z: 1 };
+
+fn mark_snapshot_line() -> String {
+    let snapshot = protocol::Snapshot {
+        msg_type: protocol::MessageType::Snapshot,
+        dims: MARK_DIMS,
+        tiles: vec![protocol::Tile::Solid(protocol::Material::Ice); 40],
+        entities: Vec::new(),
+        designations: Vec::new(),
+        zones: Vec::new(),
+        speed: protocol::Speed::Normal,
+        tick: SNAPSHOT_TICK,
+    };
+    format!("{}\n", serde_json::to_string(&snapshot).unwrap())
+}
+
+fn capture_designation_frames(key: Option<&str>) -> (String, String) {
+    const MAX_CAPTURE_BYTES: u64 = 2 * 1024 * 1024;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind mark stub daemon");
+    let port = listener.local_addr().expect("read stub address").port();
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tui"));
+    command
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("4")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(key) = key {
+        command.arg("--key").arg(key);
+    }
+    let mut child = command.spawn().expect("spawn tui mark capture");
+
+    let expects_command = key.is_some();
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(mark_snapshot_line().as_bytes())
+            .expect("send mark snapshot");
+
+        let designations = if expects_command {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("bound designation command read");
+            let mut reader = BufReader::new(stream.try_clone().expect("clone command read half"));
+            let mut line = String::new();
+            let bytes = (&mut reader)
+                .take(4 * 1024)
+                .read_line(&mut line)
+                .expect("read designation command");
+            assert!(
+                bytes > 0 && line.ends_with('\n'),
+                "missing command: {line:?}"
+            );
+            let command: protocol::Command = serde_json::from_str(&line).expect("decode command");
+            let protocol::Command::Designate { kind, rect } = command else {
+                panic!("expected designate command, got {command:?}");
+            };
+            assert_eq!(kind, protocol::DesignationKind::Dig);
+            assert_eq!(rect.min, [4, 2, 0]);
+            assert_eq!(rect.max, [6, 2, 0]);
+            (rect.min[0]..=rect.max[0])
+                .map(|x| protocol::Designation {
+                    pos: [x, 2, 0],
+                    kind,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        for tick in 8..=11 {
+            let delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: designations.clone(),
+                zones: Vec::new(),
+                speed: protocol::Speed::Normal,
+            };
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .expect("send mark delta");
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stdout)
+        .expect("read bounded mark stdout");
+    assert!(stdout.len() as u64 <= MAX_CAPTURE_BYTES);
+    let status = child.wait().expect("wait for mark capture");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stderr)
+        .expect("read bounded mark stderr");
+    assert!(stderr.len() as u64 <= MAX_CAPTURE_BYTES);
+    server.join().expect("mark stub daemon thread panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+    (stdout, stderr)
+}
+
+fn glyph_columns_for(stdout: &str, glyph: char) -> Vec<usize> {
+    stdout
+        .lines()
+        .filter_map(|line| strip_ansi(line).chars().position(|value| value == glyph))
+        .collect()
+}
+
+#[test]
+fn key_sequence_designates_and_the_echoed_marker_reaches_expected_columns() {
+    let (stdout, _) = capture_designation_frames(Some("d,enter,l,l,enter"));
+    let columns = glyph_columns_for(&stdout, '×');
+    let marker_line = stdout
+        .lines()
+        .map(strip_ansi)
+        .find(|line| line.contains('×'))
+        .expect("a streamed frame must contain the echoed marker");
+    let expected = marker_line.chars().count() / 2;
+
+    assert!(!columns.is_empty(), "no dig glyph reached the capture");
+    assert!(
+        columns.iter().all(|column| *column == expected),
+        "{columns:?}"
+    );
+    assert!(
+        stdout.lines().map(strip_ansi).any(|line| {
+            let glyphs: Vec<_> = line.chars().collect();
+            glyphs.get(expected) == Some(&'×') && glyphs.get(expected + 1) == Some(&'×')
+        }),
+        "echoed rect did not occupy the two expected centre columns"
+    );
+}
+
+#[test]
+fn identical_capture_without_a_key_sequence_contains_no_marker() {
+    let (stdout, _) = capture_designation_frames(None);
+
+    assert!(!stdout.contains('×'), "marker rendered without a command");
+}
+
 const WIDE_DIMS: protocol::Dims = protocol::Dims { x: 16, y: 16, z: 1 };
 
 fn dwarf_at(x: i32) -> protocol::Entity {

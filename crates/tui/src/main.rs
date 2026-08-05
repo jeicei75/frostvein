@@ -68,7 +68,7 @@ fn main() -> anyhow::Result<()> {
     let mut frame_only = false;
     let mut frames: Option<u32> = None;
     let mut expect_frame_count = false;
-    let mut key = None;
+    let mut keys = Vec::new();
     let mut expect_key = false;
     for arg in std::env::args_os().skip(1) {
         if expect_frame_count {
@@ -85,14 +85,15 @@ fn main() -> anyhow::Result<()> {
             let text = arg
                 .to_str()
                 .with_context(|| format!("--key value is not valid UTF-8: {arg:?}"))?;
-            key = Some(match text {
-                "space" => KeyCode::Char(' '),
-                "+" => KeyCode::Char('+'),
-                "-" => KeyCode::Char('-'),
-                "S" => KeyCode::Char('S'),
-                "L" => KeyCode::Char('L'),
-                _ => bail!("invalid --key value {text:?}: expected space, +, -, S, or L"),
-            });
+            for name in text.split(',') {
+                let Some(code) = named_key(name) else {
+                    bail!(
+                        "invalid --key value {name:?}: expected a comma-separated sequence of \
+                         space, +, -, S, L, d, c, p, x, h, j, k, l, enter, esc, <, or >"
+                    );
+                };
+                keys.push(code);
+            }
             expect_key = false;
             continue;
         }
@@ -123,9 +124,9 @@ fn main() -> anyhow::Result<()> {
         bail!("--frames requires a count, e.g. --frames 3");
     }
     if expect_key {
-        bail!("--key requires space, +, -, S, or L");
+        bail!("--key requires a comma-separated sequence, e.g. --key d,enter,l,l,enter");
     }
-    if key.is_some() && frames.is_none() {
+    if !keys.is_empty() && frames.is_none() {
         bail!("--key requires --frames");
     }
 
@@ -141,15 +142,23 @@ fn main() -> anyhow::Result<()> {
     let mut state = initial(&snapshot);
 
     if let Some(count) = frames {
-        if let Some(code) = key
-            && let Action::Command(command) = apply_key(
+        let viewport = frame_size();
+        for code in keys {
+            match apply_key(
                 &mut state,
                 KeyEvent::new(code, KeyModifiers::NONE),
                 snapshot.dims,
-                frame_size(),
-            )
-        {
-            send_command(&mut writer, command)?;
+                viewport,
+            ) {
+                Action::Command(command) => send_command(&mut writer, command)?,
+                Action::Commands(commands) => {
+                    for command in commands {
+                        send_command(&mut writer, command)?;
+                    }
+                }
+                Action::Quit => return Ok(()),
+                Action::Redraw | Action::Ignore => {}
+            }
         }
         return stream_frames(reader, snapshot, state, count);
     }
@@ -288,6 +297,29 @@ fn frame_size() -> (u16, u16) {
     }
 }
 
+fn named_key(name: &str) -> Option<KeyCode> {
+    match name {
+        "space" => Some(KeyCode::Char(' ')),
+        "+" => Some(KeyCode::Char('+')),
+        "-" => Some(KeyCode::Char('-')),
+        "S" => Some(KeyCode::Char('S')),
+        "L" => Some(KeyCode::Char('L')),
+        "d" => Some(KeyCode::Char('d')),
+        "c" => Some(KeyCode::Char('c')),
+        "p" => Some(KeyCode::Char('p')),
+        "x" => Some(KeyCode::Char('x')),
+        "h" => Some(KeyCode::Char('h')),
+        "j" => Some(KeyCode::Char('j')),
+        "k" => Some(KeyCode::Char('k')),
+        "l" => Some(KeyCode::Char('l')),
+        "enter" => Some(KeyCode::Enter),
+        "esc" => Some(KeyCode::Esc),
+        "<" => Some(KeyCode::Char('<')),
+        ">" => Some(KeyCode::Char('>')),
+        _ => None,
+    }
+}
+
 /// Headless counterpart to the interactive loop, for proving AC10 in the suite.
 ///
 /// It runs the REAL reader thread and the real `apply` -> `render` -> `write_frame`
@@ -318,7 +350,8 @@ fn stream_frames(
     if colour_is_suppressed() {
         eprintln!(
             "warning: NO_COLOR is set, so this capture contains no colour and cannot \
-             evidence dwarf job-state colours. Re-run with NO_COLOR unset to check them."
+             evidence dwarf job-state colours. Designation and zone markers remain evidenced \
+             because their glyphs are distinct. Re-run with NO_COLOR unset to check colours."
         );
     }
 
@@ -481,6 +514,36 @@ mod tests {
         r#""designations":[],"zones":[],"speed":"fast"}"#,
         "\n"
     );
+
+    #[test]
+    fn every_instrument_key_name_is_pinned() {
+        for (name, expected) in [
+            ("space", KeyCode::Char(' ')),
+            ("+", KeyCode::Char('+')),
+            ("-", KeyCode::Char('-')),
+            ("S", KeyCode::Char('S')),
+            ("L", KeyCode::Char('L')),
+            ("d", KeyCode::Char('d')),
+            ("c", KeyCode::Char('c')),
+            ("p", KeyCode::Char('p')),
+            ("x", KeyCode::Char('x')),
+            ("h", KeyCode::Char('h')),
+            ("j", KeyCode::Char('j')),
+            ("k", KeyCode::Char('k')),
+            ("l", KeyCode::Char('l')),
+            ("enter", KeyCode::Enter),
+            ("esc", KeyCode::Esc),
+            ("<", KeyCode::Char('<')),
+            (">", KeyCode::Char('>')),
+        ] {
+            assert_eq!(
+                named_key(name),
+                Some(expected),
+                "wrong mapping for {name:?}"
+            );
+        }
+        assert_eq!(named_key("bogus"), None);
+    }
 
     #[test]
     fn reads_one_snapshot_line() {
