@@ -95,6 +95,10 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         h,
         cells: vec![BLANK; usize::from(w) * usize::from(h)],
     };
+    // NOTE: deliberate — below two rows there is no map to draw, so a 1-row terminal renders
+    // blank rather than a lone status line (which is what it did before the status/hint split).
+    // A terminal this small cannot show the game; pinned by `one_row_terminal_renders_blank` so
+    // the behaviour is a decision rather than an accident of `map_h = h - 2`.
     if w == 0 || h < 2 {
         return framebuffer;
     }
@@ -641,6 +645,29 @@ mod tests {
     }
 
     #[test]
+    fn one_row_terminal_renders_blank() {
+        // Pins the `h < 2` early return as a decision, not an accident of `map_h = h - 2`.
+        // Before the status/hint split a 1-row terminal drew a status line; it now draws
+        // nothing, because two rows are reserved and no map row is left. Asserted at h = 1
+        // and h = 0, with h = 2 as the control proving the guard is not simply always-blank.
+        let dims = Dims { x: 3, y: 3, z: 1 };
+        let snapshot = empty_snapshot(dims);
+        let state = normal_state((1, 1), 0);
+        for h in [0, 1] {
+            let framebuffer = render(&snapshot, &state, 10, h);
+            assert!(
+                framebuffer.cells.iter().all(|cell| *cell == BLANK),
+                "h={h} should render blank"
+            );
+        }
+        let framebuffer = render(&snapshot, &state, 10, 2);
+        assert!(
+            framebuffer.cells.iter().any(|cell| *cell != BLANK),
+            "h=2 must still draw the status and hint rows"
+        );
+    }
+
+    #[test]
     fn renders_the_viewed_level() {
         let dims = Dims { x: 5, y: 3, z: 3 };
         let mut snapshot = empty_snapshot(dims);
@@ -921,8 +948,12 @@ mod tests {
                 let mut state = normal_state((1, 1), 0);
                 state.mode = mode;
                 state.anchor = anchored.then_some((1, 1));
-                let framebuffer = render(&snapshot, &state, 80, 3);
-                let hint: String = (0..80)
+                // Rendered WIDER than the budget on purpose. Reading 80 columns out of an
+                // 80-wide framebuffer and asserting `<= 80` cannot fail — an over-long hint
+                // would be silently truncated into a pass. At 120 the full hint survives, so
+                // the width assertion below is the real guard AC10 asks for.
+                let framebuffer = render(&snapshot, &state, 120, 3);
+                let hint: String = (0..120)
                     .map(|x| framebuffer.cell(x, 2).glyph)
                     .collect::<String>()
                     .trim_end()
