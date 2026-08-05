@@ -218,6 +218,26 @@ fn read_delta_with_speed(
     panic!("daemon never reported {expected:?}; observed {observed:?}");
 }
 
+fn read_delta_with_marks(
+    reader: &mut BufReader<TcpStream>,
+    designations: &[protocol::Designation],
+    zones: &[protocol::Zone],
+) -> protocol::Delta {
+    let mut observed = Vec::new();
+    for _ in 0..10 {
+        let update = read_delta(reader);
+        observed.push((
+            update.tick,
+            update.designations.clone(),
+            update.zones.clone(),
+        ));
+        if update.designations == designations && update.zones == zones {
+            return update;
+        }
+    }
+    panic!("daemon never emitted expected marks; observed {observed:?}");
+}
+
 #[test]
 fn save_then_load_rewinds_every_client() {
     let daemon = Daemon::spawn();
@@ -455,8 +475,73 @@ fn out_of_bounds_dwarf_home_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn out_of_bounds_designation_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.designations.push((
+        sim_core::Pos { x: -1, y: 0, z: 0 },
+        sim_core::DesignationKind::Dig,
+    ));
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds designation fixture"),
+    )
+    .expect("write out-of-bounds designation fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save designation position -1,0,0 is outside dims 128x128x32"),
+        "unexpected out-of-bounds designation log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn out_of_bounds_zone_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.zones.push(sim_core::Pos {
+        x: i32::MAX,
+        y: 0,
+        z: 0,
+    });
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds zone fixture"),
+    )
+    .expect("write out-of-bounds zone fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save zone position 2147483647,0,0 is outside dims 128x128x32"),
+        "unexpected out-of-bounds zone log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
 fn oversized_save_is_logged_and_the_daemon_keeps_ticking() {
-    const OVERSIZED: usize = 16 * 1024 * 1024 + 1;
+    // Tracks `MAX_SAVE_BYTES`, raised from 16 MB to 64 MB at story 3.1's review because a legal
+    // whole-world designation encodes to ~23.2 MB and made the world unsaveable. If this fixture
+    // drifts below the real cap the test stops exercising the refusal and silently checks the
+    // JSON decoder instead — which is exactly how it failed when the cap moved.
+    const OVERSIZED: usize = 64 * 1024 * 1024 + 1;
 
     let daemon = Daemon::spawn();
     fs::write(daemon.save_path(), vec![b' '; OVERSIZED]).expect("write oversized save fixture");
@@ -468,7 +553,7 @@ fn oversized_save_is_logged_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let log = daemon.next_log();
     assert!(
-        log.contains("save exceeds 16777216-byte limit"),
+        log.contains("save exceeds 67108864-byte limit"),
         "unexpected oversized-save log: {log}"
     );
 
@@ -651,6 +736,114 @@ fn speed_change_from_either_client_reaches_both_on_the_same_delta() {
     assert_eq!(first_update.speed, protocol::Speed::Paused);
     assert_eq!(second_update.speed, protocol::Speed::Paused);
     assert_eq!(first_update.tick, second_update.tick);
+}
+
+#[test]
+fn designation_and_stockpile_changes_reach_both_clients() {
+    let daemon = Daemon::spawn();
+    let first_stream = daemon.connect();
+    let mut writer = first_stream
+        .try_clone()
+        .expect("first client write half must clone");
+    let mut first = BufReader::new(first_stream);
+    let first_snapshot = read_snapshot(&mut first);
+    let mut second = BufReader::new(daemon.connect());
+    let _ = read_snapshot(&mut second);
+
+    send_literal(
+        &mut writer,
+        b"{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[1,2,3],\"max\":[2,3,3]}}\n",
+    );
+    let designated = vec![
+        protocol::Designation {
+            pos: [1, 2, 3],
+            kind: protocol::DesignationKind::Dig,
+        },
+        protocol::Designation {
+            pos: [1, 3, 3],
+            kind: protocol::DesignationKind::Dig,
+        },
+        protocol::Designation {
+            pos: [2, 2, 3],
+            kind: protocol::DesignationKind::Dig,
+        },
+        protocol::Designation {
+            pos: [2, 3, 3],
+            kind: protocol::DesignationKind::Dig,
+        },
+    ];
+    let _ = read_delta_with_marks(&mut first, &designated, &[]);
+    let _ = read_delta_with_marks(&mut second, &designated, &[]);
+
+    let stockpile_pos = first_snapshot.entities[0].pos;
+    let stockpile = format!(
+        "{{\"type\":\"place_stockpile\",\"rect\":{{\"min\":{stockpile_pos:?},\"max\":{stockpile_pos:?}}}}}\n"
+    );
+    send_literal(&mut writer, stockpile.as_bytes());
+    let zones = vec![protocol::Zone { pos: stockpile_pos }];
+    let _ = read_delta_with_marks(&mut first, &designated, &zones);
+    let _ = read_delta_with_marks(&mut second, &designated, &zones);
+
+    send_literal(
+        &mut writer,
+        b"{\"type\":\"cancel_designation\",\"rect\":{\"min\":[1,2,3],\"max\":[1,3,3]}}\n",
+    );
+    let remaining = vec![
+        protocol::Designation {
+            pos: [2, 2, 3],
+            kind: protocol::DesignationKind::Dig,
+        },
+        protocol::Designation {
+            pos: [2, 3, 3],
+            kind: protocol::DesignationKind::Dig,
+        },
+    ];
+    let _ = read_delta_with_marks(&mut first, &remaining, &zones);
+    let _ = read_delta_with_marks(&mut second, &remaining, &zones);
+
+    let remove = format!(
+        "{{\"type\":\"remove_stockpile\",\"rect\":{{\"min\":{stockpile_pos:?},\"max\":{stockpile_pos:?}}}}}\n"
+    );
+    send_literal(&mut writer, remove.as_bytes());
+    let _ = read_delta_with_marks(&mut first, &remaining, &[]);
+    let _ = read_delta_with_marks(&mut second, &remaining, &[]);
+}
+
+#[test]
+fn designation_is_applied_while_tick_is_paused() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_speed(&mut writer, protocol::Speed::Paused);
+    let first_paused = read_delta_with_speed(&mut reader, protocol::Speed::Paused);
+    let second_paused = read_delta(&mut reader);
+    assert_eq!(second_paused.tick, first_paused.tick);
+    let frozen_tick = first_paused.tick;
+
+    send_literal(
+        &mut writer,
+        b"{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{\"min\":[7,8,9],\"max\":[7,8,9]}}\n",
+    );
+    let expected = [protocol::Designation {
+        pos: [7, 8, 9],
+        kind: protocol::DesignationKind::Channel,
+    }];
+    let mut carrying = None;
+    for _ in 0..10 {
+        let update = read_delta(&mut reader);
+        assert_eq!(
+            update.tick, frozen_tick,
+            "every delta from pause onward must carry the frozen tick"
+        );
+        if update.designations == expected {
+            carrying = Some(update);
+            break;
+        }
+    }
+    assert!(carrying.is_some(), "paused daemon discarded designation");
 }
 
 #[test]
@@ -871,6 +1064,34 @@ fn oversized_line_is_refused_without_killing_the_daemon() {
         daemon.next_log().contains("exceeded"),
         "daemon must refuse an unbounded line rather than buffer it"
     );
+
+    let mut next = BufReader::new(daemon.connect());
+    let _: protocol::Snapshot = read_snapshot(&mut next);
+}
+
+#[test]
+fn unterminated_partial_line_is_not_reported_as_overflow() {
+    let daemon = Daemon::spawn();
+    let mut client = BufReader::new(daemon.connect());
+    let _: protocol::Snapshot = read_snapshot(&mut client);
+
+    client
+        .get_mut()
+        .write_all(b"{\"type\":\"designate\"")
+        .expect("partial command must write");
+    client
+        .get_mut()
+        .shutdown(Shutdown::Write)
+        .expect("close client write half");
+
+    match daemon.stderr.recv_timeout(Duration::from_millis(500)) {
+        Err(RecvTimeoutError::Timeout) => {}
+        Err(RecvTimeoutError::Disconnected) => panic!("daemon stderr closed unexpectedly"),
+        Ok(line) => assert!(
+            !line.contains("exceeded 65536 bytes"),
+            "partial line was falsely reported as overflow: {line}"
+        ),
+    }
 
     let mut next = BufReader::new(daemon.connect());
     let _: protocol::Snapshot = read_snapshot(&mut next);

@@ -1,6 +1,21 @@
 use std::collections::BTreeSet;
 
-use sim_core::{Dims, JobState, Material, Pos, Tile, World};
+use sim_core::{DesignationKind, Dims, JobState, Material, Pos, Rect, SimCommand, Tile, World};
+
+fn rect(min: Pos, max: Pos) -> Rect {
+    Rect { min, max }
+}
+
+fn make_standable(world: &mut World, pos: Pos) {
+    assert!(world.set_tile(
+        Pos {
+            z: pos.z - 1,
+            ..pos
+        },
+        Tile::Solid(Material::Stone),
+    ));
+    assert!(world.set_tile(pos, Tile::Empty));
+}
 
 #[test]
 fn dwarves_stay_standable_and_near_home() {
@@ -169,4 +184,234 @@ fn dirty_tiles_are_sorted_and_out_of_bounds_writes_do_nothing() {
         ]
     );
     assert!(world.drain_dirty().is_empty());
+}
+
+#[test]
+fn reversed_rect_designates_the_normalized_inclusive_tiles() {
+    let mut reversed = World::generate(42, Dims::DEFAULT);
+    reversed.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(Pos { x: 2, y: 3, z: 4 }, Pos { x: 1, y: 2, z: 4 }),
+    });
+
+    let expected = vec![
+        (Pos { x: 1, y: 2, z: 4 }, DesignationKind::Dig),
+        (Pos { x: 1, y: 3, z: 4 }, DesignationKind::Dig),
+        (Pos { x: 2, y: 2, z: 4 }, DesignationKind::Dig),
+        (Pos { x: 2, y: 3, z: 4 }, DesignationKind::Dig),
+    ];
+    assert_eq!(reversed.designations(), expected);
+
+    let mut normalized = World::generate(42, Dims::DEFAULT);
+    normalized.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(Pos { x: 1, y: 2, z: 4 }, Pos { x: 2, y: 3, z: 4 }),
+    });
+    assert_eq!(reversed.designations(), normalized.designations());
+}
+
+#[test]
+fn designation_rect_clips_to_world_bounds() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(
+            Pos {
+                x: -1,
+                y: -1,
+                z: -1,
+            },
+            Pos { x: 1, y: 0, z: 0 },
+        ),
+    });
+
+    assert_eq!(
+        world.designations(),
+        vec![
+            (Pos { x: 0, y: 0, z: 0 }, DesignationKind::Channel),
+            (Pos { x: 1, y: 0, z: 0 }, DesignationKind::Channel),
+        ]
+    );
+}
+
+#[test]
+fn fully_out_of_bounds_rect_is_a_no_op() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(
+            Pos {
+                x: -3,
+                y: -3,
+                z: -3,
+            },
+            Pos {
+                x: -1,
+                y: -1,
+                z: -1,
+            },
+        ),
+    });
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(
+            Pos {
+                x: 128,
+                y: 128,
+                z: 32,
+            },
+            Pos {
+                x: 130,
+                y: 130,
+                z: 34,
+            },
+        ),
+    });
+
+    assert!(world.designations().is_empty());
+    assert!(world.zones().is_empty());
+}
+
+#[test]
+fn designate_overwrites_the_existing_kind() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let pos = Pos { x: 7, y: 8, z: 9 };
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(pos, pos),
+    });
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(pos, pos),
+    });
+
+    assert_eq!(world.designations(), vec![(pos, DesignationKind::Channel)]);
+}
+
+#[test]
+fn each_eraser_leaves_the_other_mark_kind_untouched() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let pos = Pos {
+        x: 10,
+        y: 10,
+        z: 10,
+    };
+    make_standable(&mut world, pos);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(pos, pos),
+    });
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pos, pos),
+    });
+
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(pos, pos),
+    });
+    assert!(world.designations().is_empty());
+    assert_eq!(world.zones(), vec![pos]);
+
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(pos, pos),
+    });
+    world.apply_command(SimCommand::RemoveStockpile {
+        rect: rect(pos, pos),
+    });
+    assert_eq!(world.designations(), vec![(pos, DesignationKind::Channel)]);
+    assert!(world.zones().is_empty());
+}
+
+#[test]
+fn stockpile_keeps_exactly_the_standable_tiles() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let first = Pos {
+        x: 10,
+        y: 10,
+        z: 10,
+    };
+    let second = Pos {
+        x: 11,
+        y: 10,
+        z: 10,
+    };
+    let unsupported = Pos {
+        x: 12,
+        y: 10,
+        z: 10,
+    };
+    make_standable(&mut world, first);
+    make_standable(&mut world, second);
+    assert!(world.set_tile(unsupported, Tile::Empty));
+    assert!(world.set_tile(
+        Pos {
+            z: unsupported.z - 1,
+            ..unsupported
+        },
+        Tile::Empty,
+    ));
+
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(first, unsupported),
+    });
+
+    assert_eq!(world.zones(), vec![first, second]);
+}
+
+#[test]
+fn stockpile_with_no_standable_tile_changes_nothing() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(Pos { x: 0, y: 0, z: 0 }, Pos { x: 2, y: 2, z: 0 }),
+    });
+
+    assert!(world.zones().is_empty());
+}
+
+#[test]
+fn applying_a_command_does_not_advance_the_world() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let tick = world.tick();
+    let dwarves = world.dwarves();
+
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(Pos { x: 1, y: 2, z: 3 }, Pos { x: 4, y: 5, z: 3 }),
+    });
+
+    assert_eq!(world.tick(), tick);
+    assert_eq!(world.dwarves(), dwarves);
+}
+
+#[test]
+fn same_seed_and_commands_remain_deterministic() {
+    let mut first = World::generate(42, Dims::DEFAULT);
+    let mut second = World::generate(42, Dims::DEFAULT);
+    let commands = [
+        SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(Pos { x: 3, y: 4, z: 5 }, Pos { x: 1, y: 2, z: 5 }),
+        },
+        SimCommand::PlaceStockpile {
+            rect: rect(
+                Pos { x: 0, y: 0, z: 0 },
+                Pos {
+                    x: 20,
+                    y: 20,
+                    z: 20,
+                },
+            ),
+        },
+    ];
+    for command in commands {
+        first.apply_command(command);
+        second.apply_command(command);
+    }
+
+    for _ in 0..200 {
+        first.step();
+        second.step();
+        assert_eq!(first.dwarves(), second.dwarves());
+        assert_eq!(first.designations(), second.designations());
+        assert_eq!(first.zones(), second.zones());
+    }
 }

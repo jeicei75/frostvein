@@ -5,7 +5,7 @@ mod worldgen;
 
 pub use save::{SaveState, SavedDwarf};
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bevy_ecs::{
     component::Component,
@@ -48,6 +48,26 @@ pub struct Pos {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DesignationKind {
+    Dig,
+    Channel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rect {
+    pub min: Pos,
+    pub max: Pos,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SimCommand {
+    Designate { kind: DesignationKind, rect: Rect },
+    CancelDesignation { rect: Rect },
+    PlaceStockpile { rect: Rect },
+    RemoveStockpile { rect: Rect },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dims {
     pub x: u32,
     pub y: u32,
@@ -87,6 +107,12 @@ struct WanderRng(ChaCha8Rng);
 
 #[derive(Resource)]
 struct Tick(pub u64);
+
+#[derive(Resource, Default)]
+struct Designations(BTreeMap<Pos, DesignationKind>);
+
+#[derive(Resource, Default)]
+struct Zones(BTreeSet<Pos>);
 
 /// The tile grid lives in the ECS so systems can read it; `World` delegates.
 #[derive(Resource)]
@@ -219,6 +245,9 @@ pub struct World {
     seed: u64,
 }
 
+// The one assembly site intentionally receives every deterministic state component so generate
+// and load cannot diverge; wrapping them solely to satisfy the argument-count lint adds no model.
+#[allow(clippy::too_many_arguments)]
 fn assemble(
     seed: u64,
     dims: Dims,
@@ -226,10 +255,14 @@ fn assemble(
     tick: u64,
     wander_rng: ChaCha8Rng,
     ids: IdAllocator,
+    designations: BTreeMap<Pos, DesignationKind>,
+    zones: BTreeSet<Pos>,
 ) -> World {
     let mut ecs = EcsWorld::new();
     ecs.insert_resource(Tick(tick));
     ecs.insert_resource(WanderRng(wander_rng));
+    ecs.insert_resource(Designations(designations));
+    ecs.insert_resource(Zones(zones));
     ecs.insert_resource(Terrain {
         dims,
         tiles,
@@ -275,6 +308,8 @@ impl World {
             0,
             ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER),
             IdAllocator::default(),
+            BTreeMap::new(),
+            BTreeSet::new(),
         );
         world.spawn_dwarves(&heights, &mut spawn_rng);
         world
@@ -311,6 +346,8 @@ impl World {
             wander_rng: self.ecs.resource::<WanderRng>().0.clone(),
             next_id: self.ids.next,
             dwarves,
+            designations: self.designations(),
+            zones: self.zones(),
         }
     }
 
@@ -323,6 +360,8 @@ impl World {
             wander_rng,
             next_id,
             dwarves,
+            designations,
+            zones,
         } = save;
         let mut world = assemble(
             seed,
@@ -331,6 +370,8 @@ impl World {
             tick,
             wander_rng,
             IdAllocator { next: next_id },
+            designations.into_iter().collect(),
+            zones.into_iter().collect(),
         );
         for dwarf in dwarves {
             world.ecs.spawn((
@@ -378,6 +419,100 @@ impl World {
 
     pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
         self.ecs.resource_mut::<Terrain>().drain_dirty()
+    }
+
+    /// AD-10: `simd` calls this at loop-iteration start, in arrival order, including while
+    /// paused. Designation intake changes marks only; it is not world advancement.
+    // NOTE: command ordering is explicit at the call site rather than enforced by `.chain()`.
+    pub fn apply_command(&mut self, command: SimCommand) {
+        let dims = self.dims();
+        let rect = match command {
+            SimCommand::Designate { rect, .. }
+            | SimCommand::CancelDesignation { rect }
+            | SimCommand::PlaceStockpile { rect }
+            | SimCommand::RemoveStockpile { rect } => rect,
+        };
+        let min = Pos {
+            x: rect.min.x.min(rect.max.x),
+            y: rect.min.y.min(rect.max.y),
+            z: rect.min.z.min(rect.max.z),
+        };
+        let max = Pos {
+            x: rect.min.x.max(rect.max.x),
+            y: rect.min.y.max(rect.max.y),
+            z: rect.min.z.max(rect.max.z),
+        };
+        if max.x < 0
+            || max.y < 0
+            || max.z < 0
+            || min.x >= dims.x as i32
+            || min.y >= dims.y as i32
+            || min.z >= dims.z as i32
+        {
+            return;
+        }
+        let min = Pos {
+            x: min.x.max(0),
+            y: min.y.max(0),
+            z: min.z.max(0),
+        };
+        let max = Pos {
+            x: max.x.min(dims.x as i32 - 1),
+            y: max.y.min(dims.y as i32 - 1),
+            z: max.z.min(dims.z as i32 - 1),
+        };
+
+        let positions = || {
+            (min.z..=max.z).flat_map(move |z| {
+                (min.y..=max.y).flat_map(move |y| (min.x..=max.x).map(move |x| Pos { x, y, z }))
+            })
+        };
+        match command {
+            SimCommand::Designate { kind, .. } => {
+                let mut designations = self.ecs.resource_mut::<Designations>();
+                // NOTE: Story 3.2 owns diggability; every in-bounds tile is marked here.
+                for pos in positions() {
+                    designations.0.insert(pos, kind);
+                }
+            }
+            SimCommand::CancelDesignation { .. } => {
+                let mut designations = self.ecs.resource_mut::<Designations>();
+                for pos in positions() {
+                    designations.0.remove(&pos);
+                }
+            }
+            SimCommand::PlaceStockpile { .. } => {
+                let standable: Vec<_> = {
+                    let terrain = self.ecs.resource::<Terrain>();
+                    positions()
+                        .filter(|pos| terrain.is_standable(*pos))
+                        .collect()
+                };
+                let mut zones = self.ecs.resource_mut::<Zones>();
+                zones.0.extend(standable);
+            }
+            SimCommand::RemoveStockpile { .. } => {
+                let mut zones = self.ecs.resource_mut::<Zones>();
+                for pos in positions() {
+                    zones.0.remove(&pos);
+                }
+            }
+        }
+    }
+
+    /// Sorted ascending by `Pos`.
+    pub fn designations(&self) -> Vec<(Pos, DesignationKind)> {
+        self.ecs
+            .resource::<Designations>()
+            .0
+            .iter()
+            .map(|(&pos, &kind)| (pos, kind))
+            .collect()
+    }
+
+    /// Sorted ascending by `Pos`.
+    pub fn zones(&self) -> Vec<Pos> {
+        self.ecs.resource::<Zones>().0.iter().copied().collect()
     }
 
     /// Sorted ascending by `Id` — stable order is required by AD-7.

@@ -121,7 +121,11 @@ names where it came from and what should trigger revisiting it.
 
 ## Deferred from: code review of story 2.3 (2026-08-04)
 
-- **Partial line at EOF is misreported as a 64 KB overflow.** `read_inbound` treats *any*
+- ~~**Partial line at EOF is misreported as a 64 KB overflow.**~~ **RESOLVED in Story 3.1
+  (2026-08-05).** `read_inbound` now distinguishes a short EOF-terminated partial line from a
+  line that reaches `MAX_LINE_BYTES`; the former is reported as an unterminated partial line and
+  only the latter as an overflow. A focused daemon test pins the distinction. Previously,
+  `read_inbound` treated *any*
   `read_until` result not ending in `\n` as having hit `MAX_LINE_BYTES`, so a client that sends
   a truncated command and closes is logged as `client line exceeded 65536 bytes; closing
   connection`. Proved live with 24 bytes + FIN. A real flood and a benign mid-command
@@ -150,7 +154,11 @@ names where it came from and what should trigger revisiting it.
   eviction is observed in practice, or when a story adds reconnect (deliberately out of scope
   through Epic 2) [crates/simd/src/main.rs:22].
 
-- **Stale-speed compose trap in the TUI keymap (owner: Story 3.1).** Speed for the next command
+- ~~**Stale-speed compose trap in the TUI keymap (owner: Story 3.1).**~~ **RESOLVED in Story 3.1
+  (2026-08-05).** The client now updates its local speed optimistically when it emits a speed
+  command, so consecutive keys compose from the intended local value; every authoritative wire
+  update overwrites that prediction. A mapping test and mutation pin both halves. Previously,
+  speed for the next command
   is read from the last delta, never from an optimistic local value. Two *different* keys pressed
   inside one 100 ms round-trip therefore compose against the same stale baseline and settle on a
   speed neither implies: at `Normal`, `+` sends `SetSpeed{Fast}` and `-` sends `SetSpeed{Paused}`,
@@ -165,7 +173,9 @@ names where it came from and what should trigger revisiting it.
 
 ## Deferred from: code review of 2-4-the-world-endures (2026-08-04)
 
-- **No in-UI affordance for `Command::Quit` (owner: Story 3.1).** The wire command, the daemon arm
+- ~~**No in-UI affordance for `Command::Quit` (owner: Story 3.1).**~~ **RESOLVED in Story 3.1
+  (2026-08-05).** The normal-mode hint now says `q quit client`, making the shared-daemon lifetime
+  explicit without adding the deliberately forbidden daemon-shutdown key. The wire command, the daemon arm
   and the clean shutdown all work — `quit` logs `shutting down on client quit`, exits 0, and every
   connected client sees EOF. But nothing in the shipped client can send it: AC9 deliberately forbids
   a client quit key, because a shared daemon must not die from one viewer's keypress. The result is
@@ -184,3 +194,27 @@ names where it came from and what should trigger revisiting it.
   at the wrong thing entirely, so whoever bumps `Dims::DEFAULT` will not learn why. **Revisit when a
   story changes world dimensions**; the cheap fix is one assertion tying the default world's encoded
   size to the cap [crates/simd/src/main.rs:24].
+
+  **UPDATE — this fired at Story 3.1 (2026-08-05), by the other route.** Not a dims change: 3.1
+  added *state*. Designations clip to the whole world, so a legal command produced a 23.2 MB save
+  against the 16 MB cap and the world became unsaveable. The cap was raised to 64 MB (matching the
+  client's `MAX_SNAPSHOT_BYTES`) at 3.1's review. **The underlying defect is unchanged and still
+  open:** the cap is a hand-picked constant, not derived from the largest legal world, so the next
+  story that adds per-tile state can silently re-break it. The prediction above was right about the
+  mechanism and wrong only about which input would grow.
+
+## Deferred from: code review of 3-1-give-the-order (2026-08-05)
+
+- **AD-8's full-resend makes designation volume a wire amplifier.** Every delta carries *every*
+  designation, so cost scales with total marks rather than with what changed. Measured live at
+  3.1's review: one designate command clipping to the whole world (128x128x32 = 524,288 marks) takes
+  a delta from 378 bytes to **16,761,209 bytes**, sustained at **34.7 MB/s** (11 deltas in 5.3 s) to
+  every connected client, with no recovery short of a daemon restart. Reachable from the shipped
+  client, not only a hostile one: the TUI clamps a rect to a single z-level (16,384 marks, ~5 MB/s),
+  so 32 ordinary designate commands reach the full volume. Deliberately not fixed at 3.1 — every
+  candidate fix either changes AD-8's full-resend contract (absence means deletion) or invents a
+  game rule bounding how much may be designated, and both are architecture calls rather than
+  patches. **Owner: Story 3.2**, which adds the job market on top of designations and must revisit
+  this area regardless; it will make marks more numerous, not fewer. Note the interaction already
+  closed: the save half of this same root cause hard-failed and was fixed by raising the cap above
+  [crates/simd/src/bridge.rs:74-92, crates/sim-core/src/lib.rs:445-470].

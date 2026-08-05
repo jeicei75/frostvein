@@ -68,7 +68,7 @@ fn main() -> anyhow::Result<()> {
     let mut frame_only = false;
     let mut frames: Option<u32> = None;
     let mut expect_frame_count = false;
-    let mut key = None;
+    let mut keys = Vec::new();
     let mut expect_key = false;
     for arg in std::env::args_os().skip(1) {
         if expect_frame_count {
@@ -85,14 +85,15 @@ fn main() -> anyhow::Result<()> {
             let text = arg
                 .to_str()
                 .with_context(|| format!("--key value is not valid UTF-8: {arg:?}"))?;
-            key = Some(match text {
-                "space" => KeyCode::Char(' '),
-                "+" => KeyCode::Char('+'),
-                "-" => KeyCode::Char('-'),
-                "S" => KeyCode::Char('S'),
-                "L" => KeyCode::Char('L'),
-                _ => bail!("invalid --key value {text:?}: expected space, +, -, S, or L"),
-            });
+            for name in text.split(',') {
+                let Some(code) = named_key(name) else {
+                    bail!(
+                        "invalid --key value {name:?}: expected a comma-separated sequence of \
+                         space, +, -, S, L, d, c, p, x, h, j, k, l, enter, esc, <, or >"
+                    );
+                };
+                keys.push(code);
+            }
             expect_key = false;
             continue;
         }
@@ -123,9 +124,9 @@ fn main() -> anyhow::Result<()> {
         bail!("--frames requires a count, e.g. --frames 3");
     }
     if expect_key {
-        bail!("--key requires space, +, -, S, or L");
+        bail!("--key requires a comma-separated sequence, e.g. --key d,enter,l,l,enter");
     }
-    if key.is_some() && frames.is_none() {
+    if !keys.is_empty() && frames.is_none() {
         bail!("--key requires --frames");
     }
 
@@ -141,15 +142,28 @@ fn main() -> anyhow::Result<()> {
     let mut state = initial(&snapshot);
 
     if let Some(count) = frames {
-        if let Some(code) = key
-            && let Action::Command(command) = apply_key(
+        let viewport = frame_size();
+        // NOTE: deltas already queued behind the connect snapshot are consumed as ordinary frames,
+        // so a keyed capture wanting to see its own command's consequence must simply ask for more
+        // frames than that backlog. Story 3.1 briefly shipped a nonblocking pre-command drain here
+        // sized to simd's CLIENT_QUEUE; it was removed at review because it put knowledge of daemon
+        // internals in the client, which depends on `protocol` alone.
+        for code in keys {
+            match apply_key(
                 &mut state,
                 KeyEvent::new(code, KeyModifiers::NONE),
                 snapshot.dims,
-                snapshot.speed,
-            )
-        {
-            send_command(&mut writer, command)?;
+                viewport,
+            ) {
+                Action::Command(command) => send_command(&mut writer, command)?,
+                Action::Commands(commands) => {
+                    for command in commands {
+                        send_command(&mut writer, command)?;
+                    }
+                }
+                Action::Quit => return Ok(()),
+                Action::Redraw | Action::Ignore => {}
+            }
         }
         return stream_frames(reader, snapshot, state, count);
     }
@@ -189,19 +203,18 @@ fn main() -> anyhow::Result<()> {
         if event::poll(POLL_INTERVAL).context("could not poll terminal events")? {
             match event::read().context("could not read terminal event")? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    match apply_key(&mut state, key, snapshot.dims, snapshot.speed) {
+                    match apply_key(&mut state, key, snapshot.dims, size) {
                         Action::Redraw => needs_redraw = true,
                         Action::Quit => break 'running,
-                        // NOTE: the next speed is derived from the last wire update, so two
-                        // presses inside one round-trip both compute from the same stale
-                        // speed. They do not merely collapse — two *different* keys compose
-                        // into a speed neither implies: at Normal, `+` sends Fast and `-`
-                        // sends Paused, and the daemon's last-write-wins drain settles on
-                        // Paused. Speed is shared, so that pauses every watching terminal.
-                        // Optimistic local speed is deliberately omitted (AD-4); Story 3.1
-                        // owns the fix along with the pause/command-consumption split.
+                        // The local speed is updated optimistically by `apply_key`; the next
+                        // snapshot or delta overwrites it above, keeping the daemon authoritative.
                         Action::Command(command) => {
                             send_command(&mut writer, command)?;
+                        }
+                        Action::Commands(commands) => {
+                            for command in commands {
+                                send_command(&mut writer, command)?;
+                            }
                         }
                         Action::Ignore => {}
                     }
@@ -222,10 +235,12 @@ fn main() -> anyhow::Result<()> {
                 // the daemon serves one world for its lifetime.
                 Ok(Ok(Msg::Snapshot(next))) => {
                     snapshot = *next;
+                    state.speed = snapshot.speed;
                     needs_redraw = true;
                 }
                 Ok(Ok(Msg::Delta(delta))) => {
                     apply(&mut snapshot, *delta);
+                    state.speed = snapshot.speed;
                     needs_redraw = true;
                 }
                 Ok(Err(error)) => return Err(error),
@@ -287,6 +302,29 @@ fn frame_size() -> (u16, u16) {
     }
 }
 
+fn named_key(name: &str) -> Option<KeyCode> {
+    match name {
+        "space" => Some(KeyCode::Char(' ')),
+        "+" => Some(KeyCode::Char('+')),
+        "-" => Some(KeyCode::Char('-')),
+        "S" => Some(KeyCode::Char('S')),
+        "L" => Some(KeyCode::Char('L')),
+        "d" => Some(KeyCode::Char('d')),
+        "c" => Some(KeyCode::Char('c')),
+        "p" => Some(KeyCode::Char('p')),
+        "x" => Some(KeyCode::Char('x')),
+        "h" => Some(KeyCode::Char('h')),
+        "j" => Some(KeyCode::Char('j')),
+        "k" => Some(KeyCode::Char('k')),
+        "l" => Some(KeyCode::Char('l')),
+        "enter" => Some(KeyCode::Enter),
+        "esc" => Some(KeyCode::Esc),
+        "<" => Some(KeyCode::Char('<')),
+        ">" => Some(KeyCode::Char('>')),
+        _ => None,
+    }
+}
+
 /// Headless counterpart to the interactive loop, for proving AC10 in the suite.
 ///
 /// It runs the REAL reader thread and the real `apply` -> `render` -> `write_frame`
@@ -297,7 +335,7 @@ fn frame_size() -> (u16, u16) {
 fn stream_frames(
     mut reader: BufReader<TcpStream>,
     mut snapshot: Snapshot,
-    state: view::ViewState,
+    mut state: view::ViewState,
     count: u32,
 ) -> anyhow::Result<()> {
     reader
@@ -317,7 +355,8 @@ fn stream_frames(
     if colour_is_suppressed() {
         eprintln!(
             "warning: NO_COLOR is set, so this capture contains no colour and cannot \
-             evidence dwarf job-state colours. Re-run with NO_COLOR unset to check them."
+             evidence dwarf job-state colours. Designation and zone markers remain evidenced \
+             because their glyphs are distinct. Re-run with NO_COLOR unset to check colours."
         );
     }
 
@@ -330,8 +369,14 @@ fn stream_frames(
         // Bounded like every other read here: a server that connects and then goes
         // quiet must fail, never hang.
         match message_rx.recv_timeout(SNAPSHOT_READ_TIMEOUT) {
-            Ok(Ok(Msg::Snapshot(next))) => snapshot = *next,
-            Ok(Ok(Msg::Delta(delta))) => apply(&mut snapshot, *delta),
+            Ok(Ok(Msg::Snapshot(next))) => {
+                snapshot = *next;
+                state.speed = snapshot.speed;
+            }
+            Ok(Ok(Msg::Delta(delta))) => {
+                apply(&mut snapshot, *delta);
+                state.speed = snapshot.speed;
+            }
             Ok(Err(error)) => return Err(error),
             Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
         }
@@ -455,7 +500,8 @@ mod tests {
     use std::{io::Cursor, net::TcpListener};
 
     use protocol::{
-        Delta, Dims, Entity, EntityKind, JobState, Material, MessageType, Speed, Tile, TileChange,
+        Delta, Designation, DesignationKind, Dims, Entity, EntityKind, JobState, Material,
+        MessageType, Speed, Tile, TileChange, Zone,
     };
 
     use super::*;
@@ -473,6 +519,36 @@ mod tests {
         r#""designations":[],"zones":[],"speed":"fast"}"#,
         "\n"
     );
+
+    #[test]
+    fn every_instrument_key_name_is_pinned() {
+        for (name, expected) in [
+            ("space", KeyCode::Char(' ')),
+            ("+", KeyCode::Char('+')),
+            ("-", KeyCode::Char('-')),
+            ("S", KeyCode::Char('S')),
+            ("L", KeyCode::Char('L')),
+            ("d", KeyCode::Char('d')),
+            ("c", KeyCode::Char('c')),
+            ("p", KeyCode::Char('p')),
+            ("x", KeyCode::Char('x')),
+            ("h", KeyCode::Char('h')),
+            ("j", KeyCode::Char('j')),
+            ("k", KeyCode::Char('k')),
+            ("l", KeyCode::Char('l')),
+            ("enter", KeyCode::Enter),
+            ("esc", KeyCode::Esc),
+            ("<", KeyCode::Char('<')),
+            (">", KeyCode::Char('>')),
+        ] {
+            assert_eq!(
+                named_key(name),
+                Some(expected),
+                "wrong mapping for {name:?}"
+            );
+        }
+        assert_eq!(named_key("bogus"), None);
+    }
 
     #[test]
     fn reads_one_snapshot_line() {
@@ -509,8 +585,11 @@ mod tests {
     #[test]
     fn applies_dirty_tiles_and_replaces_authoritative_fields() {
         let mut snapshot = read_snapshot(&mut Cursor::new(SNAPSHOT_LINE.as_bytes())).unwrap();
-        snapshot.designations = vec![()];
-        snapshot.zones = vec![()];
+        snapshot.designations = vec![Designation {
+            pos: [0, 0, 0],
+            kind: DesignationKind::Dig,
+        }];
+        snapshot.zones = vec![Zone { pos: [0, 0, 0] }];
         let delta = Delta {
             msg_type: MessageType::Delta,
             tick: 10,

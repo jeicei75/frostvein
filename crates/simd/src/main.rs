@@ -22,7 +22,12 @@ const TICK_PERIOD: Duration = Duration::from_millis(100);
 const FAST_TICK_PERIOD: Duration = Duration::from_millis(20);
 const CLIENT_QUEUE: usize = 16;
 const SAVE_PATH: &str = "frostvein.save";
-const MAX_SAVE_BYTES: u64 = 16 * 1024 * 1024;
+/// Must exceed the largest *legal* world, not merely a typical one. Story 3.1 added
+/// designations and zones, and a designate command clips to the whole world — 128x128x32
+/// = 524,288 marks encode to ~23.2 MB, over the previous 16 MB cap, so a legal action made
+/// the world unsaveable. Matches the client's `MAX_SNAPSHOT_BYTES` so both ends of the wire
+/// bound at the same number.
+const MAX_SAVE_BYTES: u64 = 64 * 1024 * 1024;
 /// Leaves more than 29 billion years of 10 Hz ticks before arithmetic can overflow.
 const MAX_LOAD_TICK: u64 = u64::MAX / 2;
 
@@ -144,6 +149,27 @@ fn tick(
                     eprintln!("shutting down on client quit");
                     return Ok(());
                 }
+                protocol::Command::Designate { kind, rect } => {
+                    world.apply_command(sim_core::SimCommand::Designate {
+                        kind: bridge::designation_kind_in(kind),
+                        rect: bridge::rect_in(rect),
+                    });
+                }
+                protocol::Command::CancelDesignation { rect } => {
+                    world.apply_command(sim_core::SimCommand::CancelDesignation {
+                        rect: bridge::rect_in(rect),
+                    });
+                }
+                protocol::Command::PlaceStockpile { rect } => {
+                    world.apply_command(sim_core::SimCommand::PlaceStockpile {
+                        rect: bridge::rect_in(rect),
+                    });
+                }
+                protocol::Command::RemoveStockpile { rect } => {
+                    world.apply_command(sim_core::SimCommand::RemoveStockpile {
+                        rect: bridge::rect_in(rect),
+                    });
+                }
             }
         }
         let deadline = Instant::now() + period(speed);
@@ -174,10 +200,8 @@ fn tick(
             }
         }
 
-        // NOTE: the whole schedule is world-advancing today, so pausing skips all of it
-        // and freezes the tick with it. Story 3.1 adds a command-consuming system that
-        // must run while paused; that is when this splits into command consumption and
-        // world advancement.
+        // NOTE: commands apply above while paused. The schedule remains entirely
+        // world-advancing; Story 3.2's job conversion and reaction delays belong there.
         if speed != protocol::Speed::Paused {
             world.step();
         }
@@ -255,6 +279,32 @@ fn load_world() -> Option<sim_core::World> {
                 && (pos.y as u32) < save.dims.y
                 && (pos.z as u32) < save.dims.z
         };
+        for (pos, _) in &save.designations {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save designation position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+        for pos in &save.zones {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save zone position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
         let mut seen_ids = BTreeSet::new();
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {
@@ -399,8 +449,12 @@ fn read_inbound(stream: TcpStream, command_tx: mpsc::Sender<protocol::Command>) 
             Ok(0) => break,
             Ok(_) => {
                 if !line.ends_with(b"\n") {
-                    eprintln!("client line exceeded {MAX_LINE_BYTES} bytes; closing connection");
-                    let _ = reader.get_ref().shutdown(Shutdown::Both);
+                    if line.len() as u64 >= MAX_LINE_BYTES {
+                        eprintln!(
+                            "client line exceeded {MAX_LINE_BYTES} bytes; closing connection"
+                        );
+                        let _ = reader.get_ref().shutdown(Shutdown::Both);
+                    }
                     break;
                 }
                 // NOTE: lossy, not a UTF-8 error — a single stray byte must not cost the
