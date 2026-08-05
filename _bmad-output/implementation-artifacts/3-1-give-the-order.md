@@ -4,7 +4,7 @@ baseline_commit: 8bf4548
 
 # Story 3.1: Give the Order
 
-Status: review
+Status: done
 
 ## Story
 
@@ -242,6 +242,78 @@ so that my directives are recorded in the world, visibly, the moment I issue the
         (AGENTS.md rule 1).
 
 - [x] **Green gate** (AC: 15) — `scripts/gate.sh`, then the live check. Report what printed.
+
+### Review Findings
+
+Code review 2026-08-05. Layer attribution recorded per the Epic 2 retro action item.
+**Coverage holes:** Blind Hunter and Edge Case Hunter each hung and were killed at their time-box
+having produced zero findings; the Feature Auditor was killed mid-investigation (its one observation
+is resolved below as R5). Their territories were re-covered inline by the orchestrator, but this
+review is NOT a clean four-layer result — read the silence of those layers as absence of coverage,
+never as absence of defects.
+
+- [x] [Review][Decision] **RESOLVED (Wolf, 2026-08-05) — split in two: the save half fixed now, the
+      wire half deferred to 3.2.** `MAX_SAVE_BYTES` raised 16 MB -> 64 MB in `3ed9e9f`, matching the
+      client's `MAX_SNAPSHOT_BYTES`; the wire amplification is recorded at the site and in
+      `deferred-work.md` with its measurements. Original finding: **a whole-world designate floods
+      every delta forever and makes the world unsaveable** — *raised by: orchestrator (inline, after all three hunter layers failed).*
+      `apply_command` correctly clips any rect to world bounds, but the clipped result can be the
+      entire world: 128×128×32 = 524,288 marks. AD-8 full-resends every designation in every delta,
+      so one command permanently changes the wire from 378 bytes/delta to **16,761,209 bytes/delta**.
+      Measured live against the real daemon: 11 deltas in 5.3 s = 184 MB, **34.7 MB/s sustained**, to
+      every connected client, with no recovery path short of a daemon restart. Reachable from the
+      shipped client, not only a hostile one: the TUI clamps a rect to one z-level (16,384 marks ≈
+      5 MB/s), so 32 ordinary designate commands reach the full volume. It also collides with the
+      save cap Codex declined as out of scope — at that volume `to_save` is 23.2 MB against a 16 MB
+      `MAX_SAVE_BYTES`, so **`S` fails and the world cannot be saved at all.** The fix is genuinely
+      ambiguous and contradicts standing policy either way ("protocol chattiness is acceptable",
+      "no premature performance work"), so it is Wolf's call, not a patch.
+      [crates/sim-core/src/lib.rs:445-470, crates/simd/src/bridge.rs:74-85]
+- [x] [Review][Decision] **RESOLVED (Wolf, 2026-08-05) — removed** in `3e0494f`; the instrument now
+      requests 21 frames to outlast the backlog, and both captures were made structurally identical,
+      which closes S3 as well. Verified live against a real daemon after removal: the no-key capture
+      contains 0 dig glyphs and the keyed capture 80. Original finding:
+      **`WORLD_COMMAND_CAPTURE_DRAIN` is unrequested production machinery in the client** — *raised by: Acceptance Auditor (S1), corroborated by the orchestrator pre-review.*
+      A magic `17` encoding **simd's internal `CLIENT_QUEUE` depth inside `tui`** — the one crate the
+      architecture keeps ignorant of daemon internals — plus ~50 lines of socket-mode toggling and a
+      nested closure with hand-ordered error/restore results, all shipping in the real binary. It is
+      self-justifying: the only caller that needs it is `capture_designation_frames`, which
+      manufactures a 17-delta prelude so the drain is required, and two of the 35 mutations exist
+      solely to protect it. The auditor's judgement: the same evidence is obtainable by requesting
+      more frames. Bundled with it, **AC14's negative control is not the "identical run" the AC
+      demands** (S3): the with-key run gets 17 queued prelude deltas and ticks 25..=28, the no-key run
+      none and ticks 8..=11 — an asymmetry that exists only to service this drain. The control still
+      has teeth (sabotage-verified), but it is weaker than the AC's wording.
+      [crates/tui/src/main.rs:37-40,149-186; crates/tui/tests/client.rs:2980-3043]
+- [x] [Review][Patch] **FIXED** in `820e99b` — renders at 120 columns so the assertion can fail.
+      **The ≤80-column hint assertion is vacuous** [crates/tui/src/view.rs:918-928]
+      — *raised by: Acceptance Auditor (S4).* It reads exactly 80 cells out of an 80-wide
+      framebuffer, trims, then asserts `<= 80`. Mathematically unfailable; a 100-column hint would be
+      silently truncated and pass. AC10's width budget is therefore unguarded. The underlying fact is
+      fine — the auditor measured the real strings independently, max 70 columns — so this is a
+      hollow guard, not a broken feature. Verified vacuous by reading the test.
+- [x] [Review][Patch] **FIXED** in `820e99b` — pinned by `one_row_terminal_renders_blank` with h=2
+      as a control. **1-row terminals now render nothing** [crates/tui/src/view.rs:99] — *raised
+      by: Acceptance Auditor (S5).* `render` early-returns on `h < 2`, previously `h == 0`. At
+      `h == 1` the client used to draw the status line and now draws an empty frame. A consequence of
+      `map_h = h - 2` that no test guards.
+
+**Dismissed as noise (2), recorded so they are not re-raised:**
+
+- R5: *"A stray marker appeared at the map's top-left"* — the Feature Auditor's dying observation,
+  and the reason it was killed mid-investigation. **Resolved: review-harness artifact, not a product
+  defect.** Both Opus auditors were live-driving the same fixed-port daemon concurrently, and the
+  Acceptance Auditor's own report shows it creating designations at (10..12, 10..11, z=20). A mark at
+  world (12,11) with the camera at (60,30) renders at screen col=2, row=0 — exactly the map's
+  top-left. `screen_index` [view.rs:138-152] filters off-window positions correctly and never clamps
+  to origin; verified by reading it and by four keyed live captures, none of which put a glyph on
+  row 0.
+- S2: `load_world` rejects out-of-bounds persisted marks [crates/simd/src/main.rs:277-299] — beyond
+  the task list, but judged a **defensible extension**: it mirrors the duplicate-dwarf-id validation
+  2.4 established in the same function, is not on the story's nine-item forbidden list, and closes a
+  real silent trap (an OOB mark would otherwise broadcast to every client and be silently dropped by
+  the renderer with no log). Consistent with Wolf's standing "don't defer latent silent-failure
+  traps" ruling.
 
 ## Dev Notes
 
@@ -886,4 +958,5 @@ OpenAI Codex (GPT-5.6), acting as Völundr.
 | --- | --- |
 | 2026-08-05 | Story created |
 | 2026-08-05 | Added stockpile removal on Wolf's call: `remove_stockpile` as a fourth world-mutating command, `x` becomes a two-command eraser. Scope beyond epics.md — the epic text and the spine's command table still list three. |
+| 2026-08-05 | Code review: 2 decisions resolved, 2 patches applied, 2 dismissed. Save cap raised above the largest legal world; client-side capture drain removed as a layering breach; hint-width guard made able to fail. Gate green, 33/33 mutations killed. |
 | 2026-08-05 | Implemented designation/stockpile state, persistence, protocol and daemon seams, modal TUI controls and rendering, the keyed live instrument, corrupt-save mark validation, and 35-mutation verification. |
