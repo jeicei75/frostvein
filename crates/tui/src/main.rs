@@ -34,6 +34,10 @@ const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const COMMAND_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MESSAGE_QUEUE: usize = 16;
+// simd can have CLIENT_QUEUE messages plus one write in flight behind its large
+// snapshot. A keyed evidence capture discards that bounded pre-command window.
+// NOTE: this is instrument-only; the wire has no command acknowledgement in phase one.
+const WORLD_COMMAND_CAPTURE_WARMUP: u32 = 17;
 
 /// Caps the snapshot line so a server that never sends a newline cannot grow
 /// the buffer without bound. The 128x128x32 snapshot is ~6.9 MB.
@@ -146,25 +150,11 @@ fn main() -> anyhow::Result<()> {
         let replays_world_command = keys
             .iter()
             .any(|key| matches!(key, KeyCode::Char('d' | 'c' | 'p' | 'x')));
-        if replays_world_command {
-            // The daemon may have queued deltas behind its large connect snapshot before
-            // the client can send an instrumented key sequence. Consume only complete
-            // messages already held by this BufReader so the requested frame count starts
-            // after the command, without waiting for or predicting a wire acknowledgement.
-            while reader.buffer().contains(&b'\n') {
-                match read_message(&mut reader)? {
-                    Some(Msg::Snapshot(next)) => {
-                        snapshot = *next;
-                        state.speed = snapshot.speed;
-                    }
-                    Some(Msg::Delta(delta)) => {
-                        apply(&mut snapshot, *delta);
-                        state.speed = snapshot.speed;
-                    }
-                    None => bail!("server closed while draining queued messages"),
-                }
-            }
-        }
+        let warmup = if replays_world_command {
+            WORLD_COMMAND_CAPTURE_WARMUP
+        } else {
+            0
+        };
         for code in keys {
             match apply_key(
                 &mut state,
@@ -182,7 +172,7 @@ fn main() -> anyhow::Result<()> {
                 Action::Redraw | Action::Ignore => {}
             }
         }
-        return stream_frames(reader, snapshot, state, count);
+        return stream_frames(reader, snapshot, state, count, warmup);
     }
 
     if frame_only {
@@ -354,6 +344,7 @@ fn stream_frames(
     mut snapshot: Snapshot,
     mut state: view::ViewState,
     count: u32,
+    warmup: u32,
 ) -> anyhow::Result<()> {
     reader
         .get_mut()
@@ -382,7 +373,7 @@ fn stream_frames(
     // `initial` per frame re-centres on entity 0 every time, which pins that dwarf to
     // the middle of the screen and hides the very motion this instrument exists to show.
     let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
-    for _ in 0..count {
+    for frame in 0..count.saturating_add(warmup) {
         // Bounded like every other read here: a server that connects and then goes
         // quiet must fail, never hang.
         match message_rx.recv_timeout(SNAPSHOT_READ_TIMEOUT) {
@@ -396,6 +387,9 @@ fn stream_frames(
             }
             Ok(Err(error)) => return Err(error),
             Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
+        }
+        if frame < warmup {
+            continue;
         }
         let framebuffer = render(&snapshot, &state, w, h);
         write_frame(&mut out, &framebuffer, RowEnd::Newline)

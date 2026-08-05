@@ -452,7 +452,10 @@ fn mark_snapshot_line() -> String {
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
     };
-    format!("{}\n", serde_json::to_string(&snapshot).unwrap())
+    let mut line = serde_json::to_string(&snapshot).unwrap();
+    line.extend(std::iter::repeat_n(' ', 16 * 1024 - 1 - line.len()));
+    line.push('\n');
+    line
 }
 
 fn capture_designation_frames(key: Option<&str>) -> (String, String) {
@@ -477,7 +480,7 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
         let mut stream = accept_with_timeout(&listener);
         let mut prelude = mark_snapshot_line();
         if expects_command {
-            for tick in 8..=11 {
+            for tick in 8..=24 {
                 let delta = protocol::Delta {
                     msg_type: protocol::MessageType::Delta,
                     tick,
@@ -525,7 +528,7 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
             Vec::new()
         };
 
-        let ticks = if expects_command { 12..=15 } else { 8..=11 };
+        let ticks = if expects_command { 25..=28 } else { 8..=11 };
         for tick in ticks {
             let delta = protocol::Delta {
                 msg_type: protocol::MessageType::Delta,
