@@ -35,9 +35,9 @@ const COMMAND_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MESSAGE_QUEUE: usize = 16;
 // simd can have CLIENT_QUEUE messages plus one write in flight behind its large
-// snapshot. A keyed evidence capture discards that bounded pre-command window.
+// snapshot. A keyed evidence capture drains that bounded pre-command window.
 // NOTE: this is instrument-only; the wire has no command acknowledgement in phase one.
-const WORLD_COMMAND_CAPTURE_WARMUP: u32 = 17;
+const WORLD_COMMAND_CAPTURE_DRAIN: usize = 17;
 
 /// Caps the snapshot line so a server that never sends a newline cannot grow
 /// the buffer without bound. The 128x128x32 snapshot is ~6.9 MB.
@@ -150,11 +150,44 @@ fn main() -> anyhow::Result<()> {
         let replays_world_command = keys
             .iter()
             .any(|key| matches!(key, KeyCode::Char('d' | 'c' | 'p' | 'x')));
-        let warmup = if replays_world_command {
-            WORLD_COMMAND_CAPTURE_WARMUP
-        } else {
-            0
-        };
+        if replays_world_command {
+            reader
+                .get_mut()
+                .set_nonblocking(true)
+                .context("could not make the keyed capture drain nonblocking")?;
+            let drain_result = (|| -> anyhow::Result<()> {
+                for _ in 0..WORLD_COMMAND_CAPTURE_DRAIN {
+                    let has_complete_message = match reader.fill_buf() {
+                        Ok(buffer) => buffer.contains(&b'\n'),
+                        Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
+                        Err(error) => {
+                            return Err(error).context("could not inspect queued server messages");
+                        }
+                    };
+                    if !has_complete_message {
+                        break;
+                    }
+                    match read_message(&mut reader)? {
+                        Some(Msg::Snapshot(next)) => {
+                            snapshot = *next;
+                            state.speed = snapshot.speed;
+                        }
+                        Some(Msg::Delta(delta)) => {
+                            apply(&mut snapshot, *delta);
+                            state.speed = snapshot.speed;
+                        }
+                        None => break,
+                    }
+                }
+                Ok(())
+            })();
+            let restore_result = reader
+                .get_mut()
+                .set_nonblocking(false)
+                .context("could not restore blocking reads after the keyed capture drain");
+            drain_result?;
+            restore_result?;
+        }
         for code in keys {
             match apply_key(
                 &mut state,
@@ -172,7 +205,7 @@ fn main() -> anyhow::Result<()> {
                 Action::Redraw | Action::Ignore => {}
             }
         }
-        return stream_frames(reader, snapshot, state, count, warmup);
+        return stream_frames(reader, snapshot, state, count);
     }
 
     if frame_only {
@@ -344,7 +377,6 @@ fn stream_frames(
     mut snapshot: Snapshot,
     mut state: view::ViewState,
     count: u32,
-    warmup: u32,
 ) -> anyhow::Result<()> {
     reader
         .get_mut()
@@ -373,7 +405,7 @@ fn stream_frames(
     // `initial` per frame re-centres on entity 0 every time, which pins that dwarf to
     // the middle of the screen and hides the very motion this instrument exists to show.
     let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
-    for frame in 0..count.saturating_add(warmup) {
+    for _ in 0..count {
         // Bounded like every other read here: a server that connects and then goes
         // quiet must fail, never hang.
         match message_rx.recv_timeout(SNAPSHOT_READ_TIMEOUT) {
@@ -387,9 +419,6 @@ fn stream_frames(
             }
             Ok(Err(error)) => return Err(error),
             Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
-        }
-        if frame < warmup {
-            continue;
         }
         let framebuffer = render(&snapshot, &state, w, h);
         write_frame(&mut out, &framebuffer, RowEnd::Newline)

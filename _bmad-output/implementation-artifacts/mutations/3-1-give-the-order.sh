@@ -413,10 +413,10 @@ assert old in s
 p.write_text(s.replace(old, new))
 PY
 
-mutation "keyed capture warmup is zero" tui key_sequence_designates_and_the_echoed_marker_reaches_expected_columns <<'PY'
+mutation "keyed capture drain bound is zero" tui key_sequence_designates_and_the_echoed_marker_reaches_expected_columns <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
-old = 'const WORLD_COMMAND_CAPTURE_WARMUP: u32 = 17;'
+old = 'const WORLD_COMMAND_CAPTURE_DRAIN: usize = 17;'
 assert old in s
-p.write_text(s.replace(old, 'const WORLD_COMMAND_CAPTURE_WARMUP: u32 = 0;'))
+p.write_text(s.replace(old, 'const WORLD_COMMAND_CAPTURE_DRAIN: usize = 0;'))
 PY

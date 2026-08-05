@@ -698,7 +698,7 @@ OpenAI Codex (GPT-5), acting as Völundr.
   ```
 - Live-instrument queued-delta RED, reproduced first against the real daemon and then pinned in the
   stub with an aligned large snapshot and the bounded 17-message pre-command window. Setting the
-  production warm-up constant from 17 to 0 reproduced the same RED:
+  production drain bound from 17 to 0 reproduced the same RED:
   ```text
   test key_sequence_designates_and_the_echoed_marker_reaches_expected_columns ... FAILED
   send mark delta: Os { code: 32, kind: BrokenPipe, message: "Broken pipe" }
@@ -728,10 +728,10 @@ OpenAI Codex (GPT-5), acting as Völundr.
   final gate, final mutation pass, live checks, and self-review remain before review status.
 - Live verification found that four deltas already buffered with the large connect snapshot could
   consume the entire keyed capture before the command consequence arrived. The headless instrument
-  now consumes simd's bounded 16-message client queue plus one in-flight write before counting the
-  requested evidence frames for world-mutating key sequences; its existing save/load and speed
-  capture semantics remain unchanged. The strengthened positive test and a 32nd mutation pin the
-  bound.
+  now nonblockingly drains up to simd's bounded 16-message client queue plus one in-flight write
+  before replaying world-mutating key sequences; it stops immediately on `WouldBlock` or a partial
+  line, and its existing save/load and speed capture semantics remain unchanged. The strengthened
+  positive test and a 32nd mutation pin the bound.
 - AD-10 under-listing: `remove_stockpile` is a fourth world-mutating command added on Wolf's call,
   so `epics.md` and the architecture spine's command table now list three where there are four.
   Those two planning documents were deliberately not reconciled inside this implementation story;
