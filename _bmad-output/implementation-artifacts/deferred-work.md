@@ -121,7 +121,11 @@ names where it came from and what should trigger revisiting it.
 
 ## Deferred from: code review of story 2.3 (2026-08-04)
 
-- **Partial line at EOF is misreported as a 64 KB overflow.** `read_inbound` treats *any*
+- ~~**Partial line at EOF is misreported as a 64 KB overflow.**~~ **RESOLVED in Story 3.1
+  (2026-08-05).** `read_inbound` now distinguishes a short EOF-terminated partial line from a
+  line that reaches `MAX_LINE_BYTES`; the former is reported as an unterminated partial line and
+  only the latter as an overflow. A focused daemon test pins the distinction. Previously,
+  `read_inbound` treated *any*
   `read_until` result not ending in `\n` as having hit `MAX_LINE_BYTES`, so a client that sends
   a truncated command and closes is logged as `client line exceeded 65536 bytes; closing
   connection`. Proved live with 24 bytes + FIN. A real flood and a benign mid-command
@@ -150,7 +154,11 @@ names where it came from and what should trigger revisiting it.
   eviction is observed in practice, or when a story adds reconnect (deliberately out of scope
   through Epic 2) [crates/simd/src/main.rs:22].
 
-- **Stale-speed compose trap in the TUI keymap (owner: Story 3.1).** Speed for the next command
+- ~~**Stale-speed compose trap in the TUI keymap (owner: Story 3.1).**~~ **RESOLVED in Story 3.1
+  (2026-08-05).** The client now updates its local speed optimistically when it emits a speed
+  command, so consecutive keys compose from the intended local value; every authoritative wire
+  update overwrites that prediction. A mapping test and mutation pin both halves. Previously,
+  speed for the next command
   is read from the last delta, never from an optimistic local value. Two *different* keys pressed
   inside one 100 ms round-trip therefore compose against the same stale baseline and settle on a
   speed neither implies: at `Normal`, `+` sends `SetSpeed{Fast}` and `-` sends `SetSpeed{Paused}`,
@@ -165,7 +173,9 @@ names where it came from and what should trigger revisiting it.
 
 ## Deferred from: code review of 2-4-the-world-endures (2026-08-04)
 
-- **No in-UI affordance for `Command::Quit` (owner: Story 3.1).** The wire command, the daemon arm
+- ~~**No in-UI affordance for `Command::Quit` (owner: Story 3.1).**~~ **RESOLVED in Story 3.1
+  (2026-08-05).** The normal-mode hint now says `q quit client`, making the shared-daemon lifetime
+  explicit without adding the deliberately forbidden daemon-shutdown key. The wire command, the daemon arm
   and the clean shutdown all work — `quit` logs `shutting down on client quit`, exits 0, and every
   connected client sees EOF. But nothing in the shipped client can send it: AC9 deliberately forbids
   a client quit key, because a shared daemon must not die from one viewer's keypress. The result is

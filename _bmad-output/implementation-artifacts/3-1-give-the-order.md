@@ -221,7 +221,7 @@ so that my directives are recorded in the world, visibly, the moment I issue the
         real evidence even under `NO_COLOR` — say so where the warning is emitted.
 
 - [ ] **Sabotage + mutation set** (AC: 15)
-  - [ ] `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`, at least:
+  - [x] `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`, at least:
         `apply_command` skips normalization; skips bounds clipping; `PlaceStockpile` ignores
         `is_standable`; `CancelDesignation` also clears zones; `RemoveStockpile` also clears
         designations; `RemoveStockpile` is a no-op; `x` commits only its first command;
@@ -238,7 +238,7 @@ so that my directives are recorded in the world, visibly, the moment I issue the
         as an overflow.
   - [ ] `cargo clean -p protocol -p simd -p tui` before the final gate — `mutate.sh` is not
         concurrency-safe and both 2.3 and 2.4 hit a stale mutated binary afterwards.
-  - [ ] Paste the actual RED output for every new mapping/constant test into the Dev Agent Record
+  - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent Record
         (AGENTS.md rule 1).
 
 - [ ] **Green gate** (AC: 15) — `scripts/gate.sh`, then the live check. Report what printed.
@@ -715,6 +715,12 @@ OpenAI Codex (GPT-5), acting as Völundr.
   the stub-daemon positive capture verifies the exact command and echoed marker columns, while the
   no-key negative control proves markers are not unconditional. The `NO_COLOR` warning now states
   that glyph-distinct markers remain valid evidence.
+- AC15 development mutation pass: all 31 authored sabotages were killed. The prescribed clean,
+  final gate, final mutation pass, live checks, and self-review remain before review status.
+- AD-10 under-listing: `remove_stockpile` is a fourth world-mutating command added on Wolf's call,
+  so `epics.md` and the architecture spine's command table now list three where there are four.
+  Those two planning documents were deliberately not reconciled inside this implementation story;
+  they need one coordinated correction.
 
 ### File List
 
@@ -730,6 +736,9 @@ OpenAI Codex (GPT-5), acting as Völundr.
 - crates/tui/src/palette.rs
 - crates/tui/src/view.rs
 - crates/tui/tests/client.rs
+- _bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh
+- _bmad-output/implementation-artifacts/deferred-work.md
+- _bmad-output/implementation-artifacts/3-1-give-the-order.md
 
 ## Change Log
 
