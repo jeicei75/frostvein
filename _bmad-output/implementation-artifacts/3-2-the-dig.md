@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant chosen for a story 
 
 # Story 3.2: The Dig
 
-Status: review
+Status: done
 
 ## Story
 

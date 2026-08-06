@@ -114,6 +114,15 @@
     "output": 110575,
     "turns": 63
   },
+  "f30cdc2f-ced0-490d-a8fd-171872648129.jsonl": {
+    "cache_creation": 1125914,
+    "cache_read": 79051192,
+    "input": 693,
+    "last_ts": "2026-08-06T12:29:39.500Z",
+    "output": 364936,
+    "quota_last": null,
+    "turns": 371
+  },
   "ff39ce5d-1295-4d05-b2cb-ea5124daf950.jsonl": {
     "cache_creation": 465870,
     "cache_read": 4927668,
