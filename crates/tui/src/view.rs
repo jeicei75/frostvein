@@ -154,7 +154,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         let sx = i64::from(pos[0]) - state.camera.0 + i64::from(w) / 2;
         let sy = i64::from(pos[1]) - state.camera.1 + i64::from(map_h) / 2;
         (sx >= 0 && sx < i64::from(w) && sy >= 0 && sy < i64::from(map_h))
-            .then_some(sx as usize + sy as usize * usize::from(w))
+            .then(|| sx as usize + sy as usize * usize::from(w))
     };
 
     for zone in &snapshot.zones {
@@ -806,6 +806,24 @@ mod tests {
         snapshot.entities.clear();
         let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
         assert_eq!(framebuffer.cell(1, 1).glyph, '*');
+    }
+
+    #[test]
+    fn offscreen_items_are_discarded_before_indexing_the_framebuffer() {
+        let dims = Dims {
+            x: 128,
+            y: 128,
+            z: 1,
+        };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.items = vec![Item {
+            id: 5,
+            pos: [0, 0, 0],
+        }];
+
+        let framebuffer = render(&snapshot, &normal_state((127, 127), 0), 5, 4);
+
+        assert!(framebuffer.cells.iter().all(|cell| *cell != item_cell()));
     }
 
     #[test]
