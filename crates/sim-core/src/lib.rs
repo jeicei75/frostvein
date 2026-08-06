@@ -5,7 +5,10 @@ mod worldgen;
 
 pub use save::{SaveState, SavedDwarf};
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, BTreeSet, BinaryHeap},
+};
 
 use bevy_ecs::{
     component::Component,
@@ -24,6 +27,7 @@ const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 const MAX_DESIGNATIONS: usize = 4096;
+const MAX_ASTAR_NODES: usize = 50_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Material {
@@ -302,6 +306,100 @@ impl Terrain {
                 Some(Tile::Solid(_) | Tile::Ramp(_))
             )
     }
+}
+
+fn astar_neighbours(terrain: &Terrain, from: Pos) -> Vec<Pos> {
+    const DIRECTIONS: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+    let mut neighbours = Vec::with_capacity(12);
+    for (dx, dy) in DIRECTIONS {
+        let candidate = Pos {
+            x: from.x + dx,
+            y: from.y + dy,
+            z: from.z,
+        };
+        if terrain.is_standable(candidate) {
+            neighbours.push(candidate);
+        }
+    }
+    for dz in [-1, 1] {
+        for (dx, dy) in DIRECTIONS {
+            let candidate = Pos {
+                x: from.x + dx,
+                y: from.y + dy,
+                z: from.z + dz,
+            };
+            let lower = if candidate.z < from.z {
+                candidate
+            } else {
+                from
+            };
+            if terrain.is_standable(candidate)
+                && matches!(
+                    terrain.tile(Pos {
+                        z: lower.z - 1,
+                        ..lower
+                    }),
+                    Some(Tile::Ramp(_))
+                )
+            {
+                neighbours.push(candidate);
+            }
+        }
+    }
+    neighbours
+}
+
+fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
+    goals
+        .iter()
+        .map(|goal| from.x.abs_diff(goal.x) + from.y.abs_diff(goal.y) + from.z.abs_diff(goal.z))
+        .min()
+        .unwrap_or(0)
+}
+
+#[allow(dead_code)] // Called by job execution in the next task group.
+fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>> {
+    if goals.is_empty() {
+        return None;
+    }
+    let mut open = BinaryHeap::from([Reverse((astar_heuristic(from, goals), from))]);
+    let mut came_from = BTreeMap::new();
+    let mut costs = BTreeMap::from([(from, 0_u32)]);
+    let mut expanded = 0;
+
+    while let Some(Reverse((queued_f, current))) = open.pop() {
+        let current_cost = costs[&current];
+        if queued_f != current_cost + astar_heuristic(current, goals) {
+            continue;
+        }
+        if expanded >= MAX_ASTAR_NODES {
+            return None;
+        }
+        expanded += 1;
+        if goals.contains(&current) {
+            let mut path = Vec::new();
+            let mut cursor = current;
+            while cursor != from {
+                path.push(cursor);
+                cursor = came_from[&cursor];
+            }
+            path.reverse();
+            return Some(path);
+        }
+
+        for neighbour in astar_neighbours(terrain, current) {
+            let next_cost = current_cost + 1;
+            if next_cost < costs.get(&neighbour).copied().unwrap_or(u32::MAX) {
+                costs.insert(neighbour, next_cost);
+                came_from.insert(neighbour, current);
+                open.push(Reverse((
+                    next_cost + astar_heuristic(neighbour, goals),
+                    neighbour,
+                )));
+            }
+        }
+    }
+    None
 }
 
 fn advance_tick(mut tick: ResMut<Tick>) {
@@ -770,6 +868,22 @@ mod tests {
 
     use super::{Dims, Job, JobId, JobKind, JobState, Jobs, Material, Pos, Terrain, Tile, World};
 
+    fn flat_terrain(x: u32, y: u32) -> Terrain {
+        let dims = Dims { x, y, z: 2 };
+        let mut tiles = vec![Tile::Empty; (x * y * 2) as usize];
+        for floor_y in 0..y {
+            for floor_x in 0..x {
+                tiles[super::worldgen::index(dims, floor_x, floor_y, 0)] =
+                    Tile::Solid(Material::Stone);
+            }
+        }
+        Terrain {
+            dims,
+            tiles,
+            dirty: BTreeSet::new(),
+        }
+    }
+
     #[test]
     fn terrain_identifies_standable_tiles() {
         let terrain = Terrain {
@@ -959,6 +1073,98 @@ mod tests {
         claimed.ecs.resource_mut::<super::Tick>().0 = 100;
         claimed.step();
         assert_eq!(claimed.claims()[0], (super::Id(0), Some(JobId(1))));
+    }
+
+    #[test]
+    fn astar_finds_the_literal_shortest_corridor_path_repeatably() {
+        let terrain = flat_terrain(5, 1);
+        let from = Pos { x: 0, y: 0, z: 1 };
+        let goal = Pos { x: 4, y: 0, z: 1 };
+        let goals = BTreeSet::from([goal]);
+        let expected = vec![
+            Pos { x: 1, y: 0, z: 1 },
+            Pos { x: 2, y: 0, z: 1 },
+            Pos { x: 3, y: 0, z: 1 },
+            Pos { x: 4, y: 0, z: 1 },
+        ];
+
+        assert_eq!(super::astar(&terrain, from, &goals), Some(expected.clone()));
+        assert_eq!(super::astar(&terrain, from, &goals), Some(expected));
+    }
+
+    #[test]
+    fn astar_crosses_only_a_ramp_backed_level_change() {
+        let dims = Dims { x: 2, y: 1, z: 3 };
+        let mut terrain = Terrain {
+            dims,
+            tiles: vec![Tile::Empty; 6],
+            dirty: BTreeSet::new(),
+        };
+        terrain.tiles[super::worldgen::index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
+        terrain.tiles[super::worldgen::index(dims, 1, 0, 1)] = Tile::Solid(Material::Stone);
+        super::worldgen::place_ramps(dims, &[0, 1], &mut terrain.tiles);
+        let lower = Pos { x: 0, y: 0, z: 1 };
+        let higher = Pos { x: 1, y: 0, z: 2 };
+
+        assert_eq!(
+            super::astar(&terrain, lower, &BTreeSet::from([higher])),
+            Some(vec![higher])
+        );
+        terrain.tiles[super::worldgen::index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
+        assert_eq!(
+            super::astar(&terrain, lower, &BTreeSet::from([higher])),
+            None
+        );
+    }
+
+    #[test]
+    fn astar_returns_none_for_a_walled_off_goal() {
+        let mut terrain = flat_terrain(3, 1);
+        let wall = Pos { x: 1, y: 0, z: 1 };
+        terrain.set_tile(wall, Tile::Solid(Material::Stone));
+
+        assert_eq!(
+            super::astar(
+                &terrain,
+                Pos { x: 0, y: 0, z: 1 },
+                &BTreeSet::from([Pos { x: 2, y: 0, z: 1 }]),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn astar_horizontal_neighbour_order_is_pinned() {
+        let terrain = flat_terrain(3, 3);
+        let center = Pos { x: 1, y: 1, z: 1 };
+
+        assert_eq!(
+            super::astar_neighbours(&terrain, center),
+            vec![
+                Pos { x: 0, y: 1, z: 1 },
+                Pos { x: 2, y: 1, z: 1 },
+                Pos { x: 1, y: 0, z: 1 },
+                Pos { x: 1, y: 2, z: 1 },
+            ]
+        );
+    }
+
+    #[test]
+    fn astar_stops_at_the_node_cap() {
+        let terrain = flat_terrain(224, 224);
+
+        assert_eq!(
+            super::astar(
+                &terrain,
+                Pos { x: 0, y: 0, z: 1 },
+                &BTreeSet::from([Pos {
+                    x: 223,
+                    y: 223,
+                    z: 1,
+                }]),
+            ),
+            None
+        );
     }
 
     #[test]

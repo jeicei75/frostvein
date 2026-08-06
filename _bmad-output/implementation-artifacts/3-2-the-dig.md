@@ -170,15 +170,15 @@ so that the mountain yields stone at my command — through workers, not a remot
         job is skipped; a job is not claimed before `created_tick + delay`; the pinned delay table
         for seed 42 × dwarves 0..=4 × jobs 0..=2.
 
-- [ ] **`sim-core`: A\*** (AC: 7)
-  - [ ] Private `astar(terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>>` — a goal
+- [x] **`sim-core`: A\*** (AC: 7)
+  - [x] Private `astar(terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>>` — a goal
         **set**, so one search serves all four work positions of a dig target rather than four.
-  - [ ] `BinaryHeap<Reverse<(u32 /*f*/, Pos)>>` with `BTreeMap` for `came_from`/`g`; `Pos` in the
+  - [x] `BinaryHeap<Reverse<(u32 /*f*/, Pos)>>` with `BTreeMap` for `came_from`/`g`; `Pos` in the
         heap key is what makes ties deterministic. Heuristic = Manhattan to the nearest goal.
-  - [ ] Neighbours in the fixed order `[(-1,0), (1,0), (0,-1), (0,1)]`, matching `wander`
+  - [x] Neighbours in the fixed order `[(-1,0), (1,0), (0,-1), (0,1)]`, matching `wander`
         [lib.rs:200]: same-z when standable; z±1 when standable **and** the tile below the lower of
         the two positions is a `Ramp`.
-  - [ ] Tests: a straight corridor yields the shortest path; a ramp built by `place_ramps` is
+  - [x] Tests: a straight corridor yields the shortest path; a ramp built by `place_ramps` is
         crossed; a walled-off goal yields `None`; the node cap yields `None` rather than scanning the
         world; the same query twice yields the identical path.
 
@@ -537,6 +537,8 @@ task, imperative messages. Review-gated: no push, no PR.
   `scenario.rs:405` with `assertion failed: !world.designations().iter().any(|(pos, _)| *pos == extra)`.
 - `reaction_delay` sabotage (`5 + hash % 26 -> 6 + hash % 26`):
   `reaction_delay_table_is_pinned` failed for seed 42, dwarf 0, job 0 with `left: 29`, `right: 28`.
+- `MAX_ASTAR_NODES` sabotage (`50000 -> 60000`): `astar_stops_at_the_node_cap` failed with
+  `left: Some([Pos { x: 0, y: 1, z: 1 }, ... Pos { x: 223, y: 223, z: 1 }])`, `right: None`.
 
 ### Completion Notes List
 
