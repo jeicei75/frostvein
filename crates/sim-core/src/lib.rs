@@ -225,7 +225,7 @@ fn wander(
     }
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 struct IdAllocator {
     next: u32,
 }
@@ -241,7 +241,6 @@ impl IdAllocator {
 pub struct World {
     ecs: EcsWorld,
     schedule: Schedule,
-    ids: IdAllocator,
     seed: u64,
 }
 
@@ -261,6 +260,7 @@ fn assemble(
     let mut ecs = EcsWorld::new();
     ecs.insert_resource(Tick(tick));
     ecs.insert_resource(WanderRng(wander_rng));
+    ecs.insert_resource(ids);
     ecs.insert_resource(Designations(designations));
     ecs.insert_resource(Zones(zones));
     ecs.insert_resource(Terrain {
@@ -273,7 +273,6 @@ fn assemble(
     World {
         ecs,
         schedule,
-        ids,
         seed,
     }
 }
@@ -344,7 +343,7 @@ impl World {
             dims: terrain.dims,
             tiles: terrain.tiles.clone(),
             wander_rng: self.ecs.resource::<WanderRng>().0.clone(),
-            next_id: self.ids.next,
+            next_id: self.ecs.resource::<IdAllocator>().next,
             dwarves,
             designations: self.designations(),
             zones: self.zones(),
@@ -569,7 +568,7 @@ impl World {
         for _ in 0..5 {
             let candidate = rng.random_range(0..candidates.len());
             let pos = candidates.swap_remove(candidate);
-            let id = self.ids.allocate();
+            let id = self.ecs.resource_mut::<IdAllocator>().allocate();
             self.ecs.spawn((
                 Dwarf,
                 id,
@@ -615,6 +614,13 @@ mod tests {
         let world = World::generate(42, Dims::DEFAULT);
 
         assert_eq!(world.tick(), 0);
+    }
+
+    #[test]
+    fn allocator_lives_in_the_ecs() {
+        let world = World::generate(42, Dims::DEFAULT);
+
+        assert_eq!(world.ecs.resource::<super::IdAllocator>().next, 5);
     }
 
     #[test]
