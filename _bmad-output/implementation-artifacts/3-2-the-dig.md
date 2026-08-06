@@ -127,12 +127,12 @@ so that the mountain yields stone at my command — through workers, not a remot
         `to_save` [lib.rs:347] and `spawn_dwarves`. Small, mechanical, and every later task depends
         on it — the whole suite should be green again before you continue.
 
-- [ ] **`sim-core`: item entities** (AC: 1, 9)
-  - [ ] `#[derive(Component)] struct Item;` — the marker mirroring `Dwarf` [lib.rs:89-90]. A stone is
+- [x] **`sim-core`: item entities** (AC: 1, 9)
+  - [x] `#[derive(Component)] struct Item;` — the marker mirroring `Dwarf` [lib.rs:89-90]. A stone is
         `(Item, Id, Pos)`. No `ItemKind`, no components a stone does not have.
-  - [ ] `World::items()` filters on `Item` the way `dwarves()` filters on `Dwarf` [lib.rs:520-535],
+  - [x] `World::items()` filters on `Item` the way `dwarves()` filters on `Dwarf` [lib.rs:520-535],
         sorted ascending by `Id`.
-  - [ ] `to_save`'s dwarf filter is `entity.contains::<Dwarf>()`, so items are excluded from
+  - [x] `to_save`'s dwarf filter is `entity.contains::<Dwarf>()`, so items are excluded from
         `dwarves` automatically — but re-read its `filter_map` NOTE [lib.rs:324-327] before adding a
         second entity kind, and give items their own save list rather than widening that one.
 

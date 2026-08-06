@@ -89,6 +89,9 @@ pub struct Id(pub u32);
 #[derive(Component)]
 pub struct Dwarf;
 
+#[derive(Component)]
+struct Item;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Component, Serialize, Deserialize)]
 pub enum JobState {
     Idle,
@@ -591,6 +594,18 @@ impl World {
         claims
     }
 
+    /// Sorted ascending by `Id`.
+    pub fn items(&self) -> Vec<(Id, Pos)> {
+        let mut items: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Item>())
+            .filter_map(|entity| Some((*entity.get::<Id>()?, *entity.get::<Pos>()?)))
+            .collect();
+        items.sort_by_key(|(id, _)| *id);
+        items
+    }
+
     /// Sorted ascending by `Id` — stable order is required by AD-7.
     // NOTE: promote this tuple to a struct at the fourth field (Story 3.2 adds carried item).
     pub fn dwarves(&self) -> Vec<(Id, Pos, JobState)> {
@@ -735,6 +750,21 @@ mod tests {
                 (super::Id(4), None),
             ]
         );
+    }
+
+    #[test]
+    fn item_reader_filters_and_sorts_stones() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let later = Pos { x: 9, y: 8, z: 7 };
+        let earlier = Pos { x: 1, y: 2, z: 3 };
+        world.ecs.spawn((super::Item, super::Id(12), later));
+        world.ecs.spawn((super::Item, super::Id(11), earlier));
+
+        assert_eq!(
+            world.items(),
+            vec![(super::Id(11), earlier), (super::Id(12), later)]
+        );
+        assert_eq!(world.dwarves().len(), 5);
     }
 
     #[test]
