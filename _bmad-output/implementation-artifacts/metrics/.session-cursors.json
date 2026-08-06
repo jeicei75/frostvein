@@ -271,5 +271,13 @@
     "last_ts": "2026-08-05T10:41:40.137Z",
     "output": 12114,
     "turns": 30
+  },
+  "rollout-2026-08-06T06-14-25-019fd5b5-712f-7361-90ae-6c57507dc3d8.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 94276352,
+    "input": 1516492,
+    "last_ts": "2026-08-06T09:23:56.332Z",
+    "output": 208027,
+    "turns": 715
   }
 }

@@ -5,6 +5,7 @@ Per-phase, per-tool, per-model cost for this story. Rows are **deltas** — each
 | phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-opus-5 | 86 | 7,595 | 700,529 | 13,980,954 | 196,956 | 14,886,034 | $16.33 | `169eff84-6bb0-4581-b68c-cb8a40880bd5.jsonl` | 2026-08-06 05:49 UTC · rates 2026-08-01 | 33 |
+| dev | codex | gpt-5.6-sol | 715 | 1,516,492 | 0 | 94,276,352 | 208,027 | 96,000,871 | $60.96 | `rollout-2026-08-06T06-14-25-019fd5b5-712f-7361-90ae-6c57507dc3d8.jsonl` | 2026-08-06 09:41 UTC · rates 2026-08-01 | 189 |
 
 **Read the `create` row with one caveat.** This was the session's first recorded phase, so its delta
 window opens at the session start — and that session also pushed the `forge-process-reconcile`
@@ -13,3 +14,31 @@ that unrelated work, so the row overstates 3.2's story-creation cost by a corres
 Compare it against Epic 2's create rows only as an upper bound. Not corrected in place: the ledger
 records what the transcript spent, and a hand-adjusted number would be less trustworthy than a
 stated caveat.
+
+**The `dev` row UNDERSTATES this story by $18.28.** It bills the delegated dev rollout
+(`019fd5b5`) only. Codex ran the mandated `codex review --base main` pre-handback self-gate **six
+times**, and each cycle spawned its **own** rollout rather than logging into the dev transcript, so
+none of it reaches the ledger. Measured individually (`session_tokens.py --tool codex --transcript
+<file>` with `--story` omitted, so nothing was recorded):
+
+| self-gate rollout | turns | total processed | est_usd |
+|---|---|---|---|
+| `019fd5f1-b87b` | 38 | 3,398,979 | $3.19 |
+| `019fd605-ad8f` | 30 | 2,598,833 | $2.47 |
+| `019fd610-9751` | 37 | 2,931,160 | $2.84 |
+| `019fd628-e8f8` | 34 | 3,162,801 | $2.87 |
+| `019fd638-2273` | 34 | 3,275,863 | $2.93 |
+| `019fd647-5aea` | 45 | 4,739,654 | $3.98 |
+| **subtotal** | **218** | **20,107,290** | **$18.28** |
+
+So the true cost of implementing 3.2 is **$79.24 / 933 turns / ~116.1M tokens**, not $60.96 / 715 /
+96.0M. Not corrected in place, for the same reason as the `create` caveat above: the ledger records
+what a transcript spent, and a hand-merged row would be less trustworthy than a stated caveat.
+
+**This is the SAME DEFECT CLASS as the open forge blocker (2)** — `session_tokens.py` does not
+count sub-agent transcripts, recorded in `sprint-status.yaml` against the Epic 2 forge-propagation
+item where it was found on the *review* side (3.1's five review layers burned ~14.1M tokens
+unrecorded). It is now confirmed on the **dev** side too, by a different mechanism: not Claude
+sub-agents but nested `codex exec` sessions. Whatever fix lands must walk sibling rollouts, not just
+Claude's `subagents/` directory. Each self-gate pair also writes a companion 0-turn app-server
+rollout; those are correctly worth nothing and are excluded above.
