@@ -29,7 +29,7 @@ const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 const MAX_DESIGNATIONS: usize = 4096;
 const MAX_ASTAR_NODES: usize = 50_000;
-const WORK_TICKS: u32 = 5;
+pub const WORK_TICKS: u32 = 5;
 const RETRY_COOLDOWN: u64 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -211,34 +211,49 @@ fn claim_jobs(
     mut commands: Commands,
     seed: Res<Seed>,
     tick: Res<Tick>,
-    jobs: Res<Jobs>,
-    mut dwarves: Query<(Entity, &Id, &mut CurrentJob)>,
+    terrain: Res<Terrain>,
+    mut jobs: ResMut<Jobs>,
+    mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob)>,
 ) {
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
-    dwarves.sort_by_key(|(_, id, _)| **id);
+    dwarves.sort_by_key(|(_, id, _, _)| **id);
     let mut claimed: BTreeSet<_> = dwarves
         .iter()
-        .filter_map(|(_, _, current)| current.0)
+        .filter_map(|(_, _, _, current)| current.0)
         .collect();
 
-    for job in jobs.iter() {
+    let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
+    for job in jobs_in_order {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
         }
-        for (entity, id, current) in &mut dwarves {
+        let goals = work_positions(&terrain, job);
+        let mut attempted = false;
+        let mut assigned = false;
+        for (entity, id, pos, current) in &mut dwarves {
             if current.0.is_none()
                 && tick.0
                     >= job
                         .created_tick
                         .saturating_add(reaction_delay(seed.0, **id, job.id))
             {
+                attempted = true;
+                let Some(path) = astar(&terrain, **pos, &goals) else {
+                    continue;
+                };
                 current.0 = Some(job.id);
                 commands
                     .entity(*entity)
-                    .insert((Path(Vec::new()), WorkProgress(0)));
+                    .insert((Path(path), WorkProgress(0)));
                 claimed.insert(job.id);
+                assigned = true;
                 break;
             }
+        }
+        if attempted && !assigned {
+            jobs.get_mut(job.id)
+                .expect("iterated job still exists")
+                .retry_after = tick.0.saturating_add(RETRY_COOLDOWN);
         }
     }
 }
@@ -415,6 +430,27 @@ fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>
     None
 }
 
+fn work_positions(terrain: &Terrain, job: Job) -> BTreeSet<Pos> {
+    match job.kind {
+        JobKind::Dig => [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            .into_iter()
+            .map(|(dx, dy)| Pos {
+                x: job.target.x + dx,
+                y: job.target.y + dy,
+                z: job.target.z,
+            })
+            .filter(|candidate| terrain.is_standable(*candidate))
+            .collect(),
+        JobKind::Channel => {
+            if terrain.is_standable(job.target) {
+                BTreeSet::from([job.target])
+            } else {
+                BTreeSet::new()
+            }
+        }
+    }
+}
+
 fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
     if let Some(mut current) = ecs.get_mut::<CurrentJob>(entity) {
         current.0 = None;
@@ -456,27 +492,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         if !ecs.resource::<Terrain>().is_standable(pos) {
             continue;
         }
-        let work_positions = {
-            let terrain = ecs.resource::<Terrain>();
-            match job.kind {
-                JobKind::Dig => [(-1, 0), (1, 0), (0, -1), (0, 1)]
-                    .into_iter()
-                    .map(|(dx, dy)| Pos {
-                        x: job.target.x + dx,
-                        y: job.target.y + dy,
-                        z: job.target.z,
-                    })
-                    .filter(|candidate| terrain.is_standable(*candidate))
-                    .collect::<BTreeSet<_>>(),
-                JobKind::Channel => {
-                    if terrain.is_standable(job.target) {
-                        BTreeSet::from([job.target])
-                    } else {
-                        BTreeSet::new()
-                    }
-                }
-            }
-        };
+        let work_positions = work_positions(ecs.resource::<Terrain>(), job);
 
         if !work_positions.contains(&pos) {
             let mut path = ecs
@@ -503,12 +519,11 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         let progress = ecs
             .get::<WorkProgress>(entity)
             .map(|progress| progress.0)
-            .unwrap_or(0)
-            + 1;
+            .unwrap_or(0);
         if progress < WORK_TICKS {
             *ecs.get_mut::<JobState>(entity)
                 .expect("every dwarf has a job state") = JobState::Work;
-            ecs.entity_mut(entity).insert(WorkProgress(progress));
+            ecs.entity_mut(entity).insert(WorkProgress(progress + 1));
             continue;
         }
 
@@ -566,7 +581,7 @@ fn settle(ecs: &mut EcsWorld) {
         };
         let should_settle = {
             let terrain = ecs.resource::<Terrain>();
-            !terrain.is_standable(pos) && terrain.is_standable(below)
+            !terrain.is_standable(pos) && matches!(terrain.tile(below), Some(Tile::Empty))
         };
         if should_settle {
             *ecs.get_mut::<Pos>(entity)
@@ -1373,10 +1388,16 @@ mod tests {
     fn claim_jobs_prefers_the_lowest_free_dwarf_id() {
         let mut world = World::generate(42, Dims::DEFAULT);
         world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let worker = world.dwarves()[0].1;
+        let target = Pos {
+            x: worker.x + 1,
+            ..worker
+        };
+        assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
         assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
             id: JobId(0),
             kind: JobKind::Dig,
-            target: Pos { x: 0, y: 0, z: 0 },
+            target,
             created_tick: 0,
             retry_after: 0,
         }));
@@ -1391,6 +1412,109 @@ mod tests {
                 .iter()
                 .all(|(_, current)| current.is_none())
         );
+    }
+
+    #[test]
+    fn an_unreachable_lower_id_does_not_starve_a_reachable_dwarf() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let unreachable = Pos { x: 10, y: 10, z: 1 };
+        let reachable = Pos { x: 20, y: 20, z: 1 };
+        let target = Pos { x: 21, y: 20, z: 1 };
+        for (pos, tile) in [
+            (
+                Pos {
+                    z: 0,
+                    ..unreachable
+                },
+                Tile::Solid(Material::Stone),
+            ),
+            (unreachable, Tile::Empty),
+            (Pos { z: 0, ..reachable }, Tile::Solid(Material::Stone)),
+            (reachable, Tile::Empty),
+            (Pos { z: 0, ..target }, Tile::Solid(Material::Stone)),
+            (target, Tile::Solid(Material::Stone)),
+        ] {
+            assert!(world.set_tile(pos, tile));
+        }
+        for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            assert!(world.set_tile(
+                Pos {
+                    x: unreachable.x + dx,
+                    y: unreachable.y + dy,
+                    z: unreachable.z,
+                },
+                Tile::Solid(Material::Stone),
+            ));
+        }
+        let entities: Vec<_> = world
+            .ecs
+            .iter_entities()
+            .filter_map(|entity| Some((*entity.get::<super::Id>()?, entity.id())))
+            .collect();
+        for (id, entity) in entities {
+            match id.0 {
+                0 => *world.ecs.get_mut::<Pos>(entity).unwrap() = unreachable,
+                1 => *world.ecs.get_mut::<Pos>(entity).unwrap() = reachable,
+                _ => {
+                    world.ecs.despawn(entity);
+                }
+            }
+        }
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+        world
+            .ecs
+            .resource_mut::<super::Designations>()
+            .0
+            .insert(target, super::DesignationKind::Dig);
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+
+        for _ in 0..100 {
+            world.step();
+            if !world.items().is_empty() {
+                break;
+            }
+        }
+
+        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert!(world.jobs().is_empty());
+    }
+
+    #[test]
+    fn retry_claim_keeps_the_job_and_sets_twenty_tick_cooldown() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target: Pos { x: 20, y: 20, z: 8 },
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        world.ecs.resource_mut::<super::Tick>().0 = 7;
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(2)));
+
+        super::retry_claim(&mut world.ecs, entity, job.id);
+
+        assert_eq!(world.jobs()[0].retry_after, 27);
+        assert_eq!(world.claims()[0].1, None);
+        assert!(!world.ecs.entity(entity).contains::<super::Path>());
+        assert!(!world.ecs.entity(entity).contains::<super::WorkProgress>());
     }
 
     #[test]
@@ -1610,7 +1734,7 @@ mod tests {
         super::execute_jobs(&mut world.ecs);
         assert_eq!(world.dwarves()[0].1, work);
         assert_eq!(world.dwarves()[0].2, JobState::Walk);
-        for _ in 0..4 {
+        for _ in 0..5 {
             super::execute_jobs(&mut world.ecs);
             assert_eq!(world.dwarves()[0].2, JobState::Work);
             assert_eq!(world.claims()[0].1, Some(JobId(0)));
@@ -1657,7 +1781,7 @@ mod tests {
             .entity_mut(entity)
             .insert((super::Path(Vec::new()), super::WorkProgress(0)));
 
-        for _ in 0..4 {
+        for _ in 0..5 {
             super::execute_jobs(&mut world.ecs);
             assert_eq!(world.dwarves()[0].2, JobState::Work);
             assert_eq!(world.claims()[0].1, Some(JobId(0)));
@@ -1706,7 +1830,7 @@ mod tests {
         world
             .ecs
             .entity_mut(entity)
-            .insert((super::Path(Vec::new()), super::WorkProgress(4)));
+            .insert((super::Path(Vec::new()), super::WorkProgress(5)));
 
         super::execute_jobs(&mut world.ecs);
 
@@ -1750,6 +1874,35 @@ mod tests {
 
         assert_eq!(world.dwarves()[0].1, below);
         assert!(!world.ecs.entity(entity).contains::<super::Path>());
+    }
+
+    #[test]
+    fn settle_descends_one_level_per_tick_through_a_deep_empty_shaft() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let start = world.dwarves()[0].1;
+        let first = Pos {
+            z: start.z - 1,
+            ..start
+        };
+        let second = Pos {
+            z: start.z - 2,
+            ..start
+        };
+        let floor = Pos {
+            z: start.z - 3,
+            ..start
+        };
+        for pos in [start, first, second] {
+            assert!(world.set_tile(pos, Tile::Empty));
+        }
+        assert!(world.set_tile(floor, Tile::Solid(Material::Stone)));
+
+        super::settle(&mut world.ecs);
+        assert_eq!(world.dwarves()[0].1, first);
+        super::settle(&mut world.ecs);
+        assert_eq!(world.dwarves()[0].1, second);
+        super::settle(&mut world.ecs);
+        assert_eq!(world.dwarves()[0].1, second);
     }
 
     #[test]
@@ -1815,7 +1968,7 @@ mod tests {
         world
             .ecs
             .entity_mut(worker_entity)
-            .insert((super::Path(Vec::new()), super::WorkProgress(4)));
+            .insert((super::Path(Vec::new()), super::WorkProgress(5)));
         world
             .ecs
             .entity_mut(victim_entity)

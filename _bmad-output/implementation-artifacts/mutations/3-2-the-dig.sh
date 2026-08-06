@@ -256,17 +256,17 @@ PY
 mutation "claim_jobs walks jobs descending" sim-core claim_jobs_takes_fifo_and_skips_busy_dwarves_and_claimed_jobs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '    for job in jobs.iter() {\n'
+old = '    let jobs_in_order: Vec<_> = jobs.iter().copied().collect();\n'
 assert old in s
-p.write_text(s.replace(old, '    for job in jobs.by_id.values().rev() {\n', 1))
+p.write_text(s.replace(old, '    let jobs_in_order: Vec<_> = jobs.by_id.values().rev().copied().collect();\n', 1))
 PY
 
 mutation "claim_jobs walks dwarves descending" sim-core claim_jobs_prefers_the_lowest_free_dwarf_id <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '    dwarves.sort_by_key(|(_, id, _)| **id);\n'
+old = '    dwarves.sort_by_key(|(_, id, _, _)| **id);\n'
 assert old in s
-p.write_text(s.replace(old, '    dwarves.sort_by_key(|(_, id, _)| std::cmp::Reverse(**id));\n'))
+p.write_text(s.replace(old, '    dwarves.sort_by_key(|(_, id, _, _)| std::cmp::Reverse(**id));\n'))
 PY
 
 mutation "claim_jobs ignores reaction delay" sim-core claim_jobs_waits_for_the_reaction_delay <<'PY'
@@ -518,7 +518,7 @@ assert old in s
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "release skips retry cooldown" sim-core unreachable_job_stays_queued_and_retries_after_twenty_ticks <<'PY'
+mutation "release skips retry cooldown" sim-core retry_claim_keeps_the_job_and_sets_twenty_tick_cooldown <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '    let retry_after = ecs.resource::<Tick>().0.saturating_add(RETRY_COOLDOWN);\n'
@@ -534,7 +534,7 @@ assert old in s
 p.write_text(s.replace(old, 'const RETRY_COOLDOWN: u64 = 21;\n'))
 PY
 
-mutation "unreachable job is dropped" sim-core unreachable_job_stays_queued_and_retries_after_twenty_ticks <<'PY'
+mutation "unreachable job is dropped" sim-core retry_claim_keeps_the_job_and_sets_twenty_tick_cooldown <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''    if let Some(job) = ecs.resource_mut::<Jobs>().get_mut(job_id) {
@@ -731,4 +731,47 @@ old = '''                if !claimed_job_ids.insert(job_id) {
 '''
 assert old in s
 p.write_text(s.replace(old, '                claimed_job_ids.insert(job_id);\n'))
+PY
+
+mutation "unreachable lower id starves a reachable dwarf" sim-core an_unreachable_lower_id_does_not_starve_a_reachable_dwarf <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''                let Some(path) = astar(&terrain, **pos, &goals) else {
+                    continue;
+                };
+'''
+assert old in s
+p.write_text(s.replace(old, '                let path = Vec::new();\n'))
+PY
+
+mutation "settle requires immediate support in a deep shaft" sim-core settle_descends_one_level_per_tick_through_a_deep_empty_shaft <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            !terrain.is_standable(pos) && matches!(terrain.tile(below), Some(Tile::Empty))\n'
+assert old in s
+p.write_text(s.replace(old, '            !terrain.is_standable(pos) && terrain.is_standable(below)\n'))
+PY
+
+mutation "work completes after only four visible ticks" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        if progress < WORK_TICKS {\n'
+assert old in s
+p.write_text(s.replace(old, '        if progress + 1 < WORK_TICKS {\n', 1))
+PY
+
+mutation "load accepts overflowing work progress" simd overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''                if dwarf.work_progress > sim_core::WORK_TICKS {
+                    bail!(
+                        "save dwarf {} work progress {} exceeds {}",
+                        dwarf.id,
+                        dwarf.work_progress,
+                        sim_core::WORK_TICKS
+                    );
+                }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
 PY

@@ -367,6 +367,14 @@ fn load_world() -> Option<sim_core::World> {
                 if !claimed_job_ids.insert(job_id) {
                     bail!("save job {} has multiple claimants", job_id.0);
                 }
+                if dwarf.work_progress > sim_core::WORK_TICKS {
+                    bail!(
+                        "save dwarf {} work progress {} exceeds {}",
+                        dwarf.id,
+                        dwarf.work_progress,
+                        sim_core::WORK_TICKS
+                    );
+                }
             }
             if !in_bounds(dwarf.pos) {
                 bail!(

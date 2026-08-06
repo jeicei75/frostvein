@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
+        Mutex, MutexGuard,
         atomic::{AtomicUsize, Ordering},
         mpsc::{self, Receiver, RecvTimeoutError},
     },
@@ -15,8 +16,10 @@ use std::{
 /// Every blocking read in this harness is bounded. A daemon that binds but never
 /// writes, or never logs, must fail the test rather than hang `cargo test` forever.
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
+static DAEMON_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 struct Daemon {
+    _serial: MutexGuard<'static, ()>,
     child: Child,
     address: SocketAddr,
     stderr: Receiver<String>,
@@ -44,6 +47,12 @@ fn line_channel<R: Read + Send + 'static>(reader: R) -> Receiver<String> {
 
 impl Daemon {
     fn spawn() -> Self {
+        // These tests assert wall-clock cadence and command visibility within a small number of
+        // ticks. Running dozens of daemon processes concurrently lets queued startup deltas make
+        // those assertions measure scheduler contention instead of the daemon under test.
+        let serial = DAEMON_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // NOTE: let the daemon bind port 0 itself rather than reserving a port here and passing
         // the number on. Reserving meant dropping the listener before the child could bind it,
         // and with this many daemon tests running in parallel another test claimed that port in
@@ -81,6 +90,7 @@ impl Daemon {
             .expect("simd must print a numeric port");
 
         Self {
+            _serial: serial,
             child,
             address: SocketAddr::from(([127, 0, 0, 1], port)),
             stderr,
@@ -697,6 +707,26 @@ fn multiply_claimed_job_save_is_logged_and_the_daemon_keeps_ticking() {
     state.dwarves[1].current_job = Some(0);
 
     assert_save_is_rejected_without_stopping_ticks(state, "save job 0 has multiple claimants");
+}
+
+#[test]
+fn overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: 20, y: 20, z: 8 },
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+    state.dwarves[0].current_job = Some(0);
+    state.dwarves[0].work_progress = u32::MAX;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save dwarf 0 work progress 4294967295 exceeds 5",
+    );
 }
 
 #[test]
