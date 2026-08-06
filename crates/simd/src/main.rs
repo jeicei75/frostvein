@@ -354,9 +354,19 @@ fn load_world() -> Option<sim_core::World> {
             }
         }
         let mut seen_ids = BTreeSet::new();
+        let mut claimed_job_ids = BTreeSet::new();
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {
                 bail!("save reuses dwarf id {}", dwarf.id);
+            }
+            if let Some(job_id) = dwarf.current_job {
+                let job_id = sim_core::JobId(job_id);
+                if !seen_job_ids.contains(&job_id) {
+                    bail!("save dwarf {} claims missing job {}", dwarf.id, job_id.0);
+                }
+                if !claimed_job_ids.insert(job_id) {
+                    bail!("save job {} has multiple claimants", job_id.0);
+                }
             }
             if !in_bounds(dwarf.pos) {
                 bail!(

@@ -692,3 +692,43 @@ old = '''        if let Some(id) = seen_job_ids.last()
 assert old in s
 p.write_text(s.replace(old, ''))
 PY
+
+mutation "stale channel job retries forever" sim-core execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''        let Some((changed_pos, tile)) = change else {
+            ecs.resource_mut::<Jobs>().remove(job.id);
+            ecs.resource_mut::<Designations>().0.remove(&job.target);
+            release_claim(ecs, entity);
+            continue;
+        };
+'''
+assert old in s
+p.write_text(s.replace(old, '''        let Some((changed_pos, tile)) = change else {
+            retry_claim(ecs, entity, job.id);
+            continue;
+        };
+'''))
+PY
+
+mutation "load accepts a claim for a missing job" simd missing_claimed_job_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''                if !seen_job_ids.contains(&job_id) {
+                    bail!("save dwarf {} claims missing job {}", dwarf.id, job_id.0);
+                }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts multiple claimants for one job" simd multiply_claimed_job_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''                if !claimed_job_ids.insert(job_id) {
+                    bail!("save job {} has multiple claimants", job_id.0);
+                }
+'''
+assert old in s
+p.write_text(s.replace(old, '                claimed_job_ids.insert(job_id);\n'))
+PY

@@ -675,6 +675,31 @@ fn job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn missing_claimed_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[0].current_job = Some(99);
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save dwarf 0 claims missing job 99");
+}
+
+#[test]
+fn multiply_claimed_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: 20, y: 20, z: 8 },
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+    state.dwarves[0].current_job = Some(0);
+    state.dwarves[1].current_job = Some(0);
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save job 0 has multiple claimants");
+}
+
+#[test]
 fn out_of_bounds_zone_save_is_logged_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();

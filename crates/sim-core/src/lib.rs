@@ -532,7 +532,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             }
         };
         let Some((changed_pos, tile)) = change else {
-            retry_claim(ecs, entity, job.id);
+            ecs.resource_mut::<Jobs>().remove(job.id);
+            ecs.resource_mut::<Designations>().0.remove(&job.target);
+            release_claim(ecs, entity);
             continue;
         };
         let changed = ecs.resource_mut::<Terrain>().set_tile(changed_pos, tile);
@@ -1668,6 +1670,52 @@ mod tests {
             world.drain_dirty(),
             vec![(below, Tile::Ramp(Material::Soil))]
         );
+    }
+
+    #[test]
+    fn execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let target = world.dwarves()[0].1;
+        let below = Pos {
+            z: target.z - 1,
+            ..target
+        };
+        assert!(world.set_tile(below, Tile::Ramp(Material::Soil)));
+        assert!(world.set_tile(target, Tile::Empty));
+        world.drain_dirty();
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Channel,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        world
+            .ecs
+            .resource_mut::<super::Designations>()
+            .0
+            .insert(target, super::DesignationKind::Channel);
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(4)));
+
+        super::execute_jobs(&mut world.ecs);
+
+        assert!(world.jobs().is_empty());
+        assert!(world.designations().is_empty());
+        assert_eq!(world.claims()[0].1, None);
+        assert_eq!(world.dwarves()[0].2, JobState::Idle);
+        assert!(world.items().is_empty());
+        assert_eq!(world.tile(below), Some(Tile::Ramp(Material::Soil)));
     }
 
     #[test]
