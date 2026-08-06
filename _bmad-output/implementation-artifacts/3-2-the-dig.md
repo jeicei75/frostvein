@@ -182,21 +182,21 @@ so that the mountain yields stone at my command — through workers, not a remot
         crossed; a walled-off goal yields `None`; the node cap yields `None` rather than scanning the
         world; the same query twice yields the identical path.
 
-- [ ] **`sim-core`: walk, work, dig and channel** (AC: 8, 9)
-  - [ ] `execute_jobs`: no path → compute one to the job's work positions (none reachable → release
+- [x] **`sim-core`: walk, work, dig and channel** (AC: 8, 9)
+  - [x] `execute_jobs`: no path → compute one to the job's work positions (none reachable → release
         per AC11); path non-empty → take one step, `JobState::Walk`; at a work position → count
         `WORK_TICKS` with `JobState::Work`, then complete.
-  - [ ] `Path(Vec<Pos>)` and `WorkProgress(u32)` components, attached on claim and removed on
+  - [x] `Path(Vec<Pos>)` and `WorkProgress(u32)` components, attached on claim and removed on
         release/completion. **Neither is saved** (AC13) — `Path` is a pure function of terrain and
         endpoints, so a loaded world recomputes the identical one. `WorkProgress` IS saved, folded
         into the job as a field rather than a component if that reads simpler — pick one and say so.
-  - [ ] Completion: `set_tile` (dig: target → `Empty`; channel: target-below → `Ramp(m)` keeping the
+  - [x] Completion: `set_tile` (dig: target → `Empty`; channel: target-below → `Ramp(m)` keeping the
         material it had), spawn the stone `(Item, Id, Pos)` with `self.ids.allocate()`, then
         `jobs.remove(..)` and drop the designation.
-  - [ ] `wander` gains one filter: skip dwarves whose `CurrentJob` is `Some`. Rewrite its
+  - [x] `wander` gains one filter: skip dwarves whose `CurrentJob` is `Some`. Rewrite its
         `// NOTE:` at `lib.rs:187-191` — the resting-dwarf-on-mutated-terrain case is now handled by
         `settle`, not deferred.
-  - [ ] Tests: state machine `Idle → Walk → Work → Idle` observed over one job; a dig turns the wall
+  - [x] Tests: state machine `Idle → Walk → Work → Idle` observed over one job; a dig turns the wall
         to `Empty` and puts a stone at the target with a fresh id; a channel turns the tile below
         into a `Ramp` of the same material; the dug tile appears in that tick's `drain_dirty`.
 
@@ -539,6 +539,8 @@ task, imperative messages. Review-gated: no push, no PR.
   `reaction_delay_table_is_pinned` failed for seed 42, dwarf 0, job 0 with `left: 29`, `right: 28`.
 - `MAX_ASTAR_NODES` sabotage (`50000 -> 60000`): `astar_stops_at_the_node_cap` failed with
   `left: Some([Pos { x: 0, y: 1, z: 1 }, ... Pos { x: 223, y: 223, z: 1 }])`, `right: None`.
+- `WORK_TICKS` sabotage (`5 -> 6`):
+  `execute_jobs_walks_then_digs_for_exactly_five_work_ticks` failed with `left: Work`, `right: Idle`.
 
 ### Completion Notes List
 

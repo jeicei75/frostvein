@@ -12,9 +12,10 @@ use std::{
 
 use bevy_ecs::{
     component::Component,
+    entity::Entity,
     resource::Resource,
     schedule::{IntoScheduleConfigs, Schedule},
-    system::{Query, Res, ResMut},
+    system::{Commands, Query, Res, ResMut},
     world::World as EcsWorld,
 };
 use rand::{RngExt, SeedableRng};
@@ -28,6 +29,7 @@ const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 const MAX_DESIGNATIONS: usize = 4096;
 const MAX_ASTAR_NODES: usize = 50_000;
+const WORK_TICKS: u32 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Material {
@@ -125,6 +127,12 @@ pub struct Job {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 struct CurrentJob(Option<JobId>);
 
+#[derive(Component)]
+struct Path(Vec<Pos>);
+
+#[derive(Component)]
+struct WorkProgress(u32);
+
 /// The map and target index move together through `insert` and `remove`.
 #[derive(Resource, Default)]
 struct Jobs {
@@ -143,7 +151,6 @@ impl Jobs {
         true
     }
 
-    #[allow(dead_code)] // Used by completion and cancellation later in this story.
     fn remove(&mut self, id: JobId) -> Option<Job> {
         let job = self.by_id.remove(&id)?;
         self.targets.remove(&job.target);
@@ -201,23 +208,24 @@ fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
 }
 
 fn claim_jobs(
+    mut commands: Commands,
     seed: Res<Seed>,
     tick: Res<Tick>,
     jobs: Res<Jobs>,
-    mut dwarves: Query<(&Id, &mut CurrentJob)>,
+    mut dwarves: Query<(Entity, &Id, &mut CurrentJob)>,
 ) {
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
-    dwarves.sort_by_key(|(id, _)| **id);
+    dwarves.sort_by_key(|(_, id, _)| **id);
     let mut claimed: BTreeSet<_> = dwarves
         .iter()
-        .filter_map(|(_, current)| current.0)
+        .filter_map(|(_, _, current)| current.0)
         .collect();
 
     for job in jobs.iter() {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
         }
-        for (id, current) in &mut dwarves {
+        for (entity, id, current) in &mut dwarves {
             if current.0.is_none()
                 && tick.0
                     >= job
@@ -225,6 +233,9 @@ fn claim_jobs(
                         .saturating_add(reaction_delay(seed.0, **id, job.id))
             {
                 current.0 = Some(job.id);
+                commands
+                    .entity(*entity)
+                    .insert((Path(Vec::new()), WorkProgress(0)));
                 claimed.insert(job.id);
                 break;
             }
@@ -357,7 +368,6 @@ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
         .unwrap_or(0)
 }
 
-#[allow(dead_code)] // Called by job execution in the next task group.
 fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>> {
     if goals.is_empty() {
         return None;
@@ -402,6 +412,128 @@ fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>
     None
 }
 
+fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
+    if let Some(mut current) = ecs.get_mut::<CurrentJob>(entity) {
+        current.0 = None;
+    }
+    if let Some(mut state) = ecs.get_mut::<JobState>(entity) {
+        *state = JobState::Idle;
+    }
+    let mut entity = ecs.entity_mut(entity);
+    entity.remove::<Path>();
+    entity.remove::<WorkProgress>();
+}
+
+/// Exclusive so terrain mutation and stone spawning are visible in the same tick.
+fn execute_jobs(ecs: &mut EcsWorld) {
+    let mut dwarves: Vec<_> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| Some((*entity.get::<Id>()?, entity.id())))
+        .collect();
+    dwarves.sort_by_key(|(id, _)| *id);
+
+    for (_, entity) in dwarves {
+        let Some(job_id) = ecs.get::<CurrentJob>(entity).and_then(|current| current.0) else {
+            continue;
+        };
+        let Some(job) = ecs.resource::<Jobs>().by_id.get(&job_id).copied() else {
+            release_claim(ecs, entity);
+            continue;
+        };
+        let pos = *ecs.get::<Pos>(entity).expect("every dwarf has a position");
+        let work_positions = {
+            let terrain = ecs.resource::<Terrain>();
+            match job.kind {
+                JobKind::Dig => [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                    .into_iter()
+                    .map(|(dx, dy)| Pos {
+                        x: job.target.x + dx,
+                        y: job.target.y + dy,
+                        z: job.target.z,
+                    })
+                    .filter(|candidate| terrain.is_standable(*candidate))
+                    .collect::<BTreeSet<_>>(),
+                JobKind::Channel => {
+                    if terrain.is_standable(job.target) {
+                        BTreeSet::from([job.target])
+                    } else {
+                        BTreeSet::new()
+                    }
+                }
+            }
+        };
+
+        if !work_positions.contains(&pos) {
+            let mut path = ecs
+                .get::<Path>(entity)
+                .map(|path| path.0.clone())
+                .unwrap_or_default();
+            if path.is_empty() {
+                let terrain = ecs.resource::<Terrain>();
+                let Some(computed) = astar(terrain, pos, &work_positions) else {
+                    release_claim(ecs, entity);
+                    continue;
+                };
+                path = computed;
+            }
+            let next = path.remove(0);
+            *ecs.get_mut::<Pos>(entity)
+                .expect("every dwarf has a position") = next;
+            *ecs.get_mut::<JobState>(entity)
+                .expect("every dwarf has a job state") = JobState::Walk;
+            ecs.entity_mut(entity).insert(Path(path));
+            continue;
+        }
+
+        let progress = ecs
+            .get::<WorkProgress>(entity)
+            .map(|progress| progress.0)
+            .unwrap_or(0)
+            + 1;
+        if progress < WORK_TICKS {
+            *ecs.get_mut::<JobState>(entity)
+                .expect("every dwarf has a job state") = JobState::Work;
+            ecs.entity_mut(entity).insert(WorkProgress(progress));
+            continue;
+        }
+
+        let change = {
+            let terrain = ecs.resource::<Terrain>();
+            match job.kind {
+                JobKind::Dig => match terrain.tile(job.target) {
+                    Some(Tile::Solid(_)) => Some((job.target, Tile::Empty)),
+                    _ => None,
+                },
+                JobKind::Channel => {
+                    let below = Pos {
+                        z: job.target.z - 1,
+                        ..job.target
+                    };
+                    match terrain.tile(below) {
+                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
+                        _ => None,
+                    }
+                }
+            }
+        };
+        let Some((changed_pos, tile)) = change else {
+            release_claim(ecs, entity);
+            continue;
+        };
+        let changed = ecs.resource_mut::<Terrain>().set_tile(changed_pos, tile);
+        debug_assert!(
+            changed,
+            "job targets were bounds-checked at designation time"
+        );
+        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+        ecs.spawn((Item, item_id, job.target));
+        ecs.resource_mut::<Jobs>().remove(job.id);
+        ecs.resource_mut::<Designations>().0.remove(&job.target);
+        release_claim(ecs, entity);
+    }
+}
+
 fn advance_tick(mut tick: ResMut<Tick>) {
     tick.0 += 1;
 }
@@ -409,19 +541,18 @@ fn advance_tick(mut tick: ResMut<Tick>) {
 fn wander(
     mut rng: ResMut<WanderRng>,
     terrain: Res<Terrain>,
-    mut dwarves: Query<(&Id, &mut Pos, &mut Wander, &mut JobState)>,
+    mut dwarves: Query<(&Id, &mut Pos, &mut Wander, &mut JobState, &CurrentJob)>,
 ) {
     // AD-7: query iteration is archetype order, not Id order, and all dwarves draw from
     // one stream. Draw order is a sim outcome, so sort before touching the RNG.
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
     dwarves.sort_by_key(|(id, ..)| **id);
 
-    for (_, mut pos, mut wander, mut state) in dwarves {
-        // NOTE: a resting dwarf never re-checks the tile it is standing on, so terrain
-        // mutated underneath it goes unnoticed until its cooldown expires — it will report
-        // standing inside solid rock, or hovering with no floor, for up to
-        // WANDER_REST_TICKS - 1 ticks. Unreachable while `set_tile` has no production
-        // caller; Story 3.2's dig is the first, and owns the fix along with gravity.
+    for (_, mut pos, mut wander, mut state, current_job) in dwarves {
+        if current_job.0.is_some() {
+            continue;
+        }
+        // NOTE: `settle` handles terrain mutated under a dwarf before wandering runs.
         if wander.cooldown > 0 {
             wander.cooldown -= 1;
             *state = JobState::Idle;
@@ -437,10 +568,8 @@ fn wander(
                 y: here.y + dy,
                 z: here.z,
             })
-            // NOTE: standability only — occupancy is not checked, so two dwarves whose home
-            // boxes overlap can share a tile, and `view::render` draws them in ascending Id
-            // into the same cell, silently hiding the lower one. Tile claiming arrives with
-            // Story 3.2's jobs, which needs a reservation model anyway.
+            // NOTE: standability only — occupancy is deliberately not a movement rule. The
+            // renderer uses a crowd glyph when dwarves share a tile.
             .filter(|p| {
                 (p.x - wander.home.x).abs() <= WANDER_RADIUS
                     && (p.y - wander.home.y).abs() <= WANDER_RADIUS
@@ -503,7 +632,7 @@ fn assemble(
         dirty: BTreeSet::new(),
     });
     let mut schedule = Schedule::default();
-    schedule.add_systems((advance_tick, create_jobs, claim_jobs, wander).chain());
+    schedule.add_systems((advance_tick, create_jobs, claim_jobs, execute_jobs, wander).chain());
     World { ecs, schedule }
 }
 
@@ -990,7 +1119,15 @@ mod tests {
     #[test]
     fn claim_jobs_waits_for_the_reaction_delay() {
         let mut world = World::generate(42, Dims::DEFAULT);
-        let target = Pos { x: 40, y: 40, z: 8 };
+        let worker = world.dwarves()[2].1;
+        let target = Pos {
+            x: if worker.x + 1 < world.dims().x as i32 {
+                worker.x + 1
+            } else {
+                worker.x - 1
+            },
+            ..worker
+        };
         assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
         world.apply_command(super::SimCommand::Designate {
             kind: super::DesignationKind::Dig,
@@ -1006,11 +1143,29 @@ mod tests {
         }
         world.step();
         assert_eq!(world.claims()[2], (super::Id(2), Some(JobId(0))));
+        let worker = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(2)))
+            .expect("dwarf two exists");
+        assert!(worker.contains::<super::Path>());
+        assert!(worker.contains::<super::WorkProgress>());
     }
 
     #[test]
     fn claim_jobs_takes_fifo_and_skips_busy_dwarves_and_claimed_jobs() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        let worker = world.dwarves()[0].1;
+        let first_target = Pos {
+            x: worker.x + 1,
+            ..worker
+        };
+        let second_target = Pos {
+            y: worker.y + 1,
+            ..worker
+        };
+        assert!(world.set_tile(first_target, Tile::Solid(Material::Stone)));
+        assert!(world.set_tile(second_target, Tile::Solid(Material::Stone)));
         {
             let mut query = world.ecs.query::<(&super::Id, &mut super::CurrentJob)>();
             for (id, mut current) in query.iter_mut(&mut world.ecs) {
@@ -1024,14 +1179,14 @@ mod tests {
             assert!(jobs.insert(Job {
                 id: JobId(0),
                 kind: JobKind::Dig,
-                target: Pos { x: 1, y: 1, z: 1 },
+                target: first_target,
                 created_tick: 0,
                 retry_after: 0,
             }));
             assert!(jobs.insert(Job {
                 id: JobId(1),
                 kind: JobKind::Dig,
-                target: Pos { x: 2, y: 1, z: 1 },
+                target: second_target,
                 created_tick: 0,
                 retry_after: 0,
             }));
@@ -1041,6 +1196,17 @@ mod tests {
         assert_eq!(world.claims()[0], (super::Id(0), Some(JobId(0))));
 
         let mut claimed = World::generate(42, Dims::DEFAULT);
+        let claimed_worker = claimed.dwarves()[0].1;
+        let claimed_first_target = Pos {
+            x: claimed_worker.x + 1,
+            ..claimed_worker
+        };
+        let claimed_second_target = Pos {
+            y: claimed_worker.y + 1,
+            ..claimed_worker
+        };
+        assert!(claimed.set_tile(claimed_first_target, Tile::Solid(Material::Stone)));
+        assert!(claimed.set_tile(claimed_second_target, Tile::Solid(Material::Stone)));
         {
             let mut query = claimed.ecs.query::<(&super::Id, &mut super::CurrentJob)>();
             for (id, mut current) in query.iter_mut(&mut claimed.ecs) {
@@ -1058,14 +1224,14 @@ mod tests {
             assert!(jobs.insert(Job {
                 id: JobId(0),
                 kind: JobKind::Dig,
-                target: Pos { x: 1, y: 1, z: 1 },
+                target: claimed_first_target,
                 created_tick: 0,
                 retry_after: 0,
             }));
             assert!(jobs.insert(Job {
                 id: JobId(1),
                 kind: JobKind::Dig,
-                target: Pos { x: 2, y: 1, z: 1 },
+                target: claimed_second_target,
                 created_tick: 0,
                 retry_after: 0,
             }));
@@ -1164,6 +1330,118 @@ mod tests {
                 }]),
             ),
             None
+        );
+    }
+
+    #[test]
+    fn execute_jobs_walks_then_digs_for_exactly_five_work_ticks() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let start = world.dwarves()[0].1;
+        let dx = if start.x + 2 < world.dims().x as i32 {
+            1
+        } else {
+            -1
+        };
+        let work = Pos {
+            x: start.x + dx,
+            ..start
+        };
+        let target = Pos {
+            x: start.x + 2 * dx,
+            ..start
+        };
+        assert!(world.set_tile(
+            Pos {
+                z: work.z - 1,
+                ..work
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(work, Tile::Empty));
+        assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+        world.drain_dirty();
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(0)));
+
+        super::execute_jobs(&mut world.ecs);
+        assert_eq!(world.dwarves()[0].1, work);
+        assert_eq!(world.dwarves()[0].2, JobState::Walk);
+        for _ in 0..4 {
+            super::execute_jobs(&mut world.ecs);
+            assert_eq!(world.dwarves()[0].2, JobState::Work);
+            assert_eq!(world.claims()[0].1, Some(JobId(0)));
+        }
+        super::execute_jobs(&mut world.ecs);
+
+        assert_eq!(world.dwarves()[0].2, JobState::Idle);
+        assert_eq!(world.claims()[0].1, None);
+        assert!(world.jobs().is_empty());
+        assert!(world.designations().is_empty());
+        assert_eq!(world.tile(target), Some(Tile::Empty));
+        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert_eq!(world.drain_dirty(), vec![(target, Tile::Empty)]);
+    }
+
+    #[test]
+    fn execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let target = world.dwarves()[0].1;
+        let below = Pos {
+            z: target.z - 1,
+            ..target
+        };
+        assert!(world.set_tile(below, Tile::Solid(Material::Soil)));
+        assert!(world.set_tile(target, Tile::Empty));
+        world.drain_dirty();
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Channel,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(0)));
+
+        for _ in 0..4 {
+            super::execute_jobs(&mut world.ecs);
+            assert_eq!(world.dwarves()[0].2, JobState::Work);
+            assert_eq!(world.claims()[0].1, Some(JobId(0)));
+        }
+        super::execute_jobs(&mut world.ecs);
+
+        assert_eq!(world.tile(below), Some(Tile::Ramp(Material::Soil)));
+        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert_eq!(
+            world.drain_dirty(),
+            vec![(below, Tile::Ramp(Material::Soil))]
         );
     }
 

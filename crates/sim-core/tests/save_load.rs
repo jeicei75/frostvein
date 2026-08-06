@@ -1,4 +1,4 @@
-use sim_core::{DesignationKind, Dims, Pos, Rect, SimCommand, Tile, World};
+use sim_core::{DesignationKind, Dims, Material, Pos, Rect, SimCommand, Tile, World};
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
 
@@ -6,9 +6,11 @@ const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
 fn save_load_then_tick_matches_never_saved() {
     let mut saved = World::generate(42, Dims::DEFAULT);
     let mut control = World::generate(42, Dims::DEFAULT);
-    let designation_pos = saved.dwarves()[0].1;
+    let designation_pos = Pos { x: 4, y: 3, z: 2 };
+    assert!(saved.set_tile(designation_pos, Tile::Solid(Material::Stone)));
+    assert!(control.set_tile(designation_pos, Tile::Solid(Material::Stone)));
     let designation = SimCommand::Designate {
-        kind: DesignationKind::Channel,
+        kind: DesignationKind::Dig,
         rect: Rect {
             min: designation_pos,
             max: designation_pos,
