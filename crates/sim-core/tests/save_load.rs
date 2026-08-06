@@ -1,4 +1,6 @@
-use sim_core::{DesignationKind, Dims, Material, Pos, Rect, SimCommand, Tile, World};
+use sim_core::{
+    DesignationKind, Dims, Job, JobId, JobKind, Material, Pos, Rect, SimCommand, Tile, World,
+};
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
 
@@ -100,6 +102,35 @@ fn loading_does_not_reuse_entity_ids() {
     let loaded = World::from_save(world.to_save());
 
     assert_eq!(loaded.to_save().next_id, 5);
+}
+
+#[test]
+fn save_round_trip_preserves_items_and_current_job() {
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    let target = Pos { x: 9, y: 8, z: 7 };
+    save.next_id = 13;
+    save.items = vec![(12, target)];
+    save.jobs = vec![Job {
+        id: JobId(7),
+        kind: JobKind::Dig,
+        target,
+        created_tick: 3,
+        retry_after: 29,
+    }];
+    save.next_job_id = 8;
+    save.dwarves[0].current_job = Some(7);
+
+    let round_trip = World::from_save(save).to_save();
+
+    assert_eq!(round_trip.items, vec![(12, target)]);
+    assert_eq!(round_trip.jobs.len(), 1);
+    assert_eq!(round_trip.jobs[0].id, JobId(7));
+    assert_eq!(round_trip.jobs[0].kind, JobKind::Dig);
+    assert_eq!(round_trip.jobs[0].target, target);
+    assert_eq!(round_trip.jobs[0].created_tick, 3);
+    assert_eq!(round_trip.jobs[0].retry_after, 29);
+    assert_eq!(round_trip.next_job_id, 8);
+    assert_eq!(round_trip.dwarves[0].current_job, Some(7));
 }
 
 #[test]

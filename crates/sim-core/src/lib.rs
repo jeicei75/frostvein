@@ -1247,6 +1247,8 @@ mod tests {
         }
         world.step();
         assert_eq!(world.claims()[2], (super::Id(2), Some(JobId(0))));
+        assert_eq!(world.dwarves()[2].1, worker);
+        assert_eq!(world.dwarves()[2].2, JobState::Walk);
         let worker = world
             .ecs
             .iter_entities()
@@ -1346,6 +1348,30 @@ mod tests {
     }
 
     #[test]
+    fn claim_jobs_prefers_the_lowest_free_dwarf_id() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target: Pos { x: 0, y: 0, z: 0 },
+            created_tick: 0,
+            retry_after: 0,
+        }));
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        schedule.run(&mut world.ecs);
+
+        assert_eq!(world.claims()[0], (super::Id(0), Some(JobId(0))));
+        assert!(
+            world.claims()[1..]
+                .iter()
+                .all(|(_, current)| current.is_none())
+        );
+    }
+
+    #[test]
     fn astar_finds_the_literal_shortest_corridor_path_repeatably() {
         let terrain = flat_terrain(5, 1);
         let from = Pos { x: 0, y: 0, z: 1 };
@@ -1360,6 +1386,23 @@ mod tests {
 
         assert_eq!(super::astar(&terrain, from, &goals), Some(expected.clone()));
         assert_eq!(super::astar(&terrain, from, &goals), Some(expected));
+    }
+
+    #[test]
+    fn astar_ties_break_on_position_not_insertion_order() {
+        let terrain = flat_terrain(3, 3);
+        let from = Pos { x: 0, y: 0, z: 1 };
+        let goal = Pos { x: 2, y: 2, z: 1 };
+
+        assert_eq!(
+            super::astar(&terrain, from, &BTreeSet::from([goal])),
+            Some(vec![
+                Pos { x: 0, y: 1, z: 1 },
+                Pos { x: 0, y: 2, z: 1 },
+                Pos { x: 1, y: 2, z: 1 },
+                Pos { x: 2, y: 2, z: 1 },
+            ])
+        );
     }
 
     #[test]
@@ -1472,6 +1515,11 @@ mod tests {
             retry_after: 0,
         };
         assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        world
+            .ecs
+            .resource_mut::<super::Designations>()
+            .0
+            .insert(target, super::DesignationKind::Dig);
         let entity = world
             .ecs
             .iter_entities()

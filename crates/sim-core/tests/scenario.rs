@@ -490,8 +490,15 @@ fn unreachable_job_stays_queued_and_retries_after_twenty_ticks() {
         world.step();
     }
     let released_at = world.tick();
-    assert_eq!(world.jobs()[0].retry_after, released_at + 20);
+    let retry_after = released_at + 20;
+    assert_eq!(world.jobs()[0].retry_after, retry_after);
     assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+
+    while world.tick() + 1 < retry_after {
+        world.step();
+        assert_eq!(world.jobs()[0].retry_after, retry_after);
+        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+    }
 
     while world.tick() < 200 {
         world.step();
