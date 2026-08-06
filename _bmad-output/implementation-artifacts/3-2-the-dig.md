@@ -43,7 +43,14 @@ so that the mountain yields stone at my command — through workers, not a remot
 5. Exactly one claiming system, `claim_jobs`, at a fixed schedule point: jobs considered ascending by
    `JobId`, dwarves ascending by entity `Id`. A dwarf holding a job is not eligible; a claimed job is
    skipped. Dwarf `D` may claim job `J` only when `tick >= J.created_tick + reaction_delay(seed, D, J)`
-   **and** `tick >= J.retry_after`. One job per dwarf, one dwarf per job (FR5, AD-12).
+   **and** `tick >= J.retry_after` **and** a path to one of `J`'s work positions exists from `D`.
+   One job per dwarf, one dwarf per job (FR5, AD-12).
+   *(Third gate AMENDED at review, 2026-08-06: as first written this AC listed only the two time
+   gates, with AC11 putting pathing in `execute_jobs`. The code paths at claim time instead, so an
+   unreachable job is never claimed-then-released — the observable outcome AC11 demands is
+   unchanged. Claim searches share one `MAX_ASTAR_NODES` budget per tick; when it runs out
+   `claim_jobs` stops for that tick WITHOUT stamping a retry, so a reachable job is deferred, never
+   penalised, and the 20-tick cooldown on genuinely unreachable jobs frees the budget next tick.)*
 6. `reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64` returns 5..=30 from a hand-written,
    named FNV-1a over the three values — never `RandomState`, never an RNG stream, never wall clock
    (AD-7). The delays for seed 42, dwarves 0..=4 and job ids 0..=2 are pinned as literals in a test,
@@ -57,16 +64,28 @@ so that the mountain yields stone at my command — through workers, not a remot
    `JobState::Work` for `WORK_TICKS = 5` at a work position before the job completes. Work positions
    are: for `Dig`, the standable tiles horizontally 4-adjacent to the target at the target's z; for
    `Channel`, the target tile itself. `wander` skips any dwarf holding a job, so a working dwarf
-   never drifts; a dwarf is `Idle` exactly when it holds no job.
+   never drifts; a dwarf holding a job is never reported `Idle`.
+   *(AMENDED at review, 2026-08-06: this AC originally read "a dwarf is `Idle` exactly when it holds
+   no job", which cannot be satisfied — `wander` reports `Walk` for a job-less dwarf that moves, and
+   3.1's `streamed_deltas_show_wandering_positions_and_states` pins exactly that. Only the
+   implementable half was ever in scope, and it is met.)*
 9. Completing a `Dig` sets the target from `Solid(m)` to `Empty`. Completing a `Channel` sets the
    tile **below** the target from `Solid(m)` to `Ramp(m)`. Both mutate through `World::set_tile`, so
    both appear in that tick's delta `tiles` — the first production producer of the AD-8 dirty set. A
    stone item is spawned at the target position with an id from the single global allocator (AD-9),
    and the completed job and its designation are both removed.
 10. A `settle` system, chained after job execution and before `wander`, moves any dwarf whose current
-    tile is no longer standable down one z when the tile below is standable, dwarves in ascending
+    tile is no longer standable down one z when the tile below is `Empty`, dwarves in ascending
     `Id`, and discards that dwarf's path so it re-paths. A dwarf standing on a tile dug out from
     under it is one level lower in the same tick and never renders hovering on air.
+    *(AMENDED at review, 2026-08-06 — found independently by the acceptance and feature layers. This
+    originally read "when the tile below is standable", which would leave a dwarf hovering forever
+    over a two-deep shaft, since the tile below an unsupported tile is itself unsupported. Falling
+    one level per tick until it lands is both the better behaviour and what shipped, pinned by
+    `settle_descends_one_level_per_tick_through_a_deep_empty_shaft`, and it still honours the
+    guardrail "a dwarf never falls more than one level per tick". Note a dwarf can never be stranded
+    above a `Ramp`: `is_standable` already accepts `Ramp` as support, so `!is_standable(pos)` and
+    `below == Ramp` cannot both hold.)*
 11. A dwarf that can reach no work position releases its claim and the job's `retry_after` becomes
     `tick + RETRY_COOLDOWN = 20`; the job stays in the market and is retried, never dropped (FR8).
     `CancelDesignation` over a rect removes the designations, removes any job on those tiles whether
@@ -139,8 +158,12 @@ so that the mountain yields stone at my command — through workers, not a remot
 - [x] **`sim-core`: diggability and the mark budget** (AC: 2, 3)
   - [x] Filter in the existing `Designate` arm of `apply_command`; delete the `// NOTE: Story 3.2
         owns diggability` at `lib.rs:473` that this closes.
-  - [x] `MAX_DESIGNATIONS` check in the same loop: `break` once the map is full and the position is
-        not already present, so an over-large rect marks a deterministic prefix.
+  - [x] `MAX_DESIGNATIONS` check in the same loop: `continue` past a refused position once the map
+        is full and the position is not already present, so an over-large rect marks a deterministic
+        prefix while still re-kinding positions already marked.
+        *(CORRECTED at review, 2026-08-06: this task said `break`, contradicting AC3's explicit
+        "`continue`s past a refused position rather than `break`ing out of the rect" in the same
+        document. The code follows AC3; only one of the two could ever have been tested.)*
   - [x] **Existing tests will go red and that is expected, not a regression.** `save_load.rs`
         designates `Channel` at z=2 (solid rock — nothing is standable there) and several
         `scenario.rs` cases designate arbitrary positions. Repoint each to terrain the kind can
@@ -287,6 +310,76 @@ so that the mountain yields stone at my command — through workers, not a remot
         (AGENTS.md rule 1).
 
 - [x] **Green gate** (AC: 17) — `scripts/gate.sh`, then the live check. Report what printed.
+
+### Review Findings
+
+Code review 2026-08-06. Four layers, all completed — no coverage holes from timeouts. Each
+finding carries its originating LAYER and SEVERITY (review-cost discipline rule 1).
+
+- [x] [Review][Defer] **A Channel job is permanently orphaned when an independent Dig removes
+      its support** [crates/sim-core/src/lib.rs:463-469] — LAYER: edge-case-hunter. SEVERITY: med.
+      **RESOLVED by Wolf 2026-08-06: leave as specified, no code change.** AC11 deliberately chose
+      never-drop, the retry costs nothing, the mark stays visible and `x` cancels it. Recorded as
+      known behaviour; revisit only if it bites in play.
+      Designate a channel at `P` (needs `is_standable(P)`, i.e. `P.z-1` is `Solid`), then separately
+      designate a dig at `P.z-1` — independently valid, it is solid. If the dig completes first,
+      `is_standable(P)` is false forever, `work_positions` returns the empty set, and the channel
+      job retries every 20 ticks with no dwarf ever able to take it. Live-verified over 500 ticks:
+      `jobs().len()` pinned at 1, `retry_after` climbing to 602, never converting to `Ramp`.
+      **This matches AC11 exactly** — "the job stays in the market and is retried, never dropped
+      (FR8)" — and the retry is nearly free (`astar_with_budget` early-returns on an empty goal set
+      before spending any node budget, so there is no starvation or performance cost). The
+      designation mark also stays visible on screen and `x` cancels it, so the player is not without
+      a signal. DECISION FOR WOLF: leave as specified (never drop), or make a permanently-unwinnable
+      job detectable? Not patched either way without your call.
+
+- [x] [Review][Patch] **The story's own Verification recipe produces zero marks**
+      [3-2-the-dig.md, Verification section] — LAYER: feature-auditor. SEVERITY: med. The documented
+      recipe designates at the opening view level, where the visible map is air, so AC2's diggability
+      filter correctly marks nothing and the feature reads as broken. The Feature Auditor's first
+      live run reproduced exactly this. The recipe needs `<` to descend a level before designating.
+      This is the project's recurring SPEC-TEXT defect class, against an Epic 3 baseline of zero.
+
+- [x] [Review][Patch] **`astar_stops_at_the_node_cap`'s 0.35% margin — FINDING PARTLY REJECTED**
+      [crates/sim-core/src/lib.rs, test] — LAYER: acceptance-auditor. SEVERITY: low (revised down).
+      The auditor read the 224x224 grid (50,176 nodes vs a 50,000 cap) as a fragile fixture and
+      recommended widening it. **Acting on that made the suite WEAKER and the mutation set caught
+      it**: widening to 320x320 exhausts the budget under both the real cap and the mutated one
+      (`MAX_ASTAR_NODES is widened`, 50_000 -> 60_000), so the test passed either way and that
+      mutation SURVIVED — the first survivor this story has had. The tight margin is load-bearing:
+      it must sit BETWEEN the real cap and the smallest widening the mutation set probes. Reverted
+      to 224x224. What was actually kept: a `// NOTE:` at the test explaining why the margin must
+      stay tight (both the auditor and the reviewer misread it as an accident), and a new
+      `astar_finds_a_path_well_inside_the_node_cap` pinning the downward direction explicitly.
+      Sabotage-verified after the revert: 50_000 -> 60_000 fails the cap test, 50_000 -> 1 fails the
+      new test, baseline green.
+
+- [x] [Review][Patch] **Four ACs disagree with the shipped code; the code is right in each case**
+      — LAYER: acceptance-auditor + feature-auditor (AC10 found independently by both). SEVERITY:
+      low each, grouped as one story-text edit. (a) AC3 says the full-mark-set arm `continue`s;
+      the Tasks section says `break`. Code follows AC3. (b) AC8's "a dwarf is `Idle` exactly when it
+      holds no job" is unsatisfiable — `wander` reports `Walk` for job-less dwarves and 3.1's delta
+      test pins that; the implementable half (a job-holder is never `Idle`) is met. (c) AC10 says
+      `settle` descends "when the tile below is standable"; the code tests `tile(below) == Empty`.
+      AC10 as written would leave a dwarf hovering forever over a two-deep shaft — the code is
+      better and is pinned by `settle_descends_one_level_per_tick_through_a_deep_empty_shaft`.
+      (d) AC5 lists exactly two claim gates; `claim_jobs` adds reachability as a third by pathing at
+      claim time. Amend the text, not the code.
+
+- [x] [Review][Defer] **`jobs.next_id += 1` is a plain add** [crates/sim-core/src/lib.rs:176] —
+      LAYER: edge-case-hunter. SEVERITY: low. Every neighbouring tick/id computation in the same
+      diff uses `saturating_add`. Needs ~4 billion lifetime job creations to reach; deferred.
+- [x] [Review][Defer] **The AD-12 seam promised to 3.3 is heavier than planned** — LAYER:
+      acceptance-auditor. SEVERITY: low. `claim_jobs` now owns work-position computation, A* and the
+      node budget, so a `Haul` variant is no longer a pure `JobKind` addition. For 3.3 planning.
+- [x] [Review][Defer] **Crowd counting and crowd drawing use different entity filters**
+      [crates/tui/src/view.rs] — LAYER: acceptance-auditor. SEVERITY: low. `dwarf_counts` counts only
+      `EntityKind::Dwarf`; the draw loop applies `crowd_cell()` to any entity on a crowded index.
+      Harmless while dwarf is the only kind; latent for the second.
+- [x] [Review][Defer] **Daemon test lock lengthens the gate** [crates/simd/tests/serve.rs] — LAYER:
+      acceptance-auditor. SEVERITY: low. A new `DAEMON_TEST_LOCK` serializes every daemon test and
+      `read_delta_with_speed`'s retry budget went 5 to 50. Justified against real cross-process
+      contention, but it changes the failure mode of pre-existing tests this story did not touch.
 
 ## Dev Notes
 
@@ -492,14 +585,33 @@ Live instrument — the observable outcome, joining the two binaries no test can
 reaction delay (5–30 ticks) plus the walk plus `WORK_TICKS`, so ask for enough frames:
 
 ```bash
-cargo run -p simd &
-cargo run -p tui -- --frames 200                              > /tmp/dig-live.txt
-# In the capture: the dig mark appears, a ☺ turns Walk-coloured and moves toward it,
-# the wall glyph at the target becomes open floor, and a * remains at that cell.
-rg -c '×' /tmp/dig-live.txt      # marks placed
-rg -c '\*' /tmp/dig-live.txt     # stone exists after the dig, and only after
-cargo run -p tui                                              # d, move, Enter, move, Enter — watch it live
+cargo run -p simd -- 47411 &
+cargo run -p tui -- 47411 --frames 220 --key '<,d,enter,l,l,l,l,l,l,j,j,j,j,enter' > /tmp/dig-live.txt
+# In the capture: the dig mark appears, a ☺ moves toward it, the mark then VANISHES and a * remains.
+rg -c '×' /tmp/dig-live.txt      # marks placed        (verified 2026-08-06: 118)
+rg -c '\*' /tmp/dig-live.txt     # stone after the dig (verified 2026-08-06: 197)
+for p in $(pgrep -x simd); do kill $p; done   # NEVER pkill -f 'target/debug/simd' — it kills your own shell
+cargo run -p tui                              # then interactively: <, d, move, Enter, move, Enter
 ```
+
+**Three things this recipe gets right that the obvious one gets wrong** — corrected at 3.2's review
+after the Feature Auditor's first live run produced ZERO marks and read as a broken feature:
+
+1. **`--key` is required.** Without it `apply_key` is never called, so no `Designate` command is
+   ever sent and the capture is empty no matter how many frames you ask for. `--frames N` alone
+   streams a world nobody has given an order to.
+2. **`<` must come first.** The initial view level is the first dwarf's z, where the visible map is
+   air — and AC2's diggability filter correctly marks nothing there. You must descend one level
+   before designating or the rect is legally empty.
+3. **Do not look for the wall becoming floor.** `render` peeks up to `PEEK_DEPTH` levels below an
+   `Empty` tile and redraws what it finds, so digging stone that sits on stone re-renders a nearly
+   identical glyph — and `NO_COLOR` (set in this devpod) strips the only thing that differs. Assert
+   on the **designation glyph disappearing** and the **stone glyph appearing**, exactly as AC15
+   requires. The earlier text here claimed "the wall glyph at the target becomes open floor", which
+   contradicts AC15 in the same document.
+
+Key names are a fixed comma-separated set — `space, +, -, S, L, d, c, p, x, h, j, k, l, enter, esc,
+<, >`. There is no repeat shorthand; write `l,l,l` out.
 
 Then, interactively: designate a **channel** run of three tiles along flat ground and confirm a ramp
 appears below and a dwarf can walk down it; cancel a dig mid-walk and confirm the dwarf returns to

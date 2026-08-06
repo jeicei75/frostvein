@@ -1770,6 +1770,15 @@ mod tests {
 
     #[test]
     fn astar_stops_at_the_node_cap() {
+        // 224x224 = 50,176 standable positions against the 50,000 cap. The margin is TIGHT ON
+        // PURPOSE and must stay that way: it has to sit BETWEEN the real cap and the smallest
+        // widening the mutation set probes (`MAX_ASTAR_NODES is widened`, 50_000 -> 60_000). At
+        // 50,176 a widened cap swallows the whole grid, the search succeeds, and this assertion
+        // fails — which is how that mutation is killed. Widening the grid to "make the margin
+        // safer" (tried at 3.2's review, 320x320) exhausts the budget under BOTH the real and the
+        // widened cap, so the test passes either way and the mutation SURVIVES. Downward movement
+        // of the constant is pinned by `astar_finds_a_path_well_inside_the_node_cap` below and by
+        // `claim_jobs_bounds_aggregate_astar_expansions_per_tick`, not by this test.
         let terrain = flat_terrain(224, 224);
 
         assert_eq!(
@@ -1784,6 +1793,22 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn astar_finds_a_path_well_inside_the_node_cap() {
+        // The other direction, which the cap test alone cannot give: a search that SHOULD
+        // succeed still does. Without this, lowering MAX_ASTAR_NODES to 1 leaves the cap test
+        // green — it only ever asserts `None`.
+        let terrain = flat_terrain(40, 40);
+
+        let path = super::astar(
+            &terrain,
+            Pos { x: 0, y: 0, z: 1 },
+            &BTreeSet::from([Pos { x: 5, y: 5, z: 1 }]),
+        )
+        .expect("a 10-step goal on open ground is far inside the 50,000-node budget");
+        assert_eq!(path.len(), 10, "shortest path is |dx| + |dy|");
     }
 
     #[test]
