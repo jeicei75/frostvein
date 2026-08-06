@@ -30,6 +30,7 @@ const WANDER_REST_TICKS: u32 = 10;
 const MAX_DESIGNATIONS: usize = 4096;
 const MAX_ASTAR_NODES: usize = 50_000;
 const WORK_TICKS: u32 = 5;
+const RETRY_COOLDOWN: u64 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Material {
@@ -157,7 +158,6 @@ impl Jobs {
         Some(job)
     }
 
-    #[allow(dead_code)] // Used by retry handling later in this story.
     fn get_mut(&mut self, id: JobId) -> Option<&mut Job> {
         self.by_id.get_mut(&id)
     }
@@ -424,6 +424,14 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
     entity.remove::<WorkProgress>();
 }
 
+fn retry_claim(ecs: &mut EcsWorld, entity: Entity, job_id: JobId) {
+    let retry_after = ecs.resource::<Tick>().0.saturating_add(RETRY_COOLDOWN);
+    if let Some(job) = ecs.resource_mut::<Jobs>().get_mut(job_id) {
+        job.retry_after = retry_after;
+    }
+    release_claim(ecs, entity);
+}
+
 /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
 fn execute_jobs(ecs: &mut EcsWorld) {
     let mut dwarves: Vec<_> = ecs
@@ -472,7 +480,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             if path.is_empty() {
                 let terrain = ecs.resource::<Terrain>();
                 let Some(computed) = astar(terrain, pos, &work_positions) else {
-                    release_claim(ecs, entity);
+                    retry_claim(ecs, entity, job.id);
                     continue;
                 };
                 path = computed;
@@ -518,7 +526,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             }
         };
         let Some((changed_pos, tile)) = change else {
-            release_claim(ecs, entity);
+            retry_claim(ecs, entity, job.id);
             continue;
         };
         let changed = ecs.resource_mut::<Terrain>().set_tile(changed_pos, tile);
@@ -532,6 +540,33 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         ecs.resource_mut::<Designations>().0.remove(&job.target);
         release_claim(ecs, entity);
     }
+}
+
+fn settle(ecs: &mut EcsWorld) {
+    let mut dwarves: Vec<_> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| Some((*entity.get::<Id>()?, entity.id())))
+        .collect();
+    dwarves.sort_by_key(|(id, _)| *id);
+
+    for (_, entity) in dwarves {
+        let pos = *ecs.get::<Pos>(entity).expect("every dwarf has a position");
+        let below = Pos {
+            z: pos.z - 1,
+            ..pos
+        };
+        let should_settle = {
+            let terrain = ecs.resource::<Terrain>();
+            !terrain.is_standable(pos) && terrain.is_standable(below)
+        };
+        if should_settle {
+            *ecs.get_mut::<Pos>(entity)
+                .expect("every dwarf has a position") = below;
+            ecs.entity_mut(entity).remove::<Path>();
+        }
+    }
+    // NOTE: gravity is deliberately limited to one level per dwarf per tick; items never fall.
 }
 
 fn advance_tick(mut tick: ResMut<Tick>) {
@@ -632,7 +667,17 @@ fn assemble(
         dirty: BTreeSet::new(),
     });
     let mut schedule = Schedule::default();
-    schedule.add_systems((advance_tick, create_jobs, claim_jobs, execute_jobs, wander).chain());
+    schedule.add_systems(
+        (
+            advance_tick,
+            create_jobs,
+            claim_jobs,
+            execute_jobs,
+            settle,
+            wander,
+        )
+            .chain(),
+    );
     World { ecs, schedule }
 }
 
@@ -850,9 +895,39 @@ impl World {
                 }
             }
             SimCommand::CancelDesignation { .. } => {
-                let mut designations = self.ecs.resource_mut::<Designations>();
-                for pos in positions() {
-                    designations.0.remove(&pos);
+                let targets: BTreeSet<_> = positions().collect();
+                {
+                    let mut designations = self.ecs.resource_mut::<Designations>();
+                    for pos in &targets {
+                        designations.0.remove(pos);
+                    }
+                }
+                let job_ids: BTreeSet<_> = self
+                    .ecs
+                    .resource::<Jobs>()
+                    .iter()
+                    .filter(|job| targets.contains(&job.target))
+                    .map(|job| job.id)
+                    .collect();
+                {
+                    let mut jobs = self.ecs.resource_mut::<Jobs>();
+                    for job_id in &job_ids {
+                        jobs.remove(*job_id);
+                    }
+                }
+                let holders: Vec<_> = self
+                    .ecs
+                    .iter_entities()
+                    .filter(|entity| {
+                        entity
+                            .get::<CurrentJob>()
+                            .and_then(|current| current.0)
+                            .is_some_and(|job_id| job_ids.contains(&job_id))
+                    })
+                    .map(|entity| entity.id())
+                    .collect();
+                for entity in holders {
+                    release_claim(&mut self.ecs, entity);
                 }
             }
             SimCommand::PlaceStockpile { .. } => {
@@ -1443,6 +1518,40 @@ mod tests {
             world.drain_dirty(),
             vec![(below, Tile::Ramp(Material::Soil))]
         );
+    }
+
+    #[test]
+    fn settle_moves_one_level_down_and_discards_the_path() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let start = world.dwarves()[0].1;
+        let below = Pos {
+            z: start.z - 1,
+            ..start
+        };
+        assert!(world.set_tile(start, Tile::Empty));
+        assert!(world.set_tile(below, Tile::Empty));
+        assert!(world.set_tile(
+            Pos {
+                z: start.z - 2,
+                ..start
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert(super::Path(vec![start]));
+
+        super::settle(&mut world.ecs);
+
+        assert_eq!(world.dwarves()[0].1, below);
+        assert!(!world.ecs.entity(entity).contains::<super::Path>());
     }
 
     #[test]

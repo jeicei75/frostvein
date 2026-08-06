@@ -466,6 +466,90 @@ fn designated_tiles_become_one_job_each_only_when_the_schedule_runs() {
 }
 
 #[test]
+fn unreachable_job_stays_queued_and_retries_after_twenty_ticks() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let target = Pos { x: 40, y: 40, z: 2 };
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        assert!(world.set_tile(
+            Pos {
+                x: target.x + dx,
+                y: target.y + dy,
+                z: target.z,
+            },
+            Tile::Solid(Material::Stone),
+        ));
+    }
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+
+    while world.jobs().first().is_none_or(|job| job.retry_after == 0) {
+        assert!(world.tick() < 100, "unreachable job was never attempted");
+        world.step();
+    }
+    let released_at = world.tick();
+    assert_eq!(world.jobs()[0].retry_after, released_at + 20);
+    assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+
+    while world.tick() < 200 {
+        world.step();
+        assert_eq!(world.jobs().len(), 1);
+        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+    }
+    assert_eq!(world.tile(target), Some(Tile::Solid(Material::Stone)));
+    assert!(world.items().is_empty());
+}
+
+#[test]
+fn cancelling_a_claimed_dig_releases_the_dwarf_without_touching_the_tile() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let worker = world.dwarves()[2].1;
+    let target = Pos {
+        x: if worker.x + 1 < world.dims().x as i32 {
+            worker.x + 1
+        } else {
+            worker.x - 1
+        },
+        ..worker
+    };
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    let holder = loop {
+        assert!(world.tick() < 100, "reachable job was never claimed");
+        world.step();
+        if let Some((id, _)) = world.claims().into_iter().find(|(_, job)| job.is_some()) {
+            break id;
+        }
+    };
+
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(target, target),
+    });
+
+    assert!(world.designations().is_empty());
+    assert!(world.jobs().is_empty());
+    assert_eq!(
+        world.claims().into_iter().find(|(id, _)| *id == holder),
+        Some((holder, None))
+    );
+    assert_eq!(
+        world
+            .dwarves()
+            .into_iter()
+            .find(|(id, _, _)| *id == holder)
+            .map(|(_, _, state)| state),
+        Some(JobState::Idle)
+    );
+    assert_eq!(world.tile(target), Some(Tile::Solid(Material::Stone)));
+    assert!(world.items().is_empty());
+}
+
+#[test]
 fn stockpile_keeps_exactly_the_standable_tiles() {
     let mut world = World::generate(42, Dims::DEFAULT);
     let first = Pos {

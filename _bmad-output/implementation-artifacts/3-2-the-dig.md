@@ -200,16 +200,16 @@ so that the mountain yields stone at my command — through workers, not a remot
         to `Empty` and puts a stone at the target with a fresh id; a channel turns the tile below
         into a `Ramp` of the same material; the dug tile appears in that tick's `drain_dirty`.
 
-- [ ] **`sim-core`: settle, retry and cancel** (AC: 10, 11)
-  - [ ] `settle` between `execute_jobs` and `wander`: ascending `Id`, if `!is_standable(pos)` and
+- [x] **`sim-core`: settle, retry and cancel** (AC: 10, 11)
+  - [x] `settle` between `execute_jobs` and `wander`: ascending `Id`, if `!is_standable(pos)` and
         `is_standable(pos.z - 1)` then move down one and clear `Path`. One level per tick, no loop —
         a deeper shaft settles over successive ticks and that is deliberate.
-  - [ ] Release path: clear `CurrentJob`, drop `Path`/`WorkProgress`, set `retry_after = tick +
+  - [x] Release path: clear `CurrentJob`, drop `Path`/`WorkProgress`, set `retry_after = tick +
         RETRY_COOLDOWN`. **Without the cooldown this livelocks**: eligibility is computed from
         `created_tick`, which does not change, so the same dwarf re-claims and re-runs A* every tick.
-  - [ ] `CancelDesignation` in `apply_command` also removes jobs whose target is in the rect and
+  - [x] `CancelDesignation` in `apply_command` also removes jobs whose target is in the rect and
         clears the `CurrentJob` of any dwarf holding one. `RemoveStockpile` still touches zones only.
-  - [ ] Tests: a dwarf standing on a dug tile is one z lower the same tick; a walled-off target's job
+  - [x] Tests: a dwarf standing on a dug tile is one z lower the same tick; a walled-off target's job
         is still present after 200 ticks and no dwarf is permanently stuck on it; cancelling while
         claimed leaves the job gone, the dwarf `Idle` and the tile unchanged.
 
@@ -541,6 +541,8 @@ task, imperative messages. Review-gated: no push, no PR.
   `left: Some([Pos { x: 0, y: 1, z: 1 }, ... Pos { x: 223, y: 223, z: 1 }])`, `right: None`.
 - `WORK_TICKS` sabotage (`5 -> 6`):
   `execute_jobs_walks_then_digs_for_exactly_five_work_ticks` failed with `left: Work`, `right: Idle`.
+- `RETRY_COOLDOWN` sabotage (`20 -> 21`):
+  `unreachable_job_stays_queued_and_retries_after_twenty_ticks` failed with `left: 28`, `right: 27`.
 
 ### Completion Notes List
 
