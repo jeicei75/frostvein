@@ -565,7 +565,7 @@ task, imperative messages. Review-gated: no push, no PR.
 - Chose `WorkProgress` as a dwarf ECS component rather than a job field. It is persisted through
   `SavedDwarf.work_progress`; `Path` remains transient and is deterministically recomputed after load.
 - Added headless, daemon, protocol, renderer, and binary-capture coverage. The final mutation file has
-  59 cases and printed `All mutations killed.` (zero survivors).
+  62 cases and printed `All mutations killed.` (zero survivors).
 - Ran `cargo clean -p sim-core -p protocol -p simd -p tui`, then `scripts/gate.sh`; it printed
   `GATE GREEN` with fmt, clippy, tests, dependency-edge, and metrics-ledger checks all `ok`.
 - Manual live check joined the real `simd` and `tui` binaries. The capture checks printed 122 rows
@@ -575,6 +575,11 @@ task, imperative messages. Review-gated: no push, no PR.
 - `codex review --base main` ran and raised five legitimate findings: lost work progress, movement
   before settle, an overestimating ramp heuristic, global item-id reuse, and inconsistent job tables.
   All five were fixed and mutation-covered. It raised no self-referential-test or unbounded-I/O issue.
+- A second `codex review --base main` raised two legitimate P2 findings: an already-channelled ramp
+  could leave a permanently retrying job, and persisted claims were not checked against the job table.
+  Both were fixed with RED-first regressions and three more killed mutations. Its internal gate replay
+  could not bind loopback sockets in the nested review sandbox; the authoritative gate outside that
+  sandbox remained green, so no production code or tests were weakened for the environmental limit.
 - Deliberately did not add hauling, carrying, occupancy filtering, item gravity, path caching,
   priorities, new wire messages, or any deferred-work item outside this story's assigned AD-8 entries.
 
@@ -602,4 +607,4 @@ task, imperative messages. Review-gated: no push, no PR.
 | Date | Change |
 | --- | --- |
 | 2026-08-06 | Story created |
-| 2026-08-06 | Implemented and verified Story 3.2 end to end; moved to review |
+| 2026-08-06 | Implemented and verified Story 3.2 end to end; closed review findings and moved to review |
