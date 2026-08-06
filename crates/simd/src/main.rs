@@ -292,6 +292,8 @@ fn load_world() -> Option<sim_core::World> {
                 );
             }
         }
+        let mut seen_job_ids = BTreeSet::new();
+        let mut seen_job_targets = BTreeSet::new();
         for job in &save.jobs {
             if !in_bounds(job.target) {
                 bail!(
@@ -304,6 +306,26 @@ fn load_world() -> Option<sim_core::World> {
                     save.dims.z
                 );
             }
+            if !seen_job_ids.insert(job.id) {
+                bail!("save reuses job id {}", job.id.0);
+            }
+            if !seen_job_targets.insert(job.target) {
+                bail!(
+                    "save reuses job target {},{},{}",
+                    job.target.x,
+                    job.target.y,
+                    job.target.z
+                );
+            }
+        }
+        if let Some(id) = seen_job_ids.last()
+            && id.0 >= save.next_job_id
+        {
+            bail!(
+                "save next_job_id {} does not exceed job id {}",
+                save.next_job_id,
+                id.0
+            );
         }
         for (id, pos) in &save.items {
             if !in_bounds(*pos) {
@@ -360,6 +382,19 @@ fn load_world() -> Option<sim_core::World> {
                     save.dims.z
                 );
             }
+        }
+        for (id, _) in &save.items {
+            if !seen_ids.insert(*id) {
+                bail!("save reuses entity id {id}");
+            }
+        }
+        if let Some(id) = seen_ids.last()
+            && *id >= save.next_id
+        {
+            bail!(
+                "save next_id {} does not exceed entity id {id}",
+                save.next_id
+            );
         }
         Ok(sim_core::World::from_save(save))
     })();

@@ -363,7 +363,10 @@ fn astar_neighbours(terrain: &Terrain, from: Pos) -> Vec<Pos> {
 fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
     goals
         .iter()
-        .map(|goal| from.x.abs_diff(goal.x) + from.y.abs_diff(goal.y) + from.z.abs_diff(goal.z))
+        .map(|goal| {
+            let horizontal = from.x.abs_diff(goal.x) + from.y.abs_diff(goal.y);
+            horizontal.max(from.z.abs_diff(goal.z))
+        })
         .min()
         .unwrap_or(0)
 }
@@ -450,6 +453,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             continue;
         };
         let pos = *ecs.get::<Pos>(entity).expect("every dwarf has a position");
+        if !ecs.resource::<Terrain>().is_standable(pos) {
+            continue;
+        }
         let work_positions = {
             let terrain = ecs.resource::<Terrain>();
             match job.kind {
@@ -740,6 +746,10 @@ impl World {
                     home: wander.home,
                     cooldown: wander.cooldown,
                     current_job: current_job.0.map(|job| job.0),
+                    work_progress: entity
+                        .get::<WorkProgress>()
+                        .map(|progress| progress.0)
+                        .unwrap_or(0),
                 })
             })
             .collect();
@@ -803,17 +813,27 @@ impl World {
             zones.into_iter().collect(),
         );
         for dwarf in dwarves {
-            world.ecs.spawn((
-                Dwarf,
-                Id(dwarf.id),
-                dwarf.pos,
-                dwarf.state,
-                Wander {
-                    home: dwarf.home,
-                    cooldown: dwarf.cooldown,
-                },
-                CurrentJob(dwarf.current_job.map(JobId)),
-            ));
+            let current_job = dwarf.current_job.map(JobId);
+            let entity = world
+                .ecs
+                .spawn((
+                    Dwarf,
+                    Id(dwarf.id),
+                    dwarf.pos,
+                    dwarf.state,
+                    Wander {
+                        home: dwarf.home,
+                        cooldown: dwarf.cooldown,
+                    },
+                    CurrentJob(current_job),
+                ))
+                .id();
+            if current_job.is_some() {
+                world
+                    .ecs
+                    .entity_mut(entity)
+                    .insert(WorkProgress(dwarf.work_progress));
+            }
         }
         for (id, pos) in items {
             world.ecs.spawn((Item, Id(id), pos));
@@ -1431,6 +1451,59 @@ mod tests {
     }
 
     #[test]
+    fn astar_prefers_the_shorter_ramp_route_over_a_flat_detour() {
+        let dims = Dims { x: 4, y: 3, z: 5 };
+        let mut terrain = Terrain {
+            dims,
+            tiles: vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize],
+            dirty: BTreeSet::new(),
+        };
+        let heights = [
+            ((0, 0), 3),
+            ((0, 1), 3),
+            ((0, 2), 3),
+            ((1, 0), 3),
+            ((1, 1), 1),
+            ((1, 2), 2),
+            ((2, 0), 3),
+            ((2, 1), 2),
+            ((2, 2), 1),
+            ((3, 0), 2),
+            ((3, 1), 1),
+            ((3, 2), 3),
+        ];
+        let ramps = BTreeSet::from([
+            (0, 0),
+            (0, 2),
+            (1, 0),
+            (1, 2),
+            (2, 0),
+            (2, 1),
+            (2, 2),
+            (3, 0),
+            (3, 1),
+            (3, 2),
+        ]);
+        for ((x, y), z) in heights {
+            terrain.tiles[super::worldgen::index(dims, x, y, z - 1)] = if ramps.contains(&(x, y)) {
+                Tile::Ramp(Material::Stone)
+            } else {
+                Tile::Solid(Material::Stone)
+            };
+        }
+        let goal = Pos { x: 2, y: 0, z: 3 };
+
+        assert_eq!(
+            super::astar(&terrain, Pos { x: 1, y: 2, z: 2 }, &BTreeSet::from([goal]),),
+            Some(vec![
+                Pos { x: 2, y: 2, z: 1 },
+                Pos { x: 2, y: 1, z: 2 },
+                goal,
+            ])
+        );
+    }
+
+    #[test]
     fn astar_returns_none_for_a_walled_off_goal() {
         let mut terrain = flat_terrain(3, 1);
         let wall = Pos { x: 1, y: 0, z: 1 };
@@ -1629,6 +1702,83 @@ mod tests {
 
         assert_eq!(world.dwarves()[0].1, below);
         assert!(!world.ecs.entity(entity).contains::<super::Path>());
+    }
+
+    #[test]
+    fn claimed_dwarf_settles_before_moving_from_newly_unsupported_ground() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let worker = Pos { x: 10, y: 10, z: 1 };
+        let dug_floor = Pos { x: 11, y: 10, z: 1 };
+        let victim = Pos { x: 11, y: 10, z: 2 };
+        let escape = Pos { x: 11, y: 11, z: 2 };
+        let second_target = Pos { x: 12, y: 10, z: 2 };
+        for (pos, tile) in [
+            (Pos { z: 0, ..worker }, Tile::Solid(Material::Stone)),
+            (worker, Tile::Empty),
+            (Pos { z: 0, ..dug_floor }, Tile::Solid(Material::Stone)),
+            (dug_floor, Tile::Solid(Material::Stone)),
+            (victim, Tile::Empty),
+            (Pos { z: 1, ..escape }, Tile::Solid(Material::Stone)),
+            (escape, Tile::Empty),
+            (second_target, Tile::Solid(Material::Stone)),
+        ] {
+            assert!(world.set_tile(pos, tile));
+        }
+        let worker_entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("worker exists")
+            .id();
+        let victim_entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(1)))
+            .expect("victim exists")
+            .id();
+        *world.ecs.get_mut::<Pos>(worker_entity).unwrap() = worker;
+        *world.ecs.get_mut::<Pos>(victim_entity).unwrap() = victim;
+        let first_job = Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target: dug_floor,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        let second_job = Job {
+            id: JobId(1),
+            kind: JobKind::Dig,
+            target: second_target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(first_job));
+        assert!(world.ecs.resource_mut::<Jobs>().insert(second_job));
+        world
+            .ecs
+            .get_mut::<super::CurrentJob>(worker_entity)
+            .unwrap()
+            .0 = Some(first_job.id);
+        world
+            .ecs
+            .get_mut::<super::CurrentJob>(victim_entity)
+            .unwrap()
+            .0 = Some(second_job.id);
+        world
+            .ecs
+            .entity_mut(worker_entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(4)));
+        world
+            .ecs
+            .entity_mut(victim_entity)
+            .insert((super::Path(vec![escape]), super::WorkProgress(0)));
+
+        super::execute_jobs(&mut world.ecs);
+        super::settle(&mut world.ecs);
+
+        assert_eq!(*world.ecs.get::<Pos>(victim_entity).unwrap(), dug_floor);
+        assert!(!world.ecs.entity(victim_entity).contains::<super::Path>());
+        assert_eq!(world.claims()[1].1, Some(JobId(1)));
     }
 
     #[test]

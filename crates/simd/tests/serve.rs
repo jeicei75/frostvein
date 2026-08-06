@@ -203,6 +203,27 @@ fn read_save_state(path: &Path) -> sim_core::SaveState {
     serde_json::from_slice(&bytes).expect("saved file must decode as SaveState")
 }
 
+fn assert_save_is_rejected_without_stopping_ticks(state: sim_core::SaveState, expected: &str) {
+    let daemon = Daemon::spawn();
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode invalid save fixture"),
+    )
+    .expect("write invalid save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(log.contains(expected), "unexpected invalid-save log: {log}");
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
 fn read_delta_with_speed(
     reader: &mut BufReader<TcpStream>,
     expected: protocol::Speed,
@@ -563,6 +584,94 @@ fn out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking() {
     let first = read_delta(&mut reader).tick;
     let second = read_delta(&mut reader).tick;
     assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn duplicate_item_entity_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state
+        .items
+        .push((state.dwarves[0].id, state.dwarves[0].pos));
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses entity id 0");
+}
+
+#[test]
+fn item_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.items.push((state.next_id, state.dwarves[0].pos));
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save next_id 5 does not exceed entity id 5",
+    );
+}
+
+#[test]
+fn duplicate_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs = vec![
+        sim_core::Job {
+            id: sim_core::JobId(0),
+            kind: sim_core::JobKind::Dig,
+            target: sim_core::Pos { x: 20, y: 20, z: 8 },
+            created_tick: 0,
+            retry_after: 0,
+        },
+        sim_core::Job {
+            id: sim_core::JobId(0),
+            kind: sim_core::JobKind::Channel,
+            target: sim_core::Pos { x: 21, y: 20, z: 8 },
+            created_tick: 0,
+            retry_after: 0,
+        },
+    ];
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses job id 0");
+}
+
+#[test]
+fn duplicate_job_target_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    let target = sim_core::Pos { x: 20, y: 20, z: 8 };
+    state.jobs = vec![
+        sim_core::Job {
+            id: sim_core::JobId(0),
+            kind: sim_core::JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        },
+        sim_core::Job {
+            id: sim_core::JobId(1),
+            kind: sim_core::JobKind::Channel,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        },
+    ];
+    state.next_job_id = 2;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses job target 20,20,8");
+}
+
+#[test]
+fn job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs = vec![sim_core::Job {
+        id: sim_core::JobId(1),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: 20, y: 20, z: 8 },
+        created_tick: 0,
+        retry_after: 0,
+    }];
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save next_job_id 1 does not exceed job id 1",
+    );
 }
 
 #[test]

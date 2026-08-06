@@ -1,5 +1,6 @@
 use sim_core::{
-    DesignationKind, Dims, Job, JobId, JobKind, Material, Pos, Rect, SimCommand, Tile, World,
+    DesignationKind, Dims, Job, JobId, JobKind, JobState, Material, Pos, Rect, SimCommand, Tile,
+    World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -119,6 +120,7 @@ fn save_round_trip_preserves_items_and_current_job() {
     }];
     save.next_job_id = 8;
     save.dwarves[0].current_job = Some(7);
+    save.dwarves[0].work_progress = 3;
 
     let round_trip = World::from_save(save).to_save();
 
@@ -131,6 +133,46 @@ fn save_round_trip_preserves_items_and_current_job() {
     assert_eq!(round_trip.jobs[0].retry_after, 29);
     assert_eq!(round_trip.next_job_id, 8);
     assert_eq!(round_trip.dwarves[0].current_job, Some(7));
+    assert_eq!(round_trip.dwarves[0].work_progress, 3);
+}
+
+#[test]
+fn save_load_preserves_in_progress_work() {
+    let mut control = World::generate(42, Dims::DEFAULT);
+    let worker = control.dwarves()[2].1;
+    let target = Pos {
+        x: worker.x + 1,
+        ..worker
+    };
+    assert!(control.set_tile(target, Tile::Solid(Material::Stone)));
+    control.drain_dirty();
+    control.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: Rect {
+            min: target,
+            max: target,
+        },
+    });
+    while !control
+        .dwarves()
+        .iter()
+        .any(|(_, _, state)| *state == JobState::Work)
+    {
+        assert!(control.tick() < 100, "adjacent dig never reached work");
+        control.step();
+    }
+    control.step();
+
+    let mut loaded = World::from_save(control.to_save());
+    for _ in 0..6 {
+        control.step();
+        loaded.step();
+        assert_eq!(loaded.dwarves(), control.dwarves());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.tile(target), control.tile(target));
+    }
 }
 
 #[test]

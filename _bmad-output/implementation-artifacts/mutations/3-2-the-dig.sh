@@ -73,9 +73,9 @@ PY
 mutation "from_save discards current_job" sim-core save_round_trip_preserves_items_and_current_job <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                CurrentJob(dwarf.current_job.map(JobId)),\n'
+old = '            let current_job = dwarf.current_job.map(JobId);\n'
 assert old in s
-p.write_text(s.replace(old, '                CurrentJob(None),\n'))
+p.write_text(s.replace(old, '            let current_job = None::<JobId>;\n'))
 PY
 
 mutation "bridge drops items from delta" simd completed_dig_streams_dirty_tile_and_item_in_the_same_delta <<'PY'
@@ -141,8 +141,7 @@ PY
 mutation "load accepts an out-of-bounds job" simd out_of_bounds_job_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''        for job in &save.jobs {
-            if !in_bounds(job.target) {
+old = '''            if !in_bounds(job.target) {
                 bail!(
                     "save job target {},{},{} is outside dims {}x{}x{}",
                     job.target.x,
@@ -153,7 +152,6 @@ old = '''        for job in &save.jobs {
                     save.dims.z
                 );
             }
-        }
 '''
 assert old in s
 p.write_text(s.replace(old, ''))
@@ -577,6 +575,118 @@ import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''        if current_job.0.is_some() {
             continue;
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "to_save drops work progress" sim-core save_load_preserves_in_progress_work <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''                    work_progress: entity
+                        .get::<WorkProgress>()
+                        .map(|progress| progress.0)
+                        .unwrap_or(0),
+'''
+assert old in s
+p.write_text(s.replace(old, '                    work_progress: 0,\n'))
+PY
+
+mutation "from_save drops work progress" sim-core save_load_preserves_in_progress_work <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    .insert(WorkProgress(dwarf.work_progress));\n'
+assert old in s
+p.write_text(s.replace(old, '                    .insert(WorkProgress(0));\n'))
+PY
+
+mutation "A-star ramp heuristic overestimates" sim-core astar_prefers_the_shorter_ramp_route_over_a_flat_detour <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            horizontal.max(from.z.abs_diff(goal.z))\n'
+assert old in s
+p.write_text(s.replace(old, '            horizontal + from.z.abs_diff(goal.z)\n'))
+PY
+
+mutation "claimed dwarf moves before settling" sim-core claimed_dwarf_settles_before_moving_from_newly_unsupported_ground <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''        if !ecs.resource::<Terrain>().is_standable(pos) {
+            continue;
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts duplicate item entity ids" simd duplicate_item_entity_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        for (id, _) in &save.items {
+            if !seen_ids.insert(*id) {
+                bail!("save reuses entity id {id}");
+            }
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts item id at next_id" simd item_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        if let Some(id) = seen_ids.last()
+            && *id >= save.next_id
+        {
+            bail!(
+                "save next_id {} does not exceed entity id {id}",
+                save.next_id
+            );
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts duplicate job ids" simd duplicate_job_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''            if !seen_job_ids.insert(job.id) {
+                bail!("save reuses job id {}", job.id.0);
+            }
+'''
+assert old in s
+p.write_text(s.replace(old, '            seen_job_ids.insert(job.id);\n'))
+PY
+
+mutation "load accepts duplicate job targets" simd duplicate_job_target_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''            if !seen_job_targets.insert(job.target) {
+                bail!(
+                    "save reuses job target {},{},{}",
+                    job.target.x,
+                    job.target.y,
+                    job.target.z
+                );
+            }
+'''
+assert old in s
+p.write_text(s.replace(old, '            seen_job_targets.insert(job.target);\n'))
+PY
+
+mutation "load accepts job id at next_job_id" simd job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        if let Some(id) = seen_job_ids.last()
+            && id.0 >= save.next_job_id
+        {
+            bail!(
+                "save next_job_id {} does not exceed job id {}",
+                save.next_job_id,
+                id.0
+            );
         }
 '''
 assert old in s
