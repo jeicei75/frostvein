@@ -213,15 +213,15 @@ so that the mountain yields stone at my command — through workers, not a remot
         is still present after 200 ticks and no dwarf is permanently stuck on it; cancelling while
         claimed leaves the job gone, the dwarf `Idle` and the tile unchanged.
 
-- [ ] **`protocol` + `simd`: items on the wire** (AC: 12)
-  - [ ] Add `Item` and the `items` field to `Snapshot` and `Delta`. Do not touch `Entity` — keeping
+- [x] **`protocol` + `simd`: items on the wire** (AC: 12)
+  - [x] Add `Item` and the `items` field to `Snapshot` and `Delta`. Do not touch `Entity` — keeping
         it unchanged is why every existing pinned dwarf literal stays valid.
-  - [ ] Extend `WIRE`, `DELTA_WIRE` and `every_material_and_tile_variant_has_a_pinned_wire_name`
+  - [x] Extend `WIRE`, `DELTA_WIRE` and `every_material_and_tile_variant_has_a_pinned_wire_name`
         with the new shape. Literals, not round-trips.
-  - [ ] `bridge.rs`: `World::items()` mapped in `snapshot()` and `delta()` alongside zones. Rewrite
+  - [x] `bridge.rs`: `World::items()` mapped in `snapshot()` and `delta()` alongside zones. Rewrite
         the amplification `// NOTE:` at `bridge.rs:74-80` — it now names the `MAX_DESIGNATIONS`
         bound instead of pointing forward to this story.
-  - [ ] Live-daemon test in `crates/simd/tests/serve.rs` extending the existing `Daemon` harness: a
+  - [x] Live-daemon test in `crates/simd/tests/serve.rs` extending the existing `Daemon` harness: a
         designate over a solid tile, then read deltas until one carries a non-empty `tiles` and a
         non-empty `items` — the AD-8 dirty path proven end to end for the first time.
 
@@ -543,6 +543,10 @@ task, imperative messages. Review-gated: no push, no PR.
   `execute_jobs_walks_then_digs_for_exactly_five_work_ticks` failed with `left: Work`, `right: Idle`.
 - `RETRY_COOLDOWN` sabotage (`20 -> 21`):
   `unreachable_job_stays_queued_and_retries_after_twenty_ticks` failed with `left: 28`, `right: 27`.
+- `Item.id` wire sabotage (`id -> item_id`): `decodes_the_documented_wire_format` failed with
+  `Error("missing field `item_id`", line: 8, column: 46)`.
+- `Snapshot.items` wire sabotage (`items -> objects`): `decodes_the_documented_wire_format` failed
+  with `Error("missing field `objects`", line: 11, column: 5)`.
 
 ### Completion Notes List
 

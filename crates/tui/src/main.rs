@@ -509,14 +509,14 @@ mod tests {
     const SNAPSHOT_LINE: &str = concat!(
         r#"{"type":"snapshot","dims":{"x":2,"y":1,"z":1},"#,
         r#""tiles":["empty",{"solid":"ice"}],"entities":[{"id":7,"kind":"dwarf","pos":[0,0,0],"state":"idle"}],"#,
-        r#""designations":[],"zones":[],"speed":"normal","tick":9}"#,
+        r#""designations":[],"zones":[],"items":[],"speed":"normal","tick":9}"#,
         "\n"
     );
 
     const DELTA_LINE: &str = concat!(
         r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,0,0],"tile":{"solid":"stone"}}],"#,
         r#""entities":[{"id":8,"kind":"dwarf","pos":[1,0,0],"state":"walk"}],"#,
-        r#""designations":[],"zones":[],"speed":"fast"}"#,
+        r#""designations":[],"zones":[],"items":[],"speed":"fast"}"#,
         "\n"
     );
 
@@ -605,6 +605,7 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            items: Vec::new(),
             speed: Speed::Fast,
         };
 
@@ -641,7 +642,7 @@ mod tests {
         const SHORT: &str = concat!(
             r#"{"type":"snapshot","dims":{"x":4,"y":4,"z":4},"#,
             r#""tiles":["empty",{"solid":"ice"}],"entities":[],"#,
-            r#""designations":[],"zones":[],"speed":"normal","tick":0}"#,
+            r#""designations":[],"zones":[],"items":[],"speed":"normal","tick":0}"#,
             "\n"
         );
         let mut reader = Cursor::new(SHORT.as_bytes());

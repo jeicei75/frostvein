@@ -476,6 +476,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
         }

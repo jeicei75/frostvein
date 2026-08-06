@@ -39,6 +39,14 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
             .into_iter()
             .map(|pos| protocol::Zone { pos: pos_out(pos) })
             .collect(),
+        items: world
+            .items()
+            .into_iter()
+            .map(|(id, pos)| protocol::Item {
+                id: id.0,
+                pos: pos_out(pos),
+            })
+            .collect(),
         speed,
         tick: world.tick(),
     }
@@ -71,13 +79,8 @@ pub fn delta(world: &mut sim_core::World, speed: protocol::Speed) -> protocol::D
                 state: job_state(state),
             })
             .collect(),
-        // NOTE: AD-8 full-resends every mark in every delta, so wire volume scales with total
-        // designations, not with what changed. Measured 2026-08-05 at story 3.1's review: one
-        // designate command clipping to the whole world (524,288 marks) takes a delta from 378
-        // bytes to 16,761,209 and holds 34.7 MB/s indefinitely, to every client, with no recovery
-        // short of a daemon restart. Deliberately NOT fixed here — every fix changes AD-8's
-        // full-resend contract or invents a rule about how much may be designated, and both belong
-        // with 3.2's job system, which revisits designation handling anyway. See deferred-work.md.
+        // NOTE: AD-8 full-resends every mark in every delta, but sim-core bounds the
+        // authoritative set at MAX_DESIGNATIONS, so amplification is finite.
         designations: world
             .designations()
             .into_iter()
@@ -90,6 +93,14 @@ pub fn delta(world: &mut sim_core::World, speed: protocol::Speed) -> protocol::D
             .zones()
             .into_iter()
             .map(|pos| protocol::Zone { pos: pos_out(pos) })
+            .collect(),
+        items: world
+            .items()
+            .into_iter()
+            .map(|(id, pos)| protocol::Item {
+                id: id.0,
+                pos: pos_out(pos),
+            })
             .collect(),
         speed,
     }

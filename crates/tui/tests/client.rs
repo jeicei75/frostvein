@@ -28,6 +28,7 @@ fn snapshot_line() -> String {
         entities: Vec::new(),
         designations: Vec::new(),
         zones: Vec::new(),
+        items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
     };
@@ -49,6 +50,7 @@ fn delta_line_with_speed(tick: u64, speed: protocol::Speed) -> String {
         entities: Vec::new(),
         designations: Vec::new(),
         zones: Vec::new(),
+        items: Vec::new(),
         speed,
     };
     format!(
@@ -449,6 +451,7 @@ fn mark_snapshot_line() -> String {
         entities: Vec::new(),
         designations: Vec::new(),
         zones: Vec::new(),
+        items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
     };
@@ -503,6 +506,7 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 entities: Vec::new(),
                 designations: Vec::new(),
                 zones: Vec::new(),
+                items: Vec::new(),
                 speed: protocol::Speed::Normal,
             };
             prelude.push_str(&format!("{}\n", serde_json::to_string(&delta).unwrap()));
@@ -550,6 +554,7 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 entities: Vec::new(),
                 designations: designations.clone(),
                 zones: Vec::new(),
+                items: Vec::new(),
                 speed: protocol::Speed::Normal,
             };
             stream
@@ -642,6 +647,7 @@ fn moving_snapshot_line(x: i32) -> String {
         entities: vec![dwarf_at(x)],
         designations: Vec::new(),
         zones: Vec::new(),
+        items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
     };
@@ -659,6 +665,7 @@ fn moving_delta_line(tick: u64, x: i32) -> String {
         entities: vec![dwarf_at(x)],
         designations: Vec::new(),
         zones: Vec::new(),
+        items: Vec::new(),
         speed: protocol::Speed::Normal,
     };
     format!(
@@ -805,6 +812,7 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            items: Vec::new(),
             speed: protocol::Speed::Normal,
         };
         stream

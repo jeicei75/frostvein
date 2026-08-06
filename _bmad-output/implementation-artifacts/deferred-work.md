@@ -99,6 +99,8 @@ names where it came from and what should trigger revisiting it.
   **SCHEDULED into Story 3.2 (2026-08-06).** Its dig and channel jobs are the first production
   callers of `set_tile`, and AC12's task carries the live-daemon test that finally reads a delta with
   a non-empty `tiles` off a real socket. Until that test is green, this item stays open.
+  **CLOSED by Story 3.2 (2026-08-06):** dig/channel now call `set_tile`, and the bounded live-daemon
+  test observes a single real delta carrying both non-empty `tiles` and non-empty `items`.
 
 ## Deferred from: code review of story 2-2-dwarves-wander-the-frost (2026-08-03)
 
@@ -232,3 +234,5 @@ names where it came from and what should trigger revisiting it.
   most of the work independently: a `Dig` mark is recorded only on `Solid` tiles and a `Channel` mark
   only where `is_standable` holds, so a surface rect that used to mark every tile now marks almost
   none. The cap is what bounds the remaining case, a rect through solid rock.
+  **CLOSED by Story 3.2 (2026-08-06):** `apply_command` enforces the deterministic 4,096-mark cap
+  and the kind-specific diggability filter described above.
