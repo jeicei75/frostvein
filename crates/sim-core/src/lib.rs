@@ -126,12 +126,10 @@ struct CurrentJob(Option<JobId>);
 struct Jobs {
     by_id: BTreeMap<JobId, Job>,
     targets: BTreeSet<Pos>,
-    #[allow(dead_code)] // Used when designation-derived jobs are added in the next task group.
     next_id: u32,
 }
 
 impl Jobs {
-    #[allow(dead_code)] // Used when designation-derived jobs are added later in this story.
     fn insert(&mut self, job: Job) -> bool {
         if self.by_id.contains_key(&job.id) || self.targets.contains(&job.target) {
             return false;
@@ -155,6 +153,28 @@ impl Jobs {
 
     fn iter(&self) -> impl Iterator<Item = &Job> {
         self.by_id.values()
+    }
+}
+
+fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMut<Jobs>) {
+    for (&target, &designation) in &designations.0 {
+        if jobs.targets.contains(&target) {
+            continue;
+        }
+        let id = JobId(jobs.next_id);
+        jobs.next_id += 1;
+        let kind = match designation {
+            DesignationKind::Dig => JobKind::Dig,
+            DesignationKind::Channel => JobKind::Channel,
+        };
+        let inserted = jobs.insert(Job {
+            id,
+            kind,
+            target,
+            created_tick: tick.0,
+            retry_after: 0,
+        });
+        debug_assert!(inserted, "target and id were checked before insertion");
     }
 }
 
@@ -332,7 +352,7 @@ fn assemble(
         dirty: BTreeSet::new(),
     });
     let mut schedule = Schedule::default();
-    schedule.add_systems((advance_tick, wander).chain());
+    schedule.add_systems((advance_tick, create_jobs, wander).chain());
     World {
         ecs,
         schedule,

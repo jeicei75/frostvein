@@ -150,12 +150,12 @@ so that the mountain yields stone at my command — through workers, not a remot
         with no workable tile changes nothing; the 4097th distinct position is refused while
         re-designating an existing one still flips its kind.
 
-- [ ] **`sim-core`: designations become jobs** (AC: 4)
-  - [ ] `create_jobs` system: for each designation in ascending `Pos` with no entry in the target
+- [x] **`sim-core`: designations become jobs** (AC: 4)
+  - [x] `create_jobs` system: for each designation in ascending `Pos` with no entry in the target
         index, insert a `Job` with `created_tick = tick`, `retry_after = 0`.
-  - [ ] Add to the chained schedule — order is fixed and load-bearing (AC4, AC5, AC10):
+  - [x] Add to the chained schedule — order is fixed and load-bearing (AC4, AC5, AC10):
         `(advance_tick, create_jobs, claim_jobs, execute_jobs, settle, wander).chain()`.
-  - [ ] Tests: N designated tiles yield N jobs with ascending ids; a second `step()` adds none; a
+  - [x] Tests: N designated tiles yield N jobs with ascending ids; a second `step()` adds none; a
         paused daemon creates no jobs (assert via the schedule not running, i.e. `apply_command` then
         no `step()` leaves `jobs()` empty).
 

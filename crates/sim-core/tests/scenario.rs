@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use sim_core::{DesignationKind, Dims, JobState, Material, Pos, Rect, SimCommand, Tile, World};
+use sim_core::{
+    DesignationKind, Dims, JobId, JobKind, JobState, Material, Pos, Rect, SimCommand, Tile, World,
+};
 
 fn rect(min: Pos, max: Pos) -> Rect {
     Rect { min, max }
@@ -428,6 +430,39 @@ fn designation_budget_refuses_new_tiles_but_updates_existing_tiles_after_them() 
             .designations()
             .contains(&(existing_after, DesignationKind::Channel))
     );
+}
+
+#[test]
+fn designated_tiles_become_one_job_each_only_when_the_schedule_runs() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let first = Pos { x: 30, y: 20, z: 8 };
+    let second = Pos { x: 31, y: 20, z: 8 };
+    assert!(world.set_tile(first, Tile::Solid(Material::Stone)));
+    assert!(world.set_tile(second, Tile::Solid(Material::Soil)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(first, second),
+    });
+
+    assert_eq!(world.designations().len(), 2);
+    assert!(
+        world.jobs().is_empty(),
+        "paused intake must not derive jobs"
+    );
+
+    world.step();
+    let jobs = world.jobs();
+    assert_eq!(jobs.len(), 2);
+    assert_eq!(jobs[0].id, JobId(0));
+    assert_eq!(jobs[0].kind, JobKind::Dig);
+    assert_eq!(jobs[0].target, first);
+    assert_eq!(jobs[0].created_tick, 1);
+    assert_eq!(jobs[0].retry_after, 0);
+    assert_eq!(jobs[1].id, JobId(1));
+    assert_eq!(jobs[1].target, second);
+
+    world.step();
+    assert_eq!(world.jobs(), jobs);
 }
 
 #[test]
