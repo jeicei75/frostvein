@@ -505,6 +505,67 @@ fn out_of_bounds_designation_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn out_of_bounds_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: -1, y: 0, z: 0 },
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds job fixture"),
+    )
+    .expect("write out-of-bounds job fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save job target -1,0,0 is outside dims 128x128x32"),
+        "unexpected out-of-bounds job log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.items.push((5, sim_core::Pos { x: 0, y: -1, z: 0 }));
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds item fixture"),
+    )
+    .expect("write out-of-bounds item fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save item 5 position 0,-1,0 is outside dims 128x128x32"),
+        "unexpected out-of-bounds item log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
 fn out_of_bounds_zone_save_is_logged_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();

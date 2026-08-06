@@ -292,6 +292,32 @@ fn load_world() -> Option<sim_core::World> {
                 );
             }
         }
+        for job in &save.jobs {
+            if !in_bounds(job.target) {
+                bail!(
+                    "save job target {},{},{} is outside dims {}x{}x{}",
+                    job.target.x,
+                    job.target.y,
+                    job.target.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+        for (id, pos) in &save.items {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save item {id} position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
         for pos in &save.zones {
             if !in_bounds(*pos) {
                 bail!(

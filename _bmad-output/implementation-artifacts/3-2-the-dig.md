@@ -225,13 +225,13 @@ so that the mountain yields stone at my command — through workers, not a remot
         designate over a solid tile, then read deltas until one carries a non-empty `tiles` and a
         non-empty `items` — the AD-8 dirty path proven end to end for the first time.
 
-- [ ] **`sim-core`: jobs, claims and items survive save/load** (AC: 13)
-  - [ ] `SaveState` gains `jobs: Vec<Job>`, `next_job_id: u32`, `items: Vec<(u32, Pos)>`;
+- [x] **`sim-core`: jobs, claims and items survive save/load** (AC: 13)
+  - [x] `SaveState` gains `jobs: Vec<Job>`, `next_job_id: u32`, `items: Vec<(u32, Pos)>`;
         `SavedDwarf` gains `current_job: Option<u32>`. `Job`, `JobKind` and `JobId` derive
         `Serialize`/`Deserialize` like the other saved sim types.
-  - [ ] Extend `crates/sim-core/tests/save_load.rs`'s gate test per AC13. Do not add a save-format
+  - [x] Extend `crates/sim-core/tests/save_load.rs`'s gate test per AC13. Do not add a save-format
         literal test — format stability is a project non-goal.
-  - [ ] `load_world` in `simd` already validates persisted mark positions; extend the same
+  - [x] `load_world` in `simd` already validates persisted mark positions; extend the same
         `in_bounds` check to job targets and item positions, matching the pattern at
         `crates/simd/src/main.rs:274-307`.
 

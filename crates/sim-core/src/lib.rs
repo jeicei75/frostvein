@@ -650,6 +650,7 @@ fn assemble(
     tick: u64,
     wander_rng: ChaCha8Rng,
     ids: IdAllocator,
+    jobs: Jobs,
     designations: BTreeMap<Pos, DesignationKind>,
     zones: BTreeSet<Pos>,
 ) -> World {
@@ -660,7 +661,7 @@ fn assemble(
     ecs.insert_resource(ids);
     ecs.insert_resource(Designations(designations));
     ecs.insert_resource(Zones(zones));
-    ecs.insert_resource(Jobs::default());
+    ecs.insert_resource(jobs);
     ecs.insert_resource(Terrain {
         dims,
         tiles,
@@ -711,6 +712,7 @@ impl World {
             0,
             ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER),
             IdAllocator::default(),
+            Jobs::default(),
             BTreeMap::new(),
             BTreeSet::new(),
         );
@@ -730,16 +732,25 @@ impl World {
             // that spawns dwarves a third way must keep the set intact.
             .filter_map(|entity| {
                 let wander = entity.get::<Wander>()?;
+                let current_job = entity.get::<CurrentJob>()?;
                 Some(SavedDwarf {
                     id: entity.get::<Id>()?.0,
                     pos: *entity.get::<Pos>()?,
                     state: *entity.get::<JobState>()?,
                     home: wander.home,
                     cooldown: wander.cooldown,
+                    current_job: current_job.0.map(|job| job.0),
                 })
             })
             .collect();
         dwarves.sort_by_key(|dwarf| dwarf.id);
+        let jobs = self.jobs();
+        let job_resource = self.ecs.resource::<Jobs>();
+        let items = self
+            .items()
+            .into_iter()
+            .map(|(id, pos)| (id.0, pos))
+            .collect();
 
         SaveState {
             seed: self.seed(),
@@ -751,6 +762,9 @@ impl World {
             dwarves,
             designations: self.designations(),
             zones: self.zones(),
+            jobs,
+            next_job_id: job_resource.next_id,
+            items,
         }
     }
 
@@ -765,7 +779,18 @@ impl World {
             dwarves,
             designations,
             zones,
+            jobs,
+            next_job_id,
+            items,
         } = save;
+        let mut job_resource = Jobs {
+            next_id: next_job_id,
+            ..Jobs::default()
+        };
+        for job in jobs {
+            let inserted = job_resource.insert(job);
+            debug_assert!(inserted, "validated saves have unique job ids and targets");
+        }
         let mut world = assemble(
             seed,
             dims,
@@ -773,6 +798,7 @@ impl World {
             tick,
             wander_rng,
             IdAllocator { next: next_id },
+            job_resource,
             designations.into_iter().collect(),
             zones.into_iter().collect(),
         );
@@ -786,8 +812,11 @@ impl World {
                     home: dwarf.home,
                     cooldown: dwarf.cooldown,
                 },
-                CurrentJob(None),
+                CurrentJob(dwarf.current_job.map(JobId)),
             ));
+        }
+        for (id, pos) in items {
+            world.ecs.spawn((Item, Id(id), pos));
         }
         world
     }
