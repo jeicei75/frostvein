@@ -565,7 +565,7 @@ task, imperative messages. Review-gated: no push, no PR.
 - Chose `WorkProgress` as a dwarf ECS component rather than a job field. It is persisted through
   `SavedDwarf.work_progress`; `Path` remains transient and is deterministically recomputed after load.
 - Added headless, daemon, protocol, renderer, and binary-capture coverage. The final mutation file has
-  62 cases and printed `All mutations killed.` (zero survivors).
+  66 cases and printed `All mutations killed.` (zero survivors).
 - Ran `cargo clean -p sim-core -p protocol -p simd -p tui`, then `scripts/gate.sh`; it printed
   `GATE GREEN` with fmt, clippy, tests, dependency-edge, and metrics-ledger checks all `ok`.
 - Manual live check joined the real `simd` and `tui` binaries. The capture checks printed 122 rows
@@ -580,6 +580,13 @@ task, imperative messages. Review-gated: no push, no PR.
   Both were fixed with RED-first regressions and three more killed mutations. Its internal gate replay
   could not bind loopback sockets in the nested review sandbox; the authoritative gate outside that
   sandbox remained green, so no production code or tests were weakened for the environmental limit.
+- A third `codex review --base main` raised four legitimate P2 findings: unreachable lower-id dwarves
+  could starve reachable workers, deep shafts could leave dwarves hovering, work completed after only
+  four visible `Work` ticks, and corrupt saves could overflow `WorkProgress`. All four were reproduced,
+  fixed, and mutation-covered. The reachability check remains inside the single claiming system and
+  preserves ascending job/dwarf order. The full daemon suite exposed pre-existing timing assertions
+  competing across dozens of daemon processes; a test-only standard-library mutex now serializes that
+  harness without weakening any assertion, and the authoritative gate is green.
 - Deliberately did not add hauling, carrying, occupancy filtering, item gravity, path caching,
   priorities, new wire messages, or any deferred-work item outside this story's assigned AD-8 entries.
 
