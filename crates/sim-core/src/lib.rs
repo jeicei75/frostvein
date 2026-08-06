@@ -23,6 +23,7 @@ const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
+const MAX_DESIGNATIONS: usize = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Material {
@@ -531,9 +532,24 @@ impl World {
         };
         match command {
             SimCommand::Designate { kind, .. } => {
+                let workable: Vec<_> = {
+                    let terrain = self.ecs.resource::<Terrain>();
+                    positions()
+                        .filter(|pos| match kind {
+                            DesignationKind::Dig => {
+                                matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
+                            }
+                            DesignationKind::Channel => terrain.is_standable(*pos),
+                        })
+                        .collect()
+                };
                 let mut designations = self.ecs.resource_mut::<Designations>();
-                // NOTE: Story 3.2 owns diggability; every in-bounds tile is marked here.
-                for pos in positions() {
+                for pos in workable {
+                    if designations.0.len() >= MAX_DESIGNATIONS
+                        && !designations.0.contains_key(&pos)
+                    {
+                        continue;
+                    }
                     designations.0.insert(pos, kind);
                 }
             }

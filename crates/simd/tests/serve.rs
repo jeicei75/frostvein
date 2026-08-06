@@ -815,7 +815,8 @@ fn designation_is_applied_while_tick_is_paused() {
     let stream = daemon.connect();
     let mut writer = stream.try_clone().expect("client write half must clone");
     let mut reader = BufReader::new(stream);
-    let _ = read_snapshot(&mut reader);
+    let snapshot = read_snapshot(&mut reader);
+    let designation_pos = snapshot.entities[0].pos;
 
     send_speed(&mut writer, protocol::Speed::Paused);
     let first_paused = read_delta_with_speed(&mut reader, protocol::Speed::Paused);
@@ -823,12 +824,12 @@ fn designation_is_applied_while_tick_is_paused() {
     assert_eq!(second_paused.tick, first_paused.tick);
     let frozen_tick = first_paused.tick;
 
-    send_literal(
-        &mut writer,
-        b"{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{\"min\":[7,8,9],\"max\":[7,8,9]}}\n",
+    let command = format!(
+        "{{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{{\"min\":{designation_pos:?},\"max\":{designation_pos:?}}}}}\n"
     );
+    send_literal(&mut writer, command.as_bytes());
     let expected = [protocol::Designation {
-        pos: [7, 8, 9],
+        pos: designation_pos,
         kind: protocol::DesignationKind::Channel,
     }];
     let mut carrying = None;

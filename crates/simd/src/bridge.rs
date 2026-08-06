@@ -436,8 +436,8 @@ mod tests {
     #[test]
     fn snapshot_and_delta_carry_the_worlds_real_marks() {
         let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
-        let designation_pos = sim_core::Pos { x: 3, y: 2, z: 1 };
         let zone_pos = world.dwarves()[0].1;
+        let designation_pos = zone_pos;
         world.apply_command(sim_core::SimCommand::Designate {
             kind: sim_core::DesignationKind::Channel,
             rect: sim_core::Rect {
@@ -452,7 +452,7 @@ mod tests {
             },
         });
         let expected_designations = vec![protocol::Designation {
-            pos: [3, 2, 1],
+            pos: [designation_pos.x, designation_pos.y, designation_pos.z],
             kind: protocol::DesignationKind::Channel,
         }];
         let expected_zones = vec![protocol::Zone {

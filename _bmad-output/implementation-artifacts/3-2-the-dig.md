@@ -136,17 +136,17 @@ so that the mountain yields stone at my command — through workers, not a remot
         `dwarves` automatically — but re-read its `filter_map` NOTE [lib.rs:324-327] before adding a
         second entity kind, and give items their own save list rather than widening that one.
 
-- [ ] **`sim-core`: diggability and the mark budget** (AC: 2, 3)
-  - [ ] Filter in the existing `Designate` arm of `apply_command`; delete the `// NOTE: Story 3.2
+- [x] **`sim-core`: diggability and the mark budget** (AC: 2, 3)
+  - [x] Filter in the existing `Designate` arm of `apply_command`; delete the `// NOTE: Story 3.2
         owns diggability` at `lib.rs:473` that this closes.
-  - [ ] `MAX_DESIGNATIONS` check in the same loop: `break` once the map is full and the position is
+  - [x] `MAX_DESIGNATIONS` check in the same loop: `break` once the map is full and the position is
         not already present, so an over-large rect marks a deterministic prefix.
-  - [ ] **Existing tests will go red and that is expected, not a regression.** `save_load.rs`
+  - [x] **Existing tests will go red and that is expected, not a regression.** `save_load.rs`
         designates `Channel` at z=2 (solid rock — nothing is standable there) and several
         `scenario.rs` cases designate arbitrary positions. Repoint each to terrain the kind can
         actually work, using the existing `make_standable` helper [scenario.rs:9-20] and a
         `set_tile(.., Solid)` for dig targets. Do not weaken the filter to keep old tests green.
-  - [ ] Tests: dig marks only solid tiles of a mixed rect; channel marks only standable ones; a rect
+  - [x] Tests: dig marks only solid tiles of a mixed rect; channel marks only standable ones; a rect
         with no workable tile changes nothing; the 4097th distinct position is refused while
         re-designating an existing one still flips its kind.
 
@@ -531,6 +531,10 @@ task, imperative messages. Review-gated: no push, no PR.
 ### Agent Model Used
 
 ### Debug Log References
+
+- `MAX_DESIGNATIONS` sabotage (`4096 -> 4097`):
+  `designation_budget_refuses_new_tiles_but_updates_existing_tiles_after_them` failed at
+  `scenario.rs:405` with `assertion failed: !world.designations().iter().any(|(pos, _)| *pos == extra)`.
 
 ### Completion Notes List
 

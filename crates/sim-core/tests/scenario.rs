@@ -189,6 +189,11 @@ fn dirty_tiles_are_sorted_and_out_of_bounds_writes_do_nothing() {
 #[test]
 fn reversed_rect_designates_the_normalized_inclusive_tiles() {
     let mut reversed = World::generate(42, Dims::DEFAULT);
+    for y in 2..=3 {
+        for x in 1..=2 {
+            assert!(reversed.set_tile(Pos { x, y, z: 4 }, Tile::Solid(Material::Stone)));
+        }
+    }
     reversed.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(Pos { x: 2, y: 3, z: 4 }, Pos { x: 1, y: 2, z: 4 }),
@@ -203,6 +208,11 @@ fn reversed_rect_designates_the_normalized_inclusive_tiles() {
     assert_eq!(reversed.designations(), expected);
 
     let mut normalized = World::generate(42, Dims::DEFAULT);
+    for y in 2..=3 {
+        for x in 1..=2 {
+            assert!(normalized.set_tile(Pos { x, y, z: 4 }, Tile::Solid(Material::Stone)));
+        }
+    }
     normalized.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(Pos { x: 1, y: 2, z: 4 }, Pos { x: 2, y: 3, z: 4 }),
@@ -213,23 +223,18 @@ fn reversed_rect_designates_the_normalized_inclusive_tiles() {
 #[test]
 fn designation_rect_clips_to_world_bounds() {
     let mut world = World::generate(42, Dims::DEFAULT);
+    make_standable(&mut world, Pos { x: 0, y: 0, z: 1 });
+    make_standable(&mut world, Pos { x: 1, y: 0, z: 1 });
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
-        rect: rect(
-            Pos {
-                x: -1,
-                y: -1,
-                z: -1,
-            },
-            Pos { x: 1, y: 0, z: 0 },
-        ),
+        rect: rect(Pos { x: -1, y: -1, z: 1 }, Pos { x: 1, y: 0, z: 1 }),
     });
 
     assert_eq!(
         world.designations(),
         vec![
-            (Pos { x: 0, y: 0, z: 0 }, DesignationKind::Channel),
-            (Pos { x: 1, y: 0, z: 0 }, DesignationKind::Channel),
+            (Pos { x: 0, y: 0, z: 1 }, DesignationKind::Channel),
+            (Pos { x: 1, y: 0, z: 1 }, DesignationKind::Channel),
         ]
     );
 }
@@ -275,10 +280,12 @@ fn fully_out_of_bounds_rect_is_a_no_op() {
 fn designate_overwrites_the_existing_kind() {
     let mut world = World::generate(42, Dims::DEFAULT);
     let pos = Pos { x: 7, y: 8, z: 9 };
+    assert!(world.set_tile(pos, Tile::Solid(Material::Stone)));
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(pos, pos),
     });
+    make_standable(&mut world, pos);
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
         rect: rect(pos, pos),
@@ -295,11 +302,12 @@ fn each_eraser_leaves_the_other_mark_kind_untouched() {
         y: 10,
         z: 10,
     };
-    make_standable(&mut world, pos);
+    assert!(world.set_tile(pos, Tile::Solid(Material::Stone)));
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(pos, pos),
     });
+    make_standable(&mut world, pos);
     world.apply_command(SimCommand::PlaceStockpile {
         rect: rect(pos, pos),
     });
@@ -310,6 +318,7 @@ fn each_eraser_leaves_the_other_mark_kind_untouched() {
     assert!(world.designations().is_empty());
     assert_eq!(world.zones(), vec![pos]);
 
+    make_standable(&mut world, pos);
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
         rect: rect(pos, pos),
@@ -319,6 +328,106 @@ fn each_eraser_leaves_the_other_mark_kind_untouched() {
     });
     assert_eq!(world.designations(), vec![(pos, DesignationKind::Channel)]);
     assert!(world.zones().is_empty());
+}
+
+#[test]
+fn designations_keep_only_tiles_workable_by_their_kind() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let solid = Pos { x: 20, y: 20, z: 8 };
+    let standable = Pos { x: 21, y: 20, z: 8 };
+    let unsupported = Pos { x: 22, y: 20, z: 8 };
+    assert!(world.set_tile(solid, Tile::Solid(Material::Stone)));
+    make_standable(&mut world, standable);
+    assert!(world.set_tile(unsupported, Tile::Empty));
+    assert!(world.set_tile(
+        Pos {
+            z: unsupported.z - 1,
+            ..unsupported
+        },
+        Tile::Empty,
+    ));
+
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(solid, unsupported),
+    });
+    assert_eq!(world.designations(), vec![(solid, DesignationKind::Dig)]);
+
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(solid, unsupported),
+    });
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(solid, unsupported),
+    });
+    assert_eq!(
+        world.designations(),
+        vec![(standable, DesignationKind::Channel)]
+    );
+
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(solid, unsupported),
+    });
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(unsupported, unsupported),
+    });
+    assert!(world.designations().is_empty());
+}
+
+#[test]
+fn designation_budget_refuses_new_tiles_but_updates_existing_tiles_after_them() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    for y in 0..32 {
+        for x in 0..128 {
+            assert!(world.set_tile(Pos { x, y, z: 8 }, Tile::Solid(Material::Stone)));
+        }
+    }
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(
+            Pos { x: 0, y: 0, z: 8 },
+            Pos {
+                x: 127,
+                y: 31,
+                z: 8,
+            },
+        ),
+    });
+    assert_eq!(world.designations().len(), 4096);
+
+    let extra = Pos { x: 0, y: 32, z: 8 };
+    assert!(world.set_tile(extra, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(extra, extra),
+    });
+    assert!(!world.designations().iter().any(|(pos, _)| *pos == extra));
+
+    let refused = Pos { x: 1, y: 0, z: 8 };
+    let existing_after = Pos { x: 2, y: 0, z: 8 };
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(refused, refused),
+    });
+    make_standable(&mut world, extra);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(extra, extra),
+    });
+    make_standable(&mut world, refused);
+    make_standable(&mut world, existing_after);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(refused, existing_after),
+    });
+
+    assert_eq!(world.designations().len(), 4096);
+    assert!(!world.designations().iter().any(|(pos, _)| *pos == refused));
+    assert!(
+        world
+            .designations()
+            .contains(&(existing_after, DesignationKind::Channel))
+    );
 }
 
 #[test]
@@ -386,10 +495,11 @@ fn applying_a_command_does_not_advance_the_world() {
 fn same_seed_and_commands_remain_deterministic() {
     let mut first = World::generate(42, Dims::DEFAULT);
     let mut second = World::generate(42, Dims::DEFAULT);
+    let channel_pos = first.dwarves()[0].1;
     let commands = [
         SimCommand::Designate {
             kind: DesignationKind::Channel,
-            rect: rect(Pos { x: 3, y: 4, z: 5 }, Pos { x: 1, y: 2, z: 5 }),
+            rect: rect(channel_pos, channel_pos),
         },
         SimCommand::PlaceStockpile {
             rect: rect(
