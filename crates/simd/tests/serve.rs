@@ -536,6 +536,28 @@ fn out_of_bounds_designation_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn over_budget_designation_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.designations = (0..=4096)
+        .map(|index| {
+            (
+                sim_core::Pos {
+                    x: index % 128,
+                    y: index / 128,
+                    z: 0,
+                },
+                sim_core::DesignationKind::Dig,
+            )
+        })
+        .collect();
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save has 4097 designations; limit is 4096",
+    );
+}
+
+#[test]
 fn out_of_bounds_job_save_is_logged_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
@@ -618,6 +640,14 @@ fn item_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn exhausted_next_entity_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.next_id = u32::MAX;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save next_id 4294967295 is exhausted");
+}
+
+#[test]
 fn duplicate_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
     state.jobs = vec![
@@ -681,6 +711,17 @@ fn job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
     assert_save_is_rejected_without_stopping_ticks(
         state,
         "save next_job_id 1 does not exceed job id 1",
+    );
+}
+
+#[test]
+fn exhausted_next_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.next_job_id = u32::MAX;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save next_job_id 4294967295 is exhausted",
     );
 }
 

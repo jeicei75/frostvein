@@ -556,6 +556,15 @@ task, imperative messages. Review-gated: no push, no PR.
 - Instrument RED: `dig_replay_capture_transitions_from_designation_to_stone_at_one_cell` initially
   failed with `early frames contain no designation glyph`; moving the post-commit cursor off the
   target (`d,enter,enter,l`) exposed the intended target-cell transition.
+- Falling-claimant RED: `claimed_dwarf_settles_before_moving_from_newly_unsupported_ground` failed
+  with `left: Idle`, `right: Walk` before the unsupported claimed branch set its visible state.
+- Loaded-designation-cap RED: `over_budget_designation_save_is_logged_and_the_daemon_keeps_ticking`
+  failed with `unexpected invalid-save log: client delta queue full; disconnecting client`, proving
+  the 4,097-mark save had been accepted instead of rejected.
+- Exhausted-allocator RED: both `exhausted_next_job_id_save_is_logged_and_the_daemon_keeps_ticking`
+  and `exhausted_next_entity_id_save_is_logged_and_the_daemon_keeps_ticking` failed with
+  `unexpected invalid-save log: client delta queue full; disconnecting client` before the load
+  validator rejected `u32::MAX` cursors.
 
 ### Completion Notes List
 
@@ -565,9 +574,10 @@ task, imperative messages. Review-gated: no push, no PR.
 - Chose `WorkProgress` as a dwarf ECS component rather than a job field. It is persisted through
   `SavedDwarf.work_progress`; `Path` remains transient and is deterministically recomputed after load.
 - Added headless, daemon, protocol, renderer, and binary-capture coverage. The final mutation file has
-  66 cases and printed `All mutations killed.` (zero survivors).
-- Ran `cargo clean -p sim-core -p protocol -p simd -p tui`, then `scripts/gate.sh`; it printed
-  `GATE GREEN` with fmt, clippy, tests, dependency-edge, and metrics-ledger checks all `ok`.
+  70 cases and printed `All mutations killed.` (zero survivors).
+- After the final review fixes, ran `cargo clean -p sim-core -p protocol -p simd -p tui`, then
+  `scripts/gate.sh`; it printed `GATE GREEN` with fmt, clippy, tests, dependency-edge, and
+  metrics-ledger checks all `ok`.
 - Manual live check joined the real `simd` and `tui` binaries. The capture checks printed 122 rows
   containing `×` and 73 containing `*`; the final daemon snapshot had no designation and item id 5
   at the dug target. The first attempt also exposed an off-screen framebuffer-index overflow, which
@@ -587,6 +597,11 @@ task, imperative messages. Review-gated: no push, no PR.
   preserves ascending job/dwarf order. The full daemon suite exposed pre-existing timing assertions
   competing across dozens of daemon processes; a test-only standard-library mutex now serializes that
   harness without weakening any assertion, and the authoritative gate is green.
+- A fourth `codex review --base main` raised three legitimate P2 findings: a falling claimed dwarf
+  could report `Idle`, loaded saves could bypass `MAX_DESIGNATIONS`, and exhausted entity/job id
+  allocators could be restored. All three were reproduced with RED-first regressions, fixed, and
+  mutation-covered. Its nested gate again could not bind loopback sockets; the authoritative gate
+  outside that sandbox is green.
 - Deliberately did not add hauling, carrying, occupancy filtering, item gravity, path caching,
   priorities, new wire messages, or any deferred-work item outside this story's assigned AD-8 entries.
 
@@ -594,7 +609,7 @@ task, imperative messages. Review-gated: no push, no PR.
 
 - `_bmad-output/implementation-artifacts/3-2-the-dig.md` — updated story execution record
 - `_bmad-output/implementation-artifacts/deferred-work.md` — closed the assigned AD-8 entries
-- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` — added 59 mutation cases
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` — added 63 mutation cases
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` — advanced story status
 - `crates/protocol/src/lib.rs` — added stone item snapshot/delta wire shapes and literals
 - `crates/sim-core/src/lib.rs` — added jobs, claims, A*, execution, settle, items, and readers
@@ -615,3 +630,4 @@ task, imperative messages. Review-gated: no push, no PR.
 | --- | --- |
 | 2026-08-06 | Story created |
 | 2026-08-06 | Implemented and verified Story 3.2 end to end; closed review findings and moved to review |
+| 2026-08-06 | Closed final claimant-state and load-boundary review findings with 70 killed mutations |

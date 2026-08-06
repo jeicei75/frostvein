@@ -279,6 +279,13 @@ fn load_world() -> Option<sim_core::World> {
                 && (pos.y as u32) < save.dims.y
                 && (pos.z as u32) < save.dims.z
         };
+        if save.designations.len() > sim_core::MAX_DESIGNATIONS {
+            bail!(
+                "save has {} designations; limit is {}",
+                save.designations.len(),
+                sim_core::MAX_DESIGNATIONS
+            );
+        }
         for (pos, _) in &save.designations {
             if !in_bounds(*pos) {
                 bail!(
@@ -317,6 +324,9 @@ fn load_world() -> Option<sim_core::World> {
                     job.target.z
                 );
             }
+        }
+        if save.next_job_id == u32::MAX {
+            bail!("save next_job_id {} is exhausted", save.next_job_id);
         }
         if let Some(id) = seen_job_ids.last()
             && id.0 >= save.next_job_id
@@ -405,6 +415,9 @@ fn load_world() -> Option<sim_core::World> {
             if !seen_ids.insert(*id) {
                 bail!("save reuses entity id {id}");
             }
+        }
+        if save.next_id == u32::MAX {
+            bail!("save next_id {} is exhausted", save.next_id);
         }
         if let Some(id) = seen_ids.last()
             && *id >= save.next_id

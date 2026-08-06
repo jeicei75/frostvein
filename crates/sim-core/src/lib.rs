@@ -27,7 +27,7 @@ const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
-const MAX_DESIGNATIONS: usize = 4096;
+pub const MAX_DESIGNATIONS: usize = 4096;
 const MAX_ASTAR_NODES: usize = 50_000;
 pub const WORK_TICKS: u32 = 5;
 const RETRY_COOLDOWN: u64 = 20;
@@ -490,6 +490,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         };
         let pos = *ecs.get::<Pos>(entity).expect("every dwarf has a position");
         if !ecs.resource::<Terrain>().is_standable(pos) {
+            *ecs.get_mut::<JobState>(entity)
+                .expect("every dwarf has a job state") = JobState::Walk;
             continue;
         }
         let work_positions = work_positions(ecs.resource::<Terrain>(), job);
@@ -1978,6 +1980,11 @@ mod tests {
         super::settle(&mut world.ecs);
 
         assert_eq!(*world.ecs.get::<Pos>(victim_entity).unwrap(), dug_floor);
+        assert_eq!(
+            *world.ecs.get::<JobState>(victim_entity).unwrap(),
+            JobState::Walk,
+            "a dwarf holding a job is never reported idle while falling"
+        );
         assert!(!world.ecs.entity(victim_entity).contains::<super::Path>());
         assert_eq!(world.claims()[1].1, Some(JobId(1)));
     }

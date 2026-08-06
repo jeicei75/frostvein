@@ -613,6 +613,8 @@ mutation "claimed dwarf moves before settling" sim-core claimed_dwarf_settles_be
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''        if !ecs.resource::<Terrain>().is_standable(pos) {
+            *ecs.get_mut::<JobState>(entity)
+                .expect("every dwarf has a job state") = JobState::Walk;
             continue;
         }
 '''
@@ -771,6 +773,53 @@ old = '''                if dwarf.work_progress > sim_core::WORK_TICKS {
                         sim_core::WORK_TICKS
                     );
                 }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "falling claimant remains idle" sim-core claimed_dwarf_settles_before_moving_from_newly_unsupported_ground <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''            *ecs.get_mut::<JobState>(entity)
+                .expect("every dwarf has a job state") = JobState::Walk;
+'''
+assert old in s
+p.write_text(s.replace(old, '', 1))
+PY
+
+mutation "load accepts designations beyond MAX_DESIGNATIONS" simd over_budget_designation_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        if save.designations.len() > sim_core::MAX_DESIGNATIONS {
+            bail!(
+                "save has {} designations; limit is {}",
+                save.designations.len(),
+                sim_core::MAX_DESIGNATIONS
+            );
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts exhausted next_job_id" simd exhausted_next_job_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        if save.next_job_id == u32::MAX {
+            bail!("save next_job_id {} is exhausted", save.next_job_id);
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts exhausted next_id" simd exhausted_next_entity_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        if save.next_id == u32::MAX {
+            bail!("save next_id {} is exhausted", save.next_id);
+        }
 '''
 assert old in s
 p.write_text(s.replace(old, ''))
