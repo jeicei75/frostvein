@@ -491,6 +491,7 @@ fn apply(snapshot: &mut Snapshot, delta: Delta) {
     snapshot.entities = delta.entities;
     snapshot.designations = delta.designations;
     snapshot.zones = delta.zones;
+    snapshot.items = delta.items;
     snapshot.speed = delta.speed;
     snapshot.tick = delta.tick;
 }
@@ -500,7 +501,7 @@ mod tests {
     use std::{io::Cursor, net::TcpListener};
 
     use protocol::{
-        Delta, Designation, DesignationKind, Dims, Entity, EntityKind, JobState, Material,
+        Delta, Designation, DesignationKind, Dims, Entity, EntityKind, Item, JobState, Material,
         MessageType, Speed, Tile, TileChange, Zone,
     };
 
@@ -590,6 +591,10 @@ mod tests {
             kind: DesignationKind::Dig,
         }];
         snapshot.zones = vec![Zone { pos: [0, 0, 0] }];
+        snapshot.items = vec![Item {
+            id: 7,
+            pos: [0, 0, 0],
+        }];
         let delta = Delta {
             msg_type: MessageType::Delta,
             tick: 10,
@@ -605,7 +610,10 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
-            items: Vec::new(),
+            items: vec![Item {
+                id: 8,
+                pos: [1, 0, 0],
+            }],
             speed: Speed::Fast,
         };
 
@@ -618,6 +626,13 @@ mod tests {
         assert_eq!(snapshot.entities[0].id, 8);
         assert!(snapshot.designations.is_empty());
         assert!(snapshot.zones.is_empty());
+        assert_eq!(
+            snapshot.items,
+            vec![Item {
+                id: 8,
+                pos: [1, 0, 0]
+            }]
+        );
         assert_eq!(snapshot.speed, Speed::Fast);
         assert_eq!(snapshot.tick, 10);
     }

@@ -235,14 +235,14 @@ so that the mountain yields stone at my command — through workers, not a remot
         `in_bounds` check to job targets and item positions, matching the pattern at
         `crates/simd/src/main.rs:274-307`.
 
-- [ ] **`tui`: stone, crowds and the layer order** (AC: 14)
-  - [ ] `palette.rs`: `item_cell()` and `crowd_cell()`, both added to `every_look_is_pinned` and to
+- [x] **`tui`: stone, crowds and the layer order** (AC: 14)
+  - [x] `palette.rs`: `item_cell()` and `crowd_cell()`, both added to `every_look_is_pinned` and to
         its pairwise-distinct and no-collision assertions. Suggested `*` for stone and `⚇` for a
         crowd; exact RGB is yours, the distinctness is not optional.
-  - [ ] `view.rs render`: draw `snapshot.items` after designations and before entities. For the
+  - [x] `view.rs render`: draw `snapshot.items` after designations and before entities. For the
         entity layer, count dwarves per screen cell first, then draw `crowd_cell()` where the count
         exceeds one — do not draw a dwarf and then overwrite it.
-  - [ ] Tests: an item renders on the viewed level only (the same z-guard entities already use
+  - [x] Tests: an item renders on the viewed level only (the same z-guard entities already use
         [view.rs:170-178]); a dwarf standing on a stone shows the dwarf; two dwarves on one cell show
         the crowd glyph and neither `☺`; layer order extended in the existing
         `marker_layers_follow_...` test.
@@ -547,6 +547,10 @@ task, imperative messages. Review-gated: no push, no PR.
   `Error("missing field `item_id`", line: 8, column: 46)`.
 - `Snapshot.items` wire sabotage (`items -> objects`): `decodes_the_documented_wire_format` failed
   with `Error("missing field `objects`", line: 11, column: 5)`.
+- Stone glyph sabotage (`* -> ?`): `every_look_is_pinned` failed with
+  `left: Cell { glyph: '?', fg: (176, 172, 160) }`, `right: Cell { glyph: '*', fg: (176, 172, 160) }`.
+- Crowd glyph sabotage (`⚇ -> ☺`): `every_look_is_pinned` failed with
+  `left: Cell { glyph: '☺', fg: (240, 120, 130) }`, `right: Cell { glyph: '⚇', fg: (240, 120, 130) }`.
 
 ### Completion Notes List
 

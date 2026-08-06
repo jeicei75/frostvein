@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Command, DesignationKind, Dims, EntityKind, Rect, Snapshot, Speed, Tile};
 
 use crate::palette::{
-    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, cursor_cell, designation_cell, dim, entity_cell,
-    pending_rect_cell, tile_cell, zone_cell,
+    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, crowd_cell, cursor_cell, designation_cell, dim,
+    entity_cell, item_cell, pending_rect_cell, tile_cell, zone_cell,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,20 +169,27 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         }
     }
 
-    for entity in &snapshot.entities {
-        if entity.pos[2] != state.z
-            || entity.pos[0] < 0
-            || entity.pos[1] < 0
-            || i64::from(entity.pos[0]) >= i64::from(snapshot.dims.x)
-            || i64::from(entity.pos[1]) >= i64::from(snapshot.dims.y)
-        {
-            continue;
+    for item in &snapshot.items {
+        if let Some(index) = screen_index(item.pos) {
+            framebuffer.cells[index] = item_cell();
         }
-        let sx = i64::from(entity.pos[0]) - state.camera.0 + i64::from(w) / 2;
-        let sy = i64::from(entity.pos[1]) - state.camera.1 + i64::from(map_h) / 2;
-        if sx >= 0 && sx < i64::from(w) && sy >= 0 && sy < i64::from(map_h) {
-            framebuffer.cells[sx as usize + sy as usize * usize::from(w)] =
-                entity_cell(entity.kind, entity.state);
+    }
+
+    let mut dwarf_counts = BTreeMap::new();
+    for entity in &snapshot.entities {
+        if entity.kind == EntityKind::Dwarf
+            && let Some(index) = screen_index(entity.pos)
+        {
+            *dwarf_counts.entry(index).or_insert(0_usize) += 1;
+        }
+    }
+    for entity in &snapshot.entities {
+        if let Some(index) = screen_index(entity.pos) {
+            framebuffer.cells[index] = if dwarf_counts.get(&index).copied().unwrap_or(0) > 1 {
+                crowd_cell()
+            } else {
+                entity_cell(entity.kind, entity.state)
+            };
         }
     }
 
@@ -462,8 +471,8 @@ fn tile_index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
 #[cfg(test)]
 mod tests {
     use protocol::{
-        Command, Designation, DesignationKind, Entity, EntityKind, JobState, Material, MessageType,
-        Speed, Tile, Zone,
+        Command, Designation, DesignationKind, Entity, EntityKind, Item, JobState, Material,
+        MessageType, Speed, Tile, Zone,
     };
 
     use super::*;
@@ -770,6 +779,68 @@ mod tests {
     }
 
     #[test]
+    fn items_draw_only_on_the_viewed_level_and_under_dwarves() {
+        let dims = Dims { x: 5, y: 3, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.items = vec![
+            Item {
+                id: 5,
+                pos: [1, 1, 1],
+            },
+            Item {
+                id: 6,
+                pos: [3, 1, 2],
+            },
+        ];
+        snapshot.entities = vec![Entity {
+            id: 1,
+            kind: EntityKind::Dwarf,
+            pos: [1, 1, 1],
+            state: JobState::Idle,
+        }];
+
+        let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
+
+        assert_eq!(framebuffer.cell(1, 1).glyph, '☺');
+        assert_eq!(framebuffer.cell(3, 1), BLANK);
+        snapshot.entities.clear();
+        let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
+        assert_eq!(framebuffer.cell(1, 1).glyph, '*');
+    }
+
+    #[test]
+    fn two_dwarves_on_one_cell_draw_the_crowd_glyph() {
+        let dims = Dims { x: 3, y: 3, z: 1 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.entities = vec![
+            Entity {
+                id: 1,
+                kind: EntityKind::Dwarf,
+                pos: [1, 1, 0],
+                state: JobState::Idle,
+            },
+            Entity {
+                id: 2,
+                kind: EntityKind::Dwarf,
+                pos: [1, 1, 0],
+                state: JobState::Walk,
+            },
+        ];
+
+        let framebuffer = render(&snapshot, &normal_state((1, 1), 0), 3, 4);
+
+        assert_eq!(framebuffer.cell(1, 1).glyph, '⚇');
+        assert_eq!(
+            framebuffer
+                .cells
+                .iter()
+                .filter(|cell| cell.glyph == '☺')
+                .count(),
+            0
+        );
+    }
+
+    #[test]
     fn marks_draw_only_on_the_viewed_level() {
         let dims = Dims { x: 5, y: 5, z: 2 };
         let mut snapshot = empty_snapshot(dims);
@@ -793,10 +864,10 @@ mod tests {
     }
 
     #[test]
-    fn marker_layers_follow_terrain_zone_designation_entity_pending_cursor_order() {
+    fn marker_layers_follow_terrain_zone_designation_item_entity_pending_cursor_order() {
         let dims = Dims { x: 7, y: 3, z: 1 };
         let mut snapshot = empty_snapshot(dims);
-        for x in 0..=4 {
+        for x in 0..=5 {
             snapshot.tiles[index(dims, x, 1, 0)] = Tile::Solid(Material::Stone);
         }
         snapshot.zones = vec![Zone { pos: [0, 1, 0] }, Zone { pos: [1, 1, 0] }];
@@ -810,24 +881,34 @@ mod tests {
                 kind: DesignationKind::Channel,
             },
         ];
+        snapshot.items = vec![
+            Item {
+                id: 5,
+                pos: [2, 1, 0],
+            },
+            Item {
+                id: 6,
+                pos: [3, 1, 0],
+            },
+        ];
         snapshot.entities = vec![
             Entity {
                 id: 1,
                 kind: EntityKind::Dwarf,
-                pos: [2, 1, 0],
+                pos: [3, 1, 0],
                 state: JobState::Idle,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
-                pos: [3, 1, 0],
+                pos: [4, 1, 0],
                 state: JobState::Idle,
             },
         ];
         let state = ViewState {
             mode: Mode::Dig,
-            cursor: (4, 1),
-            anchor: Some((3, 1)),
+            cursor: (5, 1),
+            anchor: Some((4, 1)),
             ..normal_state((3, 1), 0)
         };
 
@@ -835,9 +916,10 @@ mod tests {
 
         assert_eq!(framebuffer.cell(0, 1).glyph, '≡');
         assert_eq!(framebuffer.cell(1, 1).glyph, '×');
-        assert_eq!(framebuffer.cell(2, 1).glyph, '☺');
-        assert_eq!(framebuffer.cell(3, 1).glyph, 'd');
-        assert_eq!(framebuffer.cell(4, 1).glyph, '+');
+        assert_eq!(framebuffer.cell(2, 1).glyph, '*');
+        assert_eq!(framebuffer.cell(3, 1).glyph, '☺');
+        assert_eq!(framebuffer.cell(4, 1).glyph, 'd');
+        assert_eq!(framebuffer.cell(5, 1).glyph, '+');
     }
 
     #[test]
