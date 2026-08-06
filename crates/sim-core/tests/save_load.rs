@@ -1,6 +1,6 @@
 use sim_core::{
-    DesignationKind, Dims, Job, JobId, JobKind, JobState, Material, Pos, Rect, SimCommand, Tile,
-    World,
+    DesignationKind, Dims, Job, JobId, JobKind, JobState, Material, Pos, Rect, SavedDwarf,
+    SimCommand, Tile, WORK_TICKS, World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -172,6 +172,89 @@ fn save_load_preserves_in_progress_work() {
         assert_eq!(loaded.claims(), control.claims());
         assert_eq!(loaded.items(), control.items());
         assert_eq!(loaded.tile(target), control.tile(target));
+    }
+}
+
+#[test]
+fn save_load_recomputes_every_path_invalidated_by_another_dig() {
+    let dims = Dims { x: 7, y: 3, z: 3 };
+    let index = |pos: Pos| {
+        pos.x as usize
+            + pos.y as usize * dims.x as usize
+            + pos.z as usize * dims.x as usize * dims.y as usize
+    };
+    let mut tiles = vec![Tile::Solid(Material::Stone); (dims.x * dims.y * dims.z) as usize];
+    for x in 0..=5 {
+        tiles[index(Pos { x, y: 1, z: 2 })] = Tile::Empty;
+    }
+    let walking_start = Pos { x: 0, y: 1, z: 2 };
+    let walking_target = Pos { x: 6, y: 1, z: 2 };
+    let digging_start = Pos { x: 3, y: 0, z: 1 };
+    let digging_target = Pos { x: 3, y: 1, z: 1 };
+    tiles[index(digging_start)] = Tile::Empty;
+
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    save.tick = 100;
+    save.dims = dims;
+    save.tiles = tiles;
+    save.next_id = 2;
+    save.dwarves = vec![
+        SavedDwarf {
+            id: 0,
+            pos: walking_start,
+            state: JobState::Walk,
+            home: walking_start,
+            cooldown: 10,
+            current_job: Some(0),
+            work_progress: 0,
+        },
+        SavedDwarf {
+            id: 1,
+            pos: digging_start,
+            state: JobState::Work,
+            home: digging_start,
+            cooldown: 10,
+            current_job: Some(1),
+            work_progress: WORK_TICKS,
+        },
+    ];
+    save.designations = vec![
+        (walking_target, DesignationKind::Dig),
+        (digging_target, DesignationKind::Dig),
+    ];
+    save.zones.clear();
+    save.jobs = vec![
+        Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target: walking_target,
+            created_tick: 0,
+            retry_after: 0,
+        },
+        Job {
+            id: JobId(1),
+            kind: JobKind::Dig,
+            target: digging_target,
+            created_tick: 0,
+            retry_after: 0,
+        },
+    ];
+    save.next_job_id = 2;
+    save.items.clear();
+
+    let mut control = World::from_save(save);
+    control.step();
+    assert_eq!(control.tile(digging_target), Some(Tile::Empty));
+    let mut loaded = World::from_save(control.to_save());
+
+    for _ in 0..5 {
+        control.step();
+        loaded.step();
+        assert_eq!(loaded.dwarves(), control.dwarves());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.tiles(), control.tiles());
     }
 }
 

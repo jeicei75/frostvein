@@ -221,9 +221,13 @@ fn claim_jobs(
         .iter()
         .filter_map(|(_, _, _, current)| current.0)
         .collect();
+    let mut astar_nodes_remaining = MAX_ASTAR_NODES;
 
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
-    for job in jobs_in_order {
+    'jobs: for job in jobs_in_order {
+        if astar_nodes_remaining == 0 {
+            break;
+        }
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
         }
@@ -238,9 +242,15 @@ fn claim_jobs(
                         .saturating_add(reaction_delay(seed.0, **id, job.id))
             {
                 attempted = true;
-                let Some(path) = astar(&terrain, **pos, &goals) else {
-                    continue;
-                };
+                let path =
+                    match astar_with_budget(&terrain, **pos, &goals, &mut astar_nodes_remaining) {
+                        (Some(path), false) => path,
+                        (None, false) => continue,
+                        (None, true) => break 'jobs,
+                        (Some(_), true) => {
+                            unreachable!("a completed search cannot exhaust its budget")
+                        }
+                    };
                 current.0 = Some(job.id);
                 commands
                     .entity(*entity)
@@ -386,24 +396,28 @@ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
         .unwrap_or(0)
 }
 
-fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>> {
+fn astar_with_budget(
+    terrain: &Terrain,
+    from: Pos,
+    goals: &BTreeSet<Pos>,
+    nodes_remaining: &mut usize,
+) -> (Option<Vec<Pos>>, bool) {
     if goals.is_empty() {
-        return None;
+        return (None, false);
     }
     let mut open = BinaryHeap::from([Reverse((astar_heuristic(from, goals), from))]);
     let mut came_from = BTreeMap::new();
     let mut costs = BTreeMap::from([(from, 0_u32)]);
-    let mut expanded = 0;
 
     while let Some(Reverse((queued_f, current))) = open.pop() {
         let current_cost = costs[&current];
         if queued_f != current_cost + astar_heuristic(current, goals) {
             continue;
         }
-        if expanded >= MAX_ASTAR_NODES {
-            return None;
+        if *nodes_remaining == 0 {
+            return (None, true);
         }
-        expanded += 1;
+        *nodes_remaining -= 1;
         if goals.contains(&current) {
             let mut path = Vec::new();
             let mut cursor = current;
@@ -412,7 +426,7 @@ fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>
                 cursor = came_from[&cursor];
             }
             path.reverse();
-            return Some(path);
+            return (Some(path), false);
         }
 
         for neighbour in astar_neighbours(terrain, current) {
@@ -427,7 +441,12 @@ fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>
             }
         }
     }
-    None
+    (None, false)
+}
+
+fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>> {
+    let mut nodes_remaining = MAX_ASTAR_NODES;
+    astar_with_budget(terrain, from, goals, &mut nodes_remaining).0
 }
 
 fn work_positions(terrain: &Terrain, job: Job) -> BTreeSet<Pos> {
@@ -469,6 +488,17 @@ fn retry_claim(ecs: &mut EcsWorld, entity: Entity, job_id: JobId) {
         job.retry_after = retry_after;
     }
     release_claim(ecs, entity);
+}
+
+fn clear_paths(ecs: &mut EcsWorld) {
+    let entities: Vec<_> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Path>())
+        .map(|entity| entity.id())
+        .collect();
+    for entity in entities {
+        ecs.entity_mut(entity).remove::<Path>();
+    }
 }
 
 /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
@@ -559,6 +589,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             changed,
             "job targets were bounds-checked at designation time"
         );
+        clear_paths(ecs);
         let item_id = ecs.resource_mut::<IdAllocator>().allocate();
         ecs.spawn((Item, item_id, job.target));
         ecs.resource_mut::<Jobs>().remove(job.id);
@@ -886,7 +917,11 @@ impl World {
     }
 
     pub fn set_tile(&mut self, p: Pos, tile: Tile) -> bool {
-        self.ecs.resource_mut::<Terrain>().set_tile(p, tile)
+        let changed = self.ecs.resource_mut::<Terrain>().set_tile(p, tile);
+        if changed {
+            clear_paths(&mut self.ecs);
+        }
+        changed
     }
 
     pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
@@ -1485,6 +1520,76 @@ mod tests {
 
         assert_eq!(world.items(), vec![(super::Id(5), target)]);
         assert!(world.jobs().is_empty());
+    }
+
+    #[test]
+    fn claim_jobs_bounds_aggregate_astar_expansions_per_tick() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
+        for y in 0..40 {
+            for x in 0..50 {
+                tiles[super::worldgen::index(dims, x, y, 1)] = Tile::Empty;
+            }
+        }
+        for job in 0..10_u32 {
+            let target = Pos {
+                x: 2 + 2 * job as i32,
+                y: 2,
+                z: 10,
+            };
+            tiles[super::worldgen::index(
+                dims,
+                (target.x + 1) as u32,
+                target.y as u32,
+                target.z as u32,
+            )] = Tile::Empty;
+        }
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+
+        let dwarves: Vec<_> = world
+            .ecs
+            .iter_entities()
+            .filter_map(|entity| Some((*entity.get::<super::Id>()?, entity.id())))
+            .collect();
+        for (id, entity) in dwarves {
+            *world.ecs.get_mut::<Pos>(entity).unwrap() = Pos {
+                x: id.0 as i32,
+                y: 0,
+                z: 1,
+            };
+        }
+        for job in 0..10_u32 {
+            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+                id: JobId(job),
+                kind: JobKind::Dig,
+                target: Pos {
+                    x: 2 + 2 * job as i32,
+                    y: 2,
+                    z: 10,
+                },
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        schedule.run(&mut world.ecs);
+
+        let retried: Vec<_> = world
+            .jobs()
+            .into_iter()
+            .filter(|job| job.retry_after == 120)
+            .map(|job| job.id)
+            .collect();
+        assert_eq!(
+            retried,
+            vec![JobId(0), JobId(1), JobId(2), JobId(3), JobId(4)],
+            "one tick may expand at most MAX_ASTAR_NODES across all failed claim searches"
+        );
+        assert!(world.jobs()[5..].iter().all(|job| job.retry_after == 0));
     }
 
     #[test]

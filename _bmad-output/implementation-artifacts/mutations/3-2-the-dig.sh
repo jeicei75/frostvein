@@ -881,3 +881,35 @@ new = '''            let kind_name = match job.kind {
 assert old in s
 p.write_text(s.replace(old, new))
 PY
+
+mutation "terrain mutation leaves other dwarves' cached paths stale" sim-core save_load_recomputes_every_path_invalidated_by_another_dig <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''        clear_paths(ecs);
+        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+'''
+assert old in s
+p.write_text(s.replace(old, '        let item_id = ecs.resource_mut::<IdAllocator>().allocate();\n'))
+PY
+
+mutation "each claim search gets a fresh node budget" sim-core claim_jobs_bounds_aggregate_astar_expansions_per_tick <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''                let path = match astar_with_budget(
+                    &terrain,
+                    **pos,
+                    &goals,
+                    &mut astar_nodes_remaining,
+                ) {
+'''
+new = '''                let mut per_search_nodes = MAX_ASTAR_NODES;
+                let path = match astar_with_budget(
+                    &terrain,
+                    **pos,
+                    &goals,
+                    &mut per_search_nodes,
+                ) {
+'''
+assert old in s
+p.write_text(s.replace(old, new))
+PY
