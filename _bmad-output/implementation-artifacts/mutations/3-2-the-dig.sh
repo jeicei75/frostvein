@@ -911,3 +911,15 @@ new = '''                let mut per_search_nodes = MAX_ASTAR_NODES;
 assert old in s
 p.write_text(s.replace(old, new))
 PY
+
+mutation "release_claim does not re-home the dwarf" sim-core a_dwarf_that_travelled_to_a_distant_job_still_wanders_afterwards <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''    let released_at = ecs.get::<Pos>(entity).copied();
+    if let (Some(pos), Some(mut wander)) = (released_at, ecs.get_mut::<Wander>(entity)) {
+        wander.home = pos;
+    }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY

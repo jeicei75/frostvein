@@ -477,6 +477,20 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
     if let Some(mut state) = ecs.get_mut::<JobState>(entity) {
         *state = JobState::Idle;
     }
+    // The dwarf now lives where it finished. `wander` only accepts tiles within
+    // WANDER_RADIUS of `home` and A* has no such limit, so without this a dwarf that walked
+    // to a distant job is motionless FOREVER: from 5+ tiles out every neighbour is still
+    // outside the radius, so the candidate set is empty on every future tick. Distance 4 is
+    // the boundary — from there one step inward reaches 3 and it recovers on its own, which
+    // is why only genuinely distant jobs strand a dwarf.
+    //
+    // This is the ONE place that has to do it: every path where a dwarf stops holding a job
+    // funnels here — completion, a no-op completion, a vanished job, a retry, and cancel.
+    // NOTE: a dwarf therefore never returns to its spawn; it settles wherever work took it.
+    let released_at = ecs.get::<Pos>(entity).copied();
+    if let (Some(pos), Some(mut wander)) = (released_at, ecs.get_mut::<Wander>(entity)) {
+        wander.home = pos;
+    }
     let mut entity = ecs.entity_mut(entity);
     entity.remove::<Path>();
     entity.remove::<WorkProgress>();

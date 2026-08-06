@@ -784,3 +784,103 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.zones(), second.zones());
     }
 }
+
+#[test]
+fn a_dwarf_that_travelled_to_a_distant_job_still_wanders_afterwards() {
+    // Wolf found this by playing 3.2: after digging, dwarves stop moving for good.
+    // `wander` only accepts tiles within WANDER_RADIUS of `Wander::home`, which is written
+    // once at spawn. A* has no such limit, so a dwarf will walk any distance to a job — and
+    // once it ends up 5+ away from home EVERY neighbour is still outside the radius, so the
+    // candidate set is empty on every future tick and it never moves again. Distance 4 is the
+    // boundary: from there one step inward reaches 3 and it recovers, which is why this only
+    // shows up on a genuinely distant job.
+    //
+    // The invariant asserted here is the weakest honest one: no dwarf is PERMANENTLY
+    // motionless. It deliberately does not pin where a dwarf ends up, only that it is still
+    // alive to the wander rule.
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let spawns = world.dwarves();
+    let (_, first_home, _) = spawns[0];
+
+    // A solid tile far from spawn that ALSO has a standable face — a tile buried in rock has
+    // no work position, so nobody would ever walk to it and the test would pass vacuously.
+    let standable = |world: &World, pos: Pos| {
+        matches!(world.tile(pos), Some(Tile::Empty))
+            && matches!(
+                world.tile(Pos {
+                    z: pos.z - 1,
+                    ..pos
+                }),
+                Some(Tile::Solid(_) | Tile::Ramp(_))
+            )
+    };
+    let target = (8..40)
+        .flat_map(|d| {
+            [
+                (d, 0),
+                (0, d),
+                (-d, 0),
+                (0, -d),
+                (d, d),
+                (-d, -d),
+                (d, -d),
+                (-d, d),
+            ]
+        })
+        .map(|(dx, dy)| Pos {
+            x: first_home.x + dx,
+            y: first_home.y + dy,
+            z: first_home.z,
+        })
+        .find(|pos| {
+            matches!(world.tile(*pos), Some(Tile::Solid(_)))
+                && [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                    .into_iter()
+                    .any(|(dx, dy)| {
+                        standable(
+                            &world,
+                            Pos {
+                                x: pos.x + dx,
+                                y: pos.y + dy,
+                                z: pos.z,
+                            },
+                        )
+                    })
+        })
+        .expect("seed 42 has a workable rock face within 40 tiles of the first dwarf");
+
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+
+    // Long enough to cover the reaction delay (5..=30), a cross-map walk and WORK_TICKS.
+    for _ in 0..900 {
+        world.step();
+    }
+
+    assert!(
+        !world.items().is_empty(),
+        "the distant dig never completed, so nobody travelled and this test proves nothing"
+    );
+
+    let before = world.dwarves();
+    let mut moved: Vec<bool> = vec![false; before.len()];
+    for _ in 0..200 {
+        world.step();
+        for (index, (id, pos, _)) in world.dwarves().into_iter().enumerate() {
+            debug_assert_eq!(id, before[index].0, "dwarf order is stable");
+            if pos != before[index].1 {
+                moved[index] = true;
+            }
+        }
+    }
+
+    for (index, (id, pos, _)) in before.into_iter().enumerate() {
+        assert!(
+            moved[index],
+            "dwarf {id:?} has not moved from {pos:?} in 200 ticks — it is stranded outside its \
+             wander radius and can never move again"
+        );
+    }
+}
