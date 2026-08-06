@@ -159,14 +159,14 @@ so that the mountain yields stone at my command — through workers, not a remot
         paused daemon creates no jobs (assert via the schedule not running, i.e. `apply_command` then
         no `step()` leaves `jobs()` empty).
 
-- [ ] **`sim-core`: claiming and the reaction delay** (AC: 5, 6)
-  - [ ] `reaction_delay` as a named, hand-written FNV-1a — offset basis `0xcbf29ce484222325`, prime
+- [x] **`sim-core`: claiming and the reaction delay** (AC: 5, 6)
+  - [x] `reaction_delay` as a named, hand-written FNV-1a — offset basis `0xcbf29ce484222325`, prime
         `0x100000001b3`, folding the LE bytes of seed, dwarf id and job id in that order, then
         `5 + (hash % 26)`. One function, no dependency, no RNG stream.
-  - [ ] `claim_jobs`: build the claimed-`JobId` set from dwarves ascending `Id` (five entries), then
+  - [x] `claim_jobs`: build the claimed-`JobId` set from dwarves ascending `Id` (five entries), then
         walk `jobs.iter()` ascending `JobId`; for each unclaimed, eligible job assign the first
         eligible dwarf in ascending `Id`.
-  - [ ] Tests: FIFO — with two jobs and one free dwarf the lower `JobId` is taken; a dwarf holding a
+  - [x] Tests: FIFO — with two jobs and one free dwarf the lower `JobId` is taken; a dwarf holding a
         job is skipped; a job is not claimed before `created_tick + delay`; the pinned delay table
         for seed 42 × dwarves 0..=4 × jobs 0..=2.
 
@@ -535,6 +535,8 @@ task, imperative messages. Review-gated: no push, no PR.
 - `MAX_DESIGNATIONS` sabotage (`4096 -> 4097`):
   `designation_budget_refuses_new_tiles_but_updates_existing_tiles_after_them` failed at
   `scenario.rs:405` with `assertion failed: !world.designations().iter().any(|(pos, _)| *pos == extra)`.
+- `reaction_delay` sabotage (`5 + hash % 26 -> 6 + hash % 26`):
+  `reaction_delay_table_is_pinned` failed for seed 42, dwarf 0, job 0 with `left: 29`, `right: 28`.
 
 ### Completion Notes List
 

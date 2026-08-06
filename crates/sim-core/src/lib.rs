@@ -178,6 +178,56 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
     }
 }
 
+/// FR5 / AD-7: fixed named FNV-1a, independent of RNG streams and process state.
+fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in seed.to_le_bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    for byte in dwarf.0.to_le_bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    for byte in job.0.to_le_bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    5 + hash % 26
+}
+
+fn claim_jobs(
+    seed: Res<Seed>,
+    tick: Res<Tick>,
+    jobs: Res<Jobs>,
+    mut dwarves: Query<(&Id, &mut CurrentJob)>,
+) {
+    let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+    dwarves.sort_by_key(|(id, _)| **id);
+    let mut claimed: BTreeSet<_> = dwarves
+        .iter()
+        .filter_map(|(_, current)| current.0)
+        .collect();
+
+    for job in jobs.iter() {
+        if claimed.contains(&job.id) || tick.0 < job.retry_after {
+            continue;
+        }
+        for (id, current) in &mut dwarves {
+            if current.0.is_none()
+                && tick.0
+                    >= job
+                        .created_tick
+                        .saturating_add(reaction_delay(seed.0, **id, job.id))
+            {
+                current.0 = Some(job.id);
+                claimed.insert(job.id);
+                break;
+            }
+        }
+    }
+}
+
 #[derive(Component)]
 struct Wander {
     home: Pos,
@@ -189,6 +239,9 @@ struct WanderRng(ChaCha8Rng);
 
 #[derive(Resource)]
 struct Tick(pub u64);
+
+#[derive(Resource)]
+struct Seed(u64);
 
 #[derive(Resource, Default)]
 struct Designations(BTreeMap<Pos, DesignationKind>);
@@ -323,7 +376,6 @@ impl IdAllocator {
 pub struct World {
     ecs: EcsWorld,
     schedule: Schedule,
-    seed: u64,
 }
 
 // The one assembly site intentionally receives every deterministic state component so generate
@@ -341,6 +393,7 @@ fn assemble(
 ) -> World {
     let mut ecs = EcsWorld::new();
     ecs.insert_resource(Tick(tick));
+    ecs.insert_resource(Seed(seed));
     ecs.insert_resource(WanderRng(wander_rng));
     ecs.insert_resource(ids);
     ecs.insert_resource(Designations(designations));
@@ -352,12 +405,8 @@ fn assemble(
         dirty: BTreeSet::new(),
     });
     let mut schedule = Schedule::default();
-    schedule.add_systems((advance_tick, create_jobs, wander).chain());
-    World {
-        ecs,
-        schedule,
-        seed,
-    }
+    schedule.add_systems((advance_tick, create_jobs, claim_jobs, wander).chain());
+    World { ecs, schedule }
 }
 
 impl World {
@@ -421,7 +470,7 @@ impl World {
         dwarves.sort_by_key(|dwarf| dwarf.id);
 
         SaveState {
-            seed: self.seed,
+            seed: self.seed(),
             tick: self.tick(),
             dims: terrain.dims,
             tiles: terrain.tiles.clone(),
@@ -476,7 +525,7 @@ impl World {
     }
 
     pub fn seed(&self) -> u64 {
-        self.seed
+        self.ecs.resource::<Seed>().0
     }
 
     pub fn tick(&self) -> u64 {
@@ -801,6 +850,115 @@ mod tests {
             vec![(super::Id(11), earlier), (super::Id(12), later)]
         );
         assert_eq!(world.dwarves().len(), 5);
+    }
+
+    #[test]
+    fn reaction_delay_table_is_pinned() {
+        let expected = [
+            [28, 19, 26],
+            [17, 10, 15],
+            [6, 13, 8],
+            [21, 14, 23],
+            [10, 17, 8],
+        ];
+
+        for dwarf in 0..=4 {
+            for job in 0..=2 {
+                assert_eq!(
+                    super::reaction_delay(42, super::Id(dwarf), JobId(job)),
+                    expected[dwarf as usize][job as usize],
+                    "seed 42, dwarf {dwarf}, job {job}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn claim_jobs_waits_for_the_reaction_delay() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let target = Pos { x: 40, y: 40, z: 8 };
+        assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+        world.apply_command(super::SimCommand::Designate {
+            kind: super::DesignationKind::Dig,
+            rect: super::Rect {
+                min: target,
+                max: target,
+            },
+        });
+
+        for _ in 0..6 {
+            world.step();
+            assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+        }
+        world.step();
+        assert_eq!(world.claims()[2], (super::Id(2), Some(JobId(0))));
+    }
+
+    #[test]
+    fn claim_jobs_takes_fifo_and_skips_busy_dwarves_and_claimed_jobs() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        {
+            let mut query = world.ecs.query::<(&super::Id, &mut super::CurrentJob)>();
+            for (id, mut current) in query.iter_mut(&mut world.ecs) {
+                if id.0 > 0 {
+                    current.0 = Some(JobId(100 + id.0));
+                }
+            }
+        }
+        {
+            let mut jobs = world.ecs.resource_mut::<Jobs>();
+            assert!(jobs.insert(Job {
+                id: JobId(0),
+                kind: JobKind::Dig,
+                target: Pos { x: 1, y: 1, z: 1 },
+                created_tick: 0,
+                retry_after: 0,
+            }));
+            assert!(jobs.insert(Job {
+                id: JobId(1),
+                kind: JobKind::Dig,
+                target: Pos { x: 2, y: 1, z: 1 },
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        world.step();
+        assert_eq!(world.claims()[0], (super::Id(0), Some(JobId(0))));
+
+        let mut claimed = World::generate(42, Dims::DEFAULT);
+        {
+            let mut query = claimed.ecs.query::<(&super::Id, &mut super::CurrentJob)>();
+            for (id, mut current) in query.iter_mut(&mut claimed.ecs) {
+                current.0 = if id.0 == 1 {
+                    Some(JobId(0))
+                } else if id.0 > 1 {
+                    Some(JobId(100 + id.0))
+                } else {
+                    None
+                };
+            }
+        }
+        {
+            let mut jobs = claimed.ecs.resource_mut::<Jobs>();
+            assert!(jobs.insert(Job {
+                id: JobId(0),
+                kind: JobKind::Dig,
+                target: Pos { x: 1, y: 1, z: 1 },
+                created_tick: 0,
+                retry_after: 0,
+            }));
+            assert!(jobs.insert(Job {
+                id: JobId(1),
+                kind: JobKind::Dig,
+                target: Pos { x: 2, y: 1, z: 1 },
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        claimed.ecs.resource_mut::<super::Tick>().0 = 100;
+        claimed.step();
+        assert_eq!(claimed.claims()[0], (super::Id(0), Some(JobId(1))));
     }
 
     #[test]
