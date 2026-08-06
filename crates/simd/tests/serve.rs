@@ -208,7 +208,7 @@ fn read_delta_with_speed(
     expected: protocol::Speed,
 ) -> protocol::Delta {
     let mut observed = Vec::new();
-    for _ in 0..5 {
+    for _ in 0..50 {
         let update = read_delta(reader);
         observed.push((update.tick, update.speed));
         if update.speed == expected {

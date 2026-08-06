@@ -550,6 +550,135 @@ fn cancelling_a_claimed_dig_releases_the_dwarf_without_touching_the_tile() {
 }
 
 #[test]
+fn designate_delay_claim_walk_work_and_dig_complete_headlessly() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let worker = world.dwarves()[2].1;
+    let dx = if worker.x + 10 < world.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    for distance in 1..10 {
+        make_standable(
+            &mut world,
+            Pos {
+                x: worker.x + dx * distance,
+                ..worker
+            },
+        );
+    }
+    let target = Pos {
+        x: worker.x + dx * 10,
+        ..worker
+    };
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+
+    let mut saw_delay = false;
+    let mut saw_claim = false;
+    let mut saw_walk = false;
+    let mut saw_work = false;
+    for _ in 0..300 {
+        world.step();
+        saw_delay |=
+            !world.jobs().is_empty() && world.claims().iter().all(|(_, job)| job.is_none());
+        if let Some((holder, _)) = world.claims().into_iter().find(|(_, job)| job.is_some()) {
+            saw_claim = true;
+            let state = world
+                .dwarves()
+                .into_iter()
+                .find(|(id, _, _)| *id == holder)
+                .expect("claim holder remains a dwarf")
+                .2;
+            saw_walk |= state == JobState::Walk;
+            saw_work |= state == JobState::Work;
+        }
+        if world.tile(target) == Some(Tile::Empty) {
+            break;
+        }
+    }
+
+    assert!(saw_delay && saw_claim && saw_walk && saw_work);
+    assert_eq!(world.tile(target), Some(Tile::Empty));
+    assert_eq!(world.items(), vec![(sim_core::Id(5), target)]);
+    assert!(world.jobs().is_empty());
+    assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+    assert!(world.designations().is_empty());
+}
+
+#[test]
+fn two_deep_dig_advances_from_the_exposed_face() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let worker = world.dwarves()[2].1;
+    let dx = if worker.x + 8 < world.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    for distance in 1..6 {
+        make_standable(
+            &mut world,
+            Pos {
+                x: worker.x + dx * distance,
+                ..worker
+            },
+        );
+    }
+    let outer = Pos {
+        x: worker.x + dx * 6,
+        ..worker
+    };
+    let inner = Pos {
+        x: worker.x + dx * 7,
+        ..worker
+    };
+    assert!(world.set_tile(
+        Pos {
+            z: outer.z - 1,
+            ..outer
+        },
+        Tile::Solid(Material::Stone),
+    ));
+    assert!(world.set_tile(outer, Tile::Solid(Material::Stone)));
+    assert!(world.set_tile(inner, Tile::Solid(Material::Stone)));
+    for sealed in [
+        Pos {
+            x: inner.x + dx,
+            ..inner
+        },
+        Pos {
+            y: inner.y - 1,
+            ..inner
+        },
+        Pos {
+            y: inner.y + 1,
+            ..inner
+        },
+    ] {
+        assert!(world.set_tile(sealed, Tile::Solid(Material::Stone)));
+    }
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(outer, inner),
+    });
+
+    for _ in 0..500 {
+        world.step();
+        if world.tile(inner) == Some(Tile::Empty) {
+            break;
+        }
+    }
+
+    assert_eq!(world.tile(outer), Some(Tile::Empty));
+    assert_eq!(world.tile(inner), Some(Tile::Empty));
+    assert!(world.items().iter().any(|(_, pos)| *pos == outer));
+    assert!(world.items().iter().any(|(_, pos)| *pos == inner));
+}
+
+#[test]
 fn stockpile_keeps_exactly_the_standable_tiles() {
     let mut world = World::generate(42, Dims::DEFAULT);
     let first = Pos {
@@ -640,6 +769,10 @@ fn same_seed_and_commands_remain_deterministic() {
         first.step();
         second.step();
         assert_eq!(first.dwarves(), second.dwarves());
+        assert_eq!(first.jobs(), second.jobs());
+        assert_eq!(first.claims(), second.claims());
+        assert_eq!(first.items(), second.items());
+        assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());
         assert_eq!(first.zones(), second.zones());
     }

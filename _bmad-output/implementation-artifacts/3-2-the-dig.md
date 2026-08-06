@@ -258,7 +258,7 @@ so that the mountain yields stone at my command — through workers, not a remot
         motion as stillness and its evidence was an artefact. A capture that merely *contains* a
         stone glyph would pass even if the client drew it unconditionally.
 
-- [ ] **Scenario harness** (AC: 16) — extend `crates/sim-core/tests/scenario.rs`, do not replace.
+- [x] **Scenario harness** (AC: 16) — extend `crates/sim-core/tests/scenario.rs`, do not replace.
       Build the terrain the case needs with `make_standable` and `set_tile` rather than hunting for
       generated terrain that happens to suit.
 
