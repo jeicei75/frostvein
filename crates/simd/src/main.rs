@@ -4,7 +4,7 @@ mod bridge;
 
 use anyhow::{Context, bail};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::{BufRead, BufReader, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
@@ -279,10 +279,76 @@ fn load_world() -> Option<sim_core::World> {
                 && (pos.y as u32) < save.dims.y
                 && (pos.z as u32) < save.dims.z
         };
+        if save.designations.len() > sim_core::MAX_DESIGNATIONS {
+            bail!(
+                "save has {} designations; limit is {}",
+                save.designations.len(),
+                sim_core::MAX_DESIGNATIONS
+            );
+        }
         for (pos, _) in &save.designations {
             if !in_bounds(*pos) {
                 bail!(
                     "save designation position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+        let designation_kinds: BTreeMap<_, _> = save.designations.iter().copied().collect();
+        if save.jobs.len() > sim_core::MAX_DESIGNATIONS {
+            bail!(
+                "save has {} jobs; limit is {}",
+                save.jobs.len(),
+                sim_core::MAX_DESIGNATIONS
+            );
+        }
+        let mut seen_job_ids = BTreeSet::new();
+        let mut seen_job_targets = BTreeSet::new();
+        for job in &save.jobs {
+            if !in_bounds(job.target) {
+                bail!(
+                    "save job target {},{},{} is outside dims {}x{}x{}",
+                    job.target.x,
+                    job.target.y,
+                    job.target.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+            if !seen_job_ids.insert(job.id) {
+                bail!("save reuses job id {}", job.id.0);
+            }
+            if !seen_job_targets.insert(job.target) {
+                bail!(
+                    "save reuses job target {},{},{}",
+                    job.target.x,
+                    job.target.y,
+                    job.target.z
+                );
+            }
+        }
+        if save.next_job_id == u32::MAX {
+            bail!("save next_job_id {} is exhausted", save.next_job_id);
+        }
+        if let Some(id) = seen_job_ids.last()
+            && id.0 >= save.next_job_id
+        {
+            bail!(
+                "save next_job_id {} does not exceed job id {}",
+                save.next_job_id,
+                id.0
+            );
+        }
+        for (id, pos) in &save.items {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save item {id} position {},{},{} is outside dims {}x{}x{}",
                     pos.x,
                     pos.y,
                     pos.z,
@@ -306,9 +372,27 @@ fn load_world() -> Option<sim_core::World> {
             }
         }
         let mut seen_ids = BTreeSet::new();
+        let mut claimed_job_ids = BTreeSet::new();
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {
                 bail!("save reuses dwarf id {}", dwarf.id);
+            }
+            if let Some(job_id) = dwarf.current_job {
+                let job_id = sim_core::JobId(job_id);
+                if !seen_job_ids.contains(&job_id) {
+                    bail!("save dwarf {} claims missing job {}", dwarf.id, job_id.0);
+                }
+                if !claimed_job_ids.insert(job_id) {
+                    bail!("save job {} has multiple claimants", job_id.0);
+                }
+                if dwarf.work_progress > sim_core::WORK_TICKS {
+                    bail!(
+                        "save dwarf {} work progress {} exceeds {}",
+                        dwarf.id,
+                        dwarf.work_progress,
+                        sim_core::WORK_TICKS
+                    );
+                }
             }
             if !in_bounds(dwarf.pos) {
                 bail!(
@@ -332,6 +416,37 @@ fn load_world() -> Option<sim_core::World> {
                     save.dims.x,
                     save.dims.y,
                     save.dims.z
+                );
+            }
+        }
+        for (id, _) in &save.items {
+            if !seen_ids.insert(*id) {
+                bail!("save reuses entity id {id}");
+            }
+        }
+        if save.next_id == u32::MAX {
+            bail!("save next_id {} is exhausted", save.next_id);
+        }
+        if let Some(id) = seen_ids.last()
+            && *id >= save.next_id
+        {
+            bail!(
+                "save next_id {} does not exceed entity id {id}",
+                save.next_id
+            );
+        }
+        for job in &save.jobs {
+            let (expected_designation, kind_name) = match job.kind {
+                sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
+                sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
+            };
+            if designation_kinds.get(&job.target) != Some(&expected_designation) {
+                bail!(
+                    "save job {} has no matching {kind_name} designation at {},{},{}",
+                    job.id.0,
+                    job.target.x,
+                    job.target.y,
+                    job.target.z
                 );
             }
         }

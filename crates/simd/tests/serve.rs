@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
+        Mutex, MutexGuard,
         atomic::{AtomicUsize, Ordering},
         mpsc::{self, Receiver, RecvTimeoutError},
     },
@@ -15,8 +16,10 @@ use std::{
 /// Every blocking read in this harness is bounded. A daemon that binds but never
 /// writes, or never logs, must fail the test rather than hang `cargo test` forever.
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
+static DAEMON_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 struct Daemon {
+    _serial: MutexGuard<'static, ()>,
     child: Child,
     address: SocketAddr,
     stderr: Receiver<String>,
@@ -44,6 +47,12 @@ fn line_channel<R: Read + Send + 'static>(reader: R) -> Receiver<String> {
 
 impl Daemon {
     fn spawn() -> Self {
+        // These tests assert wall-clock cadence and command visibility within a small number of
+        // ticks. Running dozens of daemon processes concurrently lets queued startup deltas make
+        // those assertions measure scheduler contention instead of the daemon under test.
+        let serial = DAEMON_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // NOTE: let the daemon bind port 0 itself rather than reserving a port here and passing
         // the number on. Reserving meant dropping the listener before the child could bind it,
         // and with this many daemon tests running in parallel another test claimed that port in
@@ -81,6 +90,7 @@ impl Daemon {
             .expect("simd must print a numeric port");
 
         Self {
+            _serial: serial,
             child,
             address: SocketAddr::from(([127, 0, 0, 1], port)),
             stderr,
@@ -203,12 +213,33 @@ fn read_save_state(path: &Path) -> sim_core::SaveState {
     serde_json::from_slice(&bytes).expect("saved file must decode as SaveState")
 }
 
+fn assert_save_is_rejected_without_stopping_ticks(state: sim_core::SaveState, expected: &str) {
+    let daemon = Daemon::spawn();
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode invalid save fixture"),
+    )
+    .expect("write invalid save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(log.contains(expected), "unexpected invalid-save log: {log}");
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
 fn read_delta_with_speed(
     reader: &mut BufReader<TcpStream>,
     expected: protocol::Speed,
 ) -> protocol::Delta {
     let mut observed = Vec::new();
-    for _ in 0..5 {
+    for _ in 0..50 {
         let update = read_delta(reader);
         observed.push((update.tick, update.speed));
         if update.speed == expected {
@@ -502,6 +533,302 @@ fn out_of_bounds_designation_save_is_logged_and_the_daemon_keeps_ticking() {
     let first = read_delta(&mut reader).tick;
     let second = read_delta(&mut reader).tick;
     assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn over_budget_designation_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.designations = (0..=4096)
+        .map(|index| {
+            (
+                sim_core::Pos {
+                    x: index % 128,
+                    y: index / 128,
+                    z: 0,
+                },
+                sim_core::DesignationKind::Dig,
+            )
+        })
+        .collect();
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save has 4097 designations; limit is 4096",
+    );
+}
+
+#[test]
+fn over_budget_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs = (0..=4096)
+        .map(|index| sim_core::Job {
+            id: sim_core::JobId(index),
+            kind: sim_core::JobKind::Dig,
+            target: sim_core::Pos {
+                x: (index % 128) as i32,
+                y: (index / 128) as i32,
+                z: 0,
+            },
+            created_tick: 0,
+            retry_after: 0,
+        })
+        .collect();
+    state.next_job_id = 4097;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save has 4097 jobs; limit is 4096");
+}
+
+#[test]
+fn out_of_bounds_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: -1, y: 0, z: 0 },
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds job fixture"),
+    )
+    .expect("write out-of-bounds job fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save job target -1,0,0 is outside dims 128x128x32"),
+        "unexpected out-of-bounds job log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.items.push((5, sim_core::Pos { x: 0, y: -1, z: 0 }));
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode out-of-bounds item fixture"),
+    )
+    .expect("write out-of-bounds item fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("save item 5 position 0,-1,0 is outside dims 128x128x32"),
+        "unexpected out-of-bounds item log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn duplicate_item_entity_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state
+        .items
+        .push((state.dwarves[0].id, state.dwarves[0].pos));
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses entity id 0");
+}
+
+#[test]
+fn item_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.items.push((state.next_id, state.dwarves[0].pos));
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save next_id 5 does not exceed entity id 5",
+    );
+}
+
+#[test]
+fn exhausted_next_entity_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.next_id = u32::MAX;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save next_id 4294967295 is exhausted");
+}
+
+#[test]
+fn duplicate_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs = vec![
+        sim_core::Job {
+            id: sim_core::JobId(0),
+            kind: sim_core::JobKind::Dig,
+            target: sim_core::Pos { x: 20, y: 20, z: 8 },
+            created_tick: 0,
+            retry_after: 0,
+        },
+        sim_core::Job {
+            id: sim_core::JobId(0),
+            kind: sim_core::JobKind::Channel,
+            target: sim_core::Pos { x: 21, y: 20, z: 8 },
+            created_tick: 0,
+            retry_after: 0,
+        },
+    ];
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses job id 0");
+}
+
+#[test]
+fn job_without_matching_designation_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: 20, y: 20, z: 8 },
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save job 0 has no matching dig designation at 20,20,8",
+    );
+}
+
+#[test]
+fn job_with_mismatched_designation_kind_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    let target = sim_core::Pos { x: 20, y: 20, z: 8 };
+    state
+        .designations
+        .push((target, sim_core::DesignationKind::Channel));
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target,
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save job 0 has no matching dig designation at 20,20,8",
+    );
+}
+
+#[test]
+fn duplicate_job_target_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    let target = sim_core::Pos { x: 20, y: 20, z: 8 };
+    state.jobs = vec![
+        sim_core::Job {
+            id: sim_core::JobId(0),
+            kind: sim_core::JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        },
+        sim_core::Job {
+            id: sim_core::JobId(1),
+            kind: sim_core::JobKind::Channel,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        },
+    ];
+    state.next_job_id = 2;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses job target 20,20,8");
+}
+
+#[test]
+fn job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs = vec![sim_core::Job {
+        id: sim_core::JobId(1),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: 20, y: 20, z: 8 },
+        created_tick: 0,
+        retry_after: 0,
+    }];
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save next_job_id 1 does not exceed job id 1",
+    );
+}
+
+#[test]
+fn exhausted_next_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.next_job_id = u32::MAX;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save next_job_id 4294967295 is exhausted",
+    );
+}
+
+#[test]
+fn missing_claimed_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[0].current_job = Some(99);
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save dwarf 0 claims missing job 99");
+}
+
+#[test]
+fn multiply_claimed_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: 20, y: 20, z: 8 },
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+    state.dwarves[0].current_job = Some(0);
+    state.dwarves[1].current_job = Some(0);
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save job 0 has multiple claimants");
+}
+
+#[test]
+fn overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: 20, y: 20, z: 8 },
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+    state.dwarves[0].current_job = Some(0);
+    state.dwarves[0].work_progress = u32::MAX;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save dwarf 0 work progress 4294967295 exceeds 5",
+    );
 }
 
 #[test]
@@ -815,7 +1142,8 @@ fn designation_is_applied_while_tick_is_paused() {
     let stream = daemon.connect();
     let mut writer = stream.try_clone().expect("client write half must clone");
     let mut reader = BufReader::new(stream);
-    let _ = read_snapshot(&mut reader);
+    let snapshot = read_snapshot(&mut reader);
+    let designation_pos = snapshot.entities[0].pos;
 
     send_speed(&mut writer, protocol::Speed::Paused);
     let first_paused = read_delta_with_speed(&mut reader, protocol::Speed::Paused);
@@ -823,12 +1151,12 @@ fn designation_is_applied_while_tick_is_paused() {
     assert_eq!(second_paused.tick, first_paused.tick);
     let frozen_tick = first_paused.tick;
 
-    send_literal(
-        &mut writer,
-        b"{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{\"min\":[7,8,9],\"max\":[7,8,9]}}\n",
+    let command = format!(
+        "{{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{{\"min\":{designation_pos:?},\"max\":{designation_pos:?}}}}}\n"
     );
+    send_literal(&mut writer, command.as_bytes());
     let expected = [protocol::Designation {
-        pos: [7, 8, 9],
+        pos: designation_pos,
         kind: protocol::DesignationKind::Channel,
     }];
     let mut carrying = None;
@@ -844,6 +1172,88 @@ fn designation_is_applied_while_tick_is_paused() {
         }
     }
     assert!(carrying.is_some(), "paused daemon discarded designation");
+}
+
+#[test]
+fn completed_dig_streams_dirty_tile_and_item_in_the_same_delta() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let dims = snapshot.dims;
+    let tile_at = |x: i32, y: i32, z: i32| {
+        if x < 0 || y < 0 || z < 0 || x >= dims.x as i32 || y >= dims.y as i32 || z >= dims.z as i32
+        {
+            return None;
+        }
+        let index = (x as u32 + y as u32 * dims.x + z as u32 * dims.x * dims.y) as usize;
+        snapshot.tiles.get(index).copied()
+    };
+    let mut target = None;
+    'search: for z in 1..dims.z as i32 {
+        for y in 0..dims.y as i32 {
+            for x in 0..dims.x as i32 {
+                if !matches!(tile_at(x, y, z), Some(protocol::Tile::Solid(_))) {
+                    continue;
+                }
+                for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                    if matches!(tile_at(x + dx, y + dy, z), Some(protocol::Tile::Empty))
+                        && matches!(
+                            tile_at(x + dx, y + dy, z - 1),
+                            Some(protocol::Tile::Solid(_) | protocol::Tile::Ramp(_))
+                        )
+                    {
+                        target = Some([x, y, z]);
+                        break 'search;
+                    }
+                }
+            }
+        }
+    }
+    let target = target.expect("generated world has an exposed solid face");
+
+    send_speed(&mut writer, protocol::Speed::Fast);
+    let mut saw_fast = false;
+    for _ in 0..50 {
+        if read_delta(&mut reader).speed == protocol::Speed::Fast {
+            saw_fast = true;
+            break;
+        }
+    }
+    assert!(saw_fast, "daemon never applied the fast command");
+    let designate = format!(
+        "{{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{{\"min\":{target:?},\"max\":{target:?}}}}}\n"
+    );
+    send_literal(&mut writer, designate.as_bytes());
+
+    let mut completed = None;
+    for _ in 0..400 {
+        let update = read_delta(&mut reader);
+        if !update.tiles.is_empty() && !update.items.is_empty() {
+            completed = Some(update);
+            break;
+        }
+    }
+    let completed = completed.expect("dig never emitted dirty terrain and an item together");
+    assert!(completed.tiles.contains(&protocol::TileChange {
+        pos: target,
+        tile: protocol::Tile::Empty,
+    }));
+    assert!(
+        completed
+            .items
+            .iter()
+            .any(|item| item.pos == target && item.id >= 5)
+    );
+    let mut later = BufReader::new(daemon.connect());
+    let later = read_snapshot(&mut later);
+    assert!(
+        later
+            .items
+            .iter()
+            .any(|item| item.pos == target && item.id >= 5)
+    );
 }
 
 #[test]

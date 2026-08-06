@@ -96,6 +96,20 @@ Each one is cheap here and expensive later.
    been exercised, so **you may be the first run to prove it works.** Say plainly whether it
    ran.
 
+   **HARD CAP: at most THREE self-gate passes per story** (Wolf, 2026-08-06). Stop earlier the
+   moment a pass returns no actionable finding. If the third pass still raises something real,
+   **do not run a fourth** — fix what it found, then say so explicitly in your final message so
+   the reviewer knows the self-gate was still finding defects when it was cut off. That is
+   information the review needs, not a failure.
+
+   Why there is a cap at all: each pass spawns its **own** Codex session and re-reads the whole
+   branch diff every poll turn. At story 3.2 six passes consumed roughly **a third to a half of
+   the entire weekly Codex quota**, and the story exhausted the quota outright — blocking the
+   next story's dev for six days. The dollar figure hides this completely (it priced those six
+   passes at 23% of story spend). Codex bills a **weekly quota**, not tokens, so passes are
+   rationed in percentage points, not dollars. The passes do earn their keep — 3.2's six raised
+   17 legitimate findings — which is why the cap is three rather than one.
+
 ## Command hygiene
 
 - Scoped and quiet: target paths/globs, pipe through `tail` / `--name-only` / `--oneline`,

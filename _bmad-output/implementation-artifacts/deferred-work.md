@@ -99,6 +99,8 @@ names where it came from and what should trigger revisiting it.
   **SCHEDULED into Story 3.2 (2026-08-06).** Its dig and channel jobs are the first production
   callers of `set_tile`, and AC12's task carries the live-daemon test that finally reads a delta with
   a non-empty `tiles` off a real socket. Until that test is green, this item stays open.
+  **CLOSED by Story 3.2 (2026-08-06):** dig/channel now call `set_tile`, and the bounded live-daemon
+  test observes a single real delta carrying both non-empty `tiles` and non-empty `items`.
 
 ## Deferred from: code review of story 2-2-dwarves-wander-the-frost (2026-08-03)
 
@@ -232,3 +234,57 @@ names where it came from and what should trigger revisiting it.
   most of the work independently: a `Dig` mark is recorded only on `Solid` tiles and a `Channel` mark
   only where `is_standable` holds, so a surface rect that used to mark every tile now marks almost
   none. The cap is what bounds the remaining case, a rect through solid rock.
+  **CLOSED by Story 3.2 (2026-08-06):** `apply_command` enforces the deterministic 4,096-mark cap
+  and the kind-specific diggability filter described above.
+
+## Deferred from: code review of 3-2-the-dig (2026-08-06)
+
+Four layers ran, all completed — no coverage holes. Each item carries its originating LAYER and
+SEVERITY. Every item below is LOW; HIGH/MED went to patch or to Wolf as a decision.
+
+- **A Channel job is permanently orphaned when an independent Dig removes its support**
+  [`crates/sim-core/src/lib.rs:463-469`] — LAYER: edge-case-hunter. SEVERITY: med.
+  **Wolf's ruling, 2026-08-06: leave as specified. No code change.** Designate a channel at `P`
+  (needs `is_standable(P)`, so `P.z-1` is `Solid`), then separately designate a dig at `P.z-1` —
+  independently valid, it is solid. If the dig lands first, `is_standable(P)` is false forever,
+  `work_positions` returns the empty set, and no dwarf can ever take the job. Live-verified over
+  500 ticks: `jobs().len()` pinned at 1, `retry_after` climbing to 602, never converting to `Ramp`.
+  WHY THIS IS NOT A DEFECT: AC11 deliberately specifies "the job stays in the market and is retried,
+  never dropped (FR8)". The retry is nearly free — `astar_with_budget` early-returns on an empty
+  goal set *before* spending any node budget — so there is no starvation and no performance cost.
+  The designation mark stays visible on screen and `x` cancels it, so the player is not without a
+  signal. REVISIT only if it actually bites in play. If it ever is addressed, note that "permanently
+  unwinnable" is not trivially decidable: a channel target can become standable again if the tile
+  below is refilled, and nothing in phase one refills terrain — but that is an assumption about
+  today's rules, not an invariant.
+
+- **`jobs.next_id += 1` is a plain add** [`crates/sim-core/src/lib.rs:176`] — LAYER:
+  edge-case-hunter. Every neighbouring tick/id computation added by the same story uses
+  `saturating_add` (`created_tick.saturating_add`, `tick.saturating_add(RETRY_COOLDOWN)`), which
+  makes this one look like an oversight rather than a choice. In debug it panics on overflow; in
+  release it wraps to 0, and because `Jobs::insert`'s uniqueness check only looks at *live* jobs, a
+  wrapped id could silently reuse a long-completed `JobId`. Deferred because it needs ~4 billion
+  lifetime job creations to reach — but note `simd`'s `load_world` already rejects an exhausted
+  `next_job_id` on load, so the guard exists on one side only. One-line fix when next in this
+  function.
+
+- **The AD-12 seam promised to Story 3.3 is heavier than planned** — LAYER: acceptance-auditor.
+  The guardrail says 3.3 adds `Haul` "as a variant plus its execution system and **must not touch
+  claiming logic**". Because `claim_jobs` now computes work positions, runs A* and spends a shared
+  per-tick node budget, a `Haul` variant will require both `work_positions` and the claim-time
+  search to understand hauling. Not an AC violation and not a defect — but the seam is no longer
+  purely `JobKind`, and 3.3's planning should budget for it rather than discover it.
+
+- **Crowd counting and crowd drawing use different entity filters** [`crates/tui/src/view.rs`] —
+  LAYER: acceptance-auditor. `dwarf_counts` counts only `EntityKind::Dwarf`, but the draw loop
+  applies `crowd_cell()` to *any* entity that lands on a crowded screen index. Harmless today
+  because dwarf is the only `EntityKind`, and AC14 only speaks about dwarves. It becomes a silent
+  visual defect the moment a second entity kind reaches the wire — which is the same failure shape
+  as the 2.2 defect AC14 exists to fix.
+
+- **The daemon test lock lengthens the gate** [`crates/simd/tests/serve.rs`] — LAYER:
+  acceptance-auditor. A new `static DAEMON_TEST_LOCK` serializes *every* daemon test in the file and
+  `read_delta_with_speed`'s retry budget went 5 to 50. It was added for a real reason — dozens of
+  concurrent daemon processes competing on timing assertions — and no guardrail forbids it. But it
+  serializes tests this story never touched and changes their failure mode, so a future flaky-gate
+  investigation should know it is here. Revisit if gate wall-clock becomes a problem.

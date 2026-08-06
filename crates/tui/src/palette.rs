@@ -95,6 +95,20 @@ pub fn zone_cell() -> Cell {
     }
 }
 
+pub fn item_cell() -> Cell {
+    Cell {
+        glyph: '*',
+        fg: (176, 172, 160),
+    }
+}
+
+pub fn crowd_cell() -> Cell {
+    Cell {
+        glyph: '⚇',
+        fg: (240, 120, 130),
+    }
+}
+
 pub fn cursor_cell() -> Cell {
     Cell {
         glyph: '+',
@@ -168,6 +182,21 @@ mod tests {
             );
         }
 
+        assert_eq!(
+            item_cell(),
+            Cell {
+                glyph: '*',
+                fg: (176, 172, 160),
+            }
+        );
+        assert_eq!(
+            crowd_cell(),
+            Cell {
+                glyph: '⚇',
+                fg: (240, 120, 130),
+            }
+        );
+
         let markers = [
             designation_cell(DesignationKind::Dig),
             designation_cell(DesignationKind::Channel),
@@ -177,6 +206,8 @@ mod tests {
             pending_rect_cell(Mode::Channel),
             pending_rect_cell(Mode::Stockpile),
             pending_rect_cell(Mode::Remove),
+            item_cell(),
+            crowd_cell(),
         ];
         assert_eq!(
             markers,
@@ -212,6 +243,14 @@ mod tests {
                 Cell {
                     glyph: '-',
                     fg: (218, 82, 82),
+                },
+                Cell {
+                    glyph: '*',
+                    fg: (176, 172, 160),
+                },
+                Cell {
+                    glyph: '⚇',
+                    fg: (240, 120, 130),
                 },
             ]
         );

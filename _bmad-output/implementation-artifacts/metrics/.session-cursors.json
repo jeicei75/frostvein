@@ -114,6 +114,15 @@
     "output": 110575,
     "turns": 63
   },
+  "f30cdc2f-ced0-490d-a8fd-171872648129.jsonl": {
+    "cache_creation": 1125914,
+    "cache_read": 79051192,
+    "input": 693,
+    "last_ts": "2026-08-06T12:29:39.500Z",
+    "output": 364936,
+    "quota_last": null,
+    "turns": 371
+  },
   "ff39ce5d-1295-4d05-b2cb-ea5124daf950.jsonl": {
     "cache_creation": 465870,
     "cache_read": 4927668,
@@ -271,5 +280,13 @@
     "last_ts": "2026-08-05T10:41:40.137Z",
     "output": 12114,
     "turns": 30
+  },
+  "rollout-2026-08-06T06-14-25-019fd5b5-712f-7361-90ae-6c57507dc3d8.jsonl": {
+    "cache_creation": 0,
+    "cache_read": 94276352,
+    "input": 1516492,
+    "last_ts": "2026-08-06T09:23:56.332Z",
+    "output": 208027,
+    "turns": 715
   }
 }

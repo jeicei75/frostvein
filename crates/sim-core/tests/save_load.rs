@@ -1,4 +1,7 @@
-use sim_core::{DesignationKind, Dims, Pos, Rect, SimCommand, Tile, World};
+use sim_core::{
+    DesignationKind, Dims, Job, JobId, JobKind, JobState, Material, Pos, Rect, SavedDwarf,
+    SimCommand, Tile, WORK_TICKS, World,
+};
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
 
@@ -6,11 +9,42 @@ const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
 fn save_load_then_tick_matches_never_saved() {
     let mut saved = World::generate(42, Dims::DEFAULT);
     let mut control = World::generate(42, Dims::DEFAULT);
+    let worker = saved.dwarves()[2].1;
+    assert_eq!(worker, control.dwarves()[2].1);
+    let dx = if worker.x + 15 < saved.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    for distance in 1..15 {
+        let pos = Pos {
+            x: worker.x + dx * distance,
+            ..worker
+        };
+        for world in [&mut saved, &mut control] {
+            assert!(world.set_tile(
+                Pos {
+                    z: pos.z - 1,
+                    ..pos
+                },
+                Tile::Solid(Material::Stone),
+            ));
+            assert!(world.set_tile(pos, Tile::Empty));
+        }
+    }
+    let designation_pos = Pos {
+        x: worker.x + dx * 15,
+        ..worker
+    };
+    assert!(saved.set_tile(designation_pos, Tile::Solid(Material::Stone)));
+    assert!(control.set_tile(designation_pos, Tile::Solid(Material::Stone)));
+    saved.drain_dirty();
+    control.drain_dirty();
     let designation = SimCommand::Designate {
-        kind: DesignationKind::Channel,
+        kind: DesignationKind::Dig,
         rect: Rect {
-            min: Pos { x: 4, y: 3, z: 2 },
-            max: Pos { x: 2, y: 1, z: 2 },
+            min: designation_pos,
+            max: designation_pos,
         },
     };
     let stockpile_pos = saved.dwarves()[0].1;
@@ -25,9 +59,25 @@ fn save_load_then_tick_matches_never_saved() {
     saved.apply_command(stockpile);
     control.apply_command(stockpile);
 
-    for _ in 0..37 {
+    while saved.claims().iter().all(|(_, job)| job.is_none()) {
+        assert!(saved.tick() < 100, "corridor dig was never claimed");
         saved.step();
         control.step();
+        assert_eq!(saved.claims(), control.claims());
+    }
+    let claimed = saved
+        .claims()
+        .into_iter()
+        .find_map(|(id, job)| job.map(|job| (id, job)))
+        .expect("a dwarf holds the dig");
+    for _ in 0..3 {
+        saved.step();
+        control.step();
+        assert!(saved.jobs().iter().any(|job| job.id == claimed.1));
+        assert_eq!(
+            saved.claims().into_iter().find(|(id, _)| *id == claimed.0),
+            Some((claimed.0, Some(claimed.1)))
+        );
     }
     assert!(saved.set_tile(MUTATED_POS, Tile::Empty));
     assert!(control.set_tile(MUTATED_POS, Tile::Empty));
@@ -38,8 +88,10 @@ fn save_load_then_tick_matches_never_saved() {
         control.step();
         assert_eq!(loaded.tick(), control.tick());
         assert_eq!(loaded.dwarves(), control.dwarves());
-        assert_eq!(loaded.tile(MUTATED_POS), Some(Tile::Empty));
-        assert_eq!(loaded.tile(MUTATED_POS), control.tile(MUTATED_POS));
+        assert_eq!(loaded.tiles(), control.tiles());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.items(), control.items());
         assert_eq!(loaded.designations(), control.designations());
         assert_eq!(loaded.zones(), control.zones());
     }
@@ -51,6 +103,159 @@ fn loading_does_not_reuse_entity_ids() {
     let loaded = World::from_save(world.to_save());
 
     assert_eq!(loaded.to_save().next_id, 5);
+}
+
+#[test]
+fn save_round_trip_preserves_items_and_current_job() {
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    let target = Pos { x: 9, y: 8, z: 7 };
+    save.next_id = 13;
+    save.items = vec![(12, target)];
+    save.jobs = vec![Job {
+        id: JobId(7),
+        kind: JobKind::Dig,
+        target,
+        created_tick: 3,
+        retry_after: 29,
+    }];
+    save.next_job_id = 8;
+    save.dwarves[0].current_job = Some(7);
+    save.dwarves[0].work_progress = 3;
+
+    let round_trip = World::from_save(save).to_save();
+
+    assert_eq!(round_trip.items, vec![(12, target)]);
+    assert_eq!(round_trip.jobs.len(), 1);
+    assert_eq!(round_trip.jobs[0].id, JobId(7));
+    assert_eq!(round_trip.jobs[0].kind, JobKind::Dig);
+    assert_eq!(round_trip.jobs[0].target, target);
+    assert_eq!(round_trip.jobs[0].created_tick, 3);
+    assert_eq!(round_trip.jobs[0].retry_after, 29);
+    assert_eq!(round_trip.next_job_id, 8);
+    assert_eq!(round_trip.dwarves[0].current_job, Some(7));
+    assert_eq!(round_trip.dwarves[0].work_progress, 3);
+}
+
+#[test]
+fn save_load_preserves_in_progress_work() {
+    let mut control = World::generate(42, Dims::DEFAULT);
+    let worker = control.dwarves()[2].1;
+    let target = Pos {
+        x: worker.x + 1,
+        ..worker
+    };
+    assert!(control.set_tile(target, Tile::Solid(Material::Stone)));
+    control.drain_dirty();
+    control.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: Rect {
+            min: target,
+            max: target,
+        },
+    });
+    while !control
+        .dwarves()
+        .iter()
+        .any(|(_, _, state)| *state == JobState::Work)
+    {
+        assert!(control.tick() < 100, "adjacent dig never reached work");
+        control.step();
+    }
+    control.step();
+
+    let mut loaded = World::from_save(control.to_save());
+    for _ in 0..6 {
+        control.step();
+        loaded.step();
+        assert_eq!(loaded.dwarves(), control.dwarves());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.tile(target), control.tile(target));
+    }
+}
+
+#[test]
+fn save_load_recomputes_every_path_invalidated_by_another_dig() {
+    let dims = Dims { x: 7, y: 3, z: 3 };
+    let index = |pos: Pos| {
+        pos.x as usize
+            + pos.y as usize * dims.x as usize
+            + pos.z as usize * dims.x as usize * dims.y as usize
+    };
+    let mut tiles = vec![Tile::Solid(Material::Stone); (dims.x * dims.y * dims.z) as usize];
+    for x in 0..=5 {
+        tiles[index(Pos { x, y: 1, z: 2 })] = Tile::Empty;
+    }
+    let walking_start = Pos { x: 0, y: 1, z: 2 };
+    let walking_target = Pos { x: 6, y: 1, z: 2 };
+    let digging_start = Pos { x: 3, y: 0, z: 1 };
+    let digging_target = Pos { x: 3, y: 1, z: 1 };
+    tiles[index(digging_start)] = Tile::Empty;
+
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    save.tick = 100;
+    save.dims = dims;
+    save.tiles = tiles;
+    save.next_id = 2;
+    save.dwarves = vec![
+        SavedDwarf {
+            id: 0,
+            pos: walking_start,
+            state: JobState::Walk,
+            home: walking_start,
+            cooldown: 10,
+            current_job: Some(0),
+            work_progress: 0,
+        },
+        SavedDwarf {
+            id: 1,
+            pos: digging_start,
+            state: JobState::Work,
+            home: digging_start,
+            cooldown: 10,
+            current_job: Some(1),
+            work_progress: WORK_TICKS,
+        },
+    ];
+    save.designations = vec![
+        (walking_target, DesignationKind::Dig),
+        (digging_target, DesignationKind::Dig),
+    ];
+    save.zones.clear();
+    save.jobs = vec![
+        Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target: walking_target,
+            created_tick: 0,
+            retry_after: 0,
+        },
+        Job {
+            id: JobId(1),
+            kind: JobKind::Dig,
+            target: digging_target,
+            created_tick: 0,
+            retry_after: 0,
+        },
+    ];
+    save.next_job_id = 2;
+    save.items.clear();
+
+    let mut control = World::from_save(save);
+    control.step();
+    assert_eq!(control.tile(digging_target), Some(Tile::Empty));
+    let mut loaded = World::from_save(control.to_save());
+
+    for _ in 0..5 {
+        control.step();
+        loaded.step();
+        assert_eq!(loaded.dwarves(), control.dwarves());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.tiles(), control.tiles());
+    }
 }
 
 #[test]

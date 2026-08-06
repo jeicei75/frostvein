@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use sim_core::{DesignationKind, Dims, JobState, Material, Pos, Rect, SimCommand, Tile, World};
+use sim_core::{
+    DesignationKind, Dims, JobId, JobKind, JobState, Material, Pos, Rect, SimCommand, Tile, World,
+};
 
 fn rect(min: Pos, max: Pos) -> Rect {
     Rect { min, max }
@@ -189,6 +191,11 @@ fn dirty_tiles_are_sorted_and_out_of_bounds_writes_do_nothing() {
 #[test]
 fn reversed_rect_designates_the_normalized_inclusive_tiles() {
     let mut reversed = World::generate(42, Dims::DEFAULT);
+    for y in 2..=3 {
+        for x in 1..=2 {
+            assert!(reversed.set_tile(Pos { x, y, z: 4 }, Tile::Solid(Material::Stone)));
+        }
+    }
     reversed.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(Pos { x: 2, y: 3, z: 4 }, Pos { x: 1, y: 2, z: 4 }),
@@ -203,6 +210,11 @@ fn reversed_rect_designates_the_normalized_inclusive_tiles() {
     assert_eq!(reversed.designations(), expected);
 
     let mut normalized = World::generate(42, Dims::DEFAULT);
+    for y in 2..=3 {
+        for x in 1..=2 {
+            assert!(normalized.set_tile(Pos { x, y, z: 4 }, Tile::Solid(Material::Stone)));
+        }
+    }
     normalized.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(Pos { x: 1, y: 2, z: 4 }, Pos { x: 2, y: 3, z: 4 }),
@@ -213,23 +225,18 @@ fn reversed_rect_designates_the_normalized_inclusive_tiles() {
 #[test]
 fn designation_rect_clips_to_world_bounds() {
     let mut world = World::generate(42, Dims::DEFAULT);
+    make_standable(&mut world, Pos { x: 0, y: 0, z: 1 });
+    make_standable(&mut world, Pos { x: 1, y: 0, z: 1 });
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
-        rect: rect(
-            Pos {
-                x: -1,
-                y: -1,
-                z: -1,
-            },
-            Pos { x: 1, y: 0, z: 0 },
-        ),
+        rect: rect(Pos { x: -1, y: -1, z: 1 }, Pos { x: 1, y: 0, z: 1 }),
     });
 
     assert_eq!(
         world.designations(),
         vec![
-            (Pos { x: 0, y: 0, z: 0 }, DesignationKind::Channel),
-            (Pos { x: 1, y: 0, z: 0 }, DesignationKind::Channel),
+            (Pos { x: 0, y: 0, z: 1 }, DesignationKind::Channel),
+            (Pos { x: 1, y: 0, z: 1 }, DesignationKind::Channel),
         ]
     );
 }
@@ -275,10 +282,12 @@ fn fully_out_of_bounds_rect_is_a_no_op() {
 fn designate_overwrites_the_existing_kind() {
     let mut world = World::generate(42, Dims::DEFAULT);
     let pos = Pos { x: 7, y: 8, z: 9 };
+    assert!(world.set_tile(pos, Tile::Solid(Material::Stone)));
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(pos, pos),
     });
+    make_standable(&mut world, pos);
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
         rect: rect(pos, pos),
@@ -295,11 +304,12 @@ fn each_eraser_leaves_the_other_mark_kind_untouched() {
         y: 10,
         z: 10,
     };
-    make_standable(&mut world, pos);
+    assert!(world.set_tile(pos, Tile::Solid(Material::Stone)));
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(pos, pos),
     });
+    make_standable(&mut world, pos);
     world.apply_command(SimCommand::PlaceStockpile {
         rect: rect(pos, pos),
     });
@@ -310,6 +320,7 @@ fn each_eraser_leaves_the_other_mark_kind_untouched() {
     assert!(world.designations().is_empty());
     assert_eq!(world.zones(), vec![pos]);
 
+    make_standable(&mut world, pos);
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
         rect: rect(pos, pos),
@@ -319,6 +330,359 @@ fn each_eraser_leaves_the_other_mark_kind_untouched() {
     });
     assert_eq!(world.designations(), vec![(pos, DesignationKind::Channel)]);
     assert!(world.zones().is_empty());
+}
+
+#[test]
+fn designations_keep_only_tiles_workable_by_their_kind() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let solid = Pos { x: 20, y: 20, z: 8 };
+    let standable = Pos { x: 21, y: 20, z: 8 };
+    let unsupported = Pos { x: 22, y: 20, z: 8 };
+    assert!(world.set_tile(solid, Tile::Solid(Material::Stone)));
+    make_standable(&mut world, standable);
+    assert!(world.set_tile(unsupported, Tile::Empty));
+    assert!(world.set_tile(
+        Pos {
+            z: unsupported.z - 1,
+            ..unsupported
+        },
+        Tile::Empty,
+    ));
+
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(solid, unsupported),
+    });
+    assert_eq!(world.designations(), vec![(solid, DesignationKind::Dig)]);
+
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(solid, unsupported),
+    });
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(solid, unsupported),
+    });
+    assert_eq!(
+        world.designations(),
+        vec![(standable, DesignationKind::Channel)]
+    );
+
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(solid, unsupported),
+    });
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(unsupported, unsupported),
+    });
+    assert!(world.designations().is_empty());
+}
+
+#[test]
+fn designation_budget_refuses_new_tiles_but_updates_existing_tiles_after_them() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    for y in 0..32 {
+        for x in 0..128 {
+            assert!(world.set_tile(Pos { x, y, z: 8 }, Tile::Solid(Material::Stone)));
+        }
+    }
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(
+            Pos { x: 0, y: 0, z: 8 },
+            Pos {
+                x: 127,
+                y: 31,
+                z: 8,
+            },
+        ),
+    });
+    assert_eq!(world.designations().len(), 4096);
+
+    let extra = Pos { x: 0, y: 32, z: 8 };
+    assert!(world.set_tile(extra, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(extra, extra),
+    });
+    assert!(!world.designations().iter().any(|(pos, _)| *pos == extra));
+
+    let refused = Pos { x: 1, y: 0, z: 8 };
+    let existing_after = Pos { x: 2, y: 0, z: 8 };
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(refused, refused),
+    });
+    make_standable(&mut world, extra);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(extra, extra),
+    });
+    make_standable(&mut world, refused);
+    make_standable(&mut world, existing_after);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(refused, existing_after),
+    });
+
+    assert_eq!(world.designations().len(), 4096);
+    assert!(!world.designations().iter().any(|(pos, _)| *pos == refused));
+    assert!(
+        world
+            .designations()
+            .contains(&(existing_after, DesignationKind::Channel))
+    );
+}
+
+#[test]
+fn designated_tiles_become_one_job_each_only_when_the_schedule_runs() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let first = Pos { x: 30, y: 20, z: 8 };
+    let second = Pos { x: 31, y: 20, z: 8 };
+    assert!(world.set_tile(first, Tile::Solid(Material::Stone)));
+    assert!(world.set_tile(second, Tile::Solid(Material::Soil)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(first, second),
+    });
+
+    assert_eq!(world.designations().len(), 2);
+    assert!(
+        world.jobs().is_empty(),
+        "paused intake must not derive jobs"
+    );
+
+    world.step();
+    let jobs = world.jobs();
+    assert_eq!(jobs.len(), 2);
+    assert_eq!(jobs[0].id, JobId(0));
+    assert_eq!(jobs[0].kind, JobKind::Dig);
+    assert_eq!(jobs[0].target, first);
+    assert_eq!(jobs[0].created_tick, 1);
+    assert_eq!(jobs[0].retry_after, 0);
+    assert_eq!(jobs[1].id, JobId(1));
+    assert_eq!(jobs[1].target, second);
+
+    world.step();
+    assert_eq!(world.jobs(), jobs);
+}
+
+#[test]
+fn unreachable_job_stays_queued_and_retries_after_twenty_ticks() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let target = Pos { x: 40, y: 40, z: 2 };
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        assert!(world.set_tile(
+            Pos {
+                x: target.x + dx,
+                y: target.y + dy,
+                z: target.z,
+            },
+            Tile::Solid(Material::Stone),
+        ));
+    }
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+
+    while world.jobs().first().is_none_or(|job| job.retry_after == 0) {
+        assert!(world.tick() < 100, "unreachable job was never attempted");
+        world.step();
+    }
+    let released_at = world.tick();
+    let retry_after = released_at + 20;
+    assert_eq!(world.jobs()[0].retry_after, retry_after);
+    assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+
+    while world.tick() + 1 < retry_after {
+        world.step();
+        assert_eq!(world.jobs()[0].retry_after, retry_after);
+        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+    }
+
+    while world.tick() < 200 {
+        world.step();
+        assert_eq!(world.jobs().len(), 1);
+        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+    }
+    assert_eq!(world.tile(target), Some(Tile::Solid(Material::Stone)));
+    assert!(world.items().is_empty());
+}
+
+#[test]
+fn cancelling_a_claimed_dig_releases_the_dwarf_without_touching_the_tile() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let worker = world.dwarves()[2].1;
+    let target = Pos {
+        x: if worker.x + 1 < world.dims().x as i32 {
+            worker.x + 1
+        } else {
+            worker.x - 1
+        },
+        ..worker
+    };
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    let holder = loop {
+        assert!(world.tick() < 100, "reachable job was never claimed");
+        world.step();
+        if let Some((id, _)) = world.claims().into_iter().find(|(_, job)| job.is_some()) {
+            break id;
+        }
+    };
+
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(target, target),
+    });
+
+    assert!(world.designations().is_empty());
+    assert!(world.jobs().is_empty());
+    assert_eq!(
+        world.claims().into_iter().find(|(id, _)| *id == holder),
+        Some((holder, None))
+    );
+    assert_eq!(
+        world
+            .dwarves()
+            .into_iter()
+            .find(|(id, _, _)| *id == holder)
+            .map(|(_, _, state)| state),
+        Some(JobState::Idle)
+    );
+    assert_eq!(world.tile(target), Some(Tile::Solid(Material::Stone)));
+    assert!(world.items().is_empty());
+}
+
+#[test]
+fn designate_delay_claim_walk_work_and_dig_complete_headlessly() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let worker = world.dwarves()[2].1;
+    let dx = if worker.x + 10 < world.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    for distance in 1..10 {
+        make_standable(
+            &mut world,
+            Pos {
+                x: worker.x + dx * distance,
+                ..worker
+            },
+        );
+    }
+    let target = Pos {
+        x: worker.x + dx * 10,
+        ..worker
+    };
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+
+    let mut saw_delay = false;
+    let mut saw_claim = false;
+    let mut saw_walk = false;
+    let mut saw_work = false;
+    for _ in 0..300 {
+        world.step();
+        saw_delay |=
+            !world.jobs().is_empty() && world.claims().iter().all(|(_, job)| job.is_none());
+        if let Some((holder, _)) = world.claims().into_iter().find(|(_, job)| job.is_some()) {
+            saw_claim = true;
+            let state = world
+                .dwarves()
+                .into_iter()
+                .find(|(id, _, _)| *id == holder)
+                .expect("claim holder remains a dwarf")
+                .2;
+            saw_walk |= state == JobState::Walk;
+            saw_work |= state == JobState::Work;
+        }
+        if world.tile(target) == Some(Tile::Empty) {
+            break;
+        }
+    }
+
+    assert!(saw_delay && saw_claim && saw_walk && saw_work);
+    assert_eq!(world.tile(target), Some(Tile::Empty));
+    assert_eq!(world.items(), vec![(sim_core::Id(5), target)]);
+    assert!(world.jobs().is_empty());
+    assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+    assert!(world.designations().is_empty());
+}
+
+#[test]
+fn two_deep_dig_advances_from_the_exposed_face() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let worker = world.dwarves()[2].1;
+    let dx = if worker.x + 8 < world.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    for distance in 1..6 {
+        make_standable(
+            &mut world,
+            Pos {
+                x: worker.x + dx * distance,
+                ..worker
+            },
+        );
+    }
+    let outer = Pos {
+        x: worker.x + dx * 6,
+        ..worker
+    };
+    let inner = Pos {
+        x: worker.x + dx * 7,
+        ..worker
+    };
+    assert!(world.set_tile(
+        Pos {
+            z: outer.z - 1,
+            ..outer
+        },
+        Tile::Solid(Material::Stone),
+    ));
+    assert!(world.set_tile(outer, Tile::Solid(Material::Stone)));
+    assert!(world.set_tile(inner, Tile::Solid(Material::Stone)));
+    for sealed in [
+        Pos {
+            x: inner.x + dx,
+            ..inner
+        },
+        Pos {
+            y: inner.y - 1,
+            ..inner
+        },
+        Pos {
+            y: inner.y + 1,
+            ..inner
+        },
+    ] {
+        assert!(world.set_tile(sealed, Tile::Solid(Material::Stone)));
+    }
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(outer, inner),
+    });
+
+    for _ in 0..500 {
+        world.step();
+        if world.tile(inner) == Some(Tile::Empty) {
+            break;
+        }
+    }
+
+    assert_eq!(world.tile(outer), Some(Tile::Empty));
+    assert_eq!(world.tile(inner), Some(Tile::Empty));
+    assert!(world.items().iter().any(|(_, pos)| *pos == outer));
+    assert!(world.items().iter().any(|(_, pos)| *pos == inner));
 }
 
 #[test]
@@ -386,10 +750,11 @@ fn applying_a_command_does_not_advance_the_world() {
 fn same_seed_and_commands_remain_deterministic() {
     let mut first = World::generate(42, Dims::DEFAULT);
     let mut second = World::generate(42, Dims::DEFAULT);
+    let channel_pos = first.dwarves()[0].1;
     let commands = [
         SimCommand::Designate {
             kind: DesignationKind::Channel,
-            rect: rect(Pos { x: 3, y: 4, z: 5 }, Pos { x: 1, y: 2, z: 5 }),
+            rect: rect(channel_pos, channel_pos),
         },
         SimCommand::PlaceStockpile {
             rect: rect(
@@ -411,6 +776,10 @@ fn same_seed_and_commands_remain_deterministic() {
         first.step();
         second.step();
         assert_eq!(first.dwarves(), second.dwarves());
+        assert_eq!(first.jobs(), second.jobs());
+        assert_eq!(first.claims(), second.claims());
+        assert_eq!(first.items(), second.items());
+        assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());
         assert_eq!(first.zones(), second.zones());
     }

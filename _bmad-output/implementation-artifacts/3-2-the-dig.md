@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant chosen for a story 
 
 # Story 3.2: The Dig
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -43,7 +43,14 @@ so that the mountain yields stone at my command — through workers, not a remot
 5. Exactly one claiming system, `claim_jobs`, at a fixed schedule point: jobs considered ascending by
    `JobId`, dwarves ascending by entity `Id`. A dwarf holding a job is not eligible; a claimed job is
    skipped. Dwarf `D` may claim job `J` only when `tick >= J.created_tick + reaction_delay(seed, D, J)`
-   **and** `tick >= J.retry_after`. One job per dwarf, one dwarf per job (FR5, AD-12).
+   **and** `tick >= J.retry_after` **and** a path to one of `J`'s work positions exists from `D`.
+   One job per dwarf, one dwarf per job (FR5, AD-12).
+   *(Third gate AMENDED at review, 2026-08-06: as first written this AC listed only the two time
+   gates, with AC11 putting pathing in `execute_jobs`. The code paths at claim time instead, so an
+   unreachable job is never claimed-then-released — the observable outcome AC11 demands is
+   unchanged. Claim searches share one `MAX_ASTAR_NODES` budget per tick; when it runs out
+   `claim_jobs` stops for that tick WITHOUT stamping a retry, so a reachable job is deferred, never
+   penalised, and the 20-tick cooldown on genuinely unreachable jobs frees the budget next tick.)*
 6. `reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64` returns 5..=30 from a hand-written,
    named FNV-1a over the three values — never `RandomState`, never an RNG stream, never wall clock
    (AD-7). The delays for seed 42, dwarves 0..=4 and job ids 0..=2 are pinned as literals in a test,
@@ -57,16 +64,28 @@ so that the mountain yields stone at my command — through workers, not a remot
    `JobState::Work` for `WORK_TICKS = 5` at a work position before the job completes. Work positions
    are: for `Dig`, the standable tiles horizontally 4-adjacent to the target at the target's z; for
    `Channel`, the target tile itself. `wander` skips any dwarf holding a job, so a working dwarf
-   never drifts; a dwarf is `Idle` exactly when it holds no job.
+   never drifts; a dwarf holding a job is never reported `Idle`.
+   *(AMENDED at review, 2026-08-06: this AC originally read "a dwarf is `Idle` exactly when it holds
+   no job", which cannot be satisfied — `wander` reports `Walk` for a job-less dwarf that moves, and
+   3.1's `streamed_deltas_show_wandering_positions_and_states` pins exactly that. Only the
+   implementable half was ever in scope, and it is met.)*
 9. Completing a `Dig` sets the target from `Solid(m)` to `Empty`. Completing a `Channel` sets the
    tile **below** the target from `Solid(m)` to `Ramp(m)`. Both mutate through `World::set_tile`, so
    both appear in that tick's delta `tiles` — the first production producer of the AD-8 dirty set. A
    stone item is spawned at the target position with an id from the single global allocator (AD-9),
    and the completed job and its designation are both removed.
 10. A `settle` system, chained after job execution and before `wander`, moves any dwarf whose current
-    tile is no longer standable down one z when the tile below is standable, dwarves in ascending
+    tile is no longer standable down one z when the tile below is `Empty`, dwarves in ascending
     `Id`, and discards that dwarf's path so it re-paths. A dwarf standing on a tile dug out from
     under it is one level lower in the same tick and never renders hovering on air.
+    *(AMENDED at review, 2026-08-06 — found independently by the acceptance and feature layers. This
+    originally read "when the tile below is standable", which would leave a dwarf hovering forever
+    over a two-deep shaft, since the tile below an unsupported tile is itself unsupported. Falling
+    one level per tick until it lands is both the better behaviour and what shipped, pinned by
+    `settle_descends_one_level_per_tick_through_a_deep_empty_shaft`, and it still honours the
+    guardrail "a dwarf never falls more than one level per tick". Note a dwarf can never be stranded
+    above a `Ramp`: `is_standable` already accepts `Ramp` as support, so `!is_standable(pos)` and
+    `below == Ramp` cannot both hold.)*
 11. A dwarf that can reach no work position releases its claim and the job's `retry_after` becomes
     `tick + RETRY_COOLDOWN = 20`; the job stays in the market and is retried, never dropped (FR8).
     `CancelDesignation` over a rect removes the designations, removes any job on those tiles whether
@@ -109,161 +128,165 @@ so that the mountain yields stone at my command — through workers, not a remot
 
 ## Tasks / Subtasks
 
-- [ ] **`sim-core`: job market vocabulary, resource and readers** (AC: 1)
-  - [ ] Add `JobId`, `JobKind`, `Job`, `CurrentJob` and the `Jobs` resource to
+- [x] **`sim-core`: job market vocabulary, resource and readers** (AC: 1)
+  - [x] Add `JobId`, `JobKind`, `Job`, `CurrentJob` and the `Jobs` resource to
         `crates/sim-core/src/lib.rs` (skeleton below). No new dependency.
-  - [ ] `Jobs` keeps its `BTreeMap<JobId, Job>` and `BTreeSet<Pos>` index private and exposes
+  - [x] `Jobs` keeps its `BTreeMap<JobId, Job>` and `BTreeSet<Pos>` index private and exposes
         `insert`/`remove`/`get_mut`/`iter` — the pairing is enforced in one place, not at each call
         site. `BTree*`, not hash containers: AD-7 forbids iteration order affecting outcomes.
-  - [ ] `Jobs` and the new components go in through `assemble`, still the ONE assembly site, so
+  - [x] `Jobs` and the new components go in through `assemble`, still the ONE assembly site, so
         `generate` and `from_save` cannot diverge.
-  - [ ] `CurrentJob(Option<JobId>)` is a component on every dwarf, present from spawn. **The dwarf
+  - [x] `CurrentJob(Option<JobId>)` is a component on every dwarf, present from spawn. **The dwarf
         owns the claim and it is the only source of truth** — do not also store `claimed_by` on the
         `Job`, or the two will drift and every later story pays for it.
-  - [ ] **Do this refactor FIRST, before anything else in the story.** `IdAllocator` is a plain field
+  - [x] **Do this refactor FIRST, before anything else in the story.** `IdAllocator` is a plain field
         on `World` [lib.rs:244] and `allocate` is called only from `spawn_dwarves` [lib.rs:572]; a
         bevy system cannot reach it, so `execute_jobs` could not give a stone an id. Make it
         `#[derive(Resource)]`, insert it in `assemble` alongside the other resources, and repoint
         `to_save` [lib.rs:347] and `spawn_dwarves`. Small, mechanical, and every later task depends
         on it — the whole suite should be green again before you continue.
 
-- [ ] **`sim-core`: item entities** (AC: 1, 9)
-  - [ ] `#[derive(Component)] struct Item;` — the marker mirroring `Dwarf` [lib.rs:89-90]. A stone is
+- [x] **`sim-core`: item entities** (AC: 1, 9)
+  - [x] `#[derive(Component)] struct Item;` — the marker mirroring `Dwarf` [lib.rs:89-90]. A stone is
         `(Item, Id, Pos)`. No `ItemKind`, no components a stone does not have.
-  - [ ] `World::items()` filters on `Item` the way `dwarves()` filters on `Dwarf` [lib.rs:520-535],
+  - [x] `World::items()` filters on `Item` the way `dwarves()` filters on `Dwarf` [lib.rs:520-535],
         sorted ascending by `Id`.
-  - [ ] `to_save`'s dwarf filter is `entity.contains::<Dwarf>()`, so items are excluded from
+  - [x] `to_save`'s dwarf filter is `entity.contains::<Dwarf>()`, so items are excluded from
         `dwarves` automatically — but re-read its `filter_map` NOTE [lib.rs:324-327] before adding a
         second entity kind, and give items their own save list rather than widening that one.
 
-- [ ] **`sim-core`: diggability and the mark budget** (AC: 2, 3)
-  - [ ] Filter in the existing `Designate` arm of `apply_command`; delete the `// NOTE: Story 3.2
+- [x] **`sim-core`: diggability and the mark budget** (AC: 2, 3)
+  - [x] Filter in the existing `Designate` arm of `apply_command`; delete the `// NOTE: Story 3.2
         owns diggability` at `lib.rs:473` that this closes.
-  - [ ] `MAX_DESIGNATIONS` check in the same loop: `break` once the map is full and the position is
-        not already present, so an over-large rect marks a deterministic prefix.
-  - [ ] **Existing tests will go red and that is expected, not a regression.** `save_load.rs`
+  - [x] `MAX_DESIGNATIONS` check in the same loop: `continue` past a refused position once the map
+        is full and the position is not already present, so an over-large rect marks a deterministic
+        prefix while still re-kinding positions already marked.
+        *(CORRECTED at review, 2026-08-06: this task said `break`, contradicting AC3's explicit
+        "`continue`s past a refused position rather than `break`ing out of the rect" in the same
+        document. The code follows AC3; only one of the two could ever have been tested.)*
+  - [x] **Existing tests will go red and that is expected, not a regression.** `save_load.rs`
         designates `Channel` at z=2 (solid rock — nothing is standable there) and several
         `scenario.rs` cases designate arbitrary positions. Repoint each to terrain the kind can
         actually work, using the existing `make_standable` helper [scenario.rs:9-20] and a
         `set_tile(.., Solid)` for dig targets. Do not weaken the filter to keep old tests green.
-  - [ ] Tests: dig marks only solid tiles of a mixed rect; channel marks only standable ones; a rect
+  - [x] Tests: dig marks only solid tiles of a mixed rect; channel marks only standable ones; a rect
         with no workable tile changes nothing; the 4097th distinct position is refused while
         re-designating an existing one still flips its kind.
 
-- [ ] **`sim-core`: designations become jobs** (AC: 4)
-  - [ ] `create_jobs` system: for each designation in ascending `Pos` with no entry in the target
+- [x] **`sim-core`: designations become jobs** (AC: 4)
+  - [x] `create_jobs` system: for each designation in ascending `Pos` with no entry in the target
         index, insert a `Job` with `created_tick = tick`, `retry_after = 0`.
-  - [ ] Add to the chained schedule — order is fixed and load-bearing (AC4, AC5, AC10):
+  - [x] Add to the chained schedule — order is fixed and load-bearing (AC4, AC5, AC10):
         `(advance_tick, create_jobs, claim_jobs, execute_jobs, settle, wander).chain()`.
-  - [ ] Tests: N designated tiles yield N jobs with ascending ids; a second `step()` adds none; a
+  - [x] Tests: N designated tiles yield N jobs with ascending ids; a second `step()` adds none; a
         paused daemon creates no jobs (assert via the schedule not running, i.e. `apply_command` then
         no `step()` leaves `jobs()` empty).
 
-- [ ] **`sim-core`: claiming and the reaction delay** (AC: 5, 6)
-  - [ ] `reaction_delay` as a named, hand-written FNV-1a — offset basis `0xcbf29ce484222325`, prime
+- [x] **`sim-core`: claiming and the reaction delay** (AC: 5, 6)
+  - [x] `reaction_delay` as a named, hand-written FNV-1a — offset basis `0xcbf29ce484222325`, prime
         `0x100000001b3`, folding the LE bytes of seed, dwarf id and job id in that order, then
         `5 + (hash % 26)`. One function, no dependency, no RNG stream.
-  - [ ] `claim_jobs`: build the claimed-`JobId` set from dwarves ascending `Id` (five entries), then
+  - [x] `claim_jobs`: build the claimed-`JobId` set from dwarves ascending `Id` (five entries), then
         walk `jobs.iter()` ascending `JobId`; for each unclaimed, eligible job assign the first
         eligible dwarf in ascending `Id`.
-  - [ ] Tests: FIFO — with two jobs and one free dwarf the lower `JobId` is taken; a dwarf holding a
+  - [x] Tests: FIFO — with two jobs and one free dwarf the lower `JobId` is taken; a dwarf holding a
         job is skipped; a job is not claimed before `created_tick + delay`; the pinned delay table
         for seed 42 × dwarves 0..=4 × jobs 0..=2.
 
-- [ ] **`sim-core`: A\*** (AC: 7)
-  - [ ] Private `astar(terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>>` — a goal
+- [x] **`sim-core`: A\*** (AC: 7)
+  - [x] Private `astar(terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>>` — a goal
         **set**, so one search serves all four work positions of a dig target rather than four.
-  - [ ] `BinaryHeap<Reverse<(u32 /*f*/, Pos)>>` with `BTreeMap` for `came_from`/`g`; `Pos` in the
+  - [x] `BinaryHeap<Reverse<(u32 /*f*/, Pos)>>` with `BTreeMap` for `came_from`/`g`; `Pos` in the
         heap key is what makes ties deterministic. Heuristic = Manhattan to the nearest goal.
-  - [ ] Neighbours in the fixed order `[(-1,0), (1,0), (0,-1), (0,1)]`, matching `wander`
+  - [x] Neighbours in the fixed order `[(-1,0), (1,0), (0,-1), (0,1)]`, matching `wander`
         [lib.rs:200]: same-z when standable; z±1 when standable **and** the tile below the lower of
         the two positions is a `Ramp`.
-  - [ ] Tests: a straight corridor yields the shortest path; a ramp built by `place_ramps` is
+  - [x] Tests: a straight corridor yields the shortest path; a ramp built by `place_ramps` is
         crossed; a walled-off goal yields `None`; the node cap yields `None` rather than scanning the
         world; the same query twice yields the identical path.
 
-- [ ] **`sim-core`: walk, work, dig and channel** (AC: 8, 9)
-  - [ ] `execute_jobs`: no path → compute one to the job's work positions (none reachable → release
+- [x] **`sim-core`: walk, work, dig and channel** (AC: 8, 9)
+  - [x] `execute_jobs`: no path → compute one to the job's work positions (none reachable → release
         per AC11); path non-empty → take one step, `JobState::Walk`; at a work position → count
         `WORK_TICKS` with `JobState::Work`, then complete.
-  - [ ] `Path(Vec<Pos>)` and `WorkProgress(u32)` components, attached on claim and removed on
+  - [x] `Path(Vec<Pos>)` and `WorkProgress(u32)` components, attached on claim and removed on
         release/completion. **Neither is saved** (AC13) — `Path` is a pure function of terrain and
         endpoints, so a loaded world recomputes the identical one. `WorkProgress` IS saved, folded
         into the job as a field rather than a component if that reads simpler — pick one and say so.
-  - [ ] Completion: `set_tile` (dig: target → `Empty`; channel: target-below → `Ramp(m)` keeping the
+  - [x] Completion: `set_tile` (dig: target → `Empty`; channel: target-below → `Ramp(m)` keeping the
         material it had), spawn the stone `(Item, Id, Pos)` with `self.ids.allocate()`, then
         `jobs.remove(..)` and drop the designation.
-  - [ ] `wander` gains one filter: skip dwarves whose `CurrentJob` is `Some`. Rewrite its
+  - [x] `wander` gains one filter: skip dwarves whose `CurrentJob` is `Some`. Rewrite its
         `// NOTE:` at `lib.rs:187-191` — the resting-dwarf-on-mutated-terrain case is now handled by
         `settle`, not deferred.
-  - [ ] Tests: state machine `Idle → Walk → Work → Idle` observed over one job; a dig turns the wall
+  - [x] Tests: state machine `Idle → Walk → Work → Idle` observed over one job; a dig turns the wall
         to `Empty` and puts a stone at the target with a fresh id; a channel turns the tile below
         into a `Ramp` of the same material; the dug tile appears in that tick's `drain_dirty`.
 
-- [ ] **`sim-core`: settle, retry and cancel** (AC: 10, 11)
-  - [ ] `settle` between `execute_jobs` and `wander`: ascending `Id`, if `!is_standable(pos)` and
+- [x] **`sim-core`: settle, retry and cancel** (AC: 10, 11)
+  - [x] `settle` between `execute_jobs` and `wander`: ascending `Id`, if `!is_standable(pos)` and
         `is_standable(pos.z - 1)` then move down one and clear `Path`. One level per tick, no loop —
         a deeper shaft settles over successive ticks and that is deliberate.
-  - [ ] Release path: clear `CurrentJob`, drop `Path`/`WorkProgress`, set `retry_after = tick +
+  - [x] Release path: clear `CurrentJob`, drop `Path`/`WorkProgress`, set `retry_after = tick +
         RETRY_COOLDOWN`. **Without the cooldown this livelocks**: eligibility is computed from
         `created_tick`, which does not change, so the same dwarf re-claims and re-runs A* every tick.
-  - [ ] `CancelDesignation` in `apply_command` also removes jobs whose target is in the rect and
+  - [x] `CancelDesignation` in `apply_command` also removes jobs whose target is in the rect and
         clears the `CurrentJob` of any dwarf holding one. `RemoveStockpile` still touches zones only.
-  - [ ] Tests: a dwarf standing on a dug tile is one z lower the same tick; a walled-off target's job
+  - [x] Tests: a dwarf standing on a dug tile is one z lower the same tick; a walled-off target's job
         is still present after 200 ticks and no dwarf is permanently stuck on it; cancelling while
         claimed leaves the job gone, the dwarf `Idle` and the tile unchanged.
 
-- [ ] **`protocol` + `simd`: items on the wire** (AC: 12)
-  - [ ] Add `Item` and the `items` field to `Snapshot` and `Delta`. Do not touch `Entity` — keeping
+- [x] **`protocol` + `simd`: items on the wire** (AC: 12)
+  - [x] Add `Item` and the `items` field to `Snapshot` and `Delta`. Do not touch `Entity` — keeping
         it unchanged is why every existing pinned dwarf literal stays valid.
-  - [ ] Extend `WIRE`, `DELTA_WIRE` and `every_material_and_tile_variant_has_a_pinned_wire_name`
+  - [x] Extend `WIRE`, `DELTA_WIRE` and `every_material_and_tile_variant_has_a_pinned_wire_name`
         with the new shape. Literals, not round-trips.
-  - [ ] `bridge.rs`: `World::items()` mapped in `snapshot()` and `delta()` alongside zones. Rewrite
+  - [x] `bridge.rs`: `World::items()` mapped in `snapshot()` and `delta()` alongside zones. Rewrite
         the amplification `// NOTE:` at `bridge.rs:74-80` — it now names the `MAX_DESIGNATIONS`
         bound instead of pointing forward to this story.
-  - [ ] Live-daemon test in `crates/simd/tests/serve.rs` extending the existing `Daemon` harness: a
+  - [x] Live-daemon test in `crates/simd/tests/serve.rs` extending the existing `Daemon` harness: a
         designate over a solid tile, then read deltas until one carries a non-empty `tiles` and a
         non-empty `items` — the AD-8 dirty path proven end to end for the first time.
 
-- [ ] **`sim-core`: jobs, claims and items survive save/load** (AC: 13)
-  - [ ] `SaveState` gains `jobs: Vec<Job>`, `next_job_id: u32`, `items: Vec<(u32, Pos)>`;
+- [x] **`sim-core`: jobs, claims and items survive save/load** (AC: 13)
+  - [x] `SaveState` gains `jobs: Vec<Job>`, `next_job_id: u32`, `items: Vec<(u32, Pos)>`;
         `SavedDwarf` gains `current_job: Option<u32>`. `Job`, `JobKind` and `JobId` derive
         `Serialize`/`Deserialize` like the other saved sim types.
-  - [ ] Extend `crates/sim-core/tests/save_load.rs`'s gate test per AC13. Do not add a save-format
+  - [x] Extend `crates/sim-core/tests/save_load.rs`'s gate test per AC13. Do not add a save-format
         literal test — format stability is a project non-goal.
-  - [ ] `load_world` in `simd` already validates persisted mark positions; extend the same
+  - [x] `load_world` in `simd` already validates persisted mark positions; extend the same
         `in_bounds` check to job targets and item positions, matching the pattern at
         `crates/simd/src/main.rs:274-307`.
 
-- [ ] **`tui`: stone, crowds and the layer order** (AC: 14)
-  - [ ] `palette.rs`: `item_cell()` and `crowd_cell()`, both added to `every_look_is_pinned` and to
+- [x] **`tui`: stone, crowds and the layer order** (AC: 14)
+  - [x] `palette.rs`: `item_cell()` and `crowd_cell()`, both added to `every_look_is_pinned` and to
         its pairwise-distinct and no-collision assertions. Suggested `*` for stone and `⚇` for a
         crowd; exact RGB is yours, the distinctness is not optional.
-  - [ ] `view.rs render`: draw `snapshot.items` after designations and before entities. For the
+  - [x] `view.rs render`: draw `snapshot.items` after designations and before entities. For the
         entity layer, count dwarves per screen cell first, then draw `crowd_cell()` where the count
         exceeds one — do not draw a dwarf and then overwrite it.
-  - [ ] Tests: an item renders on the viewed level only (the same z-guard entities already use
+  - [x] Tests: an item renders on the viewed level only (the same z-guard entities already use
         [view.rs:170-178]); a dwarf standing on a stone shows the dwarf; two dwarves on one cell show
         the crowd glyph and neither `☺`; layer order extended in the existing
         `marker_layers_follow_...` test.
 
-- [ ] **Observability instrument** (AC: 15) — extend `tui --frames N --key`; do not invent a second
+- [x] **Observability instrument** (AC: 15) — extend `tui --frames N --key`; do not invent a second
       channel. The existing `--key` sequence parser and stub-daemon capture pattern already carry it
       [3.1 AC14, `crates/tui/tests/client.rs`].
-  - [ ] Two tests driving the real binary against a stub daemon: the stub replays a wall tile
+  - [x] Two tests driving the real binary against a stub daemon: the stub replays a wall tile
         becoming empty plus an item appearing, and the capture must show the cell's glyph **change
         between frames** and the stone glyph arrive. The control stub sends deltas whose world never
         changes and its capture must show neither.
-  - [ ] The change-between-frames assertion is the point: 2.2 shipped an instrument that rendered
+  - [x] The change-between-frames assertion is the point: 2.2 shipped an instrument that rendered
         motion as stillness and its evidence was an artefact. A capture that merely *contains* a
         stone glyph would pass even if the client drew it unconditionally.
 
-- [ ] **Scenario harness** (AC: 16) — extend `crates/sim-core/tests/scenario.rs`, do not replace.
+- [x] **Scenario harness** (AC: 16) — extend `crates/sim-core/tests/scenario.rs`, do not replace.
       Build the terrain the case needs with `make_standable` and `set_tile` rather than hunting for
       generated terrain that happens to suit.
 
-- [ ] **Sabotage + mutation set** (AC: 17)
-  - [ ] `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh`, at least: `Designate`
+- [x] **Sabotage + mutation set** (AC: 17)
+  - [x] `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh`, at least: `Designate`
         ignores the diggability filter; ignores the `MAX_DESIGNATIONS` cap; `break`s out of the rect
         when full instead of `continue`ing; the stone takes its id from a second per-kind counter
         rather than the global allocator; `create_jobs` creates a
@@ -281,12 +304,82 @@ so that the mountain yields stone at my command — through workers, not a remot
         drops `current_job`; `from_save` discards them; `bridge` drops items from the delta; the
         `items` field is renamed on the wire; the crowd glyph is not drawn; items draw above
         entities.
-  - [ ] `cargo clean -p sim-core -p protocol -p simd -p tui` before the final gate — `mutate.sh` is
+  - [x] `cargo clean -p sim-core -p protocol -p simd -p tui` before the final gate — `mutate.sh` is
         not concurrency-safe and 2.3, 2.4 and 3.1 all hit stale mutated binaries.
-  - [ ] Paste the actual RED output for every new mapping/constant test into the Dev Agent Record
+  - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent Record
         (AGENTS.md rule 1).
 
-- [ ] **Green gate** (AC: 17) — `scripts/gate.sh`, then the live check. Report what printed.
+- [x] **Green gate** (AC: 17) — `scripts/gate.sh`, then the live check. Report what printed.
+
+### Review Findings
+
+Code review 2026-08-06. Four layers, all completed — no coverage holes from timeouts. Each
+finding carries its originating LAYER and SEVERITY (review-cost discipline rule 1).
+
+- [x] [Review][Defer] **A Channel job is permanently orphaned when an independent Dig removes
+      its support** [crates/sim-core/src/lib.rs:463-469] — LAYER: edge-case-hunter. SEVERITY: med.
+      **RESOLVED by Wolf 2026-08-06: leave as specified, no code change.** AC11 deliberately chose
+      never-drop, the retry costs nothing, the mark stays visible and `x` cancels it. Recorded as
+      known behaviour; revisit only if it bites in play.
+      Designate a channel at `P` (needs `is_standable(P)`, i.e. `P.z-1` is `Solid`), then separately
+      designate a dig at `P.z-1` — independently valid, it is solid. If the dig completes first,
+      `is_standable(P)` is false forever, `work_positions` returns the empty set, and the channel
+      job retries every 20 ticks with no dwarf ever able to take it. Live-verified over 500 ticks:
+      `jobs().len()` pinned at 1, `retry_after` climbing to 602, never converting to `Ramp`.
+      **This matches AC11 exactly** — "the job stays in the market and is retried, never dropped
+      (FR8)" — and the retry is nearly free (`astar_with_budget` early-returns on an empty goal set
+      before spending any node budget, so there is no starvation or performance cost). The
+      designation mark also stays visible on screen and `x` cancels it, so the player is not without
+      a signal. DECISION FOR WOLF: leave as specified (never drop), or make a permanently-unwinnable
+      job detectable? Not patched either way without your call.
+
+- [x] [Review][Patch] **The story's own Verification recipe produces zero marks**
+      [3-2-the-dig.md, Verification section] — LAYER: feature-auditor. SEVERITY: med. The documented
+      recipe designates at the opening view level, where the visible map is air, so AC2's diggability
+      filter correctly marks nothing and the feature reads as broken. The Feature Auditor's first
+      live run reproduced exactly this. The recipe needs `<` to descend a level before designating.
+      This is the project's recurring SPEC-TEXT defect class, against an Epic 3 baseline of zero.
+
+- [x] [Review][Patch] **`astar_stops_at_the_node_cap`'s 0.35% margin — FINDING PARTLY REJECTED**
+      [crates/sim-core/src/lib.rs, test] — LAYER: acceptance-auditor. SEVERITY: low (revised down).
+      The auditor read the 224x224 grid (50,176 nodes vs a 50,000 cap) as a fragile fixture and
+      recommended widening it. **Acting on that made the suite WEAKER and the mutation set caught
+      it**: widening to 320x320 exhausts the budget under both the real cap and the mutated one
+      (`MAX_ASTAR_NODES is widened`, 50_000 -> 60_000), so the test passed either way and that
+      mutation SURVIVED — the first survivor this story has had. The tight margin is load-bearing:
+      it must sit BETWEEN the real cap and the smallest widening the mutation set probes. Reverted
+      to 224x224. What was actually kept: a `// NOTE:` at the test explaining why the margin must
+      stay tight (both the auditor and the reviewer misread it as an accident), and a new
+      `astar_finds_a_path_well_inside_the_node_cap` pinning the downward direction explicitly.
+      Sabotage-verified after the revert: 50_000 -> 60_000 fails the cap test, 50_000 -> 1 fails the
+      new test, baseline green.
+
+- [x] [Review][Patch] **Four ACs disagree with the shipped code; the code is right in each case**
+      — LAYER: acceptance-auditor + feature-auditor (AC10 found independently by both). SEVERITY:
+      low each, grouped as one story-text edit. (a) AC3 says the full-mark-set arm `continue`s;
+      the Tasks section says `break`. Code follows AC3. (b) AC8's "a dwarf is `Idle` exactly when it
+      holds no job" is unsatisfiable — `wander` reports `Walk` for job-less dwarves and 3.1's delta
+      test pins that; the implementable half (a job-holder is never `Idle`) is met. (c) AC10 says
+      `settle` descends "when the tile below is standable"; the code tests `tile(below) == Empty`.
+      AC10 as written would leave a dwarf hovering forever over a two-deep shaft — the code is
+      better and is pinned by `settle_descends_one_level_per_tick_through_a_deep_empty_shaft`.
+      (d) AC5 lists exactly two claim gates; `claim_jobs` adds reachability as a third by pathing at
+      claim time. Amend the text, not the code.
+
+- [x] [Review][Defer] **`jobs.next_id += 1` is a plain add** [crates/sim-core/src/lib.rs:176] —
+      LAYER: edge-case-hunter. SEVERITY: low. Every neighbouring tick/id computation in the same
+      diff uses `saturating_add`. Needs ~4 billion lifetime job creations to reach; deferred.
+- [x] [Review][Defer] **The AD-12 seam promised to 3.3 is heavier than planned** — LAYER:
+      acceptance-auditor. SEVERITY: low. `claim_jobs` now owns work-position computation, A* and the
+      node budget, so a `Haul` variant is no longer a pure `JobKind` addition. For 3.3 planning.
+- [x] [Review][Defer] **Crowd counting and crowd drawing use different entity filters**
+      [crates/tui/src/view.rs] — LAYER: acceptance-auditor. SEVERITY: low. `dwarf_counts` counts only
+      `EntityKind::Dwarf`; the draw loop applies `crowd_cell()` to any entity on a crowded index.
+      Harmless while dwarf is the only kind; latent for the second.
+- [x] [Review][Defer] **Daemon test lock lengthens the gate** [crates/simd/tests/serve.rs] — LAYER:
+      acceptance-auditor. SEVERITY: low. A new `DAEMON_TEST_LOCK` serializes every daemon test and
+      `read_delta_with_speed`'s retry budget went 5 to 50. Justified against real cross-process
+      contention, but it changes the failure mode of pre-existing tests this story did not touch.
 
 ## Dev Notes
 
@@ -492,14 +585,33 @@ Live instrument — the observable outcome, joining the two binaries no test can
 reaction delay (5–30 ticks) plus the walk plus `WORK_TICKS`, so ask for enough frames:
 
 ```bash
-cargo run -p simd &
-cargo run -p tui -- --frames 200                              > /tmp/dig-live.txt
-# In the capture: the dig mark appears, a ☺ turns Walk-coloured and moves toward it,
-# the wall glyph at the target becomes open floor, and a * remains at that cell.
-rg -c '×' /tmp/dig-live.txt      # marks placed
-rg -c '\*' /tmp/dig-live.txt     # stone exists after the dig, and only after
-cargo run -p tui                                              # d, move, Enter, move, Enter — watch it live
+cargo run -p simd -- 47411 &
+cargo run -p tui -- 47411 --frames 220 --key '<,d,enter,l,l,l,l,l,l,j,j,j,j,enter' > /tmp/dig-live.txt
+# In the capture: the dig mark appears, a ☺ moves toward it, the mark then VANISHES and a * remains.
+rg -c '×' /tmp/dig-live.txt      # marks placed        (verified 2026-08-06: 118)
+rg -c '\*' /tmp/dig-live.txt     # stone after the dig (verified 2026-08-06: 197)
+for p in $(pgrep -x simd); do kill $p; done   # NEVER pkill -f 'target/debug/simd' — it kills your own shell
+cargo run -p tui                              # then interactively: <, d, move, Enter, move, Enter
 ```
+
+**Three things this recipe gets right that the obvious one gets wrong** — corrected at 3.2's review
+after the Feature Auditor's first live run produced ZERO marks and read as a broken feature:
+
+1. **`--key` is required.** Without it `apply_key` is never called, so no `Designate` command is
+   ever sent and the capture is empty no matter how many frames you ask for. `--frames N` alone
+   streams a world nobody has given an order to.
+2. **`<` must come first.** The initial view level is the first dwarf's z, where the visible map is
+   air — and AC2's diggability filter correctly marks nothing there. You must descend one level
+   before designating or the rect is legally empty.
+3. **Do not look for the wall becoming floor.** `render` peeks up to `PEEK_DEPTH` levels below an
+   `Empty` tile and redraws what it finds, so digging stone that sits on stone re-renders a nearly
+   identical glyph — and `NO_COLOR` (set in this devpod) strips the only thing that differs. Assert
+   on the **designation glyph disappearing** and the **stone glyph appearing**, exactly as AC15
+   requires. The earlier text here claimed "the wall glyph at the target becomes open floor", which
+   contradicts AC15 in the same document.
+
+Key names are a fixed comma-separated set — `space, +, -, S, L, d, c, p, x, h, j, k, l, enter, esc,
+<, >`. There is no repeat shorthand; write `l,l,l` out.
 
 Then, interactively: designate a **channel** run of three tiles along flat ground and confirm a ramp
 appears below and a dwarf can walk down it; cancel a dig mid-walk and confirm the dwarf returns to
@@ -530,14 +642,129 @@ task, imperative messages. Review-gated: no push, no PR.
 
 ### Agent Model Used
 
+`gpt-5.6-sol`
+
 ### Debug Log References
+
+- `MAX_DESIGNATIONS` sabotage (`4096 -> 4097`):
+  `designation_budget_refuses_new_tiles_but_updates_existing_tiles_after_them` failed at
+  `scenario.rs:405` with `assertion failed: !world.designations().iter().any(|(pos, _)| *pos == extra)`.
+- `reaction_delay` sabotage (`5 + hash % 26 -> 6 + hash % 26`):
+  `reaction_delay_table_is_pinned` failed for seed 42, dwarf 0, job 0 with `left: 29`, `right: 28`.
+- `MAX_ASTAR_NODES` sabotage (`50000 -> 60000`): `astar_stops_at_the_node_cap` failed with
+  `left: Some([Pos { x: 0, y: 1, z: 1 }, ... Pos { x: 223, y: 223, z: 1 }])`, `right: None`.
+- `WORK_TICKS` sabotage (`5 -> 6`):
+  `execute_jobs_walks_then_digs_for_exactly_five_work_ticks` failed with `left: Work`, `right: Idle`.
+- `RETRY_COOLDOWN` sabotage (`20 -> 21`):
+  `unreachable_job_stays_queued_and_retries_after_twenty_ticks` failed with `left: 28`, `right: 27`.
+- `Item.id` wire sabotage (`id -> item_id`): `decodes_the_documented_wire_format` failed with
+  `Error("missing field item_id", line: 8, column: 46)`.
+- `Snapshot.items` wire sabotage (`items -> objects`): `decodes_the_documented_wire_format` failed
+  with `Error("missing field objects", line: 11, column: 5)`.
+- Stone glyph sabotage (`* -> ?`): `every_look_is_pinned` failed with
+  `left: Cell { glyph: '?', fg: (176, 172, 160) }`, `right: Cell { glyph: '*', fg: (176, 172, 160) }`.
+- Crowd glyph sabotage (`⚇ -> ☺`): `every_look_is_pinned` failed with
+  `left: Cell { glyph: '☺', fg: (240, 120, 130) }`, `right: Cell { glyph: '⚇', fg: (240, 120, 130) }`.
+- Instrument RED: `dig_replay_capture_transitions_from_designation_to_stone_at_one_cell` initially
+  failed with `early frames contain no designation glyph`; moving the post-commit cursor off the
+  target (`d,enter,enter,l`) exposed the intended target-cell transition.
+- Falling-claimant RED: `claimed_dwarf_settles_before_moving_from_newly_unsupported_ground` failed
+  with `left: Idle`, `right: Walk` before the unsupported claimed branch set its visible state.
+- Loaded-designation-cap RED: `over_budget_designation_save_is_logged_and_the_daemon_keeps_ticking`
+  failed with `unexpected invalid-save log: client delta queue full; disconnecting client`, proving
+  the 4,097-mark save had been accepted instead of rejected.
+- Exhausted-allocator RED: both `exhausted_next_job_id_save_is_logged_and_the_daemon_keeps_ticking`
+  and `exhausted_next_entity_id_save_is_logged_and_the_daemon_keeps_ticking` failed with
+  `unexpected invalid-save log: client delta queue full; disconnecting client` before the load
+  validator rejected `u32::MAX` cursors.
+- Job-derivation RED: `over_budget_job_save_is_logged_and_the_daemon_keeps_ticking`,
+  `job_without_matching_designation_save_is_logged_and_the_daemon_keeps_ticking`, and
+  `job_with_mismatched_designation_kind_save_is_logged_and_the_daemon_keeps_ticking` each failed
+  with `unexpected invalid-save log: client delta queue full; disconnecting client`, proving the
+  malformed job tables had loaded instead of being rejected.
+- Cached-path RED: `save_load_recomputes_every_path_invalidated_by_another_dig` failed after one
+  dwarf removed support under another dwarf's route: loaded was `Pos { x: 1, y: 1, z: 2 }, Idle`
+  while the never-saved control was `Pos { x: 2, y: 1, z: 2 }, Walk`. Removing path invalidation
+  after the fix reproduced the same failure.
+- Aggregate A* RED: `claim_jobs_bounds_aggregate_astar_expansions_per_tick` initially retried job ids
+  `0..=9` instead of the literal `0..=4`. The `MAX_ASTAR_NODES` sabotage (`50000 -> 60000`) then
+  failed with `left: [JobId(0), ..., JobId(5)]`, `right: [JobId(0), ..., JobId(4)]`.
 
 ### Completion Notes List
 
+- Implemented the deterministic Dig/Channel job market, claiming delay, bounded ramp-aware A*,
+  walking/working/completion, retry/cancel, single-level settle, stone spawning, save/load, wire
+  transport, TUI item/crowd rendering, and the real-binary frame instrument without new dependencies.
+- Chose `WorkProgress` as a dwarf ECS component rather than a job field. It is persisted through
+  `SavedDwarf.work_progress`; `Path` remains transient and is deterministically recomputed after load.
+- Added headless, daemon, protocol, renderer, and binary-capture coverage. The final mutation file has
+  75 cases and printed `All mutations killed.` (zero survivors and zero apply failures).
+- After the final review fixes, ran `cargo clean -p sim-core -p protocol -p simd -p tui`, then
+  `scripts/gate.sh`; it printed `GATE GREEN` with fmt, clippy, tests, dependency-edge, and
+  metrics-ledger checks all `ok`.
+- Manual live check joined the real `simd` and `tui` binaries. The capture checks printed 122 rows
+  containing `×` and 73 containing `*`; the final daemon snapshot had no designation and item id 5
+  at the dug target. The first attempt also exposed an off-screen framebuffer-index overflow, which
+  was fixed with a regression test before the successful run.
+- `codex review --base main` ran and raised five legitimate findings: lost work progress, movement
+  before settle, an overestimating ramp heuristic, global item-id reuse, and inconsistent job tables.
+  All five were fixed and mutation-covered. It raised no self-referential-test or unbounded-I/O issue.
+- A second `codex review --base main` raised two legitimate P2 findings: an already-channelled ramp
+  could leave a permanently retrying job, and persisted claims were not checked against the job table.
+  Both were fixed with RED-first regressions and three more killed mutations. Its internal gate replay
+  could not bind loopback sockets in the nested review sandbox; the authoritative gate outside that
+  sandbox remained green, so no production code or tests were weakened for the environmental limit.
+- A third `codex review --base main` raised four legitimate P2 findings: unreachable lower-id dwarves
+  could starve reachable workers, deep shafts could leave dwarves hovering, work completed after only
+  four visible `Work` ticks, and corrupt saves could overflow `WorkProgress`. All four were reproduced,
+  fixed, and mutation-covered. The reachability check remains inside the single claiming system and
+  preserves ascending job/dwarf order. The full daemon suite exposed pre-existing timing assertions
+  competing across dozens of daemon processes; a test-only standard-library mutex now serializes that
+  harness without weakening any assertion, and the authoritative gate is green.
+- A fourth `codex review --base main` raised three legitimate P2 findings: a falling claimed dwarf
+  could report `Idle`, loaded saves could bypass `MAX_DESIGNATIONS`, and exhausted entity/job id
+  allocators could be restored. All three were reproduced with RED-first regressions, fixed, and
+  mutation-covered. Its nested gate again could not bind loopback sockets; the authoritative gate
+  outside that sandbox is green.
+- A fifth `codex review --base main` raised one legitimate P2 finding: corrupt saves could inject
+  jobs without matching designation positions/kinds and bypass the designation-derived work bound.
+  The loader now caps jobs and checks every job against the exact designation state that will be
+  restored; missing, mismatched, and over-budget tables are RED-first and mutation-covered.
+- A sixth `codex review --base main` raised two legitimate P1 findings: terrain mutation could leave
+  another dwarf's transient route stale and break deterministic save/load, and each claim attempt had
+  an independent A* node allowance so a legal unreachable queue could stall a tick. Every terrain
+  change now invalidates transient paths, and all claim searches share one 50,000-node tick allowance.
+  Both fixes have RED-first regressions and killed mutations. The review's internal gate again reached
+  only the known nested-sandbox loopback denial; the clean authoritative gate printed `GATE GREEN`.
+- Deliberately did not add hauling, carrying, occupancy filtering, item gravity, path caching,
+  priorities, new wire messages, or any deferred-work item outside this story's assigned AD-8 entries.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/3-2-the-dig.md` — updated story execution record
+- `_bmad-output/implementation-artifacts/deferred-work.md` — closed the assigned AD-8 entries
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` — added 68 mutation cases
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — advanced story status
+- `crates/protocol/src/lib.rs` — added stone item snapshot/delta wire shapes and literals
+- `crates/sim-core/src/lib.rs` — added jobs, bounded claims/A*, path invalidation, execution, settle,
+  items, and readers
+- `crates/sim-core/src/save.rs` — persisted jobs, items, claims, and work progress
+- `crates/sim-core/tests/save_load.rs` — covered mid-walk, mid-work, and terrain-invalidated restore
+- `crates/sim-core/tests/scenario.rs` — covered full dig, retry, cancel, limits, and replay
+- `crates/simd/src/bridge.rs` — streamed items and dirty terrain changes
+- `crates/simd/src/main.rs` — validated persisted job/item bounds, ids, and indexes
+- `crates/simd/tests/serve.rs` — covered live deltas and invalid-save rejection
+- `crates/tui/src/main.rs` — applied authoritative item deltas
+- `crates/tui/src/palette.rs` — added pinned stone and crowd looks
+- `crates/tui/src/view.rs` — rendered item/crowd layers and safely discarded off-screen markers
+- `crates/tui/tests/client.rs` — proved designation-to-stone frame transitions
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-06 | Story created |
+| 2026-08-06 | Implemented and verified Story 3.2 end to end; closed review findings and moved to review |
+| 2026-08-06 | Closed final claimant-state and load-boundary review findings with 70 killed mutations |
+| 2026-08-06 | Enforced designation-derived saved jobs and killed all 73 mutations |
+| 2026-08-06 | Invalidated stale paths, bounded per-tick A* work, and killed all 75 mutations |

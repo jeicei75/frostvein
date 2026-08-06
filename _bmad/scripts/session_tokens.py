@@ -190,11 +190,21 @@ def sum_codex_transcript(path: str) -> dict[str, object]:
     """Sum a Codex ``rollout-*.jsonl`` (cumulative). Codex emits ``token_count``
     events whose ``info.total_token_usage`` is *already cumulative*, so the session
     total is the LAST such event — not a sum over events. ``input_tokens`` there is
-    the full prompt count *including* cached, so fresh = input - cached."""
+    the full prompt count *including* cached, so fresh = input - cached.
+
+    Also captures ``payload.rate_limits.primary.used_percent`` — Codex bills a weekly
+    QUOTA, not metered tokens, so this is the axis that actually binds. See the ledger
+    header for why it is not interchangeable with ``est_usd``.
+
+    NOTE: ``rate_limits`` is a SIBLING of ``info`` under ``payload``, not a member of it
+    (verified against a real codex-cli 0.146.0 rollout). Reading it from ``info`` yields
+    silence, not an error — and a synthetic fixture that puts it there will happily pass
+    while the real thing reports nothing."""
     last: dict | None = None
     events = 0
     models: set[str] = set()
     stamps: list[str] = []
+    quota: list[float] = []
     with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
@@ -210,8 +220,13 @@ def sum_codex_transcript(path: str) -> dict[str, object]:
             if payload.get("model"):  # session_meta / turn_context carry the model id
                 models.add(str(payload["model"]))
             if payload.get("type") == "token_count":
+                pct = ((payload.get("rate_limits") or {}).get("primary") or {}).get("used_percent")
+                if isinstance(pct, (int, float)):
+                    quota.append(float(pct))
                 info = payload.get("info")
-                if isinstance(info, dict) and isinstance(info.get("total_token_usage"), dict):
+                if not isinstance(info, dict):
+                    continue
+                if isinstance(info.get("total_token_usage"), dict):
                     last = info["total_token_usage"]
                     events += 1
                     if obj.get("timestamp"):
@@ -225,7 +240,10 @@ def sum_codex_transcript(path: str) -> dict[str, object]:
         "cache_read": cached,
         "output": int(last.get("output_tokens", 0) or 0),  # already includes reasoning_output_tokens
     }
-    return _as_summary(events, sorted(models), totals, _span(stamps))
+    return _as_summary(
+        events, sorted(models), totals, _span(stamps),
+        (quota[0], quota[-1]) if quota else (None, None),
+    )
 
 
 def _span(stamps: list[str]) -> tuple[str | None, str | None]:
@@ -254,8 +272,15 @@ def _as_summary(
     models: list[str],
     totals: dict[str, int],
     span: tuple[str | None, str | None] = (None, None),
+    quota: tuple[float | None, float | None] = (None, None),
 ) -> dict[str, object]:
     grand = totals["input"] + totals["cache_creation"] + totals["cache_read"] + totals["output"]
+    # A weekly window RESET inside the span makes `last < first`; report `—` rather than a
+    # negative or a wrapped number, because the true consumption spans two windows and this
+    # tool cannot see the pre-reset ceiling.
+    pp = None
+    if quota[0] is not None and quota[1] is not None and quota[1] >= quota[0]:
+        pp = quota[1] - quota[0]
     return {
         "turns": turns,
         "models": models,
@@ -266,6 +291,9 @@ def _as_summary(
         "total": grand,
         "first_ts": span[0],
         "last_ts": span[1],
+        "quota_first": quota[0],
+        "quota_last": quota[1],
+        "quota_pp": pp,
     }
 
 
@@ -309,11 +337,18 @@ def delta_since_cursor(cumulative: dict, prev: dict | None) -> tuple[dict, bool]
     # The window starts where the last record stopped, so elapsed time is billed per phase
     # the same way tokens are. A cursor written before `last_ts` existed leaves it None,
     # which surfaces as `—` rather than a wrong duration.
+    # Quota bills over the same window as tokens: from where the last record stopped to
+    # here. A cursor written before quota existed leaves it None, so we fall back to this
+    # transcript's own first sample rather than inventing a floor.
+    q_from = prev.get("quota_last")
+    if q_from is None:
+        q_from = cumulative.get("quota_first")
     delta = _as_summary(
         int(cumulative["turns"]) - int(prev.get("turns", 0)),
         cumulative["models"],
         totals,
         (prev.get("last_ts"), cumulative.get("last_ts")),
+        (q_from, cumulative.get("quota_last")),
     )
     return delta, False
 
@@ -333,10 +368,21 @@ _LEDGER_HEADER = (
     "same delta window (first counted turn of the window to its last), so a phase that "
     "stalled reads differently from one that was merely expensive — it is the third axis, "
     "alongside tokens and cost, and it INCLUDES any human gap inside the window. It is "
-    "the last column so rows written before it existed still parse; those show `—`. "
+    "a late column so rows written before it existed still parse; those show `—`. "
     "Generated by that script.\n\n"
-    "| phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes |\n"
-    "|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+    "**`quota_pp` is the axis that actually binds for Codex, and `est_usd` is NOT a "
+    "substitute for it.** Codex runs on a subscription with a weekly quota, so no dollars "
+    "are literally spent on a `tool=codex` row — `est_usd` weights tokens by `PRICES` "
+    "purely as a cross-tool comparability benchmark. `quota_pp` is percentage points of "
+    "the 7-day window consumed over the same delta window, read from "
+    "`rate_limits.primary.used_percent` in the rollout. Two caveats that decide whether a "
+    "number is trustworthy: the percentage is **account-wide**, so a concurrent run in "
+    "another project inflates it (check each rollout's `cwd` before attributing), and a "
+    "weekly reset inside the window shows `—` rather than a negative. Claude rows are "
+    "always `—`. Story 3.2 is the worked example: $18.28 of self-gate priced at 23% of "
+    "dollars was ~1/3–1/2 of the quota.\n\n"
+    "| phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |\n"
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 )
 
 
@@ -346,6 +392,10 @@ def _fmt(n: int) -> str:
 
 def _fmt_usd(cost: float | None) -> str:
     return f"${cost:.2f}" if cost is not None else "—"
+
+
+def _fmt_pp(pp: float | None) -> str:
+    return f"{pp:.0f}pp" if pp is not None else "—"
 
 
 def append_ledger(metrics_file: str, story: str, phase: str, tool: str, s: dict, transcript_id: str) -> None:
@@ -360,7 +410,8 @@ def append_ledger(metrics_file: str, story: str, phase: str, tool: str, s: dict,
         f"| {phase} | {tool} | {model} | {s['turns']} | {_fmt(s['input'])} | "
         f"{_fmt(s['cache_creation'])} | {_fmt(s['cache_read'])} | {_fmt(s['output'])} | "
         f"{_fmt(s['total'])} | {_fmt_usd(estimate_usd(s))} | `{transcript_id}` | "
-        f"{when} · rates {PRICES_VERSION} | {'—' if mins is None else f'{mins:.0f}'} |\n"
+        f"{when} · rates {PRICES_VERSION} | {'—' if mins is None else f'{mins:.0f}'} | "
+        f"{_fmt_pp(s.get('quota_pp'))} |\n"
     )
     with open(metrics_file, "a", encoding="utf-8") as fh:
         fh.write(row)
@@ -379,12 +430,13 @@ def parse_ledger_rows(path: str) -> list[dict]:
     Skips the header and the ``|---|`` separator; tolerates the prose/header above
     the table. Numeric cells drop thousands-commas; ``est_usd`` parses ``$x.yz`` (and
     ``—`` -> None) so an unpriced row still counts toward token totals but not cost."""
-    # `minutes` is LAST because ledgers written before it existed carry 12 cells; `zip`
-    # stops at the shorter side, so those rows simply have no `minutes` key. Inserting it
-    # anywhere earlier would silently re-align every historical row by one column.
+    # New columns are APPENDED, never inserted: ledgers written before `minutes` carry 12
+    # cells and before `quota_pp` carry 13; `zip` stops at the shorter side, so those rows
+    # simply lack the key. Inserting anywhere earlier silently re-aligns every historical
+    # row by one column.
     cols = (
         "phase", "tool", "model", "turns", "input", "cache_create", "cache_read",
-        "output", "total", "est_usd", "transcript", "recorded", "minutes",
+        "output", "total", "est_usd", "transcript", "recorded", "minutes", "quota_pp",
     )
     rows: list[dict] = []
     with open(path, encoding="utf-8") as fh:
@@ -410,6 +462,8 @@ def parse_ledger_rows(path: str) -> list[dict]:
             row["est_usd"] = float(usd) if usd not in ("—", "-", "") else None
             mins = str(row.get("minutes", "—")).strip()
             row["minutes"] = float(mins) if mins.replace(".", "", 1).isdigit() else None
+            pp = str(row.get("quota_pp", "—")).strip().rstrip("p")
+            row["quota_pp"] = float(pp) if pp.replace(".", "", 1).isdigit() else None
             rows.append(row)
     return rows
 
@@ -590,13 +644,18 @@ def _render_shape(per_story: dict[str, list[dict]], epic: str) -> list[str]:
         "context already paid for and re-sent; a high share means the levers are turn count "
         "and context scope, not model tier or rigor. `minutes` is wall-clock across the "
         "recorded windows and **includes any human gap inside them**, so read it as elapsed, "
-        "not effort. `—` = rows recorded before these columns existed.",
+        "not effort. `—` = rows recorded before these columns existed. `quota` is Codex "
+        "weekly-window percentage points — the resource that actually rations delegated "
+        "dev, which `est_usd` cannot express because Codex bills a subscription, not "
+        "tokens. Summing it across stories is only meaningful inside one 7-day window; "
+        "across an epic read it as relative weight, not as a percentage of anything.",
         "",
-        "| story | turns | tokens | cache-read | cache-read % | output | minutes |",
-        "|---|---|---|---|---|---|---|",
+        "| story | turns | tokens | cache-read | cache-read % | output | minutes | quota |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     agg = {"turns": 0, "total": 0, "cache_read": 0, "output": 0}
     mins_total, any_mins = 0.0, False
+    pp_total, any_pp = 0.0, False
     for story, rows in per_story.items():
         t = {k: sum(int(r.get(k, 0) or 0) for r in rows) for k in agg}
         for k in agg:
@@ -605,17 +664,23 @@ def _render_shape(per_story: dict[str, list[dict]], epic: str) -> list[str]:
         if smins:
             any_mins = True
             mins_total += sum(smins)
+        spp = [r["quota_pp"] for r in rows if r.get("quota_pp") is not None]
+        if spp:
+            any_pp = True
+            pp_total += sum(spp)
         share = f"{100 * t['cache_read'] / t['total']:.0f}%" if t["total"] else "—"
         out.append(
             f"| {_story_label(story, epic)} | {_fmt(t['turns'])} | {_fmt(t['total'])} | "
             f"{_fmt(t['cache_read'])} | {share} | {_fmt(t['output'])} | "
-            f"{f'{sum(smins):.0f}' if smins else '—'} |"
+            f"{f'{sum(smins):.0f}' if smins else '—'} | "
+            f"{f'{sum(spp):.0f}pp' if spp else '—'} |"
         )
     gshare = f"{100 * agg['cache_read'] / agg['total']:.0f}%" if agg["total"] else "—"
     out.append(
         f"| **total** | **{_fmt(agg['turns'])}** | **{_fmt(agg['total'])}** | "
         f"**{_fmt(agg['cache_read'])}** | **{gshare}** | **{_fmt(agg['output'])}** | "
-        f"**{f'{mins_total:.0f}' if any_mins else '—'}** |"
+        f"**{f'{mins_total:.0f}' if any_mins else '—'}** | "
+        f"**{f'{pp_total:.0f}pp' if any_pp else '—'}** |"
     )
     out.append("")
     return out
@@ -631,6 +696,11 @@ def _print_summary(label: str, s: dict) -> None:
     print(f"  total processed {_fmt(s['total']):>12}")
     mins = _minutes_between(s.get("first_ts"), s.get("last_ts"))
     print(f"  wall-clock      {(f'{mins:.0f} min' if mins is not None else '—'):>12}  (elapsed, includes idle gaps)")
+    if s.get("quota_pp") is not None:
+        print(
+            f"  weekly quota    {_fmt_pp(s['quota_pp']):>12}  "
+            f"({s['quota_first']:.0f}% → {s['quota_last']:.0f}% of the 7-day window; account-wide)"
+        )
     cost = estimate_usd(s)
     if cost is not None:
         print(f"  est. cost       {_fmt_usd(cost):>12}  (benchmark — verify rates in PRICES)")
@@ -697,7 +767,10 @@ def main() -> int:
         _forge_root(), "_bmad-output", "implementation-artifacts", "metrics", f"{args.story}.md"
     )
     append_ledger(metrics_file, args.story, args.phase, args.tool, delta, transcript_id)
-    cursors[transcript_id] = {b: int(s[b]) for b in _CURSOR_BUCKETS} | {"last_ts": s.get("last_ts")}
+    cursors[transcript_id] = {b: int(s[b]) for b in _CURSOR_BUCKETS} | {
+        "last_ts": s.get("last_ts"),
+        "quota_last": s.get("quota_last"),
+    }
     _save_cursors(cursors)
     print(
         f"  recorded delta → {os.path.relpath(metrics_file, _forge_root())} "

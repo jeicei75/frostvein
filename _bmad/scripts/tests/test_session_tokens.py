@@ -35,25 +35,29 @@ def _claude_turn(model, inp, cw, cr, out):
     )
 
 
-def _codex_token_count(model, inp, cached, out):
+def _codex_token_count(model, inp, cached, out, used_percent=None):
+    info = {
+        "total_token_usage": {
+            "input_tokens": inp,
+            "cached_input_tokens": cached,
+            "output_tokens": out,
+            "total_tokens": inp + out,
+        }
+    }
+    # `rate_limits` is a SIBLING of `info` under `payload` — this mirrors a real
+    # codex-cli 0.146.0 rollout. An earlier version of this fixture nested it inside
+    # `info`; every test passed and the real transcript reported nothing, because the
+    # fixture was asserting the author's assumption rather than the wire shape.
+    payload = {"type": "token_count", "info": info}
+    if used_percent is not None:
+        payload["rate_limits"] = {
+            "limit_id": "codex",
+            "primary": {"used_percent": used_percent, "window_minutes": 10080},
+            "secondary": None,
+        }
     return [
         json.dumps({"type": "turn_context", "payload": {"model": model}}),
-        json.dumps(
-            {
-                "type": "event_msg",
-                "payload": {
-                    "type": "token_count",
-                    "info": {
-                        "total_token_usage": {
-                            "input_tokens": inp,
-                            "cached_input_tokens": cached,
-                            "output_tokens": out,
-                            "total_tokens": inp + out,
-                        }
-                    },
-                },
-            }
-        ),
+        json.dumps({"type": "event_msg", "payload": payload}),
     ]
 
 
@@ -148,6 +152,10 @@ class ClaudeParsingTests(unittest.TestCase):
                     # wall-clock span of the counted turns (ep-02 retro): cost cannot tell an
                     # expensive phase from a stalled one, and a 2.5h hung agent is nearly free.
                     "first_ts", "last_ts",
+                    # Codex weekly-quota window (story 3.2): the axis that actually rations
+                    # delegated dev. Always None on a Claude transcript — the shape is shared
+                    # so a row is comparable across tools, not because Claude reports quota.
+                    "quota_first", "quota_last", "quota_pp",
                 },
             )
 
@@ -330,3 +338,121 @@ class LedgerWidthGuardTests(unittest.TestCase):
             self.assertEqual(rows[0]["est_usd"], 16.92)
             self.assertEqual(rows[0]["total"], 3455878)
             self.assertIsNone(rows[0]["minutes"], "a pre-minutes row must read blank, not shifted")
+
+
+class QuotaTests(unittest.TestCase):
+    """Codex bills a weekly QUOTA, not tokens, so `est_usd` measures the non-binding axis
+    for every delegated dev row. Story 3.2 is why: $18.28 of self-gate priced at 23% of
+    dollars was ~1/3-1/2 of the week's quota, and the story exhausted it outright."""
+
+    def test_reads_percentage_points_consumed_across_the_rollout(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "rollout-q.jsonl"
+            lines = _codex_token_count("gpt-5.6-sol", 100, 80, 5, used_percent=40.0)
+            lines += _codex_token_count("gpt-5.6-sol", 1000, 900, 25, used_percent=100.0)[1:]
+            path.write_text("\n".join(lines) + "\n")
+            s = st.sum_codex_transcript(str(path))
+        self.assertEqual(s["quota_first"], 40.0)
+        self.assertEqual(s["quota_last"], 100.0)
+        self.assertEqual(s["quota_pp"], 60.0)
+
+    def test_absent_rate_limits_yield_none_not_zero(self):
+        """A zero would read as 'this run was free'. It means 'not measured'."""
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "rollout-noq.jsonl"
+            path.write_text("\n".join(_codex_token_count("gpt-5.6-sol", 100, 80, 5)) + "\n")
+            s = st.sum_codex_transcript(str(path))
+        self.assertIsNone(s["quota_pp"])
+        self.assertIsNone(s["quota_first"])
+
+    def test_weekly_reset_inside_the_window_reads_blank_not_negative(self):
+        """The window rolled over mid-run, so true consumption spans two windows and this
+        tool cannot see the pre-reset ceiling. `—` beats a negative or a wrapped number."""
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "rollout-reset.jsonl"
+            lines = _codex_token_count("gpt-5.6-sol", 100, 80, 5, used_percent=93.0)
+            lines += _codex_token_count("gpt-5.6-sol", 1000, 900, 25, used_percent=16.0)[1:]
+            path.write_text("\n".join(lines) + "\n")
+            s = st.sum_codex_transcript(str(path))
+        self.assertIsNone(s["quota_pp"], "a reset must not bill -77pp")
+
+    def test_claude_transcripts_carry_no_quota(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "c.jsonl"
+            path.write_text(_claude_turn("claude-opus-5", 10, 20, 30, 40) + "\n")
+            s = st.sum_claude_transcript(str(path))
+        self.assertIsNone(s["quota_pp"])
+
+    def test_delta_bills_quota_from_where_the_last_record_stopped(self):
+        """Same rule tokens and minutes already follow: a second phase on one transcript
+        must not re-bill the first phase's quota."""
+        prev = {
+            "turns": 1, "input": 100, "cache_creation": 0, "cache_read": 80, "output": 5,
+            "quota_last": 40.0,
+        }
+        cum = st._as_summary(
+            3, ["gpt-5.6-sol"],
+            {"input": 1000, "cache_creation": 0, "cache_read": 900, "output": 25},
+            (None, None), (40.0, 100.0),
+        )
+        delta, reset = st.delta_since_cursor(cum, prev)
+        self.assertFalse(reset)
+        self.assertEqual(delta["quota_pp"], 60.0, "bills 40->100, not 0->100")
+
+    def test_cursor_predating_quota_falls_back_to_this_rollouts_first_sample(self):
+        prev = {"turns": 1, "input": 100, "cache_creation": 0, "cache_read": 80, "output": 5}
+        cum = st._as_summary(
+            3, ["gpt-5.6-sol"],
+            {"input": 1000, "cache_creation": 0, "cache_read": 900, "output": 25},
+            (None, None), (40.0, 100.0),
+        )
+        delta, _ = st.delta_since_cursor(cum, prev)
+        self.assertEqual(delta["quota_pp"], 60.0, "no invented floor when the cursor is old")
+
+    def test_ledger_row_round_trips_quota_and_legacy_rows_stay_blank(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "led.md")
+            s = st._as_summary(
+                5, ["gpt-5.6-sol"],
+                {"input": 10, "cache_creation": 0, "cache_read": 20, "output": 30},
+                (None, None), (40.0, 100.0),
+            )
+            st.append_ledger(path, "3-2-the-dig", "dev", "codex", s, "rollout-q.jsonl")
+            rows = st.parse_ledger_rows(path)
+        self.assertEqual(rows[-1]["quota_pp"], 60.0)
+
+    def test_thirteen_cell_rows_predating_quota_still_parse_without_shifting(self):
+        """`quota_pp` is APPENDED, never inserted — a row written when `minutes` was last
+        must keep its minutes, not silently re-align by one column."""
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "led.md")
+            Path(path).write_text(
+                _LEDGER
+                + "| dev | codex | gpt-5.6-sol | 715 | 1,516,492 | 0 | 94,276,352 | "
+                  "208,027 | 96,000,871 | $60.96 | `rollout-old.jsonl` | "
+                  "2026-08-06 09:41 UTC · rates 2026-08-01 | 189 |\n"
+            )
+            rows = st.parse_ledger_rows(path)
+        self.assertEqual(rows[-1]["minutes"], 189.0)
+        self.assertIsNone(rows[-1]["quota_pp"], "a pre-quota row must read blank, not shifted")
+
+    def test_real_rollout_line_is_pinned_verbatim(self):
+        """A hand-copied line from a real codex-cli 0.146.0 rollout, NOT built by the
+        fixture. The fixture is the author's belief about the wire shape; this is the wire
+        shape. The first cut of this feature read `info.rate_limits` — every synthetic test
+        passed and the real transcript silently reported nothing."""
+        line = (
+            '{"timestamp":"2026-08-06T06:14:40.000Z","type":"event_msg","payload":'
+            '{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,'
+            '"cached_input_tokens":900,"output_tokens":25,"total_tokens":1025},'
+            '"last_token_usage":{},"model_context_window":272000},'
+            '"rate_limits":{"limit_id":"codex","limit_name":null,"primary":'
+            '{"used_percent":40.0,"window_minutes":10080,"resets_at":1786518052},'
+            '"secondary":null}}}'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "rollout-real.jsonl"
+            path.write_text(line + "\n")
+            s = st.sum_codex_transcript(str(path))
+        self.assertEqual(s["quota_last"], 40.0, "rate_limits sits beside info, not inside it")
+        self.assertEqual(s["cache_read"], 900)

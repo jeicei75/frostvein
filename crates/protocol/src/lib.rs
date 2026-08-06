@@ -111,6 +111,13 @@ pub struct Zone {
     pub pos: [i32; 3],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Item {
+    pub id: u32,
+    pub pos: [i32; 3],
+}
+// NOTE: a second item kind adds a kind field; stone is the only item in phase one.
+
 /// Full world state, sent on connect (AD-3). Field order is wire order.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -122,6 +129,7 @@ pub struct Snapshot {
     pub entities: Vec<Entity>,
     pub designations: Vec<Designation>,
     pub zones: Vec<Zone>,
+    pub items: Vec<Item>,
     pub speed: Speed,
     pub tick: u64,
 }
@@ -137,6 +145,7 @@ pub struct Delta {
     pub entities: Vec<Entity>,
     pub designations: Vec<Designation>,
     pub zones: Vec<Zone>,
+    pub items: Vec<Item>,
     pub speed: Speed,
 }
 
@@ -157,6 +166,7 @@ mod tests {
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "idle"}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
+        "items": [{"id": 12, "pos": [1, 2, 3]}],
         "speed": "normal",
         "tick": 9
     }"#;
@@ -168,6 +178,7 @@ mod tests {
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "walk"}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
+        "items": [{"id": 12, "pos": [1, 2, 3]}],
         "speed": "fast"
     }"#;
 
@@ -208,6 +219,17 @@ mod tests {
             }]
         );
         assert_eq!(snapshot.zones, vec![Zone { pos: [1, 2, 4] }]);
+        assert_eq!(
+            snapshot.items,
+            vec![Item {
+                id: 12,
+                pos: [1, 2, 3]
+            }]
+        );
+        assert_eq!(
+            serde_json::to_string(&snapshot.items[0]).unwrap(),
+            r#"{"id":12,"pos":[1,2,3]}"#
+        );
         assert_eq!(snapshot.speed, Speed::Normal);
         assert_eq!(snapshot.tick, 9);
     }
@@ -250,6 +272,13 @@ mod tests {
             }]
         );
         assert_eq!(delta.zones, vec![Zone { pos: [1, 2, 4] }]);
+        assert_eq!(
+            delta.items,
+            vec![Item {
+                id: 12,
+                pos: [1, 2, 3]
+            }]
+        );
         assert_eq!(delta.speed, Speed::Fast);
     }
 
@@ -364,6 +393,22 @@ mod tests {
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }
+        let item_wire = r#"{"id":12,"pos":[1,2,3]}"#;
+        assert_eq!(
+            serde_json::from_str::<Item>(item_wire).unwrap(),
+            Item {
+                id: 12,
+                pos: [1, 2, 3],
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&Item {
+                id: 12,
+                pos: [1, 2, 3],
+            })
+            .unwrap(),
+            item_wire
+        );
         assert_eq!(
             serde_json::to_value(Command::SetSpeed {
                 speed: Speed::Paused
