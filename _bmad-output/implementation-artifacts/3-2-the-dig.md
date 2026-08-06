@@ -570,6 +570,13 @@ task, imperative messages. Review-gated: no push, no PR.
   `job_with_mismatched_designation_kind_save_is_logged_and_the_daemon_keeps_ticking` each failed
   with `unexpected invalid-save log: client delta queue full; disconnecting client`, proving the
   malformed job tables had loaded instead of being rejected.
+- Cached-path RED: `save_load_recomputes_every_path_invalidated_by_another_dig` failed after one
+  dwarf removed support under another dwarf's route: loaded was `Pos { x: 1, y: 1, z: 2 }, Idle`
+  while the never-saved control was `Pos { x: 2, y: 1, z: 2 }, Walk`. Removing path invalidation
+  after the fix reproduced the same failure.
+- Aggregate A* RED: `claim_jobs_bounds_aggregate_astar_expansions_per_tick` initially retried job ids
+  `0..=9` instead of the literal `0..=4`. The `MAX_ASTAR_NODES` sabotage (`50000 -> 60000`) then
+  failed with `left: [JobId(0), ..., JobId(5)]`, `right: [JobId(0), ..., JobId(4)]`.
 
 ### Completion Notes List
 
@@ -579,7 +586,7 @@ task, imperative messages. Review-gated: no push, no PR.
 - Chose `WorkProgress` as a dwarf ECS component rather than a job field. It is persisted through
   `SavedDwarf.work_progress`; `Path` remains transient and is deterministically recomputed after load.
 - Added headless, daemon, protocol, renderer, and binary-capture coverage. The final mutation file has
-  73 cases and printed `All mutations killed.` (zero survivors).
+  75 cases and printed `All mutations killed.` (zero survivors and zero apply failures).
 - After the final review fixes, ran `cargo clean -p sim-core -p protocol -p simd -p tui`, then
   `scripts/gate.sh`; it printed `GATE GREEN` with fmt, clippy, tests, dependency-edge, and
   metrics-ledger checks all `ok`.
@@ -611,6 +618,12 @@ task, imperative messages. Review-gated: no push, no PR.
   jobs without matching designation positions/kinds and bypass the designation-derived work bound.
   The loader now caps jobs and checks every job against the exact designation state that will be
   restored; missing, mismatched, and over-budget tables are RED-first and mutation-covered.
+- A sixth `codex review --base main` raised two legitimate P1 findings: terrain mutation could leave
+  another dwarf's transient route stale and break deterministic save/load, and each claim attempt had
+  an independent A* node allowance so a legal unreachable queue could stall a tick. Every terrain
+  change now invalidates transient paths, and all claim searches share one 50,000-node tick allowance.
+  Both fixes have RED-first regressions and killed mutations. The review's internal gate again reached
+  only the known nested-sandbox loopback denial; the clean authoritative gate printed `GATE GREEN`.
 - Deliberately did not add hauling, carrying, occupancy filtering, item gravity, path caching,
   priorities, new wire messages, or any deferred-work item outside this story's assigned AD-8 entries.
 
@@ -618,12 +631,13 @@ task, imperative messages. Review-gated: no push, no PR.
 
 - `_bmad-output/implementation-artifacts/3-2-the-dig.md` — updated story execution record
 - `_bmad-output/implementation-artifacts/deferred-work.md` — closed the assigned AD-8 entries
-- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` — added 66 mutation cases
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` — added 68 mutation cases
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` — advanced story status
 - `crates/protocol/src/lib.rs` — added stone item snapshot/delta wire shapes and literals
-- `crates/sim-core/src/lib.rs` — added jobs, claims, A*, execution, settle, items, and readers
+- `crates/sim-core/src/lib.rs` — added jobs, bounded claims/A*, path invalidation, execution, settle,
+  items, and readers
 - `crates/sim-core/src/save.rs` — persisted jobs, items, claims, and work progress
-- `crates/sim-core/tests/save_load.rs` — covered mid-walk and mid-work deterministic restore
+- `crates/sim-core/tests/save_load.rs` — covered mid-walk, mid-work, and terrain-invalidated restore
 - `crates/sim-core/tests/scenario.rs` — covered full dig, retry, cancel, limits, and replay
 - `crates/simd/src/bridge.rs` — streamed items and dirty terrain changes
 - `crates/simd/src/main.rs` — validated persisted job/item bounds, ids, and indexes
@@ -641,3 +655,4 @@ task, imperative messages. Review-gated: no push, no PR.
 | 2026-08-06 | Implemented and verified Story 3.2 end to end; closed review findings and moved to review |
 | 2026-08-06 | Closed final claimant-state and load-boundary review findings with 70 killed mutations |
 | 2026-08-06 | Enforced designation-derived saved jobs and killed all 73 mutations |
+| 2026-08-06 | Invalidated stale paths, bounded per-tick A* work, and killed all 75 mutations |
