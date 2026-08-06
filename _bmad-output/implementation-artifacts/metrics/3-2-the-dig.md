@@ -35,6 +35,33 @@ So the true cost of implementing 3.2 is **$79.24 / 933 turns / ~116.1M tokens**,
 96.0M. Not corrected in place, for the same reason as the `create` caveat above: the ledger records
 what a transcript spent, and a hand-merged row would be less trustworthy than a stated caveat.
 
+**AND `est_usd` IS THE WRONG AXIS FOR CODEX ENTIRELY (Wolf, 2026-08-06).** Codex runs on a
+**subscription with a weekly quota**, not metered API billing, so no dollars are actually spent —
+`est_usd` weights tokens by `PRICES` purely as a cross-tool comparability benchmark. The resource
+that genuinely binds is quota, and **this story exhausted it.** Codex reports it in every
+`token_count` event: `rate_limits.primary.used_percent` against `window_minutes: 10080` (7 days),
+account-wide. Measured from the rollouts:
+
+| window | used_percent | note |
+|---|---|---|
+| 2026-08-06 06:14 (dev starts) | 40% | window opened 2026-08-05 07:00 |
+| 2026-08-06 09:25 (dev ends) | **100%** | exhausted; resets **2026-08-12 07:00 UTC** |
+
+**Story 3.2 consumed ~51–60 percentage points of a full week's Codex quota in ~3h10m.** The gross
+counter movement is 60pp; up to 9pp of that belongs to a concurrent **foreign** `/workspace` run
+(cwd outside this project, zero story references), which cannot be cleanly separated because it
+overlapped the sixth self-gate. The six self-gate cycles account for **17pp cleanly isolated**
+(4+2+4+3+4) plus a contested 9pp on the sixth.
+
+**So the self-gate is ~1/3 to 1/2 of this story's quota, while the dollar column prices it at 23%
+($18.28 of $79.24).** The benchmark understates it roughly two-fold on the axis that actually
+binds, because `est_usd` discounts cache reads heavily and the self-gate re-reads the full branch
+diff every poll turn. **Any decision about whether six self-gate passes are worth it must be made
+on percentage points, not dollars.**
+
+**Hard scheduling consequence: story 3.3 cannot be developed via Codex until 2026-08-12 07:00 UTC.**
+3.2's review is unaffected — the review layers are Claude.
+
 **This is the SAME DEFECT CLASS as the open forge blocker (2)** — `session_tokens.py` does not
 count sub-agent transcripts, recorded in `sprint-status.yaml` against the Epic 2 forge-propagation
 item where it was found on the *review* side (3.1's five review layers burned ~14.1M tokens
