@@ -109,18 +109,18 @@ so that the mountain yields stone at my command — through workers, not a remot
 
 ## Tasks / Subtasks
 
-- [ ] **`sim-core`: job market vocabulary, resource and readers** (AC: 1)
-  - [ ] Add `JobId`, `JobKind`, `Job`, `CurrentJob` and the `Jobs` resource to
+- [x] **`sim-core`: job market vocabulary, resource and readers** (AC: 1)
+  - [x] Add `JobId`, `JobKind`, `Job`, `CurrentJob` and the `Jobs` resource to
         `crates/sim-core/src/lib.rs` (skeleton below). No new dependency.
-  - [ ] `Jobs` keeps its `BTreeMap<JobId, Job>` and `BTreeSet<Pos>` index private and exposes
+  - [x] `Jobs` keeps its `BTreeMap<JobId, Job>` and `BTreeSet<Pos>` index private and exposes
         `insert`/`remove`/`get_mut`/`iter` — the pairing is enforced in one place, not at each call
         site. `BTree*`, not hash containers: AD-7 forbids iteration order affecting outcomes.
-  - [ ] `Jobs` and the new components go in through `assemble`, still the ONE assembly site, so
+  - [x] `Jobs` and the new components go in through `assemble`, still the ONE assembly site, so
         `generate` and `from_save` cannot diverge.
-  - [ ] `CurrentJob(Option<JobId>)` is a component on every dwarf, present from spawn. **The dwarf
+  - [x] `CurrentJob(Option<JobId>)` is a component on every dwarf, present from spawn. **The dwarf
         owns the claim and it is the only source of truth** — do not also store `claimed_by` on the
         `Job`, or the two will drift and every later story pays for it.
-  - [ ] **Do this refactor FIRST, before anything else in the story.** `IdAllocator` is a plain field
+  - [x] **Do this refactor FIRST, before anything else in the story.** `IdAllocator` is a plain field
         on `World` [lib.rs:244] and `allocate` is called only from `spawn_dwarves` [lib.rs:572]; a
         bevy system cannot reach it, so `execute_jobs` could not give a stone an id. Make it
         `#[derive(Resource)]`, insert it in `assemble` alongside the other resources, and repoint

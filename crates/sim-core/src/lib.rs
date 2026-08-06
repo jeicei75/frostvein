@@ -96,6 +96,64 @@ pub enum JobState {
     Work,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct JobId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum JobKind {
+    Dig,
+    Channel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Job {
+    pub id: JobId,
+    pub kind: JobKind,
+    pub target: Pos,
+    pub created_tick: u64,
+    pub retry_after: u64,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+struct CurrentJob(Option<JobId>);
+
+/// The map and target index move together through `insert` and `remove`.
+#[derive(Resource, Default)]
+struct Jobs {
+    by_id: BTreeMap<JobId, Job>,
+    targets: BTreeSet<Pos>,
+    #[allow(dead_code)] // Used when designation-derived jobs are added in the next task group.
+    next_id: u32,
+}
+
+impl Jobs {
+    #[allow(dead_code)] // Used when designation-derived jobs are added later in this story.
+    fn insert(&mut self, job: Job) -> bool {
+        if self.by_id.contains_key(&job.id) || self.targets.contains(&job.target) {
+            return false;
+        }
+        self.targets.insert(job.target);
+        self.by_id.insert(job.id, job);
+        true
+    }
+
+    #[allow(dead_code)] // Used by completion and cancellation later in this story.
+    fn remove(&mut self, id: JobId) -> Option<Job> {
+        let job = self.by_id.remove(&id)?;
+        self.targets.remove(&job.target);
+        Some(job)
+    }
+
+    #[allow(dead_code)] // Used by retry handling later in this story.
+    fn get_mut(&mut self, id: JobId) -> Option<&mut Job> {
+        self.by_id.get_mut(&id)
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Job> {
+        self.by_id.values()
+    }
+}
+
 #[derive(Component)]
 struct Wander {
     home: Pos,
@@ -263,6 +321,7 @@ fn assemble(
     ecs.insert_resource(ids);
     ecs.insert_resource(Designations(designations));
     ecs.insert_resource(Zones(zones));
+    ecs.insert_resource(Jobs::default());
     ecs.insert_resource(Terrain {
         dims,
         tiles,
@@ -382,6 +441,7 @@ impl World {
                     home: dwarf.home,
                     cooldown: dwarf.cooldown,
                 },
+                CurrentJob(None),
             ));
         }
         world
@@ -514,6 +574,23 @@ impl World {
         self.ecs.resource::<Zones>().0.iter().copied().collect()
     }
 
+    /// Sorted ascending by `JobId`.
+    pub fn jobs(&self) -> Vec<Job> {
+        self.ecs.resource::<Jobs>().iter().copied().collect()
+    }
+
+    /// Sorted ascending by dwarf `Id`.
+    pub fn claims(&self) -> Vec<(Id, Option<JobId>)> {
+        let mut claims: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| Some((*entity.get::<Id>()?, entity.get::<CurrentJob>()?.0)))
+            .collect();
+        claims.sort_by_key(|(id, _)| *id);
+        claims
+    }
+
     /// Sorted ascending by `Id` — stable order is required by AD-7.
     // NOTE: promote this tuple to a struct at the fourth field (Story 3.2 adds carried item).
     pub fn dwarves(&self) -> Vec<(Id, Pos, JobState)> {
@@ -581,6 +658,7 @@ impl World {
                     // eleventh dwarf would share dwarf 0's phase — harmless at five.
                     cooldown: id.0 % WANDER_REST_TICKS,
                 },
+                CurrentJob(None),
             ));
         }
     }
@@ -590,7 +668,7 @@ impl World {
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{Dims, JobState, Material, Pos, Terrain, Tile, World};
+    use super::{Dims, Job, JobId, JobKind, JobState, Jobs, Material, Pos, Terrain, Tile, World};
 
     #[test]
     fn terrain_identifies_standable_tiles() {
@@ -621,6 +699,42 @@ mod tests {
         let world = World::generate(42, Dims::DEFAULT);
 
         assert_eq!(world.ecs.resource::<super::IdAllocator>().next, 5);
+    }
+
+    #[test]
+    fn jobs_keep_the_target_index_paired_with_the_map() {
+        let mut jobs = Jobs::default();
+        let target = Pos { x: 3, y: 4, z: 5 };
+        let job = Job {
+            id: JobId(7),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 9,
+            retry_after: 0,
+        };
+
+        assert!(jobs.insert(job));
+        assert!(jobs.targets.contains(&target));
+        assert_eq!(jobs.iter().copied().collect::<Vec<_>>(), vec![job]);
+        assert_eq!(jobs.remove(JobId(7)), Some(job));
+        assert!(!jobs.targets.contains(&target));
+    }
+
+    #[test]
+    fn generated_world_has_empty_job_and_claim_readers() {
+        let world = World::generate(42, Dims::DEFAULT);
+
+        assert!(world.jobs().is_empty());
+        assert_eq!(
+            world.claims(),
+            vec![
+                (super::Id(0), None),
+                (super::Id(1), None),
+                (super::Id(2), None),
+                (super::Id(3), None),
+                (super::Id(4), None),
+            ]
+        );
     }
 
     #[test]
