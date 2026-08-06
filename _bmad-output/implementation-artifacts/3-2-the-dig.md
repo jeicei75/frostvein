@@ -247,14 +247,14 @@ so that the mountain yields stone at my command — through workers, not a remot
         the crowd glyph and neither `☺`; layer order extended in the existing
         `marker_layers_follow_...` test.
 
-- [ ] **Observability instrument** (AC: 15) — extend `tui --frames N --key`; do not invent a second
+- [x] **Observability instrument** (AC: 15) — extend `tui --frames N --key`; do not invent a second
       channel. The existing `--key` sequence parser and stub-daemon capture pattern already carry it
       [3.1 AC14, `crates/tui/tests/client.rs`].
-  - [ ] Two tests driving the real binary against a stub daemon: the stub replays a wall tile
+  - [x] Two tests driving the real binary against a stub daemon: the stub replays a wall tile
         becoming empty plus an item appearing, and the capture must show the cell's glyph **change
         between frames** and the stone glyph arrive. The control stub sends deltas whose world never
         changes and its capture must show neither.
-  - [ ] The change-between-frames assertion is the point: 2.2 shipped an instrument that rendered
+  - [x] The change-between-frames assertion is the point: 2.2 shipped an instrument that rendered
         motion as stillness and its evidence was an artefact. A capture that merely *contains* a
         stone glyph would pass even if the client drew it unconditionally.
 
@@ -551,6 +551,9 @@ task, imperative messages. Review-gated: no push, no PR.
   `left: Cell { glyph: '?', fg: (176, 172, 160) }`, `right: Cell { glyph: '*', fg: (176, 172, 160) }`.
 - Crowd glyph sabotage (`⚇ -> ☺`): `every_look_is_pinned` failed with
   `left: Cell { glyph: '☺', fg: (240, 120, 130) }`, `right: Cell { glyph: '⚇', fg: (240, 120, 130) }`.
+- Instrument RED: `dig_replay_capture_transitions_from_designation_to_stone_at_one_cell` initially
+  failed with `early frames contain no designation glyph`; moving the post-commit cursor off the
+  target (`d,enter,enter,l`) exposed the intended target-cell transition.
 
 ### Completion Notes List
 

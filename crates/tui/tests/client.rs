@@ -628,6 +628,167 @@ fn identical_capture_without_a_key_sequence_contains_no_marker() {
     assert!(!stdout.contains('×'), "marker rendered without a command");
 }
 
+fn capture_dig_replay(changes: bool) -> String {
+    const MAX_CAPTURE_BYTES: u64 = 2 * 1024 * 1024;
+    const TARGET: [i32; 3] = [4, 2, 0];
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind dig replay stub");
+    let port = listener.local_addr().expect("read stub address").port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("8")
+        .arg("--key")
+        .arg("d,enter,enter,l")
+        .env_remove("NO_COLOR")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tui dig replay capture");
+
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(mark_snapshot_line().as_bytes())
+            .expect("send dig replay snapshot");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("bound designation command read");
+        let mut reader = BufReader::new(stream.try_clone().expect("clone command read half"));
+        let mut line = String::new();
+        let bytes = (&mut reader)
+            .take(4 * 1024)
+            .read_line(&mut line)
+            .expect("read dig replay command");
+        assert!(
+            bytes > 0 && line.ends_with('\n'),
+            "missing command: {line:?}"
+        );
+        assert_eq!(
+            serde_json::from_str::<protocol::Command>(&line).expect("decode dig replay command"),
+            protocol::Command::Designate {
+                kind: protocol::DesignationKind::Dig,
+                rect: protocol::Rect {
+                    min: TARGET,
+                    max: TARGET,
+                },
+            }
+        );
+
+        for tick in 8..16 {
+            let early = changes && tick <= 10;
+            let late = changes && tick >= 11;
+            let delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick,
+                tiles: if tick == 11 && changes {
+                    vec![protocol::TileChange {
+                        pos: TARGET,
+                        tile: protocol::Tile::Empty,
+                    }]
+                } else {
+                    Vec::new()
+                },
+                entities: Vec::new(),
+                designations: early
+                    .then_some(protocol::Designation {
+                        pos: TARGET,
+                        kind: protocol::DesignationKind::Dig,
+                    })
+                    .into_iter()
+                    .collect(),
+                zones: Vec::new(),
+                items: late
+                    .then_some(protocol::Item {
+                        id: 12,
+                        pos: TARGET,
+                    })
+                    .into_iter()
+                    .collect(),
+                speed: protocol::Speed::Normal,
+            };
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .expect("send dig replay delta");
+            thread::sleep(Duration::from_millis(20));
+        }
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stdout)
+        .expect("read bounded dig replay stdout");
+    assert!(stdout.len() as u64 <= MAX_CAPTURE_BYTES);
+    let status = child.wait().expect("wait for dig replay capture");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stderr)
+        .expect("read bounded dig replay stderr");
+    assert!(stderr.len() as u64 <= MAX_CAPTURE_BYTES);
+    server.join().expect("dig replay stub panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+    stdout
+}
+
+#[test]
+fn dig_replay_capture_transitions_from_designation_to_stone_at_one_cell() {
+    let stdout = capture_dig_replay(true);
+    let marks: Vec<_> = stdout
+        .lines()
+        .enumerate()
+        .filter_map(|(line, text)| {
+            strip_ansi(text)
+                .chars()
+                .position(|glyph| glyph == '×')
+                .map(|column| (line, column))
+        })
+        .collect();
+    let stones: Vec<_> = stdout
+        .lines()
+        .enumerate()
+        .filter_map(|(line, text)| {
+            strip_ansi(text)
+                .chars()
+                .position(|glyph| glyph == '*')
+                .map(|column| (line, column))
+        })
+        .collect();
+
+    assert!(
+        !marks.is_empty(),
+        "early frames contain no designation glyph"
+    );
+    assert!(!stones.is_empty(), "late frames contain no stone glyph");
+    assert!(
+        marks.iter().all(|(_, column)| *column == marks[0].1)
+            && stones.iter().all(|(_, column)| *column == marks[0].1),
+        "designation and stone did not occupy one target cell: {marks:?} {stones:?}"
+    );
+    assert!(
+        marks.last().unwrap().0 < stones.first().unwrap().0,
+        "stone did not arrive after the designation disappeared"
+    );
+}
+
+#[test]
+fn unchanged_dig_replay_capture_contains_neither_transition_glyph() {
+    let stdout = capture_dig_replay(false);
+
+    assert!(
+        !stdout.contains('×'),
+        "unchanged stub rendered a designation"
+    );
+    assert!(!stdout.contains('*'), "unchanged stub rendered a stone");
+}
+
 const WIDE_DIMS: protocol::Dims = protocol::Dims { x: 16, y: 16, z: 1 };
 
 fn dwarf_at(x: i32) -> protocol::Entity {
