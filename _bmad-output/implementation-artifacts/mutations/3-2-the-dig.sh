@@ -824,3 +824,60 @@ old = '''        if save.next_id == u32::MAX {
 assert old in s
 p.write_text(s.replace(old, ''))
 PY
+
+mutation "load accepts jobs beyond MAX_DESIGNATIONS" simd over_budget_job_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        if save.jobs.len() > sim_core::MAX_DESIGNATIONS {
+            bail!(
+                "save has {} jobs; limit is {}",
+                save.jobs.len(),
+                sim_core::MAX_DESIGNATIONS
+            );
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load accepts a job without a designation" simd job_without_matching_designation_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''        for job in &save.jobs {
+            let (expected_designation, kind_name) = match job.kind {
+                sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
+                sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
+            };
+            if designation_kinds.get(&job.target) != Some(&expected_designation) {
+                bail!(
+                    "save job {} has no matching {kind_name} designation at {},{},{}",
+                    job.id.0,
+                    job.target.x,
+                    job.target.y,
+                    job.target.z
+                );
+            }
+        }
+'''
+assert old in s
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "load ignores a job designation kind mismatch" simd job_with_mismatched_designation_kind_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''            let (expected_designation, kind_name) = match job.kind {
+                sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
+                sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
+            };
+            if designation_kinds.get(&job.target) != Some(&expected_designation) {
+'''
+new = '''            let kind_name = match job.kind {
+                sim_core::JobKind::Dig => "dig",
+                sim_core::JobKind::Channel => "channel",
+            };
+            if !designation_kinds.contains_key(&job.target) {
+'''
+assert old in s
+p.write_text(s.replace(old, new))
+PY

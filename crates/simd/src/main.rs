@@ -4,7 +4,7 @@ mod bridge;
 
 use anyhow::{Context, bail};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::{BufRead, BufReader, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
@@ -299,6 +299,14 @@ fn load_world() -> Option<sim_core::World> {
                 );
             }
         }
+        let designation_kinds: BTreeMap<_, _> = save.designations.iter().copied().collect();
+        if save.jobs.len() > sim_core::MAX_DESIGNATIONS {
+            bail!(
+                "save has {} jobs; limit is {}",
+                save.jobs.len(),
+                sim_core::MAX_DESIGNATIONS
+            );
+        }
         let mut seen_job_ids = BTreeSet::new();
         let mut seen_job_targets = BTreeSet::new();
         for job in &save.jobs {
@@ -426,6 +434,21 @@ fn load_world() -> Option<sim_core::World> {
                 "save next_id {} does not exceed entity id {id}",
                 save.next_id
             );
+        }
+        for job in &save.jobs {
+            let (expected_designation, kind_name) = match job.kind {
+                sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
+                sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
+            };
+            if designation_kinds.get(&job.target) != Some(&expected_designation) {
+                bail!(
+                    "save job {} has no matching {kind_name} designation at {},{},{}",
+                    job.id.0,
+                    job.target.x,
+                    job.target.y,
+                    job.target.z
+                );
+            }
         }
         Ok(sim_core::World::from_save(save))
     })();

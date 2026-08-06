@@ -558,6 +558,27 @@ fn over_budget_designation_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn over_budget_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs = (0..=4096)
+        .map(|index| sim_core::Job {
+            id: sim_core::JobId(index),
+            kind: sim_core::JobKind::Dig,
+            target: sim_core::Pos {
+                x: (index % 128) as i32,
+                y: (index / 128) as i32,
+                z: 0,
+            },
+            created_tick: 0,
+            retry_after: 0,
+        })
+        .collect();
+    state.next_job_id = 4097;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save has 4097 jobs; limit is 4096");
+}
+
+#[test]
 fn out_of_bounds_job_save_is_logged_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
@@ -669,6 +690,46 @@ fn duplicate_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
     state.next_job_id = 1;
 
     assert_save_is_rejected_without_stopping_ticks(state, "save reuses job id 0");
+}
+
+#[test]
+fn job_without_matching_designation_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target: sim_core::Pos { x: 20, y: 20, z: 8 },
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save job 0 has no matching dig designation at 20,20,8",
+    );
+}
+
+#[test]
+fn job_with_mismatched_designation_kind_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    let target = sim_core::Pos { x: 20, y: 20, z: 8 };
+    state
+        .designations
+        .push((target, sim_core::DesignationKind::Channel));
+    state.jobs.push(sim_core::Job {
+        id: sim_core::JobId(0),
+        kind: sim_core::JobKind::Dig,
+        target,
+        created_tick: 0,
+        retry_after: 0,
+    });
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save job 0 has no matching dig designation at 20,20,8",
+    );
 }
 
 #[test]

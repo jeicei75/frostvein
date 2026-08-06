@@ -565,6 +565,11 @@ task, imperative messages. Review-gated: no push, no PR.
   and `exhausted_next_entity_id_save_is_logged_and_the_daemon_keeps_ticking` failed with
   `unexpected invalid-save log: client delta queue full; disconnecting client` before the load
   validator rejected `u32::MAX` cursors.
+- Job-derivation RED: `over_budget_job_save_is_logged_and_the_daemon_keeps_ticking`,
+  `job_without_matching_designation_save_is_logged_and_the_daemon_keeps_ticking`, and
+  `job_with_mismatched_designation_kind_save_is_logged_and_the_daemon_keeps_ticking` each failed
+  with `unexpected invalid-save log: client delta queue full; disconnecting client`, proving the
+  malformed job tables had loaded instead of being rejected.
 
 ### Completion Notes List
 
@@ -574,7 +579,7 @@ task, imperative messages. Review-gated: no push, no PR.
 - Chose `WorkProgress` as a dwarf ECS component rather than a job field. It is persisted through
   `SavedDwarf.work_progress`; `Path` remains transient and is deterministically recomputed after load.
 - Added headless, daemon, protocol, renderer, and binary-capture coverage. The final mutation file has
-  70 cases and printed `All mutations killed.` (zero survivors).
+  73 cases and printed `All mutations killed.` (zero survivors).
 - After the final review fixes, ran `cargo clean -p sim-core -p protocol -p simd -p tui`, then
   `scripts/gate.sh`; it printed `GATE GREEN` with fmt, clippy, tests, dependency-edge, and
   metrics-ledger checks all `ok`.
@@ -602,6 +607,10 @@ task, imperative messages. Review-gated: no push, no PR.
   allocators could be restored. All three were reproduced with RED-first regressions, fixed, and
   mutation-covered. Its nested gate again could not bind loopback sockets; the authoritative gate
   outside that sandbox is green.
+- A fifth `codex review --base main` raised one legitimate P2 finding: corrupt saves could inject
+  jobs without matching designation positions/kinds and bypass the designation-derived work bound.
+  The loader now caps jobs and checks every job against the exact designation state that will be
+  restored; missing, mismatched, and over-budget tables are RED-first and mutation-covered.
 - Deliberately did not add hauling, carrying, occupancy filtering, item gravity, path caching,
   priorities, new wire messages, or any deferred-work item outside this story's assigned AD-8 entries.
 
@@ -609,7 +618,7 @@ task, imperative messages. Review-gated: no push, no PR.
 
 - `_bmad-output/implementation-artifacts/3-2-the-dig.md` — updated story execution record
 - `_bmad-output/implementation-artifacts/deferred-work.md` — closed the assigned AD-8 entries
-- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` — added 63 mutation cases
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` — added 66 mutation cases
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` — advanced story status
 - `crates/protocol/src/lib.rs` — added stone item snapshot/delta wire shapes and literals
 - `crates/sim-core/src/lib.rs` — added jobs, claims, A*, execution, settle, items, and readers
@@ -631,3 +640,4 @@ task, imperative messages. Review-gated: no push, no PR.
 | 2026-08-06 | Story created |
 | 2026-08-06 | Implemented and verified Story 3.2 end to end; closed review findings and moved to review |
 | 2026-08-06 | Closed final claimant-state and load-boundary review findings with 70 killed mutations |
+| 2026-08-06 | Enforced designation-derived saved jobs and killed all 73 mutations |
