@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant chosen for a story 
 
 # Story 3.2: The Dig
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -262,8 +262,8 @@ so that the mountain yields stone at my command — through workers, not a remot
       Build the terrain the case needs with `make_standable` and `set_tile` rather than hunting for
       generated terrain that happens to suit.
 
-- [ ] **Sabotage + mutation set** (AC: 17)
-  - [ ] `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh`, at least: `Designate`
+- [x] **Sabotage + mutation set** (AC: 17)
+  - [x] `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh`, at least: `Designate`
         ignores the diggability filter; ignores the `MAX_DESIGNATIONS` cap; `break`s out of the rect
         when full instead of `continue`ing; the stone takes its id from a second per-kind counter
         rather than the global allocator; `create_jobs` creates a
@@ -281,12 +281,12 @@ so that the mountain yields stone at my command — through workers, not a remot
         drops `current_job`; `from_save` discards them; `bridge` drops items from the delta; the
         `items` field is renamed on the wire; the crowd glyph is not drawn; items draw above
         entities.
-  - [ ] `cargo clean -p sim-core -p protocol -p simd -p tui` before the final gate — `mutate.sh` is
+  - [x] `cargo clean -p sim-core -p protocol -p simd -p tui` before the final gate — `mutate.sh` is
         not concurrency-safe and 2.3, 2.4 and 3.1 all hit stale mutated binaries.
-  - [ ] Paste the actual RED output for every new mapping/constant test into the Dev Agent Record
+  - [x] Paste the actual RED output for every new mapping/constant test into the Dev Agent Record
         (AGENTS.md rule 1).
 
-- [ ] **Green gate** (AC: 17) — `scripts/gate.sh`, then the live check. Report what printed.
+- [x] **Green gate** (AC: 17) — `scripts/gate.sh`, then the live check. Report what printed.
 
 ## Dev Notes
 
@@ -530,6 +530,8 @@ task, imperative messages. Review-gated: no push, no PR.
 
 ### Agent Model Used
 
+`gpt-5.6-sol`
+
 ### Debug Log References
 
 - `MAX_DESIGNATIONS` sabotage (`4096 -> 4097`):
@@ -544,9 +546,9 @@ task, imperative messages. Review-gated: no push, no PR.
 - `RETRY_COOLDOWN` sabotage (`20 -> 21`):
   `unreachable_job_stays_queued_and_retries_after_twenty_ticks` failed with `left: 28`, `right: 27`.
 - `Item.id` wire sabotage (`id -> item_id`): `decodes_the_documented_wire_format` failed with
-  `Error("missing field `item_id`", line: 8, column: 46)`.
+  `Error("missing field item_id", line: 8, column: 46)`.
 - `Snapshot.items` wire sabotage (`items -> objects`): `decodes_the_documented_wire_format` failed
-  with `Error("missing field `objects`", line: 11, column: 5)`.
+  with `Error("missing field objects", line: 11, column: 5)`.
 - Stone glyph sabotage (`* -> ?`): `every_look_is_pinned` failed with
   `left: Cell { glyph: '?', fg: (176, 172, 160) }`, `right: Cell { glyph: '*', fg: (176, 172, 160) }`.
 - Crowd glyph sabotage (`⚇ -> ☺`): `every_look_is_pinned` failed with
@@ -557,10 +559,47 @@ task, imperative messages. Review-gated: no push, no PR.
 
 ### Completion Notes List
 
+- Implemented the deterministic Dig/Channel job market, claiming delay, bounded ramp-aware A*,
+  walking/working/completion, retry/cancel, single-level settle, stone spawning, save/load, wire
+  transport, TUI item/crowd rendering, and the real-binary frame instrument without new dependencies.
+- Chose `WorkProgress` as a dwarf ECS component rather than a job field. It is persisted through
+  `SavedDwarf.work_progress`; `Path` remains transient and is deterministically recomputed after load.
+- Added headless, daemon, protocol, renderer, and binary-capture coverage. The final mutation file has
+  59 cases and printed `All mutations killed.` (zero survivors).
+- Ran `cargo clean -p sim-core -p protocol -p simd -p tui`, then `scripts/gate.sh`; it printed
+  `GATE GREEN` with fmt, clippy, tests, dependency-edge, and metrics-ledger checks all `ok`.
+- Manual live check joined the real `simd` and `tui` binaries. The capture checks printed 122 rows
+  containing `×` and 73 containing `*`; the final daemon snapshot had no designation and item id 5
+  at the dug target. The first attempt also exposed an off-screen framebuffer-index overflow, which
+  was fixed with a regression test before the successful run.
+- `codex review --base main` ran and raised five legitimate findings: lost work progress, movement
+  before settle, an overestimating ramp heuristic, global item-id reuse, and inconsistent job tables.
+  All five were fixed and mutation-covered. It raised no self-referential-test or unbounded-I/O issue.
+- Deliberately did not add hauling, carrying, occupancy filtering, item gravity, path caching,
+  priorities, new wire messages, or any deferred-work item outside this story's assigned AD-8 entries.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/3-2-the-dig.md` — updated story execution record
+- `_bmad-output/implementation-artifacts/deferred-work.md` — closed the assigned AD-8 entries
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` — added 59 mutation cases
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — advanced story status
+- `crates/protocol/src/lib.rs` — added stone item snapshot/delta wire shapes and literals
+- `crates/sim-core/src/lib.rs` — added jobs, claims, A*, execution, settle, items, and readers
+- `crates/sim-core/src/save.rs` — persisted jobs, items, claims, and work progress
+- `crates/sim-core/tests/save_load.rs` — covered mid-walk and mid-work deterministic restore
+- `crates/sim-core/tests/scenario.rs` — covered full dig, retry, cancel, limits, and replay
+- `crates/simd/src/bridge.rs` — streamed items and dirty terrain changes
+- `crates/simd/src/main.rs` — validated persisted job/item bounds, ids, and indexes
+- `crates/simd/tests/serve.rs` — covered live deltas and invalid-save rejection
+- `crates/tui/src/main.rs` — applied authoritative item deltas
+- `crates/tui/src/palette.rs` — added pinned stone and crowd looks
+- `crates/tui/src/view.rs` — rendered item/crowd layers and safely discarded off-screen markers
+- `crates/tui/tests/client.rs` — proved designation-to-stone frame transitions
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-06 | Story created |
+| 2026-08-06 | Implemented and verified Story 3.2 end to end; moved to review |
