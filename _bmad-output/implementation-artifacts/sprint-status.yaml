@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-06
+last_updated: 2026-08-06  # 3.2 story created
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -61,7 +61,7 @@ development_status:
   epic-2-retrospective: done
   epic-3: in-progress
   3-1-give-the-order: done
-  3-2-the-dig: backlog
+  3-2-the-dig: ready-for-dev
   3-3-the-haul-and-the-skeleton-walks: backlog
   epic-3-retrospective: optional
   epic-4: backlog
@@ -181,12 +181,14 @@ action_items:
   - epic: 2
     action: "Story 3.2 stays ONE story (Wolf, 2026-08-05, declining the proposed 3.2a/3.2b split). Fold the size mitigations into its story-creation and handoff instead"
     owner: "Amelia"
-    status: open
+    status: in-progress
+    progress: "2026-08-06 -- the STORY-CREATION half is done; the HANDOFF half is still owed. Mitigations 2, 3 and 4 are written into 3.2's tasks and Dev Notes (restate RED evidence across a session boundary; commit at minimum once per completed task as the recovery mechanism, now also a hard floor in bmad-dev-story.toml; the `cargo clean -p` step before the final gate). Mitigation 1 (the layer time-box) is review-side and already encoded, though 3.1 proved it misfires on target/ lock contention -- that fix is still owed and is one of the two forge-propagation blockers. Mitigation 5 (more ACs, more chances of an unmeetable one) was applied as a checklist pass over every AC, which found and fixed six defects in the draft before it was saved: a cap that used `break` and so could not meet its own overwrite clause; a save point pinned to a magic tick against a 5-30 tick reaction delay; an A* node cap set below a legitimate cross-map path; and -- the one that matters -- an instrument asserting a wall-to-floor glyph change that CANNOT be observed, because render peeks below an Empty tile and redraws the same glyph dimmed, which NO_COLOR then strips. That is the 2.2 false-evidence failure exactly, caught in the spec this time rather than at review. FINAL SHAPE: 17 ACs. Wolf was told the count before the story was written and held the one-story ruling"
     note: "Risk accepted deliberately, not overlooked. 3.2 carries FR5, FR6, FR8, FR11, FR12 plus the AD-12 job market, the SaveState extension, the first-ever production set_tile caller, and the dwarf-collision fix deferred from 2.2. Calibration: 2.4 was the largest story so far (12 ACs, 30 mutations, $83, ~6h) and is the one that HUNG. MITIGATIONS, all belonging to story-creation and the handoff prompt: (1) the review half is already protected by the new layer time-box, which is what actually failed at 2.4; (2) a story this size may span two Codex sessions, so the standing rule -- restate RED evidence in the continuation handoff -- must be explicit in the prompt, since Epic 1 Pattern 4 was TDD discipline lost at exactly that boundary; (3) commit-per-green-step stops being style and becomes the recovery mechanism, letting a stalled run resume from the last green commit; (4) budget a cargo clean -p step for a 40+ mutation set, since mutate.sh is not concurrency-safe and both 2.3 and 2.4 hit stale mutated binaries; (5) more ACs means more chances of an unmeetable one -- 2.3 shipped two on a story a third this size"
   - epic: 2
     action: "Author an explicit dwarf-occupancy / tile-reservation AC into the dig story"
     owner: "Amelia"
-    status: open
+    status: done
+    closed: "2026-08-06 at 3.2 story creation. Authored as 3.2 AC14, but deliberately NOT as tile reservation -- Wolf's ruling when the two shapes were put to him: the reproduced defect is that a dwarf silently VANISHES FROM VIEW, which is a rendering fault, so the fix is a distinct crowd glyph drawn where two or more dwarves share a screen cell, and dwarves may still share a tile. Rejected: filtering A* on occupancy, which buys physical correctness at the price of a deadlock class (two dwarves each holding the tile the other needs, deterministic, so the harness would faithfully reproduce the hang) in a story already at capacity. 3.2's scope guardrails name the rejection explicitly so a reviewer does not read the absence of reservation as an oversight"
     note: "Deferred to 3.2 by Wolf at 2.2's review, but epics.md's 3.2 text says nothing about occupancy, so today no AC anywhere covers it. Reproduced at 2.2: seed 133, ids 0 and 1 share (62,36,17) for ticks 133-142; render writes entities in ascending Id so the second erases the first and a dwarf silently vanishes for ten ticks. With A* and jobs, dwarves CONVERGE on dig sites, so the failure gets far likelier"
   - epic: 2
     action: "Schedule the three 3.1-owned deferred items into 3.1's story rather than re-deferring them"

@@ -96,6 +96,9 @@ names where it came from and what should trigger revisiting it.
   which is the first time a `TileChange` crosses the wire for real, and the first time this
   plumbing is exercised end to end. Do not read AC6 as evidence that tile streaming has been
   proven [crates/sim-core/src/lib.rs:169-178].
+  **SCHEDULED into Story 3.2 (2026-08-06).** Its dig and channel jobs are the first production
+  callers of `set_tile`, and AC12's task carries the live-daemon test that finally reads a delta with
+  a non-empty `tiles` off a real socket. Until that test is green, this item stays open.
 
 ## Deferred from: code review of story 2-2-dwarves-wander-the-frost (2026-08-03)
 
@@ -218,3 +221,14 @@ names where it came from and what should trigger revisiting it.
   this area regardless; it will make marks more numerous, not fewer. Note the interaction already
   closed: the save half of this same root cause hard-failed and was fixed by raising the cap above
   [crates/simd/src/bridge.rs:74-92, crates/sim-core/src/lib.rs:445-470].
+
+  **SCHEDULED into Story 3.2 (Wolf's ruling, 2026-08-06), not re-deferred.** The fix is a
+  deterministic `MAX_DESIGNATIONS = 4096` cap inside `apply_command`, which bounds the worst-case
+  delta at roughly 131 KB rather than 16.8 MB. Chosen over delta-encoding designations, which would
+  have broken AD-8's "absence is deletion" full-resend contract for one section and made a client
+  resync bug silent; and over a third deferral. Two things to read carefully. (1) The cap is a *game
+  rule* about how much may be marked, and it lives in `sim-core` precisely so it is deterministic —
+  a cap applied in `simd` would not survive the scenario harness. (2) 3.2's diggability filter does
+  most of the work independently: a `Dig` mark is recorded only on `Solid` tiles and a `Channel` mark
+  only where `is_standable` holds, so a surface rect that used to mark every tile now marks almost
+  none. The cap is what bounds the remaining case, a rect through solid rock.

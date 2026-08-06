@@ -34,7 +34,7 @@ FR14: Speed control: pause, normal (1×), and one fast-forward step (≈5×), im
 FR15: Determinism: identical world seed + identical command sequence produces identical sim state, tick for tick.
 FR16: Dev save/load of the full sim state, plus clean quit. No save-format stability guarantees.
 FR17: Protocol v0: newline-delimited JSON over localhost TCP. Full world snapshot on connect, per-tick delta messages thereafter. Messages describe a world, not a dwarf game — state and typed data, never rules or narrative.
-FR18: Commands upstream: designate dig/channel, cancel designation, place stockpile, pause/resume, set tick rate, save, load, quit.
+FR18: Commands upstream: designate dig/channel, cancel designation, place stockpile, remove stockpile, pause/resume, set tick rate, save, load, quit.
 FR19: Multiple localhost clients can view the same running sim concurrently.
 FR20: TUI shows a single z-level top-down view of the world, navigable between z-levels DF-style (`<`/`>`). The client contains zero game logic.
 FR21: Modal, DF-familiar keyboard input: single keys enter a mode (dig, channel, stockpile), rectangles placed cursor-first with Enter-anchor / Enter-commit, `Esc` backs out, and a one-line hint bar always shows the active mode's keys (concrete keymap in the PRD addendum).
@@ -64,7 +64,7 @@ From the Architecture Spine (AD-1…AD-12, conventions, stack, structural seed):
 - AD-7: Determinism enforced structurally: single-threaded explicitly `.chain()`ed schedule; order-sensitive logic iterates in stable entity-id order; no `HashMap`/`HashSet` iteration affects outcomes; all randomness from the world seed via purpose-named streams (worldgen, wander); reaction delay = `hash(seed, dwarf id, job id)` with a fixed named hash, never `RandomState`.
 - AD-8: Deltas = dirty tiles + ALL small state in full (entities, designations, zones, speed/pause, tick). Tiles mutate only via `World::set_tile`, which records the per-tick dirty set. Full-resend sections are authoritative replacements — absence is deletion.
 - AD-9: One global monotonic `u32` id allocator for all entity kinds (never per-kind counters); ids never reused, survive save/load (allocator next-value is part of `SaveState`); job ids are a separate named space; `bevy_ecs::Entity` never leaves `sim-core`.
-- AD-10: Only world-mutating commands (`designate`, `cancel_designation`, `place_stockpile`) ride the command queue, consumed at loop-iteration start in arrival order. Control commands (`set_speed`, `save`, `load`, `quit`) are handled by `simd` directly. No persistent command log in phase one.
+- AD-10: Only world-mutating commands (`designate`, `cancel_designation`, `place_stockpile`, `remove_stockpile`) ride the command queue, consumed at loop-iteration start in arrival order. Control commands (`set_speed`, `save`, `load`, `quit`) are handled by `simd` directly. No persistent command log in phase one. // NOTE: `remove_stockpile` was added at Story 3.1 (Wolf, 2026-08-05) and this list said three until 2026-08-06 — see the spine's AD-10 amendment.
 - AD-11: Save/load = explicit serde `SaveState` struct in `sim-core` (tick, RNG stream states, tiles, entities + components, jobs + claims, designations, zones, id-allocator next value) via `to_save()`/`from_save()`; `simd` owns file I/O; load triggers a fresh `snapshot` broadcast to every client. Gate test: save → load → tick N ≡ never-saved → tick N.
 - AD-12: One job market: single job list with all kinds as enum variants, monotonic job ids, exactly one claiming system at a fixed schedule point; a dwarf has one `Option<CurrentJob>`. FIFO = ascending job id; dwarves considered in ascending entity id. Job-kind stories add variants and execution systems, never claiming logic.
 - Conventions: z vertical (0 = lowest); rects inclusive both corners, single z-level; bulk tile arrays flat row-major (`x + y·W + z·W·H`); wire messages have a `type` field, snake_case, positions `[x, y, z]`, ticks u64, entity ids u32; wire carries material/profession ids, never RGB — the id → RGB color table is a data table in `tui`, shared by all views, never hardcoded per draw site; no explicit ack messages — a command's effect in the next delta is the ack (meets NFR2); malformed client input is logged and dropped, sim never crashes on it; `thiserror` in `sim-core`/`protocol`, `anyhow` in `simd`/`tui`; hardcoded constants at use site (`protocol` exports `DEFAULT_PORT`); `#![forbid(unsafe_code)]` in all four crates; TUI drawing = hand-rolled cell framebuffer flushed once per frame, never per-cell writes.
@@ -307,12 +307,12 @@ So that my directives are recorded in the world, visibly, the moment I issue the
 **Then** the TUI enters that mode, the cursor moves with arrows/`hjkl`, `Enter` anchors the first corner then commits the rectangle, `Esc` backs out one level, and the one-line hint bar always shows the active mode's keys (FR21, addendum keymap).
 
 **When** a rectangle is committed,
-**Then** the matching command (`designate` dig|channel, `place_stockpile`, `cancel_designation`) goes upstream, rides the AD-10 queue, and is consumed at the next loop-iteration start
+**Then** the matching command (`designate` dig|channel, `place_stockpile`, `cancel_designation`, `remove_stockpile`) goes upstream, rides the AD-10 queue, and is consumed at the next loop-iteration start // NOTE: `remove_stockpile` added on Wolf's call during 3.1 (2026-08-05) and reconciled into this text 2026-08-06; `x` is one eraser key emitting `cancel_designation` then `remove_stockpile`.
 **And** the designation or stockpile zone appears marked in the TUI within ~200 ms via the next delta (FR9, FR10, FR18, NFR2)
 **And** rects are inclusive of both corners on a single z-level; stockpiles are only accepted on walkable floor (FR10) — a committed rect is clipped to its walkable-floor tiles (non-walkable tiles are simply not part of the zone; a rect with zero walkable tiles yields no zone). // NOTE: clip, not reject — DF-familiar and the simplest rule.
 
 **When** I remove a designation with `x`,
-**Then** the covered tiles are no longer designated and vanish from every client's view (FR9 — job release lands in Story 3.2 when jobs exist).
+**Then** the covered tiles are no longer designated, any stockpile zone under the same rect is removed, and both vanish from every client's view (FR9 — job release lands in Story 3.2 when jobs exist).
 
 **Given** the scenario harness,
 **Then** injected designate/place/cancel commands produce the same sim-state designations and zones as the TUI path (FR25).

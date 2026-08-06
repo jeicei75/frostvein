@@ -2,7 +2,7 @@
 title: Frostvein PRD
 status: final
 created: 2026-08-01
-updated: 2026-08-02
+updated: 2026-08-06
 ---
 
 # Frostvein — Product Requirements Document
@@ -121,7 +121,12 @@ Capabilities, not implementation. FR IDs are stable and globally numbered.
   narrative interpretation. This lets the channel carry any realm a future
   producer feeds it (see Future phases wild card) at zero extra cost now.
 - **FR18** — Commands upstream: designate dig/channel, cancel designation,
-  place stockpile, pause/resume, set tick rate, save, load, quit.
+  place stockpile, remove stockpile, pause/resume, set tick rate, save, load,
+  quit. Remove-stockpile added by Wolf's call (2026-08-05) during Story 3.1:
+  without it a misplaced stockpile was permanent until a save/load or a daemon
+  restart, so the placement affordance shipped with no way back. The `x` key
+  is one eraser that emits two wire commands, `cancel_designation` then
+  `remove_stockpile`, so each command's name stays honest about what it does.
 - **FR19** — Multiple localhost clients can view the same running sim
   concurrently.
 

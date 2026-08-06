@@ -932,6 +932,9 @@ OpenAI Codex (GPT-5.6), acting as Völundr.
   so `epics.md` and the architecture spine's command table now list three where there are four.
   Those two planning documents were deliberately not reconciled inside this implementation story;
   they need one coordinated correction.
+  **CLOSED 2026-08-06** at 3.2 story creation, on Wolf's instruction. It turned out to be six places,
+  not two — `docs/architecture.md` and FR18 in both the PRD and `epics.md` under-listed as well. See
+  the Change Log row.
 
 ### File List
 
@@ -960,3 +963,4 @@ OpenAI Codex (GPT-5.6), acting as Völundr.
 | 2026-08-05 | Added stockpile removal on Wolf's call: `remove_stockpile` as a fourth world-mutating command, `x` becomes a two-command eraser. Scope beyond epics.md — the epic text and the spine's command table still list three. |
 | 2026-08-05 | Code review: 2 decisions resolved, 2 patches applied, 2 dismissed. Save cap raised above the largest legal world; client-side capture drain removed as a layering breach; hint-width guard made able to fail. Gate green, 33/33 mutations killed. |
 | 2026-08-05 | Implemented designation/stockpile state, persistence, protocol and daemon seams, modal TUI controls and rendering, the keyed live instrument, corrupt-save mark validation, and 35-mutation verification. |
+| 2026-08-06 | AD-10 under-listing reconciled — the correction this story deliberately deferred. Six places now list four world-mutating commands: the spine's AD-10 rule (with a dated amendment recording why `remove_stockpile` was always inside the rule and what was rejected) and its message table, `docs/architecture.md`'s message table, `epics.md`'s AD-10 line and Story 3.1 text, and FR18 in both `epics.md` and the PRD. No code changed. |

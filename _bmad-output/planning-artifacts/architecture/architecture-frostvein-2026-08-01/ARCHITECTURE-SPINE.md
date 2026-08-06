@@ -7,7 +7,7 @@ paradigm: core–shell (functional core, imperative shells) with ECS inside the 
 scope: frostvein phase one (Milestone 1) — walking skeleton
 status: final
 created: '2026-08-01'
-updated: '2026-08-02'
+updated: '2026-08-06'
 binds: [FR1-FR26, NFR1-NFR4]
 sources:
   - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-01/prd.md
@@ -146,7 +146,8 @@ graph LR
 - **Binds:** F3, F6, F7
 - **Prevents:** mid-tick mutation; I/O-order nondeterminism
 - **Rule:** only world-mutating commands (`designate`, `cancel_designation`,
-  `place_stockpile`) ride the queue: `simd` queues them decoded; `sim-core`
+  `place_stockpile`, `remove_stockpile`) ride the queue: `simd` queues them
+  decoded; `sim-core`
   consumes the queue at the start of the next loop iteration, in arrival
   order. Control commands (`set_speed`, `save`, `load`, `quit`) concern the
   loop, not the world, and are handled by `simd` directly — otherwise
@@ -157,6 +158,16 @@ graph LR
   new mechanism. Amends technical-preferences.md ADR 2's "command log"
   wording: the log is a deferred artifact, the determinism property is not;
   that doc is updated to match.)
+- **Amended 2026-08-06:** the list above read three commands until Story 3.1
+  shipped a fourth, `remove_stockpile`, on Wolf's call — without it a
+  misplaced stockpile was permanent until a save/load or a daemon restart.
+  It was always inside AD-10's actual rule, which is the world-mutating vs
+  control *split*, and placing a zone and removing one are equally
+  world-mutating; only the enumeration was stale. The alternative considered
+  and rejected was teaching `cancel_designation` to delete zones too, which
+  would have kept the count at three at the price of a wire command whose
+  name lied about half of what it did — in the one crate whose entire job is
+  being the single source of message shapes.
 
 ### AD-11 — Save/load is an explicit `SaveState` struct
 
@@ -253,7 +264,7 @@ Protocol v0 message list (logical — field detail is owned by the code):
 
 | Direction | Messages |
 | --- | --- |
-| client → daemon | `designate` (dig \| channel, rect), `cancel_designation` (rect), `place_stockpile` (rect), `set_speed` (pause \| normal \| fast), `save`, `load`, `quit` |
+| client → daemon | `designate` (dig \| channel, rect), `cancel_designation` (rect), `place_stockpile` (rect), `remove_stockpile` (rect), `set_speed` (pause \| normal \| fast), `save`, `load`, `quit` |
 | daemon → client | `snapshot` (on connect and after `load`: dims, tiles, entities, designations, zones, speed, tick), `delta` (per tick, per AD-8) |
 
 ## Capability → Architecture Map
