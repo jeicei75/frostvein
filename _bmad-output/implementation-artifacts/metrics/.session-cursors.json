@@ -29,13 +29,13 @@
     "turns": 53
   },
   "2a9b9908-8052-4111-bac9-9fd8cff70f8b.jsonl": {
-    "cache_creation": 804136,
-    "cache_read": 84547077,
-    "input": 581,
-    "last_ts": "2026-08-07T09:59:07.582Z",
-    "output": 419030,
+    "cache_creation": 1062628,
+    "cache_read": 153638350,
+    "input": 845,
+    "last_ts": "2026-08-07T12:20:29.449Z",
+    "output": 640200,
     "quota_last": null,
-    "turns": 310
+    "turns": 450
   },
   "2bc9447d-0d2c-4fca-9638-b5fe320285dd.jsonl": {
     "cache_creation": 585647,
