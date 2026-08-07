@@ -232,6 +232,84 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
     }
 }
 
+/// Exclusive, because retiring a claimed job calls `release_claim`. It sits inside the chained
+/// schedule, so a paused daemon takes new stockpiles and designations but derives no work from
+/// them — 3.2's line, extended to stones unchanged.
+fn create_haul_jobs(ecs: &mut EcsWorld) {
+    let (stored, loose, any_zone) = {
+        let zones = &ecs.resource::<Zones>().0;
+        let carried: BTreeSet<u32> = ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| entity.get::<Carrying>()?.0)
+            .collect();
+        let mut stones: Vec<_> = ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Item>())
+            .filter_map(|entity| Some((entity.get::<Id>()?.0, *entity.get::<Pos>()?)))
+            .collect();
+        stones.sort_by_key(|(id, _)| *id);
+
+        // AC3: a stone is STORED iff it is not carried and stands on a stockpile tile, and LOOSE
+        // iff it is neither stored nor carried.
+        let mut stored = BTreeSet::new();
+        let mut loose = Vec::new();
+        for (id, pos) in stones {
+            if carried.contains(&id) {
+                continue;
+            }
+            if zones.contains(&pos) {
+                stored.insert(id);
+            } else {
+                loose.push((id, pos));
+            }
+        }
+        (stored, loose, !zones.is_empty())
+    };
+
+    // Retire first. The only way a stored stone still has a job is a stockpile placed over a
+    // loose stone while a dwarf walks to it — so its holder is by definition not yet carrying
+    // and nothing is dropped, but it must still be released rather than left holding a ghost.
+    let retired: Vec<_> = ecs
+        .resource::<Jobs>()
+        .iter()
+        .filter(|job| matches!(job.kind, JobKind::Haul { item } if stored.contains(&item)))
+        .map(|job| job.id)
+        .collect();
+    for job_id in retired {
+        ecs.resource_mut::<Jobs>().remove(job_id);
+        let holders: Vec<_> = ecs
+            .iter_entities()
+            .filter(|entity| {
+                entity.get::<CurrentJob>().and_then(|current| current.0) == Some(job_id)
+            })
+            .map(|entity| entity.id())
+            .collect();
+        for holder in holders {
+            release_claim(ecs, holder);
+        }
+    }
+
+    if !any_zone {
+        return;
+    }
+    let tick = ecs.resource::<Tick>().0;
+    for (item, pos) in loose {
+        if ecs.resource::<Jobs>().haul_items.contains(&item) {
+            continue;
+        }
+        let id = ecs.resource_mut::<Jobs>().next_job_id();
+        let inserted = ecs.resource_mut::<Jobs>().insert(Job {
+            id,
+            kind: JobKind::Haul { item },
+            target: pos,
+            created_tick: tick,
+            retry_after: 0,
+        });
+        debug_assert!(inserted, "item and id were checked before insertion");
+    }
+}
+
 /// FR5 / AD-7: fixed named FNV-1a, independent of RNG streams and process state.
 fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
@@ -841,6 +919,7 @@ fn assemble(
         (
             advance_tick,
             create_jobs,
+            create_haul_jobs,
             claim_jobs,
             execute_jobs,
             settle,
@@ -1123,10 +1202,15 @@ impl World {
                         designations.0.remove(pos);
                     }
                 }
+                // Tile jobs only. A haul job's `target` is the stone's position when the job was
+                // created and is stale the moment it is picked up, so matching cancel rects
+                // against it would drop a haul the player never cancelled — and haul jobs are
+                // never dropped (FR8, AC6).
                 let job_ids: BTreeSet<_> = self
                     .ecs
                     .resource::<Jobs>()
                     .iter()
+                    .filter(|job| matches!(job.kind, JobKind::Dig | JobKind::Channel))
                     .filter(|job| targets.contains(&job.target))
                     .map(|job| job.id)
                     .collect();
@@ -1460,6 +1544,128 @@ mod tests {
             vec![(super::Id(11), earlier), (super::Id(12), later)]
         );
         assert_eq!(world.dwarves().len(), 5);
+    }
+
+    fn place_stockpile(world: &mut World, pos: Pos) {
+        world.apply_command(super::SimCommand::PlaceStockpile {
+            rect: super::Rect { min: pos, max: pos },
+        });
+    }
+
+    fn dwarf_entity(world: &World, id: u32) -> super::Entity {
+        world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(id)))
+            .expect("dwarf exists")
+            .id()
+    }
+
+    #[test]
+    fn create_haul_jobs_makes_one_job_per_loose_stone_in_ascending_item_order() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = world.dwarves()[0].1;
+        place_stockpile(&mut world, pile);
+        assert_eq!(world.zones(), vec![pile]);
+        // Spawned in descending id order on purpose: the job order must follow the item id,
+        // not the order the ECS happens to hand the stones back.
+        let loose = [
+            (12, Pos { x: 20, y: 20, z: 8 }),
+            (11, Pos { x: 21, y: 20, z: 8 }),
+            (10, Pos { x: 22, y: 20, z: 8 }),
+        ];
+        for (id, pos) in loose {
+            world.ecs.spawn((super::Item, super::Id(id), pos));
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 7;
+
+        super::create_haul_jobs(&mut world.ecs);
+
+        assert_eq!(
+            world.jobs(),
+            vec![
+                Job {
+                    id: JobId(0),
+                    kind: JobKind::Haul { item: 10 },
+                    target: Pos { x: 22, y: 20, z: 8 },
+                    created_tick: 7,
+                    retry_after: 0,
+                },
+                Job {
+                    id: JobId(1),
+                    kind: JobKind::Haul { item: 11 },
+                    target: Pos { x: 21, y: 20, z: 8 },
+                    created_tick: 7,
+                    retry_after: 0,
+                },
+                Job {
+                    id: JobId(2),
+                    kind: JobKind::Haul { item: 12 },
+                    target: Pos { x: 20, y: 20, z: 8 },
+                    created_tick: 7,
+                    retry_after: 0,
+                },
+            ]
+        );
+
+        super::create_haul_jobs(&mut world.ecs);
+
+        assert_eq!(
+            world.jobs().len(),
+            3,
+            "an unchanged world grew a second job for a stone that already has one"
+        );
+    }
+
+    #[test]
+    fn no_stockpile_means_no_haul_job_at_all() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        world
+            .ecs
+            .spawn((super::Item, super::Id(12), Pos { x: 20, y: 20, z: 8 }));
+
+        super::create_haul_jobs(&mut world.ecs);
+        assert!(world.jobs().is_empty());
+
+        for _ in 0..20 {
+            world.step();
+        }
+
+        assert!(
+            world.jobs().is_empty(),
+            "a stone became work with nowhere to put it"
+        );
+        assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+    }
+
+    #[test]
+    fn a_stockpile_placed_over_a_loose_stone_retires_its_job_and_idles_the_claimant() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let stone = world.dwarves()[1].1;
+        let pile = world.dwarves()[0].1;
+        world.ecs.spawn((super::Item, super::Id(12), stone));
+        place_stockpile(&mut world, pile);
+        super::create_haul_jobs(&mut world.ecs);
+        let job = world.jobs()[0];
+        assert_eq!(job.kind, JobKind::Haul { item: 12 });
+        // A dwarf holds the job but has not reached the stone, so it carries nothing — the only
+        // way a stone can become stored while its job is claimed.
+        let entity = dwarf_entity(&world, 3);
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(0)));
+
+        place_stockpile(&mut world, stone);
+        super::create_haul_jobs(&mut world.ecs);
+
+        assert!(world.jobs().is_empty(), "a stored stone kept its haul job");
+        assert_eq!(world.claims()[3].1, None);
+        assert_eq!(world.dwarves()[3].2, JobState::Idle);
+        assert_eq!(world.carrying()[3], (super::Id(3), None));
+        assert_eq!(world.items(), vec![(super::Id(12), stone)]);
+        assert!(!world.ecs.entity(entity).contains::<super::Path>());
     }
 
     #[test]

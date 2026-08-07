@@ -731,6 +731,92 @@ fn stockpile_with_no_standable_tile_changes_nothing() {
     assert!(world.zones().is_empty());
 }
 
+/// Digs the tile beside dwarf 2 and returns the position the stone landed on. There is no
+/// stockpile yet, so no haul job is created while this runs.
+fn dig_one_stone(world: &mut World) -> Pos {
+    let worker = world.dwarves()[2].1;
+    let target = Pos {
+        x: if worker.x + 1 < world.dims().x as i32 {
+            worker.x + 1
+        } else {
+            worker.x - 1
+        },
+        ..worker
+    };
+    assert!(world.set_tile(
+        Pos {
+            z: target.z - 1,
+            ..target
+        },
+        Tile::Solid(Material::Stone),
+    ));
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    while world.items().is_empty() {
+        assert!(
+            world.tick() < 200,
+            "the adjacent dig never produced a stone"
+        );
+        world.step();
+    }
+    assert!(world.jobs().is_empty());
+    target
+}
+
+#[test]
+fn a_new_stockpile_derives_no_haul_job_until_the_world_steps() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let stone = dig_one_stone(&mut world);
+    let pile = world.dwarves()[0].1;
+    assert_ne!(pile, stone);
+
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+
+    assert!(
+        world.jobs().is_empty(),
+        "command intake derived work from a stone without a tick — a paused daemon would haul"
+    );
+
+    world.step();
+
+    assert_eq!(world.jobs().len(), 1);
+    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 5 });
+    assert_eq!(world.jobs()[0].target, stone);
+}
+
+#[test]
+fn cancelling_marks_over_a_stone_never_drops_its_haul_job() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let stone = dig_one_stone(&mut world);
+    let pile = world.dwarves()[0].1;
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+    world.step();
+    let job = world.jobs()[0];
+    assert_eq!(job.kind, JobKind::Haul { item: 5 });
+
+    // `x` over the stone's tile. A haul job's `target` is a stone position, so a cancel that
+    // matched on `target` would silently delete an order the player never gave.
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(stone, stone),
+    });
+
+    assert!(
+        world
+            .jobs()
+            .iter()
+            .any(|queued| queued.id == job.id && queued.kind == job.kind),
+        "cancelling marks at the stone's tile dropped its haul job: {:?}",
+        world.jobs()
+    );
+}
+
 #[test]
 fn applying_a_command_does_not_advance_the_world() {
     let mut world = World::generate(42, Dims::DEFAULT);
