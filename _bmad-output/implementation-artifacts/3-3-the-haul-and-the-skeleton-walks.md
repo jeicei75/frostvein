@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant chosen for a story 
 
 # Story 3.3: The Haul — and the Skeleton Walks
 
-Status: review
+Status: done
 
 ## Story
 
@@ -728,10 +728,14 @@ still colour-independent on purpose.
 
 ### Completion Notes List
 
-- **AC17 is NOT satisfied and cannot be by me.** It is Wolf watching the loop and signing off on the
-  feel floor (NFR2) and the icy-grim identity in motion (FR23). Everything it needs is in place and
-  the live run above is the invitation, not the sign-off. The sprint action item "Re-check FR23's
-  motion sign-off at Story 3.3" stays open until Wolf answers.
+- **AC17 — CLOSED 2026-08-07, and read the verdict precisely.** Wolf watched the live loop after the
+  merge. On the feel floor (NFR2): passed — "looks ok for 2d tui game atm". On the icy-grim identity
+  in motion (FR23): **provisional only.** His words: "not sure how much more visually pleased it could
+  be without designing own font or something ... most likely we need to get to the 3d first to say."
+  So the Epic 2 complaint that the world was "a bit boring" IS answered — the world now visibly
+  changes because the player made it change — but the identity half of FR23 is deferred to the depth
+  view in epic 4, not settled here. The sprint action item is closed with that distinction recorded;
+  it must not be read as FR23 signed off outright.
 - Every other AC is implemented and covered: 1–13 in `sim-core`/`simd`, 14 in `tui`, 15 by the stub
   replay pair, 16 by the headless walking-skeleton scenario, 18 by a green gate from a clean build
   plus a 31/31 mutation table.

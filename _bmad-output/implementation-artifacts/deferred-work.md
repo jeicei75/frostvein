@@ -352,3 +352,13 @@ below as "what one layer found", not as "what is wrong with 3.3".
   the known unreachable-target class (a tile with no standable work position), which 3.2 ruled is
   retried forever rather than dropped, but it was not chased. **Revisit if** a player ever reports
   designations that never clear, or alongside the channel-orphan item above.
+
+- **The glyph client may be near its visual ceiling** — LAYER: Wolf, at 3.3's AC17 sign-off
+  (2026-08-07). Verdict on the finished haul loop: "looks ok for 2d tui game atm ... not sure how much
+  more visually pleased it could be without designing own font or something". This is not a defect and
+  not a request: it is the standing judgement that further investment in the 2D presentation has low
+  expected return, and that FR23's icy-grim-identity-in-motion question is better answered by the depth
+  view than by more work on glyphs and truecolor. **Revisit at epic 4** (`4-1-behold-the-fortress-in-depth`)
+  — and note the implication for scope: a custom font or a tileset is the alternative lever, and
+  neither is in milestone 1. Treat "make the TUI prettier" stories as needing an explicit case against
+  this entry.

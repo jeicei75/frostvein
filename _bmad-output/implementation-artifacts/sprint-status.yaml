@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-07  # 3.3 ready for review
+last_updated: 2026-08-07  # 3.3 done, merged as PR #16
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -62,7 +62,7 @@ development_status:
   epic-3: in-progress
   3-1-give-the-order: done
   3-2-the-dig: done
-  3-3-the-haul-and-the-skeleton-walks: review
+  3-3-the-haul-and-the-skeleton-walks: done
   epic-3-retrospective: optional
   epic-4: backlog
   4-1-behold-the-fortress-in-depth: backlog
@@ -199,8 +199,8 @@ action_items:
   - epic: 2
     action: "Re-check FR23's motion sign-off at Story 3.3, with the full designate -> dig -> haul loop visible"
     owner: "Wolf"
-    status: open
-    note: "FR23's motion half did NOT close at Epic 2. Wolf's verdict: happy in the early stories, then 'the world didn't change after that, so it was a bit boring'. Predicted verbatim by 2.2's review and deferred: at 80x24 only one of five dwarves is ever visible, Walk is a one-tick pulse in eleven, and the dirty-tile path is inert so every Epic 2 delta carried tiles=[]. Wolf's call at this retro: do NOT spend a TUI story on it -- Epic 3 fixes it by construction (3.1's cursor puts the camera where the work is, 3.2's dig is the first thing that visibly changes the world). Stays OPEN until 3.3"
+    status: done
+    note: "FR23's motion half did NOT close at Epic 2. Wolf's verdict: happy in the early stories, then 'the world didn't change after that, so it was a bit boring'. Predicted verbatim by 2.2's review and deferred: at 80x24 only one of five dwarves is ever visible, Walk is a one-tick pulse in eleven, and the dirty-tile path is inert so every Epic 2 delta carried tiles=[]. Wolf's call at this retro: do NOT spend a TUI story on it -- Epic 3 fixes it by construction (3.1's cursor puts the camera where the work is, 3.2's dig is the first thing that visibly changes the world). Stays OPEN until 3.3. CLOSED at 3.3 (2026-08-07): the check happened and Wolf watched the full loop. Verdict, verbatim: \"looks ok for 2d tui game atm ... not sure how much more visually pleased it could be without designing own font or something\" and \"most likely we need to get to the 3d first to say\". So the FEEL FLOOR (NFR2) is met and the boring-world complaint is answered -- the world now visibly changes because the player made it change. But the FR23 icy-grim-identity-in-motion verdict is only PROVISIONAL at 2D: Wolf judges the glyph-and-truecolor client close to its ceiling without a custom font, and defers the real judgement to the depth view (epic 4, 4-1-behold-the-fortress-in-depth). Do not read this item as FR23 fully signed off; read it as signed off for the 2D client with the identity question re-opened at epic 4"
   - epic: 2
     action: "Hand the Epic 2 process changes to Nidavellir via a docs/forge-transfer-*.md note"
     owner: "Amelia"
