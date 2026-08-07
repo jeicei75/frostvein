@@ -239,20 +239,30 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
 fn create_haul_jobs(ecs: &mut EcsWorld) {
     let (stored, loose, any_zone) = {
         let zones = &ecs.resource::<Zones>().0;
-        // AC3: a stone is STORED iff it is not carried and stands on a stockpile tile, and LOOSE
-        // iff it is neither stored nor carried. `uncarried_stones` has already dropped the
-        // carried ones and is ascending by item id, which is the order jobs are created in.
-        let (stored, loose): (Vec<_>, Vec<_>) = uncarried_stones(ecs)
-            .into_iter()
-            .partition(|(_, pos)| zones.contains(pos));
-        (
-            stored
-                .into_iter()
-                .map(|(id, _)| id)
-                .collect::<BTreeSet<_>>(),
-            loose,
-            !zones.is_empty(),
-        )
+        // AC3, as amended at 3.3's review (Wolf's call): a stone is STORED iff it is not carried,
+        // stands on a stockpile tile, AND is the LOWEST-ID uncarried stone on that tile. Everything
+        // else uncarried is LOOSE.
+        //
+        // The lowest-id clause is the repair mechanism for a real race review found: two carriers
+        // can both be walking to the last free tile, the first delivers, and the second — now
+        // standing on a tile that is no longer in its goal set — is retried, and `release_claim`
+        // drops its stone where it stands. Two stones on one tile. Under the old rule both counted
+        // as stored, so both jobs were retired and the stack was permanent and invisible. Now the
+        // extra one stays loose, keeps (or regains) a haul job, and re-hauls itself to a genuinely
+        // free tile. It cannot thrash: the pick-up leg is gated on a free tile existing, and a
+        // delivery only ever targets a free tile, so the stone it is standing on is never a goal.
+        // `uncarried_stones` is ascending by item id, so "first seen per tile" IS "lowest id".
+        let mut occupied: BTreeSet<Pos> = BTreeSet::new();
+        let mut stored: BTreeSet<u32> = BTreeSet::new();
+        let mut loose = Vec::new();
+        for (id, pos) in uncarried_stones(ecs) {
+            if zones.contains(&pos) && occupied.insert(pos) {
+                stored.insert(id);
+            } else {
+                loose.push((id, pos));
+            }
+        }
+        (stored, loose, !zones.is_empty())
     };
 
     // Retire first. The only way a stored stone still has a job is a stockpile placed over a

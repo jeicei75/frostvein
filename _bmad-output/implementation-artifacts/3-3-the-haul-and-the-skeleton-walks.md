@@ -27,8 +27,11 @@ so that the walking-skeleton sentence is true — live on screen and proven head
    filter, which silently drops a dwarf missing one. `World::carrying() -> Vec<(Id, Option<u32>)>`
    ascending by `Id` joins `claims()` and `items()` as a reader; `dwarves()` keeps its three-tuple
    shape, so `bridge.rs` is untouched.
-3. A stone is **stored** iff it is not carried and its position is a stockpile tile. A stone that is
-   neither stored nor carried is **loose**.
+3. A stone is **stored** iff it is not carried, its position is a stockpile tile, **and it is the
+   lowest-id uncarried stone on that tile** (AMENDED at review, 2026-08-07, Wolf's call — see the
+   racing-carriers finding below). A stone that is neither stored nor carried is **loose**, so a tile
+   that has ended up holding more than one stone stores the lowest and leaves the rest loose, which
+   is what re-hauls them.
 4. `create_haul_jobs`, chained after `create_jobs` and before `claim_jobs`, creates exactly one
    `Haul` job per loose stone that has none, in ascending item id, whenever at least one stockpile
    tile exists; and removes any haul job whose stone has become stored, releasing its holder.
@@ -311,6 +314,49 @@ surviving mutation impossible to overlook. AC18's evidence rests on it. It now f
 The first version of the guard was itself broken (`set -u` on a declared-but-unset array, and the
 script does not `set -e`, so it printed an error and still reported success); both directions are
 now tested.
+
+#### Second round (re-run of the three layers killed at the box)
+
+Blind Hunter and Feature Auditor reported; **Edge Case Hunter died silent a second time, so the
+loader/boundary territory of this story is UNREVIEWED by any layer.** All wiring came back WIRED:
+`create_haul_jobs` between `create_jobs` and `claim_jobs`, `carry_items` last, `Carrying` at both
+construction sites, `carrier_cell()` reachable from the real interactive loop, and `World::carrying()`
+correctly test-only (the carried stone reaches clients as the item's moving `pos`).
+
+- [x] [Review][Decision→Patch] **Two carriers racing for the last free pile tile leave a permanent
+      stack of stored stones** [crates/sim-core/src/lib.rs:239-262 and :669-682] — HIGH (blind).
+      Reproduced independently before accepting it. The first carrier delivers; the second, standing
+      on a tile that has just left its goal set, is retried, and `release_claim` drops its stone
+      where it stands. Under the old rule both counted as stored, both jobs were retired, and the
+      stack was permanent and invisible to the sim. It also falsified a `// NOTE:` I had written
+      claiming this case was self-healing because `work_positions` is recomputed every tick — it
+      recomputes the GOALS, but a cached path is only recomputed when exhausted, so the second
+      carrier never repaths. **Wolf chose repair over prevention (option C):** only the lowest-id
+      uncarried stone on a tile is stored, so the extras stay loose, keep their haul jobs and
+      re-haul themselves to genuinely free tiles. AC3 amended accordingly. Pinned by
+      `two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack` and by mutation 34,
+      which restores the old rule and dies on "a stacked tile with no queued job".
+- [x] [Review][Patch] **The live recipe recorded in the Dev Agent Record was not reproducible** and
+      failed silently — HIGH (feature). The leading `<` assumed a fixed opening camera z; it follows
+      dwarf 0, who moves, so the auditor's run placed the pile into undug rock and captured zero of
+      every glyph with exit 0. Recipe replaced with one that reads the status line and range-checks
+      `×` before drawing any conclusion.
+- [x] [Review][Patch] **Two glyph-total claims in the Dev Agent Record were not evidence of
+      hauling** and are withdrawn — MED (feature). `☻` is co-location (the auditor's stockpile-free
+      run produced 1445 of them), and `≡` totals measure litter because items render over zones.
+      Only per-cell transitions stand.
+- [x] [Review][Defer] Placing a stockpile on solid rock is a silent no-op with no player feedback
+      [crates/sim-core/src/lib.rs, `SimCommand::PlaceStockpile`] — MED (feature), pre-existing from
+      3.1, recorded in deferred-work.md.
+- [x] [Review][Defer] The client's opening camera z is nondeterministic, which makes every scripted
+      capture in this project fragile [crates/tui/src/view.rs, `initial`] — MED (feature), recorded
+      in deferred-work.md as a product decision.
+- [x] [Review][Defer] Two dig designations never completed across ~38k ticks in the auditor's run
+      — LOW (feature), possibly unreachable cells; recorded in deferred-work.md.
+
+**Coverage hole to carry forward: the Edge Case Hunter never reported, in either round.** Boundary
+analysis of `load_world`'s new bails, the free-tile set, the uniqueness indexes and mid-carry
+save/load rests on the Acceptance Auditor's pass and the mutation set alone.
 
 Dismissed as noise: AC6's walk-late convergence (already documented in `execute_jobs`, in the
 scenario test's `// NOTE:` and in the Dev Agent Record); the "no dwarf carries while holding no job"
@@ -629,31 +675,52 @@ the sabotage — recorded because each was a real hole:
 - *the drop does not move the stone* twice failed to apply, because the same `Pos` write appears in
   both `release_claim` and `carry_items`; the sabotage now anchors on the surrounding `if let`.
 
-**Live loop** — daemon and client, real binaries, `seed 0xF005_7E1A`, port 47411. The recipe in
-Verification needed two corrections against the real terrain and they are worth recording:
+**Live loop** — daemon and client, real binaries, `seed 0xF005_7E1A`. Two facts about the terrain
+that the story's Verification block gets wrong:
 
-1. At the opening view level (the dwarf's own z, 20) **every** cell is `Empty`, so `render` draws the
-   dimmed peek of the terrain below and the dig filter correctly marks nothing: `× 0` for any rect.
-   Digging happens one level DOWN (`<`), where the surface is solid.
+1. At the dwarves' own level **every** cell is `Empty`, so `render` draws the dimmed peek of the
+   terrain below and the dig filter correctly marks nothing: `× 0` for any rect there. Digging
+   happens one level DOWN, where the surface is solid.
 2. A stockpile cannot go on that lower level *first* — the surface there is `Solid`, so
-   `PlaceStockpile`'s standability filter drops every tile. Two client runs against the one running
-   daemon: dig a 7×7 at z 19, then place the pile over the same area once it is dug floor.
+   `PlaceStockpile`'s standability filter drops every tile. Dig first, then place the pile over the
+   same area once it is dug floor, in a second client run against the same daemon.
+
+**CORRECTED AT REVIEW — the recipe below replaces what this record first claimed, which was not
+reproducible.** The first version began each run with `<`, assuming a fixed opening camera z. It is
+not fixed: `view::initial` takes z from `snapshot.entities.first()`, i.e. dwarf 0, and dwarf 0 moves
+between runs. The Feature Auditor's second run therefore opened one level lower, `<` put the
+stockpile into undug rock, and the capture drew **zero of every glyph with exit 0 and no error** —
+a silent no-op that looks exactly like "hauling is broken". Do not trust a capture you have not
+range-checked:
 
 ```bash
 cargo run -q -p simd -- 47411 &
-# run A — dig a 7x7 one level down, at fast speed
+# Read `z N/31` off the status line FIRST — the opening level follows dwarf 0 and is not fixed.
+# Then dig, and CHECK `×` before believing anything: a zero means you aimed at air or at rock.
 cargo run -q -p tui -- 47411 --frames 400 \
-  --key '<,+,d,h,h,h,k,k,k,enter,l,l,l,l,l,l,j,j,j,j,j,j,enter,esc'      # × 3384   * 6614
-# run B — the pile goes on the dug floor, same rect
+  --key '+,d,h,h,h,k,k,k,enter,l,l,l,l,l,l,j,j,j,j,j,j,enter,esc' > /tmp/runA.txt
+rg -c '×' /tmp/runA.txt      # ZERO here means the rect hit no solid tile — add or drop a `<` and redo
+# Only once run A marked tiles: place the pile over the same rect, now dug floor.
 cargo run -q -p tui -- 47411 --frames 400 \
-  --key '<,+,p,h,h,h,k,k,k,enter,l,l,l,l,l,l,j,j,j,j,j,j,enter,esc'      # ≡ 4151  ☻ 1033  * 7923
+  --key '+,p,h,h,h,k,k,k,enter,l,l,l,l,l,l,j,j,j,j,j,j,enter,esc' > /tmp/runB.txt
 for p in $(pgrep -x simd); do kill $p; done
 ```
 
-Run B, per frame rather than per capture, is the evidence: **28 distinct cells showed the stockpile
-glyph early, and 21 of them hold a stone in the final frame** — the pile filling one tile at a time.
-A carrier glyph appears in 365 of the 400 frames, first at frame 26. The whole run was at `fast`
-speed with no visible stutter and the status line kept advancing (`tick 21428 … dwarves 5`).
+**The only valid measure is the per-cell transition**, computed with the SGR escapes stripped and the
+capture split into fixed-height frames: cells that show `≡` in early frames and `*` in late ones.
+My run: **28 pile cells early, 21 holding a stone in the final frame.** The Feature Auditor,
+independently and on a differently-aged world: **11 early, 5 holding a stone**, with the count of
+stones standing on pile cells rising `0, 0, 2, 4, 6, 6, 5, 5, 4, 5` across the run. Different
+magnitude, same shape — the magnitude depends on how long the daemon has been ticking and how much
+stone is lying around.
+
+**Two glyph-total claims this record originally made are NOT evidence of hauling, and are withdrawn:**
+
+- `☻ 1033` — the carrier glyph is CO-LOCATION, exactly as AC14's own NOTE says, so it also counts a
+  dwarf standing on a loose stone it does not hold. The auditor's dig-only run, with no stockpile at
+  all, produced `☻ 1445`. A `☻` count proves nothing about carrying.
+- `≡ 4151` — items render over zones, so this measures how much stone happens to be littering the
+  pile area rather than how big the pile is. Totals are noise; only per-cell transitions count.
 
 `NO_COLOR` was NOT set in this session's shell — the captures carry real SGR sequences — so unlike
 2.2's devpod the colour half of the instrument was live here. The glyph assertions in the suite are

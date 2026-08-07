@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use sim_core::{
-    DesignationKind, Dims, JobId, JobKind, JobState, Material, Pos, Rect, SimCommand, Tile, World,
+    DesignationKind, Dims, Job, JobId, JobKind, JobState, Material, Pos, Rect, SavedDwarf,
+    SimCommand, Tile, World,
 };
 
 fn rect(min: Pos, max: Pos) -> Rect {
@@ -1039,6 +1040,148 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
         world.jobs()
     );
     assert_eq!(world.items(), vec![(sim_core::Id(5), pile)]);
+    assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+}
+
+/// Two carriers converging on the LAST free stockpile tile is a real race, found at 3.3's review:
+/// the first delivers, and the second — standing on a tile that has just left its goal set — is
+/// retried, and `release_claim` drops its stone where it stands. Two stones on one tile.
+///
+/// The rule under test is the repair, not the prevention (Wolf's call at review): the extra stone
+/// stays LOOSE rather than counting as stored, so it keeps a haul job and re-hauls itself the
+/// moment a genuinely free tile exists. Under the old "any stone on a zone tile is stored" rule
+/// both jobs were retired and the stack was permanent, with nothing in the sim able to see it.
+#[test]
+fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
+    let dims = Dims { x: 12, y: 3, z: 3 };
+    let index = |pos: Pos| {
+        pos.x as usize
+            + pos.y as usize * dims.x as usize
+            + pos.z as usize * dims.x as usize * dims.y as usize
+    };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    for x in 0..dims.x as i32 {
+        for y in 0..dims.y as i32 {
+            tiles[index(Pos { x, y, z: 0 })] = Tile::Solid(Material::Stone);
+        }
+    }
+    let pile = Pos { x: 1, y: 1, z: 1 };
+    let spare = Pos { x: 1, y: 2, z: 1 };
+    let first = Pos { x: 2, y: 1, z: 1 };
+    let second = Pos { x: 3, y: 1, z: 1 };
+
+    // Both dwarves are already carrying and one tile from the pile — the state the race produces
+    // in play, built directly so no timing accident can hide it.
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    save.dims = dims;
+    save.tiles = tiles;
+    save.tick = 100;
+    save.designations.clear();
+    save.zones = vec![pile];
+    save.dwarves = vec![
+        SavedDwarf {
+            id: 0,
+            pos: first,
+            state: JobState::Walk,
+            home: first,
+            cooldown: 0,
+            current_job: Some(0),
+            work_progress: 0,
+            carrying: Some(2),
+        },
+        SavedDwarf {
+            id: 1,
+            pos: second,
+            state: JobState::Walk,
+            home: second,
+            cooldown: 0,
+            current_job: Some(1),
+            work_progress: 0,
+            carrying: Some(3),
+        },
+    ];
+    save.items = vec![(2, first), (3, second)];
+    save.next_id = 4;
+    save.jobs = vec![
+        Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 2 },
+            target: first,
+            created_tick: 0,
+            retry_after: 0,
+        },
+        Job {
+            id: JobId(1),
+            kind: JobKind::Haul { item: 3 },
+            target: second,
+            created_tick: 0,
+            retry_after: 0,
+        },
+    ];
+    save.next_job_id = 2;
+
+    let mut world = World::from_save(save);
+    let stored_on = |world: &World, tile: Pos| -> Vec<u32> {
+        let carried: Vec<u32> = world
+            .carrying()
+            .into_iter()
+            .filter_map(|(_, item)| item)
+            .collect();
+        world
+            .items()
+            .into_iter()
+            .filter(|(id, pos)| *pos == tile && !carried.contains(&id.0))
+            .map(|(id, _)| id.0)
+            .collect()
+    };
+
+    // Let the race resolve. The stack may FORM — that is the race, and preventing it is not what
+    // this rule does — but it must never be left with no job to fix it.
+    let mut saw_stack = false;
+    for _ in 0..200 {
+        world.step();
+        if stored_on(&world, pile).len() > 1 {
+            saw_stack = true;
+            assert!(
+                !world.jobs().is_empty(),
+                "a stacked tile with no queued job is a permanent, invisible violation"
+            );
+        }
+    }
+    assert!(
+        saw_stack,
+        "the race did not occur, so this test proves nothing — check the fixture"
+    );
+
+    // Now give the pile somewhere to put the extra stone. It must sort itself out with no further
+    // intervention, and end with one stone per tile.
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(spare, spare),
+    });
+    for _ in 0..400 {
+        world.step();
+        if world.jobs().is_empty() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        stored_on(&world, pile).len(),
+        1,
+        "the pile tile still holds a stack: {:?}",
+        world.items()
+    );
+    assert_eq!(
+        stored_on(&world, spare).len(),
+        1,
+        "the extra stone never reached the new tile: {:?}",
+        world.items()
+    );
+    assert!(
+        world.jobs().is_empty(),
+        "jobs left over: {:?}",
+        world.jobs()
+    );
     assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
 }
 

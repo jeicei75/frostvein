@@ -328,3 +328,27 @@ below as "what one layer found", not as "what is wrong with 3.3".
   where "all early `*` are at the source column" is a valid derivation. It would not notice a SECOND
   stone glyph appearing on the same row. **Revisit when** a capture stub grows a second item, which
   is likely the first multi-stone TUI story.
+
+- **Placing a stockpile on solid rock is a silent no-op** [`crates/sim-core/src/lib.rs`,
+  `SimCommand::PlaceStockpile`] — LAYER: feature-auditor (story 3.3 review). The command filters to
+  standable tiles, so a rect entirely in rock adds zero zones and the player is told nothing — no
+  mark, no message, no refusal. The auditor hit this for real: aiming one z level low produced a
+  capture with zero of every glyph and exit 0, which is indistinguishable from "hauling is broken".
+  Pre-existing since 3.1 (the same is true of a dig rect that hits nothing diggable), so not caused
+  by this story. **Revisit when** a story touches command feedback or the status line — the cheap fix
+  is telling the player how many tiles a command actually took.
+
+- **The client's opening camera z is nondeterministic** [`crates/tui/src/view.rs`, `initial`] —
+  LAYER: feature-auditor (story 3.3 review). `initial` takes z from `snapshot.entities.first()`, i.e.
+  dwarf 0, who wanders and settles wherever work took it. Two clients connecting to the same daemon
+  minutes apart therefore open on different levels, which makes every `--key` capture recipe in this
+  project fragile: the same key sequence aims at a different z depending on when it is run. This cost
+  a false "the feature does not work" reading during 3.3's review. **Revisit when** the next TUI story
+  touches the camera; the options are an explicit `--z` flag, opening on the level with the most
+  standable ground, or documenting that every scripted capture must range-check its own glyphs first.
+
+- **Two dig designations never completed across ~38k ticks** — LAYER: feature-auditor (story 3.3
+  review). Observed in a live run: `×` flat at 2 marks while everything else progressed. Most likely
+  the known unreachable-target class (a tile with no standable work position), which 3.2 ruled is
+  retried forever rather than dropped, but it was not chased. **Revisit if** a player ever reports
+  designations that never clear, or alongside the channel-orphan item above.
