@@ -922,6 +922,23 @@ fn cancelling_marks_over_a_stone_never_drops_its_haul_job() {
     );
 }
 
+/// Steps once and asserts no stone jumped. A carried stone rides its carrier and a carrier moves
+/// at most one tile per tick, so a stone that teleports means something read a stale position —
+/// a haul job's `target` — instead of the stone's live one.
+fn step_without_teleporting_a_stone(world: &mut World) {
+    let before = world.items();
+    world.step();
+    for (id, pos) in world.items() {
+        if let Some((_, was)) = before.iter().find(|(old, _)| *old == id) {
+            let step = (pos.x - was.x)
+                .abs()
+                .max((pos.y - was.y).abs())
+                .max((pos.z - was.z).abs());
+            assert!(step <= 1, "stone {id:?} jumped from {was:?} to {pos:?}");
+        }
+    }
+}
+
 #[test]
 fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_job() {
     let mut world = World::generate(42, Dims::DEFAULT);
@@ -946,15 +963,30 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
 
     while world.carrying().iter().all(|(_, item)| item.is_none()) {
         assert!(world.tick() < 400, "nobody ever picked the stone up");
-        world.step();
+        step_without_teleporting_a_stone(&mut world);
+    }
+    // Let the carrier walk off the tile it picked the stone up on, so the stone is dropped
+    // somewhere its job's `target` no longer names.
+    let source = world.items()[0].1;
+    while world.items()[0].1 == source {
+        assert!(
+            world.tick() < 500,
+            "the carrier never left the tile it picked up on"
+        );
+        step_without_teleporting_a_stone(&mut world);
     }
 
     world.apply_command(SimCommand::RemoveStockpile {
         rect: rect(pile, pile),
     });
     for _ in 0..40 {
-        world.step();
+        step_without_teleporting_a_stone(&mut world);
     }
+    assert_ne!(
+        world.items()[0].1,
+        world.jobs()[0].target,
+        "the stone must be somewhere its job's stale target does not name"
+    );
 
     assert!(world.zones().is_empty());
     assert_eq!(
@@ -978,7 +1010,7 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
         rect: rect(pile, pile),
     });
     for _ in 0..400 {
-        world.step();
+        step_without_teleporting_a_stone(&mut world);
         if world.jobs().is_empty() {
             break;
         }

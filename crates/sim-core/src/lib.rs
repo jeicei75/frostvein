@@ -239,33 +239,20 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
 fn create_haul_jobs(ecs: &mut EcsWorld) {
     let (stored, loose, any_zone) = {
         let zones = &ecs.resource::<Zones>().0;
-        let carried: BTreeSet<u32> = ecs
-            .iter_entities()
-            .filter(|entity| entity.contains::<Dwarf>())
-            .filter_map(|entity| entity.get::<Carrying>()?.0)
-            .collect();
-        let mut stones: Vec<_> = ecs
-            .iter_entities()
-            .filter(|entity| entity.contains::<Item>())
-            .filter_map(|entity| Some((entity.get::<Id>()?.0, *entity.get::<Pos>()?)))
-            .collect();
-        stones.sort_by_key(|(id, _)| *id);
-
         // AC3: a stone is STORED iff it is not carried and stands on a stockpile tile, and LOOSE
-        // iff it is neither stored nor carried.
-        let mut stored = BTreeSet::new();
-        let mut loose = Vec::new();
-        for (id, pos) in stones {
-            if carried.contains(&id) {
-                continue;
-            }
-            if zones.contains(&pos) {
-                stored.insert(id);
-            } else {
-                loose.push((id, pos));
-            }
-        }
-        (stored, loose, !zones.is_empty())
+        // iff it is neither stored nor carried. `uncarried_stones` has already dropped the
+        // carried ones and is ascending by item id, which is the order jobs are created in.
+        let (stored, loose): (Vec<_>, Vec<_>) = uncarried_stones(ecs)
+            .into_iter()
+            .partition(|(_, pos)| zones.contains(pos));
+        (
+            stored
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect::<BTreeSet<_>>(),
+            loose,
+            !zones.is_empty(),
+        )
     };
 
     // Retire first. The only way a stored stone still has a job is a stockpile placed over a
@@ -1951,6 +1938,38 @@ mod tests {
             vec![(super::Id(11), pile), (super::Id(12), cell(3))]
         );
         assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+    }
+
+    #[test]
+    fn a_stockpile_tile_whose_floor_is_gone_is_never_a_delivery_target() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let cell = corridor(&mut world);
+        let loose = cell(2);
+        let pile = cell(4);
+        world.ecs.spawn((super::Item, super::Id(12), loose));
+        place_stockpile(&mut world, pile);
+        // Zone tiles are validated standable when the command lands and never re-checked, so a
+        // pile can lose its floor to a later dig.
+        assert!(world.set_tile(
+            Pos {
+                z: pile.z - 1,
+                ..pile
+            },
+            Tile::Empty,
+        ));
+
+        for _ in 0..80 {
+            world.step();
+            assert!(
+                world.carrying().iter().all(|(_, item)| item.is_none()),
+                "a stone was picked up for a pile tile nobody can stand on"
+            );
+        }
+
+        assert_eq!(world.jobs().len(), 1);
+        assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 12 });
+        assert_eq!(world.items(), vec![(super::Id(12), loose)]);
+        assert!(world.zones().contains(&pile));
     }
 
     #[test]

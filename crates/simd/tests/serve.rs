@@ -776,6 +776,39 @@ fn haul_job(id: u32, item: u32, target: sim_core::Pos) -> sim_core::Job {
     }
 }
 
+/// The positive half of the haul load rules: a haul job has no designation and never had one, so
+/// the tile-job rules must not be applied to it. Without this the whole gauntlet could reject
+/// every legitimate mid-haul save and only the rejection tests below would notice — they would
+/// all still pass.
+#[test]
+fn a_mid_haul_save_loads_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = save_with_items(1);
+    let pos = state.dwarves[0].pos;
+    state.jobs = vec![haul_job(0, 5, pos)];
+    state.next_job_id = 1;
+    state.dwarves[0].current_job = Some(0);
+    state.dwarves[0].carrying = Some(5);
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode mid-haul save"),
+    )
+    .expect("write mid-haul save");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let loaded = read_snapshot_after_load(&mut reader);
+
+    assert!(loaded.items.iter().any(|item| item.id == 5));
+    assert_eq!(loaded.tick, state.tick);
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(first < second, "the loaded world stopped ticking");
+}
+
 #[test]
 fn haul_job_naming_an_absent_item_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = save_with_items(1);
