@@ -829,6 +829,9 @@ fn two_haul_jobs_on_one_item_save_is_logged_and_the_daemon_keeps_ticking() {
     assert_save_is_rejected_without_stopping_ticks(state, "save reuses haul item 5");
 }
 
+/// Pins the LOG LINE, not an outcome bound: unique-by-item and item-exists already reject this
+/// save, so what is asserted here is that the count complaint is the one that fires first. Raised
+/// at 3.3's review, where this test read as stronger than it is.
 #[test]
 fn more_haul_jobs_than_items_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = save_with_items(1);

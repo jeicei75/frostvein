@@ -171,6 +171,9 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
 
     // Counted in the same pass that draws them, so the count and the draw can never disagree
     // about which stones are on screen, on this level, and where.
+    // NOTE: two or more stones on one tile render as a single `*` with no count in the glyph —
+    // there is no item stacking model. Deliberate: the sim enforces one stone per STOCKPILE tile,
+    // so a pile always reads truthfully; a heap on open ground does not.
     let mut item_counts = BTreeMap::new();
     for item in &snapshot.items {
         if let Some(index) = screen_index(item.pos) {

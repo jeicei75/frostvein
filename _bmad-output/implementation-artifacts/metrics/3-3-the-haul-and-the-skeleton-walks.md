@@ -7,3 +7,4 @@ Per-phase, per-tool, per-model cost for this story. Rows are **deltas** — each
 | phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-opus-5 | 57 | 107 | 577,259 | 7,143,621 | 178,314 | 7,899,301 | $11.64 | `2f09ad30-6fbf-457c-b838-9d47d78d3684.jsonl` | 2026-08-07 06:02 UTC · rates 2026-08-01 | 75 | — |
+| dev | claude | claude-opus-5 | 310 | 581 | 804,136 | 84,547,077 | 419,030 | 85,770,824 | $57.78 | `2a9b9908-8052-4111-bac9-9fd8cff70f8b.jsonl` | 2026-08-07 09:59 UTC · rates 2026-08-01 | 168 | — |

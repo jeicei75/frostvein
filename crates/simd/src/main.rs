@@ -321,6 +321,11 @@ fn load_world() -> Option<sim_core::World> {
             );
         }
         let haul_jobs = save.jobs.len() - tile_jobs;
+        // MESSAGE QUALITY ONLY, not the real bound — raised at 3.3's review. Unique-by-item plus
+        // item-exists below already imply this by pigeonhole, so this check can never reject a save
+        // those two would accept; it only decides WHICH complaint the log carries. Do not read its
+        // test as proving an outcome bound. The real bound on haul jobs is the save's item count,
+        // which nothing caps but MAX_SAVE_BYTES (recorded in deferred-work.md).
         if haul_jobs > save.items.len() {
             bail!(
                 "save has {haul_jobs} haul jobs; limit is {} item(s)",

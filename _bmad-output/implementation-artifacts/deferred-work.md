@@ -296,3 +296,35 @@ SEVERITY. Every item below is LOW; HIGH/MED went to patch or to Wolf as a decisi
   concurrent daemon processes competing on timing assertions — and no guardrail forbids it. But it
   serializes tests this story never touched and changes their failure mode, so a future flaky-gate
   investigation should know it is here. Revisit if gate wall-clock becomes a problem.
+
+## Deferred from: code review of 3-3-the-haul-and-the-skeleton-walks (2026-08-07)
+
+Only ONE of four review layers reported: the Acceptance Auditor. Blind Hunter, Edge Case Hunter and
+Feature Auditor were killed at the 20-minute time-box having produced nothing, so the adversarial,
+edge-case and does-it-actually-work territories of this story are UNREVIEWED. Read the short list
+below as "what one layer found", not as "what is wrong with 3.3".
+
+- **Haul jobs are no longer bounded by `MAX_DESIGNATIONS`** [`crates/simd/src/main.rs:317-329`] —
+  LAYER: acceptance-auditor. Before 3.3, `save.jobs.len() > MAX_DESIGNATIONS` rejected the whole
+  save; now that cap applies to tile jobs only, and haul jobs are bounded by `save.items.len()`,
+  which nothing caps but `MAX_SAVE_BYTES` (64 MB). WHY IT IS NOT A DEFECT: capping haul jobs at 4096
+  would refuse a *legitimate* late-game save — designations are consumed as tiles are dug while
+  stones accumulate, so a long game can hold far more than 4096 stones, and AC12 deliberately
+  specifies the item-count bound instead. The exposure is a local, operator-written file bounded at
+  64 MB. **Revisit if** a save ever carries enough items that `from_save` or a tick becomes slow
+  enough to measure, or if saves ever arrive from anywhere but the local operator.
+
+- **The entity draw loop skips any non-`Dwarf` `EntityKind`** [`crates/tui/src/view.rs:193`] —
+  LAYER: acceptance-auditor. Story 3.3 closed the older "counting and drawing use different filters"
+  item by making BOTH filter on `EntityKind::Dwarf`, which is strictly better today (they can no
+  longer disagree) but converts the old defect into a narrower one: a second entity kind would not be
+  drawn at all rather than being drawn with the wrong glyph. Behaviour-identical while
+  `protocol::EntityKind` has one variant, and the code carries a `// NOTE:` saying a second kind must
+  decide its own contention rule. **Revisit when** a second `EntityKind` reaches the wire — that
+  story owns the rule, and this is where it lands.
+
+- **`glyph_positions` records only the first occurrence of a glyph per line**
+  [`crates/tui/tests/client.rs:2154`] — LAYER: acceptance-auditor. Sound for the one-stone haul stub,
+  where "all early `*` are at the source column" is a valid derivation. It would not notice a SECOND
+  stone glyph appearing on the same row. **Revisit when** a capture stub grows a second item, which
+  is likely the first multi-stone TUI story.

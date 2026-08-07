@@ -35,7 +35,11 @@ trap 'restore_all; rm -rf "$BACKUP"' EXIT
 backup_all() { tar -cf "$BACKUP/tree.tar" $(git ls-files 'crates/*'); }
 restore_all() { [ -f "$BACKUP/tree.tar" ] && tar -xf "$BACKUP/tree.tar"; }
 
-declare -a NAMES RESULTS
+# Initialized empty, not merely declared: under `set -u`, `${#NAMES[@]}` on a declared-but-unset
+# array is an unbound-variable error, and this script does not `set -e`, so the empty-table guard
+# below would print a diagnostic and then carry on to report success.
+NAMES=()
+RESULTS=()
 survivors=0
 
 mutation() {
@@ -71,6 +75,14 @@ source "$MUTATIONS"
 restore_all
 
 printf '\n================ MUTATION RESULTS ================\n'
+# A mutations file that defines NOTHING — a shell syntax error inside it, a bad path, a partial
+# copy — used to print "All mutations killed." and exit 0. That is this script's own false-green:
+# the one thing it exists to make impossible to overlook. Found at 3.3's review by feeding it a
+# truncated file. An empty table is a failure, never a pass.
+if [ "${#NAMES[@]}" -eq 0 ]; then
+  printf 'NO MUTATIONS RAN. %s defined none — check it sourced cleanly.\n' "$MUTATIONS"
+  exit 1
+fi
 for i in "${!NAMES[@]}"; do
   printf '%-60s %s\n' "${NAMES[$i]}" "${RESULTS[$i]}"
 done

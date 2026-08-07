@@ -1,21 +1,14 @@
 # Mutation set for story 3.3. Run:
 # scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh
 #
-# Two lines named in the story's mutation list are NOT here, with reasons, because a mutation
-# that cannot be killed is worse than an absent one — it trains the table's signal away:
-#
-#   * "haul work positions ignore standability" on the PICK-UP leg
-#     (`terrain.is_standable(*pos)` in `match items.get(&item)`). Dropping it changes no
-#     outcome: a stone on a non-standable tile is unreachable either way, because
-#     `astar_neighbours` only ever walks standable tiles, so the claim fails and the job is
-#     retried with the line and without it. The line's value is skipping a doomed A* search,
-#     not changing behaviour. The FREE-TILE standability filter one line above IS observable
-#     and is mutated below.
-#   * "pickup does not clear `Path`" (`ecs.entity_mut(entity).remove::<Path>()`). The pick-up
-#     leg's goal set is a single tile and the walk consumes the path node by node, so the path
-#     is always already empty on arrival; `execute_jobs` recomputes on an empty path anyway.
-#     Kept in the code because AC8 requires it and a future multi-goal pick-up leg would need
-#     it, but no scenario can tell the two apart today.
+# HISTORY, kept because it is the useful part: this file first EXCLUDED two mutations the story's
+# task list named -- the pick-up leg's `is_standable` and `remove::<Path>()` at pick-up -- arguing
+# they were unkillable. 3.3's Acceptance Auditor rejected that and was right. The argument was
+# about SCENARIO observability: an unreachable stone is unclaimable either way, and the walk always
+# exhausts the path before arrival. Both fall one level down -- `work_positions` is a private fn a
+# unit test can call directly, and a component assertion can look at `Path` on the pick-up tick.
+# Both are mutated at the end of this file. The lesson: "no scenario can tell them apart" is not
+# the same claim as "no test can".
 
 mutation "create_haul_jobs runs with no stockpile present" sim-core no_stockpile_means_no_haul_job_at_all <<'PY'
 import pathlib
@@ -373,4 +366,20 @@ new = '''    for item in &snapshot.items {
     }
 '''
 p.write_text(s.replace(old, new))
+PY
+
+mutation "the pick-up leg ignores standability" sim-core haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                Some(pos) if !free.is_empty() && terrain.is_standable(*pos) => {\n'
+assert old in s
+p.write_text(s.replace(old, '                Some(pos) if !free.is_empty() => {\n'))
+PY
+
+mutation "pickup does not spend the path" sim-core pickup_sets_carrying_resets_the_work_counter_and_spends_the_path <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    ecs.entity_mut(entity).remove::<Path>();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
 PY

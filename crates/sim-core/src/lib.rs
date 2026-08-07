@@ -1484,7 +1484,7 @@ impl World {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use super::{Dims, Job, JobId, JobKind, JobState, Jobs, Material, Pos, Terrain, Tile, World};
 
@@ -1943,6 +1943,101 @@ mod tests {
     /// `Job.target` for a haul is only the stone's position when the job was created. Claiming
     /// and execution must read the stone's live `Pos`, so a job whose target has gone stale still
     /// sends a dwarf to the stone — and the stone never jumps to meet the dwarf instead.
+    /// AC8's pick-up effect, clause by clause, asserted on the components rather than through a
+    /// scenario. The path handed in is deliberately NON-empty: in production the walk always
+    /// exhausts it before arrival, which is why review found this clause pinned by nothing.
+    #[test]
+    fn pickup_sets_carrying_resets_the_work_counter_and_spends_the_path() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let cell = corridor(&mut world);
+        let stone = cell(2);
+        world.ecs.spawn((super::Item, super::Id(12), stone));
+        place_stockpile(&mut world, cell(4));
+        super::create_haul_jobs(&mut world.ecs);
+        let job = world.jobs()[0];
+        assert_eq!(job.kind, JobKind::Haul { item: 12 });
+        let entity = dwarf_entity(&world, 0);
+        // Standing on the stone already, so the very next WORK_TICKS runs end in the pick-up.
+        *world.ecs.get_mut::<Pos>(entity).unwrap() = stone;
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(vec![cell(3)]), super::WorkProgress(0)));
+
+        for _ in 0..super::WORK_TICKS {
+            super::execute_jobs(&mut world.ecs);
+        }
+        assert_eq!(world.carrying()[0], (super::Id(0), None), "picked up early");
+
+        super::execute_jobs(&mut world.ecs);
+
+        assert_eq!(world.carrying()[0], (super::Id(0), Some(12)));
+        assert_eq!(
+            world.claims()[0].1,
+            Some(job.id),
+            "a pick-up must not complete the job"
+        );
+        assert!(world.jobs().iter().any(|queued| queued.id == job.id));
+        assert_eq!(
+            world.ecs.get::<super::WorkProgress>(entity).map(|p| p.0),
+            Some(0),
+            "the second leg's work counter must start from zero"
+        );
+        assert!(
+            !world.ecs.entity(entity).contains::<super::Path>(),
+            "the path to the stone must be spent, not carried into the delivery leg"
+        );
+    }
+
+    /// The haul goal sets, called directly — the only way to see the pick-up leg's standability
+    /// rule, since an unreachable stone is unclaimable with or without it.
+    #[test]
+    fn haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile() {
+        let terrain = flat_terrain(5, 1);
+        let pile = Pos { x: 0, y: 0, z: 1 };
+        let zones = BTreeSet::from([pile]);
+        let standing = Pos { x: 2, y: 0, z: 1 };
+        // z == 0 is the solid floor, so a stone there is on no standable tile.
+        let sunken = Pos { x: 2, y: 0, z: 0 };
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 12 },
+            target: standing,
+            created_tick: 0,
+            retry_after: 0,
+        };
+
+        let reachable = BTreeMap::from([(12, standing)]);
+        assert_eq!(
+            super::work_positions(&terrain, &zones, &reachable, job, None),
+            BTreeSet::from([standing]),
+            "a standable stone with a free pile tile is its own work position"
+        );
+        assert_eq!(
+            super::work_positions(&terrain, &zones, &reachable, job, Some(12)),
+            BTreeSet::from([pile]),
+            "a carrying dwarf is sent to the free pile tile"
+        );
+
+        let unstandable = BTreeMap::from([(12, sunken)]);
+        assert!(
+            super::work_positions(&terrain, &zones, &unstandable, job, None).is_empty(),
+            "a stone on unstandable ground has no work position"
+        );
+
+        // The pile itself holding a stored stone leaves both legs empty.
+        let occupied = BTreeMap::from([(12, standing), (13, pile)]);
+        assert!(
+            super::work_positions(&terrain, &zones, &occupied, job, None).is_empty(),
+            "the pick-up leg must be gated on a free tile existing"
+        );
+        assert!(
+            super::work_positions(&terrain, &zones, &occupied, job, Some(12)).is_empty(),
+            "a full pile is no delivery target"
+        );
+    }
+
     #[test]
     fn haul_execution_reads_the_stones_live_position_not_the_jobs_target() {
         let mut world = World::generate(42, Dims::DEFAULT);

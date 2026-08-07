@@ -267,6 +267,55 @@ so that the walking-skeleton sentence is true — live on screen and proven head
 - [x] **Green gate and the live loop** (AC: 17, 18) — `scripts/gate.sh`, then the live check below.
       Report what printed, including the key sequence that actually worked and the glyph counts.
 
+### Review Findings (AI)
+
+Layers run 2026-08-07: Acceptance Auditor (Opus) completed. **Blind Hunter, Edge Case Hunter and
+Feature Auditor were killed at the 20-minute time-box with no report — their territories are
+UNREVIEWED coverage holes, not clean results.**
+
+- [x] [Review][Patch] AC8's "`Path` is dropped" clause is pinned by nothing, and two mutations the
+      task list required were documented as unkillable when they are killable one level down
+      [crates/sim-core/src/lib.rs:807, _bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh:14-18]
+      — MED (auditor). The exclusion reasoning was about SCENARIO observability; a direct component
+      assertion after the pickup tick, and a direct call to the private `work_positions`, kill both.
+- [x] [Review][Patch] The haul-job count bound cannot reject any save the unique-by-item and
+      item-exists rules would accept (pigeonhole), so it is a message-quality guard only, and its
+      test passes solely because the count check is ordered first
+      [crates/simd/src/main.rs:324-329, crates/simd/tests/serve.rs:1794] — LOW (auditor). Patched as
+      documentation, not behaviour: a test that reads stronger than it is belongs to the
+      false-evidence class this project has been bitten by.
+- [x] [Review][Patch] The `// NOTE:` the Dev Notes explicitly required — two stones may share a
+      non-stockpile tile and render as one `*` — was never written [crates/sim-core/src/lib.rs] — LOW
+      (auditor).
+- [x] [Review][Defer] Haul jobs are no longer bounded by `MAX_DESIGNATIONS`; their only bound is the
+      save's item count, which is itself bounded only by `MAX_SAVE_BYTES`
+      [crates/simd/src/main.rs:317-329] — LOW (auditor), deferred: capping haul jobs at 4096 would
+      refuse a legitimate late-game save.
+- [x] [Review][Defer] The entity draw loop now skips any non-`Dwarf` `EntityKind` entirely
+      [crates/tui/src/view.rs:193] — LOW (auditor), deferred: replaces the count/draw mismatch this
+      story closed with a narrower latent case that needs a second entity kind to exist.
+- [x] [Review][Defer] `glyph_positions` records only the first occurrence of a glyph per line
+      [crates/tui/tests/client.rs:2154] — LOW (auditor), deferred: sound for a one-stone stub.
+
+All three patches applied 2026-08-07 and re-verified: `scripts/gate.sh` green from a clean build,
+`scripts/mutate.sh` **33/33 killed** — the two restored mutations were confirmed to kill in isolation
+first. Two new tests carry AC8's pick-up clauses and both haul goal-set legs:
+`pickup_sets_carrying_resets_the_work_counter_and_spends_the_path` (non-empty stale path, so
+"the path is spent" is observable) and `haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile`
+(calls the private `work_positions` directly).
+
+FOUND WHILE PATCHING, outside this story's diff and fixed anyway: `scripts/mutate.sh` printed
+"All mutations killed." and exited 0 when its mutations file defined NOTHING — a truncated or
+syntactically broken file read as a clean sweep, in the one tool whose whole purpose is making a
+surviving mutation impossible to overlook. AC18's evidence rests on it. It now fails an empty table.
+The first version of the guard was itself broken (`set -u` on a declared-but-unset array, and the
+script does not `set -e`, so it printed an error and still reported success); both directions are
+now tested.
+
+Dismissed as noise: AC6's walk-late convergence (already documented in `execute_jobs`, in the
+scenario test's `// NOTE:` and in the Dev Agent Record); the "no dwarf carries while holding no job"
+negative (covered per tick by a strictly stronger assertion in the walking-skeleton scenario).
+
 ## Dev Notes
 
 ### Scope guardrails — do NOT build these here
