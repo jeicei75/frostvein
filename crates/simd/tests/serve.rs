@@ -757,6 +757,95 @@ fn duplicate_job_target_save_is_logged_and_the_daemon_keeps_ticking() {
     assert_save_is_rejected_without_stopping_ticks(state, "save reuses job target 20,20,8");
 }
 
+/// A save with `count` stones, all parked on dwarf zero's tile, and `next_id` moved past them.
+fn save_with_items(count: u32) -> sim_core::SaveState {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    let pos = state.dwarves[0].pos;
+    state.items = (0..count).map(|index| (5 + index, pos)).collect();
+    state.next_id = 5 + count;
+    state
+}
+
+fn haul_job(id: u32, item: u32, target: sim_core::Pos) -> sim_core::Job {
+    sim_core::Job {
+        id: sim_core::JobId(id),
+        kind: sim_core::JobKind::Haul { item },
+        target,
+        created_tick: 0,
+        retry_after: 0,
+    }
+}
+
+#[test]
+fn haul_job_naming_an_absent_item_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = save_with_items(1);
+    let target = state.dwarves[0].pos;
+    state.jobs = vec![haul_job(0, 99, target)];
+    state.next_job_id = 1;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save haul job 0 names missing item 99");
+}
+
+#[test]
+fn two_haul_jobs_on_one_item_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = save_with_items(2);
+    let target = state.dwarves[0].pos;
+    state.jobs = vec![haul_job(0, 5, target), haul_job(1, 5, target)];
+    state.next_job_id = 2;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses haul item 5");
+}
+
+#[test]
+fn more_haul_jobs_than_items_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = save_with_items(1);
+    let target = state.dwarves[0].pos;
+    state.jobs = vec![haul_job(0, 5, target), haul_job(1, 6, target)];
+    state.next_job_id = 2;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save has 2 haul jobs; limit is 1 item(s)",
+    );
+}
+
+#[test]
+fn dwarf_carrying_an_absent_item_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[0].carrying = Some(99);
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save dwarf 0 carries missing item 99");
+}
+
+#[test]
+fn two_dwarves_carrying_one_item_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = save_with_items(1);
+    let target = state.dwarves[0].pos;
+    state.jobs = vec![haul_job(0, 5, target)];
+    state.next_job_id = 1;
+    state.dwarves[0].carrying = Some(5);
+    state.dwarves[0].current_job = Some(0);
+    // No claim of its own: `save job 0 has multiple claimants` would otherwise fire first and
+    // this test would prove that rule instead of this one.
+    state.dwarves[1].carrying = Some(5);
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save item 5 has multiple carriers");
+}
+
+#[test]
+fn carrying_dwarf_without_the_matching_haul_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = save_with_items(1);
+    let target = state.dwarves[0].pos;
+    state.jobs = vec![haul_job(0, 5, target)];
+    state.next_job_id = 1;
+    state.dwarves[0].carrying = Some(5);
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save dwarf 0 carries item 5 without holding its haul job",
+    );
+}
+
 #[test]
 fn job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
@@ -1254,6 +1343,101 @@ fn completed_dig_streams_dirty_tile_and_item_in_the_same_delta() {
             .iter()
             .any(|item| item.pos == target && item.id >= 5)
     );
+}
+
+#[test]
+fn a_designated_dig_and_a_stockpile_stream_a_stone_onto_a_zone_tile() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let dims = snapshot.dims;
+    let tile_at = |x: i32, y: i32, z: i32| {
+        if x < 0 || y < 0 || z < 0 || x >= dims.x as i32 || y >= dims.y as i32 || z >= dims.z as i32
+        {
+            return None;
+        }
+        let index = (x as u32 + y as u32 * dims.x + z as u32 * dims.x * dims.y) as usize;
+        snapshot.tiles.get(index).copied()
+    };
+    // A solid tile whose OWN floor is solid, so the stone it drops lands on standable ground and
+    // can be picked up at all, beside a standable tile that serves as both work position and
+    // stockpile. Without the floor condition the search finds overhangs, where items — which
+    // never fall — are unreachable and this test would hang on a haul that cannot happen.
+    let mut face = None;
+    'search: for z in 1..dims.z as i32 {
+        for y in 0..dims.y as i32 {
+            for x in 0..dims.x as i32 {
+                if !matches!(tile_at(x, y, z), Some(protocol::Tile::Solid(_)))
+                    || !matches!(
+                        tile_at(x, y, z - 1),
+                        Some(protocol::Tile::Solid(_) | protocol::Tile::Ramp(_))
+                    )
+                {
+                    continue;
+                }
+                for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                    if matches!(tile_at(x + dx, y + dy, z), Some(protocol::Tile::Empty))
+                        && matches!(
+                            tile_at(x + dx, y + dy, z - 1),
+                            Some(protocol::Tile::Solid(_) | protocol::Tile::Ramp(_))
+                        )
+                    {
+                        face = Some(([x, y, z], [x + dx, y + dy, z]));
+                        break 'search;
+                    }
+                }
+            }
+        }
+    }
+    let (target, pile) = face.expect("generated world has a floored solid face");
+
+    send_speed(&mut writer, protocol::Speed::Fast);
+    let mut saw_fast = false;
+    for _ in 0..50 {
+        if read_delta(&mut reader).speed == protocol::Speed::Fast {
+            saw_fast = true;
+            break;
+        }
+    }
+    assert!(saw_fast, "daemon never applied the fast command");
+    let stockpile = format!(
+        "{{\"type\":\"place_stockpile\",\"rect\":{{\"min\":{pile:?},\"max\":{pile:?}}}}}\n"
+    );
+    send_literal(&mut writer, stockpile.as_bytes());
+    let designate = format!(
+        "{{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{{\"min\":{target:?},\"max\":{target:?}}}}}\n"
+    );
+    send_literal(&mut writer, designate.as_bytes());
+
+    let mut stored = None;
+    for _ in 0..900 {
+        let update = read_delta(&mut reader);
+        if let Some(item) = update
+            .items
+            .iter()
+            .find(|item| update.zones.iter().any(|zone| zone.pos == item.pos))
+        {
+            stored = Some(*item);
+            break;
+        }
+    }
+    let stored = stored.expect("no stone ever reached a stockpile tile");
+    assert_eq!(stored.pos, pile);
+    assert!(stored.id >= 5);
+
+    // A client connecting afterwards sees the stone on the pile, not just the delta that moved it.
+    let mut later = BufReader::new(daemon.connect());
+    let later = read_snapshot(&mut later);
+    assert!(
+        later
+            .items
+            .iter()
+            .any(|item| item.pos == pile && item.id == stored.id),
+        "the stored stone is missing from a fresh snapshot"
+    );
+    assert!(later.zones.iter().any(|zone| zone.pos == pile));
 }
 
 #[test]
