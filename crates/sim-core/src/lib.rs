@@ -133,6 +133,13 @@ pub struct Job {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 struct CurrentJob(Option<JobId>);
 
+/// Present on every dwarf from spawn, exactly like `CurrentJob`, and `Option` rather than an
+/// optional component: `to_save`'s `filter_map` silently skips a dwarf missing any component it
+/// reads, so an optional `Carrying` would drop every non-carrying dwarf from the save with
+/// nothing failing. A query asking for `&Carrying` would skip them too.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+struct Carrying(Option<u32>);
+
 #[derive(Component)]
 struct Path(Vec<Pos>);
 
@@ -510,7 +517,27 @@ fn work_positions(terrain: &Terrain, job: Job) -> BTreeSet<Pos> {
     }
 }
 
+/// Stones are few and never despawn, so a scan beats a reverse index that has to stay in sync.
+fn item_entity(ecs: &EcsWorld, item: u32) -> Option<Entity> {
+    ecs.iter_entities()
+        .find(|entity| entity.contains::<Item>() && entity.get::<Id>() == Some(&Id(item)))
+        .map(|entity| entity.id())
+}
+
 fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
+    // A dwarf that stops holding a job stops carrying its stone, and drops it where it stands.
+    // Doing it here is what keeps every abnormal exit — a vanished job, a retry, a cancel, a
+    // retire — from welding a stone to an idle dwarf.
+    if let Some(item) = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0) {
+        let dropped_at = ecs.get::<Pos>(entity).copied();
+        if let (Some(pos), Some(stone)) = (dropped_at, item_entity(ecs, item)) {
+            *ecs.get_mut::<Pos>(stone)
+                .expect("every stone has a position") = pos;
+        }
+        if let Some(mut carrying) = ecs.get_mut::<Carrying>(entity) {
+            carrying.0 = None;
+        }
+    }
     if let Some(mut current) = ecs.get_mut::<CurrentJob>(entity) {
         current.0 = None;
     }
@@ -687,6 +714,30 @@ fn settle(ecs: &mut EcsWorld) {
     // NOTE: gravity is deliberately limited to one level per dwarf per tick; items never fall.
 }
 
+/// Exclusive and LAST in the chain, not merely after `settle`: a carried stone sits on its
+/// carrier's tile at the end of every tick no matter which system moved the carrier.
+fn carry_items(ecs: &mut EcsWorld) {
+    let mut carriers: Vec<_> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| {
+            Some((
+                *entity.get::<Id>()?,
+                entity.get::<Carrying>()?.0?,
+                *entity.get::<Pos>()?,
+            ))
+        })
+        .collect();
+    carriers.sort_by_key(|(id, ..)| *id);
+
+    for (_, item, pos) in carriers {
+        if let Some(stone) = item_entity(ecs, item) {
+            *ecs.get_mut::<Pos>(stone)
+                .expect("every stone has a position") = pos;
+        }
+    }
+}
+
 fn advance_tick(mut tick: ResMut<Tick>) {
     tick.0 += 1;
 }
@@ -794,6 +845,7 @@ fn assemble(
             execute_jobs,
             settle,
             wander,
+            carry_items,
         )
             .chain(),
     );
@@ -941,6 +993,7 @@ impl World {
                         cooldown: dwarf.cooldown,
                     },
                     CurrentJob(current_job),
+                    Carrying(None),
                 ))
                 .id();
             if current_job.is_some() {
@@ -1149,6 +1202,19 @@ impl World {
         claims
     }
 
+    /// Sorted ascending by dwarf `Id`. A sibling reader to `claims()` and `items()`, which is
+    /// why `dwarves()` keeps its three-tuple shape and the clients need no new arm.
+    pub fn carrying(&self) -> Vec<(Id, Option<u32>)> {
+        let mut carrying: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| Some((*entity.get::<Id>()?, entity.get::<Carrying>()?.0)))
+            .collect();
+        carrying.sort_by_key(|(id, _)| *id);
+        carrying
+    }
+
     /// Sorted ascending by `Id`.
     pub fn items(&self) -> Vec<(Id, Pos)> {
         let mut items: Vec<_> = self
@@ -1162,7 +1228,8 @@ impl World {
     }
 
     /// Sorted ascending by `Id` — stable order is required by AD-7.
-    // NOTE: promote this tuple to a struct at the fourth field (Story 3.2 adds carried item).
+    // NOTE: the carried stone deliberately did NOT become a fourth field here. `carrying()` is a
+    // sibling reader instead, which leaves this tuple — and therefore `simd`'s bridge — untouched.
     pub fn dwarves(&self) -> Vec<(Id, Pos, JobState)> {
         let mut dwarves: Vec<_> = self
             .ecs
@@ -1229,6 +1296,7 @@ impl World {
                     cooldown: id.0 % WANDER_REST_TICKS,
                 },
                 CurrentJob(None),
+                Carrying(None),
             ));
         }
     }
@@ -1392,6 +1460,118 @@ mod tests {
             vec![(super::Id(11), earlier), (super::Id(12), later)]
         );
         assert_eq!(world.dwarves().len(), 5);
+    }
+
+    #[test]
+    fn carrying_reader_lists_every_dwarf_ascending_by_id() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+
+        assert_eq!(
+            world.carrying(),
+            vec![
+                (super::Id(0), None),
+                (super::Id(1), None),
+                (super::Id(2), None),
+                (super::Id(3), None),
+                (super::Id(4), None),
+            ],
+            "every dwarf carries nothing at spawn, and none is missing from the reader"
+        );
+
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(3)))
+            .expect("dwarf three exists")
+            .id();
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(12);
+
+        assert_eq!(world.carrying()[3], (super::Id(3), Some(12)));
+    }
+
+    #[test]
+    fn a_carried_stone_tracks_its_carrier_every_tick_including_a_settle_fall() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let start = world.dwarves()[0].1;
+        let stone = Pos { x: 0, y: 0, z: 1 };
+        world.ecs.spawn((super::Item, super::Id(12), stone));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(12);
+
+        // Wandering moves the carrier; the stone must be under it at the end of every tick.
+        for _ in 0..12 {
+            world.step();
+            assert_eq!(
+                world.items(),
+                vec![(super::Id(12), world.dwarves()[0].1)],
+                "a carried stone lagged behind its carrier"
+            );
+        }
+
+        // Now the ground under the carrier is dug away and `settle` — not `wander` — moves it.
+        let standing = world.dwarves()[0].1;
+        let below = Pos {
+            z: standing.z - 1,
+            ..standing
+        };
+        assert!(world.set_tile(below, Tile::Empty));
+        assert!(world.set_tile(
+            Pos {
+                z: standing.z - 2,
+                ..standing
+            },
+            Tile::Solid(Material::Stone),
+        ));
+
+        world.step();
+
+        assert_eq!(world.dwarves()[0].1, below, "the carrier did not fall");
+        assert_eq!(
+            world.items(),
+            vec![(super::Id(12), below)],
+            "the stone stayed on the level its carrier fell from"
+        );
+        assert_ne!(start, below);
+    }
+
+    #[test]
+    fn release_claim_drops_the_carried_stone_at_the_dwarfs_tile() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dwarf_pos = world.dwarves()[0].1;
+        let far_away = Pos { x: 0, y: 0, z: 1 };
+        world.ecs.spawn((super::Item, super::Id(12), far_away));
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 12 },
+            target: far_away,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(12);
+
+        super::release_claim(&mut world.ecs, entity);
+
+        assert_eq!(
+            world.items(),
+            vec![(super::Id(12), dwarf_pos)],
+            "an abnormal exit must leave a loose stone where the dwarf stood"
+        );
+        assert_eq!(world.carrying()[0], (super::Id(0), None));
+        assert_eq!(world.claims()[0].1, None);
+        assert_eq!(world.dwarves()[0].2, JobState::Idle);
     }
 
     #[test]
