@@ -267,6 +267,9 @@ SEVERITY. Every item below is LOW; HIGH/MED went to patch or to Wolf as a decisi
   lifetime job creations to reach — but note `simd`'s `load_world` already rejects an exhausted
   `next_job_id` on load, so the guard exists on one side only. One-line fix when next in this
   function.
+  **CLOSED at Story 3.3 (2026-08-07).** The second allocation site arrived, so the increment became
+  one `Jobs::next_job_id()` using `saturating_add`, shared by `create_jobs` and `create_haul_jobs`.
+  Pinned by `next_job_id_counts_up_and_saturates_at_the_maximum` and by a `wrapping_add` mutation.
 
 - **The AD-12 seam promised to Story 3.3 is heavier than planned** — LAYER: acceptance-auditor.
   The guardrail says 3.3 adds `Haul` "as a variant plus its execution system and **must not touch
@@ -281,6 +284,11 @@ SEVERITY. Every item below is LOW; HIGH/MED went to patch or to Wolf as a decisi
   because dwarf is the only `EntityKind`, and AC14 only speaks about dwarves. It becomes a silent
   visual defect the moment a second entity kind reaches the wire — which is the same failure shape
   as the 2.2 defect AC14 exists to fix.
+  **CLOSED at Story 3.3 (2026-08-07).** The cell contention rule was rewritten for the carrier
+  glyph, and both loops now filter on `EntityKind::Dwarf`; the stone count is built in the very pass
+  that draws the stones, so count and draw cannot disagree about screen position or level either. A
+  `// NOTE:` records that a second entity kind must decide its own contention rule. Pinned by a
+  wrong-z stone case and by a "counting and drawing use different filters" mutation.
 
 - **The daemon test lock lengthens the gate** [`crates/simd/tests/serve.rs`] — LAYER:
   acceptance-auditor. A new `static DAEMON_TEST_LOCK` serializes *every* daemon test in the file and

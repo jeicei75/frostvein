@@ -42,6 +42,15 @@
     "output": 247227,
     "turns": 193
   },
+  "2f09ad30-6fbf-457c-b838-9d47d78d3684.jsonl": {
+    "cache_creation": 577259,
+    "cache_read": 7143621,
+    "input": 107,
+    "last_ts": "2026-08-07T06:02:21.834Z",
+    "output": 178314,
+    "quota_last": null,
+    "turns": 57
+  },
   "3ed651a0-620d-49b4-a3fd-e4b21c793153.jsonl": {
     "cache_creation": 355333,
     "cache_read": 4806571,
