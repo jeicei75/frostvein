@@ -102,6 +102,16 @@ pub fn item_cell() -> Cell {
     }
 }
 
+/// One dwarf sharing a cell with one or more stones — the loaded twin of `☺`.
+// NOTE: the glyph states co-location, which is a carry in every case the sim produces except a
+// dwarf standing on a loose stone it does not hold.
+pub fn carrier_cell() -> Cell {
+    Cell {
+        glyph: '☻',
+        fg: (226, 198, 140),
+    }
+}
+
 pub fn crowd_cell() -> Cell {
     Cell {
         glyph: '⚇',
@@ -196,6 +206,13 @@ mod tests {
                 fg: (240, 120, 130),
             }
         );
+        assert_eq!(
+            carrier_cell(),
+            Cell {
+                glyph: '☻',
+                fg: (226, 198, 140),
+            }
+        );
 
         let markers = [
             designation_cell(DesignationKind::Dig),
@@ -208,6 +225,7 @@ mod tests {
             pending_rect_cell(Mode::Remove),
             item_cell(),
             crowd_cell(),
+            carrier_cell(),
         ];
         assert_eq!(
             markers,
@@ -251,6 +269,10 @@ mod tests {
                 Cell {
                     glyph: '⚇',
                     fg: (240, 120, 130),
+                },
+                Cell {
+                    glyph: '☻',
+                    fg: (226, 198, 140),
                 },
             ]
         );
