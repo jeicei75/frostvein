@@ -114,6 +114,11 @@ pub struct JobId(pub u32);
 pub enum JobKind {
     Dig,
     Channel,
+    // NOTE: `item` is the identity. `Job.target` for a Haul is only the stone's position at
+    // creation, kept so load validation can bounds-check every job the same way. Claiming and
+    // execution read the stone's live `Pos` — never `target`, which is stale the moment the
+    // stone is picked up.
+    Haul { item: u32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,28 +139,60 @@ struct Path(Vec<Pos>);
 #[derive(Component)]
 struct WorkProgress(u32);
 
-/// The map and target index move together through `insert` and `remove`.
+/// The map and both uniqueness indexes move together through `insert` and `remove`.
+/// Tile jobs are unique by `target`; haul jobs are unique by the stone they name, because a
+/// stone may well sit on the tile a dig was designated for.
 #[derive(Resource, Default)]
 struct Jobs {
     by_id: BTreeMap<JobId, Job>,
     targets: BTreeSet<Pos>,
+    haul_items: BTreeSet<u32>,
     next_id: u32,
 }
 
 impl Jobs {
     fn insert(&mut self, job: Job) -> bool {
-        if self.by_id.contains_key(&job.id) || self.targets.contains(&job.target) {
+        if self.by_id.contains_key(&job.id) {
             return false;
         }
-        self.targets.insert(job.target);
+        match job.kind {
+            JobKind::Dig | JobKind::Channel => {
+                if self.targets.contains(&job.target) {
+                    return false;
+                }
+                self.targets.insert(job.target);
+            }
+            JobKind::Haul { item } => {
+                if self.haul_items.contains(&item) {
+                    return false;
+                }
+                self.haul_items.insert(item);
+            }
+        }
         self.by_id.insert(job.id, job);
         true
     }
 
     fn remove(&mut self, id: JobId) -> Option<Job> {
         let job = self.by_id.remove(&id)?;
-        self.targets.remove(&job.target);
+        match job.kind {
+            JobKind::Dig | JobKind::Channel => {
+                self.targets.remove(&job.target);
+            }
+            JobKind::Haul { item } => {
+                self.haul_items.remove(&item);
+            }
+        }
         Some(job)
+    }
+
+    /// The one job-id allocator (AD-9), shared by both creation systems. Saturating rather
+    /// than wrapping: `insert` only rejects ids of *live* jobs, so a wrapped id could silently
+    /// reuse a long-completed one.
+    fn next_job_id(&mut self) -> JobId {
+        let id = JobId(self.next_id);
+        self.next_id = self.next_id.saturating_add(1);
+        id
     }
 
     fn get_mut(&mut self, id: JobId) -> Option<&mut Job> {
@@ -172,8 +209,7 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
         if jobs.targets.contains(&target) {
             continue;
         }
-        let id = JobId(jobs.next_id);
-        jobs.next_id += 1;
+        let id = jobs.next_job_id();
         let kind = match designation {
             DesignationKind::Dig => JobKind::Dig,
             DesignationKind::Channel => JobKind::Channel,
@@ -467,6 +503,10 @@ fn work_positions(terrain: &Terrain, job: Job) -> BTreeSet<Pos> {
                 BTreeSet::new()
             }
         }
+        // Haul work positions need the stockpile and the stones; they arrive with the haul
+        // execution system. Until then no dwarf can be sent to a haul job — and none exists,
+        // because nothing creates one yet.
+        JobKind::Haul { .. } => BTreeSet::new(),
     }
 }
 
@@ -573,6 +613,13 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             continue;
         }
 
+        // Dispatch on kind BEFORE the terrain change below: a haul mutates no tile, and above
+        // all must never reach the no-op-completion arm, which removes the designation at
+        // `job.target` — where a real, unrelated order may legitimately sit.
+        if let JobKind::Haul { .. } = job.kind {
+            continue;
+        }
+
         let change = {
             let terrain = ecs.resource::<Terrain>();
             match job.kind {
@@ -590,6 +637,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                         _ => None,
                     }
                 }
+                JobKind::Haul { .. } => unreachable!("haul jobs are dispatched above"),
             }
         };
         let Some((changed_pos, tile)) = change else {
@@ -863,7 +911,10 @@ impl World {
         };
         for job in jobs {
             let inserted = job_resource.insert(job);
-            debug_assert!(inserted, "validated saves have unique job ids and targets");
+            debug_assert!(
+                inserted,
+                "validated saves have unique job ids, unique tile targets and unique haul items"
+            );
         }
         let mut world = assemble(
             seed,
@@ -1253,6 +1304,62 @@ mod tests {
         assert_eq!(jobs.iter().copied().collect::<Vec<_>>(), vec![job]);
         assert_eq!(jobs.remove(JobId(7)), Some(job));
         assert!(!jobs.targets.contains(&target));
+    }
+
+    #[test]
+    fn jobs_index_haul_jobs_by_item_and_never_by_target() {
+        let mut jobs = Jobs::default();
+        let target = Pos { x: 3, y: 4, z: 5 };
+        let dig = Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        let haul = Job {
+            id: JobId(1),
+            kind: JobKind::Haul { item: 7 },
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+
+        assert!(jobs.insert(dig));
+        // A stone can sit on the tile a dig was designated for, and vice versa. Indexing a
+        // haul job by `target` would make one of the two silently refused.
+        assert!(jobs.insert(haul));
+        assert!(jobs.haul_items.contains(&7));
+        assert!(!jobs.insert(Job {
+            id: JobId(2),
+            kind: JobKind::Haul { item: 7 },
+            target: Pos { x: 9, y: 9, z: 9 },
+            created_tick: 0,
+            retry_after: 0,
+        }));
+
+        assert_eq!(jobs.remove(JobId(1)), Some(haul));
+        assert!(!jobs.haul_items.contains(&7));
+        assert!(
+            jobs.targets.contains(&target),
+            "removing a haul job must not release a tile job's target"
+        );
+    }
+
+    #[test]
+    fn next_job_id_counts_up_and_saturates_at_the_maximum() {
+        let mut jobs = Jobs::default();
+
+        assert_eq!(jobs.next_job_id(), JobId(0));
+        assert_eq!(jobs.next_job_id(), JobId(1));
+
+        jobs.next_id = u32::MAX;
+        assert_eq!(jobs.next_job_id(), JobId(u32::MAX));
+        assert_eq!(
+            jobs.next_job_id(),
+            JobId(u32::MAX),
+            "a saturated allocator must repeat its last id, never wrap onto a reusable one"
+        );
     }
 
     #[test]

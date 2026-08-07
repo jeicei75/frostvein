@@ -439,6 +439,9 @@ fn load_world() -> Option<sim_core::World> {
             let (expected_designation, kind_name) = match job.kind {
                 sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
                 sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
+                // A haul job names a stone, not a tile: it has no designation and never had
+                // one. Its own rules live with the haul validation below.
+                sim_core::JobKind::Haul { .. } => continue,
             };
             if designation_kinds.get(&job.target) != Some(&expected_designation) {
                 bail!(
