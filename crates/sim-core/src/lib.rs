@@ -1940,6 +1940,51 @@ mod tests {
         assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
     }
 
+    /// `Job.target` for a haul is only the stone's position when the job was created. Claiming
+    /// and execution must read the stone's live `Pos`, so a job whose target has gone stale still
+    /// sends a dwarf to the stone — and the stone never jumps to meet the dwarf instead.
+    #[test]
+    fn haul_execution_reads_the_stones_live_position_not_the_jobs_target() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let cell = corridor(&mut world);
+        let stone = cell(1);
+        let stale = cell(3);
+        let pile = cell(4);
+        world.ecs.spawn((super::Item, super::Id(12), stone));
+        place_stockpile(&mut world, pile);
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 12 },
+            target: stale,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+
+        for _ in 0..200 {
+            let before = world.items();
+            world.step();
+            for (id, pos) in world.items() {
+                let was = before
+                    .iter()
+                    .find(|(old, _)| *old == id)
+                    .expect("stones are never despawned")
+                    .1;
+                let step = (pos.x - was.x)
+                    .abs()
+                    .max((pos.y - was.y).abs())
+                    .max((pos.z - was.z).abs());
+                assert!(step <= 1, "stone {id:?} jumped from {was:?} to {pos:?}");
+            }
+            if world.jobs().is_empty() {
+                break;
+            }
+        }
+
+        assert!(world.jobs().is_empty(), "the haul never completed");
+        assert_eq!(world.items(), vec![(super::Id(12), pile)]);
+        assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+    }
+
     #[test]
     fn a_stockpile_tile_whose_floor_is_gone_is_never_a_delivery_target() {
         let mut world = World::generate(42, Dims::DEFAULT);

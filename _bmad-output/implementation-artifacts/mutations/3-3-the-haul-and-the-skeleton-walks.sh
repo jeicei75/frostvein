@@ -117,7 +117,7 @@ assert old in s
 p.write_text(s.replace(old, '                Some(pos) if terrain.is_standable(*pos) => {\n'))
 PY
 
-mutation "the pick-up leg uses job.target instead of the live position" sim-core removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_job <<'PY'
+mutation "the pick-up leg uses job.target instead of the live position" sim-core haul_execution_reads_the_stones_live_position_not_the_jobs_target <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            match items.get(&item) {
@@ -178,8 +178,11 @@ PY
 mutation "the drop does not move the stone" sim-core a_haul_walks_picks_up_walks_and_drops_in_two_work_runs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''            *ecs.get_mut::<Pos>(stone)
+# The same write appears in `carry_items`; anchor on release_claim's surrounding `if let`.
+old = '''        if let (Some(pos), Some(stone)) = (dropped_at, item_entity(ecs, item)) {
+            *ecs.get_mut::<Pos>(stone)
                 .expect("every stone has a position") = pos;
+        }
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
