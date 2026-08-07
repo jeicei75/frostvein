@@ -1089,6 +1089,7 @@ impl World {
             .filter_map(|entity| {
                 let wander = entity.get::<Wander>()?;
                 let current_job = entity.get::<CurrentJob>()?;
+                let carrying = entity.get::<Carrying>()?;
                 Some(SavedDwarf {
                     id: entity.get::<Id>()?.0,
                     pos: *entity.get::<Pos>()?,
@@ -1100,6 +1101,7 @@ impl World {
                         .get::<WorkProgress>()
                         .map(|progress| progress.0)
                         .unwrap_or(0),
+                    carrying: carrying.0,
                 })
             })
             .collect();
@@ -1179,7 +1181,7 @@ impl World {
                         cooldown: dwarf.cooldown,
                     },
                     CurrentJob(current_job),
-                    Carrying(None),
+                    Carrying(dwarf.carrying),
                 ))
                 .id();
             if current_job.is_some() {

@@ -36,8 +36,18 @@ fn save_load_then_tick_matches_never_saved() {
         x: worker.x + dx * 15,
         ..worker
     };
-    assert!(saved.set_tile(designation_pos, Tile::Solid(Material::Stone)));
-    assert!(control.set_tile(designation_pos, Tile::Solid(Material::Stone)));
+    for world in [&mut saved, &mut control] {
+        // Solid floor under the dug tile, so the stone it drops is on standable ground and can
+        // actually be picked up — without it the mid-haul save point below is unreachable.
+        assert!(world.set_tile(
+            Pos {
+                z: designation_pos.z - 1,
+                ..designation_pos
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(designation_pos, Tile::Solid(Material::Stone)));
+    }
     saved.drain_dirty();
     control.drain_dirty();
     let designation = SimCommand::Designate {
@@ -59,26 +69,35 @@ fn save_load_then_tick_matches_never_saved() {
     saved.apply_command(stockpile);
     control.apply_command(stockpile);
 
-    while saved.claims().iter().all(|(_, job)| job.is_none()) {
-        assert!(saved.tick() < 100, "corridor dig was never claimed");
+    // AC11: the save point is a stepped CONDITION, never a magic tick count — the first tick a
+    // dwarf is actually holding a stone. That covers the dig, the haul job's creation, its claim
+    // and the pick-up in one, and it moves with the sim instead of going quietly vacuous.
+    while saved.carrying().iter().all(|(_, item)| item.is_none()) {
+        assert!(saved.tick() < 600, "no dwarf ever picked the stone up");
         saved.step();
         control.step();
         assert_eq!(saved.claims(), control.claims());
+        assert_eq!(saved.carrying(), control.carrying());
     }
-    let claimed = saved
+    let carrier = saved
+        .carrying()
+        .into_iter()
+        .find_map(|(id, item)| item.map(|item| (id, item)))
+        .expect("a dwarf holds a stone");
+    let held = saved
         .claims()
         .into_iter()
-        .find_map(|(id, job)| job.map(|job| (id, job)))
-        .expect("a dwarf holds the dig");
-    for _ in 0..3 {
-        saved.step();
-        control.step();
-        assert!(saved.jobs().iter().any(|job| job.id == claimed.1));
-        assert_eq!(
-            saved.claims().into_iter().find(|(id, _)| *id == claimed.0),
-            Some((claimed.0, Some(claimed.1)))
-        );
-    }
+        .find(|(id, _)| *id == carrier.0)
+        .and_then(|(_, job)| job)
+        .expect("a carrying dwarf holds that stone's haul job");
+    assert_eq!(
+        saved
+            .jobs()
+            .iter()
+            .find(|job| job.id == held)
+            .map(|job| job.kind),
+        Some(JobKind::Haul { item: carrier.1 })
+    );
     assert!(saved.set_tile(MUTATED_POS, Tile::Empty));
     assert!(control.set_tile(MUTATED_POS, Tile::Empty));
 
@@ -91,10 +110,45 @@ fn save_load_then_tick_matches_never_saved() {
         assert_eq!(loaded.tiles(), control.tiles());
         assert_eq!(loaded.jobs(), control.jobs());
         assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.carrying(), control.carrying());
         assert_eq!(loaded.items(), control.items());
         assert_eq!(loaded.designations(), control.designations());
         assert_eq!(loaded.zones(), control.zones());
     }
+}
+
+#[test]
+fn save_round_trip_preserves_a_mid_haul_carry() {
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    let stone = Pos { x: 9, y: 8, z: 7 };
+    save.next_id = 13;
+    save.items = vec![(12, stone)];
+    save.jobs = vec![Job {
+        id: JobId(7),
+        kind: JobKind::Haul { item: 12 },
+        target: stone,
+        created_tick: 3,
+        retry_after: 0,
+    }];
+    save.next_job_id = 8;
+    save.dwarves[0].current_job = Some(7);
+    save.dwarves[0].carrying = Some(12);
+
+    let round_trip = World::from_save(save).to_save();
+
+    assert_eq!(
+        round_trip.dwarves.len(),
+        5,
+        "a dwarf carrying nothing must still reach the save"
+    );
+    assert_eq!(round_trip.dwarves[0].carrying, Some(12));
+    assert!(
+        round_trip.dwarves[1..]
+            .iter()
+            .all(|dwarf| dwarf.carrying.is_none())
+    );
+    assert_eq!(round_trip.jobs[0].kind, JobKind::Haul { item: 12 });
+    assert_eq!(round_trip.items, vec![(12, stone)]);
 }
 
 #[test]
@@ -207,6 +261,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             cooldown: 10,
             current_job: Some(0),
             work_progress: 0,
+            carrying: None,
         },
         SavedDwarf {
             id: 1,
@@ -216,6 +271,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             cooldown: 10,
             current_job: Some(1),
             work_progress: WORK_TICKS,
+            carrying: None,
         },
     ];
     save.designations = vec![
