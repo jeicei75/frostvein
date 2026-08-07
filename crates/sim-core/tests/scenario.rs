@@ -616,6 +616,111 @@ fn designate_delay_claim_walk_work_and_dig_complete_headlessly() {
     assert!(world.designations().is_empty());
 }
 
+/// The walking-skeleton sentence, headless: no client, no network. Order a dig, put a stockpile
+/// down, and the stone ends up on the pile with the market empty — and two worlds built from the
+/// same seed and given the same commands agree at every tick while it happens (FR26, FR15).
+#[test]
+fn designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly() {
+    let mut first = World::generate(42, Dims::DEFAULT);
+    let mut second = World::generate(42, Dims::DEFAULT);
+    let worker = first.dwarves()[2].1;
+    let dx = if worker.x + 8 < first.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    let cell = |steps: i32| Pos {
+        x: worker.x + dx * steps,
+        ..worker
+    };
+    let target = cell(7);
+    let pile = cell(2);
+    for world in [&mut first, &mut second] {
+        for steps in 1..=6 {
+            make_standable(world, cell(steps));
+        }
+        // The dug tile keeps its floor, so the stone it drops lands on standable ground. Items
+        // never fall, so without this the stone would be unreachable and the loop could not close.
+        assert!(world.set_tile(
+            Pos {
+                z: target.z - 1,
+                ..target
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+        world.drain_dirty();
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(target, target),
+        });
+        world.apply_command(SimCommand::PlaceStockpile {
+            rect: rect(pile, pile),
+        });
+    }
+    assert_eq!(first.tile(target), Some(Tile::Solid(Material::Stone)));
+
+    // Bounded by a tick guard rather than a fixed step count: two reaction delays of 5..=30, two
+    // walks and two WORK_TICKS runs is the budget this is sized against.
+    loop {
+        assert!(
+            first.tick() < 400,
+            "the loop never closed — jobs {:?}, items {:?}, carrying {:?}",
+            first.jobs(),
+            first.items(),
+            first.carrying()
+        );
+        first.step();
+        second.step();
+        assert_eq!(first.dwarves(), second.dwarves());
+        assert_eq!(first.jobs(), second.jobs());
+        assert_eq!(first.claims(), second.claims());
+        assert_eq!(first.carrying(), second.carrying());
+        assert_eq!(first.items(), second.items());
+        // AC10, checked on every tick of a real haul: a stone is only ever held by a dwarf that
+        // is holding that stone's job.
+        for (id, item) in first.carrying() {
+            if item.is_some() {
+                let held = first
+                    .claims()
+                    .into_iter()
+                    .find(|(claim_id, _)| *claim_id == id)
+                    .and_then(|(_, job)| job);
+                let kind = held.and_then(|job| {
+                    first
+                        .jobs()
+                        .into_iter()
+                        .find(|queued| queued.id == job)
+                        .map(|queued| queued.kind)
+                });
+                assert_eq!(
+                    kind,
+                    item.map(|item| JobKind::Haul { item }),
+                    "dwarf {id:?} carries a stone whose haul job it does not hold"
+                );
+            }
+        }
+        if first.jobs().is_empty() && first.items().iter().any(|(_, pos)| *pos == pile) {
+            break;
+        }
+    }
+
+    // Compared once at the end rather than every tick: half a million tiles times 400 ticks is
+    // real time, and `same_seed_and_commands_remain_deterministic` pins the per-tick case.
+    assert_eq!(first.tiles(), second.tiles());
+    assert_eq!(
+        first.tile(target),
+        Some(Tile::Empty),
+        "the ordered tile was never dug"
+    );
+    assert_eq!(first.items(), vec![(sim_core::Id(5), pile)]);
+    assert!(first.zones().contains(&pile));
+    assert!(first.jobs().is_empty());
+    assert!(first.claims().iter().all(|(_, job)| job.is_none()));
+    assert!(first.carrying().iter().all(|(_, item)| item.is_none()));
+    assert!(first.designations().is_empty());
+}
+
 #[test]
 fn two_deep_dig_advances_from_the_exposed_face() {
     let mut world = World::generate(42, Dims::DEFAULT);
@@ -935,6 +1040,7 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.dwarves(), second.dwarves());
         assert_eq!(first.jobs(), second.jobs());
         assert_eq!(first.claims(), second.claims());
+        assert_eq!(first.carrying(), second.carrying());
         assert_eq!(first.items(), second.items());
         assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());
