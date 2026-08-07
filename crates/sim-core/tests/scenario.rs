@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use sim_core::{
-    DesignationKind, Dims, JobId, JobKind, JobState, Material, Pos, Rect, SimCommand, Tile, World,
+    DesignationKind, Dims, Job, JobId, JobKind, JobState, Material, Pos, Rect, SavedDwarf,
+    SimCommand, Tile, World,
 };
 
 fn rect(min: Pos, max: Pos) -> Rect {
@@ -616,6 +617,111 @@ fn designate_delay_claim_walk_work_and_dig_complete_headlessly() {
     assert!(world.designations().is_empty());
 }
 
+/// The walking-skeleton sentence, headless: no client, no network. Order a dig, put a stockpile
+/// down, and the stone ends up on the pile with the market empty — and two worlds built from the
+/// same seed and given the same commands agree at every tick while it happens (FR26, FR15).
+#[test]
+fn designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly() {
+    let mut first = World::generate(42, Dims::DEFAULT);
+    let mut second = World::generate(42, Dims::DEFAULT);
+    let worker = first.dwarves()[2].1;
+    let dx = if worker.x + 8 < first.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    let cell = |steps: i32| Pos {
+        x: worker.x + dx * steps,
+        ..worker
+    };
+    let target = cell(7);
+    let pile = cell(2);
+    for world in [&mut first, &mut second] {
+        for steps in 1..=6 {
+            make_standable(world, cell(steps));
+        }
+        // The dug tile keeps its floor, so the stone it drops lands on standable ground. Items
+        // never fall, so without this the stone would be unreachable and the loop could not close.
+        assert!(world.set_tile(
+            Pos {
+                z: target.z - 1,
+                ..target
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+        world.drain_dirty();
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(target, target),
+        });
+        world.apply_command(SimCommand::PlaceStockpile {
+            rect: rect(pile, pile),
+        });
+    }
+    assert_eq!(first.tile(target), Some(Tile::Solid(Material::Stone)));
+
+    // Bounded by a tick guard rather than a fixed step count: two reaction delays of 5..=30, two
+    // walks and two WORK_TICKS runs is the budget this is sized against.
+    loop {
+        assert!(
+            first.tick() < 400,
+            "the loop never closed — jobs {:?}, items {:?}, carrying {:?}",
+            first.jobs(),
+            first.items(),
+            first.carrying()
+        );
+        first.step();
+        second.step();
+        assert_eq!(first.dwarves(), second.dwarves());
+        assert_eq!(first.jobs(), second.jobs());
+        assert_eq!(first.claims(), second.claims());
+        assert_eq!(first.carrying(), second.carrying());
+        assert_eq!(first.items(), second.items());
+        // AC10, checked on every tick of a real haul: a stone is only ever held by a dwarf that
+        // is holding that stone's job.
+        for (id, item) in first.carrying() {
+            if item.is_some() {
+                let held = first
+                    .claims()
+                    .into_iter()
+                    .find(|(claim_id, _)| *claim_id == id)
+                    .and_then(|(_, job)| job);
+                let kind = held.and_then(|job| {
+                    first
+                        .jobs()
+                        .into_iter()
+                        .find(|queued| queued.id == job)
+                        .map(|queued| queued.kind)
+                });
+                assert_eq!(
+                    kind,
+                    item.map(|item| JobKind::Haul { item }),
+                    "dwarf {id:?} carries a stone whose haul job it does not hold"
+                );
+            }
+        }
+        if first.jobs().is_empty() && first.items().iter().any(|(_, pos)| *pos == pile) {
+            break;
+        }
+    }
+
+    // Compared once at the end rather than every tick: half a million tiles times 400 ticks is
+    // real time, and `same_seed_and_commands_remain_deterministic` pins the per-tick case.
+    assert_eq!(first.tiles(), second.tiles());
+    assert_eq!(
+        first.tile(target),
+        Some(Tile::Empty),
+        "the ordered tile was never dug"
+    );
+    assert_eq!(first.items(), vec![(sim_core::Id(5), pile)]);
+    assert!(first.zones().contains(&pile));
+    assert!(first.jobs().is_empty());
+    assert!(first.claims().iter().all(|(_, job)| job.is_none()));
+    assert!(first.carrying().iter().all(|(_, item)| item.is_none()));
+    assert!(first.designations().is_empty());
+}
+
 #[test]
 fn two_deep_dig_advances_from_the_exposed_face() {
     let mut world = World::generate(42, Dims::DEFAULT);
@@ -731,6 +837,354 @@ fn stockpile_with_no_standable_tile_changes_nothing() {
     assert!(world.zones().is_empty());
 }
 
+/// Digs the tile beside dwarf 2 and returns the position the stone landed on. There is no
+/// stockpile yet, so no haul job is created while this runs.
+fn dig_one_stone(world: &mut World) -> Pos {
+    let worker = world.dwarves()[2].1;
+    let target = Pos {
+        x: if worker.x + 1 < world.dims().x as i32 {
+            worker.x + 1
+        } else {
+            worker.x - 1
+        },
+        ..worker
+    };
+    assert!(world.set_tile(
+        Pos {
+            z: target.z - 1,
+            ..target
+        },
+        Tile::Solid(Material::Stone),
+    ));
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    while world.items().is_empty() {
+        assert!(
+            world.tick() < 200,
+            "the adjacent dig never produced a stone"
+        );
+        world.step();
+    }
+    assert!(world.jobs().is_empty());
+    target
+}
+
+#[test]
+fn a_new_stockpile_derives_no_haul_job_until_the_world_steps() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let stone = dig_one_stone(&mut world);
+    let pile = world.dwarves()[0].1;
+    assert_ne!(pile, stone);
+
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+
+    assert!(
+        world.jobs().is_empty(),
+        "command intake derived work from a stone without a tick — a paused daemon would haul"
+    );
+
+    world.step();
+
+    assert_eq!(world.jobs().len(), 1);
+    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 5 });
+    assert_eq!(world.jobs()[0].target, stone);
+}
+
+#[test]
+fn cancelling_marks_over_a_stone_never_drops_its_haul_job() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let stone = dig_one_stone(&mut world);
+    let pile = world.dwarves()[0].1;
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+    world.step();
+    let job = world.jobs()[0];
+    assert_eq!(job.kind, JobKind::Haul { item: 5 });
+
+    // `x` over the stone's tile. A haul job's `target` is a stone position, so a cancel that
+    // matched on `target` would silently delete an order the player never gave.
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(stone, stone),
+    });
+
+    assert!(
+        world
+            .jobs()
+            .iter()
+            .any(|queued| queued.id == job.id && queued.kind == job.kind),
+        "cancelling marks at the stone's tile dropped its haul job: {:?}",
+        world.jobs()
+    );
+}
+
+/// Steps once and asserts no stone jumped. A carried stone rides its carrier and a carrier moves
+/// at most one tile per tick, so a stone that teleports means something read a stale position —
+/// a haul job's `target` — instead of the stone's live one.
+fn step_without_teleporting_a_stone(world: &mut World) {
+    let before = world.items();
+    world.step();
+    for (id, pos) in world.items() {
+        if let Some((_, was)) = before.iter().find(|(old, _)| *old == id) {
+            let step = (pos.x - was.x)
+                .abs()
+                .max((pos.y - was.y).abs())
+                .max((pos.z - was.z).abs());
+            assert!(step <= 1, "stone {id:?} jumped from {was:?} to {pos:?}");
+        }
+    }
+}
+
+#[test]
+fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_job() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let stone = dig_one_stone(&mut world);
+    // Carved in whichever direction has six tiles of room, which need not be the direction the
+    // dig went — seed 42's digger works near the eastern edge.
+    let dx = if stone.x + 6 < world.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    for distance in 1..=6 {
+        make_standable(
+            &mut world,
+            Pos {
+                x: stone.x + dx * distance,
+                ..stone
+            },
+        );
+    }
+    let pile = Pos {
+        x: stone.x + dx * 6,
+        ..stone
+    };
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+
+    while world.carrying().iter().all(|(_, item)| item.is_none()) {
+        assert!(world.tick() < 400, "nobody ever picked the stone up");
+        step_without_teleporting_a_stone(&mut world);
+    }
+    // Let the carrier get at least two tiles from the tile it picked the stone up on, so the
+    // stone is dropped somewhere its job's `target` no longer names — and far enough that a
+    // pick-up that read the stale `target` would have to teleport the stone to reach it.
+    let source = world.items()[0].1;
+    let steps_from_source = |pos: Pos| {
+        (pos.x - source.x)
+            .abs()
+            .max((pos.y - source.y).abs())
+            .max((pos.z - source.z).abs())
+    };
+    while steps_from_source(world.items()[0].1) < 2 {
+        assert!(
+            world.tick() < 500,
+            "the carrier never got two tiles from the tile it picked up on"
+        );
+        step_without_teleporting_a_stone(&mut world);
+    }
+
+    world.apply_command(SimCommand::RemoveStockpile {
+        rect: rect(pile, pile),
+    });
+    for _ in 0..40 {
+        step_without_teleporting_a_stone(&mut world);
+    }
+    // NOTE: `execute_jobs` only recomputes a path when the cached one runs out, so a carrier
+    // whose goal set just emptied finishes the walk it was on and drops at the end of it. That is
+    // benign — the drop itself still requires standing on a work position — but it does mean the
+    // stone parks a walk away from where the pile was removed, not on the spot.
+    let parked = world.items()[0].1;
+    assert!(
+        steps_from_source(parked) >= 2,
+        "the stone was dropped {parked:?}, too close to the pick-up tile {source:?}"
+    );
+
+    assert!(world.zones().is_empty());
+    assert_eq!(
+        world.jobs().len(),
+        1,
+        "the haul job was dropped, not parked"
+    );
+    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 5 });
+    assert!(
+        world.claims().iter().all(|(_, job)| job.is_none()),
+        "a job with nowhere to deliver stayed claimed"
+    );
+    assert!(
+        world.carrying().iter().all(|(_, item)| item.is_none()),
+        "a dwarf kept holding the stone with the pile gone"
+    );
+    let dropped = world.items()[0].1;
+    assert_eq!(world.tile(dropped), Some(Tile::Empty));
+
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+    for _ in 0..400 {
+        step_without_teleporting_a_stone(&mut world);
+        if world.jobs().is_empty() {
+            break;
+        }
+    }
+
+    assert!(
+        world.jobs().is_empty(),
+        "the revived job never finished: {:?}",
+        world.jobs()
+    );
+    assert_eq!(world.items(), vec![(sim_core::Id(5), pile)]);
+    assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+}
+
+/// Two carriers converging on the LAST free stockpile tile is a real race, found at 3.3's review:
+/// the first delivers, and the second — standing on a tile that has just left its goal set — is
+/// retried, and `release_claim` drops its stone where it stands. Two stones on one tile.
+///
+/// The rule under test is the repair, not the prevention (Wolf's call at review): the extra stone
+/// stays LOOSE rather than counting as stored, so it keeps a haul job and re-hauls itself the
+/// moment a genuinely free tile exists. Under the old "any stone on a zone tile is stored" rule
+/// both jobs were retired and the stack was permanent, with nothing in the sim able to see it.
+#[test]
+fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
+    let dims = Dims { x: 12, y: 3, z: 3 };
+    let index = |pos: Pos| {
+        pos.x as usize
+            + pos.y as usize * dims.x as usize
+            + pos.z as usize * dims.x as usize * dims.y as usize
+    };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    for x in 0..dims.x as i32 {
+        for y in 0..dims.y as i32 {
+            tiles[index(Pos { x, y, z: 0 })] = Tile::Solid(Material::Stone);
+        }
+    }
+    let pile = Pos { x: 1, y: 1, z: 1 };
+    let spare = Pos { x: 1, y: 2, z: 1 };
+    let first = Pos { x: 2, y: 1, z: 1 };
+    let second = Pos { x: 3, y: 1, z: 1 };
+
+    // Both dwarves are already carrying and one tile from the pile — the state the race produces
+    // in play, built directly so no timing accident can hide it.
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    save.dims = dims;
+    save.tiles = tiles;
+    save.tick = 100;
+    save.designations.clear();
+    save.zones = vec![pile];
+    save.dwarves = vec![
+        SavedDwarf {
+            id: 0,
+            pos: first,
+            state: JobState::Walk,
+            home: first,
+            cooldown: 0,
+            current_job: Some(0),
+            work_progress: 0,
+            carrying: Some(2),
+        },
+        SavedDwarf {
+            id: 1,
+            pos: second,
+            state: JobState::Walk,
+            home: second,
+            cooldown: 0,
+            current_job: Some(1),
+            work_progress: 0,
+            carrying: Some(3),
+        },
+    ];
+    save.items = vec![(2, first), (3, second)];
+    save.next_id = 4;
+    save.jobs = vec![
+        Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 2 },
+            target: first,
+            created_tick: 0,
+            retry_after: 0,
+        },
+        Job {
+            id: JobId(1),
+            kind: JobKind::Haul { item: 3 },
+            target: second,
+            created_tick: 0,
+            retry_after: 0,
+        },
+    ];
+    save.next_job_id = 2;
+
+    let mut world = World::from_save(save);
+    let stored_on = |world: &World, tile: Pos| -> Vec<u32> {
+        let carried: Vec<u32> = world
+            .carrying()
+            .into_iter()
+            .filter_map(|(_, item)| item)
+            .collect();
+        world
+            .items()
+            .into_iter()
+            .filter(|(id, pos)| *pos == tile && !carried.contains(&id.0))
+            .map(|(id, _)| id.0)
+            .collect()
+    };
+
+    // Let the race resolve. The stack may FORM — that is the race, and preventing it is not what
+    // this rule does — but it must never be left with no job to fix it.
+    let mut saw_stack = false;
+    for _ in 0..200 {
+        world.step();
+        if stored_on(&world, pile).len() > 1 {
+            saw_stack = true;
+            assert!(
+                !world.jobs().is_empty(),
+                "a stacked tile with no queued job is a permanent, invisible violation"
+            );
+        }
+    }
+    assert!(
+        saw_stack,
+        "the race did not occur, so this test proves nothing — check the fixture"
+    );
+
+    // Now give the pile somewhere to put the extra stone. It must sort itself out with no further
+    // intervention, and end with one stone per tile.
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(spare, spare),
+    });
+    for _ in 0..400 {
+        world.step();
+        if world.jobs().is_empty() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        stored_on(&world, pile).len(),
+        1,
+        "the pile tile still holds a stack: {:?}",
+        world.items()
+    );
+    assert_eq!(
+        stored_on(&world, spare).len(),
+        1,
+        "the extra stone never reached the new tile: {:?}",
+        world.items()
+    );
+    assert!(
+        world.jobs().is_empty(),
+        "jobs left over: {:?}",
+        world.jobs()
+    );
+    assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+}
+
 #[test]
 fn applying_a_command_does_not_advance_the_world() {
     let mut world = World::generate(42, Dims::DEFAULT);
@@ -778,6 +1232,7 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.dwarves(), second.dwarves());
         assert_eq!(first.jobs(), second.jobs());
         assert_eq!(first.claims(), second.claims());
+        assert_eq!(first.carrying(), second.carrying());
         assert_eq!(first.items(), second.items());
         assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());

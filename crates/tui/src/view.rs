@@ -4,8 +4,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Command, DesignationKind, Dims, EntityKind, Rect, Snapshot, Speed, Tile};
 
 use crate::palette::{
-    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, crowd_cell, cursor_cell, designation_cell, dim,
-    entity_cell, item_cell, pending_rect_cell, tile_cell, zone_cell,
+    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, carrier_cell, crowd_cell, cursor_cell, designation_cell,
+    dim, entity_cell, item_cell, pending_rect_cell, tile_cell, zone_cell,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,12 +169,21 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         }
     }
 
+    // Counted in the same pass that draws them, so the count and the draw can never disagree
+    // about which stones are on screen, on this level, and where.
+    // NOTE: two or more stones on one tile render as a single `*` with no count in the glyph —
+    // there is no item stacking model. Deliberate: the sim enforces one stone per STOCKPILE tile,
+    // so a pile always reads truthfully; a heap on open ground does not.
+    let mut item_counts = BTreeMap::new();
     for item in &snapshot.items {
         if let Some(index) = screen_index(item.pos) {
             framebuffer.cells[index] = item_cell();
+            *item_counts.entry(index).or_insert(0_usize) += 1;
         }
     }
 
+    // Same filter for counting and drawing dwarves, for the same reason. A second `EntityKind`
+    // would need its own contention rule; today there is only one.
     let mut dwarf_counts = BTreeMap::new();
     for entity in &snapshot.entities {
         if entity.kind == EntityKind::Dwarf
@@ -184,9 +193,13 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         }
     }
     for entity in &snapshot.entities {
-        if let Some(index) = screen_index(entity.pos) {
+        if entity.kind == EntityKind::Dwarf
+            && let Some(index) = screen_index(entity.pos)
+        {
             framebuffer.cells[index] = if dwarf_counts.get(&index).copied().unwrap_or(0) > 1 {
                 crowd_cell()
+            } else if item_counts.get(&index).copied().unwrap_or(0) > 0 {
+                carrier_cell()
             } else {
                 entity_cell(entity.kind, entity.state)
             };
@@ -778,8 +791,10 @@ mod tests {
         );
     }
 
+    /// Repointed at story 3.3: a dwarf on a stone used to hide it behind a plain `☺`, which is
+    /// exactly the state the haul loop has to be able to show.
     #[test]
-    fn items_draw_only_on_the_viewed_level_and_under_dwarves() {
+    fn items_draw_only_on_the_viewed_level_and_a_shared_cell_draws_the_carrier() {
         let dims = Dims { x: 5, y: 3, z: 3 };
         let mut snapshot = empty_snapshot(dims);
         snapshot.items = vec![
@@ -801,8 +816,25 @@ mod tests {
 
         let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
 
-        assert_eq!(framebuffer.cell(1, 1).glyph, '☺');
+        assert_eq!(framebuffer.cell(1, 1), carrier_cell());
         assert_eq!(framebuffer.cell(3, 1), BLANK);
+        assert_eq!(
+            framebuffer
+                .cells
+                .iter()
+                .filter(|cell| cell.glyph == '☺' || cell.glyph == '*')
+                .count(),
+            0,
+            "a shared cell must draw neither the plain dwarf nor the stone"
+        );
+
+        // The stone one level up must not count towards the dwarf's cell: the count has to use
+        // the same z filter the draw does.
+        snapshot.items[0].pos = [1, 1, 2];
+        let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
+        assert_eq!(framebuffer.cell(1, 1).glyph, '☺');
+
+        snapshot.items[0].pos = [1, 1, 1];
         snapshot.entities.clear();
         let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
         assert_eq!(framebuffer.cell(1, 1).glyph, '*');
@@ -820,16 +852,33 @@ mod tests {
             id: 5,
             pos: [0, 0, 0],
         }];
+        snapshot.entities = vec![Entity {
+            id: 1,
+            kind: EntityKind::Dwarf,
+            pos: [127, 127, 0],
+            state: JobState::Idle,
+        }];
 
         let framebuffer = render(&snapshot, &normal_state((127, 127), 0), 5, 4);
 
         assert!(framebuffer.cells.iter().all(|cell| *cell != item_cell()));
+        assert!(
+            framebuffer.cells.iter().all(|cell| *cell != carrier_cell()),
+            "an off-screen stone was counted against an on-screen dwarf"
+        );
+        assert!(framebuffer.cells.iter().any(|cell| cell.glyph == '☺'));
     }
 
     #[test]
     fn two_dwarves_on_one_cell_draw_the_crowd_glyph() {
         let dims = Dims { x: 3, y: 3, z: 1 };
         let mut snapshot = empty_snapshot(dims);
+        // A stone under them too: the crowd glyph wins over the carrier glyph, or two dwarves
+        // sharing a stockpile tile would read as one carrier.
+        snapshot.items = vec![Item {
+            id: 5,
+            pos: [1, 1, 0],
+        }];
         snapshot.entities = vec![
             Entity {
                 id: 1,
@@ -852,7 +901,7 @@ mod tests {
             framebuffer
                 .cells
                 .iter()
-                .filter(|cell| cell.glyph == '☺')
+                .filter(|cell| cell.glyph == '☺' || cell.glyph == '☻' || cell.glyph == '*')
                 .count(),
             0
         );
@@ -935,7 +984,9 @@ mod tests {
         assert_eq!(framebuffer.cell(0, 1).glyph, '≡');
         assert_eq!(framebuffer.cell(1, 1).glyph, '×');
         assert_eq!(framebuffer.cell(2, 1).glyph, '*');
-        assert_eq!(framebuffer.cell(3, 1).glyph, '☺');
+        // The entity layer still wins over the item layer; with a stone under it, the dwarf's
+        // own look is the carrier glyph.
+        assert_eq!(framebuffer.cell(3, 1).glyph, '☻');
         assert_eq!(framebuffer.cell(4, 1).glyph, 'd');
         assert_eq!(framebuffer.cell(5, 1).glyph, '+');
     }

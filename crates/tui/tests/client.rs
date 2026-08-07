@@ -789,6 +789,206 @@ fn unchanged_dig_replay_capture_contains_neither_transition_glyph() {
     assert!(!stdout.contains('*'), "unchanged stub rendered a stone");
 }
 
+/// Every (line, column) a glyph reached in the capture. Line index is the clock: frames are
+/// written in order, so "earlier" and "later" are line comparisons.
+fn glyph_positions(stdout: &str, glyph: char) -> Vec<(usize, usize)> {
+    stdout
+        .lines()
+        .enumerate()
+        .filter_map(|(line, text)| {
+            strip_ansi(text)
+                .chars()
+                .position(|value| value == glyph)
+                .map(|column| (line, column))
+        })
+        .collect()
+}
+
+/// Replays a whole haul past the real client: a stone at cell A, a dwarf that reaches it, the
+/// stone following the dwarf across the map, and the stone left on the stockpile cell B with the
+/// dwarf moved off it. With `changes = false` the identical run replays one unchanging world,
+/// which is the guard on the assertions: a capture that merely CONTAINS a carrier glyph would
+/// pass even if the client drew it unconditionally.
+fn capture_haul_replay(changes: bool) -> String {
+    const MAX_CAPTURE_BYTES: u64 = 2 * 1024 * 1024;
+    const SOURCE: [i32; 3] = [2, 2, 0];
+    const PILE: [i32; 3] = [5, 2, 0];
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind haul replay stub");
+    let port = listener.local_addr().expect("read stub address").port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("10")
+        // The stockpile is placed through the real modal machine, so the capture evidences the
+        // command path as well as the render: `p`, one step right, anchor, commit, then `esc`.
+        // The `esc` is load-bearing: committing does NOT leave the mode, and a mode other than
+        // Normal keeps drawing the cursor over the pile cell — which is the cell the assertions
+        // read, so without it this capture measures the cursor rather than the stone.
+        .arg("--key")
+        .arg("p,l,enter,enter,esc")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tui haul replay capture");
+
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(mark_snapshot_line().as_bytes())
+            .expect("send haul replay snapshot");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("bound stockpile command read");
+        let mut reader = BufReader::new(stream.try_clone().expect("clone command read half"));
+        let mut line = String::new();
+        let bytes = (&mut reader)
+            .take(4 * 1024)
+            .read_line(&mut line)
+            .expect("read haul replay command");
+        assert!(
+            bytes > 0 && line.ends_with('\n'),
+            "missing command: {line:?}"
+        );
+        assert_eq!(
+            serde_json::from_str::<protocol::Command>(&line).expect("decode stockpile command"),
+            protocol::Command::PlaceStockpile {
+                rect: protocol::Rect {
+                    min: PILE,
+                    max: PILE,
+                },
+            }
+        );
+
+        // dwarf position, stone position — the stone is under the dwarf while it is carried.
+        let replay = [
+            ([0, 2, 0], SOURCE),
+            ([1, 2, 0], SOURCE),
+            (SOURCE, SOURCE),
+            ([3, 2, 0], [3, 2, 0]),
+            ([4, 2, 0], [4, 2, 0]),
+            (PILE, PILE),
+            ([4, 2, 0], PILE),
+            ([3, 2, 0], PILE),
+            ([3, 2, 0], PILE),
+            ([3, 2, 0], PILE),
+        ];
+        for (frame, (dwarf, stone)) in replay.into_iter().enumerate() {
+            let (dwarf, stone) = if changes {
+                (dwarf, stone)
+            } else {
+                ([0, 2, 0], SOURCE)
+            };
+            let delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick: 8 + frame as u64,
+                tiles: Vec::new(),
+                entities: vec![protocol::Entity {
+                    id: 0,
+                    kind: protocol::EntityKind::Dwarf,
+                    pos: dwarf,
+                    state: protocol::JobState::Walk,
+                }],
+                designations: Vec::new(),
+                zones: vec![protocol::Zone { pos: PILE }],
+                items: vec![protocol::Item { id: 12, pos: stone }],
+                speed: protocol::Speed::Normal,
+            };
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .expect("send haul replay delta");
+            thread::sleep(Duration::from_millis(20));
+        }
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stdout)
+        .expect("read bounded haul replay stdout");
+    assert!(stdout.len() as u64 <= MAX_CAPTURE_BYTES);
+    let status = child.wait().expect("wait for haul replay capture");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stderr)
+        .expect("read bounded haul replay stderr");
+    assert!(stderr.len() as u64 <= MAX_CAPTURE_BYTES);
+    server.join().expect("haul replay stub panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+    stdout
+}
+
+#[test]
+fn haul_replay_capture_shows_the_stone_leave_the_source_ride_a_dwarf_and_reach_the_pile() {
+    let stdout = capture_haul_replay(true);
+    let stones = glyph_positions(&stdout, '*');
+    let carriers = glyph_positions(&stdout, '☻');
+
+    assert!(!stones.is_empty(), "no stone glyph reached the capture");
+    assert!(!carriers.is_empty(), "no carrier glyph reached the capture");
+    let (first_stone_line, source_column) = stones[0];
+    let pile_column = stones.last().expect("a stone was captured").1;
+    let first_carrier = carriers[0].0;
+    let last_carrier = carriers.last().expect("a carrier was captured").0;
+    assert_eq!(
+        pile_column - source_column,
+        3,
+        "the stone did not end three cells east of where it started: {stones:?}"
+    );
+
+    // Transition one and three: the stone is at the source early and at the pile late — so it is
+    // absent from the pile early and from the source late.
+    let early: Vec<_> = stones
+        .iter()
+        .filter(|(line, _)| *line < first_carrier)
+        .collect();
+    let late: Vec<_> = stones
+        .iter()
+        .filter(|(line, _)| *line > last_carrier)
+        .collect();
+    assert!(
+        !early.is_empty() && early.iter().all(|(_, column)| *column == source_column),
+        "the stone was not sitting at the source before the carry: {early:?}"
+    );
+    assert!(
+        !late.is_empty() && late.iter().all(|(_, column)| *column == pile_column),
+        "the stone did not settle on the pile after the carry: {late:?}"
+    );
+
+    // Transition two: the carrier glyph appears in the middle of the run, not from the first
+    // frame — which is the difference between showing a carry and drawing a glyph.
+    assert!(
+        first_carrier > first_stone_line,
+        "the carrier glyph was already on screen in the first frame"
+    );
+}
+
+#[test]
+fn unchanged_haul_replay_capture_shows_none_of_the_three_transitions() {
+    let stdout = capture_haul_replay(false);
+
+    assert!(
+        !stdout.contains('☻'),
+        "unchanged stub rendered a dwarf carrying a stone"
+    );
+    let columns: std::collections::BTreeSet<_> = glyph_positions(&stdout, '*')
+        .into_iter()
+        .map(|(_, column)| column)
+        .collect();
+    assert_eq!(
+        columns.len(),
+        1,
+        "the stone changed cells in a world that never changed: {columns:?}"
+    );
+}
+
 const WIDE_DIMS: protocol::Dims = protocol::Dims { x: 16, y: 16, z: 1 };
 
 fn dwarf_at(x: i32) -> protocol::Entity {

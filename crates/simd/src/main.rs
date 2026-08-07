@@ -300,15 +300,43 @@ fn load_world() -> Option<sim_core::World> {
             }
         }
         let designation_kinds: BTreeMap<_, _> = save.designations.iter().copied().collect();
-        if save.jobs.len() > sim_core::MAX_DESIGNATIONS {
+        // Tile jobs come from designations and are bounded by the designation budget. Haul jobs
+        // name a stone instead, so their bound is the number of stones in the save. Counting
+        // first means an absurd haul count is refused as a count rather than as the first
+        // missing item it happens to name.
+        let tile_jobs = save
+            .jobs
+            .iter()
+            .filter(|job| {
+                matches!(
+                    job.kind,
+                    sim_core::JobKind::Dig | sim_core::JobKind::Channel
+                )
+            })
+            .count();
+        if tile_jobs > sim_core::MAX_DESIGNATIONS {
             bail!(
-                "save has {} jobs; limit is {}",
-                save.jobs.len(),
+                "save has {tile_jobs} jobs; limit is {}",
                 sim_core::MAX_DESIGNATIONS
             );
         }
+        let haul_jobs = save.jobs.len() - tile_jobs;
+        // MESSAGE QUALITY ONLY, not the real bound — raised at 3.3's review. Unique-by-item plus
+        // item-exists below already imply this by pigeonhole, so this check can never reject a save
+        // those two would accept; it only decides WHICH complaint the log carries. Do not read its
+        // test as proving an outcome bound. The real bound on haul jobs is the save's item count,
+        // which nothing caps but MAX_SAVE_BYTES (recorded in deferred-work.md).
+        if haul_jobs > save.items.len() {
+            bail!(
+                "save has {haul_jobs} haul jobs; limit is {} item(s)",
+                save.items.len()
+            );
+        }
+        let item_ids: BTreeSet<_> = save.items.iter().map(|(id, _)| *id).collect();
         let mut seen_job_ids = BTreeSet::new();
         let mut seen_job_targets = BTreeSet::new();
+        let mut seen_haul_items = BTreeSet::new();
+        let mut haul_job_for_item = BTreeMap::new();
         for job in &save.jobs {
             if !in_bounds(job.target) {
                 bail!(
@@ -324,13 +352,26 @@ fn load_world() -> Option<sim_core::World> {
             if !seen_job_ids.insert(job.id) {
                 bail!("save reuses job id {}", job.id.0);
             }
-            if !seen_job_targets.insert(job.target) {
-                bail!(
-                    "save reuses job target {},{},{}",
-                    job.target.x,
-                    job.target.y,
-                    job.target.z
-                );
+            match job.kind {
+                sim_core::JobKind::Dig | sim_core::JobKind::Channel => {
+                    if !seen_job_targets.insert(job.target) {
+                        bail!(
+                            "save reuses job target {},{},{}",
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                }
+                sim_core::JobKind::Haul { item } => {
+                    if !item_ids.contains(&item) {
+                        bail!("save haul job {} names missing item {item}", job.id.0);
+                    }
+                    if !seen_haul_items.insert(item) {
+                        bail!("save reuses haul item {item}");
+                    }
+                    haul_job_for_item.insert(item, job.id.0);
+                }
             }
         }
         if save.next_job_id == u32::MAX {
@@ -373,6 +414,7 @@ fn load_world() -> Option<sim_core::World> {
         }
         let mut seen_ids = BTreeSet::new();
         let mut claimed_job_ids = BTreeSet::new();
+        let mut carried_items = BTreeSet::new();
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {
                 bail!("save reuses dwarf id {}", dwarf.id);
@@ -392,6 +434,25 @@ fn load_world() -> Option<sim_core::World> {
                         dwarf.work_progress,
                         sim_core::WORK_TICKS
                     );
+                }
+            }
+            if let Some(item) = dwarf.carrying {
+                if !item_ids.contains(&item) {
+                    bail!("save dwarf {} carries missing item {item}", dwarf.id);
+                }
+                if !carried_items.insert(item) {
+                    bail!("save item {item} has multiple carriers");
+                }
+                // A dwarf carries a stone only while holding that stone's haul job.
+                // NOTE: the carried stone's saved POSITION is deliberately not checked against
+                // its carrier's — `carry_items` re-establishes that on the next tick, so
+                // rejecting the file would refuse it over something self-healing.
+                match haul_job_for_item.get(&item) {
+                    Some(job_id) if dwarf.current_job == Some(*job_id) => {}
+                    _ => bail!(
+                        "save dwarf {} carries item {item} without holding its haul job",
+                        dwarf.id
+                    ),
                 }
             }
             if !in_bounds(dwarf.pos) {
@@ -439,6 +500,9 @@ fn load_world() -> Option<sim_core::World> {
             let (expected_designation, kind_name) = match job.kind {
                 sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
                 sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
+                // A haul job names a stone, not a tile: it has no designation and never had
+                // one. Its own rules live with the haul validation below.
+                sim_core::JobKind::Haul { .. } => continue,
             };
             if designation_kinds.get(&job.target) != Some(&expected_designation) {
                 bail!(

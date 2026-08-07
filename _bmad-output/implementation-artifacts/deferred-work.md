@@ -267,6 +267,9 @@ SEVERITY. Every item below is LOW; HIGH/MED went to patch or to Wolf as a decisi
   lifetime job creations to reach — but note `simd`'s `load_world` already rejects an exhausted
   `next_job_id` on load, so the guard exists on one side only. One-line fix when next in this
   function.
+  **CLOSED at Story 3.3 (2026-08-07).** The second allocation site arrived, so the increment became
+  one `Jobs::next_job_id()` using `saturating_add`, shared by `create_jobs` and `create_haul_jobs`.
+  Pinned by `next_job_id_counts_up_and_saturates_at_the_maximum` and by a `wrapping_add` mutation.
 
 - **The AD-12 seam promised to Story 3.3 is heavier than planned** — LAYER: acceptance-auditor.
   The guardrail says 3.3 adds `Haul` "as a variant plus its execution system and **must not touch
@@ -281,6 +284,11 @@ SEVERITY. Every item below is LOW; HIGH/MED went to patch or to Wolf as a decisi
   because dwarf is the only `EntityKind`, and AC14 only speaks about dwarves. It becomes a silent
   visual defect the moment a second entity kind reaches the wire — which is the same failure shape
   as the 2.2 defect AC14 exists to fix.
+  **CLOSED at Story 3.3 (2026-08-07).** The cell contention rule was rewritten for the carrier
+  glyph, and both loops now filter on `EntityKind::Dwarf`; the stone count is built in the very pass
+  that draws the stones, so count and draw cannot disagree about screen position or level either. A
+  `// NOTE:` records that a second entity kind must decide its own contention rule. Pinned by a
+  wrong-z stone case and by a "counting and drawing use different filters" mutation.
 
 - **The daemon test lock lengthens the gate** [`crates/simd/tests/serve.rs`] — LAYER:
   acceptance-auditor. A new `static DAEMON_TEST_LOCK` serializes *every* daemon test in the file and
@@ -288,3 +296,59 @@ SEVERITY. Every item below is LOW; HIGH/MED went to patch or to Wolf as a decisi
   concurrent daemon processes competing on timing assertions — and no guardrail forbids it. But it
   serializes tests this story never touched and changes their failure mode, so a future flaky-gate
   investigation should know it is here. Revisit if gate wall-clock becomes a problem.
+
+## Deferred from: code review of 3-3-the-haul-and-the-skeleton-walks (2026-08-07)
+
+Only ONE of four review layers reported: the Acceptance Auditor. Blind Hunter, Edge Case Hunter and
+Feature Auditor were killed at the 20-minute time-box having produced nothing, so the adversarial,
+edge-case and does-it-actually-work territories of this story are UNREVIEWED. Read the short list
+below as "what one layer found", not as "what is wrong with 3.3".
+
+- **Haul jobs are no longer bounded by `MAX_DESIGNATIONS`** [`crates/simd/src/main.rs:317-329`] —
+  LAYER: acceptance-auditor. Before 3.3, `save.jobs.len() > MAX_DESIGNATIONS` rejected the whole
+  save; now that cap applies to tile jobs only, and haul jobs are bounded by `save.items.len()`,
+  which nothing caps but `MAX_SAVE_BYTES` (64 MB). WHY IT IS NOT A DEFECT: capping haul jobs at 4096
+  would refuse a *legitimate* late-game save — designations are consumed as tiles are dug while
+  stones accumulate, so a long game can hold far more than 4096 stones, and AC12 deliberately
+  specifies the item-count bound instead. The exposure is a local, operator-written file bounded at
+  64 MB. **Revisit if** a save ever carries enough items that `from_save` or a tick becomes slow
+  enough to measure, or if saves ever arrive from anywhere but the local operator.
+
+- **The entity draw loop skips any non-`Dwarf` `EntityKind`** [`crates/tui/src/view.rs:193`] —
+  LAYER: acceptance-auditor. Story 3.3 closed the older "counting and drawing use different filters"
+  item by making BOTH filter on `EntityKind::Dwarf`, which is strictly better today (they can no
+  longer disagree) but converts the old defect into a narrower one: a second entity kind would not be
+  drawn at all rather than being drawn with the wrong glyph. Behaviour-identical while
+  `protocol::EntityKind` has one variant, and the code carries a `// NOTE:` saying a second kind must
+  decide its own contention rule. **Revisit when** a second `EntityKind` reaches the wire — that
+  story owns the rule, and this is where it lands.
+
+- **`glyph_positions` records only the first occurrence of a glyph per line**
+  [`crates/tui/tests/client.rs:2154`] — LAYER: acceptance-auditor. Sound for the one-stone haul stub,
+  where "all early `*` are at the source column" is a valid derivation. It would not notice a SECOND
+  stone glyph appearing on the same row. **Revisit when** a capture stub grows a second item, which
+  is likely the first multi-stone TUI story.
+
+- **Placing a stockpile on solid rock is a silent no-op** [`crates/sim-core/src/lib.rs`,
+  `SimCommand::PlaceStockpile`] — LAYER: feature-auditor (story 3.3 review). The command filters to
+  standable tiles, so a rect entirely in rock adds zero zones and the player is told nothing — no
+  mark, no message, no refusal. The auditor hit this for real: aiming one z level low produced a
+  capture with zero of every glyph and exit 0, which is indistinguishable from "hauling is broken".
+  Pre-existing since 3.1 (the same is true of a dig rect that hits nothing diggable), so not caused
+  by this story. **Revisit when** a story touches command feedback or the status line — the cheap fix
+  is telling the player how many tiles a command actually took.
+
+- **The client's opening camera z is nondeterministic** [`crates/tui/src/view.rs`, `initial`] —
+  LAYER: feature-auditor (story 3.3 review). `initial` takes z from `snapshot.entities.first()`, i.e.
+  dwarf 0, who wanders and settles wherever work took it. Two clients connecting to the same daemon
+  minutes apart therefore open on different levels, which makes every `--key` capture recipe in this
+  project fragile: the same key sequence aims at a different z depending on when it is run. This cost
+  a false "the feature does not work" reading during 3.3's review. **Revisit when** the next TUI story
+  touches the camera; the options are an explicit `--z` flag, opening on the level with the most
+  standable ground, or documenting that every scripted capture must range-check its own glyphs first.
+
+- **Two dig designations never completed across ~38k ticks** — LAYER: feature-auditor (story 3.3
+  review). Observed in a live run: `×` flat at 2 marks while everything else progressed. Most likely
+  the known unreachable-target class (a tile with no standable work position), which 3.2 ruled is
+  retried forever rather than dropped, but it was not chased. **Revisit if** a player ever reports
+  designations that never clear, or alongside the channel-orphan item above.

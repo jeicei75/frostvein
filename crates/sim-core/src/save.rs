@@ -29,4 +29,5 @@ pub struct SavedDwarf {
     pub cooldown: u32,
     pub current_job: Option<u32>,
     pub work_progress: u32,
+    pub carrying: Option<u32>,
 }
