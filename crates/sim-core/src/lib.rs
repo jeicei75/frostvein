@@ -1960,6 +1960,14 @@ mod tests {
 
         for _ in 0..80 {
             world.step();
+            // AC6's shape: with no free tile the goal set is empty at BOTH legs, so the job is
+            // never claimed — not claimed and then abandoned halfway to a pile nobody can
+            // stand on.
+            assert!(
+                world.claims().iter().all(|(_, job)| job.is_none()),
+                "a job whose only pile tile lost its floor was claimed: {:?}",
+                world.claims()
+            );
             assert!(
                 world.carrying().iter().all(|(_, item)| item.is_none()),
                 "a stone was picked up for a pile tile nobody can stand on"

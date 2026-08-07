@@ -965,13 +965,14 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
         assert!(world.tick() < 400, "nobody ever picked the stone up");
         step_without_teleporting_a_stone(&mut world);
     }
-    // Let the carrier walk off the tile it picked the stone up on, so the stone is dropped
-    // somewhere its job's `target` no longer names.
+    // Let the carrier get at least two tiles from the tile it picked the stone up on, so the
+    // stone is dropped somewhere its job's `target` no longer names — and far enough that a
+    // pick-up that read the stale `target` would have to teleport the stone to reach it.
     let source = world.items()[0].1;
-    while world.items()[0].1 == source {
+    while (world.items()[0].1.x - source.x).abs() + (world.items()[0].1.y - source.y).abs() < 2 {
         assert!(
             world.tick() < 500,
-            "the carrier never left the tile it picked up on"
+            "the carrier never got two tiles from the tile it picked up on"
         );
         step_without_teleporting_a_stone(&mut world);
     }
