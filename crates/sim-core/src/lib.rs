@@ -13,6 +13,7 @@ use std::{
 use bevy_ecs::{
     component::Component,
     entity::Entity,
+    query::With,
     resource::Resource,
     schedule::{IntoScheduleConfigs, Schedule},
     system::{Commands, Query, Res, ResMut},
@@ -328,19 +329,34 @@ fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
     5 + hash % 26
 }
 
+// AD-12: claiming LOGIC is unchanged — FIFO by `JobId`, ascending dwarf `Id`, reaction delay,
+// `retry_after` and one shared node budget. Only the goal set it asks for learned `Haul`, which
+// is why the stockpile and the stones have to reach this system.
+#[allow(clippy::too_many_arguments)]
 fn claim_jobs(
     mut commands: Commands,
     seed: Res<Seed>,
     tick: Res<Tick>,
     terrain: Res<Terrain>,
+    zones: Res<Zones>,
     mut jobs: ResMut<Jobs>,
-    mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob)>,
+    stones: Query<(&Id, &Pos), With<Item>>,
+    mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying)>,
 ) {
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
-    dwarves.sort_by_key(|(_, id, _, _)| **id);
+    dwarves.sort_by_key(|(_, id, _, _, _)| **id);
     let mut claimed: BTreeSet<_> = dwarves
         .iter()
-        .filter_map(|(_, _, _, current)| current.0)
+        .filter_map(|(_, _, _, current, _)| current.0)
+        .collect();
+    let carried: BTreeSet<u32> = dwarves
+        .iter()
+        .filter_map(|(_, _, _, _, carrying)| carrying.0)
+        .collect();
+    let items: BTreeMap<u32, Pos> = stones
+        .iter()
+        .filter(|(id, _)| !carried.contains(&id.0))
+        .map(|(id, pos)| (id.0, *pos))
         .collect();
     let mut astar_nodes_remaining = MAX_ASTAR_NODES;
 
@@ -352,10 +368,16 @@ fn claim_jobs(
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
         }
-        let goals = work_positions(&terrain, job);
+        // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
+        // set serves every candidate.
+        let goals = work_positions(&terrain, &zones.0, &items, job, None);
         let mut attempted = false;
         let mut assigned = false;
-        for (entity, id, pos, current) in &mut dwarves {
+        for (entity, id, pos, current, carrying) in &mut dwarves {
+            debug_assert!(
+                current.0.is_some() || carrying.0.is_none(),
+                "a dwarf holding no job must be carrying nothing"
+            );
             if current.0.is_none()
                 && tick.0
                     >= job
@@ -570,7 +592,15 @@ fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>
     astar_with_budget(terrain, from, goals, &mut nodes_remaining).0
 }
 
-fn work_positions(terrain: &Terrain, job: Job) -> BTreeSet<Pos> {
+/// `items` holds UNCARRIED stones only — a stone in transit occupies no tile, so a carrier
+/// crossing the pile never blocks a tile for anyone else.
+fn work_positions(
+    terrain: &Terrain,
+    zones: &BTreeSet<Pos>,
+    items: &BTreeMap<u32, Pos>,
+    job: Job,
+    carrying: Option<u32>,
+) -> BTreeSet<Pos> {
     match job.kind {
         JobKind::Dig => [(-1, 0), (1, 0), (0, -1), (0, 1)]
             .into_iter()
@@ -588,11 +618,58 @@ fn work_positions(terrain: &Terrain, job: Job) -> BTreeSet<Pos> {
                 BTreeSet::new()
             }
         }
-        // Haul work positions need the stockpile and the stones; they arrive with the haul
-        // execution system. Until then no dwarf can be sent to a haul job — and none exists,
-        // because nothing creates one yet.
-        JobKind::Haul { .. } => BTreeSet::new(),
+        JobKind::Haul { item } => {
+            debug_assert!(
+                carrying.is_none_or(|carried| carried == item),
+                "a dwarf only ever carries the stone of the haul job it holds"
+            );
+            // One stone per stockpile tile (Wolf, 2026-08-07). Recomputed every tick and never
+            // cached: that is what makes two carriers converging on one free tile self-healing —
+            // the moment the first drops, the tile leaves the second's goal set and it repaths.
+            let stored: BTreeSet<Pos> = items
+                .values()
+                .copied()
+                .filter(|pos| zones.contains(pos))
+                .collect();
+            let free: BTreeSet<Pos> = zones
+                .iter()
+                .copied()
+                // Zone tiles are validated standable at command time and never re-checked.
+                .filter(|pos| terrain.is_standable(*pos) && !stored.contains(pos))
+                .collect();
+            if carrying.is_some() {
+                return free;
+            }
+            // Both legs read the same free-tile set. With nowhere to deliver the pick-up leg is
+            // empty too, so the job is never claimed rather than claimed into a
+            // pick-up-and-drop cycle.
+            // NOTE: a stone whose floor was dug away is on no standable tile — items never fall —
+            // so its job retries forever. Retry is nearly free and never-drop wins (FR8).
+            match items.get(&item) {
+                Some(pos) if !free.is_empty() && terrain.is_standable(*pos) => {
+                    BTreeSet::from([*pos])
+                }
+                _ => BTreeSet::new(),
+            }
+        }
     }
+}
+
+/// Stone positions by id, ascending, EXCLUDING stones in transit: a carried stone occupies no
+/// tile. Recomputed rather than cached because a pick-up or a drop changes it mid-system.
+fn uncarried_stones(ecs: &EcsWorld) -> BTreeMap<u32, Pos> {
+    let carried: BTreeSet<u32> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| entity.get::<Carrying>()?.0)
+        .collect();
+    ecs.iter_entities()
+        .filter(|entity| entity.contains::<Item>())
+        .filter_map(|entity| {
+            let id = entity.get::<Id>()?.0;
+            (!carried.contains(&id)).then_some((id, *entity.get::<Pos>()?))
+        })
+        .collect()
 }
 
 /// Stones are few and never despawn, so a scan beats a reverse index that has to stay in sync.
@@ -683,7 +760,17 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 .expect("every dwarf has a job state") = JobState::Walk;
             continue;
         }
-        let work_positions = work_positions(ecs.resource::<Terrain>(), job);
+        let carrying = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0);
+        let work_positions = {
+            let stones = uncarried_stones(ecs);
+            work_positions(
+                ecs.resource::<Terrain>(),
+                &ecs.resource::<Zones>().0,
+                &stones,
+                job,
+                carrying,
+            )
+        };
 
         if !work_positions.contains(&pos) {
             let mut path = ecs
@@ -721,7 +808,27 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         // Dispatch on kind BEFORE the terrain change below: a haul mutates no tile, and above
         // all must never reach the no-op-completion arm, which removes the designation at
         // `job.target` — where a real, unrelated order may legitimately sit.
-        if let JobKind::Haul { .. } = job.kind {
+        if let JobKind::Haul { item } = job.kind {
+            match carrying {
+                // Pick up. The job stays claimed and the same dwarf now walks to the pile, so
+                // the work counter restarts and the path to the stone is spent.
+                None => {
+                    ecs.get_mut::<Carrying>(entity)
+                        .expect("every dwarf has a carrying slot")
+                        .0 = Some(item);
+                    *ecs.get_mut::<JobState>(entity)
+                        .expect("every dwarf has a job state") = JobState::Walk;
+                    ecs.entity_mut(entity).insert(WorkProgress(0));
+                    ecs.entity_mut(entity).remove::<Path>();
+                }
+                // Deliver. `release_claim` is what puts the stone on the tile the dwarf stands
+                // on and clears the slot — deliberately the same funnel every abnormal exit
+                // uses, so there is one place a stone can be dropped and not two.
+                Some(_) => {
+                    ecs.resource_mut::<Jobs>().remove(job.id);
+                    release_claim(ecs, entity);
+                }
+            }
             continue;
         }
 
@@ -1666,6 +1773,182 @@ mod tests {
         assert_eq!(world.carrying()[3], (super::Id(3), None));
         assert_eq!(world.items(), vec![(super::Id(12), stone)]);
         assert!(!world.ecs.entity(entity).contains::<super::Path>());
+    }
+
+    fn make_standable(world: &mut World, pos: Pos) {
+        assert!(world.set_tile(
+            Pos {
+                z: pos.z - 1,
+                ..pos
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(pos, Tile::Empty));
+    }
+
+    /// A four-cell standable run east (or west, at the map edge) of dwarf zero.
+    fn corridor(world: &mut World) -> impl Fn(i32) -> Pos + 'static {
+        let start = world.dwarves()[0].1;
+        let dx = if start.x + 4 < world.dims().x as i32 {
+            1
+        } else {
+            -1
+        };
+        let cell = move |steps: i32| Pos {
+            x: start.x + dx * steps,
+            ..start
+        };
+        for steps in 1..=4 {
+            make_standable(world, cell(steps));
+        }
+        cell
+    }
+
+    #[test]
+    fn a_haul_walks_picks_up_walks_and_drops_in_two_work_runs() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let cell = corridor(&mut world);
+        let stone = cell(2);
+        let pile = cell(4);
+        world.ecs.spawn((super::Item, super::Id(12), stone));
+        place_stockpile(&mut world, pile);
+        // A real, unrelated order at the stone's tile. The dig path removes the designation at
+        // `job.target`; a haul must not, or it deletes an order the player gave.
+        world.apply_command(super::SimCommand::Designate {
+            kind: super::DesignationKind::Channel,
+            rect: super::Rect {
+                min: stone,
+                max: stone,
+            },
+        });
+        super::create_haul_jobs(&mut world.ecs);
+        let job = world.jobs()[0];
+        assert_eq!(job.kind, JobKind::Haul { item: 12 });
+        let entity = dwarf_entity(&world, 0);
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(0)));
+        world.drain_dirty();
+
+        let mut states = Vec::new();
+        for _ in 0..24 {
+            super::execute_jobs(&mut world.ecs);
+            states.push(world.dwarves()[0].2);
+            if world.jobs().is_empty() {
+                break;
+            }
+        }
+
+        use JobState::{Idle, Walk, Work};
+        assert_eq!(
+            states,
+            vec![
+                Walk, Walk, Work, Work, Work, Work, Work, Walk, Walk, Walk, Work, Work, Work, Work,
+                Work, Idle,
+            ],
+            "two walks and exactly WORK_TICKS of work in each of the two legs"
+        );
+        assert_eq!(world.items(), vec![(super::Id(12), pile)]);
+        assert_eq!(world.carrying()[0], (super::Id(0), None));
+        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+        assert!(world.jobs().is_empty());
+        assert_eq!(
+            world.designations(),
+            vec![(stone, super::DesignationKind::Channel)],
+            "a haul completion removed a designation at its stale target"
+        );
+        assert!(
+            world.drain_dirty().is_empty(),
+            "a haul completion mutated a tile"
+        );
+    }
+
+    #[test]
+    fn a_stone_on_unstandable_ground_leaves_its_haul_job_queued_and_retried() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let cell = corridor(&mut world);
+        place_stockpile(&mut world, cell(4));
+        // Items never fall, so a stone whose floor was dug away has no standable position and
+        // no work position with it.
+        let stranded = Pos {
+            x: 20,
+            y: 20,
+            z: 20,
+        };
+        assert!(world.set_tile(stranded, Tile::Empty));
+        assert!(world.set_tile(
+            Pos {
+                z: stranded.z - 1,
+                ..stranded
+            },
+            Tile::Empty,
+        ));
+        world.ecs.spawn((super::Item, super::Id(12), stranded));
+
+        for _ in 0..60 {
+            world.step();
+        }
+
+        assert_eq!(world.jobs().len(), 1, "the unreachable job was dropped");
+        assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 12 });
+        assert!(world.jobs()[0].retry_after > 0, "the job was never retried");
+        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+        assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+        assert_eq!(world.items(), vec![(super::Id(12), stranded)]);
+    }
+
+    #[test]
+    fn a_full_stockpile_parks_the_haul_job_until_a_free_tile_appears() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let cell = corridor(&mut world);
+        let loose = cell(2);
+        let pile = cell(4);
+        world.ecs.spawn((super::Item, super::Id(11), pile));
+        world.ecs.spawn((super::Item, super::Id(12), loose));
+        place_stockpile(&mut world, pile);
+
+        for _ in 0..60 {
+            world.step();
+        }
+
+        assert_eq!(
+            world.jobs().len(),
+            1,
+            "one job for the loose stone, none for the stored one: {:?}",
+            world.jobs()
+        );
+        assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 12 });
+        assert!(
+            world.jobs()[0].retry_after > 0,
+            "a job with nowhere to deliver was never retried"
+        );
+        assert!(
+            world.claims().iter().all(|(_, job)| job.is_none()),
+            "a job with nowhere to deliver was claimed into a pick-up-and-drop cycle"
+        );
+        assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+        assert_eq!(
+            world.items(),
+            vec![(super::Id(11), pile), (super::Id(12), loose)]
+        );
+
+        // One stone per stockpile tile: a second tile is all it takes to revive the job.
+        place_stockpile(&mut world, cell(3));
+        for _ in 0..300 {
+            world.step();
+            if world.jobs().is_empty() {
+                break;
+            }
+        }
+
+        assert!(world.jobs().is_empty(), "the revived job never completed");
+        assert_eq!(
+            world.items(),
+            vec![(super::Id(11), pile), (super::Id(12), cell(3))]
+        );
+        assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
     }
 
     #[test]

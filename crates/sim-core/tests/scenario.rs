@@ -818,6 +818,77 @@ fn cancelling_marks_over_a_stone_never_drops_its_haul_job() {
 }
 
 #[test]
+fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_job() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let stone = dig_one_stone(&mut world);
+    let dx = (stone.x - world.dwarves()[2].1.x).signum();
+    for distance in 1..=3 {
+        make_standable(
+            &mut world,
+            Pos {
+                x: stone.x + dx * distance,
+                ..stone
+            },
+        );
+    }
+    let pile = Pos {
+        x: stone.x + dx * 3,
+        ..stone
+    };
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+
+    while world.carrying().iter().all(|(_, item)| item.is_none()) {
+        assert!(world.tick() < 400, "nobody ever picked the stone up");
+        world.step();
+    }
+
+    world.apply_command(SimCommand::RemoveStockpile {
+        rect: rect(pile, pile),
+    });
+    for _ in 0..40 {
+        world.step();
+    }
+
+    assert!(world.zones().is_empty());
+    assert_eq!(
+        world.jobs().len(),
+        1,
+        "the haul job was dropped, not parked"
+    );
+    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 5 });
+    assert!(
+        world.claims().iter().all(|(_, job)| job.is_none()),
+        "a job with nowhere to deliver stayed claimed"
+    );
+    assert!(
+        world.carrying().iter().all(|(_, item)| item.is_none()),
+        "a dwarf kept holding the stone with the pile gone"
+    );
+    let dropped = world.items()[0].1;
+    assert_eq!(world.tile(dropped), Some(Tile::Empty));
+
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+    for _ in 0..400 {
+        world.step();
+        if world.jobs().is_empty() {
+            break;
+        }
+    }
+
+    assert!(
+        world.jobs().is_empty(),
+        "the revived job never finished: {:?}",
+        world.jobs()
+    );
+    assert_eq!(world.items(), vec![(sim_core::Id(5), pile)]);
+    assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+}
+
+#[test]
 fn applying_a_command_does_not_advance_the_world() {
     let mut world = World::generate(42, Dims::DEFAULT);
     let tick = world.tick();
