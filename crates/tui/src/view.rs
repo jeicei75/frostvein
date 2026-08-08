@@ -51,44 +51,77 @@ pub enum Action {
     Ignore,
 }
 
-pub fn initial(snapshot: &Snapshot) -> ViewState {
-    // NOTE: clamped because the entity position is wire data. An out-of-world
-    // entity would otherwise open on a blank map with no way to tell why.
+/// The opening view. Deterministic: the same world opens on the same frame on
+/// every run, so a scripted capture aims where its author thought it did.
+///
+/// `z_override` is `--z`. It is clamped because it is operator input.
+pub fn initial(snapshot: &Snapshot, z_override: Option<i32>) -> ViewState {
+    // NOTE: clamped because the dims are wire data.
     let max_x = i64::from(snapshot.dims.x.saturating_sub(1));
     let max_y = i64::from(snapshot.dims.y.saturating_sub(1));
     let max_z = i32::try_from(snapshot.dims.z.saturating_sub(1)).unwrap_or(i32::MAX);
-    match snapshot.entities.first() {
-        Some(entity) => ViewState {
-            camera: (
-                i64::from(entity.pos[0]).clamp(0, max_x),
-                i64::from(entity.pos[1]).clamp(0, max_y),
-            ),
-            z: entity.pos[2].clamp(0, max_z),
-            confirming_quit: false,
-            mode: Mode::Normal,
-            cursor: (
-                i64::from(entity.pos[0]).clamp(0, max_x),
-                i64::from(entity.pos[1]).clamp(0, max_y),
-            ),
-            anchor: None,
-            speed: snapshot.speed,
-        },
-        None => ViewState {
-            camera: (
-                i64::from(snapshot.dims.x / 2),
-                i64::from(snapshot.dims.y / 2),
-            ),
-            z: i32::try_from(snapshot.dims.z / 2).unwrap_or(i32::MAX),
-            confirming_quit: false,
-            mode: Mode::Normal,
-            cursor: (
-                i64::from(snapshot.dims.x / 2),
-                i64::from(snapshot.dims.y / 2),
-            ),
-            anchor: None,
-            speed: snapshot.speed,
-        },
+    let camera = (
+        i64::from(snapshot.dims.x / 2).clamp(0, max_x),
+        i64::from(snapshot.dims.y / 2).clamp(0, max_y),
+    );
+    ViewState {
+        camera,
+        z: z_override
+            .unwrap_or_else(|| opening_z(snapshot))
+            .clamp(0, max_z),
+        confirming_quit: false,
+        mode: Mode::Normal,
+        cursor: camera,
+        anchor: None,
+        speed: snapshot.speed,
     }
+}
+
+/// The z level with the most standable ground — an `Empty` tile with `Solid` or
+/// `Ramp` directly beneath it. Ties resolve to the lowest such z; a world with no
+/// standable ground at all opens on the middle level.
+///
+/// NOTE: this reads the same wire tiles the renderer already reads and asks
+/// `sim-core` nothing — it is a presentation heuristic for "which level is worth
+/// looking at", not a sim rule, and it is not required to agree with
+/// `World::is_standable` if that rule ever changes.
+///
+/// It replaced opening on `entities.first()`, which took the whole opening view
+/// from dwarf 0 and therefore moved as he wandered: two clients connecting
+/// minutes apart opened on different levels, and every scripted `--key` capture
+/// aimed at a different z depending on when it ran. That cost a false "the
+/// feature does not work" verdict at story 3.3's review, with exit 0. The
+/// trade-off accepted here is that the opening frame no longer centres on a
+/// dwarf; if that proves annoying in play the answer is a centre-on-dwarf key,
+/// never a nondeterministic opening.
+fn opening_z(snapshot: &Snapshot) -> i32 {
+    let Dims { x, y, z } = snapshot.dims;
+    let middle = i32::try_from(z / 2).unwrap_or(i32::MAX);
+    let mut best: Option<(u64, u32)> = None;
+    // NOTE: from 1 — level 0 is the world floor and has nothing beneath it to
+    // stand on, so it can never be standable.
+    for level in 1..z {
+        let mut standable = 0u64;
+        for ty in 0..y {
+            for tx in 0..x {
+                let here = snapshot.tiles.get(tile_index(snapshot.dims, tx, ty, level));
+                let below = snapshot
+                    .tiles
+                    .get(tile_index(snapshot.dims, tx, ty, level - 1));
+                if matches!(here, Some(Tile::Empty))
+                    && matches!(below, Some(Tile::Solid(_) | Tile::Ramp(_)))
+                {
+                    standable += 1;
+                }
+            }
+        }
+        // NOTE: strictly greater, so a tie keeps the LOWEST z. That is what makes
+        // the choice reproducible rather than dependent on iteration order.
+        if standable > 0 && standable > best.map_or(0, |(count, _)| count) {
+            best = Some((standable, level));
+        }
+    }
+    best.map_or(middle, |(_, level)| i32::try_from(level).unwrap_or(middle))
 }
 
 pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebuffer {
@@ -1528,16 +1561,29 @@ mod tests {
         assert_eq!(state.mode, Mode::Remove);
     }
 
+    /// Fills level `floor` solid and leaves `floor + 1` empty, so `floor + 1`
+    /// has `count` standable cells.
+    fn make_standable(snapshot: &mut Snapshot, floor: u32, count: u32) {
+        let dims = snapshot.dims;
+        for n in 0..count {
+            let (x, y) = (n % dims.x, n / dims.x);
+            snapshot.tiles[index(dims, x, y, floor)] = Tile::Solid(Material::Stone);
+            snapshot.tiles[index(dims, x, y, floor + 1)] = Tile::Empty;
+        }
+    }
+
     #[test]
-    fn initial_view_uses_the_first_entity_or_world_middle() {
-        let dims = Dims { x: 9, y: 7, z: 5 };
+    fn initial_view_opens_on_the_level_with_the_most_standable_ground() {
+        let dims = Dims { x: 9, y: 7, z: 6 };
         let mut snapshot = empty_snapshot(dims);
+        make_standable(&mut snapshot, 1, 3); // z 2 -> 3 standable
+        make_standable(&mut snapshot, 3, 9); // z 4 -> 9 standable
 
         assert_eq!(
-            initial(&snapshot),
+            initial(&snapshot, None),
             ViewState {
                 camera: (4, 3),
-                z: 2,
+                z: 4,
                 confirming_quit: false,
                 mode: Mode::Normal,
                 cursor: (4, 3),
@@ -1545,25 +1591,55 @@ mod tests {
                 speed: Speed::Normal,
             }
         );
+    }
+
+    #[test]
+    fn initial_view_does_not_move_when_the_first_entity_does() {
+        // The defect this replaced: the whole opening view came from dwarf 0, so
+        // it moved as he wandered and no scripted capture was reproducible.
+        let dims = Dims { x: 9, y: 7, z: 6 };
+        let mut snapshot = empty_snapshot(dims);
+        make_standable(&mut snapshot, 3, 9);
+        let before = initial(&snapshot, None);
 
         snapshot.entities.push(Entity {
             id: 7,
             kind: EntityKind::Dwarf,
-            pos: [8, 1, 4],
+            pos: [8, 1, 5],
             state: JobState::Idle,
         });
-        assert_eq!(
-            initial(&snapshot),
-            ViewState {
-                camera: (8, 1),
-                z: 4,
-                confirming_quit: false,
-                mode: Mode::Normal,
-                cursor: (8, 1),
-                anchor: None,
-                speed: Speed::Normal,
-            }
-        );
+        assert_eq!(initial(&snapshot, None), before);
+
+        snapshot.entities[0].pos = [0, 6, 2];
+        assert_eq!(initial(&snapshot, None), before);
+    }
+
+    #[test]
+    fn initial_view_breaks_a_standable_tie_towards_the_lowest_level() {
+        let dims = Dims { x: 9, y: 7, z: 6 };
+        let mut snapshot = empty_snapshot(dims);
+        make_standable(&mut snapshot, 1, 4);
+        make_standable(&mut snapshot, 3, 4);
+
+        assert_eq!(initial(&snapshot, None).z, 2);
+    }
+
+    #[test]
+    fn initial_view_falls_back_to_the_middle_level_without_standable_ground() {
+        let snapshot = empty_snapshot(Dims { x: 9, y: 7, z: 5 });
+        assert_eq!(initial(&snapshot, None).z, 2);
+    }
+
+    #[test]
+    fn initial_view_honours_a_clamped_z_override() {
+        let dims = Dims { x: 9, y: 7, z: 6 };
+        let mut snapshot = empty_snapshot(dims);
+        make_standable(&mut snapshot, 3, 9);
+
+        assert_eq!(initial(&snapshot, Some(1)).z, 1);
+        // Operator input, so it is clamped rather than trusted.
+        assert_eq!(initial(&snapshot, Some(99)).z, 5);
+        assert_eq!(initial(&snapshot, Some(-4)).z, 0);
     }
 
     #[test]

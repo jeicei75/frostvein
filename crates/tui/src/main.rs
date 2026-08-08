@@ -70,7 +70,19 @@ fn main() -> anyhow::Result<()> {
     let mut expect_frame_count = false;
     let mut keys = Vec::new();
     let mut expect_key = false;
+    let mut z: Option<i32> = None;
+    let mut expect_z = false;
     for arg in std::env::args_os().skip(1) {
+        if expect_z {
+            let text = arg
+                .to_str()
+                .with_context(|| format!("--z value is not valid UTF-8: {arg:?}"))?;
+            z = Some(text.parse().with_context(|| {
+                format!("invalid --z value {text:?}: expected a z level (0 is the world floor)")
+            })?);
+            expect_z = false;
+            continue;
+        }
         if expect_frame_count {
             let text = arg
                 .to_str()
@@ -109,6 +121,14 @@ fn main() -> anyhow::Result<()> {
             expect_key = true;
             continue;
         }
+        // NOTE: --z pins the opening level for scripted captures. Without it the
+        // client picks the level with the most standable ground, which is
+        // deterministic but world-dependent; a capture that needs a specific
+        // level should say so rather than assume one.
+        if arg == "--z" {
+            expect_z = true;
+            continue;
+        }
         if port_was_set {
             bail!("unexpected extra argument {arg:?}: expected at most one port (0-65535)");
         }
@@ -126,6 +146,9 @@ fn main() -> anyhow::Result<()> {
     if expect_key {
         bail!("--key requires a comma-separated sequence, e.g. --key d,enter,l,l,enter");
     }
+    if expect_z {
+        bail!("--z requires a level, e.g. --z 20");
+    }
     if !keys.is_empty() && frames.is_none() {
         bail!("--key requires --frames");
     }
@@ -139,7 +162,7 @@ fn main() -> anyhow::Result<()> {
     let mut writer = command_writer(&stream)?;
     let mut reader = BufReader::new(stream);
     let mut snapshot = read_snapshot(&mut reader)?;
-    let mut state = initial(&snapshot);
+    let mut state = initial(&snapshot, z);
 
     if let Some(count) = frames {
         let viewport = frame_size();
