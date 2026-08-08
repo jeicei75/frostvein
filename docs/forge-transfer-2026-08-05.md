@@ -34,8 +34,18 @@ A hung layer keeps emitting tokens. Its log keeps growing. File size, token coun
 false one. The only signals that count are a layer completing a **named step of its method**
 or **emitting a finding**; if neither has advanced inside the budget, it is hung.
 
-**The fix, now encoded** in `_bmad/custom/bmad-code-review.toml` as the `LAYER TIME-BOX`
-persistent fact (verify: `rg 'LAYER TIME-BOX' _bmad/custom/bmad-code-review.toml`):
+> **SUPERSEDED 2026-08-08 — do NOT ship the version below to the forge.** Epic 3 proved this
+> rule wrong in practice: a 20-minute *wall-clock-since-launch* budget cannot distinguish a hung
+> layer from one starved on the shared `cargo` `target/` lock, and it killed working layers on two
+> of three Epic 3 stories. The rule has been rewritten in
+> `_bmad/custom/bmad-code-review.toml` to measure **silence since the last named step or finding**
+> (8 min, 45 min absolute ceiling, 90 min whole-review), paired with a per-layer
+> `CARGO_TARGET_DIR` that removes the contention entirely. **Propagate the rewritten rule, not
+> this one.** The diagnosis below is still correct and still worth transferring; only the
+> prescription changed. See `epic-3-retro-2026-08-08.md` §3 Pattern 1.
+
+**The fix as encoded on 2026-08-05** in `_bmad/custom/bmad-code-review.toml` as the
+`LAYER TIME-BOX` persistent fact (verify: `rg 'LAYER TIME-BOX' _bmad/custom/bmad-code-review.toml`):
 
 - **20 minutes hard budget per layer.** The orchestrator kills and continues. No extensions
   because it "seems close".
