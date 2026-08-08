@@ -153,6 +153,22 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
     }
 
     let map_h = h - 2;
+    // The dispatch lives HERE and not in `main.rs` on purpose: three call sites render,
+    // and dispatching at them would let the instrument render a different path from the
+    // player's — which is exactly how story 2.2 shipped an instrument that showed motion
+    // as stillness. The status and hint rows stay below, shared by both views.
+    match state.view {
+        View::Flat => draw_flat(snapshot, state, w, map_h, &mut framebuffer.cells),
+        View::Depth => crate::raycast::draw(snapshot, state, w, map_h, &mut framebuffer.cells),
+    }
+
+    draw_status_and_hint(snapshot, state, w, h, &mut framebuffer.cells);
+    framebuffer
+}
+
+/// The flat view's map region: terrain with its peek-through, then zones,
+/// designations, items, dwarves, the pending rectangle and the cursor.
+fn draw_flat(snapshot: &Snapshot, state: &ViewState, w: u16, map_h: u16, cells: &mut [Cell]) {
     for sy in 0..map_h {
         let wy = state.camera.1 + i64::from(sy) - i64::from(map_h) / 2;
         for sx in 0..w {
@@ -185,7 +201,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
                     }
                 }
             }
-            framebuffer.cells[usize::from(sx) + usize::from(sy) * usize::from(w)] = cell;
+            cells[usize::from(sx) + usize::from(sy) * usize::from(w)] = cell;
         }
     }
 
@@ -206,13 +222,13 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
 
     for zone in &snapshot.zones {
         if let Some(index) = screen_index(zone.pos) {
-            framebuffer.cells[index] = zone_cell();
+            cells[index] = zone_cell();
         }
     }
 
     for designation in &snapshot.designations {
         if let Some(index) = screen_index(designation.pos) {
-            framebuffer.cells[index] = designation_cell(designation.kind);
+            cells[index] = designation_cell(designation.kind);
         }
     }
 
@@ -224,7 +240,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
     let mut item_counts = BTreeMap::new();
     for item in &snapshot.items {
         if let Some(index) = screen_index(item.pos) {
-            framebuffer.cells[index] = item_cell();
+            cells[index] = item_cell();
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
     }
@@ -243,7 +259,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         if entity.kind == EntityKind::Dwarf
             && let Some(index) = screen_index(entity.pos)
         {
-            framebuffer.cells[index] = if dwarf_counts.get(&index).copied().unwrap_or(0) > 1 {
+            cells[index] = if dwarf_counts.get(&index).copied().unwrap_or(0) > 1 {
                 crowd_cell()
             } else if item_counts.get(&index).copied().unwrap_or(0) > 0 {
                 carrier_cell()
@@ -264,7 +280,7 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
                     continue;
                 };
                 if let Some(index) = screen_index([x, y, state.z]) {
-                    framebuffer.cells[index] = pending_rect_cell(state.mode);
+                    cells[index] = pending_rect_cell(state.mode);
                 }
             }
         }
@@ -274,9 +290,18 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         && let (Ok(x), Ok(y)) = (i32::try_from(state.cursor.0), i32::try_from(state.cursor.1))
         && let Some(index) = screen_index([x, y, state.z])
     {
-        framebuffer.cells[index] = cursor_cell();
+        cells[index] = cursor_cell();
     }
+}
 
+/// The bottom two rows, drawn once for whichever view filled the map above them.
+fn draw_status_and_hint(
+    snapshot: &Snapshot,
+    state: &ViewState,
+    w: u16,
+    h: u16,
+    cells: &mut [Cell],
+) {
     let status = if state.confirming_quit {
         "quit? (y/n)".to_string()
     } else {
@@ -290,18 +315,31 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
             Speed::Normal => "normal",
             Speed::Fast => "fast",
         };
-        format!(
-            "tick {}  {}  z {}/{}  dwarves {}",
-            snapshot.tick,
-            speed,
-            state.z,
-            snapshot.dims.z.saturating_sub(1),
-            dwarves
-        )
+        // The `  3d <heading>  ` token is what a scripted capture greps for, so it is
+        // pinned by an exact-string test rather than left to formatting drift.
+        match state.view {
+            View::Flat => format!(
+                "tick {}  {}  z {}/{}  dwarves {}",
+                snapshot.tick,
+                speed,
+                state.z,
+                snapshot.dims.z.saturating_sub(1),
+                dwarves
+            ),
+            View::Depth => format!(
+                "tick {}  {}  3d {}  z {}/{}  dwarves {}",
+                snapshot.tick,
+                speed,
+                crate::raycast::heading_name(state.heading),
+                state.z,
+                snapshot.dims.z.saturating_sub(1),
+                dwarves
+            ),
+        }
     };
     let status_y = h - 2;
     for (x, glyph) in (0..w).zip(status.chars()) {
-        framebuffer.cells[usize::from(x) + usize::from(status_y) * usize::from(w)] = Cell {
+        cells[usize::from(x) + usize::from(status_y) * usize::from(w)] = Cell {
             glyph,
             fg: STATUS_TEXT,
         };
@@ -310,16 +348,19 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
     let hint = hint(state);
     let hint_y = h - 1;
     for (x, glyph) in (0..w).zip(hint.chars()) {
-        framebuffer.cells[usize::from(x) + usize::from(hint_y) * usize::from(w)] = Cell {
+        cells[usize::from(x) + usize::from(hint_y) * usize::from(w)] = Cell {
             glyph,
             fg: STATUS_TEXT,
         };
     }
-
-    framebuffer
 }
 
 fn hint(state: &ViewState) -> &'static str {
+    // Prefixed `depth:` in the style of the mode hints, and deliberately NOT `3d:` —
+    // that would collide with a capture's grep for the status line's `3d` token.
+    if state.view == View::Depth {
+        return "depth: hl turn  kj walk  <> z  v flat view  q quit client";
+    }
     match (state.mode, state.anchor.is_some()) {
         (Mode::Normal, _) => {
             "d dig  c channel  p stockpile  x clear  <> z  hjkl move  q quit client"
@@ -556,7 +597,7 @@ fn move_cursor(state: &mut ViewState, dx: i64, dy: i64, dims: Dims, viewport: (u
 
 // NOTE: widened before multiplying — the strides come from the wire, and a u32
 // product would overflow before the caller's bounds check ever sees it.
-fn tile_index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
+pub fn tile_index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
     x as usize + y as usize * dims.x as usize + z as usize * dims.x as usize * dims.y as usize
 }
 
@@ -1220,6 +1261,109 @@ mod tests {
                 }
             }
         }
+
+        // The depth view's own hint, measured the same way and at the same width.
+        let state = ViewState {
+            view: View::Depth,
+            ..normal_state((1, 1), 0)
+        };
+        let framebuffer = render(&snapshot, &state, 120, 3);
+        let hint: String = (0..120)
+            .map(|x| framebuffer.cell(x, 2).glyph)
+            .collect::<String>()
+            .trim_end()
+            .to_string();
+
+        assert!(hint.chars().count() <= 80, "depth hint: {hint:?}");
+        assert!(hint.starts_with("depth:"), "{hint:?}");
+        for named in ["turn", "walk", "<> z", "v flat", "q quit client"] {
+            assert!(
+                hint.contains(named),
+                "depth hint missed {named:?}: {hint:?}"
+            );
+        }
+        // Designation input is not a depth-view capability, so the bar must not offer it.
+        for absent in ["dig", "channel", "stockpile", "clear"] {
+            assert!(
+                !hint.contains(absent),
+                "depth hint advertises {absent:?}: {hint:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_depth_view_fills_the_map_region_and_shares_the_bottom_two_rows() {
+        let dims = Dims { x: 32, y: 32, z: 4 };
+        let mut snapshot = empty_snapshot(dims);
+        for x in 0..dims.x {
+            for y in 0..dims.y {
+                snapshot.tiles[index(dims, x, y, 0)] = Tile::Solid(Material::Stone);
+            }
+        }
+        let state = ViewState {
+            view: View::Depth,
+            ..normal_state((16, 16), 1)
+        };
+
+        let framebuffer = render(&snapshot, &state, 11, 5);
+
+        // One framebuffer, one size, one flush: the depth view writes the map region of
+        // the same buffer the flat view does and touches nothing below it.
+        let map: Vec<Cell> = (0..3)
+            .flat_map(|y| (0..11).map(move |x| (x, y)))
+            .map(|(x, y)| framebuffer.cell(x, y))
+            .collect();
+        assert!(
+            map.iter().any(|cell| *cell != BLANK),
+            "the depth view drew nothing at all"
+        );
+        for x in 0..11 {
+            assert_eq!(framebuffer.cell(x, 3).fg, STATUS_TEXT, "status row");
+        }
+        assert_eq!(framebuffer.cell(0, 4).glyph, 'd', "hint row still below it");
+    }
+
+    #[test]
+    fn the_depth_status_line_reports_the_view_and_the_heading() {
+        let dims = Dims {
+            x: 40,
+            y: 40,
+            z: 32,
+        };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.tick = 20;
+        snapshot.entities = (0..5)
+            .map(|id| Entity {
+                id,
+                kind: EntityKind::Dwarf,
+                pos: [1, 1, 30],
+                state: JobState::Idle,
+            })
+            .collect();
+
+        for (heading, name) in [(0, "e"), (1, "se"), (4, "w"), (7, "ne")] {
+            let state = ViewState {
+                view: View::Depth,
+                heading,
+                ..normal_state((12, 34), 17)
+            };
+            // The exact shape a capture greps for, written out rather than composed
+            // from the code under test.
+            let expected = format!("tick 20  normal  3d {name}  z 17/31  dwarves 5");
+
+            let framebuffer = render(&snapshot, &state, 80, 3);
+            let rendered: String = (0..expected.chars().count() as u16)
+                .map(|x| framebuffer.cell(x, 1).glyph)
+                .collect();
+
+            assert_eq!(rendered, expected);
+        }
+
+        // The flat view keeps the line it already had — no `3d` token anywhere in it.
+        let framebuffer = render(&snapshot, &normal_state((12, 34), 17), 80, 3);
+        let flat: String = (0..80).map(|x| framebuffer.cell(x, 1).glyph).collect();
+        assert!(flat.trim_end().ends_with("dwarves 5"));
+        assert!(!flat.contains("3d"), "{flat:?}");
     }
 
     #[test]
@@ -1229,13 +1373,21 @@ mod tests {
             y: 40,
             z: 32,
         };
-        for (speed, wire_name) in [
-            (Speed::Paused, "paused"),
-            (Speed::Normal, "normal"),
-            (Speed::Fast, "fast"),
+        // The depth view carries the widest line — the extra `3d <heading>` token and
+        // the longest heading name — so it is the one that decides the budget.
+        for (speed, wire_name, view) in [
+            (Speed::Paused, "paused", View::Flat),
+            (Speed::Normal, "normal", View::Flat),
+            (Speed::Fast, "fast", View::Flat),
+            (Speed::Paused, "paused", View::Depth),
+            (Speed::Normal, "normal", View::Depth),
+            (Speed::Fast, "fast", View::Depth),
         ] {
             let mut state = normal_state((12, 34), 19);
             state.speed = speed;
+            state.view = view;
+            // 3 = `sw`, one of the two-letter headings.
+            state.heading = 3;
             let mut snapshot = empty_snapshot(dims);
             snapshot.tick = 9_999_999;
             snapshot.speed = speed;
@@ -1247,7 +1399,10 @@ mod tests {
                     state: JobState::Idle,
                 })
                 .collect();
-            let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5");
+            let expected = match view {
+                View::Flat => format!("tick 9999999  {wire_name}  z 19/31  dwarves 5"),
+                View::Depth => format!("tick 9999999  {wire_name}  3d sw  z 19/31  dwarves 5"),
+            };
 
             let framebuffer = render(&snapshot, &state, 80, 3);
             let rendered_width = (0..80)

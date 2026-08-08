@@ -148,16 +148,21 @@ pub fn pending_rect_cell(mode: Mode) -> Cell {
     }
 }
 
-pub fn dim(fg: Rgb, depth: u8) -> Rgb {
-    if depth == 0 {
-        return fg;
-    }
-    let percent = DIM_PERCENT[usize::from(depth - 1)];
+/// Scales a colour towards black. `percent` is 0..=100; 100 returns the colour
+/// unchanged.
+pub fn shade(fg: Rgb, percent: u16) -> Rgb {
     (
         (u16::from(fg.0) * percent / 100) as u8,
         (u16::from(fg.1) * percent / 100) as u8,
         (u16::from(fg.2) * percent / 100) as u8,
     )
+}
+
+pub fn dim(fg: Rgb, depth: u8) -> Rgb {
+    if depth == 0 {
+        return fg;
+    }
+    shade(fg, DIM_PERCENT[usize::from(depth - 1)])
 }
 
 #[cfg(test)]
