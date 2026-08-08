@@ -13,6 +13,7 @@ import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -156,6 +157,10 @@ class ClaudeParsingTests(unittest.TestCase):
                     # delegated dev. Always None on a Claude transcript — the shape is shared
                     # so a row is comparable across tools, not because Claude reports quota.
                     "quota_first", "quota_last", "quota_pp",
+                    # How many transcript files were counted (Epic 3 retro, T1): a row
+                    # built from a parent transcript alone silently omits every
+                    # sub-agent and nested rollout it spawned.
+                    "counted_transcripts",
                 },
             )
 
@@ -456,3 +461,149 @@ class QuotaTests(unittest.TestCase):
             s = st.sum_codex_transcript(str(path))
         self.assertEqual(s["quota_last"], 40.0, "rate_limits sits beside info, not inside it")
         self.assertEqual(s["cache_read"], 900)
+
+
+class FanOutAccountingTests(unittest.TestCase):
+    """T1 (Epic 3 retro): a phase's cost includes the fan-out it paid for.
+
+    The hole these close was real and measured twice: story 3.1 recorded
+    review=$39.18 while five review layers burned ~14.1M tokens and 193 turns in
+    transcripts no row touched, and story 3.2's dev row understated by $18.28
+    because six `codex review` self-gate cycles each spawned their own rollout.
+    """
+
+    def _session(self, d, sid, turns, subagents):
+        """A parent transcript at <d>/<sid>.jsonl with <d>/<sid>/subagents/agent-*.jsonl."""
+        parent = Path(d) / f"{sid}.jsonl"
+        parent.write_text("".join(_claude_turn("claude-opus-5", *t) + "\n" for t in turns))
+        sub_dir = Path(d) / sid / "subagents"
+        sub_dir.mkdir(parents=True)
+        for i, rows in enumerate(subagents):
+            (sub_dir / f"agent-a{i}.jsonl").write_text(
+                "".join(_claude_turn("claude-sonnet-5", *r) + "\n" for r in rows)
+            )
+        # A .meta.json sits beside every agent transcript and carries no usage.
+        (sub_dir / "agent-a0.meta.json").write_text('{"note": "not a transcript"}')
+        return parent
+
+    def test_subagent_transcripts_are_counted_with_their_parent(self):
+        with tempfile.TemporaryDirectory() as d:
+            parent = self._session(
+                d, "sess", [(10, 100, 1000, 20)], [[(1, 2, 300, 4)], [(5, 6, 700, 8)]]
+            )
+            alone = st.sum_claude_transcript(str(parent), include_subagents=False)
+            full = st.sum_claude_transcript(str(parent))
+
+        self.assertEqual((alone["turns"], alone["cache_read"], alone["counted_transcripts"]),
+                         (1, 1000, 1))
+        self.assertEqual((full["turns"], full["cache_read"], full["counted_transcripts"]),
+                         (3, 2000, 3))
+        # The layers ran on a different model; a parent-only sum cannot see that.
+        self.assertEqual(full["models"], ["claude-opus-5", "claude-sonnet-5"])
+
+    def test_a_session_that_spawned_nothing_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "solo.jsonl"
+            path.write_text(_claude_turn("claude-opus-5", 10, 100, 1000, 20) + "\n")
+            s = st.sum_claude_transcript(str(path))
+        self.assertEqual((s["turns"], s["counted_transcripts"]), (1, 1))
+
+    def test_meta_json_siblings_are_not_read_as_transcripts(self):
+        with tempfile.TemporaryDirectory() as d:
+            parent = self._session(d, "sess", [(1, 1, 1, 1)], [[(2, 2, 2, 2)]])
+            found = st.subagent_transcripts(str(parent))
+        self.assertEqual([Path(f).name for f in found], ["agent-a0.jsonl"])
+
+    def _rollout(self, d, sid, cwd, stamps, inp, cached, out):
+        path = Path(d) / f"rollout-{sid}.jsonl"
+        lines = [json.dumps({
+            "timestamp": stamps[0], "type": "session_meta",
+            "payload": {"session_id": sid, "cwd": cwd},
+        })]
+        for ts in stamps:
+            lines.append(json.dumps({
+                "timestamp": ts, "type": "event_msg",
+                "payload": {"type": "token_count", "info": {"total_token_usage": {
+                    "input_tokens": inp, "cached_input_tokens": cached,
+                    "output_tokens": out, "total_tokens": inp + out,
+                }}},
+            }))
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
+    def test_nested_rollouts_in_the_same_cwd_and_window_are_counted(self):
+        with tempfile.TemporaryDirectory() as d:
+            here, there = "/workspace/projects/frostvein", "/workspace/projects/other"
+            dev = self._rollout(d, "dev", here,
+                                ["2026-08-06T06:00:00Z", "2026-08-06T09:00:00Z"], 1000, 900, 50)
+            self._rollout(d, "selfgate", here,
+                          ["2026-08-06T07:00:00Z", "2026-08-06T07:30:00Z"], 200, 180, 10)
+            # Same window, DIFFERENT project — the contamination that cost story 3.2's
+            # quota figure a ~9pp caveat. Must not be attributed to this story.
+            self._rollout(d, "foreign", there,
+                          ["2026-08-06T07:10:00Z", "2026-08-06T07:20:00Z"], 999, 999, 999)
+            # Same project, but ran days later — outside the window.
+            self._rollout(d, "later", here,
+                          ["2026-08-09T06:00:00Z", "2026-08-09T07:00:00Z"], 777, 777, 777)
+
+            with unittest.mock.patch.object(st, "_codex_sessions_dir", return_value=d):
+                nested = st.nested_codex_rollouts(str(dev))
+                alone = st.sum_codex_session(str(dev), include_nested=False)
+                full = st.sum_codex_session(str(dev))
+
+        self.assertEqual([Path(p).name for p in nested], ["rollout-selfgate.jsonl"])
+        self.assertEqual(alone["counted_transcripts"], 1)
+        self.assertEqual(full["counted_transcripts"], 2)
+        self.assertEqual(full["cache_read"], 900 + 180)
+        self.assertEqual(full["output"], 50 + 10)
+
+    def test_quota_is_enveloped_not_summed(self):
+        """`used_percent` reads ONE account-wide counter. Adding two readings would
+        double-count the same consumption."""
+        a = st._as_summary(1, ["m"], {"input": 0, "cache_creation": 0, "cache_read": 0, "output": 0},
+                           ("2026-08-06T06:00:00Z", "2026-08-06T07:00:00Z"), (40.0, 55.0))
+        b = st._as_summary(1, ["m"], {"input": 0, "cache_creation": 0, "cache_read": 0, "output": 0},
+                           ("2026-08-06T06:30:00Z", "2026-08-06T08:00:00Z"), (50.0, 70.0))
+        merged = st.merge_summaries([a, b])
+        self.assertEqual((merged["quota_first"], merged["quota_last"]), (40.0, 70.0))
+        self.assertEqual(merged["quota_pp"], 30.0)  # NOT (55-40) + (70-50) = 35
+        self.assertEqual((merged["first_ts"], merged["last_ts"]),
+                         ("2026-08-06T06:00:00Z", "2026-08-06T08:00:00Z"))
+
+
+class CursorRebaseTests(unittest.TestCase):
+    """A pre-fan-out cursor must not have its history dumped into the next row.
+
+    Every one of frostvein's 42 cursors was written main-only. Without a rebase, the
+    first recording after T1 on any of them would bill every sub-agent token that
+    transcript ever spent to whichever phase happened to record next -- replacing a
+    known undercount with a confident-looking overcount, which is worse.
+    """
+
+    def test_schema_is_pinned_and_matches_the_forge(self):
+        # Hand-written literal on purpose. The forge solved the Claude half first and
+        # uses schema 2 with these semantics; drifting the number silently would make
+        # the two implementations unmergeable while still looking equivalent.
+        self.assertEqual(st._CURSOR_SCHEMA, 2)
+
+    def test_pre_fanout_cursor_bills_the_primary_chain_not_the_history(self):
+        primary = st._as_summary(
+            100, ["m"], {"input": 10, "cache_creation": 0, "cache_read": 1000, "output": 10}
+        )
+        # Same session, now counting a sub-agent that spent 50k on top.
+        full = st._as_summary(
+            140, ["m"], {"input": 10, "cache_creation": 0, "cache_read": 51000, "output": 10}
+        )
+        stale = {"turns": 90, "input": 9, "cache_creation": 0, "cache_read": 900, "output": 9}
+
+        naive, _ = st.delta_since_cursor(full, stale)
+        rebased, _ = st.delta_since_cursor(primary, stale)
+        self.assertEqual(naive["cache_read"], 50100)   # the trap: 50k of history swept in
+        self.assertEqual(rebased["cache_read"], 100)   # what the old meter would have billed
+        self.assertLess(rebased["total"], naive["total"])
+
+    def test_a_schema_2_cursor_is_not_rebased_again(self):
+        current = {"turns": 90, "input": 9, "cache_creation": 0, "cache_read": 900,
+                   "output": 9, "schema": st._CURSOR_SCHEMA}
+        self.assertFalse(int(current.get("schema", 1)) < st._CURSOR_SCHEMA)
+        self.assertTrue(int({"turns": 1}.get("schema", 1)) < st._CURSOR_SCHEMA)

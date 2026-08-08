@@ -91,3 +91,42 @@ subagent transcripts on the review side. Any fix must walk both.
 weekly-quota telemetry. The column exists because Codex does, and because dollars measure the wrong
 axis for a subscription-billed tool. The `dev` row's 60pp is the gross counter movement; read it
 with the ~9pp foreign-run caveat above.
+
+---
+
+## RE-MEASURED 2026-08-08 with the fixed tool (Epic 3 retrospective, action item T1)
+
+`session_tokens.py` now walks Claude sub-agent transcripts and nested Codex rollouts. The two
+caveats above were hand-derived at the time; the tool now produces them, and the two agree.
+
+**Dev — the six `codex review` self-gate cycles are now counted:**
+
+| | turns | total processed | est_usd |
+|---|---|---|---|
+| `--no-nested` (what the `dev` row above recorded) | 715 | 96,000,871 | $60.96 |
+| **with nested rollouts** | **933** | **116,108,161** | **$79.25** |
+| difference | **+218** | **+20,107,290** | **+$18.29** |
+
+That is the hand-measured subtotal in the caveat above — **218 turns / 20,107,290 tokens / $18.28**
+— reproduced to the token by an independent code path. The hand table was built by measuring six
+named rollouts one at a time; the tool found them by `cwd` + window overlap without being told which
+they were. Two derivations, one answer.
+
+**Review — the four layers are now counted:**
+
+| | turns | total processed | models |
+|---|---|---|---|
+| `--no-nested` (what the `review` row above recorded) | 472 | 119,701,851 | opus-5 |
+| **with sub-agents** | **683** | **139,214,619** | **opus-5, sonnet-5** |
+| difference | **+211** | **+19,512,768** | — |
+
+**Read the token figure against the caveat above, they measure different things and both are right.**
+The caveat cites *~495k tokens across ~111 tool-uses* — that is what the four layers reported as their
+own context. **+19.5M** is tokens *processed*, cache reads included, which is how every other row in
+every ledger is computed. The comparable number is 19.5M. Note `claude-sonnet-5` appearing only in the
+fan-out column: the Sonnet hunters were invisible to a parent-only sum, so the ledger could not even
+show which models a review ran on.
+
+**Rows above are NOT retro-edited.** Same reason as the original caveats: the ledger records what a
+transcript spent, and a hand-adjusted number would be less trustworthy than a stated one. Story 3.2's
+honest totals are **dev $79.25 / 933 turns / 116.1M** and **review 683 turns / 139.2M**.

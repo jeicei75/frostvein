@@ -153,8 +153,46 @@ def _newest_transcript(directory: str, pattern: str = "*.jsonl") -> str | None:
     return max(set(files), key=os.path.getmtime)
 
 
-def sum_claude_transcript(path: str) -> dict[str, object]:
-    """Sum per-turn usage across a Claude Code transcript JSONL (cumulative)."""
+def subagent_transcripts(path: str) -> list[str]:
+    """Sub-agent transcripts belonging to the Claude session at ``path``.
+
+    Claude Code writes each sub-agent (a review layer, an Explore run) to its own
+    JSONL under ``<dir>/<session-id>/subagents/agent-*.jsonl``, a sibling tree of
+    the parent's ``<dir>/<session-id>.jsonl``. The parent transcript records the
+    tool-use that spawned them but NOT their token usage, so a ledger row built
+    from the parent alone silently omits everything the fan-out cost.
+
+    Measured hole this closes: story 3.1 recorded review=$39.18 while its five
+    review layers burned a further ~14.1M tokens and 193 turns unrecorded; story
+    3.2's four layers burned ~495k tokens across ~111 tool-uses, none of it in the
+    row. Three of 3.1's five layers produced NOTHING, so a real fraction of review
+    spend bought coverage holes the ledger could not show.
+
+    NOTE: ``agent-*.meta.json`` files live in the same directory and carry no
+    usage; the ``.jsonl`` glob excludes them. Returns [] when the directory is
+    absent, which is the normal case for a session that spawned nothing.
+    """
+    base, ext = os.path.splitext(path)
+    if ext != ".jsonl":
+        return []
+    return sorted(glob.glob(os.path.join(base, "subagents", "agent-*.jsonl")))
+
+
+def sum_claude_transcript(path: str, include_subagents: bool = True) -> dict[str, object]:
+    """Sum per-turn usage across a Claude Code transcript JSONL (cumulative).
+
+    Includes the session's sub-agent transcripts by default — see
+    ``subagent_transcripts``. Pass ``include_subagents=False`` to measure one file
+    in isolation.
+    """
+    files = [path] + (subagent_transcripts(path) if include_subagents else [])
+    parts = [_sum_one_claude_file(f) for f in files]
+    merged = merge_summaries(parts)
+    merged["counted_transcripts"] = len(files)
+    return merged
+
+
+def _sum_one_claude_file(path: str) -> dict[str, object]:
     totals = {"input": 0, "cache_creation": 0, "cache_read": 0, "output": 0}
     turns = 0
     models: set[str] = set()
@@ -246,6 +284,112 @@ def sum_codex_transcript(path: str) -> dict[str, object]:
     )
 
 
+def merge_summaries(parts: list[dict[str, object]]) -> dict[str, object]:
+    """Fold several transcript summaries into one.
+
+    Turns and token buckets add. The span becomes the outer envelope, so
+    ``minutes`` still reads as elapsed wall-clock over everything counted.
+
+    QUOTA IS NOT SUMMED. ``used_percent`` is a reading of one account-wide counter,
+    not a per-session quantity, so adding two readings would double-count. The
+    merged quota is the envelope — the lowest first reading to the highest last —
+    which is the true movement of the counter across the whole window.
+    """
+    parts = [p for p in parts if p]
+    if not parts:
+        return _as_summary(0, [], {"input": 0, "cache_creation": 0, "cache_read": 0, "output": 0})
+    totals = {b: sum(int(p[b]) for p in parts) for b in ("input", "cache_creation", "cache_read", "output")}
+    models = sorted({m for p in parts for m in p["models"]})
+    firsts = sorted(str(p["first_ts"]) for p in parts if p.get("first_ts"))
+    lasts = sorted(str(p["last_ts"]) for p in parts if p.get("last_ts"))
+    q_first = [float(p["quota_first"]) for p in parts if p.get("quota_first") is not None]
+    q_last = [float(p["quota_last"]) for p in parts if p.get("quota_last") is not None]
+    return _as_summary(
+        sum(int(p["turns"]) for p in parts),
+        models,
+        totals,
+        (firsts[0] if firsts else None, lasts[-1] if lasts else None),
+        (min(q_first) if q_first else None, max(q_last) if q_last else None),
+    )
+
+
+def nested_codex_rollouts(primary: str) -> list[str]:
+    """Rollouts that ran *inside* ``primary``'s window from the same directory.
+
+    Codex's mandated ``codex review --base main`` pre-handback self-gate does NOT
+    log into the dev rollout — each cycle spawns its own sibling rollout under the
+    sessions tree, so a ledger row built from the dev rollout alone omits it. On
+    story 3.2 that was **six cycles, $18.28 / 218 turns / 20.1M tokens**, and it
+    understated the story's dev cost by 23% of dollars — and by far more on quota,
+    the axis that actually binds.
+
+    Attribution rule, deliberately narrow: same ``cwd``, different ``session_id``,
+    and a time span that OVERLAPS the primary's. The ``cwd`` test is what keeps a
+    concurrent run in another project out of this story's row — the exact
+    contamination that cost story 3.2's quota figure a ~9pp caveat. There is no
+    parent/child link in a rollout to use instead; this was checked against a real
+    codex-cli 0.146.0 ``session_meta``, which carries ``cwd``, ``session_id`` and
+    ``originator`` but nothing naming a parent.
+
+    Companion 0-turn app-server rollouts are written alongside each self-gate pair;
+    they contribute nothing and fall out harmlessly.
+    """
+    meta = _rollout_meta(primary)
+    if not meta or not meta.get("cwd") or not meta.get("first_ts"):
+        return []
+    found = []
+    for path in glob.glob(os.path.join(_codex_sessions_dir(), "**", "rollout-*.jsonl"), recursive=True):
+        if os.path.abspath(path) == os.path.abspath(primary):
+            continue
+        other = _rollout_meta(path)
+        if not other or other.get("cwd") != meta["cwd"] or not other.get("first_ts"):
+            continue
+        if other["session_id"] == meta["session_id"]:
+            continue
+        # Overlap, not containment: a self-gate started inside the dev window may
+        # finish after it.
+        if other["first_ts"] <= meta["last_ts"] and other["last_ts"] >= meta["first_ts"]:
+            found.append(path)
+    return sorted(found)
+
+
+def _rollout_meta(path: str) -> dict | None:
+    """(session_id, cwd, first_ts, last_ts) for a Codex rollout, or None."""
+    session_id = cwd = None
+    first_ts = last_ts = None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                payload = obj.get("payload")
+                if isinstance(payload, dict) and obj.get("type") == "session_meta":
+                    session_id = payload.get("session_id") or payload.get("id")
+                    cwd = payload.get("cwd")
+                ts = obj.get("timestamp")
+                if ts:
+                    first_ts = first_ts or str(ts)
+                    last_ts = str(ts)
+    except OSError:
+        return None
+    if not session_id:
+        return None
+    return {"session_id": session_id, "cwd": cwd, "first_ts": first_ts, "last_ts": last_ts}
+
+
+def sum_codex_session(path: str, include_nested: bool = True) -> dict[str, object]:
+    """A Codex rollout plus the sibling rollouts nested in its window."""
+    files = [path] + (nested_codex_rollouts(path) if include_nested else [])
+    merged = merge_summaries([sum_codex_transcript(f) for f in files])
+    merged["counted_transcripts"] = len(files)
+    return merged
+
+
 def _span(stamps: list[str]) -> tuple[str | None, str | None]:
     """(first, last) ISO timestamp of the rows actually counted, or (None, None)."""
     return (stamps[0], stamps[-1]) if stamps else (None, None)
@@ -294,12 +438,29 @@ def _as_summary(
         "quota_first": quota[0],
         "quota_last": quota[1],
         "quota_pp": pp,
+        # How many transcript files this summary counted. 1 for a single file; more
+        # once sub-agent transcripts or nested rollouts are folded in. Part of the
+        # shared shape so a row is comparable across tools.
+        "counted_transcripts": 1,
     }
 
 
 # --- delta accounting -------------------------------------------------------
 
 _CURSOR_BUCKETS = ("turns", "input", "cache_creation", "cache_read", "output")
+
+# Cursors written before fan-out accounting (T1, 2026-08-08) measured the PRIMARY
+# transcript only. Diffing one of those against a now-fan-out-inclusive cumulative
+# would dump every sub-agent token and every nested-rollout token that transcript
+# ever spent into whichever phase happens to record next — a fresh wrong number in
+# place of the old missing one, which is strictly worse because it looks precise.
+# `main` rebases such a cursor instead, and says so out loud.
+#
+# NOTE: schema 2 and this mechanism are deliberately identical to the forge's, which
+# solved the Claude half of this independently and got here first. Keeping the
+# semantics aligned is what makes the two implementations mergeable rather than
+# merely similar.
+_CURSOR_SCHEMA = 2
 
 
 def _cursor_path() -> str:
@@ -381,6 +542,19 @@ _LEDGER_HEADER = (
     "weekly reset inside the window shows `—` rather than a negative. Claude rows are "
     "always `—`. Story 3.2 is the worked example: $18.28 of self-gate priced at 23% of "
     "dollars was ~1/3–1/2 of the quota.\n\n"
+    "**A row COUNTS ITS FAN-OUT** (Epic 3 retrospective, action item T1). A phase that "
+    "spawns work pays for it, so the row includes it: for `tool=claude`, every sub-agent "
+    "transcript under `<session-id>/subagents/agent-*.jsonl`; for `tool=codex`, every "
+    "sibling rollout sharing the primary's `cwd` whose window overlaps it — which is how "
+    "the mandated `codex review` self-gate is caught, since each cycle spawns its own "
+    "rollout rather than logging into the dev transcript. Before this, both were invisible: "
+    "story 3.1 recorded review=$39.18 while five review layers burned ~14.1M tokens and "
+    "193 turns unrecorded, and story 3.2's dev row understated by **$18.28 / 218 turns / "
+    "20.1M tokens**. The `cwd` test is what keeps a concurrent run in another project out "
+    "of this story's row. Pass `--no-nested` to measure one transcript in isolation. "
+    "**Rows recorded before 2026-08-08 do NOT include fan-out and are undercounts**; they "
+    "are not retro-edited, because the ledger records what a transcript spent and a "
+    "hand-adjusted number would be less trustworthy than a stated caveat.\n\n"
     "| phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |\n"
     "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 )
@@ -715,6 +889,12 @@ def main() -> int:
     ap.add_argument("--story", help="story key, e.g. ep-03-us-02-... (enables ledger recording)")
     ap.add_argument("--phase", default="", help="create | dev | review | review-patch")
     ap.add_argument(
+        "--no-nested",
+        action="store_true",
+        help="measure ONE transcript in isolation: skip Claude sub-agent transcripts and nested "
+        "Codex rollouts. Off by default — the honest number for a phase includes its fan-out.",
+    )
+    ap.add_argument(
         "--metrics-file",
         help="ledger path (default: <forge>/_bmad-output/implementation-artifacts/metrics/<story>.md)",
     )
@@ -743,13 +923,15 @@ def main() -> int:
         if not path or not os.path.exists(path):
             print(f"session_tokens: no Codex rollout found in {_codex_sessions_dir()}")
             return 1
-        s = sum_codex_transcript(path)
+        s = sum_codex_session(path, include_nested=not args.no_nested)
+        primary_only = None if args.no_nested else sum_codex_session(path, include_nested=False)
     else:
         path = args.transcript or _newest_transcript(_claude_project_dir())
         if not path or not os.path.exists(path):
             print(f"session_tokens: no transcript found in {_claude_project_dir()}")
             return 1
-        s = sum_claude_transcript(path)
+        s = sum_claude_transcript(path, include_subagents=not args.no_nested)
+        primary_only = None if args.no_nested else sum_claude_transcript(path, include_subagents=False)
 
     transcript_id = os.path.basename(path)
     _print_summary(f"Session token cost  ({transcript_id}, tool={args.tool})", s)
@@ -760,9 +942,25 @@ def main() -> int:
         return 0
 
     cursors = _load_cursors()
-    delta, reset = delta_since_cursor(s, cursors.get(transcript_id))
+    prev = cursors.get(transcript_id)
+    rebased = 0
+    if prev is not None and int(prev.get("schema", 1)) < _CURSOR_SCHEMA and primary_only is not None:
+        # Bill the primary-chain delta — exactly what the old meter would have billed —
+        # then rebase the cursor to the full session so every LATER row is complete.
+        # What is skipped is NAMED, not hidden: backfilling it is a deliberate re-price,
+        # not something to smuggle into an unrelated row.
+        rebased = int(s["total"]) - int(primary_only["total"])
+        delta, reset = delta_since_cursor(primary_only, prev)
+    else:
+        delta, reset = delta_since_cursor(s, prev)
     if reset:
         print("  (cursor looked stale — billing full cumulative; cursor reset)")
+    if rebased:
+        print(
+            f"  (pre-fan-out cursor rebased: this row bills the primary chain only; "
+            f"{_fmt(rebased)} fan-out tokens already spent on this transcript are NOT "
+            f"backfilled here — later rows on it are complete)"
+        )
     metrics_file = args.metrics_file or os.path.join(
         _forge_root(), "_bmad-output", "implementation-artifacts", "metrics", f"{args.story}.md"
     )
@@ -770,6 +968,7 @@ def main() -> int:
     cursors[transcript_id] = {b: int(s[b]) for b in _CURSOR_BUCKETS} | {
         "last_ts": s.get("last_ts"),
         "quota_last": s.get("quota_last"),
+        "schema": _CURSOR_SCHEMA,
     }
     _save_cursors(cursors)
     print(
