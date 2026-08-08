@@ -2,6 +2,7 @@
 
 mod frame;
 mod palette;
+mod raycast;
 mod view;
 
 use std::{

@@ -30,6 +30,18 @@ pub struct ViewState {
     pub cursor: (i64, i64),
     pub anchor: Option<(i64, i64)>,
     pub speed: Speed,
+    pub view: View,
+    /// 0..8, 45 degrees apart, 0 = `+x`. An integer, not an angle: `ViewState` must
+    /// stay `Copy + Eq`, and a scripted capture must render identically every run.
+    pub heading: u8,
+}
+
+/// Which way the same camera is looked through. Both views share `camera` and `z`,
+/// so a move made in either is reflected in the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum View {
+    Flat,
+    Depth,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +86,8 @@ pub fn initial(snapshot: &Snapshot, z_override: Option<i32>) -> ViewState {
         cursor: camera,
         anchor: None,
         speed: snapshot.speed,
+        view: View::Flat,
+        heading: 0,
     }
 }
 
@@ -373,7 +387,20 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             Speed::Normal => command(state, Speed::Paused),
             Speed::Paused => Action::Ignore,
         },
-        KeyCode::Char(key @ ('d' | 'c' | 'p' | 'x')) if state.mode == Mode::Normal => {
+        // Client state only: no command goes upstream, and the guard pair mirrors the
+        // designation keys below for the same reason — a half-placed rectangle must
+        // never be silently lost to a view toggle.
+        KeyCode::Char('v') if state.mode == Mode::Normal => {
+            state.view = match state.view {
+                View::Flat => View::Depth,
+                View::Depth => View::Flat,
+            };
+            Action::Redraw
+        }
+        KeyCode::Char('v') => Action::Ignore,
+        KeyCode::Char(key @ ('d' | 'c' | 'p' | 'x'))
+            if state.mode == Mode::Normal && state.view == View::Flat =>
+        {
             state.mode = match key {
                 'd' => Mode::Dig,
                 'c' => Mode::Channel,
@@ -439,8 +466,13 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             state.z = (state.z + 1).min(dims.z.saturating_sub(1) as i32);
             Action::Redraw
         }
+        // The depth view routes FIRST: in it these four keys turn and walk the camera
+        // rather than panning it, and there is no cursor to move because designation
+        // input stays a flat-view capability.
         KeyCode::Left | KeyCode::Char('h') => {
-            if state.mode == Mode::Normal {
+            if state.view == View::Depth {
+                state.heading = (state.heading + 7) % 8;
+            } else if state.mode == Mode::Normal {
                 state.camera.0 = (state.camera.0 - 1).max(0);
             } else {
                 move_cursor(state, -1, 0, dims, viewport);
@@ -448,7 +480,9 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             Action::Redraw
         }
         KeyCode::Right | KeyCode::Char('l') => {
-            if state.mode == Mode::Normal {
+            if state.view == View::Depth {
+                state.heading = (state.heading + 1) % 8;
+            } else if state.mode == Mode::Normal {
                 state.camera.0 = (state.camera.0 + 1).min(i64::from(dims.x.saturating_sub(1)));
             } else {
                 move_cursor(state, 1, 0, dims, viewport);
@@ -456,7 +490,9 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             Action::Redraw
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if state.mode == Mode::Normal {
+            if state.view == View::Depth {
+                step_camera(state, 1, dims);
+            } else if state.mode == Mode::Normal {
                 state.camera.1 = (state.camera.1 - 1).max(0);
             } else {
                 move_cursor(state, 0, -1, dims, viewport);
@@ -464,7 +500,9 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             Action::Redraw
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if state.mode == Mode::Normal {
+            if state.view == View::Depth {
+                step_camera(state, -1, dims);
+            } else if state.mode == Mode::Normal {
                 state.camera.1 = (state.camera.1 + 1).min(i64::from(dims.y.saturating_sub(1)));
             } else {
                 move_cursor(state, 0, 1, dims, viewport);
@@ -477,6 +515,14 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
         }
         _ => Action::Ignore,
     }
+}
+
+/// One tile along the current heading, `sign` -1 for backwards. Clamped to the world
+/// exactly as the flat view's pan is, so the camera can never leave the world.
+fn step_camera(state: &mut ViewState, sign: i64, dims: Dims) {
+    let (dx, dy) = crate::raycast::heading_step(state.heading);
+    state.camera.0 = (state.camera.0 + dx * sign).clamp(0, i64::from(dims.x.saturating_sub(1)));
+    state.camera.1 = (state.camera.1 + dy * sign).clamp(0, i64::from(dims.y.saturating_sub(1)));
 }
 
 fn move_cursor(state: &mut ViewState, dx: i64, dy: i64, dims: Dims, viewport: (u16, u16)) {
@@ -554,6 +600,8 @@ mod tests {
             cursor: camera,
             anchor: None,
             speed: Speed::Normal,
+            view: View::Flat,
+            heading: 0,
         }
     }
 
@@ -1589,6 +1637,8 @@ mod tests {
                 cursor: (4, 3),
                 anchor: None,
                 speed: Speed::Normal,
+                view: View::Flat,
+                heading: 0,
             }
         );
     }
@@ -1654,5 +1704,210 @@ mod tests {
         let status: String = (0..11).map(|x| framebuffer.cell(x, 1).glyph).collect();
 
         assert_eq!(status, "quit? (y/n)");
+    }
+
+    #[test]
+    fn v_toggles_the_depth_view_from_normal_and_back() {
+        let dims = Dims { x: 8, y: 8, z: 4 };
+        let mut state = normal_state((4, 4), 1);
+        assert_eq!(state.view, View::Flat);
+
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('v')), dims, (80, 24)),
+            Action::Redraw
+        );
+        assert_eq!(state.view, View::Depth);
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('v')), dims, (80, 24)),
+            Action::Redraw
+        );
+        assert_eq!(state.view, View::Flat);
+    }
+
+    #[test]
+    fn v_is_ignored_in_every_designation_mode_and_leaves_the_anchor_alone() {
+        let dims = Dims { x: 8, y: 8, z: 4 };
+        for mode in [Mode::Dig, Mode::Channel, Mode::Stockpile, Mode::Remove] {
+            for anchor in [None, Some((2, 3))] {
+                let mut state = ViewState {
+                    mode,
+                    anchor,
+                    ..normal_state((4, 4), 1)
+                };
+
+                assert_eq!(
+                    apply_key(&mut state, press(KeyCode::Char('v')), dims, (80, 24)),
+                    Action::Ignore,
+                    "{mode:?} with anchor {anchor:?}"
+                );
+                assert_eq!(state.view, View::Flat, "{mode:?}");
+                assert_eq!(state.mode, mode);
+                assert_eq!(state.anchor, anchor, "a half-placed rect must survive `v`");
+            }
+        }
+    }
+
+    #[test]
+    fn turning_walks_the_eight_headings_and_wraps_both_ways() {
+        let dims = Dims { x: 8, y: 8, z: 4 };
+        let mut state = ViewState {
+            view: View::Depth,
+            ..normal_state((4, 4), 1)
+        };
+
+        for expected in [1, 2, 3, 4, 5, 6, 7, 0] {
+            assert_eq!(
+                apply_key(&mut state, press(KeyCode::Char('l')), dims, (80, 24)),
+                Action::Redraw
+            );
+            assert_eq!(state.heading, expected, "right turn");
+        }
+        for expected in [7, 6, 5, 4, 3, 2, 1, 0] {
+            assert_eq!(
+                apply_key(&mut state, press(KeyCode::Char('h')), dims, (80, 24)),
+                Action::Redraw
+            );
+            assert_eq!(state.heading, expected, "left turn");
+        }
+
+        // The arrow keys are the same two turns, not a second mechanism.
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Right), dims, (80, 24)),
+            Action::Redraw
+        );
+        assert_eq!(state.heading, 1);
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Left), dims, (80, 24)),
+            Action::Redraw
+        );
+        assert_eq!(state.heading, 0);
+
+        // Turning never moves the camera and never leaves the depth view.
+        assert_eq!(state.camera, (4, 4));
+        assert_eq!(state.view, View::Depth);
+    }
+
+    #[test]
+    fn forward_then_back_returns_to_the_starting_tile_on_every_heading() {
+        let dims = Dims { x: 16, y: 16, z: 4 };
+        for heading in 0..8 {
+            let start = (8, 8);
+            let mut state = ViewState {
+                view: View::Depth,
+                heading,
+                ..normal_state(start, 1)
+            };
+
+            apply_key(&mut state, press(KeyCode::Char('k')), dims, (80, 24));
+            let moved = state.camera;
+            let (dx, dy) = crate::raycast::heading_step(heading);
+            assert_eq!(
+                moved,
+                (start.0 + dx, start.1 + dy),
+                "heading {heading} did not step by its own table entry"
+            );
+
+            apply_key(&mut state, press(KeyCode::Char('j')), dims, (80, 24));
+            assert_eq!(state.camera, start, "heading {heading} did not come back");
+        }
+    }
+
+    #[test]
+    fn forward_clamps_at_the_world_edge_rather_than_leaving_the_world() {
+        let dims = Dims { x: 4, y: 4, z: 2 };
+        // heading 1 = south-east, so both axes press against the far corner.
+        let mut state = ViewState {
+            view: View::Depth,
+            heading: 1,
+            ..normal_state((3, 3), 0)
+        };
+
+        for _ in 0..3 {
+            apply_key(&mut state, press(KeyCode::Char('k')), dims, (80, 24));
+        }
+        assert_eq!(state.camera, (3, 3));
+
+        // heading 5 = north-west, the mirror against the origin corner.
+        let mut state = ViewState {
+            view: View::Depth,
+            heading: 5,
+            ..normal_state((0, 0), 0)
+        };
+        for _ in 0..3 {
+            apply_key(&mut state, press(KeyCode::Char('k')), dims, (80, 24));
+        }
+        assert_eq!(state.camera, (0, 0));
+    }
+
+    #[test]
+    fn designation_keys_do_nothing_in_the_depth_view() {
+        let dims = Dims { x: 8, y: 8, z: 4 };
+        for key in ['d', 'c', 'p', 'x'] {
+            let mut state = ViewState {
+                view: View::Depth,
+                ..normal_state((4, 4), 1)
+            };
+
+            assert_eq!(
+                apply_key(&mut state, press(KeyCode::Char(key)), dims, (80, 24)),
+                Action::Ignore,
+                "{key} reached the depth view"
+            );
+            assert_eq!(state.mode, Mode::Normal, "{key} changed mode in depth");
+            assert_eq!(state.anchor, None);
+        }
+    }
+
+    #[test]
+    fn global_keys_keep_working_in_the_depth_view() {
+        let dims = Dims { x: 8, y: 8, z: 4 };
+        let mut state = ViewState {
+            view: View::Depth,
+            ..normal_state((4, 4), 1)
+        };
+
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char(' ')), dims, (80, 24)),
+            Action::Command(Command::SetSpeed {
+                speed: Speed::Paused
+            })
+        );
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('S')), dims, (80, 24)),
+            Action::Command(Command::Save)
+        );
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('L')), dims, (80, 24)),
+            Action::Command(Command::Load)
+        );
+
+        // z still moves, and still clamps, exactly as it does in the flat view.
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('>')), dims, (80, 24)),
+            Action::Redraw
+        );
+        assert_eq!(state.z, 2);
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('<')), dims, (80, 24)),
+            Action::Redraw
+        );
+        assert_eq!(state.z, 1);
+
+        assert_eq!(
+            apply_key(&mut state, press(KeyCode::Char('q')), dims, (80, 24)),
+            Action::Redraw
+        );
+        assert!(state.confirming_quit);
+        assert_eq!(state.view, View::Depth, "quitting must not leave the view");
+    }
+
+    #[test]
+    fn the_opening_view_is_flat_and_faces_east() {
+        let snapshot = empty_snapshot(Dims { x: 4, y: 4, z: 2 });
+
+        let state = initial(&snapshot, None);
+
+        assert_eq!(state.view, View::Flat);
+        assert_eq!(state.heading, 0);
     }
 }
