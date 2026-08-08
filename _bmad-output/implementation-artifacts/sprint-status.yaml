@@ -21,6 +21,8 @@
 #   - ready-for-dev: Story file created in stories folder
 #   - in-progress: Developer actively working on implementation
 #   - review: Ready for code review (via Dev's code-review workflow)
+#   - dropped: Planned, never started, and deliberately cancelled — the plan changed
+#             under it. Distinct from 'backlog' (still intended) and from 'done'.
 #   - done: Story completed
 #
 # Retrospective Status:
@@ -41,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-08  # story 4.1a dev done, in review; Epic 4 in progress
+last_updated: 2026-08-08  # 4.1a reviewed + closed done (unmerged, on its branch); 3D-in-TUI abandoned, Bevy client pivot — correct-course pending
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -64,18 +66,40 @@ development_status:
   3-2-the-dig: done
   3-3-the-haul-and-the-skeleton-walks: done
   epic-3-retrospective: done
-  epic-4: in-progress
+  # CLOSED EARLY 2026-08-08 (sprint-change-proposal-2026-08-08.md). 4.1a delivered but
+  # deliberately NOT merged; 4.1b dropped; FR24 withdrawn from phase one. Wolf judged the
+  # live depth view "quite far from wow effect" — 3D-in-TUI is abandoned. MILESTONE 1 CLOSES
+  # HERE with all four phase-one success criteria met. The ambition moves to a Bevy client
+  # in Milestone 2, which needs its own product + architecture pass before any story exists.
+  epic-4: done
   # 4.1 SPLIT IN TWO at the Epic 3 retrospective (Wolf, 2026-08-08). The single story carried the
   # raycast renderer AND the sub-voxel creature models, and was larger than 3.2 -- which shipped at
   # 17 ACs and exhausted a full week of Codex quota. FR23/FR24 sign-off lands on 4.1b. The keys
   # below are provisional until action item E1 rewrites epics.md; sprint-planning owns the final shape.
-  4-1a-behold-the-fortress-in-depth: review
-  4-1b-dwarves-in-depth: backlog
+  # done but DELIBERATELY NOT MERGED — kept on branch `4-1a-behold-the-fortress-in-depth`,
+  # `main` stays 2D-only (Wolf, 2026-08-08). Review was clean (4 layers, gate green, honest
+  # evidence); the story answered its question in the NEGATIVE — Wolf judged the live depth
+  # view "quite far from wow effect". 3D-in-TUI is abandoned. Replan via correct-course.
+  4-1a-behold-the-fortress-in-depth: done
+  # DROPPED 2026-08-08, never started, no story file was ever written. It carried sub-voxel
+  # glyph dwarf models AND FR23's deferred icy-grim sign-off — both inside a terminal renderer
+  # Wolf has now judged, live, as unable to reach the effect he wants. FR23's PHASE-ONE
+  # obligation was already MET at 3.3; only the 3D ambition moved to Milestone 2. Do NOT read
+  # this drop as FR23 going unmet. Full record: epics.md + sprint-change-proposal-2026-08-08.md
+  4-1b-dwarves-in-depth: dropped
   epic-4-retrospective: optional
 
 # Appended by the Epic 1 retrospective (2026-08-03).
 # Full context: epic-1-retro-2026-08-03.md
 action_items:
+
+  - id: E4-P1
+    epic: 4
+    status: open
+    action: "Guard the NEW spec-defect subclass 4.1a exposed: an AC that is MEETABLE, IMPLEMENTED and NOT WHAT THE USER WANTED. Fix belongs at requirement + story authoring, NOT at review."
+    note: "READ THIS BEFORE PROPOSING A REVIEW-SIDE FIX -- there isn't one. All four review layers audit 'does the code match the spec?' and 4.1a's code matched it faithfully; even the Feature Auditor, whose whole question is 'would the user get the outcome the story promises?', is defeated when the PROMISE is the wrong thing. The tracked spec-defect class so far is 'AC unmeetable as written' (2.3's AC9, 4.1a's AC3) -- caught by review, reliably, 4 instances in 7 stories. This is the other kind and it is far more expensive: a whole story, gate green, four layers clean, $28 of review, and the feature was not what Wolf asked for. ROOT CAUSE IS VISIBLE IN THE REQUIREMENT: FR24 read 'The RAYCAST 3D view is its own story' -- it named a MECHANISM, not an outcome, so nobody ever had to ask what Wolf wanted to SEE. That is the same failure the AC-authoring rule (adopted at 3.1, _bmad/custom/bmad-create-story.toml, check 2 = OUTCOME NOT MECHANISM) already guards against ONE LEVEL LOWER DOWN -- it governs ACs and never reaches FRs. Wolf's own words: 'I meant actually more like isometric 3d camera view but I didn't manage to clarify that.' CANDIDATE FIXES for the Epic 4 retro to rule on: (a) extend the outcome-not-mechanism check UP to requirement authoring in bmad-prd/bmad-create-epics-and-stories, not only to ACs; (b) for any story whose headline outcome is VISUAL or otherwise subjective, require a cheap human-checkable artefact BEFORE the full build -- a mock frame, a sketch, a one-paragraph 'here is what you will see' -- since the whole cost here was discovering the mismatch only after a complete implementation; (c) accept the class as uncatchable-by-agents and rely on earlier live checks. Worked example to cite: FR24 + story 4.1a, and Milestone 2's re-statement of FR24 as an outcome is the first test of whether the fix holds."
+    success_criterion: "Milestone 2's replacement for FR24 states what the boss should SEE and FEEL and names no rendering technique; ruled on at the Epic 4 retrospective before any Bevy story is written"
+
   - epic: 1
     action: "Retune code-review: Blind Hunter + Edge Case Hunter on Sonnet; Acceptance Auditor, Feature Auditor and triage stay Opus. Control = mutation kill-rate vs 1.3's baseline; revert Lever A if it drops"
     owner: "Amelia"

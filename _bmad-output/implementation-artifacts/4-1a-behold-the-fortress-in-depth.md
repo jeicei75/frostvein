@@ -5,7 +5,8 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant, as at 3.3
 
 # Story 4.1a: Behold the Fortress in Depth
 
-Status: review
+Status: done — **deliberately NOT merged to `main`.** Kept on branch
+`4-1a-behold-the-fortress-in-depth` (Wolf, 2026-08-08). See Disposition below.
 
 ## Story
 
@@ -593,3 +594,132 @@ _bmad-output/implementation-artifacts/sprint-status.yaml                        
 | --- | --- |
 | 2026-08-08 | Story created |
 | 2026-08-08 | Implemented directly by Opus (Codex quota exhausted until 2026-08-12, verified live). Depth view shipped: 5 commits, gate green, 22/22 mutations killed, live capture taken. Status → review |
+
+## Review Findings
+
+Code review 2026-08-08 (Opus orchestrator, fresh context). Four layers, all four completed — no
+coverage holes, no timed-out layer. Layer key: `blind` = Blind Hunter (Sonnet, `raycast.rs`),
+`edge` = Edge Case Hunter (Sonnet, shells), `acc` = Acceptance Auditor (Opus, whole diff),
+`feat` = Feature Auditor (Opus, whole diff). Gate re-run independently: **GREEN**.
+
+### Decisions needed
+
+- [ ] [Review][Decision] **`v` is never advertised to the player — the epic's marquee feature is
+      undiscoverable** [crates/tui/src/view.rs:366] (`feat`, HIGH) — the flat-view hint reads
+      `d dig  c channel  p stockpile  x clear  <> z  hjkl move  q quit client` (70 chars); the string
+      `v flat view` appears **only** in the depth hint, i.e. `v` is announced only to a player who has
+      already found it. No AC requires advertising it, so every test is green. The story's headline
+      outcome begins "I press `v`". Fix is a wording + budget call: `  v 3d` fits at 76 within the
+      pinned 80-column status budget, `  v 3d view` overflows at 81.
+- [ ] [Review][Decision] **`shade()`'s `0..=100` contract is unenforced and fails silently out of
+      range** [crates/tui/src/palette.rs:153-159] (`edge`, LOW, **not reachable today**) —
+      `(u16::from(fg.0) * percent / 100) as u8` truncates by wrapping above 100% (`510 as u8 == 254`)
+      and the `u16` multiply itself overflows above ~257%, which panics in debug and wraps in release.
+      The only caller (`raycast.rs:102`) is provably ≤100. This is the latent silent-failure class
+      this project has repeatedly chosen to close early rather than defer, hence a decision not a
+      deferral: harden now, or accept it as YAGNI.
+
+### Patches
+
+- [ ] [Review][Patch] `NO_COLOR` stderr warning is now false in the depth view [crates/tui/src/main.rs:382-388]
+      (`acc`+`feat` CONVERGED, MED) — still claims "Designation and zone markers remain evidenced
+      because their glyphs are distinct". The depth view draws no designations or zones, and every
+      cell is one of four band glyphs, so material identity and dwarf-vs-terrain are exactly what a
+      colourless depth capture cannot evidence. The spec named keeping this warning honest as an
+      explicit obligation and it was skipped. Also covers `feat`'s AC8 point: under `NO_COLOR` a dwarf
+      is pixel-identical to terrain (only `fg` differs), so no colourless capture can evidence AC8.
+- [ ] [Review][Patch] A left–right mirrored picture survives the whole suite AND all 22 mutations
+      [crates/tui/src/raycast.rs:164] (`acc`, MED) — negating `right = (-forward.1, forward.0)` in a
+      throwaway copy of HEAD gave 71 + 19 tests passed, 0 failed, and the live recipe still green.
+      Every picture-inspecting test uses `centre_of()`, invariant under a horizontal mirror; `right`
+      appears in none of the 22 mutations. Control: flipping the vertical axis DOES fail a test, so
+      vertical is guarded and horizontal is not. NOTE the shipped orientation is *correct*
+      (east `(1,0)` → right `(0,1)` = south, matching `heading_name`) — this is a coverage hole in
+      AC13's own guarantee, not a live defect. Fix: one asymmetric-scene test + its mutation entry.
+- [ ] [Review][Patch] `Hit.distance` doc comment states the opposite of what the code does
+      [crates/tui/src/raycast.rs:35-37] (`blind`+`acc` CONVERGED, MED) — comment claims "Euclidean …
+      the mild fisheye it leaves is a fair price". The stored value is `t_max[axis]`, and since
+      `right ⊥ forward` and `forward.z == 0`, `forward · direction == 1` exactly, so `t` **is** the
+      perpendicular (camera-plane) distance and there is **no** fisheye. Not cosmetic: this comment
+      demonstrably misleads — the Blind Hunter proposed "multiply by `|direction|`", which would
+      *introduce* fisheye and curve every flat wall. Comment-only fix.
+- [ ] [Review][Patch] Self-referential test: forward/back round-trip proves only self-consistency
+      [crates/tui/src/view.rs:1979-2001] (`edge`, MED) — `forward_then_back_returns_to_the_starting_tile_on_every_heading`
+      computes its expectation with `crate::raycast::heading_step(heading)`, the same table
+      `step_camera` calls. A corrupted table would still round-trip and agree. Mitigated (verified):
+      `raycast.rs:586-603` hand-writes the table and pins `heading_step` independently, so the table
+      IS covered — but not from within this test's own territory. This antipattern has shipped in
+      stories 1.1, 1.2 and 1.3. Fix: hand-write the expected step in the assertion.
+- [ ] [Review][Patch] The fourth distance band `░` is pinned by no test and no mutation
+      [crates/tui/src/raycast.rs:26] (`acc`+`feat` CONVERGED, LOW — fold into the mirror-test patch) —
+      `BAND_LIMITS[2] = 24.0` appears in zero of the 22 mutations and no test asserts band 3; the
+      `--key v` capture counts `░ 0`. AC7's "four-step ramp" is three-quarters evidenced;
+      `BAND_LIMITS[2]` could be any value ≥10 and nothing would notice.
+- [ ] [Review][Patch] SPEC DEFECT — AC3's "byte-identical frame on every run" is unmeetable as written
+      (`acc`, LOW) — the status line carries `snapshot.tick`, which differs between runs against a live
+      daemon regardless of rendering determinism. Determinism was verifiable only after stripping the
+      status and hint rows. Scope the AC to the map region, or to a fixed protocol state.
+- [ ] [Review][Patch] SPEC DEFECT — AC12's band-count range check cannot on its own distinguish the
+      depth view from the flat view (`acc`+`feat` CONVERGED, both measured independently, LOW) — the
+      **flat** control capture, with `v` never pressed, contains all four bands
+      (`█ 642  ▓ 2556  ▒ 2760  ░ 2610`), because those are the material glyphs the flat view already
+      uses. Read alone the band loop passes trivially and evidences nothing — 3.3's withdrawn
+      glyph-total failure mode, resurfacing in spec text. The recipe is saved only by the adjacent
+      `3d` status grep. The implementation is fine (the control test asserts on status/hint text, not
+      glyphs); the spec text should state the band count is meaningful only conditional on that grep.
+
+### Deferred
+
+- [x] [Review][Defer] Camera inside solid rock renders a featureless full-screen `█` with no cue
+      [crates/tui/src/raycast.rs:174-207] (`feat`, LOW) — deferred, spec pre-declares this "a
+      legitimate picture, not a bug"; reachable in normal play via `<`,`<`,`v`
+- [x] [Review][Defer] `shade()` has no direct test; `percent = 0` is never exercised anywhere
+      [crates/tui/src/palette.rs:151-159] (`edge`, LOW) — deferred, LOW-tail cap
+- [x] [Review][Defer] Partial-clamp corner (one axis at bound, one free) untested
+      [crates/tui/src/view.rs:563-567] (`edge`, LOW) — deferred, correct by construction, coverage only
+- [x] [Review][Defer] `simd` serve suite flakes under heavy concurrent load
+      [crates/simd/tests/serve.rs:148] (`orchestrator`, LOW) — deferred, pre-existing and outside this
+      diff; bites the review process, which mandates four concurrent cargo-running layers
+- [x] [Review][Defer] SPEC premise false — "this devpod sets `NO_COLOR=1`"; it is unset
+      (`edge`+`feat`+`orchestrator`, LOW) — deferred, spec text only
+
+### Not proven by this review
+
+- **AC11 was NOT observed live.** Designation is unreachable from the depth view by design, so no
+  single scripted run can dig and then look at the result. It rests on the unit test
+  `a_wall_turned_empty_reveals_the_wall_behind_it` plus the integration capture, not on a live dig.
+- **AC13's mutation half is dev-reported only.** `scripts/mutate.sh` was not run by any layer (it
+  rewrites source in place and sibling layers were live). 22/22 remains unverified by review; the
+  Acceptance Auditor audited the mutation file's *content* instead and found the mirror gap above.
+- **Independently confirmed honest:** the Acceptance Auditor reproduced the dev's reported capture
+  numbers exactly (600/5160/666/0 bands, 6/0/6 status lines, heading `3d s`).
+
+## Disposition (2026-08-08)
+
+**Closed `done`, NOT merged.** The branch `4-1a-behold-the-fortress-in-depth` (5 commits, gate
+green) is kept as-is; `main` stays 2D-only. No push, no PR — Wolf's explicit call.
+
+**Why: the story succeeded technically and answered its question in the negative.** Wolf ran the
+depth view live and judged it *"quite far from wow effect"*, and doubts wow is reachable in a
+terminal at all. That is an experiment concluding, not a story failing — the code is sound, the
+gate is green, four review layers completed cleanly and the evidence was honest.
+
+**The requirements miss, recorded because no review layer could have caught it.** Wolf wanted an
+**isometric** 3D camera; this story specified and shipped a **first-person raycast** view — *"I
+didn't manage to clarify that"*. Every layer audits "does the code match the spec?", and it does,
+faithfully; even the Feature Auditor's "would the user get the outcome the story promises?" cannot
+help when the *promise* is the wrong thing. This is a new subclass of the tracked spec-defect
+category: not an AC unmeetable as written (2.3's AC9, this story's AC3) but **an AC perfectly
+meetable, perfectly implemented, describing something the user did not want.** Any process fix
+belongs at story creation / epic authoring, not at review. This is retro material.
+
+**Consequences beyond this story** (handled via `bmad-correct-course`): 3D-in-TUI is abandoned
+including isometric-in-TUI; the TUI is **not** retired but demoted to the 2D instrument and debug
+client; Unreal is dropped in favour of a **Bevy** client; and FR23/FR24's identity verdict, only
+ever provisional at 2D, moves to that client. The four-crate spine makes this cheap — a Bevy client
+is another `protocol` consumer, so `sim-core`, `simd` and `protocol` need no changes at all.
+
+**The seven patch findings and two decisions above were deliberately NOT applied.** They are
+correct, and they are recorded for the retro rather than fixed, because the code they would harden
+is no longer on the path to anything. The two SPEC defects (AC3 unmeetable, AC12's vacuous band
+check) are the exception worth carrying forward as authoring lessons.
