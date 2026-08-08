@@ -102,10 +102,10 @@ FR19: Epic 2 - Multiple localhost clients view the same sim
 FR20: Epic 1 - Single z-level top-down TUI view with z-navigation
 FR21: Epic 3 - Modal DF-familiar keyboard input with hint bar
 FR22: Epic 1 - Glyph rendering, 24-bit truecolor, color-as-data
-FR23: Epic 1 - Icy-grim visual identity (Wolf sign-off; re-checked live in Epic 2)
-FR24: Epic 4 - Raycast 3D view (firm scope per Wolf's override)
+FR23: Epic 1 - Icy-grim visual identity (Wolf sign-off; re-checked live in Epic 2, PROVISIONAL at 3.3 for the 2D client — the identity-in-motion verdict is deferred to Story 4.1b)
+FR24: Epic 4 - Raycast 3D view (firm scope per Wolf's override; split 2026-08-08 into 4.1a renderer + 4.1b sub-voxel dwarves)
 FR25: Epic 2 - Headless scenario harness (foundation; exercised throughout Epic 3)
-FR26: Epic 3 - Walking-skeleton scenario test — the phase-one gate
+FR26: Epic 3 - Walking-skeleton scenario test — the phase-one gate (PASSED, 2026-08-07; MILESTONE 1)
 
 ## Epic List
 
@@ -122,8 +122,8 @@ Designate a dig, watch dwarves obey in their own time, see stone reach the stock
 **FRs covered:** FR5, FR6, FR7, FR8, FR9, FR10, FR11, FR12, FR21, FR26, FR18 (world-mutating commands)
 
 ### Epic 4: The World in Three Dimensions
-See the fortress with depth: the raycast 3D view, firm scope per Wolf's FR24 override.
-**FRs covered:** FR24
+See the fortress with depth: the raycast 3D view (4.1a) then the sub-voxel dwarves in it (4.1b), firm scope per Wolf's FR24 override. Split into two stories at the Epic 3 retrospective, 2026-08-08.
+**FRs covered:** FR24, and FR23's deferred icy-grim-identity verdict (4.1b)
 
 ## Epic 1: The Frozen World on Screen
 
@@ -373,11 +373,17 @@ See the fortress with depth: the raycast 3D view, firm scope per Wolf's FR24 ove
 
 Keymap note: `v` toggles the 2D ↔ 3D view (agreed with Wolf during story design; a plain letter passes through tmux/SSH with zero risk and matches the DF-style letter keymap — can be rebound later).
 
-### Story 4.1: Behold the Fortress in Depth
+**SPLIT INTO TWO STORIES at the Epic 3 retrospective (Wolf, 2026-08-08).** This was one story, and it carried the raycast renderer *and* the sub-voxel creature models — larger than story 3.2, which shipped at 17 ACs, cost $132.98 and exhausted a full week of Codex quota in ~3h10m. The seam is natural rather than invented to hit a size target: different files, different risk, different failure modes. Note this deliberately reverses the 3.2 one-story ruling, on the evidence 3.2 produced. FR23/FR24 sign-off moves to 4.1b, which is where the creatures are.
+
+**The split does NOT breach the story-count counter-metric.** The 2026-08-02 implementation-readiness report flagged this exact sizing risk and warned that splitting 4.1 "lands at 13 stories, breaching the counter-metric, whose cut list starts at FR16" — but that projection assumed Story 3.2 would ALSO be split, and Wolf kept 3.2 whole. Actual count after this split: 3 + 4 + 3 + 2 = **12**, exactly at the 8–12 cap. **The cut list is not invoked and FR16 (save/load) is not at risk.** Verify with `rg -c '^### Story ' _bmad-output/planning-artifacts/epics.md`.
+
+**PREREQUISITE TO 4.1a, not deferred work — the opening camera must be deterministic.** Closed 2026-08-08 (action item T3) before either story is written: `initial` used to take the whole opening view from dwarf 0, who wanders, so two clients connecting minutes apart opened on different levels and every scripted `--key` capture aimed at a different z depending on when it ran — which cost a false "the feature does not work" verdict at story 3.3's review, with exit 0. The client now opens on the level with the most standable ground and takes `tui --z N` to pin one. Epic 4 is a pure-camera epic whose every AC is proven by a scripted capture, so its whole evidence base rests on this.
+
+### Story 4.1a: Behold the Fortress in Depth
 
 As the boss,
 I want a raycast 3D view of my fortress in the terminal,
-So that I can see the icy world — terrain, dwarves, and diggings — with depth.
+So that I can see the icy world — terrain and diggings — with depth.
 
 **Acceptance Criteria:**
 
@@ -390,10 +396,34 @@ So that I can see the icy world — terrain, dwarves, and diggings — with dept
 **Then** it raycasts the voxel grid via DDA traversal using the same protocol state and the same `tui` id → RGB color table as the 2D view — no game logic, no second color mapping (AD-4, spine convention)
 **And** it draws through the shared cell framebuffer, flushed once per frame, keeping the ~100 ms feel budget on the dev machine (NFR2).
 
+**Given** dug corridors and ramps,
+**When** the 3D view is shown,
+**Then** terrain that changed in the 2D view is visible as depth in the 3D view from the same protocol state — no second copy of the world in the client.
+
+**Given** a scripted capture,
+**Then** the instrument pins the opening view with `--z` and range-checks a non-zero count of what it came to see before drawing any conclusion (exit 0 is not a result).
+
+// NOTE: dwarves in 4.1a render at whatever the simplest correct fidelity is — a single voxel is fine and expected. Sub-voxel models are 4.1b's whole subject; do not start them here.
+
+### Story 4.1b: Dwarves in Depth
+
+As the boss,
+I want my dwarves to look like dwarves in the 3D view,
+So that the fortress reads as inhabited, and the icy-grim identity holds in depth.
+
+**Acceptance Criteria:**
+
 **Given** dwarves in view,
 **Then** they render as code-authored sub-voxel models (~10×5×13 boxes-as-code: boots, wide tunic, beard, helmet — the wide-and-short silhouette), sampled fine-step inside creature-flagged tiles during DDA, with distance LOD down to a single voxel far away (addendum decision)
-**And** individual identity (beard/hair color) derives from the world seed as palette swaps on shared geometry — no sprites, no per-creature assets, ever.
+**And** individual identity (beard/hair color) derives from the world seed as palette swaps on shared geometry — no sprites, no per-creature assets, ever
+**And** the same seed yields the same dwarf appearances on every run (FR15's determinism applied to presentation).
+
+**Given** the ~100 ms feel budget (NFR2),
+**When** the visible dwarves are at close range and at full model fidelity,
+**Then** the budget still holds, and the LOD threshold is what keeps it — measured, not assumed.
 
 **Given** a live session,
 **When** Wolf watches the fortress in 3D — dug corridors, ramps, wandering and working dwarves,
 **Then** the icy-grim identity holds in depth and Wolf signs off on the 3D look (FR23 spirit applied to FR24).
+
+// NOTE: this is where FR23 is finally settled. Story 3.3's AC17 signed off the *feel floor* (NFR2) at 2D and left the icy-grim identity verdict PROVISIONAL — Wolf's words: "not sure how much more visually pleased it could be without designing own font or something ... most likely we need to get to the 3d first to say." Do not read 3.3 as FR23 signed off; this story is the deferred verdict.

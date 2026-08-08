@@ -9,9 +9,23 @@ tool and accumulated in a durable per-story ledger that survives restarts.
 
 Two transcript sources:
   * ``--tool claude`` — Claude Code logs each turn's ``usage`` to
-    ``~/.claude/projects/<forge-slug>/<id>.jsonl``.
+    ``~/.claude/projects/<forge-slug>/<id>.jsonl``, and each Task-tool **subagent** to
+    its own ``<id>/subagents/agent-*.jsonl``. A session is the sum of both: subagent
+    turns are NOT mirrored into the main file, so summing that file alone under-reports
+    every multi-agent phase — ~20% of tokens across this project, 50-70% in the
+    review-heavy sessions where the cost question is actually asked.
   * ``--tool codex``  — Codex logs cumulative ``token_count`` events to
     ``$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl`` (CODEX_HOME=/workspace/.codex).
+    A ``codex review`` self-gate does NOT log into the dev rollout: each cycle spawns its
+    own SIBLING rollout, so a row built from the dev rollout alone omits it. Same defect
+    class as the invisible Claude subagents above, different mechanism — fixing one does
+    not fix the other. Both are counted now; ``--no-nested`` measures one transcript alone.
+
+Three axes, not one. ``est_usd`` cannot express what a Codex row actually costs: Codex bills
+a subscription with a WEEKLY QUOTA, so ``quota_pp`` is the resource that really rations
+delegated dev — and on this forge it is shared with nidavellir's court brain, so a dev
+handoff can starve a live gate. ``minutes`` is the third: it separates a phase that thought
+hard from one that STALLED, which cost alone cannot do.
 
 **Delta accounting (no whole-session mis-attribution).** A single transcript holds
 many phases (Opus authors, then later reviews, then patches post-review — all in
@@ -94,6 +108,10 @@ PRICES: dict[str, dict[str, float]] = {
 }
 
 
+# The four token classes every summary carries, in ledger-column order.
+_BUCKETS = ("input", "cache_creation", "cache_read", "output")
+
+
 def _rates_for(models: list[str]) -> dict[str, float] | None:
     """First *priced* model wins. Skips Claude Code's ``<synthetic>`` pseudo-model
     (no price key) so a session that briefly used it still prices at the real model."""
@@ -104,16 +122,44 @@ def _rates_for(models: list[str]) -> dict[str, float] | None:
     return None
 
 
+def _price_bucket(t: dict, rates: dict[str, float]) -> float:
+    return (
+        int(t.get("input", 0)) / 1e6 * rates["input"]
+        + int(t.get("cache_creation", 0)) / 1e6 * rates["cache_write"]
+        + int(t.get("cache_read", 0)) / 1e6 * rates["cache_read"]
+        + int(t.get("output", 0)) / 1e6 * rates["output"]
+    )
+
+
 def estimate_usd(s: dict) -> float | None:
+    """Price a summary, **per model**, and sum.
+
+    A session is no longer single-model: subagents can run a different tier than the
+    parent (an Explore agent on Haiku under an Opus review), and even the main chain
+    mixes when the session model is switched mid-run. The old flat path priced the
+    WHOLE session at ``_rates_for(models)`` — the first *sorted* model that matched a
+    PRICES key — so a session holding 256M Opus tokens and 39M Fable tokens billed all
+    295M at Fable's 2x rate. ``by_model`` fixes that; the flat path is kept only for
+    summaries that predate it (a legacy cursor delta), which are single-model anyway.
+
+    Returns None if any model that actually spent tokens has no rate — a loud ``—`` in
+    the ledger beats a confident number that quietly omits a model.
+    """
+    by_model = s.get("by_model") or {}
+    if by_model:
+        total = 0.0
+        for model, t in by_model.items():
+            rates = _rates_for([model])
+            if rates is None:
+                if any(int(t.get(b, 0) or 0) for b in _BUCKETS):
+                    return None  # real spend at an unpriced model — refuse to guess
+                continue  # zero-token model (e.g. `<synthetic>`) — ignore
+            total += _price_bucket(t, rates)
+        return total
     rates = _rates_for(s["models"])
     if rates is None:
         return None
-    return (
-        s["input"] / 1e6 * rates["input"]
-        + s["cache_creation"] / 1e6 * rates["cache_write"]
-        + s["cache_read"] / 1e6 * rates["cache_read"]
-        + s["output"] / 1e6 * rates["output"]
-    )
+    return _price_bucket(s, rates)
 
 
 def _forge_root() -> str:
@@ -145,8 +191,16 @@ def _codex_sessions_dir() -> str:
     return os.path.join(os.environ.get("CODEX_HOME", "/workspace/.codex"), "sessions")
 
 
-def _newest_transcript(directory: str, pattern: str = "*.jsonl") -> str | None:
-    files = glob.glob(os.path.join(directory, "**", pattern), recursive=True)
+def _newest_transcript(directory: str, pattern: str = "*.jsonl", recursive: bool = True) -> str | None:
+    """Newest transcript under ``directory``.
+
+    ``recursive=False`` for Claude: session transcripts are top-level, and the nested
+    ``<session-id>/subagents/agent-*.jsonl`` files must NOT be selectable as "the
+    session" — a run interrupted while a subagent was still writing would otherwise
+    make an agent file the newest, and the meter would report that agent as the whole
+    session. Codex keeps its rollouts under ``YYYY/MM/DD``, so it stays recursive.
+    """
+    files = glob.glob(os.path.join(directory, "**", pattern), recursive=True) if recursive else []
     files += glob.glob(os.path.join(directory, pattern))
     if not files:
         return None
@@ -154,12 +208,17 @@ def _newest_transcript(directory: str, pattern: str = "*.jsonl") -> str | None:
 
 
 def sum_claude_transcript(path: str) -> dict[str, object]:
-    """Sum per-turn usage across a Claude Code transcript JSONL (cumulative)."""
+    """Sum per-turn usage across ONE Claude Code transcript JSONL (cumulative).
+
+    This is a single *file*. A session's subagent turns live in sibling files — see
+    ``sum_claude_session``, which is what callers almost always want.
+    """
     totals = {"input": 0, "cache_creation": 0, "cache_read": 0, "output": 0}
+    by_model: dict[str, dict[str, int]] = {}
     turns = 0
     models: set[str] = set()
     stamps: list[str] = []
-    with open(path, encoding="utf-8") as fh:
+    with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
             if not line:
@@ -177,13 +236,19 @@ def sum_claude_transcript(path: str) -> dict[str, object]:
             if not isinstance(usage, dict):
                 continue
             turns += 1
+            spent = {
+                "input": int(usage.get("input_tokens", 0) or 0),
+                "cache_creation": int(usage.get("cache_creation_input_tokens", 0) or 0),
+                "cache_read": int(usage.get("cache_read_input_tokens", 0) or 0),
+                "output": int(usage.get("output_tokens", 0) or 0),
+            }
+            bucket = by_model.setdefault(str(msg.get("model") or "unknown"), dict.fromkeys(_BUCKETS, 0))
+            for b, v in spent.items():
+                totals[b] += v
+                bucket[b] += v
             if obj.get("timestamp"):
                 stamps.append(str(obj["timestamp"]))
-            totals["input"] += int(usage.get("input_tokens", 0) or 0)
-            totals["cache_creation"] += int(usage.get("cache_creation_input_tokens", 0) or 0)
-            totals["cache_read"] += int(usage.get("cache_read_input_tokens", 0) or 0)
-            totals["output"] += int(usage.get("output_tokens", 0) or 0)
-    return _as_summary(turns, sorted(models), totals, _span(stamps))
+    return _as_summary(turns, sorted(models), totals, by_model, span=_span(stamps))
 
 
 def sum_codex_transcript(path: str) -> dict[str, object]:
@@ -193,13 +258,14 @@ def sum_codex_transcript(path: str) -> dict[str, object]:
     the full prompt count *including* cached, so fresh = input - cached.
 
     Also captures ``payload.rate_limits.primary.used_percent`` — Codex bills a weekly
-    QUOTA, not metered tokens, so this is the axis that actually binds. See the ledger
-    header for why it is not interchangeable with ``est_usd``.
+    QUOTA, not metered tokens, so that is the axis which actually binds, and ``est_usd``
+    is not a substitute for it. See the ledger header.
 
     NOTE: ``rate_limits`` is a SIBLING of ``info`` under ``payload``, not a member of it
     (verified against a real codex-cli 0.146.0 rollout). Reading it from ``info`` yields
-    silence, not an error — and a synthetic fixture that puts it there will happily pass
-    while the real thing reports nothing."""
+    silence, not an error — and a synthetic fixture that nests it there passes happily
+    while the real thing reports nothing. That is why a real line is pinned verbatim in
+    the tests. (Ported from frostvein, 2026-08-08.)"""
     last: dict | None = None
     events = 0
     models: set[str] = set()
@@ -224,9 +290,7 @@ def sum_codex_transcript(path: str) -> dict[str, object]:
                 if isinstance(pct, (int, float)):
                     quota.append(float(pct))
                 info = payload.get("info")
-                if not isinstance(info, dict):
-                    continue
-                if isinstance(info.get("total_token_usage"), dict):
+                if isinstance(info, dict) and isinstance(info.get("total_token_usage"), dict):
                     last = info["total_token_usage"]
                     events += 1
                     if obj.get("timestamp"):
@@ -240,9 +304,16 @@ def sum_codex_transcript(path: str) -> dict[str, object]:
         "cache_read": cached,
         "output": int(last.get("output_tokens", 0) or 0),  # already includes reasoning_output_tokens
     }
+    # `total_token_usage` is session-wide, not per-model, so the whole run is attributed
+    # to the model the rollout reports. A `codex exec` run is one model, so this holds.
+    priced = sorted(models)[0] if models else "unknown"
     return _as_summary(
-        events, sorted(models), totals, _span(stamps),
-        (quota[0], quota[-1]) if quota else (None, None),
+        events,
+        sorted(models),
+        totals,
+        {priced: dict(totals)},
+        span=_span(stamps),
+        quota=(quota[0], quota[-1]) if quota else (None, None),
     )
 
 
@@ -271,13 +342,19 @@ def _as_summary(
     turns: int,
     models: list[str],
     totals: dict[str, int],
+    by_model: dict[str, dict[str, int]] | None = None,
+    *,
     span: tuple[str | None, str | None] = (None, None),
     quota: tuple[float | None, float | None] = (None, None),
+    counted_transcripts: int = 1,
 ) -> dict[str, object]:
+    """The shared summary shape. ``by_model`` stays the 4th positional argument (forge
+    call sites pass it there); the wall-clock/quota axes ported from frostvein are
+    keyword-only, where frostvein had ``span`` positionally."""
     grand = totals["input"] + totals["cache_creation"] + totals["cache_read"] + totals["output"]
-    # A weekly window RESET inside the span makes `last < first`; report `—` rather than a
-    # negative or a wrapped number, because the true consumption spans two windows and this
-    # tool cannot see the pre-reset ceiling.
+    # A weekly window RESET inside the span makes `last < first`; report None -> `—` rather
+    # than a negative or a wrapped number, because the true consumption spans two windows
+    # and this tool cannot see the pre-reset ceiling.
     pp = None
     if quota[0] is not None and quota[1] is not None and quota[1] >= quota[0]:
         pp = quota[1] - quota[0]
@@ -289,17 +366,187 @@ def _as_summary(
         "cache_read": totals["cache_read"],
         "output": totals["output"],
         "total": grand,
+        # Per-model split of the same totals — the basis for pricing. Empty only for
+        # summaries built before this field existed (legacy cursor deltas).
+        "by_model": by_model or {},
         "first_ts": span[0],
         "last_ts": span[1],
         "quota_first": quota[0],
         "quota_last": quota[1],
         "quota_pp": pp,
+        # How many transcript files this summary counted. 1 for a single file; more once
+        # subagent transcripts or nested Codex rollouts are folded in.
+        "counted_transcripts": counted_transcripts,
     }
+
+
+def _merge_summaries(parts: list[dict]) -> dict[str, object]:
+    """Fold several transcript summaries into one — a Claude session (main chain plus its
+    subagents) or a Codex session (primary rollout plus the rollouts nested in its window).
+
+    Turns, token buckets and per-model buckets ADD. The span becomes the outer envelope,
+    so ``minutes`` still reads as elapsed wall-clock over everything counted.
+
+    QUOTA IS NOT SUMMED. ``used_percent`` is a reading of one account-wide counter, not a
+    per-session quantity, so adding two readings would double-count. The merged quota is
+    the envelope — lowest first reading to highest last — which is the true movement of
+    the counter across the whole window.
+    """
+    parts = [p for p in parts if p]
+    if not parts:
+        return _as_summary(0, [], dict.fromkeys(_BUCKETS, 0), counted_transcripts=0)
+    totals = dict.fromkeys(_BUCKETS, 0)
+    by_model: dict[str, dict[str, int]] = {}
+    turns = 0
+    models: set[str] = set()
+    for p in parts:
+        turns += int(p["turns"])
+        models.update(p["models"])
+        for b in _BUCKETS:
+            totals[b] += int(p[b])
+        for model, t in (p.get("by_model") or {}).items():
+            bucket = by_model.setdefault(model, dict.fromkeys(_BUCKETS, 0))
+            for b in _BUCKETS:
+                bucket[b] += int(t.get(b, 0) or 0)
+    firsts = sorted(str(p["first_ts"]) for p in parts if p.get("first_ts"))
+    lasts = sorted(str(p["last_ts"]) for p in parts if p.get("last_ts"))
+    q_first = [float(p["quota_first"]) for p in parts if p.get("quota_first") is not None]
+    q_last = [float(p["quota_last"]) for p in parts if p.get("quota_last") is not None]
+    return _as_summary(
+        turns,
+        sorted(models),
+        totals,
+        by_model,
+        span=(firsts[0] if firsts else None, lasts[-1] if lasts else None),
+        quota=(min(q_first) if q_first else None, max(q_last) if q_last else None),
+        counted_transcripts=sum(int(p.get("counted_transcripts", 1) or 1) for p in parts),
+    )
+
+
+def subagent_transcripts(main_path: str) -> list[str]:
+    """The subagent transcripts belonging to a Claude Code session.
+
+    Claude Code writes each Task-tool subagent to its own JSONL in a sibling tree —
+    ``<project-dir>/<session-id>/subagents/agent-*.jsonl`` — and does NOT copy those
+    turns into the main transcript (they are not ``isSidechain`` rows there; they are
+    simply absent). The meter summed the main file alone, so every token a subagent
+    spent was invisible: across this project's sessions that is ~20% of all tokens,
+    and 50-70% in the review-heavy ones, which is exactly where the cost questions
+    are asked. (ep-06 retro A5-bis / A1a.)
+    """
+    directory = os.path.dirname(main_path)
+    session_id = os.path.basename(main_path)
+    if session_id.endswith(".jsonl"):
+        session_id = session_id[: -len(".jsonl")]
+    return sorted(glob.glob(os.path.join(directory, session_id, "subagents", "agent-*.jsonl")))
+
+
+def _rollout_meta(path: str) -> dict | None:
+    """(session_id, cwd, first_ts, last_ts) for a Codex rollout, or None."""
+    session_id = cwd = None
+    first_ts = last_ts = None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                payload = obj.get("payload")
+                if isinstance(payload, dict) and obj.get("type") == "session_meta":
+                    session_id = payload.get("session_id") or payload.get("id")
+                    cwd = payload.get("cwd")
+                ts = obj.get("timestamp")
+                if ts:
+                    first_ts = first_ts or str(ts)
+                    last_ts = str(ts)
+    except OSError:
+        return None
+    if not session_id:
+        return None
+    return {"session_id": session_id, "cwd": cwd, "first_ts": first_ts, "last_ts": last_ts}
+
+
+def nested_codex_rollouts(primary: str) -> list[str]:
+    """Rollouts that ran *inside* ``primary``'s window from the same directory.
+
+    THE CODEX HALF OF THE FAN-OUT DEFECT — the same class as invisible Claude subagents,
+    a different mechanism, and fixing one does not fix the other. A `codex review --base
+    main` self-gate does NOT log into the dev rollout: each cycle spawns its own sibling
+    rollout, so a row built from the dev rollout alone omits it. On frostvein's story 3.2
+    that was six cycles — 218 turns / 20.1M tokens / $18.28 — invisible, and understated
+    the dev row by 23% of dollars and far more of the weekly quota.
+
+    Attribution rule, deliberately narrow: same ``cwd``, different ``session_id``, and a
+    time span that OVERLAPS the primary's.
+      * ``cwd`` is what keeps a concurrent run in another project out of this row — the
+        exact contamination that cost story 3.2's quota figure a ~9pp caveat.
+      * OVERLAP, not containment: a self-gate started inside the dev window may finish
+        after it.
+      * There is NO parent/child link in a rollout to use instead. Checked against a real
+        codex-cli 0.146.0 ``session_meta``: it carries ``cwd``, ``session_id`` and
+        ``originator``, and nothing naming a parent. Do not go looking for one.
+      * Companion 0-turn app-server rollouts sit beside each self-gate pair; they
+        contribute nothing and fall out harmlessly.
+
+    (Ported from frostvein, 2026-08-08, where it was confirmed by two independent
+    derivations landing on the same 218 / 20,107,290 / $18.28.)
+    """
+    meta = _rollout_meta(primary)
+    if not meta or not meta.get("cwd") or not meta.get("first_ts"):
+        return []
+    found = []
+    for path in glob.glob(os.path.join(_codex_sessions_dir(), "**", "rollout-*.jsonl"), recursive=True):
+        if os.path.abspath(path) == os.path.abspath(primary):
+            continue
+        other = _rollout_meta(path)
+        if not other or other.get("cwd") != meta["cwd"] or not other.get("first_ts"):
+            continue
+        if other["session_id"] == meta["session_id"]:
+            continue
+        if other["first_ts"] <= meta["last_ts"] and other["last_ts"] >= meta["first_ts"]:
+            found.append(path)
+    return sorted(found)
+
+
+def sum_codex_session(path: str, *, include_nested: bool = True) -> tuple[dict, dict, int]:
+    """A Codex rollout plus the sibling rollouts nested in its window.
+
+    Returns ``(session, primary_only, n_nested)`` — the same triple shape as
+    ``sum_claude_session``, so ``main`` handles both tools through one code path."""
+    primary = sum_codex_transcript(path)
+    nested = nested_codex_rollouts(path) if include_nested else []
+    if not nested:
+        return primary, primary, 0
+    return _merge_summaries([primary] + [sum_codex_transcript(f) for f in nested]), primary, len(nested)
+
+
+def sum_claude_session(main_path: str, *, include_subagents: bool = True) -> tuple[dict, dict, int]:
+    """Total a Claude Code session: the main chain PLUS every subagent it spawned.
+
+    Returns ``(session, main_only, n_agents)``. ``main_only`` is what the meter used to
+    report and is kept for two purposes: rebasing a pre-fix cursor (see ``main``), and
+    answering "what did THIS one transcript cost?" under ``--no-nested``."""
+    main = sum_claude_transcript(main_path)
+    agents = subagent_transcripts(main_path) if include_subagents else []
+    if not agents:
+        return main, main, 0
+    return _merge_summaries([main] + [sum_claude_transcript(a) for a in agents]), main, len(agents)
 
 
 # --- delta accounting -------------------------------------------------------
 
-_CURSOR_BUCKETS = ("turns", "input", "cache_creation", "cache_read", "output")
+_CURSOR_BUCKETS = ("turns",) + _BUCKETS
+
+# Cursor schema. v1 recorded the MAIN transcript only; v2 records the whole session
+# (main + subagents) and carries the per-model split. A v1 cursor cannot be compared
+# against a v2 cumulative — the difference would silently bill every subagent token
+# ever spent on that transcript to whichever phase happens to record next. `main`
+# rebases instead, and says so out loud.
+_CURSOR_SCHEMA = 2
 
 
 def _cursor_path() -> str:
@@ -333,13 +580,23 @@ def delta_since_cursor(cumulative: dict, prev: dict | None) -> tuple[dict, bool]
         return cumulative, False
     if any(int(cumulative.get(b, 0)) < int(prev.get(b, 0)) for b in _CURSOR_BUCKETS):
         return cumulative, True
-    totals = {b: int(cumulative[b]) - int(prev.get(b, 0)) for b in ("input", "cache_creation", "cache_read", "output")}
+    totals = {b: int(cumulative[b]) - int(prev.get(b, 0)) for b in _BUCKETS}
+    # Per-model delta, so a delta spanning two models prices at both rates. A v1 cursor
+    # carries no split; leaving by_model empty makes estimate_usd fall back to the old
+    # flat rate for that one row rather than invent a split that was never recorded.
+    prev_by_model = prev.get("by_model") or {}
+    by_model: dict[str, dict[str, int]] = {}
+    if prev.get("by_model") is not None:
+        for model, cur in (cumulative.get("by_model") or {}).items():
+            before = prev_by_model.get(model, {})
+            diff = {b: int(cur.get(b, 0) or 0) - int(before.get(b, 0) or 0) for b in _BUCKETS}
+            if any(diff.values()):
+                by_model[model] = diff
     # The window starts where the last record stopped, so elapsed time is billed per phase
     # the same way tokens are. A cursor written before `last_ts` existed leaves it None,
     # which surfaces as `—` rather than a wrong duration.
-    # Quota bills over the same window as tokens: from where the last record stopped to
-    # here. A cursor written before quota existed leaves it None, so we fall back to this
-    # transcript's own first sample rather than inventing a floor.
+    # Quota bills over that same window. A cursor written before quota existed leaves it
+    # None, so fall back to this transcript's own first sample rather than inventing a floor.
     q_from = prev.get("quota_last")
     if q_from is None:
         q_from = cumulative.get("quota_first")
@@ -347,8 +604,10 @@ def delta_since_cursor(cumulative: dict, prev: dict | None) -> tuple[dict, bool]
         int(cumulative["turns"]) - int(prev.get("turns", 0)),
         cumulative["models"],
         totals,
-        (prev.get("last_ts"), cumulative.get("last_ts")),
-        (q_from, cumulative.get("quota_last")),
+        by_model,
+        span=(prev.get("last_ts"), cumulative.get("last_ts")),
+        quota=(q_from, cumulative.get("quota_last")),
+        counted_transcripts=int(cumulative.get("counted_transcripts", 1) or 1),
     )
     return delta, False
 
@@ -366,21 +625,30 @@ _LEDGER_HEADER = (
     "`codex-dev` (tool=codex) vs `review-patch` (tool=claude) rows separate Codex's dev "
     "cost from the rework the review required after. `minutes` is wall-clock across the "
     "same delta window (first counted turn of the window to its last), so a phase that "
-    "stalled reads differently from one that was merely expensive — it is the third axis, "
-    "alongside tokens and cost, and it INCLUDES any human gap inside the window. It is "
-    "a late column so rows written before it existed still parse; those show `—`. "
-    "Generated by that script.\n\n"
+    "STALLED reads differently from one that was merely expensive — it is the third axis "
+    "alongside tokens and cost, and it INCLUDES any human gap inside the window, so read "
+    "it as elapsed, not effort. Generated by that script.\n\n"
     "**`quota_pp` is the axis that actually binds for Codex, and `est_usd` is NOT a "
     "substitute for it.** Codex runs on a subscription with a weekly quota, so no dollars "
     "are literally spent on a `tool=codex` row — `est_usd` weights tokens by `PRICES` "
-    "purely as a cross-tool comparability benchmark. `quota_pp` is percentage points of "
-    "the 7-day window consumed over the same delta window, read from "
-    "`rate_limits.primary.used_percent` in the rollout. Two caveats that decide whether a "
-    "number is trustworthy: the percentage is **account-wide**, so a concurrent run in "
-    "another project inflates it (check each rollout's `cwd` before attributing), and a "
-    "weekly reset inside the window shows `—` rather than a negative. Claude rows are "
-    "always `—`. Story 3.2 is the worked example: $18.28 of self-gate priced at 23% of "
-    "dollars was ~1/3–1/2 of the quota.\n\n"
+    "purely as a cross-tool comparability benchmark. `quota_pp` is percentage points of the "
+    "7-day window consumed over the same delta window, read from "
+    "`rate_limits.primary.used_percent` in the rollout. Two caveats decide whether a number "
+    "is trustworthy: the percentage is **account-wide**, so a concurrent run in another "
+    "project inflates it (check each rollout's `cwd` before attributing), and a weekly reset "
+    "inside the window shows `—` rather than a negative. Claude rows are always `—`. This "
+    "matters doubly here: nidavellir's court brain draws on the SAME Codex weekly pool as "
+    "the dev delegation, so a dev handoff can starve a live gate — a cost the dollar column "
+    "cannot show.\n\n"
+    "**A row COUNTS ITS FAN-OUT.** A phase that spawns work pays for it: for `tool=claude`, "
+    "every subagent transcript under `<session-id>/subagents/agent-*.jsonl`; for "
+    "`tool=codex`, every sibling rollout sharing the primary's `cwd` whose window overlaps "
+    "it — which is how a `codex review` self-gate is caught, since each cycle spawns its own "
+    "rollout rather than logging into the dev transcript. Pass `--no-nested` to measure one "
+    "transcript in isolation. Rows recorded before 2026-08-08 predate this; ep-06 and ep-11 "
+    "carry explicit `subagents` backfill rows rather than retro-edited originals.\n\n"
+    "New columns are APPENDED, never inserted, so rows written before a column existed still "
+    "parse and simply read `—`.\n\n"
     "| phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |\n"
     "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 )
@@ -423,6 +691,19 @@ def append_ledger(metrics_file: str, story: str, phase: str, tool: str, s: dict,
 # so a gap is loud (the ep-03->04->05 slip was silent-missing review/dev rows).
 _TRIAD = ("create", "dev", "review")
 
+# The live gate is the phase that decides whether a story is actually DONE, and it is
+# the most expensive single row in several ep-06 stories — but it was not checked, so
+# the rollup printed "No gaps" over two stories that carried no live-gate row at all.
+# It is reported separately rather than folded into _TRIAD because a spike legitimately
+# has no live gate: the rollup names the absence and lets the reader judge, instead of
+# either failing a spike or staying silent about a real hole.
+_LIVE_GATE = "live-gate"
+
+# Epic-level ledgers (retro, planning, sprint bookkeeping) live at
+# `metrics/<epic>-epic.md` and are rolled up alongside the stories. They are exempt
+# from the per-story triad — an epic has no `dev` phase and never should.
+_EPIC_LEDGER_SUFFIX = "-epic"
+
 
 def parse_ledger_rows(path: str) -> list[dict]:
     """Parse the data rows of a per-story ledger markdown table into dicts.
@@ -432,8 +713,7 @@ def parse_ledger_rows(path: str) -> list[dict]:
     ``—`` -> None) so an unpriced row still counts toward token totals but not cost."""
     # New columns are APPENDED, never inserted: ledgers written before `minutes` carry 12
     # cells and before `quota_pp` carry 13; `zip` stops at the shorter side, so those rows
-    # simply lack the key. Inserting anywhere earlier silently re-aligns every historical
-    # row by one column.
+    # simply lack the key. Inserting anywhere earlier silently re-aligns every historical row.
     cols = (
         "phase", "tool", "model", "turns", "input", "cache_create", "cache_read",
         "output", "total", "est_usd", "transcript", "recorded", "minutes", "quota_pp",
@@ -447,11 +727,11 @@ def parse_ledger_rows(path: str) -> list[dict]:
             cells = [c.strip() for c in line.strip("|").split("|")]
             if not cells or cells[0] in ("phase", "") or set(cells[0]) <= {"-", ":"}:
                 continue
-            # A ledger row carries every column through `transcript`/`recorded` (12, or 13
-            # once `minutes` exists). Narrower tables in the same file are PROSE — the
-            # rate-correction and annotation tables 2.1 and 1-rollup carry — and parsing
-            # them invented phantom phases ("row", "dev (codex, gpt-5.6-sol)") that showed
-            # up as extra rollup columns. Require the full width.
+            # A ledger row carries every column through `transcript`/`recorded` (12, or more
+            # once the later columns exist). NARROWER tables in the same file are PROSE —
+            # rate-correction and annotation tables — and parsing them invented phantom
+            # phases that showed up as extra rollup columns. Require the full width.
+            # (Ported from frostvein, 2026-08-08.)
             if len(cells) < 12:
                 continue
             row: dict = dict(zip(cols, cells))
@@ -491,15 +771,25 @@ def build_rollup(metrics_dir: str, epic: str) -> dict:
     for f in files:
         story = os.path.basename(f)[: -len(".md")]
         per_story[story] = parse_ledger_rows(f)
-    gaps, unrecoverable = [], []
+    gaps, unrecoverable, no_live_gate = [], [], []
     for story, rows in per_story.items():
+        if story.endswith(_EPIC_LEDGER_SUFFIX):
+            continue  # epic-level ledger: no story triad, no live gate
         for phase in _TRIAD:
             prows = [r for r in rows if r["phase"] == phase]
             if not prows:
                 gaps.append((story, phase))  # no row at all = a silent gap
             elif all(r["est_usd"] is None for r in prows):
                 unrecoverable.append((story, phase))  # row present, cost annotated unrecoverable
-    return {"epic": epic, "per_story": per_story, "gaps": gaps, "unrecoverable": unrecoverable}
+        if not any(r["phase"] == _LIVE_GATE for r in rows):
+            no_live_gate.append(story)
+    return {
+        "epic": epic,
+        "per_story": per_story,
+        "gaps": gaps,
+        "unrecoverable": unrecoverable,
+        "no_live_gate": no_live_gate,
+    }
 
 
 def _sum_usd(rows: list[dict]) -> float:
@@ -591,27 +881,37 @@ def render_rollup(roll: dict) -> str:
             "forward, so this class of gap does not recur."
         )
         out.append("")
-    if not roll["gaps"] and not roll.get("unrecoverable"):
-        out.append("**No gaps** — every story carries a priced create/dev/review.")
+    if roll.get("no_live_gate"):
+        out.append("**No `live-gate` row:** " + ", ".join(roll["no_live_gate"]))
+        out.append("")
+        out.append(
+            "Either the story genuinely had no live gate (a spike — say so in its ledger) or the "
+            "gate ran and its cost was never recorded. The live gate is what makes a story done, "
+            "and it is among the most expensive rows in this epic, so its absence is never neutral."
+        )
+        out.append("")
+    if not roll["gaps"] and not roll.get("unrecoverable") and not roll.get("no_live_gate"):
+        out.append("**No gaps** — every story carries a priced create/dev/review/live-gate.")
         out.append("")
     out.append(_SENTINEL)
     out.append("")
     return "\n".join(out)
 
 
-# Everything after this line in a rollup survives regeneration. A rollup accumulates
-# hand-written analysis that the generator cannot reproduce (rate-era corrections, why a
-# row is annotated unrecoverable, cross-project comparisons), and `--rollup` used to
-# silently overwrite all of it — which is precisely the "silently rewriting recorded
-# history" failure the ledgers themselves warn against. Cost frostvein one rate-correction
-# table before it was caught.
-_SENTINEL = "<!-- HAND-WRITTEN BELOW — `--rollup` regenerates above this line and preserves everything after it. -->"
+# `--rollup` REGENERATES its file, and a rollup is also where hand-written retrospective
+# analysis lands. Without a preserve marker, re-running the rollup destroys that analysis —
+# the same "silently rewrote history" failure the ledgers themselves warn against. Cost
+# frostvein one rate-correction table before it was caught. (Ported 2026-08-08.)
+_SENTINEL = (
+    "<!-- HAND-WRITTEN BELOW — `--rollup` regenerates above this line and preserves "
+    "everything after it. -->"
+)
 
 
 def _merge_preserved(path: str, generated: str) -> str:
     """Carry a previous rollup's hand-written tail across a regeneration.
 
-    A pre-sentinel file cannot be split safely, so it is backed up rather than parsed —
+    A pre-sentinel file cannot be split safely, so it is BACKED UP rather than parsed —
     losing the analysis silently is the one outcome not on the table."""
     if not os.path.exists(path):
         return generated
@@ -633,9 +933,12 @@ def _merge_preserved(path: str, generated: str) -> str:
 
 
 def _render_shape(per_story: dict[str, list[dict]], epic: str) -> list[str]:
-    """The two axes cost alone hides: tokens (and how much of them is re-read context)
-    and wall-clock. Cost answers 'how much'; these answer 'why', and they are what the
-    Epic 2 retrospective could not read off the ledger."""
+    """The two axes cost alone hides: tokens (and how much of them is re-read context) and
+    wall-clock. Cost answers 'how much'; these answer 'why'. Frostvein measured 96-98% of
+    every token processed being a cache read across two epics — which is what proves the
+    levers are turn count and context scope, not model tier or rigor. The forge reached the
+    same conclusion by hand at the ep-11 retro (69% review / 66% of it cache_read); this
+    table makes it readable off the ledger instead."""
     out = [
         "## Spend shape — tokens and wall-clock",
         "",
@@ -645,10 +948,10 @@ def _render_shape(per_story: dict[str, list[dict]], epic: str) -> list[str]:
         "and context scope, not model tier or rigor. `minutes` is wall-clock across the "
         "recorded windows and **includes any human gap inside them**, so read it as elapsed, "
         "not effort. `—` = rows recorded before these columns existed. `quota` is Codex "
-        "weekly-window percentage points — the resource that actually rations delegated "
-        "dev, which `est_usd` cannot express because Codex bills a subscription, not "
-        "tokens. Summing it across stories is only meaningful inside one 7-day window; "
-        "across an epic read it as relative weight, not as a percentage of anything.",
+        "weekly-window percentage points — the resource that actually rations delegated dev, "
+        "which `est_usd` cannot express because Codex bills a subscription, not tokens. "
+        "Summing it across stories is only meaningful inside one 7-day window; across an "
+        "epic read it as relative weight, not as a percentage of anything.",
         "",
         "| story | turns | tokens | cache-read | cache-read % | output | minutes | quota |",
         "|---|---|---|---|---|---|---|---|",
@@ -706,6 +1009,12 @@ def _print_summary(label: str, s: dict) -> None:
         print(f"  est. cost       {_fmt_usd(cost):>12}  (benchmark — verify rates in PRICES)")
     else:
         print("  est. cost                —  (no rate for this model in PRICES)")
+    by_model = s.get("by_model") or {}
+    if len(by_model) > 1:  # show the split that flat pricing used to flatten away
+        for name, t in sorted(by_model.items(), key=lambda kv: -sum(kv[1].values())):
+            rates = _rates_for([name])
+            share = _fmt_usd(_price_bucket(t, rates)) if rates else "—"
+            print(f"    {name:<24} {_fmt(sum(t.values())):>14}  {share:>9}")
 
 
 def main() -> int:
@@ -713,7 +1022,14 @@ def main() -> int:
     ap.add_argument("--tool", choices=["claude", "codex"], default="claude")
     ap.add_argument("--transcript", help="explicit transcript path (default: newest for the tool)")
     ap.add_argument("--story", help="story key, e.g. ep-03-us-02-... (enables ledger recording)")
-    ap.add_argument("--phase", default="", help="create | dev | review | review-patch")
+    ap.add_argument("--phase", default="", help="create | dev | review | review-patch | live-gate | retro")
+    ap.add_argument(
+        "--no-nested",
+        action="store_true",
+        help="measure ONE transcript in isolation: skip Claude subagent transcripts and "
+        "nested Codex rollouts. Off by default — the honest number for a phase includes the "
+        "work it spawned; the isolated number is the special case.",
+    )
     ap.add_argument(
         "--metrics-file",
         help="ledger path (default: <forge>/_bmad-output/implementation-artifacts/metrics/<story>.md)",
@@ -736,23 +1052,35 @@ def main() -> int:
         print(f"  wrote {os.path.relpath(out_path, _forge_root())}")
         if roll["gaps"]:
             print(f"  {len(roll['gaps'])} gap(s) — backfill or annotate unrecoverable.")
+        if roll.get("no_live_gate"):
+            print(f"  {len(roll['no_live_gate'])} story/stories with NO live-gate row — confirm or backfill.")
         return 0
 
+    # `primary_only` = this ONE transcript, without the fan-out it spawned. Both tools now
+    # produce it, so the cursor-rebase path below is tool-agnostic.
     if args.tool == "codex":
         path = args.transcript or _newest_transcript(_codex_sessions_dir(), "rollout-*.jsonl")
         if not path or not os.path.exists(path):
             print(f"session_tokens: no Codex rollout found in {_codex_sessions_dir()}")
             return 1
-        s = sum_codex_transcript(path)
+        s, primary_only, n_nested = sum_codex_session(path, include_nested=not args.no_nested)
+        fan_out_label = "nested rollout(s)"
     else:
-        path = args.transcript or _newest_transcript(_claude_project_dir())
+        path = args.transcript or _newest_transcript(_claude_project_dir(), recursive=False)
         if not path or not os.path.exists(path):
             print(f"session_tokens: no transcript found in {_claude_project_dir()}")
             return 1
-        s = sum_claude_transcript(path)
+        s, primary_only, n_nested = sum_claude_session(path, include_subagents=not args.no_nested)
+        fan_out_label = "subagent transcript(s)"
 
     transcript_id = os.path.basename(path)
     _print_summary(f"Session token cost  ({transcript_id}, tool={args.tool})", s)
+    if n_nested:
+        fan = int(s["total"]) - int(primary_only["total"])
+        share = fan / int(s["total"]) * 100 if s["total"] else 0.0
+        print(f"  incl. {n_nested} {fan_out_label}: {_fmt(fan)} tokens ({share:.1f}% of the session)")
+    elif args.no_nested:
+        print("  (--no-nested: this transcript in isolation; any fan-out it spawned is NOT counted)")
 
     if not (args.story and args.phase):
         if args.story or args.phase:
@@ -760,14 +1088,37 @@ def main() -> int:
         return 0
 
     cursors = _load_cursors()
-    delta, reset = delta_since_cursor(s, cursors.get(transcript_id))
+    prev = cursors.get(transcript_id)
+    rebased = 0
+    if prev is not None and int(prev.get("schema", 1)) < _CURSOR_SCHEMA and not args.no_nested:
+        # A pre-fix cursor measured the PRIMARY transcript only — the main Claude chain, or
+        # the primary Codex rollout. Diffing it against a now-fan-out-inclusive cumulative
+        # would dump every subagent and nested-rollout token that transcript ever spent into
+        # whichever phase records next — a fresh wrong number in place of the old missing
+        # one, which is strictly worse because it looks precise. Bill the primary-chain delta
+        # (exactly what the old meter would have billed), then rebase the cursor to the full
+        # session so every LATER row is complete. What is skipped is named, not hidden:
+        # backfilling it belongs to a deliberate re-price (A1b), not to this row.
+        rebased = int(s["total"]) - int(primary_only["total"])
+        delta, reset = delta_since_cursor(primary_only, prev)
+    else:
+        delta, reset = delta_since_cursor(s, prev)
     if reset:
         print("  (cursor looked stale — billing full cumulative; cursor reset)")
+    if rebased:
+        print(
+            f"  (pre-fan-out cursor: billed the primary-chain delta only and rebased. "
+            f"{_fmt(rebased)} fan-out tokens already on this transcript are NOT in this row "
+            f"— later rows on it are complete; backfill deliberately if this story needs them.)"
+        )
     metrics_file = args.metrics_file or os.path.join(
         _forge_root(), "_bmad-output", "implementation-artifacts", "metrics", f"{args.story}.md"
     )
     append_ledger(metrics_file, args.story, args.phase, args.tool, delta, transcript_id)
     cursors[transcript_id] = {b: int(s[b]) for b in _CURSOR_BUCKETS} | {
+        "schema": _CURSOR_SCHEMA,
+        "by_model": {m: dict(t) for m, t in (s.get("by_model") or {}).items()},
+        # So the NEXT row's window starts where this one stopped, for time and quota alike.
         "last_ts": s.get("last_ts"),
         "quota_last": s.get("quota_last"),
     }

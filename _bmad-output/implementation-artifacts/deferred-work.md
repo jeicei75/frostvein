@@ -358,7 +358,7 @@ below as "what one layer found", not as "what is wrong with 3.3".
   more visually pleased it could be without designing own font or something". This is not a defect and
   not a request: it is the standing judgement that further investment in the 2D presentation has low
   expected return, and that FR23's icy-grim-identity-in-motion question is better answered by the depth
-  view than by more work on glyphs and truecolor. **Revisit at epic 4** (`4-1-behold-the-fortress-in-depth`)
+  view than by more work on glyphs and truecolor. **Revisit at epic 4, specifically story 4.1b** (`4-1b-dwarves-in-depth` — the 4.1 split of 2026-08-08 put the FR23 verdict on the creatures story, not the renderer)
   — and note the implication for scope: a custom font or a tileset is the alternative lever, and
   neither is in milestone 1. Treat "make the TUI prettier" stories as needing an explicit case against
   this entry.

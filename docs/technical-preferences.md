@@ -80,6 +80,15 @@ sentence and proceed.
   colourless under `NO_COLOR`. Both were caught at review, after the story read as done. The
   instrument's test must show the observable *changes* when the underlying state changes,
   and — where the environment can suppress the signal — that the instrument says so.
+- **A scripted capture must be reproducible, and must range-check its own output.** An
+  instrument that aims somewhere world- or time-dependent manufactures the same false
+  evidence as a broken one. Story 3.3's recorded recipe assumed a fixed opening camera z;
+  the camera followed a wandering dwarf, so the auditor's run aimed into undug rock and
+  captured **zero of every glyph with exit 0** — indistinguishable from "the feature is
+  broken". The client now opens on a deterministic level and takes `tui --z N` to pin one;
+  a recipe that needs a specific level passes `--z` rather than assuming, and asserts a
+  non-zero count of what it came to see before drawing any conclusion. **Exit 0 is not a
+  result.**
 
 ## Dev workflow
 - Every story: `scripts/gate.sh` green before done — `cargo fmt --check`, `cargo clippy
