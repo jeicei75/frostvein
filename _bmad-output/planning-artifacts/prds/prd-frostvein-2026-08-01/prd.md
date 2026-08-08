@@ -11,8 +11,9 @@ updated: 2026-08-06
 
 Frostvein is a Dwarf Fortress–inspired voxel colony simulation set in an icy,
 gloomy, dark and grim world, built as a headless, deterministic simulation
-daemon with thin display clients — TUI first, an Unreal client as the
-long-term visual target. The world must look delicious even in the TUI: the
+daemon with thin display clients — TUI first, a **Bevy** client as the
+long-term visual target (Unreal was dropped 2026-08-08; see Future
+phases). The world must look delicious even in the TUI: the
 icy-grim identity is carried by color and glyph choices from day one, not
 deferred to future graphics. The sim must be playable and enjoyable early and
 remain fully testable headless: the fun is the whole loop — issuing an order,
@@ -149,9 +150,25 @@ Capabilities, not implementation. FR IDs are stable and globally numbered.
   acceptance instrument is Wolf's eye: success criterion 2 includes sign-off
   on the icy-grim look in the live TUI. `[ASSUMPTION]` this is palette/glyph
   selection work inside existing rendering stories, not a separate art story.
-- **FR24** — The raycast 3D view is its own story late in the milestone.
-  Required for phase one — Wolf's override (2026-08-01) of this FR's earlier
-  may-slip clause; it no longer slips and is off the cut list.
+  **Phase-one obligation MET (2026-08-08).** Success criterion 2 asks for
+  sign-off on the icy-grim look *in the live TUI*, and Wolf gave it at story
+  3.3 — "looks ok for 2d tui game atm". His further "most likely we need to
+  get to the 3d first to say" was an **escalation beyond this FR's phase-one
+  bar**, and it is what created story 4.1b's sign-off obligation. 4.1b is
+  dropped; the icy-grim-in-depth ambition moves to Milestone 2's client as
+  **ambition, not as an unmet phase-one criterion**.
+- **FR24** — ~~The raycast 3D view is its own story late in the milestone.~~
+  **WITHDRAWN FROM PHASE ONE, 2026-08-08, and re-homed to Milestone 2.**
+  Story 4.1a delivered this FR *to the letter* — a raycast 3D view, gate
+  green, four review layers clean — and Wolf judged the live result "quite
+  far from wow effect". He had wanted an **isometric** camera and the FR
+  never said so, **because this FR named a mechanism ("raycast") instead of
+  an outcome.** That is the same defect class the AC-authoring rule guards
+  against one level lower down. The code is kept on branch
+  `4-1a-behold-the-fortress-in-depth` and deliberately **not merged** (see
+  the counter-metric: no code serves only a future phase). Milestone 2
+  re-states this as an outcome — *what the boss should be able to see and
+  feel* — never as a rendering technique.
 
 ### F9. Headless scenario harness
 
@@ -175,6 +192,10 @@ Capabilities, not implementation. FR IDs are stable and globally numbered.
   react in their own time (FR5). Even with zero commands issued, the view
   visibly moves (idle wandering, FR4). Checkable by eye; no measurement
   infrastructure in phase one.
+  **Scope note (2026-08-08):** this NFR is written TUI-specific and is **met**
+  for phase one. It does **not** silently extend to Milestone 2's Bevy
+  client — that client needs its own measured bar, set when it is planned.
+  Do not stretch a number over a renderer it was never measured against.
 - **NFR3 — Determinism everywhere.** FR15 is cross-cutting: every feature
   must keep seed + command log ⇒ identical state true. Any source of
   nondeterminism (unordered iteration, wall-clock time, unseeded randomness)
@@ -187,7 +208,7 @@ Capabilities, not implementation. FR IDs are stable and globally numbered.
 Carried over from the project brief; listing them here keeps this PRD safe to
 hand downstream on its own. None of these exist in phase one:
 
-- No Unreal or any graphical client.
+- No graphical client. (The long-term 3D client is **Bevy**, Milestone 2 — Unreal was dropped 2026-08-08.)
 - No world-generation history, civilizations, or off-map anything.
 - No combat, health, injuries, or body parts.
 - No fluids, temperature, weather, seasons, or cave-ins. Ice and snow (FR1)
@@ -223,7 +244,9 @@ hand downstream on its own. None of these exist in phase one:
 - FR count is not story count — FRs pack into vertical slices. If story
   planning still exceeds 12, the cut list starts with FR16 (save/load).
   FR24 (raycast view) was removed from the cut list by Wolf's override,
-  2026-08-01.
+  2026-08-01, and then **withdrawn from phase one entirely on 2026-08-08** —
+  see FR24. Final phase-one story count: **11**, inside the 8–12 cap, so the
+  cut list was never invoked and FR16 (save/load) was never at risk.
 - The story rules in `docs/technical-preferences.md` apply unchanged:
   vertical slices only, every story ends in something observable, each fits
   one dev-agent session.
@@ -243,9 +266,25 @@ abstractions may be created for them yet.
   stay deterministic — tests substitute scripted stand-ins. The "dwarves
   obey in their own time" gap that phase one creates (FR5) is exactly the
   space this layer later occupies. Mechanism sketch in the addendum.
+- **A Bevy 3D client (Milestone 2).** ~~The Unreal client~~ **Unreal was
+  dropped 2026-08-08** in favour of **Bevy**: Rust, one workspace, one
+  `cargo`/gate loop, no editor binary and no second toolchain — decisively
+  better for agentic development. It is **another `protocol` consumer**, so
+  AD-1/AD-4 mean `sim-core`, `simd` and `protocol` need no changes at all.
+  Isometric vs first-person vs orbit stops being an architecture decision
+  there and becomes a camera setting — which is why the question that cost
+  story 4.1a is nearly free on this client.
+  **The TUI is NOT retired.** It stays as the 2D debug client *and*,
+  load-bearingly, as the **deterministic assertion instrument** the whole
+  evidence discipline depends on: both clients speak the same protocol, so
+  sim behaviour stays provable through the cheap one. A real 3D renderer
+  cannot be asserted on that cheaply, and losing that capability would cost
+  far more than the terminal client costs to keep.
+  Needs its own planning pass; no code and no abstraction for it may exist
+  before then.
 - **Later:** larger maps with chunking, hierarchical pathfinding, FlatBuffers
-  protocol with interest management, true multi-machine server + client play,
-  and the Unreal client — the long-term visual target for the icy-grim world.
+  protocol with interest management, and true multi-machine server + client
+  play.
 - **Pathfinding vs. future GUI clients:** nothing to prepare now. Clients
   never path — they render the per-tick positions the sim reports (a GUI
   client may interpolate between ticks visually, which is pure presentation).

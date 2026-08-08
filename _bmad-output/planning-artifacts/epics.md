@@ -39,8 +39,8 @@ FR19: Multiple localhost clients can view the same running sim concurrently.
 FR20: TUI shows a single z-level top-down view of the world, navigable between z-levels DF-style (`<`/`>`). The client contains zero game logic.
 FR21: Modal, DF-familiar keyboard input: single keys enter a mode (dig, channel, stockpile), rectangles placed cursor-first with Enter-anchor / Enter-commit, `Esc` backs out, and a one-line hint bar always shows the active mode's keys (concrete keymap in the PRD addendum).
 FR22: Dwarves render as `☺` glyphs colored by current job/profession; terrain and items render as distinct glyphs. 24-bit truecolor from the start; color is data (material/profession → RGB), not a fixed palette.
-FR23: The visual identity is icy, gloomy, dark and grim: a cold, desaturated terrain palette with profession colors as warm accents. Acceptance instrument is Wolf's sign-off on the icy-grim look in the live TUI; palette/glyph selection happens inside existing rendering stories, not a separate art story.
-FR24: The raycast 3D view is its own story late in the milestone. Required for phase one — Wolf's override (2026-08-01) of the PRD's may-slip clause; it no longer slips and is off the cut list.
+FR23: The visual identity is icy, gloomy, dark and grim: a cold, desaturated terrain palette with profession colors as warm accents. Acceptance instrument is Wolf's sign-off on the icy-grim look in the live TUI; palette/glyph selection happens inside existing rendering stories, not a separate art story. **Phase-one obligation MET at 3.3** (Wolf's live TUI sign-off); the icy-grim-in-depth ambition moved to Milestone 2 when 4.1b was dropped, 2026-08-08.
+FR24: ~~The raycast 3D view is its own story late in the milestone.~~ **WITHDRAWN from phase one 2026-08-08**, re-homed to Milestone 2's Bevy client as an OUTCOME. Story 4.1a delivered this FR to the letter and Wolf judged the live result "quite far from wow effect"; he had wanted an isometric camera, which the FR never said — because it named a MECHANISM, not an outcome. Code kept unmerged on branch `4-1a-behold-the-fortress-in-depth`.
 FR25: Scenario tests build a world from a seed, inject commands, tick N times, and assert sim state — with no client or network attached.
 FR26: The walking-skeleton sentence exists as an automated scenario test (dig designation → pathfind → dig → haul to stockpile) and is the phase-one gate.
 
@@ -70,7 +70,7 @@ From the Architecture Spine (AD-1…AD-12, conventions, stack, structural seed):
 - Conventions: z vertical (0 = lowest); rects inclusive both corners, single z-level; bulk tile arrays flat row-major (`x + y·W + z·W·H`); wire messages have a `type` field, snake_case, positions `[x, y, z]`, ticks u64, entity ids u32; wire carries material/profession ids, never RGB — the id → RGB color table is a data table in `tui`, shared by all views, never hardcoded per draw site; no explicit ack messages — a command's effect in the next delta is the ack (meets NFR2); malformed client input is logged and dropped, sim never crashes on it; `thiserror` in `sim-core`/`protocol`, `anyhow` in `simd`/`tui`; hardcoded constants at use site (`protocol` exports `DEFAULT_PORT`); `#![forbid(unsafe_code)]` in all four crates; TUI drawing = hand-rolled cell framebuffer flushed once per frame, never per-cell writes.
 - Stack (closed list; new dependency = one sentence of justification in its story): Rust stable edition 2024, bevy_ecs 0.19 headless, serde/serde_json, rand + rand_chacha 0.10 (`serde` feature for RNG-state saves), crossterm 0.29, thiserror/anyhow, `std::net` + threads (no tokio/async).
 - Scenario harness lives as `sim-core` integration tests, calling the lib directly — no client or network.
-- Story-count counter-metric: phase one ships in 8–12 vertically sliced stories; if planning exceeds 12, the cut list starts with FR16 (save/load). FR24 (raycast view) was removed from the cut list by Wolf's override, 2026-08-01.
+- Story-count counter-metric: phase one ships in 8–12 vertically sliced stories; if planning exceeds 12, the cut list starts with FR16 (save/load). FR24 (raycast view) was removed from the cut list by Wolf's override, 2026-08-01, and then **withdrawn from phase one entirely on 2026-08-08**. **Final phase-one count: 11** — the cut list was never invoked and FR16 was never at risk.
 
 ### UX Design Requirements
 
@@ -102,8 +102,8 @@ FR19: Epic 2 - Multiple localhost clients view the same sim
 FR20: Epic 1 - Single z-level top-down TUI view with z-navigation
 FR21: Epic 3 - Modal DF-familiar keyboard input with hint bar
 FR22: Epic 1 - Glyph rendering, 24-bit truecolor, color-as-data
-FR23: Epic 1 - Icy-grim visual identity (Wolf sign-off; re-checked live in Epic 2, PROVISIONAL at 3.3 for the 2D client — the identity-in-motion verdict is deferred to Story 4.1b)
-FR24: Epic 4 - Raycast 3D view (firm scope per Wolf's override; split 2026-08-08 into 4.1a renderer + 4.1b sub-voxel dwarves)
+FR23: Epic 1 — Icy-grim visual identity. Phase-one obligation **MET** at 3.3 (Wolf's live TUI sign-off: "looks ok for 2d tui game atm"). His "need to get to the 3d first to say" was an escalation BEYOND the phase-one bar; the icy-grim-in-depth ambition moved to Milestone 2 when 4.1b was dropped, 2026-08-08. Do not read that drop as FR23 going unmet.
+FR24: **WITHDRAWN from phase one 2026-08-08**, re-homed to Milestone 2 as an outcome. Epic 4 delivered 4.1a (done, kept unmerged); 4.1b dropped.
 FR25: Epic 2 - Headless scenario harness (foundation; exercised throughout Epic 3)
 FR26: Epic 3 - Walking-skeleton scenario test — the phase-one gate (PASSED, 2026-08-07; MILESTONE 1)
 
@@ -121,9 +121,9 @@ The sim lives and the session is yours: fixed-timestep tick loop with per-tick d
 Designate a dig, watch dwarves obey in their own time, see stone reach the stockpile: modal input, designations with cancel, stockpiles, job market with reaction delays, A*, dig, haul, retry — capped by the walking-skeleton scenario test (FR26), the phase-one gate.
 **FRs covered:** FR5, FR6, FR7, FR8, FR9, FR10, FR11, FR12, FR21, FR26, FR18 (world-mutating commands)
 
-### Epic 4: The World in Three Dimensions
-See the fortress with depth: the raycast 3D view (4.1a) then the sub-voxel dwarves in it (4.1b), firm scope per Wolf's FR24 override. Split into two stories at the Epic 3 retrospective, 2026-08-08.
-**FRs covered:** FR24, and FR23's deferred icy-grim-identity verdict (4.1b)
+### Epic 4: The World in Three Dimensions — **CLOSED EARLY 2026-08-08**
+Delivered 4.1a (raycast depth view, `done`, deliberately **not merged**); **4.1b dropped**; **FR24 withdrawn** from phase one. Wolf judged the live depth view "quite far from wow effect" and 3D-in-TUI is abandoned. The ambition moves to a **Bevy client in Milestone 2**, which needs its own planning pass. The 2D TUI is NOT retired — it becomes the debug client and the deterministic assertion instrument.
+**FRs covered:** none in phase one. FR24 withdrawn; FR23's phase-one obligation was already met at 3.3.
 
 ## Epic 1: The Frozen World on Screen
 
@@ -369,13 +369,19 @@ So that the walking-skeleton sentence is true — live on screen and proven head
 
 ## Epic 4: The World in Three Dimensions
 
-See the fortress with depth: the raycast 3D view, firm scope per Wolf's FR24 override.
+**EPIC CLOSED EARLY — 2026-08-08. Status `done`. FR24 is WITHDRAWN from phase one.**
 
-Keymap note: `v` toggles the 2D ↔ 3D view (agreed with Wolf during story design; a plain letter passes through tmux/SSH with zero risk and matches the DF-style letter keymap — can be rebound later).
+Story 4.1a shipped a raycast depth view (gate green, four review layers clean, no coverage holes). Wolf ran it live and judged it **"quite far from wow effect"**, and clarified that he had wanted an **isometric** camera, not the first-person raycast the story specified — *"I didn't manage to clarify that."* **3D-in-TUI is abandoned, including isometric-in-TUI**: terminal cells staircase diagonals badly and half-blocks with truecolor cap out near Game Boy resolution, so isometric here lands on *charming*, not *wow*.
 
-**SPLIT INTO TWO STORIES at the Epic 3 retrospective (Wolf, 2026-08-08).** This was one story, and it carried the raycast renderer *and* the sub-voxel creature models — larger than story 3.2, which shipped at 17 ACs, cost $132.98 and exhausted a full week of Codex quota in ~3h10m. The seam is natural rather than invented to hit a size target: different files, different risk, different failure modes. Note this deliberately reverses the 3.2 one-story ruling, on the evidence 3.2 produced. FR23/FR24 sign-off moves to 4.1b, which is where the creatures are.
+**Disposition:** 4.1a is `done` but **deliberately NOT merged** — kept on branch `4-1a-behold-the-fortress-in-depth`, `main` stays 2D-only, consistent with the PRD counter-metric *"no code exists that serves only a future phase"*. **Story 4.1b is DROPPED** (see below). The 2D TUI client is **not** retired — it becomes the debug client and the deterministic assertion instrument.
 
-**The split does NOT breach the story-count counter-metric.** The 2026-08-02 implementation-readiness report flagged this exact sizing risk and warned that splitting 4.1 "lands at 13 stories, breaching the counter-metric, whose cut list starts at FR16" — but that projection assumed Story 3.2 would ALSO be split, and Wolf kept 3.2 whole. Actual count after this split: 3 + 4 + 3 + 2 = **12**, exactly at the 8–12 cap. **The cut list is not invoked and FR16 (save/load) is not at risk.** Verify with `rg -c '^### Story ' _bmad-output/planning-artifacts/epics.md`.
+**Where the ambition went:** Unreal was dropped the same day in favour of a **Bevy client (Milestone 2)**, which needs its own planning pass. FR24 is re-stated there **as an outcome, never as a rendering technique** — naming the mechanism in the requirement is precisely what let the wrong camera get built. FR23's icy-grim-in-depth verdict follows it there as ambition; FR23's phase-one obligation was already MET at 3.3.
+
+**Final phase-one story count: 11** (3 + 4 + 3 + 1), inside the 8–12 cap — the cut list was never invoked and FR16 (save/load) was never at risk. Verify with `rg -c '^### Story ' _bmad-output/planning-artifacts/epics.md`.
+
+Keymap note (historical): `v` toggles the 2D ↔ 3D view. Lives only on 4.1a's unmerged branch; `main`'s keymap does not include it.
+
+**PREREQUISITE THAT OUTLIVED THIS EPIC — the deterministic opening camera (action item T3, closed 2026-08-08).** Keep this note: `initial` used to take the whole opening view from dwarf 0, who wanders, so two clients connecting minutes apart opened on different levels and every scripted `--key` capture aimed at a different z depending on when it ran — which cost a false "the feature does not work" verdict at story 3.3's review, with exit 0. The client now opens on the level with the most standable ground and takes `tui --z N` to pin one. **This still protects every TUI capture, and the TUI is now the project's assertion instrument, so it matters more after this epic than during it.**
 
 **PREREQUISITE TO 4.1a, not deferred work — the opening camera must be deterministic.** Closed 2026-08-08 (action item T3) before either story is written: `initial` used to take the whole opening view from dwarf 0, who wanders, so two clients connecting minutes apart opened on different levels and every scripted `--key` capture aimed at a different z depending on when it ran — which cost a false "the feature does not work" verdict at story 3.3's review, with exit 0. The client now opens on the level with the most standable ground and takes `tui --z N` to pin one. Epic 4 is a pure-camera epic whose every AC is proven by a scripted capture, so its whole evidence base rests on this.
 
@@ -403,27 +409,32 @@ So that I can see the icy world — terrain and diggings — with depth.
 **Given** a scripted capture,
 **Then** the instrument pins the opening view with `--z` and range-checks a non-zero count of what it came to see before drawing any conclusion (exit 0 is not a result).
 
-// NOTE: dwarves in 4.1a render at whatever the simplest correct fidelity is — a single voxel is fine and expected. Sub-voxel models are 4.1b's whole subject; do not start them here.
+// NOTE (historical, from when 4.1b was still planned): dwarves in 4.1a render at whatever the simplest correct fidelity is — a single voxel is fine and expected. Sub-voxel models were 4.1b's whole subject. **4.1b was DROPPED 2026-08-08 and the sub-voxel idea moved to Milestone 2's Bevy client**, where geometry is native rather than simulated with character cells.
 
-### Story 4.1b: Dwarves in Depth
+### ~~Story 4.1b: Dwarves in Depth~~ — **DROPPED 2026-08-08**
 
-As the boss,
-I want my dwarves to look like dwarves in the 3D view,
-So that the fortress reads as inhabited, and the icy-grim identity holds in depth.
+**Never started. Dropped at the Epic 4 closure, before any story file was written.**
 
-**Acceptance Criteria:**
+**What it was:** dwarves rendered as code-authored sub-voxel models (~10×5×13 boxes-as-code —
+boots, wide tunic, beard, helmet, the wide-and-short silhouette), sampled fine-step inside
+creature-flagged tiles during DDA, with distance LOD down to a single voxel; seed-derived palette
+swaps on shared geometry for individual identity; no sprites, no per-creature assets, ever. It also
+carried **FR23's deferred icy-grim-in-depth sign-off** and an NFR2 budget check at full model
+fidelity.
 
-**Given** dwarves in view,
-**Then** they render as code-authored sub-voxel models (~10×5×13 boxes-as-code: boots, wide tunic, beard, helmet — the wide-and-short silhouette), sampled fine-step inside creature-flagged tiles during DDA, with distance LOD down to a single voxel far away (addendum decision)
-**And** individual identity (beard/hair color) derives from the world seed as palette swaps on shared geometry — no sprites, no per-creature assets, ever
-**And** the same seed yields the same dwarf appearances on every run (FR15's determinism applied to presentation).
+**Why it was dropped:** it existed to make the depth view read as inhabited and to settle the
+identity verdict — both inside a **terminal** renderer that Wolf has now judged, live, as unable to
+reach the effect he wants. Building sub-voxel *glyph* dwarf models to answer a visual-identity
+question that a Bevy client answers far better, with a camera that can actually be chosen, is money
+burned.
 
-**Given** the ~100 ms feel budget (NFR2),
-**When** the visible dwarves are at close range and at full model fidelity,
-**Then** the budget still holds, and the LOD threshold is what keeps it — measured, not assumed.
-
-**Given** a live session,
-**When** Wolf watches the fortress in 3D — dug corridors, ramps, wandering and working dwarves,
-**Then** the icy-grim identity holds in depth and Wolf signs off on the 3D look (FR23 spirit applied to FR24).
-
-// NOTE: this is where FR23 is finally settled. Story 3.3's AC17 signed off the *feel floor* (NFR2) at 2D and left the icy-grim identity verdict PROVISIONAL — Wolf's words: "not sure how much more visually pleased it could be without designing own font or something ... most likely we need to get to the 3d first to say." Do not read 3.3 as FR23 signed off; this story is the deferred verdict.
+**Where its purpose went:**
+- **FR23's icy-grim-in-depth verdict** → Milestone 2's Bevy client, as *ambition*. FR23's
+  **phase-one obligation is already MET** — success criterion 2 asked for sign-off in the live TUI
+  and Wolf gave it at story 3.3 ("looks ok for 2d tui game atm"). His "we need to get to the 3d
+  first to say" was an escalation beyond the bar, and it is what created this story's obligation.
+  **Do not read this drop as FR23 going unmet.**
+- **The NFR2 fidelity budget** → re-set for the Bevy client when it is planned. NFR2 as written is
+  TUI-specific and stays met for phase one.
+- **The voxel-model idea itself** → still good, still deliberately unbuilt. It belongs to the 3D
+  client, where geometry is native rather than simulated with character cells.

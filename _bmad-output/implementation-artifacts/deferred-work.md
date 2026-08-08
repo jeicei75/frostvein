@@ -362,3 +362,39 @@ below as "what one layer found", not as "what is wrong with 3.3".
   — and note the implication for scope: a custom font or a tileset is the alternative lever, and
   neither is in milestone 1. Treat "make the TUI prettier" stories as needing an explicit case against
   this entry.
+
+## Deferred from: code review of 4-1a-behold-the-fortress-in-depth (2026-08-08)
+
+- **Camera inside solid rock renders a featureless full-screen `█` with no cue why**
+  [crates/tui/src/raycast.rs:174-207]. The camera's own voxel is tested on iteration 0, so a solid
+  camera tile returns `distance 0.0` → band 0 for every ray: `tui --z 5 --frames 2 --key v` gives a
+  map-area histogram of exactly `[('█', 1760)]`. The spec pre-declares this "a legitimate picture,
+  not a bug", and for captures AC12's two-distinct-bands check is the guard. But it is reachable in
+  ordinary play — `<`, `<`, `v` — and a player then sees a screen indistinguishable from a crashed
+  renderer, with neither the status line nor the hint saying "you are inside rock". Raised by the
+  Feature Auditor.
+- **`shade()` has no direct test and `percent = 0` is never exercised anywhere**
+  [crates/tui/src/palette.rs:151-159]. The new public cross-module home of the "scale colour toward
+  black" formula is reached only via `dim()` (which early-returns at depth 0, never touching
+  `shade`) and via `raycast.rs`'s tests at 100/80/62/46. Its lower boundary and identity case are
+  unverified in the module that owns it. Raised by the Edge Case Hunter.
+- **Partial-clamp corner untested** [crates/tui/src/view.rs:563-567]. The only new edge-clamp test
+  sits the camera in a full corner of a 4×4 world so both axes clamp together. No test covers one
+  axis already at its bound while the other moves freely (e.g. `dims 4×4`, heading `se`, start
+  `(3,1)` → expect `(3,2)`). Correct by construction — the two `.clamp()` calls are independent —
+  so this is a coverage gap, not a defect. Raised by the Edge Case Hunter.
+- **`simd` serve suite flakes under heavy concurrent load** [crates/simd/tests/serve.rs:148].
+  `two_haul_jobs_on_one_item_save_is_logged_and_the_daemon_keeps_ticking` failed twice with
+  `snapshot line must match the protocol: Error("EOF while parsing a value")` while four review
+  layers were running cargo concurrently, and passed 3/3 in isolation (0.71s each); the full gate is
+  GREEN on a quiet machine. EOF means the daemon *closed the socket*, not that it was slow, so this
+  is not a plain timeout. Pre-existing and entirely outside 4.1a's diff (which never leaves
+  `crates/tui`), but it matters to process: the review workflow mandates four concurrent
+  cargo-running layers, so this will keep firing and will keep looking like a story defect.
+  Not port contention — `Daemon::spawn` passes `0` and lets the OS assign. Raised by the orchestrator.
+- **SPEC premise false: "this devpod sets `NO_COLOR=1`"** (story 4.1a Key decisions). `NO_COLOR` is
+  unset here (`COLORTERM=truecolor`); both hunters independently found this and had to force it to
+  test the glyph-ramp claim. The design conclusion survives — the ramp does carry geometry with
+  colour stripped, verified live both ways — but two things follow: the reasoning rests on a false
+  premise, and the stale `NO_COLOR` warning at `main.rs:382-388` never fires in this devpod, which is
+  why nobody noticed it had gone out of date. Raised by the Edge Case and Feature Auditors.
