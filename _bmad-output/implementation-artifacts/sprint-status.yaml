@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-08  # Epic 3 retrospective; MILESTONE 1 done
+last_updated: 2026-08-08  # story 4.1a dev done, in review; Epic 4 in progress
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -64,12 +64,12 @@ development_status:
   3-2-the-dig: done
   3-3-the-haul-and-the-skeleton-walks: done
   epic-3-retrospective: done
-  epic-4: backlog
+  epic-4: in-progress
   # 4.1 SPLIT IN TWO at the Epic 3 retrospective (Wolf, 2026-08-08). The single story carried the
   # raycast renderer AND the sub-voxel creature models, and was larger than 3.2 -- which shipped at
   # 17 ACs and exhausted a full week of Codex quota. FR23/FR24 sign-off lands on 4.1b. The keys
   # below are provisional until action item E1 rewrites epics.md; sprint-planning owns the final shape.
-  4-1a-behold-the-fortress-in-depth: backlog
+  4-1a-behold-the-fortress-in-depth: review
   4-1b-dwarves-in-depth: backlog
   epic-4-retrospective: optional
 
