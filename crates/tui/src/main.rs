@@ -102,7 +102,7 @@ fn main() -> anyhow::Result<()> {
                 let Some(code) = named_key(name) else {
                     bail!(
                         "invalid --key value {name:?}: expected a comma-separated sequence of \
-                         space, +, -, S, L, d, c, p, x, h, j, k, l, enter, esc, <, or >"
+                         space, +, -, S, L, d, c, p, x, v, h, j, k, l, enter, esc, <, or >"
                     );
                 };
                 keys.push(code);
@@ -145,7 +145,7 @@ fn main() -> anyhow::Result<()> {
         bail!("--frames requires a count, e.g. --frames 3");
     }
     if expect_key {
-        bail!("--key requires a comma-separated sequence, e.g. --key d,enter,l,l,enter");
+        bail!("--key requires a comma-separated sequence, e.g. --key d,enter,l,l,enter or --key v");
     }
     if expect_z {
         bail!("--z requires a level, e.g. --z 20");
@@ -337,6 +337,9 @@ fn named_key(name: &str) -> Option<KeyCode> {
         "c" => Some(KeyCode::Char('c')),
         "p" => Some(KeyCode::Char('p')),
         "x" => Some(KeyCode::Char('x')),
+        // Without this row no scripted capture can ever reach the depth view: the key
+        // table is a closed set and an unknown name bails.
+        "v" => Some(KeyCode::Char('v')),
         "h" => Some(KeyCode::Char('h')),
         "j" => Some(KeyCode::Char('j')),
         "k" => Some(KeyCode::Char('k')),
@@ -557,6 +560,7 @@ mod tests {
             ("c", KeyCode::Char('c')),
             ("p", KeyCode::Char('p')),
             ("x", KeyCode::Char('x')),
+            ("v", KeyCode::Char('v')),
             ("h", KeyCode::Char('h')),
             ("j", KeyCode::Char('j')),
             ("k", KeyCode::Char('k')),

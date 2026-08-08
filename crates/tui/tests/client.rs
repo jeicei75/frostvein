@@ -1306,3 +1306,275 @@ fn the_client_loop_renders_a_frame_per_streamed_delta() {
         "a frame was rendered for the connect snapshot rather than for a streamed delta"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Story 4.1a: the depth view through the SAME instrument, `tui --frames N --key`.
+// No second capture channel is invented; `v` simply joins the key table.
+// ---------------------------------------------------------------------------
+
+const DEPTH_DIMS: protocol::Dims = protocol::Dims { x: 32, y: 32, z: 4 };
+/// The camera's own level. Passed to `--z` rather than assumed: story 3.3's recipe
+/// assumed an opening z, aimed into undug rock, and captured zero of every glyph with
+/// exit 0 — evidence indistinguishable from a broken feature.
+const DEPTH_Z: i32 = 1;
+const DEPTH_WALL_X: u32 = 26;
+
+fn depth_index(x: u32, y: u32, z: u32) -> usize {
+    (x + y * DEPTH_DIMS.x + z * DEPTH_DIMS.x * DEPTH_DIMS.y) as usize
+}
+
+/// A floor underfoot and a wall ten tiles east. The floor alone spans near to far, so
+/// the picture holds several distance bands rather than one flat wash — which is what
+/// makes the capture's range check able to fail.
+fn depth_snapshot_line() -> String {
+    let mut tiles =
+        vec![protocol::Tile::Empty; (DEPTH_DIMS.x * DEPTH_DIMS.y * DEPTH_DIMS.z) as usize];
+    for y in 0..DEPTH_DIMS.y {
+        for x in 0..DEPTH_DIMS.x {
+            tiles[depth_index(x, y, 0)] = protocol::Tile::Solid(protocol::Material::Stone);
+        }
+    }
+    for y in 0..DEPTH_DIMS.y {
+        for z in 1..3 {
+            tiles[depth_index(DEPTH_WALL_X, y, z)] = protocol::Tile::Solid(protocol::Material::Ice);
+        }
+    }
+
+    let snapshot = protocol::Snapshot {
+        msg_type: protocol::MessageType::Snapshot,
+        dims: DEPTH_DIMS,
+        tiles,
+        entities: Vec::new(),
+        designations: Vec::new(),
+        zones: Vec::new(),
+        items: Vec::new(),
+        speed: protocol::Speed::Normal,
+        tick: SNAPSHOT_TICK,
+    };
+    format!(
+        "{}\n",
+        serde_json::to_string(&snapshot).expect("encode depth snapshot")
+    )
+}
+
+/// `moving_wall` walks the east wall towards the camera one delta at a time, so the
+/// picture must change between frames.
+fn capture_depth_frames(key: Option<&str>, moving_wall: bool) -> String {
+    const MAX_CAPTURE_BYTES: u64 = 4 * 1024 * 1024;
+    const FRAMES: u32 = 4;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind depth stub daemon");
+    let port = listener.local_addr().expect("read stub address").port();
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tui"));
+    command
+        .arg(port.to_string())
+        .arg("--z")
+        .arg(DEPTH_Z.to_string())
+        .arg("--frames")
+        .arg(FRAMES.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(key) = key {
+        command.arg("--key").arg(key);
+    }
+    let mut child = command.spawn().expect("spawn tui depth capture");
+
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(depth_snapshot_line().as_bytes())
+            .expect("send depth snapshot");
+
+        let mut wall = DEPTH_WALL_X;
+        for tick in 8..8 + u64::from(FRAMES) {
+            let mut tiles = Vec::new();
+            if moving_wall {
+                let next = wall - 3;
+                for z in 1..3 {
+                    tiles.push(protocol::TileChange {
+                        pos: [wall as i32, 16, z],
+                        tile: protocol::Tile::Empty,
+                    });
+                    tiles.push(protocol::TileChange {
+                        pos: [next as i32, 16, z],
+                        tile: protocol::Tile::Solid(protocol::Material::Ice),
+                    });
+                }
+                wall = next;
+            }
+            let delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick,
+                tiles,
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: protocol::Speed::Normal,
+            };
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .expect("send depth delta");
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        // AC1: the toggle is client state only. Nothing may come back up the socket.
+        stream
+            .set_read_timeout(Some(Duration::from_millis(200)))
+            .expect("bound the upstream check");
+        let mut upstream = Vec::new();
+        match stream
+            .try_clone()
+            .expect("clone read half")
+            .take(256)
+            .read_to_end(&mut upstream)
+        {
+            Ok(0) => {}
+            Ok(_) => panic!(
+                "the view toggle sent {} bytes upstream: {:?}",
+                upstream.len(),
+                String::from_utf8_lossy(&upstream)
+            ),
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {}
+            Err(error) if error.kind() == ErrorKind::TimedOut => {}
+            Err(error) => panic!("unexpected upstream read error: {error}"),
+        }
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stdout)
+        .expect("read bounded depth stdout");
+    assert!(stdout.len() as u64 <= MAX_CAPTURE_BYTES);
+    let status = child.wait().expect("wait for depth capture");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stderr)
+        .expect("read bounded depth stderr");
+    server.join().expect("depth stub daemon thread panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+    stdout
+}
+
+/// Status lines and hint rows carry the view's name; everything else is the picture.
+fn depth_map_only(stdout: &str) -> String {
+    stdout
+        .lines()
+        .map(strip_ansi)
+        .filter(|line| !line.contains("  3d ") && !line.starts_with("depth:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn band_counts(stdout: &str) -> Vec<(char, usize)> {
+    let plain = depth_map_only(stdout);
+    ['█', '▓', '▒', '░']
+        .into_iter()
+        .map(|glyph| (glyph, plain.chars().filter(|value| *value == glyph).count()))
+        .collect()
+}
+
+#[test]
+fn the_v_key_capture_reports_the_depth_view_and_holds_at_least_two_distance_bands() {
+    let stdout = capture_depth_frames(Some("v"), false);
+    let status_lines = stdout
+        .lines()
+        .map(strip_ansi)
+        .filter(|line| line.contains("  3d e  z "))
+        .count();
+    let bands = band_counts(&stdout);
+    let present = bands.iter().filter(|(_, count)| *count > 0).count();
+
+    assert_eq!(
+        status_lines, 4,
+        "expected one depth status line per streamed frame, saw {status_lines}"
+    );
+    // One band alone means the camera is buried in rock or the ramp collapsed, and
+    // zero means nothing was drawn. Exit 0 is not a result.
+    assert!(
+        present >= 2,
+        "the depth capture holds fewer than two distance bands: {bands:?}"
+    );
+}
+
+#[test]
+fn the_identical_capture_without_v_stays_in_the_flat_view() {
+    let stdout = capture_depth_frames(None, false);
+
+    assert!(
+        !stdout.contains("  3d "),
+        "the control capture reached the depth view without pressing v"
+    );
+    assert!(
+        !stdout.contains("depth:"),
+        "the control capture drew the depth hint bar"
+    );
+    assert!(
+        stdout.contains("hjkl move"),
+        "the control capture is not the flat view at all"
+    );
+}
+
+#[test]
+fn turning_the_camera_changes_the_captured_picture() {
+    let facing_east = capture_depth_frames(Some("v"), false);
+    let turned = capture_depth_frames(Some("v,l,l"), false);
+
+    assert!(
+        turned
+            .lines()
+            .map(strip_ansi)
+            .any(|line| line.contains("  3d s  ")),
+        "two right turns from east must report heading `s`"
+    );
+    assert_ne!(
+        depth_map_only(&facing_east),
+        depth_map_only(&turned),
+        "turning the camera changed nothing in the picture"
+    );
+}
+
+/// One entry per frame, holding that frame's MAP only. The status line carries the
+/// tick, which differs every frame no matter what the picture does — comparing whole
+/// frames would report motion that is not there.
+fn depth_frame_maps(stdout: &str) -> Vec<String> {
+    let mut frames = Vec::new();
+    let mut current: Vec<String> = Vec::new();
+    for line in stdout.lines().map(strip_ansi) {
+        if line.starts_with("depth:") {
+            frames.push(current.join("\n"));
+            current = Vec::new();
+        } else if !line.contains("  3d ") {
+            current.push(line);
+        }
+    }
+    frames
+}
+
+#[test]
+fn a_wall_moving_on_the_wire_moves_in_the_depth_capture() {
+    let moving = depth_frame_maps(&capture_depth_frames(Some("v"), true));
+    let still = depth_frame_maps(&capture_depth_frames(Some("v"), false));
+
+    assert_eq!(moving.len(), 4, "expected one map per streamed frame");
+    assert_eq!(still.len(), 4);
+    assert!(
+        moving.iter().any(|frame| *frame != moving[0]),
+        "the wall walked towards the camera but every captured map is identical: \
+         the depth view is a static artefact, not an observation"
+    );
+    // The control: with the same key sequence and an unchanging world, the picture
+    // must hold still. Without this the assertion above would also pass on noise.
+    assert!(
+        still.iter().all(|frame| *frame == still[0]),
+        "the world did not change but the depth picture did"
+    );
+}
