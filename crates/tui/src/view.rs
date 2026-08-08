@@ -1292,6 +1292,39 @@ mod tests {
     }
 
     #[test]
+    fn the_two_views_draw_different_pictures_of_the_same_world() {
+        // The guard on the dispatch itself: without it `render` could quietly draw the
+        // flat map in both views while the status line below happily reported `3d`.
+        let dims = Dims { x: 32, y: 32, z: 4 };
+        let mut snapshot = empty_snapshot(dims);
+        for x in 0..dims.x {
+            for y in 0..dims.y {
+                snapshot.tiles[index(dims, x, y, 0)] = Tile::Solid(Material::Stone);
+            }
+        }
+        snapshot.tiles[index(dims, 24, 16, 1)] = Tile::Solid(Material::Ice);
+        let flat = normal_state((16, 16), 1);
+        let depth = ViewState {
+            view: View::Depth,
+            ..flat
+        };
+
+        let map_of = |state: &ViewState| -> Vec<Cell> {
+            let framebuffer = render(&snapshot, state, 21, 11);
+            (0..9)
+                .flat_map(|y| (0..21).map(move |x| (x, y)))
+                .map(|(x, y)| framebuffer.cell(x, y))
+                .collect()
+        };
+
+        assert_ne!(
+            map_of(&flat),
+            map_of(&depth),
+            "both views drew the same picture: the dispatch is not reaching the raycaster"
+        );
+    }
+
+    #[test]
     fn the_depth_view_fills_the_map_region_and_shares_the_bottom_two_rows() {
         let dims = Dims { x: 32, y: 32, z: 4 };
         let mut snapshot = empty_snapshot(dims);
