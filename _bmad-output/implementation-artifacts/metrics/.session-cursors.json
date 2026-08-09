@@ -384,5 +384,23 @@
     "last_ts": "2026-08-06T09:23:56.332Z",
     "output": 208027,
     "turns": 715
+  },
+  "rollout-2026-08-09T17-29-15-019fe792-58b5-7b20-9f5f-20b2b8f22470.jsonl": {
+    "by_model": {
+      "gpt-5.6-sol": {
+        "cache_creation": 0,
+        "cache_read": 47058688,
+        "input": 934503,
+        "output": 110747
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 47058688,
+    "input": 934503,
+    "last_ts": "2026-08-09T18:38:33.492Z",
+    "output": 110747,
+    "quota_last": 23.0,
+    "schema": 2,
+    "turns": 390
   }
 }
