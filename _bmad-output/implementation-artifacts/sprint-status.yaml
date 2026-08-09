@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-08  # 4.1a reviewed + closed done (unmerged, on its branch); 3D-in-TUI abandoned, Bevy client pivot — correct-course pending
+last_updated: 2026-08-09  # MILESTONE 2 ADDED — Epics 5-8, 11 stories, all backlog. M2 planning is complete and readiness-checked; next move is create-story 5.1
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -88,6 +88,72 @@ development_status:
   # this drop as FR23 going unmet. Full record: epics.md + sprint-change-proposal-2026-08-08.md
   4-1b-dwarves-in-depth: dropped
   epic-4-retrospective: optional
+
+  # ============================================================================
+  # MILESTONE 2 — THE BEVY CLIENT. Planned 2026-08-09; readiness-checked and its
+  # nine findings applied the same day (implementation-readiness-report-2026-08-09.md).
+  # Four epics, 11 stories, inside the PRD's 10-14 counter-metric. Two new crates:
+  # client-core (mirror, protocol-only) and gui (Bevy). Six crates total.
+  #
+  # ORDERING IS NOT TASTE — it is two hard constraints. client-core exists before
+  # either client consumes it (AD-13), and the gui envelope is proven before
+  # anything builds on it (5.3). Wow beat 1 lands at 5.4, story 4 of 11, which
+  # completes at 36% of the milestone: CM2's first-third mandate is met AT THE
+  # EDGE. Splitting 5.2 or 5.3 pushes it to 42% and breaches CM2, so a split is
+  # the trigger to re-check CM2 on the record, never a free move.
+  #
+  # CUT ORDER, decided in advance (PRD counter-metrics): FIRST 6.2 (lanterns) —
+  # torches and the campfire still carry the warm/cold wow. THEN 8.1+8.2 shrink
+  # away, leaving 8.3 with speed control only and the TUI keeping designations;
+  # if that fires, 8.3's walking-skeleton AC MUST BE REWRITTEN, not reinterpreted
+  # (the dig is designated from a TUI client and watched in gui). 5.2 is on NO
+  # cut list — AD-13 is load-bearing on it.
+  # ============================================================================
+  epic-5: backlog
+  # 5.1 carries the vista-mountain-silhouette decision (readiness fix #5): the story
+  # states ON THE RECORD whether in-grid terrain is shaped for a skyline, and why.
+  # Last of the spine's three decisions owed; 5.4 builds on the answer.
+  5-1-the-world-grows-things-that-glow: backlog
+  # Split line if it overruns one session: the crate/mirror boundary. On no cut list.
+  5-2-one-mirror-two-clients: backlog
+  # ALLOWED TO BE UGLY — grey boxes orbiting at speed is a pass; visual bars are 5.4's.
+  # Carries M2's only unproven-until-run risk: a Bevy window rendering on WSLg. If the
+  # envelope does not hold that is the story's FINDING, reported, never worked around
+  # in production code — fallback ladder recorded in Epic 5 (force GL via WGPU_BACKEND,
+  # then the spine's deferred native Windows build). Eight stories sit downstream.
+  # Split line: envelope+lifecycle vs projection+instruments.
+  5-3-a-window-onto-the-valley: backlog
+  # WOW BEAT 1. Sign-off gate BOTH halves (UX-DR22): Wolf approves a "here is what you
+  # will see" artifact BEFORE implementation starts, and the story is done only when he
+  # has viewed the built result live against it. CANNOT BE CLOSED BY A DEV AGENT.
+  5-4-the-cold-boot: backlog
+  epic-5-retrospective: optional
+  epic-6: backlog
+  # WOW BEAT 2 — the beat the PRD calls the magic; a client achieving only beat 1 has
+  # FAILED the milestone. Sign-off gate applies. Also cannot be closed by a dev agent.
+  # Its dig must be at a surface-visible face designated from a TUI client (readiness
+  # fix #4) — z-slicing does not arrive until 7.1.
+  6-1-the-world-moves: backlog
+  # FIRST ON THE M2 CUT LIST. Cutting it leaves Epic 6's wow intact.
+  6-2-lanterns-in-the-dark: backlog
+  epic-6-retrospective: optional
+  epic-7: backlog
+  # Resolves the addendum's open control collision BY TESTING, on the record: the
+  # mousewheel is already claimed by the zoom continuum and one wheel cannot drive both.
+  7-1-slice-into-the-mountain: backlog
+  # Renders designations/zones issued from a TUI client — gui issues nothing here. That
+  # placement is deliberate: the rendering survives if Epic 8's input work is cut.
+  7-2-read-the-working-zoom: backlog
+  epic-7-retrospective: optional
+  epic-8: backlog
+  # M2's hardest input work and the main story-count driver, isolated on purpose.
+  # IF PICKING PROVES EASY, 8.1 AND 8.2 COLLAPSE INTO ONE AND M2 LANDS AT 10.
+  8-1-point-at-the-world: backlog
+  8-2-designate-with-the-mouse: backlog
+  # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
+  # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.
+  8-3-master-of-time-and-the-skeleton-walks-in-3d: backlog
+  epic-8-retrospective: optional
 
 # Appended by the Epic 1 retrospective (2026-08-03).
 # Full context: epic-1-retro-2026-08-03.md
