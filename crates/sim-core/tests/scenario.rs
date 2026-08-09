@@ -1282,6 +1282,7 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.claims(), second.claims());
         assert_eq!(first.carrying(), second.carrying());
         assert_eq!(first.items(), second.items());
+        assert_eq!(first.emitters(), second.emitters());
         assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());
         assert_eq!(first.zones(), second.zones());

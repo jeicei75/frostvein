@@ -166,11 +166,11 @@ so that the valley has something living in it and something warm in it before an
         by omission.
   - [x] Close `deferred-work.md:317-324` with the rule this story chose.
 
-- [ ] **Task 7 — Determinism and save/load** (AC: 18, 19)
-  - [ ] Extend `tests/scenario.rs:1203-1241` `same_seed_and_commands_remain_deterministic` with the
+- [x] **Task 7 — Determinism and save/load** (AC: 18, 19)
+  - [x] Extend `tests/scenario.rs:1203-1241` `same_seed_and_commands_remain_deterministic` with the
         new `emitters()` reader in its per-tick assertion list.
-  - [ ] Extend the `save_load.rs` round-trip to carry emitters.
-  - [ ] `frostvein.save` at the repo root holds the old vocabulary and will no longer load. v0 has
+  - [x] Extend the `save_load.rs` round-trip to carry emitters.
+  - [x] `frostvein.save` at the repo root holds the old vocabulary and will no longer load. v0 has
         no save-format stability guarantee — delete it or regenerate it, and say which.
 
 - [ ] **Task 8 — The observability instrument** (AC: 20, 21)
@@ -460,6 +460,7 @@ GPT-5.6 Codex (Völundr)
 - Task 4 RED: `execute_jobs_digs_tree_materials_without_spawning_items` failed `left: 1, right: 0` for `TreeTrunk` before the yield guard.
 - Task 5 RED: protocol tests failed with missing `Entity.light`, both tree materials, both emitter kinds, and `LightKind`; bridge tests also referenced the not-yet-existing emitter reader.
 - Task 6 RED: workspace checking failed on non-exhaustive TUI matches for all four tree tile shapes and both emitter kinds before palette/render support.
+- Task 7 RED (controlled sabotage): removing emitter restoration made `save_round_trip_preserves_emitters` fail with `left: []` versus the five expected `(Id, Pos, LightKind)` tuples; restoration was then reinstated.
 
 ### Completion Notes List
 
@@ -469,6 +470,7 @@ GPT-5.6 Codex (Völundr)
 - Task 4: carried a tree/mineral yield flag through Dig and Channel changes; both tree materials mutate and dirty their tiles without items, while existing mineral yield tests stay pinned. All 98 `sim-core` tests pass offline.
 - Task 5: added five fixed camp emitters, sorted/persisted emitter state, exact wire vocabulary and null-light goldens, exhaustive independent bridges, and save-id/bounds validation. Protocol (5), sim-core (99), simd unit (14), and simd serve (60) tests pass offline.
 - Task 6: pinned four distinct tree/emitter glyphs in the palette, added an emitter pass between items and dwarves, preserved dwarf-only contention/status rules, and closed the non-dwarf draw deferral. All 61 TUI tests pass offline.
+- Task 7: added emitter assertions to per-tick determinism and save/load lockstep, added an explicit emitter round-trip test, and deleted the obsolete 6.9 MB v0 `frostvein.save`. All 100 `sim-core` tests pass offline.
 
 ### File List
 
@@ -489,6 +491,7 @@ GPT-5.6 Codex (Völundr)
 - `crates/tui/src/palette.rs`
 - `crates/tui/src/view.rs`
 - `crates/tui/tests/client.rs`
+- `frostvein.save` (deleted)
 
 ## Change Log
 
@@ -501,3 +504,4 @@ GPT-5.6 Codex (Völundr)
 | 2026-08-09 | Task 4 made dug and channelled tree materials yield no stone. |
 | 2026-08-09 | Task 5 added persisted camp emitters and the exact light-aware wire vocabulary. |
 | 2026-08-09 | Task 6 rendered trees and fixed emitters with the specified layer and parity rules. |
+| 2026-08-09 | Task 7 pinned emitter determinism/save-load behavior and removed the obsolete save. |
