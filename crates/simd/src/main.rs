@@ -17,7 +17,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const SEED: u64 = 0xF005_7E1A;
 const TICK_PERIOD: Duration = Duration::from_millis(100);
 const FAST_TICK_PERIOD: Duration = Duration::from_millis(20);
 const CLIENT_QUEUE: usize = 16;
@@ -86,7 +85,7 @@ fn main() -> anyhow::Result<()> {
         .context("could not spawn accept thread")?;
 
     let (command_tx, command_rx) = mpsc::channel();
-    let world = sim_core::World::generate(SEED, sim_core::Dims::DEFAULT);
+    let world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
     tick(world, new_rx, live, command_tx, command_rx)
 }
 
@@ -240,18 +239,21 @@ fn save_world(world: &sim_core::World) {
 }
 
 fn load_world() -> Option<sim_core::World> {
+    load_world_from(SAVE_PATH)
+}
+
+fn load_world_from(path: &str) -> Option<sim_core::World> {
     let result = (|| -> anyhow::Result<sim_core::World> {
-        let file =
-            fs::File::open(SAVE_PATH).with_context(|| format!("could not open {SAVE_PATH}"))?;
+        let file = fs::File::open(path).with_context(|| format!("could not open {path}"))?;
         let mut encoded = Vec::new();
         file.take(MAX_SAVE_BYTES + 1)
             .read_to_end(&mut encoded)
-            .with_context(|| format!("could not read {SAVE_PATH}"))?;
+            .with_context(|| format!("could not read {path}"))?;
         if encoded.len() as u64 > MAX_SAVE_BYTES {
             bail!("save exceeds {MAX_SAVE_BYTES}-byte limit");
         }
-        let save: sim_core::SaveState = serde_json::from_slice(&encoded)
-            .with_context(|| format!("could not decode {SAVE_PATH}"))?;
+        let save: sim_core::SaveState =
+            serde_json::from_slice(&encoded).with_context(|| format!("could not decode {path}"))?;
         let tile_count = u64::from(save.dims.x)
             .checked_mul(u64::from(save.dims.y))
             .and_then(|area| area.checked_mul(u64::from(save.dims.z)))
@@ -496,7 +498,10 @@ fn load_world() -> Option<sim_core::World> {
                 bail!("save reuses entity id {id}");
             }
         }
-        for (id, pos, _) in &save.emitters {
+        for (id, pos, light) in &save.emitters {
+            if *light == sim_core::LightKind::Lantern {
+                bail!("save emitter {id} uses unsupported lantern kind");
+            }
             if !in_bounds(*pos) {
                 bail!(
                     "save emitter {id} position {},{},{} is outside dims {}x{}x{}",
@@ -547,7 +552,7 @@ fn load_world() -> Option<sim_core::World> {
     match result {
         Ok(world) => Some(world),
         Err(error) => {
-            eprintln!("could not load {SAVE_PATH}: {error:#}");
+            eprintln!("could not load {path}: {error:#}");
             None
         }
     }
@@ -710,6 +715,22 @@ mod tests {
         assert_eq!(period(protocol::Speed::Paused), Duration::from_millis(100));
         assert_eq!(period(protocol::Speed::Normal), Duration::from_millis(100));
         assert_eq!(period(protocol::Speed::Fast), Duration::from_millis(20));
+    }
+
+    #[test]
+    fn loading_rejects_lantern_emitters_before_the_wire_bridge() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-5-1-lantern-save-{}.json",
+            std::process::id()
+        ));
+        let mut save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        save.emitters[0].2 = sim_core::LightKind::Lantern;
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write lantern save fixture");
+
+        let loaded = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove lantern save fixture");
+
+        assert!(loaded.is_none(), "lantern save reached the live world");
     }
 
     /// A real loopback pair: the daemon's end goes into `Client`, the peer end stands in

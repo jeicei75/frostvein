@@ -32,18 +32,13 @@ fn is_standable(world: &World, pos: Pos) -> bool {
 }
 
 #[test]
-fn dwarves_stay_standable_and_near_home() {
+fn idle_dwarves_stay_standable_and_inside_the_camp() {
     let mut world = World::generate(42, Dims::DEFAULT);
-    let homes = world.dwarves();
+    let camp = world.camp_origin();
 
     for _ in 0..200 {
         world.step();
         for (id, pos, _) in world.dwarves() {
-            let home = homes
-                .iter()
-                .find(|(home_id, _, _)| *home_id == id)
-                .expect("every dwarf keeps its spawn home")
-                .1;
             assert_eq!(world.tile(pos), Some(Tile::Empty));
             assert!(matches!(
                 world.tile(Pos {
@@ -52,9 +47,9 @@ fn dwarves_stay_standable_and_near_home() {
                 }),
                 Some(Tile::Solid(_) | Tile::Ramp(_))
             ));
-            assert_eq!(pos.z, home.z);
-            assert!((pos.x - home.x).abs() <= 3, "dwarf {id:?} escaped in x");
-            assert!((pos.y - home.y).abs() <= 3, "dwarf {id:?} escaped in y");
+            assert_eq!(pos.z, camp.z);
+            assert!((pos.x - camp.x).abs() <= 3, "dwarf {id:?} escaped in x");
+            assert!((pos.y - camp.y).abs() <= 3, "dwarf {id:?} escaped in y");
         }
     }
 }

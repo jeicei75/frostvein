@@ -23,6 +23,7 @@ use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_SEED: u64 = 0xF005_7E1A;
 const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
 const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
@@ -1533,7 +1534,7 @@ impl World {
                 pos,
                 JobState::Idle,
                 Wander {
-                    home: pos,
+                    home: camp,
                     // NOTE: staggers the spawn phases so the dwarves do not step in lockstep,
                     // without spending a second RNG draw. It wraps at WANDER_REST_TICKS, so an
                     // eleventh dwarf would share dwarf 0's phase — harmless at five.

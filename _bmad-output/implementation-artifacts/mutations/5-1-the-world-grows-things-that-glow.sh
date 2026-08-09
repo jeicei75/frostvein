@@ -65,3 +65,30 @@ old = '            let height = (dims.z as f64 / 2.0 + (noise * 2.0 - 1.0) * 12.
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            let height = (dims.z as f64 / 2.0 + (noise * 2.0 - 1.0) * 4.0).round();\n'))
 PY
+
+mutation "dwarf wander homes return to random spawn cells" sim-core idle_dwarves_stay_standable_and_inside_the_camp <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    home: camp,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    home: pos,\n'))
+PY
+
+mutation "lantern saves reach the live world" simd loading_rejects_lantern_emitters_before_the_wire_bridge <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '''            if *light == sim_core::LightKind::Lantern {
+                bail!("save emitter {id} uses unsupported lantern kind");
+            }
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "the shipped world seed changes unnoticed" sim-core default_world_has_mountainous_height_span <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = 'pub const DEFAULT_SEED: u64 = 0xF005_7E1A;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'pub const DEFAULT_SEED: u64 = 42;\n'))
+PY

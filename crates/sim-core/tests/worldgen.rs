@@ -40,7 +40,8 @@ fn same_seed_produces_identical_worlds() {
 
 #[test]
 fn default_world_has_mountainous_height_span() {
-    let world = World::generate(42, Dims::DEFAULT);
+    assert_eq!(sim_core::DEFAULT_SEED, 0xF005_7E1A);
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let mut heights = Vec::new();
     for y in 0..world.dims().y as i32 {
         for x in 0..world.dims().x as i32 {
