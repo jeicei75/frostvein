@@ -186,15 +186,15 @@ so that the valley has something living in it and something warm in it before an
         only the first occurrence of a glyph per line (`deferred-work.md:326-330`) — a counting
         assertion must not be built on it.
 
-- [ ] **Task 9 — Sabotage table** (project rule: a green suite is not evidence)
-  - [ ] Write `_bmad-output/implementation-artifacts/mutations/5-1-the-world-grows-things-that-glow.sh`
+- [x] **Task 9 — Sabotage table** (project rule: a green suite is not evidence)
+  - [x] Write `_bmad-output/implementation-artifacts/mutations/5-1-the-world-grows-things-that-glow.sh`
         following the existing files' shape, and run `scripts/mutate.sh` against it.
-  - [ ] Minimum set: the yield guard is removed (a dug tree drops stone); the camp clearing filter
+  - [x] Minimum set: the yield guard is removed (a dug tree drops stone); the camp clearing filter
         is dropped from tree placement; the tree stream is replaced by the worldgen stream (a
         determinism change that must move the pinned values); the emitter draw pass is deleted; the
         emitter list is dropped from `delta()` but kept in `snapshot()`; the amplitude change is
         reverted (the height-span test must go red).
-  - [ ] Paste the RED output verbatim into the Dev Agent Record.
+  - [x] Paste the RED output verbatim into the Dev Agent Record.
 
 - [ ] **Task 10 — Gate and commit**
   - [ ] `scripts/gate.sh` green. Do **not** add gate probes here — NFR8's `client-core` and `gui`
@@ -463,6 +463,47 @@ GPT-5.6 Codex (Völundr)
 - Task 7 RED (controlled sabotage): removing emitter restoration made `save_round_trip_preserves_emitters` fail with `left: []` versus the five expected `(Id, Pos, LightKind)` tuples; restoration was then reinstated.
 - Task 8 RED (controlled sabotage): deleting the emitter draw pass made `growing_world_instrument_counts_change_with_trees_and_emitters` fail with `feature capture contained zero †`; the pass was restored.
 - Task 8 manual instrument tuning: z=25 aimed at seed 42 and produced `│=30 ♠=222 †=0 ♨=0 ☺=0`; the live default-seed snapshot identified camp z=9. At z=9 the first run exposed absent tree slices, and later a fully occluded campfire; density/crown air-only placement and emitter-cell-free dwarf spawns closed both evidence failures.
+- Task 9 mutation run (verbatim):
+
+```text
+=== tree yield guard always spawns stone ===
+thread 'tests::execute_jobs_digs_tree_materials_without_spawning_items' (720) panicked at crates/sim-core/src/lib.rs:3056:13:
+assertion `left == right` failed: dug TreeTrunk
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.02s
+
+=== tree placement ignores the camp clearing ===
+thread 'pines_use_both_tree_materials_and_leave_the_camp_clear' (1441) panicked at crates/sim-core/tests/worldgen.rs:148:17:
+assertion failed: !matches!(world.tile(Pos { x, y, z }),
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.02s
+
+=== trees consume the worldgen stream ===
+thread 'spawn_positions_for_seed_42_are_pinned' (2162) panicked at crates/sim-core/tests/worldgen.rs:213:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.02s
+
+=== the emitter draw pass is deleted ===
+thread 'growing_world_instrument_counts_change_with_trees_and_emitters' (2546) panicked at crates/tui/tests/client.rs:924:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out; finished in 1.10s
+
+=== delta drops emitters while snapshot keeps them ===
+thread 'bridge::tests::snapshot_and_delta_carry_the_same_emitters' (3069) panicked at crates/simd/src/bridge.rs:416:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.02s
+
+=== terrain amplitude returns to four ===
+thread 'default_world_has_mountainous_height_span' (3790) panicked at crates/sim-core/tests/worldgen.rs:53:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.09s
+
+================ MUTATION RESULTS ================
+tree yield guard always spawns stone                         KILLED
+tree placement ignores the camp clearing                     KILLED
+trees consume the worldgen stream                            KILLED
+the emitter draw pass is deleted                             KILLED
+delta drops emitters while snapshot keeps them               KILLED
+terrain amplitude returns to four                            KILLED
+
+All mutations killed.
+```
 
 ### Completion Notes List
 
@@ -474,11 +515,13 @@ GPT-5.6 Codex (Völundr)
 - Task 6: pinned four distinct tree/emitter glyphs in the palette, added an emitter pass between items and dwarves, preserved dwarf-only contention/status rules, and closed the non-dwarf draw deferral. All 61 TUI tests pass offline.
 - Task 7: added emitter assertions to per-tick determinism and save/load lockstep, added an explicit emitter round-trip test, and deleted the obsolete 6.9 MB v0 `frostvein.save`. All 100 `sim-core` tests pass offline.
 - Task 8: added a bounded real-binary feature/control capture that counts every ANSI-stripped glyph occurrence. Manual `tui 7413 --frames 6 --z 9` observation: `│=6`, `♠=48`, `†=21`, `♨=3`, `☺=30` (all non-zero; `NO_COLOR` warning observed, so this manual run evidences glyphs, not colours). All 100 sim-core and 62 TUI tests pass offline.
+- Task 9: added and ran the six-entry sabotage table; every required mutation was killed and the runner returned `All mutations killed.`
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/5-1-the-world-grows-things-that-glow.md`
 - `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/mutations/5-1-the-world-grows-things-that-glow.sh`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `crates/sim-core/src/lib.rs`
 - `crates/sim-core/src/save.rs`
@@ -509,3 +552,4 @@ GPT-5.6 Codex (Völundr)
 | 2026-08-09 | Task 6 rendered trees and fixed emitters with the specified layer and parity rules. |
 | 2026-08-09 | Task 7 pinned emitter determinism/save-load behavior and removed the obsolete save. |
 | 2026-08-09 | Task 8 proved the real capture instrument with a zero-feature control and non-zero live counts. |
+| 2026-08-09 | Task 9 killed all six required mutations and recorded the verbatim RED evidence. |
