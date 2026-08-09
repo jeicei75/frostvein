@@ -150,21 +150,21 @@ so that the valley has something living in it and something warm in it before an
         table at `protocol/src/lib.rs:356-395`, and `tui/src/main.rs:533-545`
         (`SNAPSHOT_LINE`, `DELTA_LINE`).
 
-- [ ] **Task 6 — Render them in the TUI** (AC: 16, 17)
-  - [ ] `palette.rs:23-59` `tile_cell`: four new arms (`Solid` and `Ramp` for each tree material).
+- [x] **Task 6 — Render them in the TUI** (AC: 16, 17)
+  - [x] `palette.rs:23-59` `tile_cell`: four new arms (`Solid` and `Ramp` for each tree material).
         Ramp arms take the ramp glyph `▲` with the tree colour, like every other ramp.
-  - [ ] `palette.rs:61-76` `entity_cell`: match the emitter kinds on kind alone
+  - [x] `palette.rs:61-76` `entity_cell`: match the emitter kinds on kind alone
         (`(EntityKind::Torch, _) =>`), since an emitter has no meaningful job state.
-  - [ ] `view.rs`: the entity draw loop at `view.rs:228-240` filters `kind == EntityKind::Dwarf`
+  - [x] `view.rs`: the entity draw loop at `view.rs:228-240` filters `kind == EntityKind::Dwarf`
         and would **silently drop** emitters — this is `deferred-work.md:317-324`, and this story
         owns the rule it names. Draw emitters in their own pass **below** dwarves; leave the crowd
         count (`view.rs:220-227`) and the status-line dwarf count (`view.rs:269-273`) dwarf-only.
-  - [ ] Extend the layer-order test `marker_layers_follow_terrain_zone_designation_item_entity_pending_cursor_order`
+  - [x] Extend the layer-order test `marker_layers_follow_terrain_zone_designation_item_entity_pending_cursor_order`
         (`view.rs:967-1025`) with the emitter layer.
-  - [ ] Extend `palette.rs:167-294` `every_look_is_pinned`, including the `existing_glyphs`
+  - [x] Extend `palette.rs:167-294` `every_look_is_pinned`, including the `existing_glyphs`
         distinctness set — four new glyphs must be added there or the distinctness claim is a lie
         by omission.
-  - [ ] Close `deferred-work.md:317-324` with the rule this story chose.
+  - [x] Close `deferred-work.md:317-324` with the rule this story chose.
 
 - [ ] **Task 7 — Determinism and save/load** (AC: 18, 19)
   - [ ] Extend `tests/scenario.rs:1203-1241` `same_seed_and_commands_remain_deterministic` with the
@@ -459,6 +459,7 @@ GPT-5.6 Codex (Völundr)
 - Task 3 RED: tree tests failed to compile with 12 `no variant ... TreeTrunk/TreeFoliage` errors before the materials and generator existed.
 - Task 4 RED: `execute_jobs_digs_tree_materials_without_spawning_items` failed `left: 1, right: 0` for `TreeTrunk` before the yield guard.
 - Task 5 RED: protocol tests failed with missing `Entity.light`, both tree materials, both emitter kinds, and `LightKind`; bridge tests also referenced the not-yet-existing emitter reader.
+- Task 6 RED: workspace checking failed on non-exhaustive TUI matches for all four tree tile shapes and both emitter kinds before palette/render support.
 
 ### Completion Notes List
 
@@ -467,6 +468,7 @@ GPT-5.6 Codex (Völundr)
 - Task 3: added a purpose-seeded pine pass after ramps, bounded every crown below `dims.z`, kept foliage out of the whole camp clearing, and proved pathfinding detours plus reachable outside digging. All 96 `sim-core` tests pass offline.
 - Task 4: carried a tree/mineral yield flag through Dig and Channel changes; both tree materials mutate and dirty their tiles without items, while existing mineral yield tests stay pinned. All 98 `sim-core` tests pass offline.
 - Task 5: added five fixed camp emitters, sorted/persisted emitter state, exact wire vocabulary and null-light goldens, exhaustive independent bridges, and save-id/bounds validation. Protocol (5), sim-core (99), simd unit (14), and simd serve (60) tests pass offline.
+- Task 6: pinned four distinct tree/emitter glyphs in the palette, added an emitter pass between items and dwarves, preserved dwarf-only contention/status rules, and closed the non-dwarf draw deferral. All 61 TUI tests pass offline.
 
 ### File List
 
@@ -484,6 +486,7 @@ GPT-5.6 Codex (Völundr)
 - `crates/simd/src/main.rs`
 - `crates/simd/tests/serve.rs`
 - `crates/tui/src/main.rs`
+- `crates/tui/src/palette.rs`
 - `crates/tui/src/view.rs`
 - `crates/tui/tests/client.rs`
 
@@ -497,3 +500,4 @@ GPT-5.6 Codex (Völundr)
 | 2026-08-09 | Task 3 added deterministic pine trees with camp, bounds, pathing, and reachability coverage. |
 | 2026-08-09 | Task 4 made dug and channelled tree materials yield no stone. |
 | 2026-08-09 | Task 5 added persisted camp emitters and the exact light-aware wire vocabulary. |
+| 2026-08-09 | Task 6 rendered trees and fixed emitters with the specified layer and parity rules. |

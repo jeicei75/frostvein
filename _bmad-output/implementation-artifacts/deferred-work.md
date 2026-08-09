@@ -324,6 +324,8 @@ below as "what one layer found", not as "what is wrong with 3.3".
   `protocol::EntityKind` has one variant, and the code carries a `// NOTE:` saying a second kind must
   decide its own contention rule. **Revisit when** a second `EntityKind` reaches the wire — that
   story owns the rule, and this is where it lands.
+  **CLOSED in Story 5.1:** fixed emitters draw in their own pass above items and below dwarves;
+  only dwarves participate in crowd/carrier contention and the status count.
 
 - **`glyph_positions` records only the first occurrence of a glyph per line**
   [`crates/tui/tests/client.rs:2154`] — LAYER: acceptance-auditor. Sound for the one-stone haul stub,
