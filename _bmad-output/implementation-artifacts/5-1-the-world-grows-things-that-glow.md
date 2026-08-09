@@ -120,14 +120,14 @@ so that the valley has something living in it and something warm in it before an
   - [x] Tests: a dwarf routes around a trunk; the camp is tree-free; a dig outside the clearing
         completes (proves the camp is not enclosed).
 
-- [ ] **Task 4 — A dug tree drops nothing** (AC: 10, 11)
-  - [ ] In `execute_jobs`, bind the material at `crates/sim-core/src/lib.rs:836` instead of `_` and
+- [x] **Task 4 — A dug tree drops nothing** (AC: 10, 11)
+  - [x] In `execute_jobs`, bind the material at `crates/sim-core/src/lib.rs:836` instead of `_` and
         carry a yield flag through the `change` tuple; guard the `ecs.spawn((Item, ...))` at
         `lib.rs:864-865` on it. Leave `set_tile`, `clear_paths`, job retirement, designation
         clearing and `release_claim` untouched.
-  - [ ] This is the **first place in `sim-core` that matches on `Material`** — write it as one
+  - [x] This is the **first place in `sim-core` that matches on `Material`** — write it as one
         `matches!` on the tree variants, not a new trait or table.
-  - [ ] Tests: dig a trunk → tile empty, dirty set carries it, item count unchanged; dig stone →
+  - [x] Tests: dig a trunk → tile empty, dirty set carries it, item count unchanged; dig stone →
         exactly one stone, unchanged from today.
 
 - [ ] **Task 5 — Grow the wire vocabulary** (AC: 12, 13, 14, 15)
@@ -457,12 +457,14 @@ GPT-5.6 Codex (Völundr)
 - Task 1 RED: `default_world_has_mountainous_height_span` failed with `minimum surface height was 12` before the height-field change.
 - Task 2 RED: the camp tests failed to compile because `World::camp_origin` did not exist before the camp rule was implemented.
 - Task 3 RED: tree tests failed to compile with 12 `no variant ... TreeTrunk/TreeFoliage` errors before the materials and generator existed.
+- Task 4 RED: `execute_jobs_digs_tree_materials_without_spawning_items` failed `left: 1, right: 0` for `TreeTrunk` before the yield guard.
 
 ### Completion Notes List
 
 - Task 1: widened terrain amplitude and lattice spacing together, preserved the height clamp and traversal invariants, added range/bounds tests, and re-pinned the seed-42 literals. `cargo test --offline -p sim-core` passed (91 tests).
 - Task 2: selected the nearest deterministic 7x7 flat central clearing, persisted/exposed its origin, restricted all five seeded spawn draws to it, and independently tested nearest-site and standability/mobility properties.
 - Task 3: added a purpose-seeded pine pass after ramps, bounded every crown below `dims.z`, kept foliage out of the whole camp clearing, and proved pathfinding detours plus reachable outside digging. All 96 `sim-core` tests pass offline.
+- Task 4: carried a tree/mineral yield flag through Dig and Channel changes; both tree materials mutate and dirty their tiles without items, while existing mineral yield tests stay pinned. All 98 `sim-core` tests pass offline.
 
 ### File List
 
@@ -484,3 +486,4 @@ GPT-5.6 Codex (Völundr)
 | 2026-08-09 | Task 1 reshaped the terrain skyline and added range and bounds coverage. |
 | 2026-08-09 | Task 2 established the deterministic central camp and clustered dwarf spawns. |
 | 2026-08-09 | Task 3 added deterministic pine trees with camp, bounds, pathing, and reachability coverage. |
+| 2026-08-09 | Task 4 made dug and channelled tree materials yield no stone. |

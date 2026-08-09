@@ -839,7 +839,11 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             let terrain = ecs.resource::<Terrain>();
             match job.kind {
                 JobKind::Dig => match terrain.tile(job.target) {
-                    Some(Tile::Solid(_)) => Some((job.target, Tile::Empty)),
+                    Some(Tile::Solid(material)) => Some((
+                        job.target,
+                        Tile::Empty,
+                        !matches!(material, Material::TreeTrunk | Material::TreeFoliage),
+                    )),
                     _ => None,
                 },
                 JobKind::Channel => {
@@ -848,14 +852,18 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                         ..job.target
                     };
                     match terrain.tile(below) {
-                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
+                        Some(Tile::Solid(material)) => Some((
+                            below,
+                            Tile::Ramp(material),
+                            !matches!(material, Material::TreeTrunk | Material::TreeFoliage),
+                        )),
                         _ => None,
                     }
                 }
                 JobKind::Haul { .. } => unreachable!("haul jobs are dispatched above"),
             }
         };
-        let Some((changed_pos, tile)) = change else {
+        let Some((changed_pos, tile, yields_stone)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
             release_claim(ecs, entity);
@@ -867,8 +875,10 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             "job targets were bounds-checked at designation time"
         );
         clear_paths(ecs);
-        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-        ecs.spawn((Item, item_id, job.target));
+        if yields_stone {
+            let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+            ecs.spawn((Item, item_id, job.target));
+        }
         ecs.resource_mut::<Jobs>().remove(job.id);
         ecs.resource_mut::<Designations>().0.remove(&job.target);
         release_claim(ecs, entity);
@@ -2869,6 +2879,87 @@ mod tests {
         assert_eq!(world.tile(target), Some(Tile::Empty));
         assert_eq!(world.items(), vec![(super::Id(5), target)]);
         assert_eq!(world.drain_dirty(), vec![(target, Tile::Empty)]);
+    }
+
+    #[test]
+    fn execute_jobs_digs_tree_materials_without_spawning_items() {
+        for material in [Material::TreeTrunk, Material::TreeFoliage] {
+            let mut world = World::generate(42, Dims::DEFAULT);
+            let work = world.dwarves()[0].1;
+            let target = Pos {
+                x: work.x + 1,
+                ..work
+            };
+            assert!(world.set_tile(target, Tile::Solid(material)));
+            world.drain_dirty();
+            let items_before = world.items().len();
+            let job = Job {
+                id: JobId(0),
+                kind: JobKind::Dig,
+                target,
+                created_tick: 0,
+                retry_after: 0,
+            };
+            assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+            let entity = world
+                .ecs
+                .iter_entities()
+                .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+                .expect("dwarf zero exists")
+                .id();
+            world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+            world
+                .ecs
+                .entity_mut(entity)
+                .insert(super::WorkProgress(super::WORK_TICKS));
+
+            super::execute_jobs(&mut world.ecs);
+
+            assert_eq!(world.tile(target), Some(Tile::Empty));
+            assert_eq!(world.drain_dirty(), vec![(target, Tile::Empty)]);
+            assert_eq!(world.items().len(), items_before, "dug {material:?}");
+        }
+    }
+
+    #[test]
+    fn execute_jobs_channels_tree_materials_without_spawning_items() {
+        for material in [Material::TreeTrunk, Material::TreeFoliage] {
+            let mut world = World::generate(42, Dims::DEFAULT);
+            let target = world.dwarves()[0].1;
+            let below = Pos {
+                z: target.z - 1,
+                ..target
+            };
+            assert!(world.set_tile(below, Tile::Solid(material)));
+            assert!(world.set_tile(target, Tile::Empty));
+            world.drain_dirty();
+            let items_before = world.items().len();
+            let job = Job {
+                id: JobId(0),
+                kind: JobKind::Channel,
+                target,
+                created_tick: 0,
+                retry_after: 0,
+            };
+            assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+            let entity = world
+                .ecs
+                .iter_entities()
+                .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+                .expect("dwarf zero exists")
+                .id();
+            world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+            world
+                .ecs
+                .entity_mut(entity)
+                .insert(super::WorkProgress(super::WORK_TICKS));
+
+            super::execute_jobs(&mut world.ecs);
+
+            assert_eq!(world.tile(below), Some(Tile::Ramp(material)));
+            assert_eq!(world.drain_dirty(), vec![(below, Tile::Ramp(material))]);
+            assert_eq!(world.items().len(), items_before, "channelled {material:?}");
+        }
     }
 
     #[test]
