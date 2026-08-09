@@ -788,12 +788,14 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 1],
                 state: JobState::Idle,
+                light: None,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
                 pos: [3, 1, 2],
                 state: JobState::Idle,
+                light: None,
             },
         ];
         let state = normal_state((2, 1), 1);
@@ -845,6 +847,7 @@ mod tests {
             kind: EntityKind::Dwarf,
             pos: [1, 1, 1],
             state: JobState::Idle,
+            light: None,
         }];
 
         let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
@@ -890,6 +893,7 @@ mod tests {
             kind: EntityKind::Dwarf,
             pos: [127, 127, 0],
             state: JobState::Idle,
+            light: None,
         }];
 
         let framebuffer = render(&snapshot, &normal_state((127, 127), 0), 5, 4);
@@ -918,12 +922,14 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 0],
                 state: JobState::Idle,
+                light: None,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 0],
                 state: JobState::Walk,
+                light: None,
             },
         ];
 
@@ -997,12 +1003,14 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [3, 1, 0],
                 state: JobState::Idle,
+                light: None,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
                 pos: [4, 1, 0],
                 state: JobState::Idle,
+                light: None,
             },
         ];
         let state = ViewState {
@@ -1034,12 +1042,14 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [0, 0, 0],
                 state: JobState::Idle,
+                light: None,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
                 pos: [2, 0, 0],
                 state: JobState::Walk,
+                light: None,
             },
         ];
         let state = normal_state((1, 0), 0);
@@ -1091,6 +1101,7 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 30],
                 state: JobState::Idle,
+                light: None,
             })
             .collect();
         let state = normal_state((12, 34), 19);
@@ -1197,6 +1208,7 @@ mod tests {
                     kind: EntityKind::Dwarf,
                     pos: [1, 1, 30],
                     state: JobState::Idle,
+                    light: None,
                 })
                 .collect();
             let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5");
@@ -1607,6 +1619,7 @@ mod tests {
             kind: EntityKind::Dwarf,
             pos: [8, 1, 5],
             state: JobState::Idle,
+            light: None,
         });
         assert_eq!(initial(&snapshot, None), before);
 

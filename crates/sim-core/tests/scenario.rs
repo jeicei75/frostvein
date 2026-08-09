@@ -659,7 +659,7 @@ fn designate_delay_claim_walk_work_and_dig_complete_headlessly() {
 
     assert!(saw_delay && saw_claim && saw_walk && saw_work);
     assert_eq!(world.tile(target), Some(Tile::Empty));
-    assert_eq!(world.items(), vec![(sim_core::Id(5), target)]);
+    assert_eq!(world.items(), vec![(sim_core::Id(10), target)]);
     assert!(world.jobs().is_empty());
     assert!(world.claims().iter().all(|(_, job)| job.is_none()));
     assert!(world.designations().is_empty());
@@ -762,7 +762,7 @@ fn designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly() {
         Some(Tile::Empty),
         "the ordered tile was never dug"
     );
-    assert_eq!(first.items(), vec![(sim_core::Id(5), pile)]);
+    assert_eq!(first.items(), vec![(sim_core::Id(10), pile)]);
     assert!(first.zones().contains(&pile));
     assert!(first.jobs().is_empty());
     assert!(first.claims().iter().all(|(_, job)| job.is_none()));
@@ -939,7 +939,7 @@ fn a_new_stockpile_derives_no_haul_job_until_the_world_steps() {
     world.step();
 
     assert_eq!(world.jobs().len(), 1);
-    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 5 });
+    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 10 });
     assert_eq!(world.jobs()[0].target, stone);
 }
 
@@ -953,7 +953,7 @@ fn cancelling_marks_over_a_stone_never_drops_its_haul_job() {
     });
     world.step();
     let job = world.jobs()[0];
-    assert_eq!(job.kind, JobKind::Haul { item: 5 });
+    assert_eq!(job.kind, JobKind::Haul { item: 10 });
 
     // `x` over the stone's tile. A haul job's `target` is a stone position, so a cancel that
     // matched on `target` would silently delete an order the player never gave.
@@ -1060,7 +1060,7 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
         1,
         "the haul job was dropped, not parked"
     );
-    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 5 });
+    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 10 });
     assert!(
         world.claims().iter().all(|(_, job)| job.is_none()),
         "a job with nowhere to deliver stayed claimed"
@@ -1087,7 +1087,7 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
         "the revived job never finished: {:?}",
         world.jobs()
     );
-    assert_eq!(world.items(), vec![(sim_core::Id(5), pile)]);
+    assert_eq!(world.items(), vec![(sim_core::Id(10), pile)]);
     assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
 }
 

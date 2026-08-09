@@ -104,6 +104,16 @@ pub struct Dwarf;
 #[derive(Component)]
 struct Item;
 
+#[derive(Component)]
+struct Emitter(LightKind);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LightKind {
+    Torch,
+    Campfire,
+    Lantern,
+}
+
 #[derive(Resource)]
 struct Camp(Pos);
 
@@ -1092,6 +1102,7 @@ impl World {
             BTreeSet::new(),
         );
         world.spawn_dwarves(camp_origin, &mut spawn_rng);
+        world.spawn_emitters(camp_origin);
         world
     }
 
@@ -1132,6 +1143,13 @@ impl World {
             .into_iter()
             .map(|(id, pos)| (id.0, pos))
             .collect();
+        let emitters = self
+            .emitters()
+            // NOTE: like dwarves, an emitter missing Id or Pos is silently skipped by this
+            // filter_map. Both construction sites attach Emitter, Id and Pos together.
+            .into_iter()
+            .map(|(id, pos, light)| (id.0, pos, light))
+            .collect();
 
         SaveState {
             seed: self.seed(),
@@ -1147,6 +1165,7 @@ impl World {
             jobs,
             next_job_id: job_resource.next_id,
             items,
+            emitters,
         }
     }
 
@@ -1165,6 +1184,7 @@ impl World {
             jobs,
             next_job_id,
             items,
+            emitters,
         } = save;
         let mut job_resource = Jobs {
             next_id: next_job_id,
@@ -1215,6 +1235,9 @@ impl World {
         }
         for (id, pos) in items {
             world.ecs.spawn((Item, Id(id), pos));
+        }
+        for (id, pos, light) in emitters {
+            world.ecs.spawn((Emitter(light), Id(id), pos));
         }
         world
     }
@@ -1446,6 +1469,20 @@ impl World {
         items
     }
 
+    /// Sorted ascending by `Id`.
+    pub fn emitters(&self) -> Vec<(Id, Pos, LightKind)> {
+        let mut emitters: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter_map(|entity| {
+                let emitter = entity.get::<Emitter>()?;
+                Some((*entity.get::<Id>()?, *entity.get::<Pos>()?, emitter.0))
+            })
+            .collect();
+        emitters.sort_by_key(|(id, ..)| *id);
+        emitters
+    }
+
     /// Sorted ascending by `Id` — stable order is required by AD-7.
     // NOTE: the carried stone deliberately did NOT become a fourth field here. `carrying()` is a
     // sibling reader instead, which leaves this tuple — and therefore `simd`'s bridge — untouched.
@@ -1503,6 +1540,49 @@ impl World {
             ));
         }
     }
+
+    fn spawn_emitters(&mut self, camp: Pos) {
+        let emitters = [
+            (camp, LightKind::Campfire),
+            (
+                Pos {
+                    x: camp.x - 2,
+                    y: camp.y - 2,
+                    ..camp
+                },
+                LightKind::Torch,
+            ),
+            (
+                Pos {
+                    x: camp.x + 2,
+                    y: camp.y - 2,
+                    ..camp
+                },
+                LightKind::Torch,
+            ),
+            (
+                Pos {
+                    x: camp.x - 2,
+                    y: camp.y + 2,
+                    ..camp
+                },
+                LightKind::Torch,
+            ),
+            (
+                Pos {
+                    x: camp.x + 2,
+                    y: camp.y + 2,
+                    ..camp
+                },
+                LightKind::Torch,
+            ),
+        ];
+
+        for (pos, light) in emitters {
+            let id = self.ecs.resource_mut::<IdAllocator>().allocate();
+            self.ecs.spawn((Emitter(light), id, pos));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1552,10 +1632,60 @@ mod tests {
     }
 
     #[test]
+    fn generated_world_has_sorted_camp_emitters() {
+        let world = World::generate(42, Dims::DEFAULT);
+        let camp = world.camp_origin();
+
+        assert_eq!(
+            world.emitters(),
+            vec![
+                (super::Id(5), camp, super::LightKind::Campfire),
+                (
+                    super::Id(6),
+                    Pos {
+                        x: camp.x - 2,
+                        y: camp.y - 2,
+                        ..camp
+                    },
+                    super::LightKind::Torch,
+                ),
+                (
+                    super::Id(7),
+                    Pos {
+                        x: camp.x + 2,
+                        y: camp.y - 2,
+                        ..camp
+                    },
+                    super::LightKind::Torch,
+                ),
+                (
+                    super::Id(8),
+                    Pos {
+                        x: camp.x - 2,
+                        y: camp.y + 2,
+                        ..camp
+                    },
+                    super::LightKind::Torch,
+                ),
+                (
+                    super::Id(9),
+                    Pos {
+                        x: camp.x + 2,
+                        y: camp.y + 2,
+                        ..camp
+                    },
+                    super::LightKind::Torch,
+                ),
+            ]
+        );
+        assert_eq!(world.to_save().emitters.len(), 5);
+    }
+
+    #[test]
     fn allocator_lives_in_the_ecs() {
         let world = World::generate(42, Dims::DEFAULT);
 
-        assert_eq!(world.ecs.resource::<super::IdAllocator>().next, 5);
+        assert_eq!(world.ecs.resource::<super::IdAllocator>().next, 10);
     }
 
     #[test]
@@ -2500,7 +2630,7 @@ mod tests {
             }
         }
 
-        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert_eq!(world.items(), vec![(super::Id(10), target)]);
         assert!(world.jobs().is_empty());
     }
 
@@ -2877,7 +3007,7 @@ mod tests {
         assert!(world.jobs().is_empty());
         assert!(world.designations().is_empty());
         assert_eq!(world.tile(target), Some(Tile::Empty));
-        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert_eq!(world.items(), vec![(super::Id(10), target)]);
         assert_eq!(world.drain_dirty(), vec![(target, Tile::Empty)]);
     }
 
@@ -3001,7 +3131,7 @@ mod tests {
         super::execute_jobs(&mut world.ecs);
 
         assert_eq!(world.tile(below), Some(Tile::Ramp(Material::Soil)));
-        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert_eq!(world.items(), vec![(super::Id(10), target)]);
         assert_eq!(
             world.drain_dirty(),
             vec![(below, Tile::Ramp(Material::Soil))]

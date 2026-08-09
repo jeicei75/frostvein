@@ -21,6 +21,8 @@ pub enum Material {
     Soil,
     Ice,
     Snow,
+    TreeTrunk,
+    TreeFoliage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,6 +37,16 @@ pub enum Tile {
 #[serde(rename_all = "snake_case")]
 pub enum EntityKind {
     Dwarf,
+    Torch,
+    Campfire,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LightKind {
+    Torch,
+    Campfire,
+    Lantern,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,6 +104,7 @@ pub struct Entity {
     pub kind: EntityKind,
     pub pos: [i32; 3],
     pub state: JobState,
+    pub light: Option<LightKind>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,7 +176,7 @@ mod tests {
         "type": "snapshot",
         "dims": {"x": 2, "y": 1, "z": 1},
         "tiles": ["empty", {"solid": "stone"}],
-        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "idle"}],
+        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "idle", "light": null}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
         "items": [{"id": 12, "pos": [1, 2, 3]}],
@@ -175,7 +188,7 @@ mod tests {
         "type": "delta",
         "tick": 10,
         "tiles": [{"pos": [1, 2, 3], "tile": {"solid": "ice"}}],
-        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "walk"}],
+        "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "walk", "light": null}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
         "items": [{"id": 12, "pos": [1, 2, 3]}],
@@ -205,11 +218,12 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [4, 5, 6],
                 state: JobState::Idle,
+                light: None,
             }]
         );
         assert_eq!(
             serde_json::to_string(&snapshot.entities[0]).unwrap(),
-            r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle"}"#
+            r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null}"#
         );
         assert_eq!(
             snapshot.designations,
@@ -262,6 +276,7 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [4, 5, 6],
                 state: JobState::Walk,
+                light: None,
             }]
         );
         assert_eq!(
@@ -359,6 +374,8 @@ mod tests {
             (Material::Soil, "\"soil\""),
             (Material::Ice, "\"ice\""),
             (Material::Snow, "\"snow\""),
+            (Material::TreeTrunk, "\"tree_trunk\""),
+            (Material::TreeFoliage, "\"tree_foliage\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }
@@ -383,10 +400,20 @@ mod tests {
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }
-        assert_eq!(
-            serde_json::to_string(&EntityKind::Dwarf).unwrap(),
-            "\"dwarf\""
-        );
+        for (value, wire) in [
+            (EntityKind::Dwarf, "\"dwarf\""),
+            (EntityKind::Torch, "\"torch\""),
+            (EntityKind::Campfire, "\"campfire\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (LightKind::Torch, "\"torch\""),
+            (LightKind::Campfire, "\"campfire\""),
+            (LightKind::Lantern, "\"lantern\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
         for (value, wire) in [
             (DesignationKind::Dig, "\"dig\""),
             (DesignationKind::Channel, "\"channel\""),

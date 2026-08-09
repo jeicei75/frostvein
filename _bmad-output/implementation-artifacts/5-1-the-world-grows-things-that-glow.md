@@ -130,22 +130,22 @@ so that the valley has something living in it and something warm in it before an
   - [x] Tests: dig a trunk → tile empty, dirty set carries it, item count unchanged; dig stone →
         exactly one stone, unchanged from today.
 
-- [ ] **Task 5 — Grow the wire vocabulary** (AC: 12, 13, 14, 15)
-  - [ ] `sim-core`: a marker component for emitters plus the light kind, a sorted public reader
+- [x] **Task 5 — Grow the wire vocabulary** (AC: 12, 13, 14, 15)
+  - [x] `sim-core`: a marker component for emitters plus the light kind, a sorted public reader
         (`emitters()`) modelled on `items()`, and a `SaveState` field modelled on
         `SaveState.items`. Both `to_save` and `from_save` must be updated in lockstep —
         `to_save`'s `filter_map` **silently skips** an entity missing a component it reads.
-  - [ ] `simd`'s save loader (`main.rs:483-498`) must add emitter ids to the `seen_ids` uniqueness
+  - [x] `simd`'s save loader (`main.rs:483-498`) must add emitter ids to the `seen_ids` uniqueness
         check and the `next_id` bound, or a corrupt save loads silently.
-  - [ ] `protocol`: the five additions of AC12, mirroring `sim-core` (AD-6). `LightKind` must be
+  - [x] `protocol`: the five additions of AC12, mirroring `sim-core` (AD-6). `LightKind` must be
         `Copy + Eq` — `protocol::Entity` derives both and is passed by value throughout `tui`.
-  - [ ] `simd/src/bridge.rs`: extend `fn material`, add an `entity_kind`/light bridge, and emit
+  - [x] `simd/src/bridge.rs`: extend `fn material`, add an `entity_kind`/light bridge, and emit
         emitters into both `snapshot()` and `delta()` entity lists. Extend the independent test
         oracle `expected_material` (`bridge.rs:184-191`) — it is a deliberate second copy, keep it
         independent.
-  - [ ] Update the runtime material allow-list at `bridge.rs:381` (`["stone","soil","ice","snow"]`)
+  - [x] Update the runtime material allow-list at `bridge.rs:381` (`["stone","soil","ice","snow"]`)
         — it is a **runtime** check that fails the moment worldgen emits a tree.
-  - [ ] Update the golden literals: `protocol/src/lib.rs:162,174` (`WIRE`, `DELTA_WIRE`),
+  - [x] Update the golden literals: `protocol/src/lib.rs:162,174` (`WIRE`, `DELTA_WIRE`),
         `protocol/src/lib.rs:211-213` (the `to_string` entity assertion), the variant-name pinning
         table at `protocol/src/lib.rs:356-395`, and `tui/src/main.rs:533-545`
         (`SNAPSHOT_LINE`, `DELTA_LINE`).
@@ -458,6 +458,7 @@ GPT-5.6 Codex (Völundr)
 - Task 2 RED: the camp tests failed to compile because `World::camp_origin` did not exist before the camp rule was implemented.
 - Task 3 RED: tree tests failed to compile with 12 `no variant ... TreeTrunk/TreeFoliage` errors before the materials and generator existed.
 - Task 4 RED: `execute_jobs_digs_tree_materials_without_spawning_items` failed `left: 1, right: 0` for `TreeTrunk` before the yield guard.
+- Task 5 RED: protocol tests failed with missing `Entity.light`, both tree materials, both emitter kinds, and `LightKind`; bridge tests also referenced the not-yet-existing emitter reader.
 
 ### Completion Notes List
 
@@ -465,6 +466,7 @@ GPT-5.6 Codex (Völundr)
 - Task 2: selected the nearest deterministic 7x7 flat central clearing, persisted/exposed its origin, restricted all five seeded spawn draws to it, and independently tested nearest-site and standability/mobility properties.
 - Task 3: added a purpose-seeded pine pass after ramps, bounded every crown below `dims.z`, kept foliage out of the whole camp clearing, and proved pathfinding detours plus reachable outside digging. All 96 `sim-core` tests pass offline.
 - Task 4: carried a tree/mineral yield flag through Dig and Channel changes; both tree materials mutate and dirty their tiles without items, while existing mineral yield tests stay pinned. All 98 `sim-core` tests pass offline.
+- Task 5: added five fixed camp emitters, sorted/persisted emitter state, exact wire vocabulary and null-light goldens, exhaustive independent bridges, and save-id/bounds validation. Protocol (5), sim-core (99), simd unit (14), and simd serve (60) tests pass offline.
 
 ### File List
 
@@ -476,7 +478,14 @@ GPT-5.6 Codex (Völundr)
 - `crates/sim-core/src/worldgen.rs`
 - `crates/sim-core/tests/worldgen.rs`
 - `crates/sim-core/tests/scenario.rs`
+- `crates/sim-core/tests/save_load.rs`
+- `crates/protocol/src/lib.rs`
+- `crates/simd/src/bridge.rs`
+- `crates/simd/src/main.rs`
 - `crates/simd/tests/serve.rs`
+- `crates/tui/src/main.rs`
+- `crates/tui/src/view.rs`
+- `crates/tui/tests/client.rs`
 
 ## Change Log
 
@@ -487,3 +496,4 @@ GPT-5.6 Codex (Völundr)
 | 2026-08-09 | Task 2 established the deterministic central camp and clustered dwarf spawns. |
 | 2026-08-09 | Task 3 added deterministic pine trees with camp, bounds, pathing, and reachability coverage. |
 | 2026-08-09 | Task 4 made dug and channelled tree materials yield no stone. |
+| 2026-08-09 | Task 5 added persisted camp emitters and the exact light-aware wire vocabulary. |

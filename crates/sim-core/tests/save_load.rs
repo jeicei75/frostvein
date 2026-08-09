@@ -156,7 +156,7 @@ fn loading_does_not_reuse_entity_ids() {
     let world = World::generate(42, Dims::DEFAULT);
     let loaded = World::from_save(world.to_save());
 
-    assert_eq!(loaded.to_save().next_id, 5);
+    assert_eq!(loaded.to_save().next_id, 10);
 }
 
 #[test]

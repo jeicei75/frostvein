@@ -1,7 +1,7 @@
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::{DesignationKind, Dims, Job, JobState, Pos, Tile};
+use crate::{DesignationKind, Dims, Job, JobState, LightKind, Pos, Tile};
 
 /// `sim-core`'s complete deterministic state. File I/O belongs to `simd`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,6 +19,7 @@ pub struct SaveState {
     pub jobs: Vec<Job>,
     pub next_job_id: u32,
     pub items: Vec<(u32, Pos)>,
+    pub emitters: Vec<(u32, Pos, LightKind)>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

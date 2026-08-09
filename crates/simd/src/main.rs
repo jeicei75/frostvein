@@ -412,6 +412,17 @@ fn load_world() -> Option<sim_core::World> {
                 );
             }
         }
+        if !in_bounds(save.camp_origin) {
+            bail!(
+                "save camp origin {},{},{} is outside dims {}x{}x{}",
+                save.camp_origin.x,
+                save.camp_origin.y,
+                save.camp_origin.z,
+                save.dims.x,
+                save.dims.y,
+                save.dims.z
+            );
+        }
         let mut seen_ids = BTreeSet::new();
         let mut claimed_job_ids = BTreeSet::new();
         let mut carried_items = BTreeSet::new();
@@ -481,6 +492,22 @@ fn load_world() -> Option<sim_core::World> {
             }
         }
         for (id, _) in &save.items {
+            if !seen_ids.insert(*id) {
+                bail!("save reuses entity id {id}");
+            }
+        }
+        for (id, pos, _) in &save.emitters {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save emitter {id} position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
             if !seen_ids.insert(*id) {
                 bail!("save reuses entity id {id}");
             }

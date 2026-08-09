@@ -888,6 +888,7 @@ fn capture_haul_replay(changes: bool) -> String {
                     kind: protocol::EntityKind::Dwarf,
                     pos: dwarf,
                     state: protocol::JobState::Walk,
+                    light: None,
                 }],
                 designations: Vec::new(),
                 zones: vec![protocol::Zone { pos: PILE }],
@@ -997,6 +998,7 @@ fn dwarf_at(x: i32) -> protocol::Entity {
         kind: protocol::EntityKind::Dwarf,
         pos: [x, 8, 0],
         state: protocol::JobState::Idle,
+        light: None,
     }
 }
 
@@ -1170,6 +1172,7 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
                 kind: protocol::EntityKind::Dwarf,
                 pos: [5, 8, 0],
                 state: protocol::JobState::Walk,
+                light: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
