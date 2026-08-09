@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-09  # MILESTONE 2 ADDED — Epics 5-8, 11 stories, all backlog. M2 planning is complete and readiness-checked; next move is create-story 5.1
+last_updated: 2026-08-09  # Story 5.1 created and ready-for-dev. Epic 5 in-progress; M2 under way.
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -109,11 +109,16 @@ development_status:
   # (the dig is designated from a TUI client and watched in gui). 5.2 is on NO
   # cut list — AD-13 is load-bearing on it.
   # ============================================================================
-  epic-5: backlog
-  # 5.1 carries the vista-mountain-silhouette decision (readiness fix #5): the story
-  # states ON THE RECORD whether in-grid terrain is shaped for a skyline, and why.
-  # Last of the spine's three decisions owed; 5.4 builds on the answer.
-  5-1-the-world-grows-things-that-glow: backlog
+  epic-5: in-progress
+  # 5.1 carried the vista-mountain-silhouette decision (readiness fix #5), the last of the
+  # spine's three decisions owed. ANSWERED 2026-08-09 (Wolf): YES — in-grid terrain IS shaped
+  # for a skyline, tuned inside 5.1 to a headless-testable target (height span >=16 levels).
+  # 5.4 builds on that answer and does not re-open it.
+  # Second decision taken at the same time: THE CAMP IS REAL — 5.1 clusters all five dwarves
+  # into a deterministic camp site near the map centre, because a campfire with no dwarves
+  # around it does not deliver UX-DR5's warm/cold read that 5.4's wow rests on. Consequence:
+  # the pinned seed-42 spawn positions and the terrain fingerprint both change, deliberately.
+  5-1-the-world-grows-things-that-glow: ready-for-dev
   # Split line if it overruns one session: the crate/mirror boundary. On no cut list.
   5-2-one-mirror-two-clients: backlog
   # ALLOWED TO BE UGLY — grey boxes orbiting at speed is a pass; visual bars are 5.4's.
