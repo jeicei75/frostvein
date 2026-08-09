@@ -5,7 +5,16 @@ use sim_core::{Dims, Id, Material, Pos, Tile, World};
 fn surface_height(world: &World, x: i32, y: i32) -> i32 {
     (0..world.dims().z as i32)
         .rev()
-        .find(|&z| world.tile(Pos { x, y, z }) != Some(Tile::Empty))
+        .find(|&z| {
+            !matches!(
+                world.tile(Pos { x, y, z }),
+                Some(
+                    Tile::Empty
+                        | Tile::Solid(Material::TreeTrunk | Material::TreeFoliage)
+                        | Tile::Ramp(Material::TreeTrunk | Material::TreeFoliage)
+                )
+            )
+        })
         .expect("every column has terrain")
 }
 
@@ -117,6 +126,35 @@ fn all_dwarves_spawn_inside_the_camp_with_room_to_move() {
 }
 
 #[test]
+fn pines_use_both_tree_materials_and_leave_the_camp_clear() {
+    let world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let mut trunks = 0;
+    let mut foliage = 0;
+
+    for tile in world.tiles() {
+        match tile {
+            Tile::Solid(Material::TreeTrunk) => trunks += 1,
+            Tile::Solid(Material::TreeFoliage) => foliage += 1,
+            _ => {}
+        }
+    }
+    assert!(trunks > 0, "world contains no tree trunks");
+    assert!(foliage > 0, "world contains no tree foliage");
+
+    for y in camp.y - 3..=camp.y + 3 {
+        for x in camp.x - 3..=camp.x + 3 {
+            for z in 0..world.dims().z as i32 {
+                assert!(!matches!(
+                    world.tile(Pos { x, y, z }),
+                    Some(Tile::Solid(Material::TreeTrunk | Material::TreeFoliage))
+                ));
+            }
+        }
+    }
+}
+
+#[test]
 fn spawn_positions_for_seed_42_are_pinned() {
     let world = World::generate(42, Dims::DEFAULT);
     let positions: Vec<_> = world.dwarves().into_iter().map(|(_, pos, _)| pos).collect();
@@ -165,10 +203,14 @@ fn spawn_positions_for_seed_42_are_pinned() {
                 Tile::Ramp(Material::Soil) => 6,
                 Tile::Ramp(Material::Ice) => 7,
                 Tile::Ramp(Material::Snow) => 8,
+                Tile::Solid(Material::TreeTrunk) => 9,
+                Tile::Solid(Material::TreeFoliage) => 10,
+                Tile::Ramp(Material::TreeTrunk) => 11,
+                Tile::Ramp(Material::TreeFoliage) => 12,
             };
             (hash ^ code).wrapping_mul(0x0000_0100_0000_01b3)
         });
-    assert_eq!(terrain_fingerprint, 0xc7b7_bfa1_dd96_b57e);
+    assert_eq!(terrain_fingerprint, 0x21ab_0f04_2e4e_686d);
 }
 
 #[test]
@@ -268,10 +310,14 @@ fn surface_is_icy() {
             );
 
             for z in top + 1..world.dims().z as i32 {
-                assert_eq!(
-                    world.tile(Pos { x, y, z }),
-                    Some(Tile::Empty),
-                    "expected Air above the surface at ({x},{y},{z})"
+                assert!(
+                    matches!(
+                        world.tile(Pos { x, y, z }),
+                        Some(
+                            Tile::Empty | Tile::Solid(Material::TreeTrunk | Material::TreeFoliage)
+                        )
+                    ),
+                    "expected air or a tree above the surface at ({x},{y},{z})"
                 );
             }
         }

@@ -20,6 +20,17 @@ fn make_standable(world: &mut World, pos: Pos) {
     assert!(world.set_tile(pos, Tile::Empty));
 }
 
+fn is_standable(world: &World, pos: Pos) -> bool {
+    world.tile(pos) == Some(Tile::Empty)
+        && matches!(
+            world.tile(Pos {
+                z: pos.z - 1,
+                ..pos
+            }),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+}
+
 #[test]
 fn dwarves_stay_standable_and_near_home() {
     let mut world = World::generate(42, Dims::DEFAULT);
@@ -58,6 +69,43 @@ fn same_seed_wanders_identically() {
         second.step();
         assert_eq!(first.dwarves(), second.dwarves());
     }
+}
+
+#[test]
+fn trees_do_not_enclose_the_camp_from_outside_dig_work() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let mut trunks = Vec::new();
+    for z in 0..world.dims().z as i32 {
+        for y in 0..world.dims().y as i32 {
+            for x in 0..world.dims().x as i32 {
+                let pos = Pos { x, y, z };
+                if world.tile(pos) == Some(Tile::Solid(Material::TreeTrunk))
+                    && [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+                        .into_iter()
+                        .any(|(nx, ny)| is_standable(&world, Pos { x: nx, y: ny, z }))
+                {
+                    trunks.push(pos);
+                }
+            }
+        }
+    }
+    trunks.sort_by_key(|pos| (pos.x.abs_diff(camp.x) + pos.y.abs_diff(camp.y), *pos));
+    let target = trunks[0];
+    assert!((target.x - camp.x).abs() > 3 || (target.y - camp.y).abs() > 3);
+
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    for _ in 0..1_000 {
+        world.step();
+        if world.tile(target) == Some(Tile::Empty) {
+            break;
+        }
+    }
+
+    assert_eq!(world.tile(target), Some(Tile::Empty));
 }
 
 #[test]

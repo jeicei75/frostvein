@@ -111,13 +111,13 @@ so that the valley has something living in it and something warm in it before an
   - [x] Close `deferred-work.md:46-53` (border-biased spawn) — this is the real embark-site rule
         that entry named as its revisit trigger. Add the closing note to `deferred-work.md`.
 
-- [ ] **Task 3 — Grow the trees** (AC: 7, 8, 9)
-  - [ ] Add `Material::TreeTrunk` and `Material::TreeFoliage` to `sim-core`.
-  - [ ] Add a fourth stream constant `STREAM_TREES` beside the existing three and build the tree
+- [x] **Task 3 — Grow the trees** (AC: 7, 8, 9)
+  - [x] Add `Material::TreeTrunk` and `Material::TreeFoliage` to `sim-core`.
+  - [x] Add a fourth stream constant `STREAM_TREES` beside the existing three and build the tree
         RNG in `World::generate`. Place trees **after** ramps and **before** `spawn_dwarves`, and
         skip the camp clearing.
-  - [ ] Truncate or skip a tree where the crown would not fit under `dims.z`.
-  - [ ] Tests: a dwarf routes around a trunk; the camp is tree-free; a dig outside the clearing
+  - [x] Truncate or skip a tree where the crown would not fit under `dims.z`.
+  - [x] Tests: a dwarf routes around a trunk; the camp is tree-free; a dig outside the clearing
         completes (proves the camp is not enclosed).
 
 - [ ] **Task 4 — A dug tree drops nothing** (AC: 10, 11)
@@ -456,11 +456,13 @@ GPT-5.6 Codex (Völundr)
 
 - Task 1 RED: `default_world_has_mountainous_height_span` failed with `minimum surface height was 12` before the height-field change.
 - Task 2 RED: the camp tests failed to compile because `World::camp_origin` did not exist before the camp rule was implemented.
+- Task 3 RED: tree tests failed to compile with 12 `no variant ... TreeTrunk/TreeFoliage` errors before the materials and generator existed.
 
 ### Completion Notes List
 
 - Task 1: widened terrain amplitude and lattice spacing together, preserved the height clamp and traversal invariants, added range/bounds tests, and re-pinned the seed-42 literals. `cargo test --offline -p sim-core` passed (91 tests).
 - Task 2: selected the nearest deterministic 7x7 flat central clearing, persisted/exposed its origin, restricted all five seeded spawn draws to it, and independently tested nearest-site and standability/mobility properties.
+- Task 3: added a purpose-seeded pine pass after ramps, bounded every crown below `dims.z`, kept foliage out of the whole camp clearing, and proved pathfinding detours plus reachable outside digging. All 96 `sim-core` tests pass offline.
 
 ### File List
 
@@ -471,6 +473,7 @@ GPT-5.6 Codex (Völundr)
 - `crates/sim-core/src/save.rs`
 - `crates/sim-core/src/worldgen.rs`
 - `crates/sim-core/tests/worldgen.rs`
+- `crates/sim-core/tests/scenario.rs`
 - `crates/simd/tests/serve.rs`
 
 ## Change Log
@@ -480,3 +483,4 @@ GPT-5.6 Codex (Völundr)
 | 2026-08-09 | Story created. Two decisions taken on the record with Wolf: the vista mountain silhouette (yes, shaped here) and the camp (dwarves clustered into it). |
 | 2026-08-09 | Task 1 reshaped the terrain skyline and added range and bounds coverage. |
 | 2026-08-09 | Task 2 established the deterministic central camp and clustered dwarf spawns. |
+| 2026-08-09 | Task 3 added deterministic pine trees with camp, bounds, pathing, and reachability coverage. |

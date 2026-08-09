@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
 const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
+const STREAM_TREES: u64 = 0x5452_4545_535f_5f5f;
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 pub const MAX_DESIGNATIONS: usize = 4096;
@@ -39,6 +40,8 @@ pub enum Material {
     Soil,
     Ice,
     Snow,
+    TreeTrunk,
+    TreeFoliage,
 }
 
 /// A voxel. `Empty` is air; `Solid` is wall/floor; `Ramp` is a walkable slope.
@@ -1062,6 +1065,8 @@ impl World {
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
         let camp_origin = worldgen::camp_origin(dims, &heights);
+        let mut tree_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_TREES);
+        worldgen::place_trees(dims, &heights, &mut tiles, camp_origin, &mut tree_rng);
         let mut spawn_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_SPAWN);
 
         let mut world = assemble(
@@ -2606,6 +2611,23 @@ mod tests {
 
         assert_eq!(super::astar(&terrain, from, &goals), Some(expected.clone()));
         assert_eq!(super::astar(&terrain, from, &goals), Some(expected));
+    }
+
+    #[test]
+    fn astar_routes_a_dwarf_around_a_tree_trunk() {
+        let mut terrain = flat_terrain(5, 3);
+        let trunk = Pos { x: 2, y: 1, z: 1 };
+        terrain.tiles[super::worldgen::index(terrain.dims, 2, 1, 1)] =
+            Tile::Solid(Material::TreeTrunk);
+        let from = Pos { x: 0, y: 1, z: 1 };
+        let goal = Pos { x: 4, y: 1, z: 1 };
+
+        let path = super::astar(&terrain, from, &BTreeSet::from([goal]))
+            .expect("dwarf can walk around a tree");
+
+        assert_eq!(path.last(), Some(&goal));
+        assert!(!path.contains(&trunk));
+        assert_eq!(path.len(), 6, "tree must force a two-step detour");
     }
 
     #[test]
