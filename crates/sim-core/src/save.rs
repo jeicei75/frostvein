@@ -12,6 +12,7 @@ pub struct SaveState {
     pub tiles: Vec<Tile>,
     pub wander_rng: ChaCha8Rng,
     pub next_id: u32,
+    pub camp_origin: Pos,
     pub dwarves: Vec<SavedDwarf>,
     pub designations: Vec<(Pos, DesignationKind)>,
     pub zones: Vec<Pos>,

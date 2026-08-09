@@ -9,6 +9,17 @@ fn surface_height(world: &World, x: i32, y: i32) -> i32 {
         .expect("every column has terrain")
 }
 
+fn is_standable(world: &World, pos: Pos) -> bool {
+    world.tile(pos) == Some(Tile::Empty)
+        && matches!(
+            world.tile(Pos {
+                z: pos.z - 1,
+                ..pos
+            }),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+}
+
 #[test]
 fn same_seed_produces_identical_worlds() {
     let first = World::generate(42, Dims::DEFAULT);
@@ -54,6 +65,58 @@ fn generated_world_writes_no_tile_beyond_vertical_bounds() {
 }
 
 #[test]
+fn camp_is_the_nearest_flat_central_clearing() {
+    const RADIUS: i32 = 3;
+
+    let world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let centre = (world.dims().x as i32 / 2, world.dims().y as i32 / 2);
+    let camp_key = (
+        (camp.x - centre.0).pow(2) + (camp.y - centre.1).pow(2),
+        camp.y,
+        camp.x,
+    );
+
+    for y in RADIUS..world.dims().y as i32 - RADIUS {
+        for x in RADIUS..world.dims().x as i32 - RADIUS {
+            let height = surface_height(&world, x, y);
+            let flat = (y - RADIUS..=y + RADIUS).all(|ny| {
+                (x - RADIUS..=x + RADIUS).all(|nx| surface_height(&world, nx, ny) == height)
+            });
+            if flat {
+                let candidate_key = ((x - centre.0).pow(2) + (y - centre.1).pow(2), y, x);
+                assert!(camp_key <= candidate_key);
+            }
+        }
+    }
+}
+
+#[test]
+fn all_dwarves_spawn_inside_the_camp_with_room_to_move() {
+    const RADIUS: i32 = 3;
+
+    let world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+
+    for (_, pos, _) in world.dwarves() {
+        assert!((pos.x - camp.x).abs() <= RADIUS);
+        assert!((pos.y - camp.y).abs() <= RADIUS);
+        assert_eq!(pos.z, camp.z);
+        assert_eq!(world.tile(pos), Some(Tile::Empty));
+        assert!(
+            [
+                (pos.x - 1, pos.y),
+                (pos.x + 1, pos.y),
+                (pos.x, pos.y - 1),
+                (pos.x, pos.y + 1)
+            ]
+            .into_iter()
+            .any(|(x, y)| is_standable(&world, Pos { x, y, z: pos.z }))
+        );
+    }
+}
+
+#[test]
 fn spawn_positions_for_seed_42_are_pinned() {
     let world = World::generate(42, Dims::DEFAULT);
     let positions: Vec<_> = world.dwarves().into_iter().map(|(_, pos, _)| pos).collect();
@@ -61,25 +124,29 @@ fn spawn_positions_for_seed_42_are_pinned() {
         positions,
         vec![
             Pos {
-                x: 110,
-                y: 82,
-                z: 18
+                x: 64,
+                y: 65,
+                z: 25
             },
             Pos {
-                x: 73,
-                y: 103,
-                z: 14
-            },
-            Pos { x: 58, y: 9, z: 17 },
-            Pos {
-                x: 50,
-                y: 113,
-                z: 12
+                x: 64,
+                y: 66,
+                z: 25
             },
             Pos {
-                x: 44,
-                y: 123,
-                z: 12
+                x: 65,
+                y: 61,
+                z: 25
+            },
+            Pos {
+                x: 66,
+                y: 66,
+                z: 25
+            },
+            Pos {
+                x: 62,
+                y: 67,
+                z: 25
             },
         ]
     );

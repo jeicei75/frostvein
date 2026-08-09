@@ -468,7 +468,7 @@ fn out_of_bounds_dwarf_save_is_logged_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let log = daemon.next_log();
     assert!(
-        log.contains("save dwarf 0 position 2147483647,82,18 is outside dims 128x128x32"),
+        log.contains("save dwarf 0 position 2147483647,65,25 is outside dims 128x128x32"),
         "unexpected out-of-bounds dwarf log: {log}"
     );
 
@@ -496,7 +496,7 @@ fn out_of_bounds_dwarf_home_is_logged_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let log = daemon.next_log();
     assert!(
-        log.contains("save dwarf 0 home -2147483648,82,18 is outside dims 128x128x32"),
+        log.contains("save dwarf 0 home -2147483648,65,25 is outside dims 128x128x32"),
         "unexpected out-of-bounds dwarf-home log: {log}"
     );
 

@@ -51,6 +51,8 @@ names where it came from and what should trigger revisiting it.
   wall. No AC requires interior spawning, so this is an unintended distribution
   rather than a defect. **Revisit if** dwarf starting position becomes
   gameplay-relevant, or when a real embark-site rule replaces the placeholder.
+  **CLOSED in Story 5.1:** the real embark-site rule now selects the nearest qualifying
+  central 7x7 flat clearing, and all five seeded spawn draws are restricted to it.
 
 - **Story artifacts reference planning docs that are untracked**
   (`_bmad-output/implementation-artifacts/1-1-a-seeded-frozen-world-exists.md`

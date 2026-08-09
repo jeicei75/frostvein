@@ -101,6 +101,9 @@ pub struct Dwarf;
 #[derive(Component)]
 struct Item;
 
+#[derive(Resource)]
+struct Camp(Pos);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Component, Serialize, Deserialize)]
 pub enum JobState {
     Idle,
@@ -1001,6 +1004,7 @@ fn assemble(
     tick: u64,
     wander_rng: ChaCha8Rng,
     ids: IdAllocator,
+    camp_origin: Pos,
     jobs: Jobs,
     designations: BTreeMap<Pos, DesignationKind>,
     zones: BTreeSet<Pos>,
@@ -1010,6 +1014,7 @@ fn assemble(
     ecs.insert_resource(Seed(seed));
     ecs.insert_resource(WanderRng(wander_rng));
     ecs.insert_resource(ids);
+    ecs.insert_resource(Camp(camp_origin));
     ecs.insert_resource(Designations(designations));
     ecs.insert_resource(Zones(zones));
     ecs.insert_resource(jobs);
@@ -1056,6 +1061,7 @@ impl World {
         let heights = worldgen::height_field(dims, &mut rng);
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
+        let camp_origin = worldgen::camp_origin(dims, &heights);
         let mut spawn_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_SPAWN);
 
         let mut world = assemble(
@@ -1065,11 +1071,12 @@ impl World {
             0,
             ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER),
             IdAllocator::default(),
+            camp_origin,
             Jobs::default(),
             BTreeMap::new(),
             BTreeSet::new(),
         );
-        world.spawn_dwarves(&heights, &mut spawn_rng);
+        world.spawn_dwarves(camp_origin, &mut spawn_rng);
         world
     }
 
@@ -1118,6 +1125,7 @@ impl World {
             tiles: terrain.tiles.clone(),
             wander_rng: self.ecs.resource::<WanderRng>().0.clone(),
             next_id: self.ecs.resource::<IdAllocator>().next,
+            camp_origin: self.camp_origin(),
             dwarves,
             designations: self.designations(),
             zones: self.zones(),
@@ -1135,6 +1143,7 @@ impl World {
             tiles,
             wander_rng,
             next_id,
+            camp_origin,
             dwarves,
             designations,
             zones,
@@ -1160,6 +1169,7 @@ impl World {
             tick,
             wander_rng,
             IdAllocator { next: next_id },
+            camp_origin,
             job_resource,
             designations.into_iter().collect(),
             zones.into_iter().collect(),
@@ -1204,6 +1214,10 @@ impl World {
 
     pub fn tick(&self) -> u64 {
         self.ecs.resource::<Tick>().0
+    }
+
+    pub fn camp_origin(&self) -> Pos {
+        self.ecs.resource::<Camp>().0
     }
 
     pub fn step(&mut self) {
@@ -1437,31 +1451,15 @@ impl World {
         dwarves
     }
 
-    fn spawn_dwarves(&mut self, heights: &[u32], rng: &mut ChaCha8Rng) {
+    fn spawn_dwarves(&mut self, camp: Pos, rng: &mut ChaCha8Rng) {
         let mut candidates = {
             let terrain = self.ecs.resource::<Terrain>();
-            let dims = terrain.dims;
             let mut candidates = Vec::new();
-            for y in 0..dims.y {
-                for x in 0..dims.x {
-                    let height = heights[(x + y * dims.x) as usize];
-                    let is_flat = [
-                        (x as i32 - 1, y as i32),
-                        (x as i32 + 1, y as i32),
-                        (x as i32, y as i32 - 1),
-                        (x as i32, y as i32 + 1),
-                    ]
-                    .into_iter()
-                    .filter(|&(nx, ny)| {
-                        nx >= 0 && ny >= 0 && nx < dims.x as i32 && ny < dims.y as i32
-                    })
-                    .all(|(nx, ny)| heights[(nx as u32 + ny as u32 * dims.x) as usize] == height);
-                    let pos = Pos {
-                        x: x as i32,
-                        y: y as i32,
-                        z: height as i32 + 1,
-                    };
-                    if is_flat && terrain.is_standable(pos) {
+            let radius = worldgen::CAMP_RADIUS as i32;
+            for y in camp.y - radius..=camp.y + radius {
+                for x in camp.x - radius..=camp.x + radius {
+                    let pos = Pos { x, y, z: camp.z };
+                    if terrain.is_standable(pos) {
                         candidates.push(pos);
                     }
                 }

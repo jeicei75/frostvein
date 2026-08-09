@@ -102,13 +102,13 @@ so that the valley has something living in it and something warm in it before an
         loudly, which is what they are for. Extend the fingerprint's exhaustive `Tile` match with
         the two new materials by **appending** codes; do not renumber existing ones.
 
-- [ ] **Task 2 — Choose the camp and spawn the dwarves into it** (AC: 4, 5, 6)
-  - [ ] Add a camp-site rule to worldgen: scan flat standable columns, take the one nearest the
+- [x] **Task 2 — Choose the camp and spawn the dwarves into it** (AC: 4, 5, 6)
+  - [x] Add a camp-site rule to worldgen: scan flat standable columns, take the one nearest the
         map centre with a large enough flat neighbourhood, tie-broken deterministically.
-  - [ ] Rewrite `World::spawn_dwarves` to draw its five positions from inside the clearing rather
+  - [x] Rewrite `World::spawn_dwarves` to draw its five positions from inside the clearing rather
         than from the whole map. `STREAM_SPAWN` stays the spawn stream (AD-7).
-  - [ ] Set each dwarf's `Wander { home }` to its camp position so wandering keeps them there.
-  - [ ] Close `deferred-work.md:46-53` (border-biased spawn) — this is the real embark-site rule
+  - [x] Set each dwarf's `Wander { home }` to its camp position so wandering keeps them there.
+  - [x] Close `deferred-work.md:46-53` (border-biased spawn) — this is the real embark-site rule
         that entry named as its revisit trigger. Add the closing note to `deferred-work.md`.
 
 - [ ] **Task 3 — Grow the trees** (AC: 7, 8, 9)
@@ -455,15 +455,20 @@ GPT-5.6 Codex (Völundr)
 ### Debug Log References
 
 - Task 1 RED: `default_world_has_mountainous_height_span` failed with `minimum surface height was 12` before the height-field change.
+- Task 2 RED: the camp tests failed to compile because `World::camp_origin` did not exist before the camp rule was implemented.
 
 ### Completion Notes List
 
 - Task 1: widened terrain amplitude and lattice spacing together, preserved the height clamp and traversal invariants, added range/bounds tests, and re-pinned the seed-42 literals. `cargo test --offline -p sim-core` passed (91 tests).
+- Task 2: selected the nearest deterministic 7x7 flat central clearing, persisted/exposed its origin, restricted all five seeded spawn draws to it, and independently tested nearest-site and standability/mobility properties.
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/5-1-the-world-grows-things-that-glow.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `crates/sim-core/src/lib.rs`
+- `crates/sim-core/src/save.rs`
 - `crates/sim-core/src/worldgen.rs`
 - `crates/sim-core/tests/worldgen.rs`
 - `crates/simd/tests/serve.rs`
@@ -474,3 +479,4 @@ GPT-5.6 Codex (Völundr)
 | --- | --- |
 | 2026-08-09 | Story created. Two decisions taken on the record with Wolf: the vista mountain silhouette (yes, shaped here) and the camp (dwarves clustered into it). |
 | 2026-08-09 | Task 1 reshaped the terrain skyline and added range and bounds coverage. |
+| 2026-08-09 | Task 2 established the deterministic central camp and clustered dwarf spawns. |
