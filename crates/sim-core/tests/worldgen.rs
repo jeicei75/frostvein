@@ -177,7 +177,7 @@ fn spawn_positions_for_seed_42_are_pinned() {
                 z: 25
             },
             Pos {
-                x: 66,
+                x: 67,
                 y: 66,
                 z: 25
             },
@@ -210,7 +210,7 @@ fn spawn_positions_for_seed_42_are_pinned() {
             };
             (hash ^ code).wrapping_mul(0x0000_0100_0000_01b3)
         });
-    assert_eq!(terrain_fingerprint, 0x21ab_0f04_2e4e_686d);
+    assert_eq!(terrain_fingerprint, 0xbd48_ac6b_7250_d2e9);
 }
 
 #[test]
@@ -338,11 +338,19 @@ fn height_varies_and_steps_are_at_most_one() {
 
                 if x + 1 < world.dims().x as i32 {
                     let right = surface_height(&world, x + 1, y);
-                    assert!((height - right).abs() <= 1, "seed {seed}");
+                    assert!(
+                        (height - right).abs() <= 1,
+                        "seed {seed} step ({x},{y})={height} -> ({},{y})={right}",
+                        x + 1
+                    );
                 }
                 if y + 1 < world.dims().y as i32 {
                     let down = surface_height(&world, x, y + 1);
-                    assert!((height - down).abs() <= 1, "seed {seed}");
+                    assert!(
+                        (height - down).abs() <= 1,
+                        "seed {seed} step ({x},{y})={height} -> ({x},{})={down}",
+                        y + 1
+                    );
                 }
             }
         }

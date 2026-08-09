@@ -1504,6 +1504,10 @@ impl World {
     }
 
     fn spawn_dwarves(&mut self, camp: Pos, rng: &mut ChaCha8Rng) {
+        let emitter_positions: BTreeSet<_> = camp_emitters(camp)
+            .into_iter()
+            .map(|(pos, _)| pos)
+            .collect();
         let mut candidates = {
             let terrain = self.ecs.resource::<Terrain>();
             let mut candidates = Vec::new();
@@ -1511,7 +1515,7 @@ impl World {
             for y in camp.y - radius..=camp.y + radius {
                 for x in camp.x - radius..=camp.x + radius {
                     let pos = Pos { x, y, z: camp.z };
-                    if terrain.is_standable(pos) {
+                    if terrain.is_standable(pos) && !emitter_positions.contains(&pos) {
                         candidates.push(pos);
                     }
                 }
@@ -1542,47 +1546,49 @@ impl World {
     }
 
     fn spawn_emitters(&mut self, camp: Pos) {
-        let emitters = [
-            (camp, LightKind::Campfire),
-            (
-                Pos {
-                    x: camp.x - 2,
-                    y: camp.y - 2,
-                    ..camp
-                },
-                LightKind::Torch,
-            ),
-            (
-                Pos {
-                    x: camp.x + 2,
-                    y: camp.y - 2,
-                    ..camp
-                },
-                LightKind::Torch,
-            ),
-            (
-                Pos {
-                    x: camp.x - 2,
-                    y: camp.y + 2,
-                    ..camp
-                },
-                LightKind::Torch,
-            ),
-            (
-                Pos {
-                    x: camp.x + 2,
-                    y: camp.y + 2,
-                    ..camp
-                },
-                LightKind::Torch,
-            ),
-        ];
-
-        for (pos, light) in emitters {
+        for (pos, light) in camp_emitters(camp) {
             let id = self.ecs.resource_mut::<IdAllocator>().allocate();
             self.ecs.spawn((Emitter(light), id, pos));
         }
     }
+}
+
+fn camp_emitters(camp: Pos) -> [(Pos, LightKind); 5] {
+    [
+        (camp, LightKind::Campfire),
+        (
+            Pos {
+                x: camp.x - 2,
+                y: camp.y - 2,
+                ..camp
+            },
+            LightKind::Torch,
+        ),
+        (
+            Pos {
+                x: camp.x + 2,
+                y: camp.y - 2,
+                ..camp
+            },
+            LightKind::Torch,
+        ),
+        (
+            Pos {
+                x: camp.x - 2,
+                y: camp.y + 2,
+                ..camp
+            },
+            LightKind::Torch,
+        ),
+        (
+            Pos {
+                x: camp.x + 2,
+                y: camp.y + 2,
+                ..camp
+            },
+            LightKind::Torch,
+        ),
+    ]
 }
 
 #[cfg(test)]

@@ -181,7 +181,7 @@ pub(crate) fn place_trees(
             {
                 continue;
             }
-            if rng.random_range(0..32) != 0
+            if rng.random_range(0..12) != 0
                 || trunks
                     .iter()
                     .any(|&(tx, ty): &(u32, u32)| tx.abs_diff(x) <= 2 && ty.abs_diff(y) <= 2)
@@ -199,14 +199,30 @@ pub(crate) fn place_trees(
             for z in surface + 1..crown_top {
                 tiles[index(dims, x, y, z)] = Tile::Solid(Material::TreeTrunk);
             }
-            tiles[index(dims, x, y, crown_top)] = Tile::Solid(Material::TreeFoliage);
+            let crown_tip = index(dims, x, y, crown_top);
+            if tiles[crown_tip] == Tile::Empty {
+                tiles[crown_tip] = Tile::Solid(Material::TreeFoliage);
+            }
+            for fy in y - 1..=y + 1 {
+                for fx in x - 1..=x + 1 {
+                    if fx != x || fy != y {
+                        let foliage = index(dims, fx, fy, surface + 1);
+                        if tiles[foliage] == Tile::Empty {
+                            tiles[foliage] = Tile::Solid(Material::TreeFoliage);
+                        }
+                    }
+                }
+            }
             for z in crown_top.saturating_sub(2)..crown_top {
                 for fy in y - 1..=y + 1 {
                     for fx in x - 1..=x + 1 {
                         if fx == x && fy == y {
                             continue;
                         }
-                        tiles[index(dims, fx, fy, z)] = Tile::Solid(Material::TreeFoliage);
+                        let foliage = index(dims, fx, fy, z);
+                        if tiles[foliage] == Tile::Empty {
+                            tiles[foliage] = Tile::Solid(Material::TreeFoliage);
+                        }
                     }
                 }
             }

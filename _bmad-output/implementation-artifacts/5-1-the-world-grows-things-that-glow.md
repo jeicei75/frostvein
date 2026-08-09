@@ -173,16 +173,16 @@ so that the valley has something living in it and something warm in it before an
   - [x] `frostvein.save` at the repo root holds the old vocabulary and will no longer load. v0 has
         no save-format stability guarantee — delete it or regenerate it, and say which.
 
-- [ ] **Task 8 — The observability instrument** (AC: 20, 21)
-  - [ ] The instrument is the existing `tui --frames N --z N`; **do not build a second one.**
+- [x] **Task 8 — The observability instrument** (AC: 20, 21)
+  - [x] The instrument is the existing `tui --frames N --z N`; **do not build a second one.**
         Its exact command and the required non-zero observation are in Verification below.
-  - [ ] Add an integration test in `crates/tui/tests/client.rs` that spawns the real `tui` binary
+  - [x] Add an integration test in `crates/tui/tests/client.rs` that spawns the real `tui` binary
         against the stub daemon with a world containing trees and emitters, counts the four new
         glyphs in the ANSI-stripped capture, and asserts each count is non-zero.
-  - [ ] The same test carries its **control**: a stub world with no trees and no emitters produces
+  - [x] The same test carries its **control**: a stub world with no trees and no emitters produces
         zero of those glyphs. Without it, a test asserting only "non-zero" would pass against a
         renderer that painted the glyphs unconditionally.
-  - [ ] Note the harness trap recorded in Key decisions: `glyph_positions` in that file records
+  - [x] Note the harness trap recorded in Key decisions: `glyph_positions` in that file records
         only the first occurrence of a glyph per line (`deferred-work.md:326-330`) — a counting
         assertion must not be built on it.
 
@@ -461,6 +461,8 @@ GPT-5.6 Codex (Völundr)
 - Task 5 RED: protocol tests failed with missing `Entity.light`, both tree materials, both emitter kinds, and `LightKind`; bridge tests also referenced the not-yet-existing emitter reader.
 - Task 6 RED: workspace checking failed on non-exhaustive TUI matches for all four tree tile shapes and both emitter kinds before palette/render support.
 - Task 7 RED (controlled sabotage): removing emitter restoration made `save_round_trip_preserves_emitters` fail with `left: []` versus the five expected `(Id, Pos, LightKind)` tuples; restoration was then reinstated.
+- Task 8 RED (controlled sabotage): deleting the emitter draw pass made `growing_world_instrument_counts_change_with_trees_and_emitters` fail with `feature capture contained zero †`; the pass was restored.
+- Task 8 manual instrument tuning: z=25 aimed at seed 42 and produced `│=30 ♠=222 †=0 ♨=0 ☺=0`; the live default-seed snapshot identified camp z=9. At z=9 the first run exposed absent tree slices, and later a fully occluded campfire; density/crown air-only placement and emitter-cell-free dwarf spawns closed both evidence failures.
 
 ### Completion Notes List
 
@@ -471,6 +473,7 @@ GPT-5.6 Codex (Völundr)
 - Task 5: added five fixed camp emitters, sorted/persisted emitter state, exact wire vocabulary and null-light goldens, exhaustive independent bridges, and save-id/bounds validation. Protocol (5), sim-core (99), simd unit (14), and simd serve (60) tests pass offline.
 - Task 6: pinned four distinct tree/emitter glyphs in the palette, added an emitter pass between items and dwarves, preserved dwarf-only contention/status rules, and closed the non-dwarf draw deferral. All 61 TUI tests pass offline.
 - Task 7: added emitter assertions to per-tick determinism and save/load lockstep, added an explicit emitter round-trip test, and deleted the obsolete 6.9 MB v0 `frostvein.save`. All 100 `sim-core` tests pass offline.
+- Task 8: added a bounded real-binary feature/control capture that counts every ANSI-stripped glyph occurrence. Manual `tui 7413 --frames 6 --z 9` observation: `│=6`, `♠=48`, `†=21`, `♨=3`, `☺=30` (all non-zero; `NO_COLOR` warning observed, so this manual run evidences glyphs, not colours). All 100 sim-core and 62 TUI tests pass offline.
 
 ### File List
 
@@ -505,3 +508,4 @@ GPT-5.6 Codex (Völundr)
 | 2026-08-09 | Task 5 added persisted camp emitters and the exact light-aware wire vocabulary. |
 | 2026-08-09 | Task 6 rendered trees and fixed emitters with the specified layer and parity rules. |
 | 2026-08-09 | Task 7 pinned emitter determinism/save-load behavior and removed the obsolete save. |
+| 2026-08-09 | Task 8 proved the real capture instrument with a zero-feature control and non-zero live counts. |

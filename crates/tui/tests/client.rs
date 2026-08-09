@@ -804,6 +804,129 @@ fn glyph_positions(stdout: &str, glyph: char) -> Vec<(usize, usize)> {
         .collect()
 }
 
+fn capture_growing_world(with_features: bool) -> String {
+    const MAX_CAPTURE_BYTES: u64 = 2 * 1024 * 1024;
+    const FEATURE_DIMS: protocol::Dims = protocol::Dims { x: 9, y: 9, z: 2 };
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind growing-world stub");
+    let port = listener.local_addr().expect("read stub address").port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("2")
+        .arg("--z")
+        .arg("1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn growing-world capture");
+
+    let server = thread::spawn(move || {
+        let mut tiles = vec![protocol::Tile::Empty; 162];
+        for tile in &mut tiles[..81] {
+            *tile = protocol::Tile::Solid(protocol::Material::Ice);
+        }
+        if with_features {
+            tiles[2 + 4 * 9 + 81] = protocol::Tile::Solid(protocol::Material::TreeTrunk);
+            tiles[3 + 4 * 9 + 81] = protocol::Tile::Solid(protocol::Material::TreeFoliage);
+        }
+        let mut entities = vec![protocol::Entity {
+            id: 0,
+            kind: protocol::EntityKind::Dwarf,
+            pos: [6, 4, 1],
+            state: protocol::JobState::Idle,
+            light: None,
+        }];
+        if with_features {
+            entities.extend([
+                protocol::Entity {
+                    id: 5,
+                    kind: protocol::EntityKind::Torch,
+                    pos: [4, 4, 1],
+                    state: protocol::JobState::Idle,
+                    light: Some(protocol::LightKind::Torch),
+                },
+                protocol::Entity {
+                    id: 6,
+                    kind: protocol::EntityKind::Campfire,
+                    pos: [5, 4, 1],
+                    state: protocol::JobState::Idle,
+                    light: Some(protocol::LightKind::Campfire),
+                },
+            ]);
+        }
+        let snapshot = protocol::Snapshot {
+            msg_type: protocol::MessageType::Snapshot,
+            dims: FEATURE_DIMS,
+            tiles,
+            entities: entities.clone(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: protocol::Speed::Normal,
+            tick: 7,
+        };
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(format!("{}\n", serde_json::to_string(&snapshot).unwrap()).as_bytes())
+            .expect("send growing-world snapshot");
+        for tick in 8..=9 {
+            let delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick,
+                tiles: Vec::new(),
+                entities: entities.clone(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: protocol::Speed::Normal,
+            };
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .expect("send growing-world delta");
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stdout)
+        .expect("read bounded growing-world stdout");
+    assert!(stdout.len() as u64 <= MAX_CAPTURE_BYTES);
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .take(MAX_CAPTURE_BYTES + 1)
+        .read_to_string(&mut stderr)
+        .expect("read bounded growing-world stderr");
+    assert!(stderr.len() as u64 <= MAX_CAPTURE_BYTES);
+    let status = child.wait().expect("wait for growing-world capture");
+    server.join().expect("growing-world stub panicked");
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+    strip_ansi(&stdout)
+}
+
+#[test]
+fn growing_world_instrument_counts_change_with_trees_and_emitters() {
+    let feature = capture_growing_world(true);
+    let control = capture_growing_world(false);
+
+    for glyph in ['│', '♠', '†', '♨'] {
+        let feature_count = feature.chars().filter(|value| *value == glyph).count();
+        let control_count = control.chars().filter(|value| *value == glyph).count();
+        assert!(feature_count > 0, "feature capture contained zero {glyph}");
+        assert_eq!(control_count, 0, "empty control rendered {glyph}");
+        assert!(feature_count > control_count);
+    }
+}
+
 /// Replays a whole haul past the real client: a stone at cell A, a dwarf that reaches it, the
 /// stone following the dwarf across the map, and the stone left on the stockpile cell B with the
 /// dwarf moved off it. With `changes = false` the identical run replays one unchanging world,
