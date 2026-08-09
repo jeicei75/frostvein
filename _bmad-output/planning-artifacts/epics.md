@@ -1,10 +1,22 @@
 ---
-stepsCompleted: [1, 2, 3]
+# M1 pass (2026-08-02) completed steps 1-3. M2 pass (2026-08-09) restarts the count.
+stepsCompleted: [1, 2, 3, 4]
+milestone: 2
 inputDocuments:
+  # Milestone 1 (inherited by reference, still binding)
   - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-01/prd.md
   - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-01/addendum.md
   - _bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md
   - docs/architecture.md
+  # Milestone 2
+  - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-09/prd.md
+  - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-09/addendum.md
+  - _bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md
+  - _bmad-output/planning-artifacts/sprint-change-proposal-2026-08-08.md
+  - docs/technical-preferences.md
+  - docs/narrative.md
+  - docs/17d7215b-6c05-4286-b3bb-56592ca617ec.jpg
+  - docs/a9d4e72b-b4c3-43f2-8a1c-e25c539fd6c1.jpg
 ---
 
 # frostvein - Epic Breakdown
@@ -44,12 +56,46 @@ FR24: ~~The raycast 3D view is its own story late in the milestone.~~ **WITHDRAW
 FR25: Scenario tests build a world from a seed, inject commands, tick N times, and assert sim state — with no client or network attached.
 FR26: The walking-skeleton sentence exists as an automated scenario test (dig designation → pathfind → dig → haul to stockpile) and is the phase-one gate.
 
+#### Milestone 2 — Bevy client (FR27–FR37)
+
+FR IDs continue M1's global numbering; feature groups continue at F10. M1's FRs remain binding and are not restated. FR24 is delivered here, re-stated as an outcome and never as a rendering technique.
+
+**F10 — World content that glows and grows (the one place M2 touches the sim).** All of it worldgen/sim-side, seeded, deterministic; clients render it, never invent it.
+
+FR27: Worldgen grows pine trees on the surface — seeded, deterministic, part of world state, visible to every client (the TUI shows them as glyphs). Density and placement are worldgen tuning decisions inside the story, not FR text.
+FR28: Worldgen places static warm light emitters — torches and a campfire at the dwarven starting camp. Light emitters are world state with a position; what light *looks* like is each client's concern.
+FR29: Dwarves carry lanterns — a light source attached to a moving entity, deliberately the lighting system's hardest case, placed in scope as a testbed. Every dwarf simply carries one; no fuel, no pickup/drop, no economy. **First item on the M2 cut list.**
+FR30: Protocol v0 vocabulary grows to carry the above (tree and light-emitter materials/entities, carried-light state) as typed world data, honouring FR17's world-not-game principle. No shape changes, only vocabulary.
+
+**F11 — The diorama (Bevy client, the view).**
+
+FR31: The world renders as the isometric orbitable diorama the Visual Target describes: one zoom continuum from working-close to valley-vista, camera always usable, never lost.
+FR32: The cold/warm read is live — world light sources render as warm pools against the cold night palette; sky, stars, and aurora carry the far register; snow falls as pure decoration (no sim weather).
+FR33: The player can slice into the mountain by z-level to see and work the underground, and can always tell which z-level they are on and what is underground vs. surface. Mechanism is chosen by testing in its story (addendum's open question), not specified here.
+FR34: The world visibly lives, driven only by real sim state over the wire — dwarves move and work at the dig face, carried lanterns move with them, static lights flicker, idle dwarves wander. Zero commands issued still means visible motion (M1's FR4 aliveness, now in 3D).
+
+**F12 — Working the fortress (input parity).**
+
+FR35: The Bevy client reaches full TUI command parity — designate dig/channel, cancel designation, place/remove stockpile, pause/resume, tick rate, save/load, quit. Clients contain zero game logic, unchanged. **Second on the cut list: shrinks to camera + speed control if the story count runs over.**
+FR36: The player can select tiles and rectangles in the 3D view with the mouse — the picking problem — including on sliced underground z-levels. M2's hardest input work and the main story-count driver. **Cut alongside FR35.**
+
+**F13 — Client lifecycle (the boring glue).**
+
+FR37: The Bevy client is a `protocol`-only consumer — connects, receives snapshot, applies per-tick deltas, coexists with concurrent TUI clients on the same daemon (M1's FR19). `sim-core` and `simd` need no structural change for it.
+
 ### NonFunctional Requirements
 
 NFR1: Platform — phase one targets the WSL2 devpod and any decent terminal emulator over SSH; no other platforms. Nothing in phase one may preclude the long-term multi-machine server + client shape, and nothing builds for it.
 NFR2: Feels alive — TUI keeps pace at 10 ticks/sec with no visible stutter (~100 ms frame budget, full 128×128 z-level). A player command is acknowledged in the UI within ~200 ms (one tick + one frame). Dwarf obedience is exempt (FR5 reaction delay). Even with zero commands, the view visibly moves (idle wandering). Checkable by eye; no measurement infrastructure.
 NFR3: Determinism everywhere — every feature keeps seed + command log ⇒ identical state true. Any nondeterminism source (unordered iteration, wall-clock time, unseeded randomness) in `sim-core` is a bug.
 NFR4: Quality gate — every story lands with `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test` green.
+
+#### Milestone 2 (NFR5–NFR8)
+
+NFR5: **No drift.** Clients never invent world state; everything visible in any client is derivable from the wire (AD-1/AD-4 restated). One deliberate carve-out: pure atmosphere — sky, aurora, snowfall, flicker animation, dig-face cosmetic chips — is client-side by design and must never acquire sim meaning silently.
+NFR6: **Feels alive, Bevy bar (measured).** Sustained **60 fps at working zoom** and **≥30 fps at full vista**, full 128×128×32 world, all dwarves and all lights, on the WSLg devpod, read from the frame-time overlay. Client-agnostic ack bar: in any client, a player command's effect is visible in the issuing client within ~200 ms (one tick + one frame), met by the no-explicit-ack convention. NFR2 is TUI-specific and explicitly does **not** stretch to this client.
+NFR7: **Determinism unchanged.** FR27–FR29 land inside worldgen and sim state, so seed + command log ⇒ identical state must survive them; scenario tests cover trees and light emitters like any other world state.
+NFR8: **Gate grows sibling probes.** `scripts/gate.sh` gains the `gui` and `client-core` twins of the `tui` no-`sim-core`-edge probe, so the AD-1 edge stays guarded for the client that matters most.
 
 ### Additional Requirements
 
@@ -72,11 +118,80 @@ From the Architecture Spine (AD-1…AD-12, conventions, stack, structural seed):
 - Scenario harness lives as `sim-core` integration tests, calling the lib directly — no client or network.
 - Story-count counter-metric: phase one ships in 8–12 vertically sliced stories; if planning exceeds 12, the cut list starts with FR16 (save/load). FR24 (raycast view) was removed from the cut list by Wolf's override, 2026-08-01, and then **withdrawn from phase one entirely on 2026-08-08**. **Final phase-one count: 11** — the cut list was never invoked and FR16 was never at risk.
 
+#### Milestone 2 — from the M2 Architecture Spine (AD-13…AD-18, M2 conventions, stack, structural seed)
+
+**No starter template.** The workspace exists; M2 adds **two new crates to the existing four** — `client-core` (library, `protocol`-only dep) and `gui` (Bevy binary) — for **six** total. The M2 dependency graph is the new closed set, superseding the parent's; no edge may be added to it: `simd → sim-core`, `simd → protocol`, `client-core → protocol`, `tui → protocol`, `tui → client-core`, `gui → protocol`, `gui → client-core`.
+
+- **AD-13 — one client mirror, in `client-core`.** A fifth crate owns the world mirror and ALL snapshot/delta application; both clients consume it and neither reimplements any of it. **`tui` adopts `client-core` in an M2 story** — its current in-crate client state is retired, not kept as a second path. That adoption story is load-bearing for this AD and **sits on no cut list**.
+- **AD-14 — rendering projects the mirror; ingestion never touches the ECS.** In `gui`, wire messages mutate only the `client-core` mirror. Every render entity is exactly one of two classes: **world-projected** (terrain, dwarves, items, lights, designations, zones) or **client-local** (sky, aurora, snowfall, the NFR6 overlay, camera rigs). Reconciliation systems keyed by sim `Id` (AD-9) are the only place world-projected entities are created or despawned; deleting every world-projected entity and re-projecting must reproduce the same scene.
+- **AD-15 — interpolation is presentation.** The mirror holds only states the wire delivered (current tick and the previous one). The projection layer may blend between those two for smooth motion; it never extrapolates beyond the newest tick and never predicts. A `snapshot` (connect or AD-11 load) is a world replacement: it clears previous-tick state, and nothing ever blends across it — **a rewind snaps, it is not animated.**
+- **AD-16 — trees are tiles; everything that glows is an entity with a light field.** Trees are exactly two `Material` variants, `TreeTrunk` and `TreeFoliage`, occupying voxels (worldgen-seeded, blocking pathing via existing solidity rules, mutating via `set_tile`/AD-8). **Digging a tree tile removes the tile and drops no item** (Wolf's call, 2026-08-09; wood items deferred). **Snow capping is presentation**, computed by clients from material + exposure — never wire state. Every light source is an entity: `EntityKind` gains `Torch` and `Campfire`; `light: Option<LightKind>` with `LightKind = Torch | Campfire | Lantern`; a lantern-carrying dwarf is `light: Some(Lantern)` on a moving entity. The **sanctioned wire diff for all of M2 is exactly** the `light` field on `Entity` plus those enum variants — framing and mechanism unchanged. The wire carries kind identifiers only, **never RGB, radius, or flicker**. Vocabulary lands per AD-6: `sim-core` source of truth, mirrored serde enums in `protocol`, exhaustive `match` bridges.
+- **AD-17 — the evidence ladder for a real renderer.** Rung 1: world-correctness proven by `client-core` asserted **headless and byte-exact in CI** (the same code `gui` renders from), with `tui` as the live cross-check on a shared daemon. Rung 2: `gui` logic (reconciliation, picking, camera, z-slice) runs **headless under minimal plugins in `cargo test`** — no GPU in CI. Rung 3: visual truth uses `gui`'s scripted capture instrument (`--capture`, Bevy screenshot API), which **has its own tests** (file exists, not black, changes when the world changes, range-checks what it came to see — exit 0 is not a result) and is **never golden-imaged in CI**; captures are the artifact for the sign-off gate's closing half, and rung 3's judge is Wolf's eye, structurally. Capture self-tests need a real render surface and are therefore **excluded from `scripts/gate.sh` and default `cargo test`** — separately invoked; the gate stays headless.
+- **AD-18 — `client-core` owns the mirror's contract.** The mirror's shape is `client-core`'s API and nowhere else: world state keyed by sim `Id`, exposing current tick, **previous-tick entity states (entities only — tiles are never double-buffered)**, and per-tick change information. Providing the previous tick is a mandate on `client-core`, not a cap clients may ignore; **clients consume `client-core`'s change info and never diff wire messages themselves.** Rect handling is part of this contract: the parent's rect rule (single z-level, inclusive corners, `min ≤ max` per axis) is binding for commands, `client-core` provides the one normalization helper both clients use, and `simd` validates incoming rects and logs-and-drops violations.
+- **M2 conventions:** kind → light properties (RGB, radius, flicker) is a **data table in `gui`**, sibling to `tui`'s color table, never hardcoded per draw site. `gui`'s CLI mirrors `tui`'s scripted determinism (`--capture <path>`, `--frames N`, `--z N`-style pinning) — every visual story's instrument is a command line, not a manual recipe. The NFR6 instrument is a frame-time overlay **read on screen, not felt**: `FrameTimeDiagnosticsPlugin` is a default built-in but the ready-made `FpsOverlayPlugin` needs the non-default `bevy_dev_tools` cargo feature — **the story says which**. **Exactly ONE coordinate transform pair** (`world_to_render` / `render_to_world`, sim z-up `[x,y,z]` ↔ Bevy Y-up) lives in `gui`; projection, picking, and capture all call it and a round-trip test pins it — no system does its own axis math. No unix-only code in `gui` or `client-core` (native Windows build deferred, not precluded). `bevy` and `bevy_ecs` move together on the same 0.x line, always — never two Bevy versions in one workspace.
+- **Parent updates owed** (recorded, not silent): AD-6's "`tui` depends on nothing else in the workspace" is amended by AD-13; the parent's dependency-graph enumeration is superseded; the Deferred entries "Raycast 3D view" and "Mouse/touch input — confined to `tui`" and the "Unreal client" mention are stale since the 2026-08-08 pivot; `#![forbid(unsafe_code)]` now applies to all **six** crates, with `thiserror` in `client-core` and `anyhow` in `gui`.
+- **Stack (M2 addition, verified 2026-08-09):** `bevy` 0.19.0 full engine, aligned with `sim-core`'s `bevy_ecs` 0.19.0 (same release train, lockfile confirmed); default features plus `bevy_dev_tools` if the ready-made FPS overlay is used; trim only on a measured problem. Frame diagnostics and the screenshot API are in default features — no third-party deps. **No other new dependencies at cold start:** meshes are built in code, no voxel crate, no asset pipeline. The closed-list rule stands — any addition needs one sentence of justification in its story.
+- **Sequencing facts the structure creates (epic-planning inputs):** `client-core` must exist before either client consumes it; and **the first `gui` story proves the envelope before anything builds on it** — a Bevy window rendering at speed on this box. `glxinfo` proved GL, but wgpu prefers Vulkan via WSLg's Dozen driver, which is younger and less conformant: **unproven until run, and non-negotiable.** Runtime topology is the WSL2 devpod with `gui` displaying via WSLg (D3D12 passthrough, RTX 4080 Laptop, Mesa 25.3.5).
+- **M2 story-count counter-metric: 10–14 stories.** Materially more means scope gets cut, not the plan extended. Cut order, decided in advance: **first FR29** (lanterns — torches and campfire still carry the warm/cold wow), **then FR35/FR36 shrink to camera + speed control**, with the TUI keeping designations until a later milestone. The `tui`-adopts-`client-core` story is explicitly not on this list.
+- **"As soon as possible" has teeth:** the first boot-frame wow — world, light, aurora, no input needed — lands in the milestone's **first third**. A plan that back-loads the visual payoff is wrong, cap or no cap.
+- **Parity rule, both halves:** Bevy first catches up to the TUI's features and reaches the look-and-feel bar; the TUI is not extended for Bevy-only work. But **any new sim functionality or bug fix that affects the TUI updates the TUI too** — no TUI regression ships during M2, and F10's trees and lights are rendered by both clients (TUI glyphs included).
+- **Baseline:** M2 starts against today's `simd` functionality and today's seeded worldgen. More sim control is added by specific stories when a story needs it, not up front. The dwarf count stays at FR3's five (the narrative's six were scene dressing) until a story changes it.
+- **Art:** procedural/code-first; no asset pipeline in the base build. Authored assets enter only when a concrete case forces the decision on the record (dwarves expected first). This **overturns, on the record**, M1's "models authored as code, never as assets, ever" — that constraint's premise no longer holds. A **tech-art-guidelines deliverable** is owed: its procedural-era half (value discipline, sky-as-illuminant, material rules) by the first `gui` visual stories; its asset-contract half arrives with the pipeline.
+- **Story rules still binding (M1 `docs/technical-preferences.md`):** vertical slices, never horizontal layers; every story ends with something observable; a story fits one dev-agent session; **every story names its observability instrument in a task and tests the instrument**; a scripted capture must be reproducible and range-check its own output — **exit 0 is not a result**.
+- **Decisions owed inside M2 stories (spine Deferred; the spine binds only the outcome):** the **z-slice control mechanism** (UX-DR3); the **world-edge treatment** (UX-DR12); and the **vista mountain silhouette** — should in-grid terrain give the skyline peaks backlit by the aurora within 128×128×32? M1's FR2 assumed "modest rolling hills" **for pathfinding, not for the vista register**, so this needs conscious revisiting on the record at worldgen tuning, never silent stretching. Also recorded as deferred with explicit triggers, building nothing now: native Windows build (trigger: Wolf calls for it), asset pipeline via MagicaVoxel `.vox`/`bevy_vox_scene` (trigger: a story needs authored assets — unverified against bevy 0.19, re-verify at trigger time), golden-image CI (trigger: a deterministic driver-stable render path exists; not planned), and trimming bevy features (trigger: a measured gate-time or binary-size problem).
+
 ### UX Design Requirements
 
 No separate UX design contract exists (no `ux-designs/` run folders). The TUI's visual and interaction requirements are first-class PRD requirements (FR20–FR23) plus the concrete keymap in the PRD addendum:
 
 - Keymap (addendum, binds FR21): `d` dig mode, `c` channel mode, `p` stockpile mode, `x` remove-designation mode, arrows/`hjkl` cursor, `Enter` anchor/commit rectangle, `Esc` back out one level, `Space` pause/resume, `+`/`-` tick rate, `<`/`>` z-level, `q` quit with confirm; one-line hint bar always shows the active mode's keys.
+
+#### Milestone 2 — UX-DR1…UX-DR22
+
+Still no separate UX design contract exists. The M2 PRD's **Visual Target & Game Feel** section carries that weight deliberately — it was written as the structural fix for FR24's defect (a requirement that named a mechanism instead of an outcome), so **no line below may name a rendering technique**. Each is a bar a story must clear, extracted so it becomes an acceptance criterion rather than evaporating into "make it pretty".
+
+**The view (FR31, FR33)**
+
+UX-DR1: A frozen mountain valley seen as an isometric diorama — you look *down into* a place, from outside, and orbit it by hand. The camera is always usable; there is no angle you get stuck in.
+UX-DR2: One zoom continuum, two registers: pulled close, a working view where individual dwarves and blocks are readable; pulled out, a vista where the valley, sky, and aurora carry the frame and dwarves become warm specks. **The far register is the same view, not a mode** — pulling out changes distance, never representation.
+UX-DR3: The world keeps discrete z-levels, DF-style, even in 3D; dwarves start at ground level and dig down, and the player can slice into the mountain to see and work the underground. **Open design question, decided by testing in its story:** Wolf's candidate is the mousewheel, which collides with the conventional orbit-camera zoom that UX-DR2 already claims. One wheel cannot drive both. Candidates to test — modifier+wheel for slicing, dedicated keys (`<`/`>`, TUI parity), or slice-follows-selection.
+
+**The light — the wow mechanism (FR28, FR32)**
+
+UX-DR4: The organising principle is **cold against warm**: a dark blue night world — snow, ice, stone, stars, a sweeping aurora — punctured by pockets of warm orange light where the dwarves are.
+UX-DR5: The eye lands on the dwarven encampment **first**, and it lands there because of the warm/cold contrast, **not because of a UI marker**.
+UX-DR6: Warm light sources exist *in the world* (things that glow), so the contrast is real rather than painted on.
+
+**What the reference images bind (bars, not guidance)**
+
+UX-DR7: **The sky is an illuminant, not a backdrop** — aurora and starlight visibly light the snow and catch on ice, and the aurora hugs the horizon rather than hanging overhead.
+UX-DR8: **Snow reads as a settled cap** — white tops, bare dark flanks, loaded branches; not a uniform coat.
+UX-DR9: **Work leaves evidence** — rubble and debris at the dig face (the sim's stone items, plus cosmetic chips under NFR5's carve-out), so a worked site never looks spotless.
+UX-DR10: **Value discipline** — night snow stays midtone blue-grey; only emissive light approaches white. Bright moonlit snow would flatten the warm/cold read.
+UX-DR11: **The cold field varies** — blue ice breaks the white expanse, so the vista reads in cold-against-cold layers rather than one white sheet.
+UX-DR12: **The world reads as a miniature whose edges dissolve into the night — a raw grid edge is never visible at any zoom.** The 128×128 world shows its cut edges when the camera pulls out. **Open design question, decided by testing in the camera/atmosphere story:** fog skirt, darkness falloff at the rim, sky wrapping below the horizon line, or vignette.
+
+**The two wow beats — both required (FR31, FR32, FR34)**
+
+UX-DR13: **Cold boot** — the first frame is an aesthetic hit on looks alone: voxel world, dramatic lighting, aurora. No input needed.
+UX-DR14: **~Thirty seconds in** — the realisation that it's *alive*: light flickers, work animates at the dig face, a dwarf picks something up and carries it. The moment a beautiful still image becomes a running simulation. **This beat is the magic; a client that only achieves UX-DR13 has failed the milestone.**
+
+**The anti-requirements — 4.1a's six failures, inverted (each is a pass/fail bar)**
+
+UX-DR15: *Not ugly* — the boot frame is something you'd screenshot unprompted.
+UX-DR16: *Not flat* — depth reads instantly; light, shadow, and air separate near from far.
+UX-DR17: *Not cluttered* — at working zoom you can tell dwarves, terrain, designations, and items apart at a glance.
+UX-DR18: *Not confusing* — you always know what you're looking at, which z-level you're on, and what is underground vs. surface.
+UX-DR19: *Not lifeless* — something visibly moves even when you issue nothing: work, light, weather, idle wandering.
+UX-DR20: *Camera usable* — you can always reach the angle you want, and never lose the fortress.
+
+**Interaction (FR35, FR36)**
+
+UX-DR21: The player selects tiles and rectangles in the 3D view **with the mouse** — the picking problem — including on sliced underground z-levels, and issues the full TUI command set from the Bevy client.
+
+**Process obligation (binds every visually subjective story)**
+
+UX-DR22: **The sign-off gate, both halves.** *Opening:* no visually subjective story is implemented before Wolf has approved a cheap "here is what you will see" artifact for it — target frame, mock, sketch, or generated reference of *our actual world* at the framing being built, **one artifact per visual story**. *Closing:* the story is done only when Wolf has **viewed the built result live** and compared it against the approved artifact. This is the structural fix for the FR24 defect class — a spec that is meetable, implemented, and not what was wanted, which no review layer can catch by construction. **4.1a was lost at live viewing, not at spec time.** Per AD-17, `gui --capture` output serves the closing half and never replaces the opening half.
 
 ### FR Coverage Map
 
@@ -107,6 +222,24 @@ FR24: **WITHDRAWN from phase one 2026-08-08**, re-homed to Milestone 2 as an out
 FR25: Epic 2 - Headless scenario harness (foundation; exercised throughout Epic 3)
 FR26: Epic 3 - Walking-skeleton scenario test — the phase-one gate (PASSED, 2026-08-07; MILESTONE 1)
 
+#### Milestone 2 (FR27–FR37)
+
+FR27: Epic 5 - Seeded pine trees on the surface (sim state, rendered by both clients)
+FR28: Epic 5 - Static warm light emitters — torches and campfire at the starting camp
+FR29: Epic 6 - Dwarves carry lanterns (moving light source) — **first on the cut list**
+FR30: Epic 5 - Protocol vocabulary growth: the `light` field plus tree/emitter enum variants (the whole sanctioned M2 wire diff)
+FR31: Epic 5 - The isometric orbitable diorama: one zoom continuum, camera always usable
+FR32: Epic 5 - The cold/warm read live: warm pools, night palette, sky/stars/aurora, decorative snowfall
+FR33: Epic 7 - Z-slicing into the mountain, with the player always knowing their level and surface-vs-underground
+FR34: Epic 6 - The world visibly lives from wire state alone: motion, work at the dig face, flicker, idle wandering
+FR35: Epic 8 - Full TUI command parity from the Bevy client — **shrinks to camera + speed control if the cap is hit**
+FR36: Epic 8 - Mouse picking of tiles and rectangles in 3D, including on sliced underground levels — **cut alongside FR35**
+FR37: Epic 5 - The Bevy client as a `protocol`-only consumer, coexisting with concurrent TUI clients
+
+**NFR coverage:** NFR5 (no drift) is a bar on every `gui` story, not one story's work. NFR6 lands as an instrument in Epic 5 (the envelope proof measures it; the vista bar is re-checked there) and is re-measured under full load in Epics 6 and 8. NFR7 lands with Epic 5's worldgen story. NFR8's probes land with the crates that need them — `client-core` and `gui`, both in Epic 5.
+
+**UX-DR coverage:** Epic 5 — UX-DR1, 2, 4, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 20. Epic 6 — UX-DR9, 14, 19. Epic 7 — UX-DR3, 17, 18. Epic 8 — UX-DR21. **UX-DR22 (the sign-off gate, both halves) binds every visually subjective story in every epic.**
+
 ## Epic List
 
 ### Epic 1: The Frozen World on Screen
@@ -124,6 +257,36 @@ Designate a dig, watch dwarves obey in their own time, see stone reach the stock
 ### Epic 4: The World in Three Dimensions — **CLOSED EARLY 2026-08-08**
 Delivered 4.1a (raycast depth view, `done`, deliberately **not merged**); **4.1b dropped**; **FR24 withdrawn** from phase one. Wolf judged the live depth view "quite far from wow effect" and 3D-in-TUI is abandoned. The ambition moves to a **Bevy client in Milestone 2**, which needs its own planning pass. The 2D TUI is NOT retired — it becomes the debug client and the deterministic assertion instrument.
 **FRs covered:** none in phase one. FR24 withdrawn; FR23's phase-one obligation was already met at 3.3.
+
+---
+
+## Epic List — Milestone 2 (Bevy client)
+
+Four epics, **11 stories** planned inside the 10–14 cap, with the slack deliberately reserved for picking (Epic 8) and for splitting either of Epic 5's two heavy crate stories (5.2, 5.3) if one overruns a dev session — split lines for both are named in Epic 5. The ordering is driven by two hard constraints, not by taste: the PRD's **first-third wow** counter-metric and the spine's two sequencing facts (`client-core` exists before either client consumes it; the `gui` envelope is proven before anything builds on it).
+
+**CM2, stated honestly:** the boot frame lands at story 4 of 11, completing at **36%** of the milestone — inside the first-third mandate at the edge rather than comfortably, and by *effort* tighter still, since 5.2, 5.3 and 5.4 are three of the milestone's five heaviest stories and all three precede the beat. **Splitting 5.2 or 5.3 pushes the beat to story 5 of 12 (42%) and breaches CM2**, so a split is the trigger to re-check CM2 on the record, not a free move.
+
+### Epic 5: The Cold Boot
+Wolf launches the Bevy client and the first frame stops him — a frozen valley seen as an isometric diorama he can orbit, dark blue night punctured by the warm glow of the camp, aurora hugging the horizon, snow-capped pines, edges dissolving into the dark. He has issued no input and the world already looks like somewhere. Along the way the sim grows the things that glow, and both clients start reading the world through one shared mirror.
+**FRs covered:** FR27, FR28, FR30, FR31, FR32, FR37
+**Delivers wow beat 1 (UX-DR13).** Standalone: a beautiful viewable client; the TUI still does the commanding.
+
+### Epic 6: The Valley Lives
+Thirty seconds after the boot frame, the still image becomes a simulation. Dwarves walk and swing at the dig face, rubble accumulates where they work, torch and campfire light flickers, idle dwarves wander, and lantern light travels with the dwarf carrying it — all of it driven by real sim state over the wire, none of it invented by the client.
+**FRs covered:** FR34, FR29
+**Delivers wow beat 2 (UX-DR14) — the beat the PRD calls the magic.** Standalone: builds on Epic 5, needs nothing after it.
+
+### Epic 7: Into the Mountain
+Wolf slices into the mountain and sees the dig underground: he can always tell which z-level he is on and what is below ground versus on the surface, and at working zoom he can tell dwarves, terrain, designations, items, and stockpiles apart at a glance.
+**FRs covered:** FR33
+**Resolves the z-slice/zoom control collision by testing (UX-DR3).** Standalone: builds on Epics 5–6, needs nothing after it.
+
+### Epic 8: The Boss Gives Orders in Three Dimensions
+Wolf works the fortress from the Bevy client with the mouse — clicking and dragging rectangles to designate digs and channels, cancelling them, placing and removing stockpiles, including on sliced underground levels — plus speed, save/load, and quit. Full parity with the TUI, and the walking skeleton runs end to end in 3D.
+**FRs covered:** FR35, FR36
+**M2's hardest input work and the main story-count driver.** Standalone: builds on Epics 5–7; it is also the cut-list's second victim, shrinking to camera + speed control if the story cap binds.
+
+---
 
 ## Epic 1: The Frozen World on Screen
 
@@ -438,3 +601,486 @@ burned.
   TUI-specific and stays met for phase one.
 - **The voxel-model idea itself** → still good, still deliberately unbuilt. It belongs to the 3D
   client, where geometry is native rather than simulated with character cells.
+
+---
+
+# Milestone 2 — The Bevy Client
+
+## Epic 5: The Cold Boot
+
+Wolf launches the Bevy client and the first frame stops him — a frozen valley seen as an isometric diorama he can orbit, dark blue night punctured by the warm glow of the camp, aurora hugging the horizon, snow-capped pines, edges dissolving into the dark. He has issued no input and the world already looks like somewhere.
+
+Four stories, ordered by the two hard constraints: the sim grows the things that glow (5.1), both clients start reading one shared mirror (5.2), the render envelope is proven on this machine (5.3), and only then does the world become beautiful (5.4). **Wow beat 1 lands at story 4 of 11 — the story completes at 36% of the milestone, so CM2's first-third mandate is met at the edge, not comfortably.** Splitting either 5.2 or 5.3 moves the beat to story 5 of 12 (42%) and breaches CM2; **a split of 5.2 or 5.3 is therefore the trigger to re-check CM2 on the record, never a free move.** If a safety valve is needed, thin 5.3 (see its split line) rather than delaying 5.4.
+
+**The sign-off gate (UX-DR22) applies to 5.4 and not to 5.1–5.3.** 5.3 is deliberately allowed to be ugly: grey boxes that orbit at speed are a pass. Naming that up front is what keeps 5.3 small enough to fit one session.
+
+**Split line, named in advance (5.3 as well as 5.2).** The 10–14 cap's slack covers a split of either. 5.2 splits at the crate/mirror boundary. **5.3 splits into envelope + lifecycle** (crate, gate probe, window, backend recording, connect, mirror ingestion, concurrent TUI cross-check) **versus projection + instruments** (reconciliation, transform pair, camera, overlay, capture) — the first half alone is a legitimate observable story: a window on this machine showing real world state. "Allowed to be ugly" bounds 5.3's visual scope, not its structural scope.
+
+**Contingency if the render envelope does not hold (5.3's negative finding).** Eight of the milestone's eleven stories sit downstream of 5.3, so the fallback is recorded now rather than decided under pressure: first force the GL backend `glxinfo` already proved (`WGPU_BACKEND`), then escalate to the spine's deferred **native Windows build** — a failed envelope is exactly the trigger its "Wolf calls for it" clause anticipates. Neither is chosen here; recording the ladder is what removes the panic.
+
+### Story 5.1: The World Grows Things That Glow
+
+As the boss,
+I want the generated world to contain pine trees and the camp's torches and campfire,
+So that the valley has something living in it and something warm in it before any client exists to light it.
+
+**Acceptance Criteria:**
+
+**Given** a world seed,
+**When** `sim-core` generates the default 128×128×32 world,
+**Then** pine trees stand on the surface as exactly two new `Material` variants — `TreeTrunk` and `TreeFoliage` — placed by a seeded worldgen stream and blocking pathing through the existing solidity rules (FR27, AD-16)
+**And** torches and a campfire exist as entities at the dwarven starting camp, each with a position, `EntityKind::Torch` / `EntityKind::Campfire`, and `light: Some(..)` (FR28, AD-16)
+**And** density and placement are tuned inside this story — the requirement does not specify them.
+
+**Given** a designated tree tile,
+**When** a dwarf digs it,
+**Then** the tile is removed via `World::set_tile` and appears in the per-tick dirty set (AD-8)
+**And** **no item is dropped** — stone comes from mineral materials and wood items are deferred (AD-16, Wolf's call 2026-08-09).
+
+**Given** the wire,
+**When** a snapshot or delta carries the new content,
+**Then** the only additions are the `light: Option<LightKind>` field on `Entity` and the new `Material`, `EntityKind` and `LightKind` variants — `LightKind` gains `Torch` and `Campfire` here, with `Lantern` arriving only if FR29 ships (FR30, AD-16)
+**And** the wire carries kind identifiers only — never RGB, radius, or flicker
+**And** `sim-core` enums stay source of truth, mirrored in `protocol`, bridged in `simd` by exhaustive `match` with no wildcard arm (AD-6).
+
+**Given** a TUI client attached,
+**Then** trees and light emitters render as distinct glyphs drawn from the existing `tui` id → RGB data table — the parity rule's backward half, since this is a sim-level change (FR27, FR28).
+
+**Given** the vista register and M1's FR2 assumption of "modest rolling hills" — made for pathfinding, never for the vista — 
+**When** worldgen is tuned in this story,
+**Then** the story states **on the record** whether in-grid terrain is shaped to give the skyline a mountain silhouette backlit by the aurora within 128×128×32, and why — the last of the spine's three decisions owed inside M2 stories, and the one it warned must be revisited consciously and **never silently stretched**
+**And** the answer is cross-referenced from 5.4, which builds the vista on top of whatever this story decides.
+
+**Given** the same seed,
+**When** two worlds are generated and ticked N times,
+**Then** trees, emitters and all other world state are identical tile-for-tile and entity-for-entity, asserted by `sim-core` scenario tests (NFR7, AD-7).
+
+**Given** the observability instrument,
+**When** `tui --frames N --z N` runs pinned to the camp's level,
+**Then** it reports a non-zero count of tree glyphs and a non-zero count of emitter glyphs before any conclusion is drawn — exit 0 is not a result
+**And** the instrument's own test shows those counts change when worldgen changes.
+
+### Story 5.2: One Mirror, Two Clients
+
+As a developer,
+I want a `client-core` crate that owns the world mirror and all snapshot/delta application, with the TUI already running on it,
+So that both clients read one truth, and the mirror's contract is proven against the client we can byte-assert before the Bevy client bets on it.
+
+**Acceptance Criteria:**
+
+**Given** the workspace,
+**When** the `client-core` crate is added,
+**Then** it depends on `protocol` only, carries `#![forbid(unsafe_code)]` and `thiserror`, and the closed dependency graph becomes exactly `simd → sim-core`, `simd → protocol`, `client-core → protocol`, `tui → protocol`, `tui → client-core` (AD-13)
+**And** `scripts/gate.sh` gains a `client-core` sibling of the `tui` no-`sim-core`-edge probe (NFR8).
+
+**Given** a snapshot or delta arriving,
+**When** `client-core` applies it,
+**Then** the mirror holds world state keyed by sim `Id` and exposes the current tick, previous-tick **entity** states (entities only — tiles are never double-buffered), and per-tick change information (AD-18)
+**And** AD-8's client-side semantics live here and only here: full-resend sections are authoritative replacements, absence is deletion, and a `snapshot` is a world replacement that clears previous-tick state.
+
+**Given** the rect contract,
+**Then** `client-core` provides the single normalization helper both clients use — single z-level, inclusive corners, `min ≤ max` per axis
+**And** `simd` validates incoming command rects and logs-and-drops violations while the sim keeps running, the malformed-input convention extended to well-formed JSON with invalid semantics (AD-18).
+
+**Given** the TUI,
+**When** this story is done,
+**Then** it consumes `client-core` for all world state and its in-crate client state is **retired, not kept as a second path** (AD-13)
+**And** it never diffs wire messages itself — it consumes `client-core`'s change information.
+
+**Given** a recorded snapshot and delta sequence,
+**When** `client-core` applies it headlessly in `cargo test`,
+**Then** the resulting mirror is asserted byte-exact, including deletion-by-absence and snapshot-as-reset (AD-17 rung 1).
+
+**Given** the observability instrument — a scripted TUI capture at a pinned level (`tui --frames N --z N`) against the same seed and command sequence,
+**When** it is run before and after adoption,
+**Then** the output is identical, which is what makes this story observable rather than a refactor
+**And** the guard is shown to have teeth: sabotaging one mirror rule (for example, making absence stop meaning deletion) makes the comparison fail.
+
+### Story 5.3: A Window Onto the Valley
+
+As the boss,
+I want a Bevy client that opens a window on this machine and shows the real world as voxels I can orbit,
+So that the render path is proven to work here, at speed, before anything beautiful is built on it.
+
+**This story is allowed to be ugly.** Unlit grey boxes that orbit at speed are a pass; the visual bars belong to 5.4.
+
+**Acceptance Criteria:**
+
+**Given** the workspace,
+**When** the `gui` crate is added,
+**Then** it depends on `protocol` and `client-core` only — never `sim-core` — carries `#![forbid(unsafe_code)]` and `anyhow`, and uses `bevy` 0.19.0 on the same release train as `sim-core`'s `bevy_ecs` 0.19.0 (spine stack)
+**And** `scripts/gate.sh` gains the `gui` no-`sim-core`-edge probe (NFR8).
+
+**Given** the dev machine (WSL2 devpod, WSLg, RTX 4080 Laptop, Mesa 25.3.5),
+**When** `gui` launches,
+**Then** a window opens and renders continuously
+**And** the story records **which wgpu backend actually initialised** — WSLg's Vulkan/Dozen path is younger and less conformant than the GL path `glxinfo` proved, and is unproven until run
+**And** if the envelope does not hold, that is this story's finding and it is reported, never worked around silently in production code.
+
+**Given** the daemon running,
+**When** `gui` connects,
+**Then** it receives the snapshot and applies per-tick deltas through `client-core`, with wire messages mutating only the mirror and never the ECS (AD-14, FR37)
+**And** a `tui` client attached to the same daemon at the same time shows the same world (FR19, FR37).
+
+**Given** the mirror,
+**When** the world is projected,
+**Then** terrain, dwarves, items and emitters render as world-projected entities at the simplest correct fidelity, and every render entity is exactly one of two classes — world-projected or client-local (AD-14)
+**And** reconciliation systems keyed by sim `Id` are the only place world-projected entities are created or despawned
+**And** despawning every world-projected entity and re-projecting reproduces the same scene, asserted headlessly under minimal plugins in `cargo test` with no GPU (AD-14, AD-17 rung 2).
+
+**Given** the two coordinate systems,
+**Then** exactly one transform pair (`world_to_render` / `render_to_world`) exists in `gui` for sim z-up `[x,y,z]` ↔ Bevy Y-up; projection and capture both call it, no system does its own axis math, and a round-trip test pins it (spine convention).
+
+**Given** the view,
+**When** I orbit and zoom,
+**Then** the camera looks down into the world isometrically from outside, I can always reach the angle I want, and I never lose the fortress (FR31, UX-DR1, UX-DR20).
+
+**Given** the NFR6 instrument,
+**Then** a frame-time overlay is readable on screen — the story states whether it uses the ready-made `FpsOverlayPlugin` (which needs the non-default `bevy_dev_tools` feature) or a hand-rolled overlay — and the measured figure at this fidelity is recorded as the baseline (NFR6)
+**And** the overlay is **toggleable and off by default in `--capture` output**: captures are the sign-off gate's closing artifact (AD-17 rung 3, UX-DR22) and a burnt-in fps counter both spoils the artifact and gives the instrument's "changes when the world changes" self-test a false positive for the wrong reason.
+
+**Given** the observability instrument,
+**When** `gui --capture <path> --frames N` runs,
+**Then** it writes an image file, and its own tests assert the file exists, is not black, changes when the world changes, and range-check what it came to see (AD-17 rung 3)
+**And** those self-tests are excluded from `scripts/gate.sh` and default `cargo test` because they need a real render surface — the gate stays headless.
+
+### Story 5.4: The Cold Boot
+
+As the boss,
+I want the first frame of the Bevy client to be a frozen valley at night — warm camp light against cold dark, aurora on the horizon,
+So that I want to keep looking at it before I have issued a single command.
+
+**Sign-off gate, opening half (UX-DR22): Wolf approves a "here is what you will see" artifact of our actual world at this framing before implementation starts. The story is done only when he has viewed the built result live and compared it against that artifact.**
+
+**Acceptance Criteria:**
+
+**Given** the world at boot,
+**Then** the palette is a dark blue night world — snow, ice, stone, stars — and the camp's torches and campfire read as warm orange pools of light against it (FR32, UX-DR4, UX-DR6)
+**And** the eye lands on the dwarven encampment first because of the warm/cold contrast, with no UI marker doing that work (UX-DR5)
+**And** depth reads instantly: light, shadow and air separate near from far (UX-DR16).
+
+**Given** the sky,
+**Then** it is an illuminant and not a backdrop — aurora and starlight visibly light the snow and catch on ice, and the aurora hugs the horizon rather than hanging overhead (UX-DR7)
+**And** sky, stars, aurora and falling snow are client-local entities with no sim meaning, sanctioned by NFR5's carve-out and never acquiring sim meaning silently (FR32, AD-14, AD-15).
+
+**Given** the terrain,
+**Then** snow reads as a settled cap — white tops, bare dark flanks, loaded branches, not a uniform coat — computed by the client from material and exposure, never from wire state (UX-DR8, AD-16)
+**And** blue ice breaks the white expanse so the cold field reads in layers rather than as one white sheet (UX-DR11)
+**And** night snow stays midtone blue-grey while only emissive light approaches white, since bright moonlit snow would flatten the warm/cold read (UX-DR10).
+
+**Given** the zoom continuum,
+**When** I pull out to full vista,
+**Then** the valley, sky and aurora carry the frame and dwarves become warm specks; pulled close, individual dwarves and blocks are readable — **the same view at a different distance, never a different representation** (FR31, UX-DR2)
+**And** at no zoom is a raw grid edge visible: the world reads as a miniature whose edges dissolve into the night, by a treatment chosen by testing here from the addendum's candidates — fog skirt, darkness falloff at the rim, sky wrapping below the horizon, or vignette (UX-DR12)
+**And** the vista is built on 5.1's recorded silhouette decision rather than re-opening it: if 5.1 declined the mountain skyline, this story works with the horizon it has and says so.
+
+**Given** the light appearance,
+**Then** kind → light properties (RGB, radius, flicker) is a data table in `gui` keyed by `LightKind`, sibling to `tui`'s color table, never hardcoded per draw site (AD-16, spine convention).
+
+**Given** the full 128×128×32 world with all dwarves and all lights on the WSLg devpod,
+**When** the frame-time overlay is read,
+**Then** it shows a sustained 60 fps at working zoom and ≥30 fps at full vista (NFR6).
+
+**Given** the tech-art guidelines deliverable,
+**Then** its procedural-era half — value discipline, sky-as-illuminant, and the material rules this story settles — is written down as those decisions are made, not reconstructed later (spine Deferred).
+
+**Given** the observability instrument built at 5.3,
+**When** `gui --capture <path> --frames N` runs at the boot framing,
+**Then** it produces the reproducible artifact of this story's headline outcome — the frame Wolf judges — with the fps overlay off (5.3's toggle)
+**And** it range-checks what it came to see before any conclusion is drawn: a non-zero count of warm-lit emitter entities in frame and a non-black, non-uniform image — **exit 0 is not a result** (AD-17 rung 3, story rules)
+**And** the capture is retained beside the artifact Wolf approved at the gate's opening half, so the comparison the closing half demands is against two images rather than a memory.
+
+**Given** the sign-off gate's closing half,
+**Then** Wolf has viewed the built result live, compared it against the artifact he approved before implementation, and signed off **wow beat 1**: the boot frame is something he would screenshot unprompted (UX-DR13, UX-DR15, UX-DR22).
+
+## Epic 6: The Valley Lives
+
+Thirty seconds after the boot frame, the still image becomes a simulation. Dwarves walk and swing at the dig face, rubble accumulates where they work, torch and campfire light flickers, idle dwarves wander, and lantern light travels with the dwarf carrying it — all of it driven by real sim state over the wire, none of it invented by the client.
+
+Two stories. **6.1 delivers wow beat 2 — the beat the PRD calls the magic, and the one a client that only achieves beat 1 has failed the milestone on.** 6.2 is FR29, first on the M2 cut list; cutting it leaves Epic 6 with its wow intact, because torches and the campfire already carry the warm/cold read.
+
+**The sign-off gate (UX-DR22) applies to both stories.**
+
+### Story 6.1: The World Moves
+
+As the boss,
+I want the valley to visibly live — dwarves walking and working, light flickering, rubble piling at the dig face — with no command from me,
+So that the beautiful still image becomes a running simulation in front of my eyes.
+
+**Acceptance Criteria:**
+
+**Given** the mirror holding the current tick and the previous one,
+**When** the projection layer draws a frame between ticks,
+**Then** entity motion is blended between those two delivered states so dwarves move smoothly rather than snapping tile to tile (AD-15, FR34)
+**And** it **never extrapolates beyond the newest tick and never predicts** — the client shows only states the wire delivered
+**And** the blend logic is asserted headlessly under minimal plugins in `cargo test`, including that no blend factor ever reaches past the newest tick (AD-17 rung 2).
+
+**Given** a `snapshot` arriving on connect or after an AD-11 load,
+**When** the client applies it,
+**Then** it is a world replacement that clears previous-tick state, and nothing blends across it — **a rewind snaps, it is not animated** (AD-15)
+**And** this is asserted headlessly, not judged by eye.
+
+**Given** a dig designated **from a TUI client on the same daemon** — the Bevy client issues no commands until Epic 8 — at a **surface-visible dig face named in the story**, since z-slicing does not arrive until 7.1 and until then this client sees the world only from outside,
+**When** I watch that dig face,
+**Then** a dwarf in the working state visibly works there, and the site accumulates evidence: the sim's stone items appear as world-projected entities, alongside cosmetic chips that are client-local under NFR5's carve-out — **a worked site never looks spotless** (FR34, UX-DR9, AD-14)
+**And** the site is chosen so the camera can see it without slicing: a dig aimed into or under the mountain has its face occluded by the terrain being dug, which is story 3.3's false failure repeated — a capture aimed somewhere world-dependent returned zero of every glyph with exit 0, indistinguishable from a broken feature.
+
+**Given** torches and the campfire,
+**Then** their light flickers as client-side animation with no sim meaning, driven from the `gui` light data table and never from the wire (FR34, AD-15, AD-16).
+
+**Given** a session where I issue no commands at all,
+**When** I watch for thirty seconds,
+**Then** something visibly moves — idle dwarves wander, work continues, light flickers — because M1's FR4 aliveness is now visible in 3D (FR34, UX-DR19).
+
+**Given** the full world with all dwarves moving and all lights animating on the WSLg devpod,
+**When** the frame-time overlay is read,
+**Then** it still shows a sustained 60 fps at working zoom and ≥30 fps at full vista (NFR6).
+
+**Given** the observability instruments,
+**When** `gui --capture <path> --frames N` runs across a span of ticks, aimed at the named surface-visible dig site,
+**Then** successive captures differ where the sim changed, and the instrument range-checks what it came to see — a non-zero count of working dwarves and of accumulated rubble at that site — rather than reporting exit 0 (AD-17 rung 3)
+**And** a `tui` client on the same daemon is the live cross-check that the motion reflects real sim state and not client invention (AD-17 rung 1).
+
+**Given** the sign-off gate's closing half,
+**Then** Wolf has viewed the built result live against his approved artifact and signed off **wow beat 2** — the moment the beautiful still image becomes a running simulation (UX-DR14, UX-DR22).
+
+### Story 6.2: Lanterns in the Dark
+
+As the boss,
+I want each dwarf to carry a lantern whose warm light travels with them,
+So that the dwarves are the warm thing moving through the cold, and the lighting system is proven on its hardest case.
+
+**First item on the M2 cut list.** If the story cap binds, this is what goes; Epic 6 keeps its wow because torches and the campfire already carry the warm/cold read.
+
+**Acceptance Criteria:**
+
+**Given** worldgen,
+**When** dwarves are placed,
+**Then** every dwarf carries a lantern as `light: Some(LightKind::Lantern)` on the dwarf entity — **no fuel, no pickup or drop, no economy** (FR29, AD-16)
+**And** `LightKind` gains its `Lantern` variant here, the last piece of M2's sanctioned wire diff (FR30, AD-16).
+
+**Given** the TUI,
+**Then** no TUI rendering change is required and that reasoning is recorded rather than assumed: every dwarf carries one uniformly, so a lantern glyph would distinguish nothing. The field still flows through `client-core`'s mirror to both clients (parity rule).
+
+**Given** the same seed and command sequence,
+**When** scenario tests run,
+**Then** lantern state is identical run to run like any other world state (NFR7).
+
+**Given** a dwarf walking through the dark,
+**When** I watch in the Bevy client,
+**Then** a warm pool of light travels with them, lighting the terrain they pass — a moving light source, deliberately the lighting system's hardest case (FR29, FR32)
+**And** its appearance comes from the `gui` data table keyed by `LightKind`, never from the wire and never hardcoded per draw site (AD-16).
+
+**Given** all five dwarves carrying moving lights plus every static emitter on the WSLg devpod,
+**When** the frame-time overlay is read,
+**Then** NFR6 still holds — 60 fps at working zoom, ≥30 fps at full vista — and if it does not, that measurement is the story's finding and is reported (NFR6).
+
+**Given** the observability instrument,
+**When** `gui --capture <path> --frames N` runs across a span of ticks while a dwarf walks through dark terrain,
+**Then** the lit region **moves with the dwarf** between captures — the headline outcome observed, not inferred from the light field existing on the wire
+**And** it range-checks a non-zero count of lit terrain at the dwarf's successive positions before any conclusion is drawn — exit 0 is not a result (AD-17 rung 3, story rules).
+
+**Given** the sign-off gate,
+**Then** Wolf approved a "here is what you will see" artifact before implementation and has viewed the built result live against it (UX-DR22).
+
+## Epic 7: Into the Mountain
+
+Wolf slices into the mountain and sees the dig underground: he can always tell which z-level he is on and what is below ground versus on the surface, and at working zoom he can tell dwarves, terrain, designations, items and stockpiles apart at a glance.
+
+Two stories. 7.1 resolves the addendum's open control-collision question by testing. 7.2 renders designations and stockpile zones — **issued from a TUI client on the same daemon**, which is why it belongs here rather than in Epic 8: it proves the Bevy client renders them with zero game logic of its own, and it means the rendering survives if Epic 8's input work is cut.
+
+**The sign-off gate (UX-DR22) applies to both stories.**
+
+### Story 7.1: Slice Into the Mountain
+
+As the boss,
+I want to slice into the mountain by z-level and always know which level I am on,
+So that I can see and work the underground the dwarves are digging into.
+
+**Acceptance Criteria:**
+
+**Given** the diorama and the addendum's open design question,
+**When** the control mechanism is chosen,
+**Then** it is chosen **by testing, on the record** — the story states what was tried and why the winner won, from the candidates: modifier+wheel, dedicated keys (`<`/`>`, TUI parity), or slice-follows-selection (FR33, UX-DR3)
+**And** the collision is resolved explicitly: the mousewheel is the conventional orbit-camera zoom that UX-DR2's continuum already claims, and **one wheel cannot drive both**
+**And** behaviour *above* ground level is tested deliberately, since that is the case Wolf flagged himself.
+
+**Given** any slice level,
+**When** I look at the view,
+**Then** I always know which z-level I am on and what is underground versus on the surface, without guessing (FR33, UX-DR18)
+**And** I always know what I am looking at — the anti-requirement bar for *confusing* (UX-DR18).
+
+**Given** the slice level,
+**Then** it is **client-local view state and never wire state** — the daemon does not know or care which level a client is looking at, and two clients on the same daemon can sit at different levels (NFR5, AD-14).
+
+**Given** the slice logic,
+**When** it runs headlessly under minimal plugins in `cargo test`,
+**Then** which tiles are shown and hidden at level N is asserted, including clamping at world bounds, with no GPU involved (AD-17 rung 2).
+
+**Given** dug corridors and channels underground,
+**When** I slice down to them,
+**Then** they are visible as the dwarves left them, projected from mirror state alone (FR33, AD-14).
+
+**Given** the observability instrument,
+**When** `gui --capture <path> --frames N --z N` runs pinned to a level — the parity of `tui --z N`, and the same lesson from story 3.3's false failure,
+**Then** it range-checks a non-zero count of what it came to see at that level before any conclusion is drawn (AD-17 rung 3).
+
+**Given** the full world at any slice level on the WSLg devpod,
+**Then** NFR6 still holds — 60 fps at working zoom, ≥30 fps at full vista (NFR6).
+
+**Given** the sign-off gate,
+**Then** Wolf approved the artifact before implementation and has viewed the built result live against it (UX-DR22).
+
+### Story 7.2: Read the Working Zoom
+
+As the boss,
+I want designations, stockpiles, items, dwarves and terrain to be tellable apart at a glance when I am zoomed in to work,
+So that the view stays readable as a working instrument instead of becoming pretty clutter.
+
+**Acceptance Criteria:**
+
+**Given** a TUI client on the same daemon issuing designations and placing a stockpile,
+**When** I look at the Bevy client,
+**Then** dig designations, channel designations and stockpile zones render as world-projected entities from mirror state alone — **the Bevy client contains zero game logic and issues no commands in this story** (AD-4, AD-14, FR37).
+
+**Given** a dig designation and a channel designation,
+**Then** they are distinguishable from each other and from undesignated terrain.
+
+**Given** a designation cancelled from the TUI,
+**When** the next delta arrives,
+**Then** it disappears in the Bevy client through `client-core`'s absence-is-deletion, with no special-case code in `gui` (AD-8, AD-13).
+
+**Given** the working zoom,
+**When** I look at a busy site,
+**Then** I can tell dwarves, terrain, designations, items and stockpiles apart at a glance — the anti-requirement bar for *cluttered* (UX-DR17)
+**And** this legibility does not cost the cold/warm read: designations and overlays must not compete with the warm light for the eye, which still lands on the encampment first (UX-DR5).
+
+**Given** designation and zone reconciliation,
+**When** it runs headlessly under minimal plugins in `cargo test`,
+**Then** entities are created, updated and despawned by sim `Id` correctly, and re-projecting from scratch reproduces the same scene (AD-14, AD-17 rung 2).
+
+**Given** the observability instrument,
+**When** `gui --capture <path> --frames N --z N` runs after a scripted TUI designation,
+**Then** it range-checks a non-zero count of designation and zone entities in the capture before drawing any conclusion (AD-17 rung 3).
+
+**Given** the sign-off gate,
+**Then** Wolf approved the artifact before implementation and has viewed the built result live against it (UX-DR17, UX-DR22).
+
+## Epic 8: The Boss Gives Orders in Three Dimensions
+
+Wolf works the fortress from the Bevy client with the mouse — clicking and dragging rectangles to designate digs and channels, cancelling them, placing and removing stockpiles, including on sliced underground levels — plus speed, save/load and quit. Full parity with the TUI, and the walking skeleton running end to end in 3D.
+
+Three stories, and the epic carries M2's remaining cut risk. **If the cap binds, FR35/FR36 shrink to camera + speed control**: 8.1 and 8.2 drop, 8.3 keeps speed control, and the TUI keeps designations until a later milestone — which still works, because Epic 7 already renders TUI-issued designations in the Bevy client.
+
+**If that cut fires, story 8.3's walking-skeleton AC changes with it** and must be rewritten, not silently reinterpreted: the dig is designated **from a TUI client on the same daemon** and watched in the Bevy client. The milestone's done sentence survives the cut — Wolf watches the skeleton walk in the Bevy client — but the sentence "I designate a dig in the Bevy client" does not, and an AC that cannot be met as written is this project's most frequently caught defect class.
+
+8.1 is split from 8.2 deliberately: the spine names picking as M2's hardest input work and the main story-count driver, so the risk is isolated in a story of its own. 8.1's standalone user value is thin by design — a hover highlight — and **if picking proves easy, 8.1 and 8.2 collapse into one story and M2 lands at 10.**
+
+**The sign-off gate (UX-DR22) applies to 8.3 and not to 8.1–8.2**, stated here for the same reason Epic 5 stated its exclusion rather than leaving it to inference. 8.1's hover highlight and 8.2's drag feedback are **legibility** work already governed by UX-DR17 and UX-DR18 — they add readable affordances to a look 5.4 and 7.2 already settled, so a full artifact cycle would be ceremony. 8.3 is different: it closes the milestone on Wolf's judgement of both wow beats and all six anti-requirement words, and that is the gate's closing half doing its real job.
+
+### Story 8.1: Point at the World
+
+As the boss,
+I want to point at a block in the 3D view and see exactly which one I am pointing at,
+So that I can trust where my orders will land before I give any.
+
+**Acceptance Criteria:**
+
+**Given** the cursor over the window,
+**When** the client resolves what it is pointing at,
+**Then** exactly one screen-ray-to-tile path exists in `gui` and it calls the existing `render_to_world` transform — no system does its own axis math (FR36, spine convention).
+
+**Given** any orbit angle, any zoom in the continuum, and any slice level,
+**When** I point at a visible block,
+**Then** the tile identified is the one a player would say they are pointing at, **including on sliced underground levels** (FR36, UX-DR21)
+**And** a hover highlight shows which tile is picked before any command is issued.
+
+**Given** the edge cases,
+**When** the cursor is over empty sky, over a tile hidden by the current slice, or outside the window,
+**Then** nothing is picked — and specifically **not** a silent fallback to a default tile such as the origin, which would issue orders somewhere the player never pointed.
+
+**Given** the picking logic,
+**When** it runs headlessly under minimal plugins in `cargo test`,
+**Then** known camera pose plus known screen coordinate resolves to the expected tile, asserted across orbit angles, zoom levels and slice levels, with the transform round-trip test extended to cover the picking path (AD-17 rung 2).
+
+**Given** picking,
+**Then** it is entirely client-local — no command is issued in this story and no picking state reaches the wire (NFR5).
+
+**Given** the observability instrument,
+**When** `gui --capture <path> --frames N --z N` runs with a scripted cursor position,
+**Then** the highlight is visible in the capture and the instrument range-checks that it found one, rather than reporting exit 0 (AD-17 rung 3).
+
+**Given** the full world with picking active on the WSLg devpod,
+**Then** NFR6 still holds (NFR6).
+
+### Story 8.2: Designate with the Mouse
+
+As the boss,
+I want to drag out rectangles in the 3D view to designate digs and channels, cancel them, and place and remove stockpiles,
+So that I can run the fortress from the client I actually want to look at.
+
+**Acceptance Criteria:**
+
+**Given** the Bevy client,
+**When** I select a mode and drag a rectangle over the world,
+**Then** dig and channel designations, **cancellation of a designation before it is dug**, stockpile placement and stockpile removal are all issued as the **existing** protocol commands — the full world-mutating set of FR35 and AD-10, no new command shapes, and the client contains zero game logic (FR35, FR9, AD-4, AD-10)
+**And** a designation cancelled from the Bevy client disappears in both clients through `client-core`'s absence-is-deletion, the same path 7.2 proved for a TUI-issued cancel
+**And** the interaction pattern (drag versus click-anchor-click-commit) is chosen by testing in this story, in the spirit of the TUI's cursor-first anchor/commit.
+
+**Given** a rectangle I drew,
+**When** the command is built,
+**Then** it is normalized by `client-core`'s single rect helper — one z-level, inclusive corners, `min ≤ max` per axis — the same helper the TUI uses, never a second implementation (AD-18)
+**And** `simd` validates the incoming rect and logs-and-drops a violation without crashing the sim (AD-18).
+
+**Given** a sliced underground level,
+**When** I designate there,
+**Then** it works exactly as it does on the surface (FR36, UX-DR21).
+
+**Given** any mode,
+**Then** I always know which mode is active and how to leave it — the Bevy client's equivalent of the TUI's always-visible hint bar (UX-DR18).
+
+**Given** a command I issue,
+**When** the next delta arrives,
+**Then** its effect is visible in this client within ~200 ms — one tick plus one frame, with no explicit ack message (NFR6 ack bar, parent convention).
+
+**Given** the input logic,
+**When** it runs headlessly under minimal plugins in `cargo test`,
+**Then** the mode state machine and rect construction are asserted without a GPU (AD-17 rung 2).
+
+**Given** the observability instruments,
+**When** a scripted `gui` command sequence runs,
+**Then** the resulting capture shows the designations it created, range-checked rather than assumed
+**And** a `tui` client on the same daemon independently confirms the sim received exactly the intended designations — the cheap byte-assertable cross-check on the expensive renderer (AD-17 rung 1).
+
+### Story 8.3: Master of Time, and the Skeleton Walks in 3D
+
+As the boss,
+I want to control speed, save, load and quit from the Bevy client, and watch the whole walking skeleton run there,
+So that Milestone 2 is done: designate, pathfind, dig, haul — live, in the client worth looking at.
+
+**Acceptance Criteria:**
+
+**Given** the Bevy client,
+**When** I pause, resume, change tick rate, save, load or quit,
+**Then** each is issued as the existing control command and handled by `simd` directly, never through the world-mutating queue (FR35, AD-10)
+**And** the daemon loop never stops while paused: sim time freezes, command intake does not (AD-2).
+
+**Given** a load,
+**When** the fresh `snapshot` broadcast arrives (AD-11),
+**Then** the Bevy client replaces its world, previous-tick state is cleared, and **the rewind snaps rather than animating** — the AD-15 rule proven at 6.1, now exercised by the feature that actually causes it.
+
+**Given** a TUI client and the Bevy client attached to the same daemon,
+**When** either issues commands,
+**Then** both show the same world and neither interferes with the other (FR19, FR37).
+
+**Given** a fresh world,
+**When** I designate a dig in the Bevy client and watch,
+**Then** the walking skeleton runs end to end in front of me — designate, pathfind, dig, haul to stockpile — driven entirely by sim state over the wire (PRD success criterion 1).
+
+**Given** the observability instrument,
+**When** the end-to-end sequence is run as a scripted capture series,
+**Then** it range-checks the stone reaching the stockpile rather than reporting exit 0 (AD-17 rung 3)
+**And** the equivalent `tui` run on the same daemon confirms the same outcome (AD-17 rung 1).
+
+**Given** the milestone,
+**Then** Wolf signs off **both wow beats in one sitting** — the boot frame on looks alone, and the alive moment thirty seconds later — and confirms that none of the six 4.1a words is true of this client: ugly, flat, cluttered, confusing, lifeless, camera unusable (PRD success criteria 1 and 3, UX-DR13–UX-DR20).

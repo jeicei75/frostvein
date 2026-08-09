@@ -7,7 +7,7 @@ paradigm: core–shell (functional core, imperative shells) with ECS inside the 
 scope: frostvein phase one (Milestone 1) — walking skeleton
 status: final
 created: '2026-08-01'
-updated: '2026-08-06'
+updated: '2026-08-09'
 binds: [FR1-FR26, NFR1-NFR4]
 sources:
   - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-01/prd.md
@@ -31,7 +31,10 @@ renderers of protocol state.
 
 ## Invariants & Rules
 
-Dependency direction is a rule — no edge may be added to this graph:
+Dependency direction is a rule — no edge may be added to this graph.
+(**Amended 2026-08-09:** Milestone 2's spine legitimately extends it —
+`client-core` and `gui` — and its graph is now the closed set; see
+`../architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md`.)
 
 ```mermaid
 graph LR
@@ -98,6 +101,10 @@ graph LR
   `protocol`, never strings — a `String` field smuggles an unshared
   vocabulary through a shared struct. (Amends technical-preferences.md's
   three-crate layout; that doc is updated to match.)
+- **Amended 2026-08-09:** "`tui` depends on nothing else in the workspace"
+  is relaxed by M2's AD-13 — `tui` also depends on `client-core` (the
+  shared mirror crate). The invariant that matters is untouched: no wire
+  shape outside `protocol`, no `sim-core` edge in any client.
 
 ### AD-7 — Determinism is enforced structurally, not by care
 
@@ -206,7 +213,7 @@ graph LR
 | Bulk tile arrays | flat row-major: index = `x + y·dims.x + z·dims.x·dims.y` — ordering is invisible to the type system, so it is fixed here |
 | Vocabulary enums | material, profession/job kind are defined in `sim-core` (source of truth), mirrored as serde enums in `protocol`, bridged in `simd` by exhaustive `match` with no wildcard arm — vocabulary drift is a compile error |
 | Shared constants | `protocol` exports `DEFAULT_PORT`; neither binary hardcodes its own |
-| Color | wire carries material/profession identifiers, never RGB; the id → RGB mapping (24-bit truecolor) is a data table in `tui`, shared by the 2D view and the future raycast view — never hardcoded per draw site |
+| Color | wire carries material/profession identifiers, never RGB; the id → RGB mapping (24-bit truecolor) is a data table in `tui` — never hardcoded per draw site. (Amended 2026-08-09: "shared by the future raycast view" is stale — the raycast view was withdrawn; the pattern instead extends to `gui`'s light/appearance table, M2 spine AD-16) |
 | Command acknowledgement | no explicit ack messages; a command's effect appearing in the next delta is the acknowledgement (meets NFR2's ~200 ms bar) |
 | Malformed client input | `simd` logs and drops the line; the sim never crashes on client input |
 | Errors | `thiserror` in `sim-core`/`protocol`, `anyhow` in `simd`/`tui` |
@@ -301,14 +308,19 @@ delay to `hash(seed, dwarf id, job id)`.
   is part of this trigger's scope, not assumed present.
 - **tokio / async** — trigger: a story that concretely needs it.
 - **Mouse/touch input** — phase 2, confined to `tui`'s input layer
-  (mechanism in the PRD addendum).
-- **Raycast 3D view** — its own story late in the milestone; firm phase-one
-  scope per Wolf's override, 2026-08-01, superseding FR24's original
-  may-slip clause. Creature rendering follows the addendum's decided
-  approach: code-authored sub-voxel models sampled during DDA traversal,
-  seed-derived individual identity — never sprites or per-creature assets.
+  (mechanism in the PRD addendum). **Amended 2026-08-09:** no longer
+  `tui`-confined — `gui` owns mouse picking in Milestone 2; a future touch
+  story lands there too.
+- **Raycast 3D view** — ~~its own story late in the milestone~~.
+  **Amended 2026-08-09:** withdrawn with FR24 at the 2026-08-08 pivot; the
+  3D client is Bevy (Milestone 2, own spine:
+  `../architecture-frostvein-2026-08-09/`). The "never sprites or
+  per-creature assets" clause was overturned on the record in the M2 PRD
+  (Wolf is the artist; procedural-first stands, authored assets permitted
+  when a story forces it).
 - **Parallel ECS scheduling** — trigger: a profiled problem (AD-7).
-- **Save-format stability, multi-machine play, Unreal client** — out of
+- **Save-format stability, multi-machine play, graphical client** — out of
   scope per PRD; nothing in phase one may preclude them, nothing builds for
-  them.
+  them. (Amended 2026-08-09: "Unreal client" — Unreal was dropped
+  2026-08-08; the graphical client is Bevy, Milestone 2.)
 - **TUI framework** — trigger: a story shows crossterm alone hurts.
