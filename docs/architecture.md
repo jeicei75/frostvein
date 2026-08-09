@@ -1,27 +1,35 @@
-# Frostvein — Architecture (phase one)
+# Frostvein — Architecture
 
-The ten-minute read. The binding contract is the architecture spine at
-`_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md`
-(decision rationale in `.memlog.md` beside it); if this doc and the spine ever
-disagree, the spine wins.
+The ten-minute read. The binding contracts are the architecture spines at
+`_bmad-output/planning-artifacts/architecture/` — `architecture-frostvein-2026-08-01/`
+(phase one, AD-1…12) and `architecture-frostvein-2026-08-09/` (Milestone 2,
+AD-13…18) — decision rationale in the `.memlog.md` beside each; if this doc
+and a spine ever disagree, the spine wins.
 
 ## The shape
 
-Core–shell: a pure, deterministic simulation library wrapped by two thin
-imperative shells, speaking a shared wire language.
+Core–shell: a pure, deterministic simulation library wrapped by thin
+imperative shells, speaking a shared wire language. Clients are
+mirror-then-project: a plain world mirror holds wire truth; rendering
+projects it.
 
 ```
-sim-core ◄── simd ──► protocol ◄── tui
+sim-core ◄── simd ──► protocol ◄── client-core ◄── tui
+                          ▲              ▲
+                          └──── gui ─────┘
 ```
 
-One Cargo workspace, four crates. No other dependency edge is ever added.
+One Cargo workspace, six crates (`client-core` and `gui` land in M2
+stories). No other dependency edge is ever added.
 
 | Crate | What it is |
 | --- | --- |
 | `sim-core` | pure library: world, ECS (headless bevy_ecs), jobs, A*, `SaveState`. Zero I/O — no net, fs, clock, or terminal. Scenario tests live here as integration tests. |
 | `protocol` | serde wire types only. The single home of every message shape and closed vocabulary (materials, professions, …) — drift between daemon and client is a compile error. |
 | `simd` | daemon binary: fixed-timestep loop (10 ticks/s), TCP server (`std::net` + threads), command queue, delta assembly, save-file I/O. |
-| `tui` | client binary: crossterm cell framebuffer (flushed once per frame), modal DF-style input, the id → RGB color table. Zero game logic. |
+| `tui` | client binary: crossterm cell framebuffer (flushed once per frame), modal DF-style input, the id → RGB color table. Zero game logic. Also the deterministic assertion instrument the review evidence discipline rests on. |
+| `client-core` | (M2) the shared client library: world mirror + ALL snapshot/delta application, previous-tick entity states, rect normalization. Depends on `protocol` only; both clients consume it, neither reimplements it. |
+| `gui` | (M2) Bevy 0.19 client binary: projects the mirror into an isometric voxel diorama — reconciliation, picking, camera, the kind → light/appearance tables, `--capture` instrument. Zero game logic, runs via WSLg. |
 
 ## The decisions (AD-1…12, condensed)
 
@@ -70,10 +78,52 @@ save → load → tick N ≡ never-saved → tick N (AD-11).
 **Pathfinding.** Plain A* on the voxel grid, walk + ramps/stairs. Nothing
 hierarchical, nothing cached (AD-5).
 
+## Milestone 2 — the Bevy client (AD-13…18, condensed)
+
+**One mirror.** `client-core` owns the world mirror and all snapshot/delta
+application; the mirror's shape is its API — Id-keyed state, current +
+previous-tick entities, per-tick change info. Clients never diff wire
+messages themselves. `tui` adopts it in an M2 story and retires its in-crate
+state (AD-13, AD-18 — amends AD-6's "`tui` depends on nothing else").
+
+**Projection.** In `gui`, wire messages mutate only the mirror. Render
+entities are world-projected (created/despawned solely by reconciliation,
+keyed by sim id; delete-all-and-re-project must reproduce the scene) or
+client-local (sky, aurora, snowfall, overlay — never world state) (AD-14).
+
+**Interpolation is presentation.** The projection may blend between the two
+mirrored ticks; it never extrapolates or predicts. A snapshot (connect or
+load) clears the previous tick — a rewind snaps, never animates (AD-15).
+
+**M2 world content.** Trees are tiles (`TreeTrunk`/`TreeFoliage`; digging
+one drops no item). Everything that glows is an entity: `kind` names the
+object (+`Torch`, +`Campfire`), `light: Option<LightKind>` names the
+emission (`Torch | Campfire | Lantern`) — a dwarf's lantern is the same
+concept moving. That field + those variants are the entire sanctioned M2
+wire diff. Appearance (RGB, radius, flicker) is a `gui` data table; the
+wire never carries it (AD-16).
+
+**Evidence ladder.** World-correctness proven headless in CI through
+`client-core` (same code `gui` renders from) with the TUI as live
+cross-check; `gui` logic tests run without GPU (minimal plugins); visual
+truth uses the scripted `--capture` instrument — tested itself, never
+golden-imaged in CI, judged by Wolf's eye against the pre-approved sign-off
+artifact (AD-17). Capture tests need a render surface and stay out of
+`gate.sh`.
+
+**The bar (NFR6).** 60 fps at working zoom, ≥30 fps at full vista, full
+world + all dwarves + all lights, on the WSLg devpod, read from the
+frame-time overlay. Any client: command effect visible within ~200 ms.
+
 ## Conventions worth memorizing
 
 - z is vertical, 0 = lowest. Rects are inclusive of both corners, one
-  z-level. Bulk tile arrays are flat row-major: `x + y·W + z·W·H`.
+  z-level — binding for commands: `client-core` holds the one normalization
+  helper, `simd` validates and drops violators. Bulk tile arrays are flat
+  row-major: `x + y·W + z·W·H`.
+- Sim is z-up, Bevy is Y-up: exactly one `world_to_render`/`render_to_world`
+  pair in `gui`, used by projection, picking, and capture; round-trip
+  tested. No system does its own axis math.
 - Wire: one JSON object per line, `type` field, snake_case; positions
   `[x, y, z]`; closed vocabularies are enums, never strings; the wire carries
   material/profession ids, never RGB — the color table lives in `tui`.
@@ -95,9 +145,12 @@ hierarchical, nothing cached (AD-5).
 
 Rust stable (edition 2024) · bevy_ecs 0.19 (headless) · serde/serde_json ·
 rand + rand_chacha 0.10 (`serde` feature for RNG-state saves) ·
-crossterm 0.29 · thiserror/anyhow · `std::net` + threads. Versions verified
-on crates.io 2026-08-01. The list is closed: a new dependency needs one
-sentence of justification in its story.
+crossterm 0.29 · thiserror/anyhow · `std::net` + threads. M2 adds: bevy
+0.19.0 (full engine, `gui` only; same release train as bevy_ecs — the two
+always move together; + `bevy_dev_tools` feature if the ready-made FPS
+overlay is used). Versions verified on crates.io 2026-08-01 / 2026-08-09.
+The list is closed: a new dependency needs one sentence of justification in
+its story.
 
 ## Deferred, with triggers
 
@@ -106,7 +159,14 @@ interest management (stable shapes + measured problem) · protocol
 generalization for external producers (second producer exists — Asgard) ·
 LLM whimsy sidecar (phase 2+; enters through the command queue, and brings
 the persistent command log with it) · tokio (a story that needs it) ·
-mouse/touch input (phase 2, `tui` input layer) · raycast 3D view (late
-milestone story, firm phase-one scope per Wolf's override 2026-08-01;
-sub-voxel code-authored models, never sprites) ·
-parallel ECS scheduling (profiled problem).
+touch input (post-M2; lands in `gui` — mouse picking made it the input
+client, 2026-08-09) · parallel ECS scheduling (profiled problem) · native
+Windows `gui` build (Wolf calls for it; no unix-only code in `gui`/
+`client-core` keeps it reachable) · asset pipeline, MagicaVoxel via
+bevy_vox_scene (a story needs authored assets — dwarves expected first;
+re-verify the crate against current bevy then) · z-slice control & world-edge
+treatment (story-level design-and-test, PRD addendum) · golden-image CI
+(a driver-stable render path; not planned).
+
+*(The raycast 3D view entry is gone: withdrawn with FR24 at the 2026-08-08
+pivot — the 3D client is Bevy, above.)*
