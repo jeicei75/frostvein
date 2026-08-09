@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant, as at 4.1a
 
 # Story 5.1: The World Grows Things That Glow
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -196,10 +196,10 @@ so that the valley has something living in it and something warm in it before an
         reverted (the height-span test must go red).
   - [x] Paste the RED output verbatim into the Dev Agent Record.
 
-- [ ] **Task 10 — Gate and commit**
-  - [ ] `scripts/gate.sh` green. Do **not** add gate probes here — NFR8's `client-core` and `gui`
+- [x] **Task 10 — Gate and commit**
+  - [x] `scripts/gate.sh` green. Do **not** add gate probes here — NFR8's `client-core` and `gui`
         probes land with those crates in 5.2 and 5.3.
-  - [ ] Branch `5-1-the-world-grows-things-that-glow`. Small commits, imperative messages, author
+  - [x] Branch `5-1-the-world-grows-things-that-glow`. Small commits, imperative messages, author
         `Völundr <jeicei75@gmail.com>`. Push/PR only on Wolf's explicit yes.
 
 ## Dev Notes
@@ -463,21 +463,22 @@ GPT-5.6 Codex (Völundr)
 - Task 7 RED (controlled sabotage): removing emitter restoration made `save_round_trip_preserves_emitters` fail with `left: []` versus the five expected `(Id, Pos, LightKind)` tuples; restoration was then reinstated.
 - Task 8 RED (controlled sabotage): deleting the emitter draw pass made `growing_world_instrument_counts_change_with_trees_and_emitters` fail with `feature capture contained zero †`; the pass was restored.
 - Task 8 manual instrument tuning: z=25 aimed at seed 42 and produced `│=30 ♠=222 †=0 ♨=0 ☺=0`; the live default-seed snapshot identified camp z=9. At z=9 the first run exposed absent tree slices, and later a fully occluded campfire; density/crown air-only placement and emitter-cell-free dwarf spawns closed both evidence failures.
+- Self-review pass 1 RED: `idle_dwarves_stay_standable_and_inside_the_camp` exposed dwarf 3 outside the camp at tick 15; `loading_rejects_lantern_emitters_before_the_wire_bridge` loaded an unsupported lantern; the skyline test was also found to exercise seed 42 rather than the shipped daemon seed. The fixes anchor initial wander homes at camp origin, reject lantern saves before bridging, and share/pin `DEFAULT_SEED`.
 - Task 9 mutation run (verbatim):
 
 ```text
 === tree yield guard always spawns stone ===
-thread 'tests::execute_jobs_digs_tree_materials_without_spawning_items' (720) panicked at crates/sim-core/src/lib.rs:3056:13:
+thread 'tests::execute_jobs_digs_tree_materials_without_spawning_items' (720) panicked at crates/sim-core/src/lib.rs:3057:13:
 assertion `left == right` failed: dug TreeTrunk
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.02s
 
 === tree placement ignores the camp clearing ===
-thread 'pines_use_both_tree_materials_and_leave_the_camp_clear' (1441) panicked at crates/sim-core/tests/worldgen.rs:148:17:
+thread 'pines_use_both_tree_materials_and_leave_the_camp_clear' (1441) panicked at crates/sim-core/tests/worldgen.rs:149:17:
 assertion failed: !matches!(world.tile(Pos { x, y, z }),
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.02s
 
 === trees consume the worldgen stream ===
-thread 'spawn_positions_for_seed_42_are_pinned' (2162) panicked at crates/sim-core/tests/worldgen.rs:213:5:
+thread 'spawn_positions_for_seed_42_are_pinned' (2162) panicked at crates/sim-core/tests/worldgen.rs:214:5:
 assertion `left == right` failed
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.02s
 
@@ -486,13 +487,26 @@ thread 'growing_world_instrument_counts_change_with_trees_and_emitters' (2546) p
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out; finished in 1.10s
 
 === delta drops emitters while snapshot keeps them ===
-thread 'bridge::tests::snapshot_and_delta_carry_the_same_emitters' (3069) panicked at crates/simd/src/bridge.rs:416:9:
+thread 'bridge::tests::snapshot_and_delta_carry_the_same_emitters' (3114) panicked at crates/simd/src/bridge.rs:416:9:
 assertion `left == right` failed
-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.02s
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.02s
 
 === terrain amplitude returns to four ===
-thread 'default_world_has_mountainous_height_span' (3790) panicked at crates/sim-core/tests/worldgen.rs:53:5:
+thread 'default_world_has_mountainous_height_span' (3835) panicked at crates/sim-core/tests/worldgen.rs:54:5:
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.09s
+
+=== dwarf wander homes return to random spawn cells ===
+thread 'idle_dwarves_stay_standable_and_inside_the_camp' (4555) panicked at crates/sim-core/tests/scenario.rs:51:13:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.02s
+
+=== lantern saves reach the live world ===
+thread 'tests::loading_rejects_lantern_emitters_before_the_wire_bridge' (5109) panicked at crates/simd/src/main.rs:730:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.31s
+
+=== the shipped world seed changes unnoticed ===
+thread 'default_world_has_mountainous_height_span' (5830) panicked at crates/sim-core/tests/worldgen.rs:43:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
 
 ================ MUTATION RESULTS ================
 tree yield guard always spawns stone                         KILLED
@@ -501,6 +515,9 @@ trees consume the worldgen stream                            KILLED
 the emitter draw pass is deleted                             KILLED
 delta drops emitters while snapshot keeps them               KILLED
 terrain amplitude returns to four                            KILLED
+dwarf wander homes return to random spawn cells              KILLED
+lantern saves reach the live world                           KILLED
+the shipped world seed changes unnoticed                     KILLED
 
 All mutations killed.
 ```
@@ -515,7 +532,9 @@ All mutations killed.
 - Task 6: pinned four distinct tree/emitter glyphs in the palette, added an emitter pass between items and dwarves, preserved dwarf-only contention/status rules, and closed the non-dwarf draw deferral. All 61 TUI tests pass offline.
 - Task 7: added emitter assertions to per-tick determinism and save/load lockstep, added an explicit emitter round-trip test, and deleted the obsolete 6.9 MB v0 `frostvein.save`. All 100 `sim-core` tests pass offline.
 - Task 8: added a bounded real-binary feature/control capture that counts every ANSI-stripped glyph occurrence. Manual `tui 7413 --frames 6 --z 9` observation: `│=6`, `♠=48`, `†=21`, `♨=3`, `☺=30` (all non-zero; `NO_COLOR` warning observed, so this manual run evidences glyphs, not colours). All 100 sim-core and 62 TUI tests pass offline.
-- Task 9: added and ran the six-entry sabotage table; every required mutation was killed and the runner returned `All mutations killed.`
+- Task 9: added and ran the sabotage table; all six required mutations plus three review regressions were killed, and the runner returned `All mutations killed.`
+- Task 10: ran `scripts/gate.sh` after the final fixes and observed `GATE GREEN`; committed every task plus review repairs locally on `5-1-the-world-grows-things-that-glow` as Völundr, with no push or PR.
+- Self-review: pass 1 raised three actionable findings (camp wander origin, unsupported lantern saves, shipped-seed coverage), all fixed with RED-first regressions. Pass 2 returned no actionable defects. Its isolated review sandbox denied loopback binds, while the repository gate ran those tests successfully.
 
 ### File List
 
@@ -553,3 +572,4 @@ All mutations killed.
 | 2026-08-09 | Task 7 pinned emitter determinism/save-load behavior and removed the obsolete save. |
 | 2026-08-09 | Task 8 proved the real capture instrument with a zero-feature control and non-zero live counts. |
 | 2026-08-09 | Task 9 killed all six required mutations and recorded the verbatim RED evidence. |
+| 2026-08-09 | Task 10 completed the green gate and two-pass self-review; three pass-1 findings were fixed and pass 2 was clean. |
