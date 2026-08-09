@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant, as at 4.1a
 
 # Story 5.1: The World Grows Things That Glow
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -91,14 +91,14 @@ so that the valley has something living in it and something warm in it before an
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Reshape the terrain for a skyline** (AC: 1, 2, 3)
-  - [ ] Widen the height field's amplitude in `crates/sim-core/src/worldgen.rs:height_field`.
+- [x] **Task 1 — Reshape the terrain for a skyline** (AC: 1, 2, 3)
+  - [x] Widen the height field's amplitude in `crates/sim-core/src/worldgen.rs:height_field`.
         **Amplitude alone will not do it** — see the arithmetic in Key decisions; `NOISE_SPACING`
         must move with it or `clamp_steps` grinds the peaks back down.
-  - [ ] Keep the height clamp inside `[3, dims.z - 2]` and leave headroom for tree crowns.
-  - [ ] Add a test asserting the height span (≥16 levels, min ≤ 10, max ≥ 26) as a range.
-  - [ ] Add a test asserting no tile is written at or above `dims.z`.
-  - [ ] Re-pin `tests/worldgen.rs`'s terrain fingerprint and spawn literals — they **will** change,
+  - [x] Keep the height clamp inside `[3, dims.z - 2]` and leave headroom for tree crowns.
+  - [x] Add a test asserting the height span (≥16 levels, min ≤ 10, max ≥ 26) as a range.
+  - [x] Add a test asserting no tile is written at or above `dims.z`.
+  - [x] Re-pin `tests/worldgen.rs`'s terrain fingerprint and spawn literals — they **will** change,
         loudly, which is what they are for. Extend the fingerprint's exhaustive `Tile` match with
         the two new materials by **appending** codes; do not renumber existing ones.
 
@@ -450,14 +450,27 @@ record if you take it.
 
 ### Agent Model Used
 
+GPT-5.6 Codex (Völundr)
+
 ### Debug Log References
+
+- Task 1 RED: `default_world_has_mountainous_height_span` failed with `minimum surface height was 12` before the height-field change.
 
 ### Completion Notes List
 
+- Task 1: widened terrain amplitude and lattice spacing together, preserved the height clamp and traversal invariants, added range/bounds tests, and re-pinned the seed-42 literals. `cargo test --offline -p sim-core` passed (91 tests).
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/5-1-the-world-grows-things-that-glow.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `crates/sim-core/src/worldgen.rs`
+- `crates/sim-core/tests/worldgen.rs`
+- `crates/simd/tests/serve.rs`
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-09 | Story created. Two decisions taken on the record with Wolf: the vista mountain silhouette (yes, shaped here) and the camp (dwarves clustered into it). |
+| 2026-08-09 | Task 1 reshaped the terrain skyline and added range and bounds coverage. |

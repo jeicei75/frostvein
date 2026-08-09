@@ -19,6 +19,41 @@ fn same_seed_produces_identical_worlds() {
 }
 
 #[test]
+fn default_world_has_mountainous_height_span() {
+    let world = World::generate(42, Dims::DEFAULT);
+    let mut heights = Vec::new();
+    for y in 0..world.dims().y as i32 {
+        for x in 0..world.dims().x as i32 {
+            heights.push(surface_height(&world, x, y));
+        }
+    }
+    let minimum = heights.iter().min().copied().unwrap();
+    let maximum = heights.iter().max().copied().unwrap();
+
+    assert!(minimum <= 10, "minimum surface height was {minimum}");
+    assert!(maximum >= 26, "maximum surface height was {maximum}");
+    assert!(
+        maximum - minimum >= 16,
+        "surface height span was only {} ({minimum}..={maximum})",
+        maximum - minimum
+    );
+}
+
+#[test]
+fn generated_world_writes_no_tile_beyond_vertical_bounds() {
+    let world = World::generate(42, Dims::DEFAULT);
+    let plane = (world.dims().x * world.dims().y) as usize;
+    let topmost_written_z = world
+        .tiles()
+        .chunks_exact(plane)
+        .rposition(|level| level.iter().any(|tile| *tile != Tile::Empty))
+        .expect("generated world contains terrain");
+
+    assert!(topmost_written_z < world.dims().z as usize);
+    assert_eq!(world.tiles().len(), plane * world.dims().z as usize);
+}
+
+#[test]
 fn spawn_positions_for_seed_42_are_pinned() {
     let world = World::generate(42, Dims::DEFAULT);
     let positions: Vec<_> = world.dwarves().into_iter().map(|(_, pos, _)| pos).collect();
@@ -26,29 +61,25 @@ fn spawn_positions_for_seed_42_are_pinned() {
         positions,
         vec![
             Pos {
-                x: 115,
-                y: 84,
-                z: 15
+                x: 110,
+                y: 82,
+                z: 18
             },
             Pos {
-                x: 20,
-                y: 102,
-                z: 19
+                x: 73,
+                y: 103,
+                z: 14
             },
+            Pos { x: 58, y: 9, z: 17 },
             Pos {
-                x: 121,
-                y: 12,
-                z: 16
-            },
-            Pos {
-                x: 51,
+                x: 50,
                 y: 113,
-                z: 19
+                z: 12
             },
             Pos {
-                x: 102,
-                y: 122,
-                z: 17
+                x: 44,
+                y: 123,
+                z: 12
             },
         ]
     );
@@ -70,7 +101,7 @@ fn spawn_positions_for_seed_42_are_pinned() {
             };
             (hash ^ code).wrapping_mul(0x0000_0100_0000_01b3)
         });
-    assert_eq!(terrain_fingerprint, 0xd03e_1a26_2b9c_c19d);
+    assert_eq!(terrain_fingerprint, 0xc7b7_bfa1_dd96_b57e);
 }
 
 #[test]

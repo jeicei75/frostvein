@@ -3,7 +3,7 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::{Dims, Material, Tile};
 
-const NOISE_SPACING: u32 = 16;
+const NOISE_SPACING: u32 = 32;
 
 pub(crate) fn index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
     // NOTE: widened to usize before multiplying — the u32 product wraps silently in
@@ -38,7 +38,7 @@ pub(crate) fn height_field(dims: Dims, rng: &mut ChaCha8Rng) -> Vec<u32> {
             let top = lerp(top_left, top_right, fraction_x);
             let bottom = lerp(bottom_left, bottom_right, fraction_x);
             let noise = lerp(top, bottom, fraction_y);
-            let height = (dims.z as f64 / 2.0 + (noise * 2.0 - 1.0) * 4.0).round();
+            let height = (dims.z as f64 / 2.0 + (noise * 2.0 - 1.0) * 12.0).round();
             heights.push(height.clamp(3.0, dims.z.saturating_sub(2) as f64) as u32);
         }
     }
