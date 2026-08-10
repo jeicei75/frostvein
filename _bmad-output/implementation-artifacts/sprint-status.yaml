@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-09  # Story 5.1 created and ready-for-dev. Epic 5 in-progress; M2 under way.
+last_updated: 2026-08-10  # Story 5.1 reviewed (4 layers, no coverage holes) and moved to done; Epic 5 in-progress.
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -118,7 +118,7 @@ development_status:
   # into a deterministic camp site near the map centre, because a campfire with no dwarves
   # around it does not deliver UX-DR5's warm/cold read that 5.4's wow rests on. Consequence:
   # the pinned seed-42 spawn positions and the terrain fingerprint both change, deliberately.
-  5-1-the-world-grows-things-that-glow: ready-for-dev
+  5-1-the-world-grows-things-that-glow: done
   # Split line if it overruns one session: the crate/mirror boundary. On no cut list.
   5-2-one-mirror-two-clients: backlog
   # ALLOWED TO BE UGLY — grey boxes orbiting at speed is a pass; visual bars are 5.4's.

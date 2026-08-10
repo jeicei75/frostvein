@@ -23,9 +23,11 @@ use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_SEED: u64 = 0xF005_7E1A;
 const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
 const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
+const STREAM_TREES: u64 = 0x5452_4545_535f_5f5f;
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 pub const MAX_DESIGNATIONS: usize = 4096;
@@ -39,6 +41,8 @@ pub enum Material {
     Soil,
     Ice,
     Snow,
+    TreeTrunk,
+    TreeFoliage,
 }
 
 /// A voxel. `Empty` is air; `Solid` is wall/floor; `Ramp` is a walkable slope.
@@ -100,6 +104,19 @@ pub struct Dwarf;
 
 #[derive(Component)]
 struct Item;
+
+#[derive(Component)]
+struct Emitter(LightKind);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LightKind {
+    Torch,
+    Campfire,
+    Lantern,
+}
+
+#[derive(Resource)]
+struct Camp(Pos);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Component, Serialize, Deserialize)]
 pub enum JobState {
@@ -833,7 +850,11 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             let terrain = ecs.resource::<Terrain>();
             match job.kind {
                 JobKind::Dig => match terrain.tile(job.target) {
-                    Some(Tile::Solid(_)) => Some((job.target, Tile::Empty)),
+                    Some(Tile::Solid(material)) => Some((
+                        job.target,
+                        Tile::Empty,
+                        !matches!(material, Material::TreeTrunk | Material::TreeFoliage),
+                    )),
                     _ => None,
                 },
                 JobKind::Channel => {
@@ -842,14 +863,18 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                         ..job.target
                     };
                     match terrain.tile(below) {
-                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
+                        Some(Tile::Solid(material)) => Some((
+                            below,
+                            Tile::Ramp(material),
+                            !matches!(material, Material::TreeTrunk | Material::TreeFoliage),
+                        )),
                         _ => None,
                     }
                 }
                 JobKind::Haul { .. } => unreachable!("haul jobs are dispatched above"),
             }
         };
-        let Some((changed_pos, tile)) = change else {
+        let Some((changed_pos, tile, yields_stone)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
             release_claim(ecs, entity);
@@ -861,8 +886,10 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             "job targets were bounds-checked at designation time"
         );
         clear_paths(ecs);
-        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-        ecs.spawn((Item, item_id, job.target));
+        if yields_stone {
+            let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+            ecs.spawn((Item, item_id, job.target));
+        }
         ecs.resource_mut::<Jobs>().remove(job.id);
         ecs.resource_mut::<Designations>().0.remove(&job.target);
         release_claim(ecs, entity);
@@ -1001,6 +1028,7 @@ fn assemble(
     tick: u64,
     wander_rng: ChaCha8Rng,
     ids: IdAllocator,
+    camp_origin: Pos,
     jobs: Jobs,
     designations: BTreeMap<Pos, DesignationKind>,
     zones: BTreeSet<Pos>,
@@ -1010,6 +1038,7 @@ fn assemble(
     ecs.insert_resource(Seed(seed));
     ecs.insert_resource(WanderRng(wander_rng));
     ecs.insert_resource(ids);
+    ecs.insert_resource(Camp(camp_origin));
     ecs.insert_resource(Designations(designations));
     ecs.insert_resource(Zones(zones));
     ecs.insert_resource(jobs);
@@ -1056,6 +1085,9 @@ impl World {
         let heights = worldgen::height_field(dims, &mut rng);
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
+        let camp_origin = worldgen::camp_origin(dims, &heights);
+        let mut tree_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_TREES);
+        worldgen::place_trees(dims, &heights, &mut tiles, camp_origin, &mut tree_rng);
         let mut spawn_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_SPAWN);
 
         let mut world = assemble(
@@ -1065,11 +1097,13 @@ impl World {
             0,
             ChaCha8Rng::seed_from_u64(seed ^ STREAM_WANDER),
             IdAllocator::default(),
+            camp_origin,
             Jobs::default(),
             BTreeMap::new(),
             BTreeSet::new(),
         );
-        world.spawn_dwarves(&heights, &mut spawn_rng);
+        world.spawn_dwarves(camp_origin, &mut spawn_rng);
+        world.spawn_emitters(camp_origin);
         world
     }
 
@@ -1110,6 +1144,13 @@ impl World {
             .into_iter()
             .map(|(id, pos)| (id.0, pos))
             .collect();
+        let emitters = self
+            .emitters()
+            // NOTE: like dwarves, an emitter missing Id or Pos is silently skipped by this
+            // filter_map. Both construction sites attach Emitter, Id and Pos together.
+            .into_iter()
+            .map(|(id, pos, light)| (id.0, pos, light))
+            .collect();
 
         SaveState {
             seed: self.seed(),
@@ -1118,12 +1159,14 @@ impl World {
             tiles: terrain.tiles.clone(),
             wander_rng: self.ecs.resource::<WanderRng>().0.clone(),
             next_id: self.ecs.resource::<IdAllocator>().next,
+            camp_origin: self.camp_origin(),
             dwarves,
             designations: self.designations(),
             zones: self.zones(),
             jobs,
             next_job_id: job_resource.next_id,
             items,
+            emitters,
         }
     }
 
@@ -1135,12 +1178,14 @@ impl World {
             tiles,
             wander_rng,
             next_id,
+            camp_origin,
             dwarves,
             designations,
             zones,
             jobs,
             next_job_id,
             items,
+            emitters,
         } = save;
         let mut job_resource = Jobs {
             next_id: next_job_id,
@@ -1160,6 +1205,7 @@ impl World {
             tick,
             wander_rng,
             IdAllocator { next: next_id },
+            camp_origin,
             job_resource,
             designations.into_iter().collect(),
             zones.into_iter().collect(),
@@ -1191,6 +1237,9 @@ impl World {
         for (id, pos) in items {
             world.ecs.spawn((Item, Id(id), pos));
         }
+        for (id, pos, light) in emitters {
+            world.ecs.spawn((Emitter(light), Id(id), pos));
+        }
         world
     }
 
@@ -1204,6 +1253,10 @@ impl World {
 
     pub fn tick(&self) -> u64 {
         self.ecs.resource::<Tick>().0
+    }
+
+    pub fn camp_origin(&self) -> Pos {
+        self.ecs.resource::<Camp>().0
     }
 
     pub fn step(&mut self) {
@@ -1417,6 +1470,20 @@ impl World {
         items
     }
 
+    /// Sorted ascending by `Id`.
+    pub fn emitters(&self) -> Vec<(Id, Pos, LightKind)> {
+        let mut emitters: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter_map(|entity| {
+                let emitter = entity.get::<Emitter>()?;
+                Some((*entity.get::<Id>()?, *entity.get::<Pos>()?, emitter.0))
+            })
+            .collect();
+        emitters.sort_by_key(|(id, ..)| *id);
+        emitters
+    }
+
     /// Sorted ascending by `Id` — stable order is required by AD-7.
     // NOTE: the carried stone deliberately did NOT become a fourth field here. `carrying()` is a
     // sibling reader instead, which leaves this tuple — and therefore `simd`'s bridge — untouched.
@@ -1437,31 +1504,19 @@ impl World {
         dwarves
     }
 
-    fn spawn_dwarves(&mut self, heights: &[u32], rng: &mut ChaCha8Rng) {
+    fn spawn_dwarves(&mut self, camp: Pos, rng: &mut ChaCha8Rng) {
+        let emitter_positions: BTreeSet<_> = camp_emitters(camp)
+            .into_iter()
+            .map(|(pos, _)| pos)
+            .collect();
         let mut candidates = {
             let terrain = self.ecs.resource::<Terrain>();
-            let dims = terrain.dims;
             let mut candidates = Vec::new();
-            for y in 0..dims.y {
-                for x in 0..dims.x {
-                    let height = heights[(x + y * dims.x) as usize];
-                    let is_flat = [
-                        (x as i32 - 1, y as i32),
-                        (x as i32 + 1, y as i32),
-                        (x as i32, y as i32 - 1),
-                        (x as i32, y as i32 + 1),
-                    ]
-                    .into_iter()
-                    .filter(|&(nx, ny)| {
-                        nx >= 0 && ny >= 0 && nx < dims.x as i32 && ny < dims.y as i32
-                    })
-                    .all(|(nx, ny)| heights[(nx as u32 + ny as u32 * dims.x) as usize] == height);
-                    let pos = Pos {
-                        x: x as i32,
-                        y: y as i32,
-                        z: height as i32 + 1,
-                    };
-                    if is_flat && terrain.is_standable(pos) {
+            let radius = worldgen::CAMP_RADIUS as i32;
+            for y in camp.y - radius..=camp.y + radius {
+                for x in camp.x - radius..=camp.x + radius {
+                    let pos = Pos { x, y, z: camp.z };
+                    if terrain.is_standable(pos) && !emitter_positions.contains(&pos) {
                         candidates.push(pos);
                     }
                 }
@@ -1479,7 +1534,7 @@ impl World {
                 pos,
                 JobState::Idle,
                 Wander {
-                    home: pos,
+                    home: camp,
                     // NOTE: staggers the spawn phases so the dwarves do not step in lockstep,
                     // without spending a second RNG draw. It wraps at WANDER_REST_TICKS, so an
                     // eleventh dwarf would share dwarf 0's phase — harmless at five.
@@ -1490,6 +1545,51 @@ impl World {
             ));
         }
     }
+
+    fn spawn_emitters(&mut self, camp: Pos) {
+        for (pos, light) in camp_emitters(camp) {
+            let id = self.ecs.resource_mut::<IdAllocator>().allocate();
+            self.ecs.spawn((Emitter(light), id, pos));
+        }
+    }
+}
+
+fn camp_emitters(camp: Pos) -> [(Pos, LightKind); 5] {
+    [
+        (camp, LightKind::Campfire),
+        (
+            Pos {
+                x: camp.x - 2,
+                y: camp.y - 2,
+                ..camp
+            },
+            LightKind::Torch,
+        ),
+        (
+            Pos {
+                x: camp.x + 2,
+                y: camp.y - 2,
+                ..camp
+            },
+            LightKind::Torch,
+        ),
+        (
+            Pos {
+                x: camp.x - 2,
+                y: camp.y + 2,
+                ..camp
+            },
+            LightKind::Torch,
+        ),
+        (
+            Pos {
+                x: camp.x + 2,
+                y: camp.y + 2,
+                ..camp
+            },
+            LightKind::Torch,
+        ),
+    ]
 }
 
 #[cfg(test)]
@@ -1539,10 +1639,60 @@ mod tests {
     }
 
     #[test]
+    fn generated_world_has_sorted_camp_emitters() {
+        let world = World::generate(42, Dims::DEFAULT);
+        let camp = world.camp_origin();
+
+        assert_eq!(
+            world.emitters(),
+            vec![
+                (super::Id(5), camp, super::LightKind::Campfire),
+                (
+                    super::Id(6),
+                    Pos {
+                        x: camp.x - 2,
+                        y: camp.y - 2,
+                        ..camp
+                    },
+                    super::LightKind::Torch,
+                ),
+                (
+                    super::Id(7),
+                    Pos {
+                        x: camp.x + 2,
+                        y: camp.y - 2,
+                        ..camp
+                    },
+                    super::LightKind::Torch,
+                ),
+                (
+                    super::Id(8),
+                    Pos {
+                        x: camp.x - 2,
+                        y: camp.y + 2,
+                        ..camp
+                    },
+                    super::LightKind::Torch,
+                ),
+                (
+                    super::Id(9),
+                    Pos {
+                        x: camp.x + 2,
+                        y: camp.y + 2,
+                        ..camp
+                    },
+                    super::LightKind::Torch,
+                ),
+            ]
+        );
+        assert_eq!(world.to_save().emitters.len(), 5);
+    }
+
+    #[test]
     fn allocator_lives_in_the_ecs() {
         let world = World::generate(42, Dims::DEFAULT);
 
-        assert_eq!(world.ecs.resource::<super::IdAllocator>().next, 5);
+        assert_eq!(world.ecs.resource::<super::IdAllocator>().next, 10);
     }
 
     #[test]
@@ -2487,7 +2637,7 @@ mod tests {
             }
         }
 
-        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert_eq!(world.items(), vec![(super::Id(10), target)]);
         assert!(world.jobs().is_empty());
     }
 
@@ -2608,6 +2758,23 @@ mod tests {
 
         assert_eq!(super::astar(&terrain, from, &goals), Some(expected.clone()));
         assert_eq!(super::astar(&terrain, from, &goals), Some(expected));
+    }
+
+    #[test]
+    fn astar_routes_a_dwarf_around_a_tree_trunk() {
+        let mut terrain = flat_terrain(5, 3);
+        let trunk = Pos { x: 2, y: 1, z: 1 };
+        terrain.tiles[super::worldgen::index(terrain.dims, 2, 1, 1)] =
+            Tile::Solid(Material::TreeTrunk);
+        let from = Pos { x: 0, y: 1, z: 1 };
+        let goal = Pos { x: 4, y: 1, z: 1 };
+
+        let path = super::astar(&terrain, from, &BTreeSet::from([goal]))
+            .expect("dwarf can walk around a tree");
+
+        assert_eq!(path.last(), Some(&goal));
+        assert!(!path.contains(&trunk));
+        assert_eq!(path.len(), 6, "tree must force a two-step detour");
     }
 
     #[test]
@@ -2847,8 +3014,89 @@ mod tests {
         assert!(world.jobs().is_empty());
         assert!(world.designations().is_empty());
         assert_eq!(world.tile(target), Some(Tile::Empty));
-        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert_eq!(world.items(), vec![(super::Id(10), target)]);
         assert_eq!(world.drain_dirty(), vec![(target, Tile::Empty)]);
+    }
+
+    #[test]
+    fn execute_jobs_digs_tree_materials_without_spawning_items() {
+        for material in [Material::TreeTrunk, Material::TreeFoliage] {
+            let mut world = World::generate(42, Dims::DEFAULT);
+            let work = world.dwarves()[0].1;
+            let target = Pos {
+                x: work.x + 1,
+                ..work
+            };
+            assert!(world.set_tile(target, Tile::Solid(material)));
+            world.drain_dirty();
+            let items_before = world.items().len();
+            let job = Job {
+                id: JobId(0),
+                kind: JobKind::Dig,
+                target,
+                created_tick: 0,
+                retry_after: 0,
+            };
+            assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+            let entity = world
+                .ecs
+                .iter_entities()
+                .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+                .expect("dwarf zero exists")
+                .id();
+            world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+            world
+                .ecs
+                .entity_mut(entity)
+                .insert(super::WorkProgress(super::WORK_TICKS));
+
+            super::execute_jobs(&mut world.ecs);
+
+            assert_eq!(world.tile(target), Some(Tile::Empty));
+            assert_eq!(world.drain_dirty(), vec![(target, Tile::Empty)]);
+            assert_eq!(world.items().len(), items_before, "dug {material:?}");
+        }
+    }
+
+    #[test]
+    fn execute_jobs_channels_tree_materials_without_spawning_items() {
+        for material in [Material::TreeTrunk, Material::TreeFoliage] {
+            let mut world = World::generate(42, Dims::DEFAULT);
+            let target = world.dwarves()[0].1;
+            let below = Pos {
+                z: target.z - 1,
+                ..target
+            };
+            assert!(world.set_tile(below, Tile::Solid(material)));
+            assert!(world.set_tile(target, Tile::Empty));
+            world.drain_dirty();
+            let items_before = world.items().len();
+            let job = Job {
+                id: JobId(0),
+                kind: JobKind::Channel,
+                target,
+                created_tick: 0,
+                retry_after: 0,
+            };
+            assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+            let entity = world
+                .ecs
+                .iter_entities()
+                .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+                .expect("dwarf zero exists")
+                .id();
+            world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+            world
+                .ecs
+                .entity_mut(entity)
+                .insert(super::WorkProgress(super::WORK_TICKS));
+
+            super::execute_jobs(&mut world.ecs);
+
+            assert_eq!(world.tile(below), Some(Tile::Ramp(material)));
+            assert_eq!(world.drain_dirty(), vec![(below, Tile::Ramp(material))]);
+            assert_eq!(world.items().len(), items_before, "channelled {material:?}");
+        }
     }
 
     #[test]
@@ -2890,7 +3138,7 @@ mod tests {
         super::execute_jobs(&mut world.ecs);
 
         assert_eq!(world.tile(below), Some(Tile::Ramp(Material::Soil)));
-        assert_eq!(world.items(), vec![(super::Id(5), target)]);
+        assert_eq!(world.items(), vec![(super::Id(10), target)]);
         assert_eq!(
             world.drain_dirty(),
             vec![(below, Tile::Ramp(Material::Soil))]

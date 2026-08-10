@@ -24,7 +24,9 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
                 kind: protocol::EntityKind::Dwarf,
                 pos: [pos.x, pos.y, pos.z],
                 state: job_state(state),
+                light: None,
             })
+            .chain(world.emitters().into_iter().map(emitter_entity))
             .collect(),
         designations: world
             .designations()
@@ -77,7 +79,9 @@ pub fn delta(world: &mut sim_core::World, speed: protocol::Speed) -> protocol::D
                 kind: protocol::EntityKind::Dwarf,
                 pos: [pos.x, pos.y, pos.z],
                 state: job_state(state),
+                light: None,
             })
+            .chain(world.emitters().into_iter().map(emitter_entity))
             .collect(),
         // NOTE: AD-8 full-resends every mark in every delta, but sim-core bounds the
         // authoritative set at MAX_DESIGNATIONS, so amplification is finite.
@@ -120,6 +124,36 @@ fn material(material: sim_core::Material) -> protocol::Material {
         sim_core::Material::Soil => protocol::Material::Soil,
         sim_core::Material::Ice => protocol::Material::Ice,
         sim_core::Material::Snow => protocol::Material::Snow,
+        sim_core::Material::TreeTrunk => protocol::Material::TreeTrunk,
+        sim_core::Material::TreeFoliage => protocol::Material::TreeFoliage,
+    }
+}
+
+fn emitter_entity(
+    (id, pos, light): (sim_core::Id, sim_core::Pos, sim_core::LightKind),
+) -> protocol::Entity {
+    protocol::Entity {
+        id: id.0,
+        kind: entity_kind(light),
+        pos: [pos.x, pos.y, pos.z],
+        state: protocol::JobState::Idle,
+        light: Some(light_kind(light)),
+    }
+}
+
+fn entity_kind(light: sim_core::LightKind) -> protocol::EntityKind {
+    match light {
+        sim_core::LightKind::Torch => protocol::EntityKind::Torch,
+        sim_core::LightKind::Campfire => protocol::EntityKind::Campfire,
+        sim_core::LightKind::Lantern => unreachable!("lanterns are not live emitters"),
+    }
+}
+
+fn light_kind(light: sim_core::LightKind) -> protocol::LightKind {
+    match light {
+        sim_core::LightKind::Torch => protocol::LightKind::Torch,
+        sim_core::LightKind::Campfire => protocol::LightKind::Campfire,
+        sim_core::LightKind::Lantern => protocol::LightKind::Lantern,
     }
 }
 
@@ -187,6 +221,8 @@ mod tests {
             sim_core::Material::Soil => protocol::Material::Soil,
             sim_core::Material::Ice => protocol::Material::Ice,
             sim_core::Material::Snow => protocol::Material::Snow,
+            sim_core::Material::TreeTrunk => protocol::Material::TreeTrunk,
+            sim_core::Material::TreeFoliage => protocol::Material::TreeFoliage,
         }
     }
 
@@ -316,16 +352,17 @@ mod tests {
         let snap = snapshot(&world, protocol::Speed::Normal);
         let dwarves = world.dwarves();
 
-        assert_eq!(snap.entities.len(), 5);
+        assert_eq!(snap.entities.len(), 10);
+        let dwarf_entities = &snap.entities[..dwarves.len()];
         assert_eq!(
-            snap.entities
+            dwarf_entities
                 .iter()
                 .map(|entity| entity.id)
                 .collect::<Vec<_>>(),
             vec![0, 1, 2, 3, 4]
         );
         assert_eq!(
-            snap.entities
+            dwarf_entities
                 .iter()
                 .map(|entity| entity.pos)
                 .collect::<Vec<_>>(),
@@ -335,12 +372,12 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         assert!(
-            snap.entities
+            dwarf_entities
                 .iter()
                 .all(|entity| entity.kind == protocol::EntityKind::Dwarf)
         );
         assert_eq!(
-            snap.entities
+            dwarf_entities
                 .iter()
                 .map(|entity| entity.state)
                 .collect::<Vec<_>>(),
@@ -348,6 +385,45 @@ mod tests {
                 .iter()
                 .map(|(_, _, state)| expected_job_state(*state))
                 .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn snapshot_and_delta_carry_the_same_emitters() {
+        let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        let expected: Vec<_> = world
+            .emitters()
+            .into_iter()
+            .map(|(id, pos, light)| protocol::Entity {
+                id: id.0,
+                kind: match light {
+                    sim_core::LightKind::Torch => protocol::EntityKind::Torch,
+                    sim_core::LightKind::Campfire => protocol::EntityKind::Campfire,
+                    sim_core::LightKind::Lantern => unreachable!("lanterns are not spawned"),
+                },
+                pos: [pos.x, pos.y, pos.z],
+                state: protocol::JobState::Idle,
+                light: Some(match light {
+                    sim_core::LightKind::Torch => protocol::LightKind::Torch,
+                    sim_core::LightKind::Campfire => protocol::LightKind::Campfire,
+                    sim_core::LightKind::Lantern => unreachable!("lanterns are not spawned"),
+                }),
+            })
+            .collect();
+
+        let snap = snapshot(&world, protocol::Speed::Normal);
+        let update = delta(&mut world, protocol::Speed::Normal);
+        assert_eq!(&snap.entities[5..], expected);
+        assert_eq!(&update.entities[5..], expected);
+        assert!(
+            snap.entities[..5]
+                .iter()
+                .all(|entity| entity.light.is_none())
+        );
+        assert!(
+            update.entities[..5]
+                .iter()
+                .all(|entity| entity.light.is_none())
         );
     }
 
@@ -376,9 +452,9 @@ mod tests {
         let tiles = value["tiles"].as_array().expect("tiles must be an array");
         assert!(tiles.iter().any(|tile| tile == "empty"));
 
-        // Every solid/ramp payload must be one of the four named materials — "some
+        // Every solid/ramp payload must be one of the six named materials — "some
         // lowercase string" would accept a renamed or swapped variant.
-        let named = ["stone", "soil", "ice", "snow"];
+        let named = ["stone", "soil", "ice", "snow", "tree_trunk", "tree_foliage"];
         let mut saw_solid = false;
         for tile in tiles {
             for key in ["solid", "ramp"] {
@@ -423,10 +499,9 @@ mod tests {
                 tile: protocol::Tile::Solid(protocol::Material::Ice),
             }]
         );
-        assert_eq!(update.entities.len(), 5);
+        assert_eq!(update.entities.len(), 10);
         assert_eq!(
-            update
-                .entities
+            update.entities[..world.dwarves().len()]
                 .iter()
                 .map(|entity| entity.state)
                 .collect::<Vec<_>>(),

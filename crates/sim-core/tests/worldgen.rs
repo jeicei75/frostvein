@@ -5,8 +5,28 @@ use sim_core::{Dims, Id, Material, Pos, Tile, World};
 fn surface_height(world: &World, x: i32, y: i32) -> i32 {
     (0..world.dims().z as i32)
         .rev()
-        .find(|&z| world.tile(Pos { x, y, z }) != Some(Tile::Empty))
+        .find(|&z| {
+            !matches!(
+                world.tile(Pos { x, y, z }),
+                Some(
+                    Tile::Empty
+                        | Tile::Solid(Material::TreeTrunk | Material::TreeFoliage)
+                        | Tile::Ramp(Material::TreeTrunk | Material::TreeFoliage)
+                )
+            )
+        })
         .expect("every column has terrain")
+}
+
+fn is_standable(world: &World, pos: Pos) -> bool {
+    world.tile(pos) == Some(Tile::Empty)
+        && matches!(
+            world.tile(Pos {
+                z: pos.z - 1,
+                ..pos
+            }),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
 }
 
 #[test]
@@ -19,6 +39,140 @@ fn same_seed_produces_identical_worlds() {
 }
 
 #[test]
+fn default_world_has_mountainous_height_span() {
+    assert_eq!(sim_core::DEFAULT_SEED, 0xF005_7E1A);
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let mut heights = Vec::new();
+    for y in 0..world.dims().y as i32 {
+        for x in 0..world.dims().x as i32 {
+            heights.push(surface_height(&world, x, y));
+        }
+    }
+    let minimum = heights.iter().min().copied().unwrap();
+    let maximum = heights.iter().max().copied().unwrap();
+
+    assert!(minimum <= 10, "minimum surface height was {minimum}");
+    assert!(maximum >= 26, "maximum surface height was {maximum}");
+    assert!(
+        maximum - minimum >= 16,
+        "surface height span was only {} ({minimum}..={maximum})",
+        maximum - minimum
+    );
+}
+
+#[test]
+fn generated_world_writes_no_tile_beyond_vertical_bounds() {
+    // NOTE: the guard this test exists for is `place_trees`'s `crown_top >= dims.z` skip.
+    // Remove it and `tiles[index(..)]` addresses past the grid, so generation panics — a
+    // successful generate across seeds that genuinely reach the ceiling IS the assertion.
+    // The original version asserted `chunks_exact(plane).rposition(..) < dims.z`, which
+    // `chunks_exact` makes true by construction: it could not fail for any implementation.
+    // The headroom counter keeps this test from going vacuous the same way if the terrain
+    // ever stops reaching the ceiling.
+    const MAX_TREE_HEIGHT: i32 = 6;
+    let dims = Dims::DEFAULT;
+    let mut columns_without_crown_headroom = 0;
+
+    for seed in [sim_core::DEFAULT_SEED, 42, 7] {
+        let world = World::generate(seed, dims);
+        for y in 0..dims.y as i32 {
+            for x in 0..dims.x as i32 {
+                if surface_height(&world, x, y) + MAX_TREE_HEIGHT >= dims.z as i32 {
+                    columns_without_crown_headroom += 1;
+                }
+            }
+        }
+    }
+
+    assert!(
+        columns_without_crown_headroom > 0,
+        "no column across the sampled seeds came within a full crown of the ceiling, so \
+         place_trees' crown-headroom skip was never exercised and this test proves nothing"
+    );
+}
+
+#[test]
+fn camp_is_the_nearest_flat_central_clearing() {
+    const RADIUS: i32 = 3;
+
+    let world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let centre = (world.dims().x as i32 / 2, world.dims().y as i32 / 2);
+    let camp_key = (
+        (camp.x - centre.0).pow(2) + (camp.y - centre.1).pow(2),
+        camp.y,
+        camp.x,
+    );
+
+    for y in RADIUS..world.dims().y as i32 - RADIUS {
+        for x in RADIUS..world.dims().x as i32 - RADIUS {
+            let height = surface_height(&world, x, y);
+            let flat = (y - RADIUS..=y + RADIUS).all(|ny| {
+                (x - RADIUS..=x + RADIUS).all(|nx| surface_height(&world, nx, ny) == height)
+            });
+            if flat {
+                let candidate_key = ((x - centre.0).pow(2) + (y - centre.1).pow(2), y, x);
+                assert!(camp_key <= candidate_key);
+            }
+        }
+    }
+}
+
+#[test]
+fn all_dwarves_spawn_inside_the_camp_with_room_to_move() {
+    const RADIUS: i32 = 3;
+
+    let world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+
+    for (_, pos, _) in world.dwarves() {
+        assert!((pos.x - camp.x).abs() <= RADIUS);
+        assert!((pos.y - camp.y).abs() <= RADIUS);
+        assert_eq!(pos.z, camp.z);
+        assert_eq!(world.tile(pos), Some(Tile::Empty));
+        assert!(
+            [
+                (pos.x - 1, pos.y),
+                (pos.x + 1, pos.y),
+                (pos.x, pos.y - 1),
+                (pos.x, pos.y + 1)
+            ]
+            .into_iter()
+            .any(|(x, y)| is_standable(&world, Pos { x, y, z: pos.z }))
+        );
+    }
+}
+
+#[test]
+fn pines_use_both_tree_materials_and_leave_the_camp_clear() {
+    let world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let mut trunks = 0;
+    let mut foliage = 0;
+
+    for tile in world.tiles() {
+        match tile {
+            Tile::Solid(Material::TreeTrunk) => trunks += 1,
+            Tile::Solid(Material::TreeFoliage) => foliage += 1,
+            _ => {}
+        }
+    }
+    assert!(trunks > 0, "world contains no tree trunks");
+    assert!(foliage > 0, "world contains no tree foliage");
+
+    for y in camp.y - 3..=camp.y + 3 {
+        for x in camp.x - 3..=camp.x + 3 {
+            for z in 0..world.dims().z as i32 {
+                assert!(!matches!(
+                    world.tile(Pos { x, y, z }),
+                    Some(Tile::Solid(Material::TreeTrunk | Material::TreeFoliage))
+                ));
+            }
+        }
+    }
+}
+
+#[test]
 fn spawn_positions_for_seed_42_are_pinned() {
     let world = World::generate(42, Dims::DEFAULT);
     let positions: Vec<_> = world.dwarves().into_iter().map(|(_, pos, _)| pos).collect();
@@ -26,29 +180,29 @@ fn spawn_positions_for_seed_42_are_pinned() {
         positions,
         vec![
             Pos {
-                x: 115,
-                y: 84,
-                z: 15
+                x: 64,
+                y: 65,
+                z: 25
             },
             Pos {
-                x: 20,
-                y: 102,
-                z: 19
+                x: 64,
+                y: 66,
+                z: 25
             },
             Pos {
-                x: 121,
-                y: 12,
-                z: 16
+                x: 65,
+                y: 61,
+                z: 25
             },
             Pos {
-                x: 51,
-                y: 113,
-                z: 19
+                x: 67,
+                y: 66,
+                z: 25
             },
             Pos {
-                x: 102,
-                y: 122,
-                z: 17
+                x: 62,
+                y: 67,
+                z: 25
             },
         ]
     );
@@ -67,10 +221,14 @@ fn spawn_positions_for_seed_42_are_pinned() {
                 Tile::Ramp(Material::Soil) => 6,
                 Tile::Ramp(Material::Ice) => 7,
                 Tile::Ramp(Material::Snow) => 8,
+                Tile::Solid(Material::TreeTrunk) => 9,
+                Tile::Solid(Material::TreeFoliage) => 10,
+                Tile::Ramp(Material::TreeTrunk) => 11,
+                Tile::Ramp(Material::TreeFoliage) => 12,
             };
             (hash ^ code).wrapping_mul(0x0000_0100_0000_01b3)
         });
-    assert_eq!(terrain_fingerprint, 0xd03e_1a26_2b9c_c19d);
+    assert_eq!(terrain_fingerprint, 0xbd48_ac6b_7250_d2e9);
 }
 
 #[test]
@@ -170,10 +328,14 @@ fn surface_is_icy() {
             );
 
             for z in top + 1..world.dims().z as i32 {
-                assert_eq!(
-                    world.tile(Pos { x, y, z }),
-                    Some(Tile::Empty),
-                    "expected Air above the surface at ({x},{y},{z})"
+                assert!(
+                    matches!(
+                        world.tile(Pos { x, y, z }),
+                        Some(
+                            Tile::Empty | Tile::Solid(Material::TreeTrunk | Material::TreeFoliage)
+                        )
+                    ),
+                    "expected air or a tree above the surface at ({x},{y},{z})"
                 );
             }
         }
@@ -194,11 +356,19 @@ fn height_varies_and_steps_are_at_most_one() {
 
                 if x + 1 < world.dims().x as i32 {
                     let right = surface_height(&world, x + 1, y);
-                    assert!((height - right).abs() <= 1, "seed {seed}");
+                    assert!(
+                        (height - right).abs() <= 1,
+                        "seed {seed} step ({x},{y})={height} -> ({},{y})={right}",
+                        x + 1
+                    );
                 }
                 if y + 1 < world.dims().y as i32 {
                     let down = surface_height(&world, x, y + 1);
-                    assert!((height - down).abs() <= 1, "seed {seed}");
+                    assert!(
+                        (height - down).abs() <= 1,
+                        "seed {seed} step ({x},{y})={height} -> ({x},{})={down}",
+                        y + 1
+                    );
                 }
             }
         }

@@ -1,7 +1,7 @@
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::{DesignationKind, Dims, Job, JobState, Pos, Tile};
+use crate::{DesignationKind, Dims, Job, JobState, LightKind, Pos, Tile};
 
 /// `sim-core`'s complete deterministic state. File I/O belongs to `simd`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,12 +12,14 @@ pub struct SaveState {
     pub tiles: Vec<Tile>,
     pub wander_rng: ChaCha8Rng,
     pub next_id: u32,
+    pub camp_origin: Pos,
     pub dwarves: Vec<SavedDwarf>,
     pub designations: Vec<(Pos, DesignationKind)>,
     pub zones: Vec<Pos>,
     pub jobs: Vec<Job>,
     pub next_job_id: u32,
     pub items: Vec<(u32, Pos)>,
+    pub emitters: Vec<(u32, Pos, LightKind)>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

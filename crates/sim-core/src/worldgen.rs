@@ -3,7 +3,8 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::{Dims, Material, Tile};
 
-const NOISE_SPACING: u32 = 16;
+const NOISE_SPACING: u32 = 32;
+pub(crate) const CAMP_RADIUS: u32 = 3;
 
 pub(crate) fn index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
     // NOTE: widened to usize before multiplying — the u32 product wraps silently in
@@ -38,7 +39,7 @@ pub(crate) fn height_field(dims: Dims, rng: &mut ChaCha8Rng) -> Vec<u32> {
             let top = lerp(top_left, top_right, fraction_x);
             let bottom = lerp(bottom_left, bottom_right, fraction_x);
             let noise = lerp(top, bottom, fraction_y);
-            let height = (dims.z as f64 / 2.0 + (noise * 2.0 - 1.0) * 4.0).round();
+            let height = (dims.z as f64 / 2.0 + (noise * 2.0 - 1.0) * 12.0).round();
             heights.push(height.clamp(3.0, dims.z.saturating_sub(2) as f64) as u32);
         }
     }
@@ -132,6 +133,100 @@ pub(crate) fn place_ramps(dims: Dims, heights: &[u32], tiles: &mut [Tile]) {
                     tiles[surface] = Tile::Ramp(material);
                 }
             }
+        }
+    }
+}
+
+pub(crate) fn camp_origin(dims: Dims, heights: &[u32]) -> crate::Pos {
+    let centre = (dims.x as i64 / 2, dims.y as i64 / 2);
+    let radius = CAMP_RADIUS;
+
+    let (x, y, height) = (radius..dims.y - radius)
+        .flat_map(|y| (radius..dims.x - radius).map(move |x| (x, y)))
+        .filter_map(|(x, y)| {
+            let height = heights[(x + y * dims.x) as usize];
+            let flat = (y - radius..=y + radius).all(|ny| {
+                (x - radius..=x + radius).all(|nx| heights[(nx + ny * dims.x) as usize] == height)
+            });
+            flat.then_some((x, y, height))
+        })
+        .min_by_key(|&(x, y, _)| {
+            let dx = x as i64 - centre.0;
+            let dy = y as i64 - centre.1;
+            (dx * dx + dy * dy, y, x)
+        })
+        .expect("worldgen requires one 7x7 flat camp clearing");
+
+    crate::Pos {
+        x: x as i32,
+        y: y as i32,
+        z: height as i32 + 1,
+    }
+}
+
+pub(crate) fn place_trees(
+    dims: Dims,
+    heights: &[u32],
+    tiles: &mut [Tile],
+    camp: crate::Pos,
+    rng: &mut ChaCha8Rng,
+) {
+    let camp_radius = CAMP_RADIUS as i32;
+    let mut trunks = Vec::new();
+
+    for y in 1..dims.y - 1 {
+        for x in 1..dims.x - 1 {
+            if (x as i32 - camp.x).abs() <= camp_radius + 1
+                && (y as i32 - camp.y).abs() <= camp_radius + 1
+            {
+                continue;
+            }
+            if rng.random_range(0..12) != 0
+                || trunks
+                    .iter()
+                    .any(|&(tx, ty): &(u32, u32)| tx.abs_diff(x) <= 2 && ty.abs_diff(y) <= 2)
+            {
+                continue;
+            }
+
+            let surface = heights[(x + y * dims.x) as usize];
+            let height = rng.random_range(4..=6);
+            let crown_top = surface + height;
+            if crown_top >= dims.z {
+                continue;
+            }
+
+            for z in surface + 1..crown_top {
+                tiles[index(dims, x, y, z)] = Tile::Solid(Material::TreeTrunk);
+            }
+            let crown_tip = index(dims, x, y, crown_top);
+            if tiles[crown_tip] == Tile::Empty {
+                tiles[crown_tip] = Tile::Solid(Material::TreeFoliage);
+            }
+            for fy in y - 1..=y + 1 {
+                for fx in x - 1..=x + 1 {
+                    if fx != x || fy != y {
+                        let foliage = index(dims, fx, fy, surface + 1);
+                        if tiles[foliage] == Tile::Empty {
+                            tiles[foliage] = Tile::Solid(Material::TreeFoliage);
+                        }
+                    }
+                }
+            }
+            for z in crown_top.saturating_sub(2)..crown_top {
+                for fy in y - 1..=y + 1 {
+                    for fx in x - 1..=x + 1 {
+                        if fx == x && fy == y {
+                            continue;
+                        }
+                        let foliage = index(dims, fx, fy, z);
+                        if tiles[foliage] == Tile::Empty {
+                            tiles[foliage] = Tile::Solid(Material::TreeFoliage);
+                        }
+                    }
+                }
+            }
+            trunks.push((x, y));
         }
     }
 }

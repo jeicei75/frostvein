@@ -112,9 +112,20 @@ fn save_load_then_tick_matches_never_saved() {
         assert_eq!(loaded.claims(), control.claims());
         assert_eq!(loaded.carrying(), control.carrying());
         assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.emitters(), control.emitters());
         assert_eq!(loaded.designations(), control.designations());
         assert_eq!(loaded.zones(), control.zones());
     }
+}
+
+#[test]
+fn save_round_trip_preserves_emitters() {
+    let world = World::generate(42, Dims::DEFAULT);
+    let expected = world.emitters();
+
+    let loaded = World::from_save(world.to_save());
+
+    assert_eq!(loaded.emitters(), expected);
 }
 
 #[test]
@@ -156,7 +167,7 @@ fn loading_does_not_reuse_entity_ids() {
     let world = World::generate(42, Dims::DEFAULT);
     let loaded = World::from_save(world.to_save());
 
-    assert_eq!(loaded.to_save().next_id, 5);
+    assert_eq!(loaded.to_save().next_id, 10);
 }
 
 #[test]

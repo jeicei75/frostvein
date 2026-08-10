@@ -20,19 +20,25 @@ fn make_standable(world: &mut World, pos: Pos) {
     assert!(world.set_tile(pos, Tile::Empty));
 }
 
+fn is_standable(world: &World, pos: Pos) -> bool {
+    world.tile(pos) == Some(Tile::Empty)
+        && matches!(
+            world.tile(Pos {
+                z: pos.z - 1,
+                ..pos
+            }),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+}
+
 #[test]
-fn dwarves_stay_standable_and_near_home() {
+fn idle_dwarves_stay_standable_and_inside_the_camp() {
     let mut world = World::generate(42, Dims::DEFAULT);
-    let homes = world.dwarves();
+    let camp = world.camp_origin();
 
     for _ in 0..200 {
         world.step();
         for (id, pos, _) in world.dwarves() {
-            let home = homes
-                .iter()
-                .find(|(home_id, _, _)| *home_id == id)
-                .expect("every dwarf keeps its spawn home")
-                .1;
             assert_eq!(world.tile(pos), Some(Tile::Empty));
             assert!(matches!(
                 world.tile(Pos {
@@ -41,9 +47,9 @@ fn dwarves_stay_standable_and_near_home() {
                 }),
                 Some(Tile::Solid(_) | Tile::Ramp(_))
             ));
-            assert_eq!(pos.z, home.z);
-            assert!((pos.x - home.x).abs() <= 3, "dwarf {id:?} escaped in x");
-            assert!((pos.y - home.y).abs() <= 3, "dwarf {id:?} escaped in y");
+            assert_eq!(pos.z, camp.z);
+            assert!((pos.x - camp.x).abs() <= 3, "dwarf {id:?} escaped in x");
+            assert!((pos.y - camp.y).abs() <= 3, "dwarf {id:?} escaped in y");
         }
     }
 }
@@ -58,6 +64,43 @@ fn same_seed_wanders_identically() {
         second.step();
         assert_eq!(first.dwarves(), second.dwarves());
     }
+}
+
+#[test]
+fn trees_do_not_enclose_the_camp_from_outside_dig_work() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let mut trunks = Vec::new();
+    for z in 0..world.dims().z as i32 {
+        for y in 0..world.dims().y as i32 {
+            for x in 0..world.dims().x as i32 {
+                let pos = Pos { x, y, z };
+                if world.tile(pos) == Some(Tile::Solid(Material::TreeTrunk))
+                    && [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+                        .into_iter()
+                        .any(|(nx, ny)| is_standable(&world, Pos { x: nx, y: ny, z }))
+                {
+                    trunks.push(pos);
+                }
+            }
+        }
+    }
+    trunks.sort_by_key(|pos| (pos.x.abs_diff(camp.x) + pos.y.abs_diff(camp.y), *pos));
+    let target = trunks[0];
+    assert!((target.x - camp.x).abs() > 3 || (target.y - camp.y).abs() > 3);
+
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    for _ in 0..1_000 {
+        world.step();
+        if world.tile(target) == Some(Tile::Empty) {
+            break;
+        }
+    }
+
+    assert_eq!(world.tile(target), Some(Tile::Empty));
 }
 
 #[test]
@@ -611,7 +654,7 @@ fn designate_delay_claim_walk_work_and_dig_complete_headlessly() {
 
     assert!(saw_delay && saw_claim && saw_walk && saw_work);
     assert_eq!(world.tile(target), Some(Tile::Empty));
-    assert_eq!(world.items(), vec![(sim_core::Id(5), target)]);
+    assert_eq!(world.items(), vec![(sim_core::Id(10), target)]);
     assert!(world.jobs().is_empty());
     assert!(world.claims().iter().all(|(_, job)| job.is_none()));
     assert!(world.designations().is_empty());
@@ -714,7 +757,7 @@ fn designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly() {
         Some(Tile::Empty),
         "the ordered tile was never dug"
     );
-    assert_eq!(first.items(), vec![(sim_core::Id(5), pile)]);
+    assert_eq!(first.items(), vec![(sim_core::Id(10), pile)]);
     assert!(first.zones().contains(&pile));
     assert!(first.jobs().is_empty());
     assert!(first.claims().iter().all(|(_, job)| job.is_none()));
@@ -891,7 +934,7 @@ fn a_new_stockpile_derives_no_haul_job_until_the_world_steps() {
     world.step();
 
     assert_eq!(world.jobs().len(), 1);
-    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 5 });
+    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 10 });
     assert_eq!(world.jobs()[0].target, stone);
 }
 
@@ -905,7 +948,7 @@ fn cancelling_marks_over_a_stone_never_drops_its_haul_job() {
     });
     world.step();
     let job = world.jobs()[0];
-    assert_eq!(job.kind, JobKind::Haul { item: 5 });
+    assert_eq!(job.kind, JobKind::Haul { item: 10 });
 
     // `x` over the stone's tile. A haul job's `target` is a stone position, so a cancel that
     // matched on `target` would silently delete an order the player never gave.
@@ -1012,7 +1055,7 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
         1,
         "the haul job was dropped, not parked"
     );
-    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 5 });
+    assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 10 });
     assert!(
         world.claims().iter().all(|(_, job)| job.is_none()),
         "a job with nowhere to deliver stayed claimed"
@@ -1039,7 +1082,7 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
         "the revived job never finished: {:?}",
         world.jobs()
     );
-    assert_eq!(world.items(), vec![(sim_core::Id(5), pile)]);
+    assert_eq!(world.items(), vec![(sim_core::Id(10), pile)]);
     assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
 }
 
@@ -1234,6 +1277,7 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.claims(), second.claims());
         assert_eq!(first.carrying(), second.carrying());
         assert_eq!(first.items(), second.items());
+        assert_eq!(first.emitters(), second.emitters());
         assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());
         assert_eq!(first.zones(), second.zones());

@@ -39,6 +39,14 @@ pub fn tile_cell(tile: Tile) -> Cell {
             glyph: '░',
             fg: (206, 218, 228),
         },
+        Tile::Solid(Material::TreeTrunk) => Cell {
+            glyph: '│',
+            fg: (105, 76, 48),
+        },
+        Tile::Solid(Material::TreeFoliage) => Cell {
+            glyph: '♠',
+            fg: (54, 106, 78),
+        },
         Tile::Ramp(Material::Stone) => Cell {
             glyph: '▲',
             fg: (86, 92, 104),
@@ -54,6 +62,14 @@ pub fn tile_cell(tile: Tile) -> Cell {
         Tile::Ramp(Material::Snow) => Cell {
             glyph: '▲',
             fg: (206, 218, 228),
+        },
+        Tile::Ramp(Material::TreeTrunk) => Cell {
+            glyph: '▲',
+            fg: (105, 76, 48),
+        },
+        Tile::Ramp(Material::TreeFoliage) => Cell {
+            glyph: '▲',
+            fg: (54, 106, 78),
         },
     }
 }
@@ -71,6 +87,14 @@ pub fn entity_cell(kind: EntityKind, state: JobState) -> Cell {
         (EntityKind::Dwarf, JobState::Work) => Cell {
             glyph: '☺',
             fg: (236, 186, 96),
+        },
+        (EntityKind::Torch, _) => Cell {
+            glyph: '†',
+            fg: (246, 166, 62),
+        },
+        (EntityKind::Campfire, _) => Cell {
+            glyph: '♨',
+            fg: (244, 92, 40),
         },
     }
 }
@@ -171,15 +195,34 @@ mod tests {
             (Tile::Solid(Material::Soil), '▓', (72, 66, 58)),
             (Tile::Solid(Material::Ice), '▒', (126, 174, 196)),
             (Tile::Solid(Material::Snow), '░', (206, 218, 228)),
+            (Tile::Solid(Material::TreeTrunk), '│', (105, 76, 48)),
+            (Tile::Solid(Material::TreeFoliage), '♠', (54, 106, 78)),
             (Tile::Ramp(Material::Stone), '▲', (86, 92, 104)),
             (Tile::Ramp(Material::Soil), '▲', (72, 66, 58)),
             (Tile::Ramp(Material::Ice), '▲', (126, 174, 196)),
             (Tile::Ramp(Material::Snow), '▲', (206, 218, 228)),
+            (Tile::Ramp(Material::TreeTrunk), '▲', (105, 76, 48)),
+            (Tile::Ramp(Material::TreeFoliage), '▲', (54, 106, 78)),
             (Tile::Empty, ' ', (8, 10, 14)),
         ];
         for (tile, glyph, fg) in tiles {
             assert_eq!(tile_cell(tile), Cell { glyph, fg });
         }
+
+        assert_eq!(
+            entity_cell(EntityKind::Torch, JobState::Work),
+            Cell {
+                glyph: '†',
+                fg: (246, 166, 62),
+            }
+        );
+        assert_eq!(
+            entity_cell(EntityKind::Campfire, JobState::Walk),
+            Cell {
+                glyph: '♨',
+                fg: (244, 92, 40),
+            }
+        );
 
         for (state, fg) in [
             (JobState::Idle, (150, 112, 62)),
@@ -277,7 +320,16 @@ mod tests {
             ]
         );
 
-        let existing_glyphs = ['█', '▓', '▒', '░', '▲', ' ', '☺'];
+        let existing_glyphs = ['█', '▓', '▒', '░', '▲', ' ', '☺', '│', '♠', '†', '♨'];
+        let new_glyphs = ['│', '♠', '†', '♨'];
+        assert_eq!(
+            new_glyphs
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            new_glyphs.len(),
+            "tree and emitter glyphs must all be distinct"
+        );
         let marker_glyphs: std::collections::BTreeSet<_> =
             markers.iter().map(|cell| cell.glyph).collect();
         assert_eq!(

@@ -468,7 +468,7 @@ fn out_of_bounds_dwarf_save_is_logged_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let log = daemon.next_log();
     assert!(
-        log.contains("save dwarf 0 position 2147483647,84,15 is outside dims 128x128x32"),
+        log.contains("save dwarf 0 position 2147483647,65,25 is outside dims 128x128x32"),
         "unexpected out-of-bounds dwarf log: {log}"
     );
 
@@ -496,7 +496,7 @@ fn out_of_bounds_dwarf_home_is_logged_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let log = daemon.next_log();
     assert!(
-        log.contains("save dwarf 0 home -2147483648,84,15 is outside dims 128x128x32"),
+        log.contains("save dwarf 0 home -2147483648,64,25 is outside dims 128x128x32"),
         "unexpected out-of-bounds dwarf-home log: {log}"
     );
 
@@ -616,7 +616,7 @@ fn out_of_bounds_job_save_is_logged_and_the_daemon_keeps_ticking() {
 fn out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
-    state.items.push((5, sim_core::Pos { x: 0, y: -1, z: 0 }));
+    state.items.push((10, sim_core::Pos { x: 0, y: -1, z: 0 }));
     fs::write(
         daemon.save_path(),
         serde_json::to_vec(&state).expect("encode out-of-bounds item fixture"),
@@ -630,7 +630,7 @@ fn out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let log = daemon.next_log();
     assert!(
-        log.contains("save item 5 position 0,-1,0 is outside dims 128x128x32"),
+        log.contains("save item 10 position 0,-1,0 is outside dims 128x128x32"),
         "unexpected out-of-bounds item log: {log}"
     );
 
@@ -650,13 +650,32 @@ fn duplicate_item_entity_id_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
+fn duplicate_emitter_entity_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.emitters[0].0 = state.dwarves[0].id;
+
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses entity id 0");
+}
+
+#[test]
+fn emitter_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.emitters[0].0 = state.next_id;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save next_id 10 does not exceed entity id 10",
+    );
+}
+
+#[test]
 fn item_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
     state.items.push((state.next_id, state.dwarves[0].pos));
 
     assert_save_is_rejected_without_stopping_ticks(
         state,
-        "save next_id 5 does not exceed entity id 5",
+        "save next_id 10 does not exceed entity id 10",
     );
 }
 
@@ -761,8 +780,8 @@ fn duplicate_job_target_save_is_logged_and_the_daemon_keeps_ticking() {
 fn save_with_items(count: u32) -> sim_core::SaveState {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
     let pos = state.dwarves[0].pos;
-    state.items = (0..count).map(|index| (5 + index, pos)).collect();
-    state.next_id = 5 + count;
+    state.items = (0..count).map(|index| (10 + index, pos)).collect();
+    state.next_id = 10 + count;
     state
 }
 
@@ -785,10 +804,10 @@ fn a_mid_haul_save_loads_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();
     let mut state = save_with_items(1);
     let pos = state.dwarves[0].pos;
-    state.jobs = vec![haul_job(0, 5, pos)];
+    state.jobs = vec![haul_job(0, 10, pos)];
     state.next_job_id = 1;
     state.dwarves[0].current_job = Some(0);
-    state.dwarves[0].carrying = Some(5);
+    state.dwarves[0].carrying = Some(10);
     fs::write(
         daemon.save_path(),
         serde_json::to_vec(&state).expect("encode mid-haul save"),
@@ -802,7 +821,7 @@ fn a_mid_haul_save_loads_and_the_daemon_keeps_ticking() {
     send_literal(&mut writer, b"{\"type\":\"load\"}\n");
     let loaded = read_snapshot_after_load(&mut reader);
 
-    assert!(loaded.items.iter().any(|item| item.id == 5));
+    assert!(loaded.items.iter().any(|item| item.id == 10));
     assert_eq!(loaded.tick, state.tick);
     let first = read_delta(&mut reader).tick;
     let second = read_delta(&mut reader).tick;
@@ -823,10 +842,10 @@ fn haul_job_naming_an_absent_item_save_is_logged_and_the_daemon_keeps_ticking() 
 fn two_haul_jobs_on_one_item_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = save_with_items(2);
     let target = state.dwarves[0].pos;
-    state.jobs = vec![haul_job(0, 5, target), haul_job(1, 5, target)];
+    state.jobs = vec![haul_job(0, 10, target), haul_job(1, 10, target)];
     state.next_job_id = 2;
 
-    assert_save_is_rejected_without_stopping_ticks(state, "save reuses haul item 5");
+    assert_save_is_rejected_without_stopping_ticks(state, "save reuses haul item 10");
 }
 
 /// Pins the LOG LINE, not an outcome bound: unique-by-item and item-exists already reject this
@@ -836,7 +855,7 @@ fn two_haul_jobs_on_one_item_save_is_logged_and_the_daemon_keeps_ticking() {
 fn more_haul_jobs_than_items_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = save_with_items(1);
     let target = state.dwarves[0].pos;
-    state.jobs = vec![haul_job(0, 5, target), haul_job(1, 6, target)];
+    state.jobs = vec![haul_job(0, 10, target), haul_job(1, 11, target)];
     state.next_job_id = 2;
 
     assert_save_is_rejected_without_stopping_ticks(
@@ -857,28 +876,28 @@ fn dwarf_carrying_an_absent_item_save_is_logged_and_the_daemon_keeps_ticking() {
 fn two_dwarves_carrying_one_item_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = save_with_items(1);
     let target = state.dwarves[0].pos;
-    state.jobs = vec![haul_job(0, 5, target)];
+    state.jobs = vec![haul_job(0, 10, target)];
     state.next_job_id = 1;
-    state.dwarves[0].carrying = Some(5);
+    state.dwarves[0].carrying = Some(10);
     state.dwarves[0].current_job = Some(0);
     // No claim of its own: `save job 0 has multiple claimants` would otherwise fire first and
     // this test would prove that rule instead of this one.
-    state.dwarves[1].carrying = Some(5);
+    state.dwarves[1].carrying = Some(10);
 
-    assert_save_is_rejected_without_stopping_ticks(state, "save item 5 has multiple carriers");
+    assert_save_is_rejected_without_stopping_ticks(state, "save item 10 has multiple carriers");
 }
 
 #[test]
 fn carrying_dwarf_without_the_matching_haul_job_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = save_with_items(1);
     let target = state.dwarves[0].pos;
-    state.jobs = vec![haul_job(0, 5, target)];
+    state.jobs = vec![haul_job(0, 10, target)];
     state.next_job_id = 1;
-    state.dwarves[0].carrying = Some(5);
+    state.dwarves[0].carrying = Some(10);
 
     assert_save_is_rejected_without_stopping_ticks(
         state,
-        "save dwarf 0 carries item 5 without holding its haul job",
+        "save dwarf 0 carries item 10 without holding its haul job",
     );
 }
 
@@ -1067,7 +1086,7 @@ fn streams_three_strictly_increasing_deltas() {
 
     let snapshot = read_snapshot(&mut reader);
     assert_eq!(snapshot.tiles.len(), 524_288);
-    assert_eq!(snapshot.entities.len(), 5);
+    assert_eq!(snapshot.entities.len(), 10);
 
     let ticks = [
         read_delta(&mut reader).tick,

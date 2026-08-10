@@ -215,8 +215,19 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         }
     }
 
-    // Same filter for counting and drawing dwarves, for the same reason. A second `EntityKind`
-    // would need its own contention rule; today there is only one.
+    for entity in &snapshot.entities {
+        match entity.kind {
+            EntityKind::Dwarf => {}
+            EntityKind::Torch | EntityKind::Campfire => {
+                if let Some(index) = screen_index(entity.pos) {
+                    framebuffer.cells[index] = entity_cell(entity.kind, entity.state);
+                }
+            }
+        }
+    }
+
+    // Emitters have their own pass above items and below dwarves. Only dwarves participate in
+    // crowd and carrier contention.
     let mut dwarf_counts = BTreeMap::new();
     for entity in &snapshot.entities {
         if entity.kind == EntityKind::Dwarf
@@ -788,12 +799,14 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 1],
                 state: JobState::Idle,
+                light: None,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
                 pos: [3, 1, 2],
                 state: JobState::Idle,
+                light: None,
             },
         ];
         let state = normal_state((2, 1), 1);
@@ -845,6 +858,7 @@ mod tests {
             kind: EntityKind::Dwarf,
             pos: [1, 1, 1],
             state: JobState::Idle,
+            light: None,
         }];
 
         let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
@@ -890,6 +904,7 @@ mod tests {
             kind: EntityKind::Dwarf,
             pos: [127, 127, 0],
             state: JobState::Idle,
+            light: None,
         }];
 
         let framebuffer = render(&snapshot, &normal_state((127, 127), 0), 5, 4);
@@ -918,12 +933,14 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 0],
                 state: JobState::Idle,
+                light: None,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 0],
                 state: JobState::Walk,
+                light: None,
             },
         ];
 
@@ -990,25 +1007,45 @@ mod tests {
                 id: 6,
                 pos: [3, 1, 0],
             },
+            Item {
+                id: 7,
+                pos: [4, 1, 0],
+            },
         ];
         snapshot.entities = vec![
             Entity {
-                id: 1,
-                kind: EntityKind::Dwarf,
+                id: 8,
+                kind: EntityKind::Torch,
                 pos: [3, 1, 0],
                 state: JobState::Idle,
+                light: Some(protocol::LightKind::Torch),
+            },
+            Entity {
+                id: 9,
+                kind: EntityKind::Campfire,
+                pos: [4, 1, 0],
+                state: JobState::Idle,
+                light: Some(protocol::LightKind::Campfire),
+            },
+            Entity {
+                id: 1,
+                kind: EntityKind::Dwarf,
+                pos: [4, 1, 0],
+                state: JobState::Idle,
+                light: None,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
-                pos: [4, 1, 0],
+                pos: [5, 1, 0],
                 state: JobState::Idle,
+                light: None,
             },
         ];
         let state = ViewState {
             mode: Mode::Dig,
-            cursor: (5, 1),
-            anchor: Some((4, 1)),
+            cursor: (6, 1),
+            anchor: Some((5, 1)),
             ..normal_state((3, 1), 0)
         };
 
@@ -1017,11 +1054,14 @@ mod tests {
         assert_eq!(framebuffer.cell(0, 1).glyph, '≡');
         assert_eq!(framebuffer.cell(1, 1).glyph, '×');
         assert_eq!(framebuffer.cell(2, 1).glyph, '*');
-        // The entity layer still wins over the item layer; with a stone under it, the dwarf's
-        // own look is the carrier glyph.
-        assert_eq!(framebuffer.cell(3, 1).glyph, '☻');
-        assert_eq!(framebuffer.cell(4, 1).glyph, 'd');
-        assert_eq!(framebuffer.cell(5, 1).glyph, '+');
+        assert_eq!(
+            framebuffer.cell(3, 1),
+            entity_cell(EntityKind::Torch, JobState::Idle)
+        );
+        // Dwarves win over emitters and retain their dwarf-only item contention rule.
+        assert_eq!(framebuffer.cell(4, 1).glyph, '☻');
+        assert_eq!(framebuffer.cell(5, 1).glyph, 'd');
+        assert_eq!(framebuffer.cell(6, 1).glyph, '+');
     }
 
     #[test]
@@ -1034,12 +1074,14 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [0, 0, 0],
                 state: JobState::Idle,
+                light: None,
             },
             Entity {
                 id: 2,
                 kind: EntityKind::Dwarf,
                 pos: [2, 0, 0],
                 state: JobState::Walk,
+                light: None,
             },
         ];
         let state = normal_state((1, 0), 0);
@@ -1091,8 +1133,16 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [1, 1, 30],
                 state: JobState::Idle,
+                light: None,
             })
             .collect();
+        snapshot.entities.push(Entity {
+            id: 9,
+            kind: EntityKind::Campfire,
+            pos: [2, 2, 30],
+            state: JobState::Idle,
+            light: Some(protocol::LightKind::Campfire),
+        });
         let state = normal_state((12, 34), 19);
 
         let framebuffer = render(&snapshot, &state, 78, 3);
@@ -1197,6 +1247,7 @@ mod tests {
                     kind: EntityKind::Dwarf,
                     pos: [1, 1, 30],
                     state: JobState::Idle,
+                    light: None,
                 })
                 .collect();
             let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5");
@@ -1607,6 +1658,7 @@ mod tests {
             kind: EntityKind::Dwarf,
             pos: [8, 1, 5],
             state: JobState::Idle,
+            light: None,
         });
         assert_eq!(initial(&snapshot, None), before);
 

@@ -51,6 +51,8 @@ names where it came from and what should trigger revisiting it.
   wall. No AC requires interior spawning, so this is an unintended distribution
   rather than a defect. **Revisit if** dwarf starting position becomes
   gameplay-relevant, or when a real embark-site rule replaces the placeholder.
+  **CLOSED in Story 5.1:** the real embark-site rule now selects the nearest qualifying
+  central 7x7 flat clearing, and all five seeded spawn draws are restricted to it.
 
 - **Story artifacts reference planning docs that are untracked**
   (`_bmad-output/implementation-artifacts/1-1-a-seeded-frozen-world-exists.md`
@@ -322,6 +324,8 @@ below as "what one layer found", not as "what is wrong with 3.3".
   `protocol::EntityKind` has one variant, and the code carries a `// NOTE:` saying a second kind must
   decide its own contention rule. **Revisit when** a second `EntityKind` reaches the wire — that
   story owns the rule, and this is where it lands.
+  **CLOSED in Story 5.1:** fixed emitters draw in their own pass above items and below dwarves;
+  only dwarves participate in crowd/carrier contention and the status count.
 
 - **`glyph_positions` records only the first occurrence of a glyph per line**
   [`crates/tui/tests/client.rs:2154`] — LAYER: acceptance-auditor. Sound for the one-stone haul stub,
@@ -398,3 +402,100 @@ below as "what one layer found", not as "what is wrong with 3.3".
   colour stripped, verified live both ways — but two things follow: the reasoning rests on a false
   premise, and the stale `NO_COLOR` warning at `main.rs:382-388` never fires in this devpod, which is
   why nobody noticed it had gone out of date. Raised by the Edge Case and Feature Auditors.
+
+## Deferred from: code review of story-5.1 (2026-08-10)
+
+- **`bridge::entity_kind` panics on `LightKind::Lantern`, and the only guard lives in another crate**
+  [crates/simd/src/bridge.rs:144-157]. `entity_kind` runs on the daemon's main thread inside the
+  tick loop (`simd/src/main.rs:142,189,209`) with no `catch_unwind` anywhere in `simd`, so the panic
+  would take down the whole process and disconnect every client, not fail one request. Today it is
+  genuinely unreachable and correctly guarded — but the guard is `simd::load_world_from`
+  (`main.rs:501-504`), which only covers the save-load path, while `World::emitters()` and
+  `World::from_save` in `sim-core` accept `Lantern` without complaint. The invariant is enforced by
+  convention across a crate boundary, not by a type. Note `light_kind()` maps `Lantern` correctly;
+  only the `kind` field panics, which is easy to miss on inspection. NOT patched because there is no
+  correct wire mapping to give it: `protocol` has no `EntityKind::Lantern`, and adding one would
+  breach AC12's "exactly this and nothing else". **Revisit trigger: FR29 (moving lights), which is
+  first on the M2 cut list and is the story that makes `Lantern` live.** Raised independently by the
+  Edge Case Hunter and the Acceptance Auditor.
+- **The emitter test oracle copies production's `unreachable!()` arms instead of decoding
+  independently** [crates/simd/src/bridge.rs:399-409]. `snapshot_and_delta_carry_the_same_emitters`
+  builds its "expected" values with `LightKind::Lantern => unreachable!(...)` twice — textually the
+  same arms as production `entity_kind`/`light_kind`. This same file documents the opposite
+  discipline for another bridge: `expected_job_state` (`bridge.rs:232-239`) hand-decodes wire
+  strings "rather than repeating the production match — a second copy of the same arms would pass
+  even when the author got a mapping wrong." For the `Lantern` case the test can therefore never
+  produce a useful assertion diff; it would crash with production's own message. Raised by the Edge
+  Case Hunter.
+- **Two emitters on one cell render with silent last-write-wins** [crates/tui/src/view.rs:218-227].
+  The emitter draw pass has no per-cell counting comparable to `item_counts` (`view.rs:210-216`) or
+  `dwarf_counts` (`view.rs:231-238`); a second emitter on the same tile overwrites the first with no
+  visual signal that anything is hidden. Unreachable from worldgen today — `camp_emitters` places
+  all five at distinct positions — so this is reasoned from the code, not demonstrated. Revisit if
+  emitter placement ever becomes data-driven or a hand-crafted save can reach the renderer. Raised
+  by the Edge Case Hunter.
+- **`opening_z` counts tree foliage as standable ground** [crates/tui/src/view.rs:111-113]. The
+  condition matches `Tile::Solid(_)` uniformly, so a tree canopy is indistinguishable from a rock
+  floor for the opening-level heuristic. Measured against the live daemon: at the winning level
+  (z 19) 684 of 1638 tiles counted as standable are canopy, not ground. Excluding tree materials
+  still picks z 19 on the shipped seed (954 vs 908 next-best), so there is no behaviour change
+  today. **Coupled to the decision item in story 5.1's Review Findings** — if `opening_z` is
+  reworked to find the camp, this belongs in the same edit. Raised by the Edge Case Hunter.
+- **The camp/tree code carries an undocumented `dims.x, dims.y >= 2*CAMP_RADIUS+1` precondition**
+  [crates/sim-core/src/worldgen.rs:144,177; crates/sim-core/src/lib.rs:1516-1517]. `dims.y - radius`
+  on a map smaller than 7 wraps in release (overflow-checks off) and the subsequent `heights[...]`
+  index panics with `index out of bounds: the len is 4 but the index is 9`, not the intended
+  `.expect("worldgen requires one 7x7 flat camp clearing")` at `worldgen.rs:158`; a debug build
+  panics earlier with "attempt to subtract with overflow". Reproduced with a scratch harness calling
+  `World::generate(1, Dims { x: 2, y: 2, z: 10 })`. The old `spawn_dwarves` walked the full grid with
+  no radius subtraction and tolerated arbitrarily small maps, so this is a precondition **this story
+  introduced**. Every call site in the repo uses `Dims::DEFAULT`, so it is dead code today. **Revisit
+  trigger: the first story that generates a world at a non-default `Dims`** — a small test map or a
+  scenario-test helper — where the panic message would give no hint the real cause is camp sizing.
+  Raised by the Blind Hunter.
+- **AC16's glyph-distinctness assertion proves less than the AC claims**
+  [crates/tui/src/palette.rs:323-345]. The four new glyphs were added to `existing_glyphs`, and the
+  only new assertion checks the four are distinct **from each other**. Nothing asserts they differ
+  from `█ ▓ ▒ ░ ▲ ␠ ☺`. Setting `Tile::Solid(Material::TreeTrunk)`'s glyph to `▲` would leave
+  `every_look_is_pinned` green while the distinctness claim silently became false. The claim is true
+  today — every palette glyph was enumerated and confirmed — but the test named as its guard does not
+  enforce it. Raised by the Acceptance Auditor.
+- **AC5's "spawn position is standable" is only half-asserted**
+  [crates/sim-core/tests/worldgen.rs:113]. `all_dwarves_spawn_inside_the_camp_with_room_to_move`
+  defines a correct `is_standable` helper (`worldgen.rs:21-30`) and uses it for the *neighbour*
+  clause, but for the spawn tile itself asserts only `world.tile(pos) == Some(Tile::Empty)` — the
+  "solid or ramp below" half is skipped, so a spawn floating one level above the ground would pass.
+  The production code does call `terrain.is_standable` (`lib.rs:1519`) and a 3000-seed sweep found no
+  violation, so the behaviour is right; the assertion is just weaker than the AC. Raised by the
+  Acceptance Auditor.
+- **AC18's "at generation" half is not asserted for emitters**
+  [crates/sim-core/tests/worldgen.rs:33-39]. `same_seed_produces_identical_worlds` still compares
+  `tiles()` and `dwarves()` only. Emitters are compared solely inside
+  `same_seed_and_commands_remain_deterministic`'s loop, i.e. from tick 1 onward. Emitters never move,
+  so a generation-time divergence would surface one tick later — the gap is narrow, but the AC names
+  both moments and only one is covered. Raised by the Acceptance Auditor.
+- **Clustering the dwarves makes the crowd glyph the common case** [crates/tui/src/view.rs:239-249].
+  Measured on 300 live frames: 115 (38%) had two dwarves on one cell, so a capture routinely shows
+  `☺=3` where five dwarves exist. The status line correctly still reads `dwarves 5`, so AC17 holds
+  and this is per spec. The rule is pre-existing and deliberate (3.2 AC14, Wolf's ruling that the fix
+  is a crowd glyph rather than tile reservation), but it was near-unreachable when dwarves spawned
+  ~104 tiles apart and is now routine in a 49-cell clearing holding 5 dwarves and 5 emitters.
+  Recorded so a later reader does not read a low `☺` count as a missing dwarf. Raised by the Feature
+  Auditor.
+- **The default TUI view opens ten levels above the camp** [crates/tui/src/view.rs:97-125].
+  `tui <port>` with no `--z` opens at z 19 while the camp sits at z 9 on the shipped seed. Measured
+  live: `†=0 ♨=0 ☺=0` on screen while the status line simultaneously reads `dwarves 5` — a user who
+  runs the client the obvious way sees a forest and none of story 5.1's headline content.
+  `opening_z` picks the level with the most standable ground; the behaviour is pre-existing and
+  deliberate (it carries a `// NOTE:` that the answer is a centre-on-dwarf key, never a
+  nondeterministic opening), but 5.1 makes it categorically worse — dwarves used to be scattered
+  over z 15–20 near the auto-picked level, and are now all concentrated ten levels below it. **No AC
+  covers the default opening level, so nothing is violated**; this is the 4.1a class (meetable,
+  implemented, not what the user wanted to see) and only a live run finds it. **Wolf's ruling at
+  5.1's review (2026-08-10): leave it.** The TUI is a 2D instrument, not the product; 5.3's Bevy
+  window is the real viewer, and the instrument recipe pins `--z 9`. Rejected: reworking `opening_z`
+  to prefer the level where the dwarves are (`Snapshot.entities` already carries them, so it is a
+  `tui`-only change with no wire change — this is the cheap fix if the ruling is ever revisited);
+  putting the camp z on the wire (breaches AC12). **Revisit trigger: 5.4, the wow gate** — if that
+  sign-off is ever taken through the TUI rather than the Bevy client, the default invocation shows
+  none of what 5.4 is judging. Raised by the Feature Auditor and the Edge Case Hunter.

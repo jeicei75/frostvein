@@ -532,14 +532,14 @@ mod tests {
 
     const SNAPSHOT_LINE: &str = concat!(
         r#"{"type":"snapshot","dims":{"x":2,"y":1,"z":1},"#,
-        r#""tiles":["empty",{"solid":"ice"}],"entities":[{"id":7,"kind":"dwarf","pos":[0,0,0],"state":"idle"}],"#,
+        r#""tiles":["empty",{"solid":"ice"}],"entities":[{"id":7,"kind":"dwarf","pos":[0,0,0],"state":"idle","light":null}],"#,
         r#""designations":[],"zones":[],"items":[],"speed":"normal","tick":9}"#,
         "\n"
     );
 
     const DELTA_LINE: &str = concat!(
         r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,0,0],"tile":{"solid":"stone"}}],"#,
-        r#""entities":[{"id":8,"kind":"dwarf","pos":[1,0,0],"state":"walk"}],"#,
+        r#""entities":[{"id":8,"kind":"dwarf","pos":[1,0,0],"state":"walk","light":null}],"#,
         r#""designations":[],"zones":[],"items":[],"speed":"fast"}"#,
         "\n"
     );
@@ -630,6 +630,7 @@ mod tests {
                 kind: EntityKind::Dwarf,
                 pos: [1, 0, 0],
                 state: JobState::Walk,
+                light: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),

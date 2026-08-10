@@ -11,3 +11,5 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-opus-5 | 195 | 23,135 | 1,830,115 | 13,803,016 | 197,737 | 15,854,003 | $23.40 | `1f0ec2a4-c610-40e6-8599-64ac6ecc070f.jsonl` | 2026-08-09 16:48 UTC · rates 2026-08-01 | 32 | — |
+| dev | codex | gpt-5.6-sol | 390 | 934,503 | 0 | 47,058,688 | 110,747 | 48,103,938 | $31.52 | `rollout-2026-08-09T17-29-15-019fe792-58b5-7b20-9f5f-20b2b8f22470.jsonl` | 2026-08-09 18:45 UTC · rates 2026-08-01 | 69 | 23pp |
+| review | claude | claude-opus-5, claude-sonnet-5 | 415 | 6,963 | 5,370,803 | 34,721,863 | 303,518 | 40,403,147 | $50.86 | `13194c34-65ea-4469-8773-cd4e25cd50bd.jsonl` | 2026-08-10 08:07 UTC · rates 2026-08-01 | 127 | — |
