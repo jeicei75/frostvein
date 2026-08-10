@@ -41,6 +41,14 @@ cargo run -p tui -- 7999   # optional arg: the port simd is listening on
 | --- | --- |
 | `<` / `>` | walk down / up one z-level |
 | arrows or `hjkl` | pan the camera |
+| `space` | pause / resume |
+| `+` / `-` | faster / slower (paused → normal → fast) |
+| `d` / `c` | designate a dig / channel rectangle |
+| `p` | place a stockpile rectangle |
+| `x` | clear designations and stockpiles in a rectangle |
+| `Enter` | in a designation mode: mark the first corner, then the second to send it |
+| `Esc` | cancel the pending corner, then leave the mode |
+| `S` / `L` | save / load the world |
 | `q` then `y` | quit (any other key cancels) |
 | `Ctrl-C` | quit immediately |
 
@@ -49,15 +57,26 @@ anyone is connected — it does not wait for a client and does not stop when one
 Connect late and you get a snapshot of the world as it is at that moment, then one delta
 per tick from there.
 
-You open centred on a dwarf. Terrain is one z-level at a time in 24-bit colour — snow `░`,
-ice `▒`, soil `▓`, stone `█`, ramps `▲`, dwarves `☺` — and where a tile is empty the ground
-up to three levels below shows through, dimmed with depth. The bottom row reports the tick,
-z-level, camera, dwarf count and keys.
+You open at the **centre of the map**, on the z-level with the most standable ground.
+Terrain is one z-level at a time in 24-bit colour — snow `░`, ice `▒`, soil `▓`, stone `█`,
+ramps `▲`, tree trunks `│`, foliage `♠` — with dwarves `☺` on top, torches `†` and a
+campfire `♨` beneath them, `☻` where a dwarf shares a cell with a stone and `⚇` where two
+dwarves share one. Where a tile is empty the ground up to three levels below shows through,
+dimmed with depth. The bottom row reports the tick, the speed, the z-level and the dwarf
+count.
 
-**The only thing that moves right now is the tick counter**, climbing about ten a second.
-That is correct, not a stall: nothing dirties a tile until the dig lands, and the dwarves
-do not wander yet, so every delta carries an empty tile list and five stationary dwarves.
-Panning and changing z-level keep working while it streams.
+**The camp is not on the level you open at.** The dwarves, the campfire and the torches all
+sit at z 9 on the shipped seed, while the most-standable-ground rule opens you at z 19 — a
+canopy level. You get a forest, and a status line truthfully reporting five dwarves you
+cannot see. Pass the level explicitly to find them:
+
+```bash
+cargo run -p tui -- --z 9
+```
+
+This is a known rough edge in the terminal client, kept deliberately: the opening level is
+deterministic (a scripted capture aims where its author thought it did), and the real viewer
+is the Bevy client, not this one.
 
 Colour comes from one table, `crates/tui/src/palette.rs`. Nothing on the wire carries RGB.
 
@@ -66,7 +85,18 @@ Colour comes from one table, `crates/tui/src/palette.rs`. Nothing on the wire ca
 ```bash
 cargo run -p tui -- --frame            # one frame from the connect snapshot, exits 0
 cargo run -p tui -- --frames 3         # three frames from the LIVE stream, exits 0
+cargo run -p tui -- --frames 6 --z 9   # six frames of the camp, which --z is needed to see
 ```
+
+**Pin `--z`, and take more than one or two frames.** Without `--z` you capture the opening
+level, which is not the camp. And dwarves are drawn over the emitters they wander across, so
+in any single frame a torch or the campfire may be standing behind a dwarf — the campfire is
+hidden in about one frame in nine. Six frames is enough that each glyph appears somewhere in
+the capture; one frame is not, and a zero count then means nothing.
+
+Count glyphs with `grep -o '<glyph>' | wc -l`, never `tr -cd`. `tr` works on bytes, and the
+box-drawing glyphs share leading UTF-8 bytes, so it reports large counts for glyphs that are
+absent entirely.
 
 Rows are newline-terminated, so frames can be piped, captured or diffed. `NO_COLOR` strips
 the truecolor entirely — unset it before judging how the world looks.
@@ -83,7 +113,7 @@ cargo run -p tui -- --frames 3 | grep -o 'tick [0-9]*'
 Three different numbers means the daemon and the stream are healthy and any problem is in
 your terminal; three identical numbers, or a hang, points at the daemon.
 
-To see the raw wire instead — a newline-terminated snapshot (~6.9 MB), then one delta line
+To see the raw wire instead — a newline-terminated snapshot (~7.4 MB), then one delta line
 per tick, forever:
 
 ```bash
@@ -98,8 +128,9 @@ bash -c 'head -c 300 < /dev/tcp/127.0.0.1/7373'
 scripts/gate.sh
 ```
 
-`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, and a probe
-that `tui` has not grown a `sim-core` dependency. It exits non-zero, and `.githooks/pre-commit`
+`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, a probe that
+`tui` has not grown a `sim-core` dependency, and the metrics ledger tests. It exits non-zero,
+and `.githooks/pre-commit`
 runs it on every commit — enable that once per clone with:
 
 ```bash
