@@ -3,6 +3,12 @@
 Items surfaced by review that were real but not actionable at the time. Each entry
 names where it came from and what should trigger revisiting it.
 
+## Deferred from: story 5.2
+
+- `client-core::Mirror::previous_entity()` and `changes()` have no live caller yet. Their
+  decision surface is headlessly tested; Story 5.3 is the wiring story for gui reconciliation
+  and AD-15 interpolation.
+
 ## Deferred from: code review of 1-1-a-seeded-frozen-world-exists (2026-08-02)
 
 - **A spawn that ignores the RNG draw is not detected by the test suite**
