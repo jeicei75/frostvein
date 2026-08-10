@@ -1,0 +1,8 @@
+[package]
+name = "client-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+protocol = { path = "../protocol" }
+thiserror.workspace = true

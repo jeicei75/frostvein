@@ -76,6 +76,23 @@ else
   fail=1
 fi
 
+# Inverted: a MATCH is the failure. `client-core` depends on `protocol` only.
+printf '  %-28s' "client-core has no sim-core edge"
+if tree=$(cargo tree -p client-core 2>&1); then
+  if printf '%s\n' "$tree" | rg -q sim-core; then
+    echo "FAILED"
+    echo "    client-core must depend on protocol only; sim-core edge found:"
+    printf '%s\n' "$tree" | rg -n sim-core | head -5
+    fail=1
+  else
+    echo "ok"
+  fi
+else
+  echo "FAILED"
+  printf '%s\n' "$tree" | tail -10
+  fail=1
+fi
+
 run "metrics ledger tests" python3 -m unittest discover -s _bmad/scripts/tests
 
 if [ "$fail" -ne 0 ]; then
