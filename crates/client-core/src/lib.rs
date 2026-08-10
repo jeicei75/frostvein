@@ -303,4 +303,70 @@ mod tests {
         .to_string();
         assert!(error.contains("1 tiles") && error.contains("2x1x1 need 2"));
     }
+
+    #[test]
+    fn changes_partition_entities_and_keep_one_previous_generation() {
+        let mut initial = snapshot();
+        initial.entities.push(Entity {
+            id: 2,
+            kind: EntityKind::Dwarf,
+            pos: [1, 0, 0],
+            state: JobState::Idle,
+            light: None,
+        });
+        initial.entities.push(Entity {
+            id: 3,
+            kind: EntityKind::Dwarf,
+            pos: [0, 0, 0],
+            state: JobState::Idle,
+            light: None,
+        });
+        let mut mirror = Mirror::from_snapshot(initial).unwrap();
+
+        mirror.apply_delta(Delta {
+            msg_type: MessageType::Delta,
+            tick: 10,
+            tiles: Vec::new(),
+            entities: vec![
+                Entity {
+                    id: 7,
+                    kind: EntityKind::Dwarf,
+                    pos: [1, 0, 0],
+                    state: JobState::Walk,
+                    light: None,
+                },
+                Entity {
+                    id: 2,
+                    kind: EntityKind::Dwarf,
+                    pos: [1, 0, 0],
+                    state: JobState::Idle,
+                    light: None,
+                },
+                Entity {
+                    id: 8,
+                    kind: EntityKind::Dwarf,
+                    pos: [0, 0, 0],
+                    state: JobState::Idle,
+                    light: None,
+                },
+            ],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        });
+
+        assert_eq!(mirror.changes().spawned, vec![8]);
+        assert_eq!(mirror.changes().despawned, vec![3]);
+        assert_eq!(mirror.changes().changed, vec![7]);
+        assert_eq!(mirror.previous_entity(7).unwrap().state, JobState::Idle);
+        assert!(mirror.previous_entity(2).is_some());
+        assert!(mirror.previous_entity(3).is_none());
+        assert!(mirror.changes().spawned.iter().all(|id| *id != 3));
+        assert!(mirror.changes().changed.iter().all(|id| *id != 2));
+
+        mirror.apply_snapshot(snapshot()).unwrap();
+        assert!(mirror.previous_entity(7).is_none());
+        assert!(mirror.previous_entity(2).is_none());
+    }
 }
