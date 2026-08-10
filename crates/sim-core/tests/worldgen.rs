@@ -62,16 +62,33 @@ fn default_world_has_mountainous_height_span() {
 
 #[test]
 fn generated_world_writes_no_tile_beyond_vertical_bounds() {
-    let world = World::generate(42, Dims::DEFAULT);
-    let plane = (world.dims().x * world.dims().y) as usize;
-    let topmost_written_z = world
-        .tiles()
-        .chunks_exact(plane)
-        .rposition(|level| level.iter().any(|tile| *tile != Tile::Empty))
-        .expect("generated world contains terrain");
+    // NOTE: the guard this test exists for is `place_trees`'s `crown_top >= dims.z` skip.
+    // Remove it and `tiles[index(..)]` addresses past the grid, so generation panics — a
+    // successful generate across seeds that genuinely reach the ceiling IS the assertion.
+    // The original version asserted `chunks_exact(plane).rposition(..) < dims.z`, which
+    // `chunks_exact` makes true by construction: it could not fail for any implementation.
+    // The headroom counter keeps this test from going vacuous the same way if the terrain
+    // ever stops reaching the ceiling.
+    const MAX_TREE_HEIGHT: i32 = 6;
+    let dims = Dims::DEFAULT;
+    let mut columns_without_crown_headroom = 0;
 
-    assert!(topmost_written_z < world.dims().z as usize);
-    assert_eq!(world.tiles().len(), plane * world.dims().z as usize);
+    for seed in [sim_core::DEFAULT_SEED, 42, 7] {
+        let world = World::generate(seed, dims);
+        for y in 0..dims.y as i32 {
+            for x in 0..dims.x as i32 {
+                if surface_height(&world, x, y) + MAX_TREE_HEIGHT >= dims.z as i32 {
+                    columns_without_crown_headroom += 1;
+                }
+            }
+        }
+    }
+
+    assert!(
+        columns_without_crown_headroom > 0,
+        "no column across the sampled seeds came within a full crown of the ceiling, so \
+         place_trees' crown-headroom skip was never exercised and this test proves nothing"
+    );
 }
 
 #[test]

@@ -13,6 +13,30 @@
     "output": 268787,
     "turns": 231
   },
+  "13194c34-65ea-4469-8773-cd4e25cd50bd.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 3527969,
+        "cache_read": 22169750,
+        "input": 463,
+        "output": 247354
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 1842834,
+        "cache_read": 12552113,
+        "input": 6500,
+        "output": 56164
+      }
+    },
+    "cache_creation": 5370803,
+    "cache_read": 34721863,
+    "input": 6963,
+    "last_ts": "2026-08-10T08:07:51.050Z",
+    "output": 303518,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 415
+  },
   "169eff84-6bb0-4581-b68c-cb8a40880bd5.jsonl": {
     "cache_creation": 700529,
     "cache_read": 13980954,
