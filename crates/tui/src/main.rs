@@ -14,6 +14,7 @@ use std::{
 };
 
 use anyhow::{Context, bail};
+use client_core::Mirror;
 use crossterm::{
     cursor::{Hide, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
@@ -161,8 +162,8 @@ fn main() -> anyhow::Result<()> {
         .context("could not set the snapshot read timeout")?;
     let mut writer = command_writer(&stream)?;
     let mut reader = BufReader::new(stream);
-    let mut snapshot = read_snapshot(&mut reader)?;
-    let mut state = initial(&snapshot, z);
+    let mut mirror = read_mirror(&mut reader)?;
+    let mut state = initial(&mirror, z);
 
     if let Some(count) = frames {
         let viewport = frame_size();
@@ -175,7 +176,7 @@ fn main() -> anyhow::Result<()> {
             match apply_key(
                 &mut state,
                 KeyEvent::new(code, KeyModifiers::NONE),
-                snapshot.dims,
+                mirror.dims(),
                 viewport,
             ) {
                 Action::Command(command) => send_command(&mut writer, command)?,
@@ -188,12 +189,12 @@ fn main() -> anyhow::Result<()> {
                 Action::Redraw | Action::Ignore => {}
             }
         }
-        return stream_frames(reader, snapshot, state, count);
+        return stream_frames(reader, mirror, state, count);
     }
 
     if frame_only {
         let (w, h) = frame_size();
-        let framebuffer = render(&snapshot, &state, w, h);
+        let framebuffer = render(&mirror, &state, w, h);
         let mut out = BufWriter::with_capacity(FRAME_BUFFER_BYTES, io::stdout());
         write_frame(&mut out, &framebuffer, RowEnd::Newline)
             .context("could not write terminal frame")?;
@@ -226,11 +227,11 @@ fn main() -> anyhow::Result<()> {
         if event::poll(POLL_INTERVAL).context("could not poll terminal events")? {
             match event::read().context("could not read terminal event")? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    match apply_key(&mut state, key, snapshot.dims, size) {
+                    match apply_key(&mut state, key, mirror.dims(), size) {
                         Action::Redraw => needs_redraw = true,
                         Action::Quit => break 'running,
                         // The local speed is updated optimistically by `apply_key`; the next
-                        // snapshot or delta overwrites it above, keeping the daemon authoritative.
+                        // mirror updates overwrite it above, keeping the daemon authoritative.
                         Action::Command(command) => {
                             send_command(&mut writer, command)?;
                         }
@@ -254,16 +255,16 @@ fn main() -> anyhow::Result<()> {
             match message_rx.try_recv() {
                 // Adopt the world but KEEP the camera and z-level; resetting them would
                 // silently throw away where the player was looking.
-                // NOTE: assumes dims never change between snapshots, which holds while
-                // the daemon serves one world for its lifetime.
                 Ok(Ok(Msg::Snapshot(next))) => {
-                    snapshot = *next;
-                    state.speed = snapshot.speed;
+                    mirror
+                        .apply_snapshot(*next)
+                        .context("could not update client mirror")?;
+                    state.speed = mirror.speed();
                     needs_redraw = true;
                 }
                 Ok(Ok(Msg::Delta(delta))) => {
-                    apply(&mut snapshot, *delta);
-                    state.speed = snapshot.speed;
+                    mirror.apply_delta(*delta);
+                    state.speed = mirror.speed();
                     needs_redraw = true;
                 }
                 Ok(Err(error)) => return Err(error),
@@ -283,7 +284,7 @@ fn main() -> anyhow::Result<()> {
                 size = terminal::size().unwrap_or(size);
             }
             if size.0 != 0 && size.1 != 0 {
-                let framebuffer = render(&snapshot, &state, size.0, size.1);
+                let framebuffer = render(&mirror, &state, size.0, size.1);
                 write_frame(&mut out, &framebuffer, RowEnd::MoveTo)
                     .context("could not write terminal frame")?;
                 out.flush().context("could not flush terminal frame")?;
@@ -357,7 +358,7 @@ fn named_key(name: &str) -> Option<KeyCode> {
 /// had stopped consuming deltas.
 fn stream_frames(
     mut reader: BufReader<TcpStream>,
-    mut snapshot: Snapshot,
+    mut mirror: Mirror,
     mut state: view::ViewState,
     count: u32,
 ) -> anyhow::Result<()> {
@@ -393,17 +394,19 @@ fn stream_frames(
         // quiet must fail, never hang.
         match message_rx.recv_timeout(SNAPSHOT_READ_TIMEOUT) {
             Ok(Ok(Msg::Snapshot(next))) => {
-                snapshot = *next;
-                state.speed = snapshot.speed;
+                mirror
+                    .apply_snapshot(*next)
+                    .context("could not update client mirror")?;
+                state.speed = mirror.speed();
             }
             Ok(Ok(Msg::Delta(delta))) => {
-                apply(&mut snapshot, *delta);
-                state.speed = snapshot.speed;
+                mirror.apply_delta(*delta);
+                state.speed = mirror.speed();
             }
             Ok(Err(error)) => return Err(error),
             Err(_) => bail!("no server message within {SNAPSHOT_READ_TIMEOUT:?}"),
         }
-        let framebuffer = render(&snapshot, &state, w, h);
+        let framebuffer = render(&mirror, &state, w, h);
         write_frame(&mut out, &framebuffer, RowEnd::Newline)
             .context("could not write terminal frame")?;
         out.flush().context("could not flush terminal frame")?;
@@ -424,6 +427,10 @@ fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
         Some(Msg::Delta(_)) => bail!("server sent a delta before its snapshot"),
         None => bail!("server closed before sending a snapshot"),
     }
+}
+
+fn read_mirror(reader: &mut dyn BufRead) -> anyhow::Result<Mirror> {
+    Mirror::from_snapshot(read_snapshot(reader)?).context("could not build client mirror")
 }
 
 fn read_message(reader: &mut dyn BufRead) -> anyhow::Result<Option<Msg>> {
@@ -447,7 +454,6 @@ fn read_message(reader: &mut dyn BufRead) -> anyhow::Result<Option<Msg>> {
         Some("snapshot") => {
             let snapshot: Snapshot =
                 serde_json::from_value(value).context("could not decode snapshot")?;
-            validate_snapshot(&snapshot)?;
             Ok(Some(Msg::Snapshot(Box::new(snapshot))))
         }
         Some("delta") => {
@@ -457,25 +463,6 @@ fn read_message(reader: &mut dyn BufRead) -> anyhow::Result<Option<Msg>> {
         Some(message_type) => bail!("unknown server message type {message_type:?}"),
         None => bail!("server message has no string type field"),
     }
-}
-
-fn validate_snapshot(snapshot: &Snapshot) -> anyhow::Result<()> {
-    // A decodable snapshot can still be inconsistent, and `render` indexes
-    // `tiles` from `dims` directly — checking here keeps that an error rather
-    // than a panic.
-    let dims = snapshot.dims;
-    let expected = u64::from(dims.x) * u64::from(dims.y) * u64::from(dims.z);
-    if snapshot.tiles.len() as u64 != expected {
-        bail!(
-            "snapshot has {} tiles but dims {}x{}x{} need {expected}",
-            snapshot.tiles.len(),
-            dims.x,
-            dims.y,
-            dims.z
-        );
-    }
-
-    Ok(())
 }
 
 fn read_messages(mut reader: BufReader<TcpStream>, sender: SyncSender<anyhow::Result<Msg>>) {
@@ -492,41 +479,11 @@ fn read_messages(mut reader: BufReader<TcpStream>, sender: SyncSender<anyhow::Re
     }
 }
 
-fn apply(snapshot: &mut Snapshot, delta: Delta) {
-    for change in delta.tiles {
-        let [x, y, z] = change.pos;
-        if x < 0
-            || y < 0
-            || z < 0
-            || x >= snapshot.dims.x as i32
-            || y >= snapshot.dims.y as i32
-            || z >= snapshot.dims.z as i32
-        {
-            continue;
-        }
-        let index = x as usize
-            + y as usize * snapshot.dims.x as usize
-            + z as usize * snapshot.dims.x as usize * snapshot.dims.y as usize;
-        if let Some(tile) = snapshot.tiles.get_mut(index) {
-            *tile = change.tile;
-        }
-    }
-    snapshot.entities = delta.entities;
-    snapshot.designations = delta.designations;
-    snapshot.zones = delta.zones;
-    snapshot.items = delta.items;
-    snapshot.speed = delta.speed;
-    snapshot.tick = delta.tick;
-}
-
 #[cfg(test)]
 mod tests {
     use std::{io::Cursor, net::TcpListener};
 
-    use protocol::{
-        Delta, Designation, DesignationKind, Dims, Entity, EntityKind, Item, JobState, Material,
-        MessageType, Speed, Tile, TileChange, Zone,
-    };
+    use protocol::{Dims, JobState, Material, MessageType, Tile};
 
     use super::*;
 
@@ -607,61 +564,6 @@ mod tests {
     }
 
     #[test]
-    fn applies_dirty_tiles_and_replaces_authoritative_fields() {
-        let mut snapshot = read_snapshot(&mut Cursor::new(SNAPSHOT_LINE.as_bytes())).unwrap();
-        snapshot.designations = vec![Designation {
-            pos: [0, 0, 0],
-            kind: DesignationKind::Dig,
-        }];
-        snapshot.zones = vec![Zone { pos: [0, 0, 0] }];
-        snapshot.items = vec![Item {
-            id: 7,
-            pos: [0, 0, 0],
-        }];
-        let delta = Delta {
-            msg_type: MessageType::Delta,
-            tick: 10,
-            tiles: vec![TileChange {
-                pos: [1, 0, 0],
-                tile: Tile::Solid(Material::Stone),
-            }],
-            entities: vec![Entity {
-                id: 8,
-                kind: EntityKind::Dwarf,
-                pos: [1, 0, 0],
-                state: JobState::Walk,
-                light: None,
-            }],
-            designations: Vec::new(),
-            zones: Vec::new(),
-            items: vec![Item {
-                id: 8,
-                pos: [1, 0, 0],
-            }],
-            speed: Speed::Fast,
-        };
-
-        apply(&mut snapshot, delta);
-
-        assert_eq!(
-            snapshot.tiles,
-            vec![Tile::Empty, Tile::Solid(Material::Stone)]
-        );
-        assert_eq!(snapshot.entities[0].id, 8);
-        assert!(snapshot.designations.is_empty());
-        assert!(snapshot.zones.is_empty());
-        assert_eq!(
-            snapshot.items,
-            vec![Item {
-                id: 8,
-                pos: [1, 0, 0]
-            }]
-        );
-        assert_eq!(snapshot.speed, Speed::Fast);
-        assert_eq!(snapshot.tick, 10);
-    }
-
-    #[test]
     fn rejects_a_garbage_snapshot_line() {
         let mut reader = Cursor::new(b"not json\n");
 
@@ -686,7 +588,7 @@ mod tests {
         );
         let mut reader = Cursor::new(SHORT.as_bytes());
 
-        let error = read_snapshot(&mut reader).unwrap_err().to_string();
+        let error = format!("{:#}", read_mirror(&mut reader).unwrap_err());
 
         assert!(
             error.contains("2 tiles") && error.contains("64"),

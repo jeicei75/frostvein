@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
+use client_core::{Mirror, rect_on_level};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use protocol::{Command, DesignationKind, Dims, EntityKind, Rect, Snapshot, Speed, Tile};
+use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
     BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, carrier_cell, crowd_cell, cursor_cell, designation_cell,
@@ -55,25 +56,26 @@ pub enum Action {
 /// every run, so a scripted capture aims where its author thought it did.
 ///
 /// `z_override` is `--z`. It is clamped because it is operator input.
-pub fn initial(snapshot: &Snapshot, z_override: Option<i32>) -> ViewState {
+pub fn initial(mirror: &Mirror, z_override: Option<i32>) -> ViewState {
     // NOTE: clamped because the dims are wire data.
-    let max_x = i64::from(snapshot.dims.x.saturating_sub(1));
-    let max_y = i64::from(snapshot.dims.y.saturating_sub(1));
-    let max_z = i32::try_from(snapshot.dims.z.saturating_sub(1)).unwrap_or(i32::MAX);
+    let dims = mirror.dims();
+    let max_x = i64::from(dims.x.saturating_sub(1));
+    let max_y = i64::from(dims.y.saturating_sub(1));
+    let max_z = i32::try_from(dims.z.saturating_sub(1)).unwrap_or(i32::MAX);
     let camera = (
-        i64::from(snapshot.dims.x / 2).clamp(0, max_x),
-        i64::from(snapshot.dims.y / 2).clamp(0, max_y),
+        i64::from(dims.x / 2).clamp(0, max_x),
+        i64::from(dims.y / 2).clamp(0, max_y),
     );
     ViewState {
         camera,
         z: z_override
-            .unwrap_or_else(|| opening_z(snapshot))
+            .unwrap_or_else(|| opening_z(mirror))
             .clamp(0, max_z),
         confirming_quit: false,
         mode: Mode::Normal,
         cursor: camera,
         anchor: None,
-        speed: snapshot.speed,
+        speed: mirror.speed(),
     }
 }
 
@@ -94,8 +96,8 @@ pub fn initial(snapshot: &Snapshot, z_override: Option<i32>) -> ViewState {
 /// trade-off accepted here is that the opening frame no longer centres on a
 /// dwarf; if that proves annoying in play the answer is a centre-on-dwarf key,
 /// never a nondeterministic opening.
-fn opening_z(snapshot: &Snapshot) -> i32 {
-    let Dims { x, y, z } = snapshot.dims;
+fn opening_z(mirror: &Mirror) -> i32 {
+    let Dims { x, y, z } = mirror.dims();
     let middle = i32::try_from(z / 2).unwrap_or(i32::MAX);
     let mut best: Option<(u64, u32)> = None;
     // NOTE: from 1 — level 0 is the world floor and has nothing beneath it to
@@ -104,10 +106,8 @@ fn opening_z(snapshot: &Snapshot) -> i32 {
         let mut standable = 0u64;
         for ty in 0..y {
             for tx in 0..x {
-                let here = snapshot.tiles.get(tile_index(snapshot.dims, tx, ty, level));
-                let below = snapshot
-                    .tiles
-                    .get(tile_index(snapshot.dims, tx, ty, level - 1));
+                let here = mirror.tile([tx as i32, ty as i32, level as i32]);
+                let below = mirror.tile([tx as i32, ty as i32, level as i32 - 1]);
                 if matches!(here, Some(Tile::Empty))
                     && matches!(below, Some(Tile::Solid(_) | Tile::Ramp(_)))
                 {
@@ -124,7 +124,7 @@ fn opening_z(snapshot: &Snapshot) -> i32 {
     best.map_or(middle, |(_, level)| i32::try_from(level).unwrap_or(middle))
 }
 
-pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebuffer {
+pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer {
     let mut framebuffer = Framebuffer {
         w,
         h,
@@ -145,25 +145,26 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
             let wx = state.camera.0 + i64::from(sx) - i64::from(w) / 2;
             if wx < 0
                 || wy < 0
-                || wx >= i64::from(snapshot.dims.x)
-                || wy >= i64::from(snapshot.dims.y)
+                || wx >= i64::from(mirror.dims().x)
+                || wy >= i64::from(mirror.dims().y)
                 || state.z < 0
-                || i64::from(state.z) >= i64::from(snapshot.dims.z)
+                || i64::from(state.z) >= i64::from(mirror.dims().z)
             {
                 continue;
             }
 
-            let x = wx as u32;
-            let y = wy as u32;
-            let z = state.z as u32;
-            let tile = snapshot.tiles[tile_index(snapshot.dims, x, y, z)];
+            let tile = mirror
+                .tile([wx as i32, wy as i32, state.z])
+                .unwrap_or(Tile::Empty);
             let mut cell = tile_cell(tile);
             if tile == Tile::Empty {
                 for depth in 1..=PEEK_DEPTH {
-                    let Some(below_z) = z.checked_sub(depth as u32) else {
+                    let Some(below_z) = state.z.checked_sub(depth as i32) else {
                         break;
                     };
-                    let below = snapshot.tiles[tile_index(snapshot.dims, x, y, below_z)];
+                    let below = mirror
+                        .tile([wx as i32, wy as i32, below_z])
+                        .unwrap_or(Tile::Empty);
                     if below != Tile::Empty {
                         cell = tile_cell(below);
                         cell.fg = dim(cell.fg, depth as u8);
@@ -179,8 +180,8 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         if pos[2] != state.z
             || pos[0] < 0
             || pos[1] < 0
-            || i64::from(pos[0]) >= i64::from(snapshot.dims.x)
-            || i64::from(pos[1]) >= i64::from(snapshot.dims.y)
+            || i64::from(pos[0]) >= i64::from(mirror.dims().x)
+            || i64::from(pos[1]) >= i64::from(mirror.dims().y)
         {
             return None;
         }
@@ -190,13 +191,13 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
             .then(|| sx as usize + sy as usize * usize::from(w))
     };
 
-    for zone in &snapshot.zones {
+    for zone in mirror.zones() {
         if let Some(index) = screen_index(zone.pos) {
             framebuffer.cells[index] = zone_cell();
         }
     }
 
-    for designation in &snapshot.designations {
+    for designation in mirror.designations() {
         if let Some(index) = screen_index(designation.pos) {
             framebuffer.cells[index] = designation_cell(designation.kind);
         }
@@ -208,14 +209,14 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
     // there is no item stacking model. Deliberate: the sim enforces one stone per STOCKPILE tile,
     // so a pile always reads truthfully; a heap on open ground does not.
     let mut item_counts = BTreeMap::new();
-    for item in &snapshot.items {
+    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
             framebuffer.cells[index] = item_cell();
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
     }
 
-    for entity in &snapshot.entities {
+    for entity in mirror.entities() {
         match entity.kind {
             EntityKind::Dwarf => {}
             EntityKind::Torch | EntityKind::Campfire => {
@@ -229,14 +230,14 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
     // Emitters have their own pass above items and below dwarves. Only dwarves participate in
     // crowd and carrier contention.
     let mut dwarf_counts = BTreeMap::new();
-    for entity in &snapshot.entities {
+    for entity in mirror.entities() {
         if entity.kind == EntityKind::Dwarf
             && let Some(index) = screen_index(entity.pos)
         {
             *dwarf_counts.entry(index).or_insert(0_usize) += 1;
         }
     }
-    for entity in &snapshot.entities {
+    for entity in mirror.entities() {
         if entity.kind == EntityKind::Dwarf
             && let Some(index) = screen_index(entity.pos)
         {
@@ -277,9 +278,8 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
     let status = if state.confirming_quit {
         "quit? (y/n)".to_string()
     } else {
-        let dwarves = snapshot
-            .entities
-            .iter()
+        let dwarves = mirror
+            .entities()
             .filter(|entity| entity.kind == EntityKind::Dwarf)
             .count();
         let speed = match state.speed {
@@ -289,10 +289,10 @@ pub fn render(snapshot: &Snapshot, state: &ViewState, w: u16, h: u16) -> Framebu
         };
         format!(
             "tick {}  {}  z {}/{}  dwarves {}",
-            snapshot.tick,
+            mirror.tick(),
             speed,
             state.z,
-            snapshot.dims.z.saturating_sub(1),
+            mirror.dims().z.saturating_sub(1),
             dwarves
         )
     };
@@ -403,18 +403,11 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
                 Action::Redraw
             }
             Some(anchor) => {
-                let rect = Rect {
-                    min: [
-                        anchor.0.min(state.cursor.0) as i32,
-                        anchor.1.min(state.cursor.1) as i32,
-                        state.z,
-                    ],
-                    max: [
-                        anchor.0.max(state.cursor.0) as i32,
-                        anchor.1.max(state.cursor.1) as i32,
-                        state.z,
-                    ],
-                };
+                let rect = rect_on_level(
+                    (anchor.0 as i32, anchor.1 as i32),
+                    (state.cursor.0 as i32, state.cursor.1 as i32),
+                    state.z,
+                );
                 match state.mode {
                     Mode::Dig => Action::Command(Command::Designate {
                         kind: DesignationKind::Dig,
@@ -519,17 +512,11 @@ fn move_cursor(state: &mut ViewState, dx: i64, dy: i64, dims: Dims, viewport: (u
     state.camera.1 = state.camera.1.clamp(0, max_y);
 }
 
-// NOTE: widened before multiplying — the strides come from the wire, and a u32
-// product would overflow before the caller's bounds check ever sees it.
-fn tile_index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
-    x as usize + y as usize * dims.x as usize + z as usize * dims.x as usize * dims.y as usize
-}
-
 #[cfg(test)]
 mod tests {
     use protocol::{
         Command, Designation, DesignationKind, Entity, EntityKind, Item, JobState, Material,
-        MessageType, Speed, Tile, Zone,
+        MessageType, Rect, Snapshot, Speed, Tile, Zone,
     };
 
     use super::*;
@@ -546,6 +533,10 @@ mod tests {
             speed: Speed::Normal,
             tick: 0,
         }
+    }
+
+    fn mirror(snapshot: &Snapshot) -> Mirror {
+        Mirror::from_snapshot(snapshot.clone()).expect("test snapshots must be consistent")
     }
 
     fn index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
@@ -721,13 +712,13 @@ mod tests {
         let snapshot = empty_snapshot(dims);
         let state = normal_state((1, 1), 0);
         for h in [0, 1] {
-            let framebuffer = render(&snapshot, &state, 10, h);
+            let framebuffer = render(&mirror(&snapshot), &state, 10, h);
             assert!(
                 framebuffer.cells.iter().all(|cell| *cell == BLANK),
                 "h={h} should render blank"
             );
         }
-        let framebuffer = render(&snapshot, &state, 10, 2);
+        let framebuffer = render(&mirror(&snapshot), &state, 10, 2);
         assert!(
             framebuffer.cells.iter().any(|cell| *cell != BLANK),
             "h=2 must still draw the status and hint rows"
@@ -747,7 +738,7 @@ mod tests {
         snapshot.tiles[index(dims, 2, 2, 2)] = Tile::Solid(Material::Ice);
         let state = normal_state((2, 1), 2);
 
-        let framebuffer = render(&snapshot, &state, 7, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 7, 4);
         let expected = [
             (' ', (8, 10, 14)),
             ('█', (86, 92, 104)),
@@ -811,7 +802,7 @@ mod tests {
         ];
         let state = normal_state((2, 1), 1);
 
-        let framebuffer = render(&snapshot, &state, 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 5, 4);
 
         assert_eq!(
             framebuffer.cell(1, 1),
@@ -861,7 +852,7 @@ mod tests {
             light: None,
         }];
 
-        let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
 
         assert_eq!(framebuffer.cell(1, 1), carrier_cell());
         assert_eq!(framebuffer.cell(3, 1), BLANK);
@@ -878,12 +869,12 @@ mod tests {
         // The stone one level up must not count towards the dwarf's cell: the count has to use
         // the same z filter the draw does.
         snapshot.items[0].pos = [1, 1, 2];
-        let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
         assert_eq!(framebuffer.cell(1, 1).glyph, '☺');
 
         snapshot.items[0].pos = [1, 1, 1];
         snapshot.entities.clear();
-        let framebuffer = render(&snapshot, &normal_state((2, 1), 1), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
         assert_eq!(framebuffer.cell(1, 1).glyph, '*');
     }
 
@@ -907,7 +898,7 @@ mod tests {
             light: None,
         }];
 
-        let framebuffer = render(&snapshot, &normal_state((127, 127), 0), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((127, 127), 0), 5, 4);
 
         assert!(framebuffer.cells.iter().all(|cell| *cell != item_cell()));
         assert!(
@@ -944,7 +935,7 @@ mod tests {
             },
         ];
 
-        let framebuffer = render(&snapshot, &normal_state((1, 1), 0), 3, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((1, 1), 0), 3, 4);
 
         assert_eq!(framebuffer.cell(1, 1).glyph, '⚇');
         assert_eq!(
@@ -973,7 +964,7 @@ mod tests {
         ];
         snapshot.zones = vec![Zone { pos: [3, 2, 1] }, Zone { pos: [2, 2, 0] }];
 
-        let framebuffer = render(&snapshot, &normal_state((2, 2), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 2), 1), 5, 5);
 
         assert_eq!(framebuffer.cell(1, 1).glyph, '×');
         assert_eq!(framebuffer.cell(3, 1).glyph, '≡');
@@ -1049,7 +1040,7 @@ mod tests {
             ..normal_state((3, 1), 0)
         };
 
-        let framebuffer = render(&snapshot, &state, 7, 5);
+        let framebuffer = render(&mirror(&snapshot), &state, 7, 5);
 
         assert_eq!(framebuffer.cell(0, 1).glyph, '≡');
         assert_eq!(framebuffer.cell(1, 1).glyph, '×');
@@ -1086,7 +1077,7 @@ mod tests {
         ];
         let state = normal_state((1, 0), 0);
 
-        let framebuffer = render(&snapshot, &state, 3, 3);
+        let framebuffer = render(&mirror(&snapshot), &state, 3, 3);
 
         // The glyph is deliberately the same for both: what must differ is the colour, so
         // assert on `fg` alone. Comparing whole cells would also pass on a glyph change.
@@ -1106,7 +1097,7 @@ mod tests {
         snapshot.tiles[index(dims, 1, 0, 3)] = Tile::Solid(Material::Snow);
         let state = normal_state((1, 0), 7);
 
-        let framebuffer = render(&snapshot, &state, 4, 3);
+        let framebuffer = render(&mirror(&snapshot), &state, 4, 3);
 
         assert_eq!(
             framebuffer.cell(1, 0),
@@ -1145,7 +1136,7 @@ mod tests {
         });
         let state = normal_state((12, 34), 19);
 
-        let framebuffer = render(&snapshot, &state, 78, 3);
+        let framebuffer = render(&mirror(&snapshot), &state, 78, 3);
         let status: String = (0..78).map(|x| framebuffer.cell(x, 1).glyph).collect();
 
         assert_eq!(
@@ -1159,7 +1150,7 @@ mod tests {
         let snapshot = empty_snapshot(Dims { x: 3, y: 3, z: 1 });
         let state = normal_state((1, 1), 0);
 
-        let framebuffer = render(&snapshot, &state, 80, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 80, 4);
         let status: String = (0..80).map(|x| framebuffer.cell(x, 2).glyph).collect();
         let hint: String = (0..80).map(|x| framebuffer.cell(x, 3).glyph).collect();
 
@@ -1187,7 +1178,7 @@ mod tests {
                 // 80-wide framebuffer and asserting `<= 80` cannot fail — an over-long hint
                 // would be silently truncated into a pass. At 120 the full hint survives, so
                 // the width assertion below is the real guard AC10 asks for.
-                let framebuffer = render(&snapshot, &state, 120, 3);
+                let framebuffer = render(&mirror(&snapshot), &state, 120, 3);
                 let hint: String = (0..120)
                     .map(|x| framebuffer.cell(x, 2).glyph)
                     .collect::<String>()
@@ -1252,7 +1243,7 @@ mod tests {
                 .collect();
             let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5");
 
-            let framebuffer = render(&snapshot, &state, 80, 3);
+            let framebuffer = render(&mirror(&snapshot), &state, 80, 3);
             let rendered_width = (0..80)
                 .take_while(|x| framebuffer.cell(*x, 1).fg == STATUS_TEXT)
                 .count();
@@ -1508,7 +1499,7 @@ mod tests {
         snapshot.tiles[index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
         let state = normal_state((0, 0), 0);
 
-        let framebuffer = render(&snapshot, &state, 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 5, 4);
 
         assert_eq!(framebuffer.cell(2, 1).glyph, '█');
         for (x, y) in [(0, 0), (1, 0), (2, 0), (0, 1), (1, 1)] {
@@ -1631,7 +1622,7 @@ mod tests {
         make_standable(&mut snapshot, 3, 9); // z 4 -> 9 standable
 
         assert_eq!(
-            initial(&snapshot, None),
+            initial(&mirror(&snapshot), None),
             ViewState {
                 camera: (4, 3),
                 z: 4,
@@ -1651,7 +1642,7 @@ mod tests {
         let dims = Dims { x: 9, y: 7, z: 6 };
         let mut snapshot = empty_snapshot(dims);
         make_standable(&mut snapshot, 3, 9);
-        let before = initial(&snapshot, None);
+        let before = initial(&mirror(&snapshot), None);
 
         snapshot.entities.push(Entity {
             id: 7,
@@ -1660,10 +1651,10 @@ mod tests {
             state: JobState::Idle,
             light: None,
         });
-        assert_eq!(initial(&snapshot, None), before);
+        assert_eq!(initial(&mirror(&snapshot), None), before);
 
         snapshot.entities[0].pos = [0, 6, 2];
-        assert_eq!(initial(&snapshot, None), before);
+        assert_eq!(initial(&mirror(&snapshot), None), before);
     }
 
     #[test]
@@ -1673,13 +1664,13 @@ mod tests {
         make_standable(&mut snapshot, 1, 4);
         make_standable(&mut snapshot, 3, 4);
 
-        assert_eq!(initial(&snapshot, None).z, 2);
+        assert_eq!(initial(&mirror(&snapshot), None).z, 2);
     }
 
     #[test]
     fn initial_view_falls_back_to_the_middle_level_without_standable_ground() {
         let snapshot = empty_snapshot(Dims { x: 9, y: 7, z: 5 });
-        assert_eq!(initial(&snapshot, None).z, 2);
+        assert_eq!(initial(&mirror(&snapshot), None).z, 2);
     }
 
     #[test]
@@ -1688,10 +1679,10 @@ mod tests {
         let mut snapshot = empty_snapshot(dims);
         make_standable(&mut snapshot, 3, 9);
 
-        assert_eq!(initial(&snapshot, Some(1)).z, 1);
+        assert_eq!(initial(&mirror(&snapshot), Some(1)).z, 1);
         // Operator input, so it is clamped rather than trusted.
-        assert_eq!(initial(&snapshot, Some(99)).z, 5);
-        assert_eq!(initial(&snapshot, Some(-4)).z, 0);
+        assert_eq!(initial(&mirror(&snapshot), Some(99)).z, 5);
+        assert_eq!(initial(&mirror(&snapshot), Some(-4)).z, 0);
     }
 
     #[test]
@@ -1702,7 +1693,7 @@ mod tests {
             ..normal_state((0, 0), 0)
         };
 
-        let framebuffer = render(&snapshot, &state, 11, 3);
+        let framebuffer = render(&mirror(&snapshot), &state, 11, 3);
         let status: String = (0..11).map(|x| framebuffer.cell(x, 1).glyph).collect();
 
         assert_eq!(status, "quit? (y/n)");
