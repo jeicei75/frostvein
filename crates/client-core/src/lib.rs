@@ -369,4 +369,15 @@ mod tests {
         assert!(mirror.previous_entity(7).is_none());
         assert!(mirror.previous_entity(2).is_none());
     }
+
+    #[test]
+    fn rect_helper_normalizes_two_corners_on_one_level() {
+        assert_eq!(
+            rect_on_level((4, -2), (1, 3), 9),
+            protocol::Rect {
+                min: [1, -2, 9],
+                max: [4, 3, 9],
+            }
+        );
+    }
 }

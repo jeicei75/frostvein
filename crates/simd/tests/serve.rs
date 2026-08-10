@@ -1319,6 +1319,60 @@ fn designation_is_applied_while_tick_is_paused() {
 }
 
 #[test]
+fn invalid_rects_are_logged_dropped_and_leave_the_client_connected() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_speed(&mut writer, protocol::Speed::Paused);
+    let paused = read_delta_with_speed(&mut reader, protocol::Speed::Paused);
+
+    send_literal(
+        &mut writer,
+        b"{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[2,2,3],\"max\":[1,2,3]}}\n",
+    );
+    let inverted_log = daemon.next_log();
+    assert!(
+        inverted_log.contains("invalid client rect"),
+        "unexpected rect-rejection log: {inverted_log}"
+    );
+    let after_inverted = read_delta(&mut reader);
+    assert_eq!(after_inverted.tick, paused.tick);
+    assert!(after_inverted.designations.is_empty());
+    assert!(after_inverted.zones.is_empty());
+
+    send_literal(
+        &mut writer,
+        b"{\"type\":\"place_stockpile\",\"rect\":{\"min\":[1,2,3],\"max\":[1,2,4]}}\n",
+    );
+    let two_z_log = daemon.next_log();
+    assert!(
+        two_z_log.contains("invalid client rect"),
+        "unexpected rect-rejection log: {two_z_log}"
+    );
+    let after_two_z = read_delta(&mut reader);
+    assert_eq!(after_two_z.tick, paused.tick);
+    assert!(after_two_z.designations.is_empty());
+    assert!(after_two_z.zones.is_empty());
+
+    send_literal(
+        &mut writer,
+        b"{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[1,2,3],\"max\":[1,2,3]}}\n",
+    );
+    let valid = read_delta_with_marks(
+        &mut reader,
+        &[protocol::Designation {
+            pos: [1, 2, 3],
+            kind: protocol::DesignationKind::Dig,
+        }],
+        &[],
+    );
+    assert_eq!(valid.tick, paused.tick);
+}
+
+#[test]
 fn completed_dig_streams_dirty_tile_and_item_in_the_same_delta() {
     let daemon = Daemon::spawn();
     let stream = daemon.connect();

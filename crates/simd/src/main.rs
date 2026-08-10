@@ -674,6 +674,12 @@ fn read_inbound(stream: TcpStream, command_tx: mpsc::Sender<protocol::Command>) 
                 let text = text.trim_end();
                 match serde_json::from_str::<protocol::Command>(text) {
                     Ok(command) => {
+                        if let Some(rect) = command_rect(&command)
+                            && !rect_is_valid(rect)
+                        {
+                            eprintln!("invalid client rect: {}", excerpt(text));
+                            continue;
+                        }
                         if command_tx.send(command).is_err() {
                             break;
                         }
@@ -690,6 +696,23 @@ fn read_inbound(stream: TcpStream, command_tx: mpsc::Sender<protocol::Command>) 
             }
         }
     }
+}
+
+fn command_rect(command: &protocol::Command) -> Option<&protocol::Rect> {
+    match command {
+        protocol::Command::Designate { rect, .. }
+        | protocol::Command::CancelDesignation { rect }
+        | protocol::Command::PlaceStockpile { rect }
+        | protocol::Command::RemoveStockpile { rect } => Some(rect),
+        protocol::Command::SetSpeed { .. }
+        | protocol::Command::Save
+        | protocol::Command::Load
+        | protocol::Command::Quit => None,
+    }
+}
+
+fn rect_is_valid(rect: &protocol::Rect) -> bool {
+    rect.min[2] == rect.max[2] && (0..3).all(|axis| rect.min[axis] <= rect.max[axis])
 }
 
 /// Client bytes are echoed to the log; without a cap the daemon amplifies whatever
