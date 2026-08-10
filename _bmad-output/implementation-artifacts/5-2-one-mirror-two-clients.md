@@ -503,7 +503,8 @@ gpt-5.6
 - Task 6: Added headless wire-literal coverage for movement, deletion-by-absence, item lifecycle, dirty tiles, and snapshot reset.
 - Task 7: Ran the prescribed baseline and after-adoption captures; all five reported glyphs are non-zero and terrain is exactly stable (`│=6`, `♠=48`).
 - Task 8: Added the 5.3 deferred wiring note and five killed mutations. Full offline workspace tests and clippy passed; `scripts/gate.sh` completed green, including both no-`sim-core` probes.
-- Self-gate pass 1: fixed the review's malformed-dimension overflow finding, added a regression test, and reran the full gate green. Pass 2 follows this record update.
+- Self-gate pass 1: fixed the review's malformed-dimension overflow finding, added a regression test, and reran the full gate green.
+- Self-gate pass 2: no actionable findings. Its nested sandbox could not bind loopback sockets for existing `simd`/`tui` tests; the direct workspace gate had already run those tests green.
 
 ### File List
 
@@ -529,3 +530,4 @@ gpt-5.6
 | 2026-08-10 | Story created. Baseline instrument recipe executed live against `main`; terrain counts pinned (`│=6 ♠=48`) and the entity/tick half recorded as deliberately not byte-stable. |
 | 2026-08-10 | Implemented client-core mirror adoption, daemon rect validation, wire-literal tests, mutation evidence, and the 5.3 deferral; status set to review. |
 | 2026-08-10 | Self-gate pass 1 fixed overflow-safe snapshot dimension validation and added its regression test. |
+| 2026-08-10 | Self-gate pass 2 found no actionable issue; its local gate could not bind loopback sockets in the nested sandbox. |
