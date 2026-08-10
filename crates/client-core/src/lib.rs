@@ -23,7 +23,7 @@ pub enum MirrorError {
         x: u32,
         y: u32,
         z: u32,
-        expected: u64,
+        expected: u128,
     },
 }
 
@@ -194,8 +194,8 @@ pub fn rect_on_level(a: (i32, i32), b: (i32, i32), z: i32) -> Rect {
 
 fn validate_snapshot(snapshot: &Snapshot) -> Result<(), MirrorError> {
     let dims = snapshot.dims;
-    let expected = u64::from(dims.x) * u64::from(dims.y) * u64::from(dims.z);
-    if snapshot.tiles.len() as u64 != expected {
+    let expected = u128::from(dims.x) * u128::from(dims.y) * u128::from(dims.z);
+    if snapshot.tiles.len() as u128 != expected {
         return Err(MirrorError::TileCount {
             actual: snapshot.tiles.len(),
             x: dims.x,
@@ -302,6 +302,21 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(error.contains("1 tiles") && error.contains("2x1x1 need 2"));
+    }
+
+    #[test]
+    fn rejects_dimension_products_beyond_u64_without_panicking() {
+        let result = Mirror::from_snapshot(Snapshot {
+            dims: Dims {
+                x: 2_147_483_648,
+                y: 2_147_483_648,
+                z: 4,
+            },
+            tiles: Vec::new(),
+            ..snapshot()
+        });
+
+        assert!(result.is_err());
     }
 
     #[test]
