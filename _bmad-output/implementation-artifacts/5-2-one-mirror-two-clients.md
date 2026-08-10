@@ -399,7 +399,10 @@ re-check CM2 **on the record**, never a free move: if you take it, say so and re
 
 ### Agent Model Used
 
-gpt-5.6
+`gpt-5.6-terra`, reasoning effort `high` (read off the run banner, not the agent's self-report —
+the record said "gpt-5.6", and a family nickname is exactly what makes an old ledger row
+unreadable). **First delegated dev run on `terra` rather than `sol`** — one variable changed,
+effort held at `high`, which is the comparison the runbook asks for.
 
 ### Debug Log References
 
