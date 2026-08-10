@@ -516,7 +516,7 @@ fn move_cursor(state: &mut ViewState, dx: i64, dy: i64, dims: Dims, viewport: (u
 mod tests {
     use protocol::{
         Command, Designation, DesignationKind, Entity, EntityKind, Item, JobState, Material,
-        MessageType, Rect, Snapshot, Speed, Tile, Zone,
+        MessageType, Snapshot, Speed, Tile, Zone,
     };
 
     use super::*;
@@ -1427,10 +1427,7 @@ mod tests {
     #[test]
     fn second_enter_commits_each_single_command_mode_and_stays_in_mode() {
         let dims = Dims { x: 20, y: 20, z: 3 };
-        let rect = Rect {
-            min: [2, 3, 1],
-            max: [3, 4, 1],
-        };
+        let rect = rect_on_level((2, 3), (3, 4), 1);
         for (key, mode, expected) in [
             (
                 'd',
@@ -1476,10 +1473,7 @@ mod tests {
         let _ = apply_key(&mut state, press(KeyCode::Char('x')), dims, (9, 7));
         let _ = apply_key(&mut state, press(KeyCode::Enter), dims, (9, 7));
         let _ = apply_key(&mut state, press(KeyCode::Char('l')), dims, (9, 7));
-        let rect = Rect {
-            min: [2, 3, 1],
-            max: [3, 3, 1],
-        };
+        let rect = rect_on_level((2, 3), (3, 3), 1);
 
         assert_eq!(
             apply_key(&mut state, press(KeyCode::Enter), dims, (9, 7)),
