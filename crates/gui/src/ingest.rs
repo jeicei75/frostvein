@@ -18,6 +18,7 @@ use bevy::{
     input::ButtonInput,
     prelude::{
         Camera3d, Commands, DefaultPlugins, KeyCode, Query, Res, ResMut, Resource, Transform,
+        Without,
     },
 };
 use client_core::Mirror;
@@ -203,7 +204,7 @@ fn reconcile_projection(
     mut commands: Commands,
     mirror: Res<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
-    projected: Query<(bevy::prelude::Entity, &WorldProjected)>,
+    projected: Query<(bevy::prelude::Entity, &WorldProjected), Without<TerrainTile>>,
     terrain: Query<(bevy::prelude::Entity, &TerrainTile)>,
     assets: Option<Res<ProjectionAssets>>,
 ) {

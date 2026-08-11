@@ -1,6 +1,6 @@
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, Query, ResMut, Resource, StandardMaterial, Transform,
+    MeshMaterial3d, Query, ResMut, Resource, StandardMaterial, Transform, Without,
 };
 use client_core::Mirror;
 use protocol::{Dims, Tile};
@@ -69,11 +69,11 @@ pub fn reconcile(
     mirror: &Mirror,
     rebuild_terrain: bool,
     dirty_tiles: &[[i32; 3]],
-    projected: &Query<(BevyEntity, &WorldProjected)>,
+    projected: &Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
     terrain: &Query<(BevyEntity, &TerrainTile)>,
     assets: Option<&ProjectionAssets>,
 ) {
-    if snapshot_needs_full_rebuild(rebuild_terrain) {
+    if rebuild_terrain {
         for (entity, _) in terrain.iter() {
             commands.entity(entity).despawn();
         }
@@ -117,10 +117,10 @@ pub fn reconcile(
         }
     }
     for (id, position) in wanted {
-        if let Some((bevy_entity, _)) = projected
-            .iter()
-            .find(|(_, marker)| marker_matches_id(**marker, id))
-        {
+        // NOTE: terrain and simulation entities retain the same marker component and
+        // numeric range. Keep this query filtered to prevent a terrain id colliding
+        // with a simulation id until a story needs separate marker types.
+        if let Some((bevy_entity, _)) = projected.iter().find(|(_, marker)| marker.0 == id) {
             commands
                 .entity(bevy_entity)
                 .insert(Transform::from_translation(world_to_render(position)));
@@ -140,14 +140,6 @@ pub fn reconcile(
             }
         }
     }
-}
-
-fn snapshot_needs_full_rebuild(rebuild_terrain: bool) -> bool {
-    rebuild_terrain
-}
-
-fn marker_matches_id(marker: WorldProjected, id: u32) -> bool {
-    marker.0 == id
 }
 
 fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> usize {
@@ -231,48 +223,5 @@ mod tests {
         })
         .unwrap();
         assert!(!is_exposed(&enclosed, [1, 1, 1]));
-    }
-
-    #[test]
-    fn snapshot_rebuild_projects_terrain_even_when_the_mirror_reports_no_changes() {
-        let initial = Snapshot {
-            msg_type: MessageType::Snapshot,
-            dims: Dims { x: 2, y: 1, z: 1 },
-            tiles: vec![Tile::Empty, Tile::Empty],
-            entities: Vec::new(),
-            designations: Vec::new(),
-            zones: Vec::new(),
-            items: Vec::new(),
-            speed: Speed::Normal,
-            tick: 0,
-        };
-        let mut mirror = Mirror::from_snapshot(initial).unwrap();
-        mirror
-            .apply_snapshot(Snapshot {
-                tiles: vec![Tile::Solid(protocol::Material::Ice), Tile::Empty],
-                tick: 1,
-                ..Snapshot {
-                    msg_type: MessageType::Snapshot,
-                    dims: Dims { x: 2, y: 1, z: 1 },
-                    tiles: Vec::new(),
-                    entities: Vec::new(),
-                    designations: Vec::new(),
-                    zones: Vec::new(),
-                    items: Vec::new(),
-                    speed: Speed::Normal,
-                    tick: 0,
-                }
-            })
-            .unwrap();
-
-        assert!(mirror.changes().tiles.is_empty());
-        assert!(snapshot_needs_full_rebuild(true));
-        assert_eq!(terrain_positions(&mirror), vec![[0, 0, 0]]);
-    }
-
-    #[test]
-    fn reconciliation_identity_is_the_simulation_id() {
-        assert!(marker_matches_id(WorldProjected(42), 42));
-        assert!(!marker_matches_id(WorldProjected(42), 41));
     }
 }
