@@ -538,8 +538,8 @@ GPT-5.6 Codex
 
 ### Debug Log References
 
-- `cargo test -p gui --offline --test headless -- --nocapture`: 7 passed under `MinimalPlugins`.
-- `cargo test -p gui --offline --lib -- --nocapture`: 6 passed, including `capture_forces_the_frame_time_overlay_off`.
+- `cargo test -p gui --offline --test headless -- --nocapture`: 8 passed under `MinimalPlugins`.
+- `cargo test -p gui --offline --lib -- --nocapture`: 7 passed, including `capture_forces_the_frame_time_overlay_off`.
 - `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/5-3-a-window-onto-the-valley.sh`: all five mutations killed.
 - `cargo clean && time scripts/gate.sh`: green in 158.71 s cold; a second green gate measured 61.22 s warm.
 
@@ -552,6 +552,7 @@ GPT-5.6 Codex
 - `image` 0.25.10 is a PNG-only GUI test dependency, already transitively pinned by Bevy; it decodes captures so the ignored self-test can range-check non-background pixels before comparing frames.
 - AC1's five normal dependencies are confirmed by Wolf's amendment; AC4 was rechecked: one `bevy_ecs`, version 0.19.0. The cold 158.71 s result crosses the architecture spine's measured-gate-time trigger; no feature-trim change is made in this story. The 61.22 s warm number is contextual only.
 - Self-gate pass 1 raised five legitimate findings. Fixed: wait for `ScreenshotCaptured` before writing `AppExit`; re-project a dirty tile plus its six neighbours; accumulate dirty positions across queued deltas (a focused system test pins it); keep the 30 s socket read bound after the snapshot; and print `RenderAdapterInfo` on startup. The full gate after the fixes was green.
+- Self-gate pass 2 found that a cube newly exposed by a delta had no `Mesh3d` or `MeshMaterial3d`. The new rendering assertion first went RED: `a terrain cube exposed by a delta must carry its render mesh and material`; the incremental spawn now attaches the same shared mesh and material as a full rebuild.
 - Unmet: AC7–9, live AC11/24, and live capture observation AC25/26. This GPU-less devpod has no display or graphics userspace; no backend/adapter, frame-time figure, or captured pixels were fabricated. The WSLg NFR6 figure remains owed.
 
 ### File List
@@ -572,3 +573,4 @@ GPT-5.6 Codex
 | 2026-08-11 | Orchestrator verification of the first dev pass: gate independently re-run GREEN (62 s **warm**, so the spine's cold-build trigger is still unarmed and the figure is not yet the answer). Three gaps recorded for the continuation pass: (a) AC17/AC14's evidence rests on identity-function wrappers (`snapshot_needs_full_rebuild`, `marker_matches_id`) that no test reaches through `reconcile`, so a `changes()`-driven reconciler would still pass; (b) terrain ids and sim entity ids share one `WorldProjected` space — `terrain_id([0,0,0]) == 0` collides with dwarf id 0 and the entity-reconcile `find` does not exclude terrain; (c) `crates/gui/tests/headless.rs` was never created, so AC12/15/16/18 and Task 2's AD-14 negative have no coverage. |
 | 2026-08-11 | Continuation pass: replaced wrapper evidence with seven `MinimalPlugins` reconciliation tests, filtered simulation reconciliation from terrain IDs, added the capture-overlay forcing test and PNG range check, and rewrote the mutation table against real decisions. All five mutations were killed. Gate: 158.71 s cold and 61.22 s warm, both green. Story remains in-progress for display-bound evidence. |
 | 2026-08-11 | Self-gate pass 1 fixed the capture completion lifecycle, exposed-neighbour terrain updates, queued-delta accumulation, post-snapshot reader bound, and adapter logging; its green commit gate reran all checks. |
+| 2026-08-11 | Self-gate pass 2 caught missing render components on delta-exposed terrain. Added a `MinimalPlugins` rendering-component assertion, recorded its RED, and made incremental terrain spawns use the shared mesh/material handles. |

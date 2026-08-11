@@ -110,11 +110,19 @@ pub fn reconcile(
                 commands.entity(entity).despawn();
             }
             if is_exposed(mirror, position) {
-                commands.spawn((
+                let mut entity = commands.spawn((
                     WorldProjected(terrain_id(position, mirror.dims())),
                     TerrainTile(position),
                     Transform::from_translation(world_to_render(position)),
                 ));
+                if let Some(assets) = assets {
+                    entity.insert((
+                        Mesh3d(assets.cube.clone()),
+                        MeshMaterial3d(
+                            assets.materials[terrain_material(mirror, position)].clone(),
+                        ),
+                    ));
+                }
             }
         }
     }

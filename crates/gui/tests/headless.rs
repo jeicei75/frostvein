@@ -4,11 +4,17 @@ use bevy::{
     MinimalPlugins,
     app::{App, Update},
     ecs::system::{Commands, Query, Res, ResMut},
-    prelude::{Entity as BevyEntity, Resource, Transform, Without},
+    prelude::{
+        Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, Resource, StandardMaterial,
+        Transform, Without,
+    },
 };
 use client_core::Mirror;
 use gui::{
-    project::{ClientLocal, TerrainTile, WorldProjected, reconcile},
+    project::{
+        ClientLocal, ProjectionAssets, TerrainTile, WorldProjected, reconcile,
+        setup_projection_assets,
+    },
     transform::world_to_render,
 };
 use protocol::{
@@ -27,10 +33,13 @@ struct ProjectionWork {
 fn headless_app(snapshot: Snapshot) -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
+        .init_resource::<Assets<Mesh>>()
+        .init_resource::<Assets<StandardMaterial>>()
         .insert_resource(TestMirror(Mirror::from_snapshot(snapshot).unwrap()))
         .insert_resource(ProjectionWork {
             rebuild_terrain: true,
         })
+        .add_systems(bevy::app::Startup, setup_projection_assets)
         .add_systems(Update, reconcile_from_mirror);
     app
 }
@@ -41,6 +50,7 @@ fn reconcile_from_mirror(
     mut work: ResMut<ProjectionWork>,
     projected: Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
     terrain: Query<(BevyEntity, &TerrainTile)>,
+    assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild_terrain = std::mem::take(&mut work.rebuild_terrain);
     reconcile(
@@ -50,7 +60,7 @@ fn reconcile_from_mirror(
         &mirror.0.changes().tiles,
         &projected,
         &terrain,
-        None,
+        assets.as_deref(),
     );
 }
 
@@ -290,6 +300,20 @@ fn dirty_delta_reprojects_newly_exposed_neighbours() {
     assert_eq!(
         terrain,
         gui::project::terrain_positions(&app.world().resource::<TestMirror>().0)
+    );
+    let newly_exposed = app
+        .world_mut()
+        .query::<(
+            &TerrainTile,
+            Option<&Mesh3d>,
+            Option<&MeshMaterial3d<StandardMaterial>>,
+        )>()
+        .iter(app.world())
+        .find(|(tile, _, _)| tile.0 == [2, 2, 1])
+        .expect("the newly exposed neighbour must be projected");
+    assert!(
+        newly_exposed.1.is_some() && newly_exposed.2.is_some(),
+        "a terrain cube exposed by a delta must carry its render mesh and material"
     );
 }
 
