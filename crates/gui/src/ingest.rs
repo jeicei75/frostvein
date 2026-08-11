@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeSet,
+    ffi::OsString,
     io::{BufRead, BufReader, Read},
     net::TcpStream,
     path::PathBuf,
@@ -92,6 +93,9 @@ pub fn run() -> anyhow::Result<()> {
             Startup,
             (setup_camera, setup_projection_assets, log_adapter),
         )
+        // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
+        // still GUI-local, so classify the complete startup scene after all plugin setup.
+        .add_systems(bevy::app::PostStartup, classify_client_local)
         .add_systems(
             Update,
             (
@@ -122,10 +126,14 @@ struct Args {
 }
 
 fn parse_args() -> anyhow::Result<Args> {
+    parse_args_from(std::env::args_os().skip(1))
+}
+
+fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<Args> {
     let mut port = protocol::DEFAULT_PORT;
     let mut capture = None;
     let mut frames = None;
-    let mut args = std::env::args_os().skip(1);
+    let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
             let path = args.next().context("--capture requires a path")?;
@@ -145,6 +153,9 @@ fn parse_args() -> anyhow::Result<Args> {
     if capture.is_some() && frames.is_none() {
         bail!("--capture requires --frames N");
     }
+    if capture.is_some() && frames == Some(0) {
+        bail!("--capture --frames must be positive");
+    }
     Ok(Args {
         port,
         capture,
@@ -155,6 +166,15 @@ fn parse_args() -> anyhow::Result<Args> {
 fn setup_camera(mut commands: Commands) {
     let rig = CameraRig::new([64, 64, 9]);
     commands.spawn((Camera3d::default(), rig.transform(), rig, ClientLocal));
+}
+
+fn classify_client_local(
+    mut commands: Commands,
+    unclassified: Query<bevy::prelude::Entity, (Without<WorldProjected>, Without<ClientLocal>)>,
+) {
+    for entity in &unclassified {
+        commands.entity(entity).insert(ClientLocal);
+    }
 }
 
 fn log_adapter(adapter: Option<Res<RenderAdapterInfo>>) {
@@ -308,9 +328,10 @@ mod tests {
     use protocol::{Delta, Dims, MessageType, Snapshot, Speed, Tile, TileChange};
 
     use super::{
-        IngestReceiver, MirrorResource, ProjectionWork, WireMessage, force_capture_overlay_off,
-        ingest_messages,
+        ClientLocal, IngestReceiver, MirrorResource, ProjectionWork, WireMessage,
+        classify_client_local, force_capture_overlay_off, ingest_messages,
     };
+    use crate::project::WorldProjected;
 
     #[test]
     fn capture_forces_the_frame_time_overlay_off() {
@@ -323,6 +344,49 @@ mod tests {
         force_capture_overlay_off(&mut app);
 
         assert!(!app.world().resource::<FpsOverlayConfig>().enabled);
+    }
+
+    #[test]
+    fn capture_requires_a_positive_frame_count() {
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--capture"),
+                std::ffi::OsString::from("out.png"),
+                std::ffi::OsString::from("--frames"),
+                std::ffi::OsString::from("0"),
+            ])
+            .is_err(),
+            "a zero-frame capture must be rejected before opening a socket"
+        );
+    }
+
+    #[test]
+    fn startup_entities_without_world_projection_are_client_local() {
+        let mut app = App::new();
+        app.add_systems(bevy::app::PostStartup, classify_client_local);
+        app.world_mut().spawn(WorldProjected(7));
+        app.world_mut().spawn_empty();
+
+        app.update();
+
+        let mut unclassified = app.world_mut().query_filtered::<bevy::prelude::Entity, (
+            bevy::ecs::query::Without<WorldProjected>,
+            bevy::ecs::query::Without<ClientLocal>,
+        )>();
+        assert_eq!(
+            unclassified.iter(app.world()).count(),
+            0,
+            "overlay and other startup entities must be structurally client-local"
+        );
+        let mut projected = app
+            .world_mut()
+            .query::<(&WorldProjected, Option<&ClientLocal>)>();
+        assert!(
+            projected
+                .iter(app.world())
+                .all(|(_, local)| local.is_none()),
+            "world projection must stay disjoint from client-local entities"
+        );
     }
 
     #[test]
