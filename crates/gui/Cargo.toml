@@ -9,3 +9,7 @@ bevy.workspace = true
 client-core = { path = "../client-core" }
 protocol = { path = "../protocol" }
 serde_json.workspace = true
+
+[dev-dependencies]
+# Test-only PNG decoding range-checks the capture instrument required by AC25.
+image = { version = "0.25.10", default-features = false, features = ["png"] }
