@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant, as at 5.1
 
 # Story 5.2: One Mirror, Two Clients
 
-Status: review
+Status: done
 
 ## Story
 
@@ -17,9 +17,14 @@ so that both clients read one truth, and the mirror's contract is proven against
 
 ### The crate and the graph
 
-1. A fifth crate `client-core` exists at `crates/client-core`, is a workspace member, depends on
-   `protocol` and `thiserror` only, and carries `#![forbid(unsafe_code)]`. It contains no I/O of any
-   kind — no `std::net`, no `std::fs`, no clock.
+1. A fifth crate `client-core` exists at `crates/client-core`, is a workspace member, has
+   `protocol` and `thiserror` as its only **normal** dependencies, and carries
+   `#![forbid(unsafe_code)]`. It contains no I/O of any kind — no `std::net`, no `std::fs`, no clock.
+   *(Wording corrected at review, 2026-08-11. As first written this AC said "depends on `protocol`
+   and `thiserror` only", which contradicts AC17: wire-JSON-literal tests need a parser in test
+   scope, and "no change to `protocol`" blocks putting one there. A `serde_json` dev-dependency is
+   the resolution — the same pattern `protocol` itself uses. Dev-dependencies do not enter the
+   shipped graph, so AC2 and the gate probe are unaffected.)*
 2. The workspace dependency graph is exactly `simd → sim-core`, `simd → protocol`,
    `client-core → protocol`, `tui → protocol`, `tui → client-core`. No other edge exists, read off
    the five `Cargo.toml` files and the two gate probes. (`gui` arrives in 5.3; this story adds no
@@ -216,6 +221,90 @@ so that both clients read one truth, and the mirror's contract is proven against
         small commits, imperative messages, author `Völundr <jeicei75@gmail.com>`. Push/PR only on
         Wolf's explicit yes.
 
+### Review Findings
+
+Code review 2026-08-11. Four layers, all four reported, no coverage holes. Zero HIGH findings.
+Layer attribution is in brackets: `[blind]` Blind Hunter (Sonnet, `client-core`), `[edge]` Edge Case
+Hunter (Sonnet, shells), `[auditor]` Acceptance Auditor (Opus), `[feature]` Feature Auditor (Opus).
+
+- [x] [Review][Decision — RESOLVED: keep as-is, document the contract] Wolf's ruling 2026-08-11.
+      `changes()` stays delta-only; no production code changed. The contract is now recorded in
+      `deferred-work.md` under "Deferred from: story 5.2" so 5.3 reads it before writing a
+      reconciler. Rejected: populating `spawned` on a snapshot (asymmetric with tiles), and
+      populating `tiles` with every position (~6MB per snapshot on the shipped world, for a
+      consumer that does not exist yet). Original finding: `changes()` reports nothing after a
+      snapshot, and under-reports dropped dirty tiles — [auditor+feature+blind, MED] `apply_snapshot` resets `changes` to `Default`
+      (`client-core/src/lib.rs:52,166`), pinned by `tests/mirror.rs:139-142`: after a reset snapshot
+      carrying entity 99, all four lists are empty. AC8 says `changes()` reports "for the most
+      recently applied message" and a snapshot IS a message, so empty is only correct under a
+      delta-only reading the AC never states. A 5.3 gui reconciler driven by `changes()` would create
+      no nodes for a world it just received in full — an empty Bevy window beside a correct TUI. The
+      consumer also has no positive signal that a snapshot happened; `previous_entity == None`
+      everywhere is the only tell, and it costs a full scan. Same seam, second half: an out-of-bounds
+      dirty tile is skipped (`lib.rs:68-73`) AND omitted from `changes().tiles`, so a consumer
+      repainting only `changes().tiles` silently diverges from one repainting everything. The skip
+      itself is spec-mandated (Task 2, "skipped, not an error") and is NOT the finding; the
+      unreported-ness is new with `changes()`. Options: (a) after a snapshot populate `spawned` with
+      every id and `tiles` with every position; (b) add an explicit reset signal; (c) keep as-is and
+      document the delta-only contract in the deferral so 5.3 does not discover it by redesign.
+- [x] [Review][Decision — RESOLVED: AC1 means normal dependencies] Wolf's ruling 2026-08-11. The
+      `serde_json` dev-dependency stands; AC1's wording has been corrected above to say "only
+      **normal** dependencies", with the AC1/AC17 conflict recorded inline so the next reader does
+      not re-derive it. No code changed. Original finding: AC1 and AC17 cannot both be met
+      literally — [auditor, MED]
+      `crates/client-core/Cargo.toml:10-11` carries `serde_json` as a **dev**-dependency. AC1 says the
+      crate "depends on `protocol` and `thiserror` only" and Task 1's verification command says
+      `cargo tree` must show "nothing else"; AC17 requires the recorded sequence be wire JSON string
+      literals, which needs a parser in test scope, and "no change to `protocol`" forbids putting a
+      helper there. The dev chose the dev-dependency (the same pattern `protocol` itself uses) and
+      reworded the completion note to "normal dependencies" rather than surfacing the conflict.
+      Options: (a) rule that AC1 means normal dependencies and correct the AC's wording;
+      (b) require the dev-dep be removed and AC17 met another way.
+
+- [x] [Review][Patch] APPLIED — Mutation evidence re-run against final source; a sixth mutation
+      (`rect helper stops normalizing corners`) added. All six KILLED, output pasted in the Dev
+      Agent Record; the stale dev-time block is kept beneath it, labelled superseded.
+- [x] [Review][Patch] APPLIED — Self-referential rect assertions replaced with literal oracles
+      [crates/tui/src/view.rs:1430, :1476], each carrying a `// NOTE:` saying why it is a literal.
+      The new mutation proves they now kill a normalization change; the version they replaced would
+      have survived it.
+- [x] [Review][Patch] APPLIED — `tile_index` now compares as `u32` via `u32::try_from` instead of
+      casting dims to `i32` [crates/client-core/src/lib.rs:170-185], with a `// NOTE:` naming the
+      wrap it avoids, plus a covering test for negative and out-of-range coordinates.
+      **`render`'s `unwrap_or(Tile::Empty)` deliberately left alone** — with the cast fixed the two
+      bounds checks agree so it cannot fire, it is load-bearing for the peek-below path (which
+      relies on `z = -1` reading as out-of-range), and touching `render` would put AC15 at risk for
+      no behavioural gain.
+- [x] [Review][Patch] APPLIED — Instrument-stability caveat corrected: the entity glyphs and tick
+      ARE stable while the daemon-start-to-connect delay and frame count are held fixed, so all
+      five counts are a regression guard rather than three of them being noise to ignore.
+
+- [x] [Review][Defer] Duplicate entity/item ids silently collapse to last-one-wins
+      [crates/client-core/src/lib.rs:75-78, 101, 151-162] — deferred; the obvious fix adds a second
+      `MirrorError` variant, which AC9 forbids ("the only error the crate defines")
+- [x] [Review][Defer] `rect_is_valid` is a structural gate, not a dims gate
+      [crates/simd/src/main.rs:714-716] — deferred, AC11 as written; bounds safety still lives in
+      `sim-core`'s unchanged clamp
+- [x] [Review][Defer] Ascending `items()` order has no test that would fail if it flipped
+      [crates/client-core/tests/mirror.rs:82-85] — deferred, low tail
+- [x] [Review][Defer] A NOTE documenting a still-live limitation was deleted with code that did not
+      describe it [crates/tui/src/main.rs:255-258] — deferred, comment-only, behaviour matches `main`
+- [x] [Review][Defer] Pre-existing `simd` test flakes under parallel test execution
+      [crates/simd/tests/serve.rs] — deferred, pre-existing and not attributable to this diff
+- [x] [Review][Defer] AC17's "equals a hand-written expected mirror" is unmeetable from `tests/`
+      [crates/client-core/tests/mirror.rs:45-143] — deferred, AC phrasing; the accessor assertions
+      are thorough and the ordering mutant died via this file
+
+Dismissed as noise (2): the out-of-bounds dirty-tile **skip** itself, which Task 2 mandates verbatim;
+and the inline `protocol::Rect` literals at `crates/tui/tests/client.rs:671,979`, which are
+independent wire-level oracles and the correct pattern — AC16 governs production rect construction,
+and `rg 'Rect\s*\{' crates/tui/src/` returns zero hits.
+
+**Layer convergence** (Epic 2 action item; R1 territory-split measurement): 3 of 12 merged findings
+were raised independently by two layers — `changes()`-after-snapshot (auditor+feature), the `i32`
+dims cast (blind+auditor), and the out-of-bounds dirty tile (blind+feature). Against Epic 3's clean
+four-layer story (3.2), which produced 1 convergence in 8.
+
 ## Dev Notes
 
 ### Scope guardrails — do NOT build these here
@@ -357,11 +446,23 @@ status:   tick 31  normal  z 9/31  dwarves 5   ... through tick 36
 
 **The required observation after adoption: every one of those five counts is non-zero, and `│` and
 `♠` are exactly 6 and 48.** The two terrain figures are byte-stable because terrain is seeded and
-static; they are the part of this capture that a mirror regression would move. The three entity
-counts and the tick are **not** stable — 5.1 recorded `†=21 ♨=3 ☺=30` for the same command, and the
-run above gives `24 / 6 / 22`, because the client connects at a wall-clock-dependent tick (31 here)
-and the dwarves have wandered. Do not read a difference in those three as a regression, and do not
-claim byte identity. **Exit 0 is not a result.** Use `grep -o`, never `tr -cd`.
+static; they are the part of this capture that a mirror regression would move.
+
+**CORRECTED AT REVIEW, 2026-08-11 — this instrument is stronger than the paragraph that used to
+stand here claimed.** The original text said the three entity counts and the tick are "not stable"
+and told the reader not to treat a difference in them as a regression. That is **false for this
+recipe**, and following it discards a real regression signal. The Feature Auditor ran the recipe
+twice from a fresh daemon and got `†=24 ♨=6 ☺=22`, ticks 31→36, both times — byte-identical to the
+`main` baseline recorded above. The tick at connect is a deterministic function of the fixed
+`sleep 3` against a seed-deterministic sim, so **a fixed-delay capture IS a byte comparison across
+the commit, entity glyphs included.** The 5.1 figures (`†=21 ♨=3 ☺=30`) differ because that capture
+used a different sleep and frame count, not because the instrument is nondeterministic.
+
+The honest caveat is narrower: the entity counts and tick are stable **only while the
+daemon-start-to-connect delay and the frame count are held fixed**. Vary either — or connect to a
+long-lived daemon (one run at tick 963 gave `†=12 ♨=6 ☺=30`) — and only `│=6 ♠=48` survive. Hold
+them fixed and all five are a regression guard. **Exit 0 is not a result.** Use `grep -o`, never
+`tr -cd`.
 
 **Sabotage:**
 
@@ -453,7 +554,54 @@ effort held at `high`, which is the comparison the runbook asks for.
   tick 36  normal  z 9/31  dwarves 5
   ```
   `NO_COLOR` was set, so the binary correctly emitted its existing warning that this capture cannot evidence colours; glyph-count evidence is unaffected.
-- Task 8 mutation RED output (verbatim):
+- Task 8 mutation RED output, RE-RUN AT REVIEW 2026-08-11 against final source (verbatim). The
+  block below it is the original dev-time run, kept for the record — the review found it had been
+  captured at `c80e0d6`, before `2925485` changed `client-core/src/lib.rs`, and never re-run, so its
+  line numbers no longer matched the source. This run is against HEAD and adds a sixth mutation
+  (`rect helper stops normalizing corners`) that did not exist at dev time; it is the proof that the
+  restored literal oracle in `view.rs` kills a normalization change, which the self-referential
+  version it replaced would have survived.
+  ```text
+  === delta absence no longer deletes entities ===
+  thread 'tests::delta_deletes_entities_and_items_absent_from_authoritative_lists' (447063) panicked at crates/client-core/src/lib.rs:261:9:
+  assertion failed: mirror.entities().next().is_none()
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+  === snapshot retains previous-tick state ===
+  thread 'tests::changes_partition_entities_and_keep_one_previous_generation' (447470) panicked at crates/client-core/src/lib.rs:386:9:
+  assertion failed: mirror.previous_entity(7).is_none()
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+  === unchanged entity is reported as changed ===
+  thread 'tests::changes_partition_entities_and_keep_one_previous_generation' (447853) panicked at crates/client-core/src/lib.rs:376:9:
+  assertion `left == right` failed
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+  === daemon accepts inverted rectangles ===
+  thread 'invalid_rects_are_logged_dropped_and_leave_the_client_connected' (448397) panicked at crates/simd/tests/serve.rs:114:47:
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 60 filtered out; finished in 10.41s
+
+  === rect helper stops normalizing corners ===
+  thread 'view::tests::second_enter_commits_each_single_command_mode_and_stays_in_mode' (449282) panicked at crates/tui/src/view.rs:1466:13:
+  assertion `left == right` failed
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+  === mirror entity iteration reverses ids ===
+  thread 'recorded_wire_messages_build_the_expected_mirror' (449726) panicked at crates/client-core/tests/mirror.rs:55:5:
+  assertion `left == right` failed
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+  ================ MUTATION RESULTS ================
+  delta absence no longer deletes entities                     KILLED
+  snapshot retains previous-tick state                         KILLED
+  unchanged entity is reported as changed                      KILLED
+  daemon accepts inverted rectangles                           KILLED
+  rect helper stops normalizing corners                        KILLED
+  mirror entity iteration reverses ids                         KILLED
+
+  All mutations killed.
+  ```
+- Task 8 mutation RED output, ORIGINAL DEV-TIME RUN (superseded, see above):
   ```text
   === delta absence no longer deletes entities ===
   thread 'tests::delta_deletes_entities_and_items_absent_from_authoritative_lists' (272) panicked at crates/client-core/src/lib.rs:261:9:
@@ -534,3 +682,4 @@ effort held at `high`, which is the comparison the runbook asks for.
 | 2026-08-10 | Implemented client-core mirror adoption, daemon rect validation, wire-literal tests, mutation evidence, and the 5.3 deferral; status set to review. |
 | 2026-08-10 | Self-gate pass 1 fixed overflow-safe snapshot dimension validation and added its regression test. |
 | 2026-08-10 | Self-gate pass 2 found no actionable issue; its local gate could not bind loopback sockets in the nested sandbox. |
+| 2026-08-11 | Four-layer code review, all layers reporting, no coverage holes, zero HIGH findings. Two decisions taken by Wolf; four patches applied; six items deferred; two dismissed. Gate green, all six mutations killed, live instrument re-run at `│=6 ♠=48 †=24 ♨=6 ☺=22` ticks 31→36. |

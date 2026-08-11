@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-10  # Story 5.2 created and ready-for-dev; 5.1 done (4-layer review, no coverage holes); Epic 5 in-progress.
+last_updated: 2026-08-11  # Story 5.2 done (4-layer review, no coverage holes, zero HIGH); next = create-story 5.3. Epic 5 in-progress.
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -120,7 +120,7 @@ development_status:
   # the pinned seed-42 spawn positions and the terrain fingerprint both change, deliberately.
   5-1-the-world-grows-things-that-glow: done
   # Split line if it overruns one session: the crate/mirror boundary. On no cut list.
-  5-2-one-mirror-two-clients: review
+  5-2-one-mirror-two-clients: done
   # ALLOWED TO BE UGLY — grey boxes orbiting at speed is a pass; visual bars are 5.4's.
   # Carries M2's only unproven-until-run risk: a Bevy window rendering on WSLg. If the
   # envelope does not hold that is the story's FINDING, reported, never worked around
