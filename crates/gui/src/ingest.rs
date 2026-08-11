@@ -102,11 +102,16 @@ pub fn run() -> anyhow::Result<()> {
         );
     if let Some(capture) = args.capture {
         // Capture output must never contain the diagnostic overlay.
+        force_capture_overlay_off(&mut app);
         app.insert_resource(CaptureState::new(capture, args.frames));
         app.add_systems(Update, capture_after_frames);
     }
     app.run();
     Ok(())
+}
+
+fn force_capture_overlay_off(app: &mut App) {
+    app.world_mut().resource_mut::<FpsOverlayConfig>().enabled = false;
 }
 
 struct Args {
@@ -277,5 +282,25 @@ fn read_messages(
         if sender.send(message).is_err() || done {
             return;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::{app::App, dev_tools::fps_overlay::FpsOverlayConfig};
+
+    use super::force_capture_overlay_off;
+
+    #[test]
+    fn capture_forces_the_frame_time_overlay_off() {
+        let mut app = App::new();
+        app.insert_resource(FpsOverlayConfig {
+            enabled: true,
+            ..Default::default()
+        });
+
+        force_capture_overlay_off(&mut app);
+
+        assert!(!app.world().resource::<FpsOverlayConfig>().enabled);
     }
 }
