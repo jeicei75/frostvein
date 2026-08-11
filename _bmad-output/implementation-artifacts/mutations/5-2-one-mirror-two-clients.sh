@@ -43,6 +43,24 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
+# Added at review 2026-08-11. The tui key tests briefly expected `rect_on_level(..)` — the same
+# helper `apply_key` calls — so this mutation would have SURVIVED. It is here to prove the
+# restored literal oracle in view.rs actually kills a normalization change. Deliberately targets
+# `tui`, not `client-core`: client-core's own test already pins the helper against literals, and
+# the guard that was lost was the one on the caller's side.
+mutation "rect helper stops normalizing corners" tui second_enter_commits_each_single_command_mode_and_stays_in_mode <<'PY'
+import pathlib
+p = pathlib.Path('crates/client-core/src/lib.rs'); s = p.read_text()
+old = '''        min: [a.0.min(b.0), a.1.min(b.1), z],
+        max: [a.0.max(b.0), a.1.max(b.1), z],
+'''
+new = '''        min: [a.0.max(b.0), a.1.max(b.1), z],
+        max: [a.0.min(b.0), a.1.min(b.1), z],
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, new))
+PY
+
 mutation "mirror entity iteration reverses ids" client-core recorded_wire_messages_build_the_expected_mirror <<'PY'
 import pathlib
 p = pathlib.Path('crates/client-core/src/lib.rs'); s = p.read_text()
