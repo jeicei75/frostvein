@@ -210,11 +210,11 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
   - [ ] If the bring-up fails, that is a finding about the environment and not about `gui`.
         Record it and stop at the headless boundary — do not fake the live evidence.
 
-- [ ] **Task 1 — The crate, the feature trim, the gate loop** (AC: 1, 2, 3, 4, 5, 6)
-  - [ ] `crates/gui/Cargo.toml`: `protocol`, `client-core`, `anyhow.workspace = true`, and
+- [x] **Task 1 — The crate, the feature trim, the gate loop** (AC: 1, 2, 3, 4, 5, 6)
+  - [x] `crates/gui/Cargo.toml`: `protocol`, `client-core`, `anyhow.workspace = true`, and
         `bevy` with `default-features = false`. Add `bevy = "0.19.0"` to root
         `[workspace.dependencies]`.
-  - [ ] The feature list, **verified to compile in this devpod at story-creation** (449 crates,
+  - [x] The feature list, **verified to compile in this devpod at story-creation** (449 crates,
         1m02s, exit 0):
         ```toml
         bevy = { version = "0.19.0", default-features = false, features = [
@@ -226,23 +226,23 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
         trimming "on a measured problem" — this is one. Default features fail to build here (see
         Key decisions); `bevy_dev_tools` is the non-default feature the spine's own NFR6 row
         names for the ready-made overlay.
-  - [ ] Collapse the three inverted `cargo tree` probes in `scripts/gate.sh:73-105` into one loop
+  - [x] Collapse the three inverted `cargo tree` probes in `scripts/gate.sh:73-105` into one loop
         over `tui client-core gui`. 5.2's Task 1 named this story as the point where the loop
         earns itself. Keep the inversion: a match is the failure. Widen the label column while
         you are there — the existing `printf '  %-28s'` is too narrow for the 32-character
         `client-core has no sim-core edge`, which currently prints as `...edgeok`, and `gui`'s
         label will collide the same way.
-  - [ ] Assert `rg -c '^name = "bevy_ecs"$' Cargo.lock` is 1 and its version is `0.19.0`.
+  - [x] Assert `rg -c '^name = "bevy_ecs"$' Cargo.lock` is 1 and its version is `0.19.0`.
 
-- [ ] **Task 2 — Connect and ingest** (AC: 10, 11)
-  - [ ] Port the connection shape from `tui/src/main.rs:157-165` and its reader thread
+- [x] **Task 2 — Connect and ingest** (AC: 10, 11)
+  - [x] Port the connection shape from `tui/src/main.rs:157-165` and its reader thread
         (`:220-224`): `TcpStream`, `SNAPSHOT_READ_TIMEOUT`, `MAX_SNAPSHOT_BYTES`,
         `read_message`, an `mpsc::sync_channel`. **Networking lives in `gui`, exactly as it lives
         in `tui`** — `client-core` has zero I/O and gaining one is an AD-13 breach.
-  - [ ] The mirror lives in a Bevy `Resource`. A system drains the channel and calls
+  - [x] The mirror lives in a Bevy `Resource`. A system drains the channel and calls
         `apply_snapshot` / `apply_delta`. **That system is the only code in `gui` that touches
         `protocol` message types.**
-  - [ ] Test: with the mirror resource driven by recorded wire literals, no ECS mutation happens
+  - [x] Test: with the mirror resource driven by recorded wire literals, no ECS mutation happens
         outside the reconciliation systems — the AD-14 negative.
 
 - [x] **Task 3 — The one transform pair** (AC: 19, 20)
@@ -252,19 +252,19 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
         it is a literal precisely so a handedness flip cannot survive it.
   - [x] `rg 'Vec3::new' crates/gui/src/` must show axis construction only inside this module.
 
-- [ ] **Task 4 — Projection and reconciliation** (AC: 12, 13, 14, 15, 16, 17, 18)
-  - [ ] Two marker components, `WorldProjected(Id)` and `ClientLocal`, so AC12's partition is a
+- [x] **Task 4 — Projection and reconciliation** (AC: 12, 13, 14, 15, 16, 17, 18)
+  - [x] Two marker components, `WorldProjected(Id)` and `ClientLocal`, so AC12's partition is a
         query and not a convention.
-  - [ ] Terrain: the exposed-tile predicate, then one cube per exposed solid tile. Share one
+  - [x] Terrain: the exposed-tile predicate, then one cube per exposed solid tile. Share one
         `Mesh3d` handle and one `MeshMaterial3d` per material so Bevy batches the draw; 8
         materials appear on the shipped seed.
-  - [ ] Entities: reconcile dwarves/items/emitters from `mirror.entities()` / `items()` against
+  - [x] Entities: reconcile dwarves/items/emitters from `mirror.entities()` / `items()` against
         the projected set keyed by sim `Id` — spawn missing, despawn absent, update transforms.
         At ~15 entities a full pass per frame is correct and cheap; do not optimise it.
-  - [ ] Terrain updates take the other route: `changes().tiles` on a delta (AC16), **full rebuild
+  - [x] Terrain updates take the other route: `changes().tiles` on a delta (AC16), **full rebuild
         on a snapshot** (AC17). Write the snapshot test first and watch it fail before the
         rebuild path exists — that RED is the evidence AC17 asks for.
-  - [ ] The despawn-all-and-re-project test (AC15) under `MinimalPlugins`, comparing the
+  - [x] The despawn-all-and-re-project test (AC15) under `MinimalPlugins`, comparing the
         resulting entity set, not a screenshot.
 
 - [x] **Task 5 — The camera** (AC: 21)
@@ -274,24 +274,24 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
         ends, and the focus point stays inside the world bounds at every zoom — "never lose the
         fortress" as an assertion rather than a hope.
 
-- [ ] **Task 6 — The frame-time overlay** (AC: 22, 23, 24)
-  - [ ] `FpsOverlayPlugin` with `FpsOverlayConfig { enabled: false, ..default() }`, plus
+- [x] **Task 6 — The frame-time overlay** (AC: 22, 23, 24)
+  - [x] `FpsOverlayPlugin` with `FpsOverlayConfig { enabled: false, ..default() }`, plus
         `FrameTimeDiagnosticsPlugin::default()`. Both compile-verified at story-creation.
-  - [ ] A key toggles `config.enabled`; `--capture` forces it `false`. Test the forcing, not the
+  - [x] A key toggles `config.enabled`; `--capture` forces it `false`. Test the forcing, not the
         key.
-  - [ ] Record the figure with its machine (AC24). State plainly in the Dev Agent Record whether
+  - [x] Record the figure with its machine (AC24). State plainly in the Dev Agent Record whether
         the WSLg number is still owed.
 
-- [ ] **Task 7 — The capture instrument** (AC: 25, 26)
-  - [ ] `gui --capture <path> --frames N`, mirroring `tui`'s scripted-flag discipline
+- [x] **Task 7 — The capture instrument** (AC: 25, 26)
+  - [x] `gui --capture <path> --frames N`, mirroring `tui`'s scripted-flag discipline
         (`tui/src/main.rs:76-155` is the arg-parsing shape to copy).
-  - [ ] Capture via `commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path))`;
+  - [x] Capture via `commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path))`;
         exit after N frames with `MessageWriter<AppExit>` and `AppExit::Success`.
         **`MessageWriter`, not `EventWriter`** — verified against 0.19 at story-creation.
-  - [ ] Self-tests behind `#[ignore]` (or a separate `--test` target excluded from the gate), so
+  - [x] Self-tests behind `#[ignore]` (or a separate `--test` target excluded from the gate), so
         `scripts/gate.sh` stays headless and green on a GPU-less devpod. Name the exact invocation
         in the Dev Agent Record.
-  - [ ] The "changes when the world changes" test drives the same daemon at two different ticks
+  - [x] The "changes when the world changes" test drives the same daemon at two different ticks
         and asserts the images differ. Range-check first: assert a non-zero count of
         non-background pixels **before** drawing any conclusion.
 
@@ -301,22 +301,22 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
   - [ ] If the window does not open: record the error, walk the AC9 ladder, and report. A failed
         envelope is a legitimate outcome of this story.
 
-- [ ] **Task 9 — Mutations, deferrals, gate** (AC: 27)
-  - [ ] Write the sabotage table. Minimum set: the reconciler is driven by `changes()` alone (the
+- [x] **Task 9 — Mutations, deferrals, gate** (AC: 27)
+  - [x] Write the sabotage table. Minimum set: the reconciler is driven by `changes()` alone (the
         snapshot rebuild dies); the exposed-tile predicate returns all solid tiles; the transform
         pair's handedness flips; reconciliation is keyed by something other than sim `Id`; the
         camera pitch clamp is removed.
-  - [ ] Append a `## Deferred from: story 5.3` note recording that **`Mirror::previous_entity()`
+  - [x] Append a `## Deferred from: story 5.3` note recording that **`Mirror::previous_entity()`
         is still without a live caller** — AD-15 interpolation is deliberately deferred to 6.1
         (see Key decisions), so the seam stays inert by design for one more story rather than
         silently dropped.
-  - [ ] **Record the gate's wall-clock before and after adding `bevy`.** Measured green at
+  - [x] **Record the gate's wall-clock before and after adding `bevy`.** Measured green at
         story-creation: **61 s warm**. Adding a 449-crate dependency to the workspace makes
         `cargo clippy --all-targets` and `cargo test` compile Bevy, and the gate runs on every
         commit via the pre-commit hook. The spine defers "trimming bevy features / build-time
         work" with the trigger *"a measured gate-time problem"* — this measurement is what arms
         that trigger, so record the number even though this story does not act on it.
-  - [ ] `scripts/gate.sh` green. Branch `5-3-a-window-onto-the-valley`, small commits, imperative
+  - [x] `scripts/gate.sh` green. Branch `5-3-a-window-onto-the-valley`, small commits, imperative
         messages, author `Völundr <jeicei75@gmail.com>`. Push/PR only on Wolf's explicit yes.
 
 ## Dev Notes
@@ -538,22 +538,25 @@ GPT-5.6 Codex
 
 ### Debug Log References
 
-- `cargo test -p gui --offline --lib -- --nocapture`: 7 passed.
+- `cargo test -p gui --offline --test headless -- --nocapture`: 7 passed under `MinimalPlugins`.
+- `cargo test -p gui --offline --lib -- --nocapture`: 6 passed, including `capture_forces_the_frame_time_overlay_off`.
 - `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/5-3-a-window-onto-the-valley.sh`: all five mutations killed.
-- `scripts/gate.sh` passed in the pre-commit hook for `b2dbcb8`; the relay truncated its final output while cargo test ran, but the successful commit independently confirms the green exit.
+- `cargo clean && time scripts/gate.sh`: green in 158.71 s cold; a second green gate measured 61.22 s warm.
 
 ### Completion Notes List
 
-- Implemented feature trim, bounded TCP reader/thread, Mirror resource, transform pair, projection components/reconciliation, orbit rig, FPS overlay wiring, and capture request/exit code. Grey cube meshes are intentional; appearance is 5.4.
-- AC17 RED: `thread 'project::tests::snapshot_rebuild_projects_terrain_even_when_the_mirror_reports_no_changes' (577) panicked at crates/gui/src/project.rs:255:9: assertion failed: snapshot_needs_full_rebuild(true)`; `test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s`.
-- AC27 RED: all mutations killed. Representative failures: `assertion \`left == right\` failed` (handedness), `assertion failed: marker_matches_id(WorldProjected(42), 42)` (sim Id), and `assertion \`left == right\` failed` (pitch clamp).
+- Replaced the AC14/17 identity wrappers with app-level reconciliation tests. AC17 RED after sabotaging the real `if rebuild_terrain` branch: `assertion \`left == right\` failed: a reset snapshot must fully rebuild terrain; left: 0; right: 1`. The terrain/sim-ID collision was independently RED on the old query: `the origin terrain cube must stay at the origin; left: 0; right: 1`.
+- `headless.rs` covers the structural partition, recorded-wire AD-14 negative, despawn/re-project scene equality, dirty-tile-only reconciliation, out-of-bounds/full-repaint agreement, snapshot rebuild, and terrain/sim-id separation.
+- AC27 RED: snapshot sabotage failed the reset-terrain assertion; transform sabotage failed the literal handedness oracle; sim-ID sabotage failed `dwarf 1 must remain keyed by its own simulation id`; camera-clamp sabotage failed its clamp assertion. The exposed-tile mutation was also killed. The actual mutation table ended `All mutations killed.`
 - Gate-excluded capture invocation: `FROSTVEIN_CAPTURE_FIRST=/tmp/first.png FROSTVEIN_CAPTURE_SECOND=/tmp/second.png cargo test -p gui --test capture -- --ignored --nocapture`. It was not run: no display/GPU.
-- Unmet: AC7–9, live AC11/24, capture observation AC25/26, post-Bevy gate timing, and complete headless task evidence. AC1/2 additionally need a ruling: ingestion requires existing workspace `serde_json`, while AC1 says the four normal GUI dependencies are exact. Gate timing: 61 s warm baseline; post-Bevy timing was not observable and is not fabricated.
+- `image` 0.25.10 is a PNG-only GUI test dependency, already transitively pinned by Bevy; it decodes captures so the ignored self-test can range-check non-background pixels before comparing frames.
+- AC1's five normal dependencies are confirmed by Wolf's amendment; AC4 was rechecked: one `bevy_ecs`, version 0.19.0. The cold 158.71 s result crosses the architecture spine's measured-gate-time trigger; no feature-trim change is made in this story. The 61.22 s warm number is contextual only.
+- Unmet: AC7–9, live AC11/24, and live capture observation AC25/26. This GPU-less devpod has no display or graphics userspace; no backend/adapter, frame-time figure, or captured pixels were fabricated. The WSLg NFR6 figure remains owed.
 
 ### File List
 
 - Cargo.toml; Cargo.lock; scripts/gate.sh
-- crates/gui/Cargo.toml; crates/gui/src/lib.rs; crates/gui/src/main.rs; crates/gui/src/ingest.rs; crates/gui/src/transform.rs; crates/gui/src/project.rs; crates/gui/src/camera.rs; crates/gui/src/capture.rs; crates/gui/tests/capture.rs
+- crates/gui/Cargo.toml; crates/gui/src/lib.rs; crates/gui/src/main.rs; crates/gui/src/ingest.rs; crates/gui/src/transform.rs; crates/gui/src/project.rs; crates/gui/src/camera.rs; crates/gui/src/capture.rs; crates/gui/tests/headless.rs; crates/gui/tests/capture.rs
 - _bmad-output/implementation-artifacts/mutations/5-3-a-window-onto-the-valley.sh
 - _bmad-output/implementation-artifacts/deferred-work.md
 - _bmad-output/implementation-artifacts/5-3-a-window-onto-the-valley.md
@@ -566,3 +569,4 @@ GPT-5.6 Codex
 | 2026-08-11 | Implemented the headless GUI foundation and recorded mutation evidence; story remains in-progress for live/display work and outstanding evidence. |
 | 2026-08-11 | **AC1 AMENDED on Wolf's ruling** — five normal dependencies, adding `serde_json`. The four-dep list was unmeetable alongside the story's own "no change to `protocol` / `client-core`" guardrails; `tui` and `client-core` already carry `serde_json` for the same decode. 5th instance of the AC-unmeetable-as-written class, and the first caught at dev rather than at review. |
 | 2026-08-11 | Orchestrator verification of the first dev pass: gate independently re-run GREEN (62 s **warm**, so the spine's cold-build trigger is still unarmed and the figure is not yet the answer). Three gaps recorded for the continuation pass: (a) AC17/AC14's evidence rests on identity-function wrappers (`snapshot_needs_full_rebuild`, `marker_matches_id`) that no test reaches through `reconcile`, so a `changes()`-driven reconciler would still pass; (b) terrain ids and sim entity ids share one `WorldProjected` space — `terrain_id([0,0,0]) == 0` collides with dwarf id 0 and the entity-reconcile `find` does not exclude terrain; (c) `crates/gui/tests/headless.rs` was never created, so AC12/15/16/18 and Task 2's AD-14 negative have no coverage. |
+| 2026-08-11 | Continuation pass: replaced wrapper evidence with seven `MinimalPlugins` reconciliation tests, filtered simulation reconciliation from terrain IDs, added the capture-overlay forcing test and PNG range check, and rewrote the mutation table against real decisions. All five mutations were killed. Gate: 158.71 s cold and 61.22 s warm, both green. Story remains in-progress for display-bound evidence. |
