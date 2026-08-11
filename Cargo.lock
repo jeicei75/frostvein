@@ -278,6 +278,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "client-core"
+version = "0.1.0"
+dependencies = [
+ "protocol",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1041,6 +1050,7 @@ name = "tui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "client-core",
  "crossterm",
  "protocol",
  "serde_json",

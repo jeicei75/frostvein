@@ -3,6 +3,76 @@
 Items surfaced by review that were real but not actionable at the time. Each entry
 names where it came from and what should trigger revisiting it.
 
+## Deferred from: code review of 5-2-one-mirror-two-clients (2026-08-11)
+
+- **Duplicate entity/item ids silently collapse to last-one-wins** (`client-core/src/lib.rs:75-78`,
+  `:101`, `:151-162`). Proven with a probe crate: a snapshot carrying two `Entity{id:5}` yields one
+  entity, the first gone with no diagnostic; same for items, and for duplicates inside one delta.
+  The mirror validates tile count and nothing else, so an id-reuse bug in `simd` would make a dwarf
+  vanish from every client silently. **Why deferred, and this is the interesting part:** the obvious
+  fix — a `DuplicateId` variant — is forbidden by AC9, which says the tile-count error is "the only
+  error the crate defines". Not reachable today: sim ids are unique by construction. **Revisit
+  trigger:** any story that makes the daemon allocate or recycle entity ids, or the first time a
+  second producer feeds the mirror. Raised by the Blind Hunter.
+- **`rect_is_valid` is a structural gate, not a dims gate** (`simd/src/main.rs:714-716`). A rect
+  spanning the full `i32` range passes validation: a live probe sent
+  `min:[-2147483648,0,3] max:[2147483647,0,3]` and designated an entire 128-tile map row in one
+  command — no log, no rejection. Harmless today because `sim-core`'s unchanged clamp bounds the
+  work, and this is AC11 exactly as written (it names `min.z != max.z` and `min > max`, nothing
+  about dims). Recorded because "the daemon now validates rects" is easy to misread as bounds
+  safety that in fact still lives entirely in `sim-core`, outside this story's diff. **Revisit
+  trigger:** any story that removes or weakens `World::apply_command`'s clipping. Raised by the
+  Edge Case Hunter.
+- **Ascending `items()` order has no test that would fail if it flipped**
+  (`client-core/tests/mirror.rs:82-85`). The only ordering assertion over items is a single-element
+  list, so adding `.rev()` to `items()` would be killed by nothing — unlike the entity counterpart,
+  which the mutation table covers. AC4 names items explicitly. Structurally safe today because
+  `BTreeMap`. One-line fixture change plus a mutation entry when next in the file. Raised by the
+  Acceptance Auditor.
+- **A NOTE documenting a still-live limitation was deleted** (`tui/src/main.rs:255-258`). The removed
+  comment said dims are assumed never to change between snapshots. `Mirror::apply_snapshot` does now
+  replace dims, but `ViewState.camera` and `.z` are still not re-clamped against the new ones — the
+  limitation survived, only its documentation went. Behaviour is identical to `main` and the render
+  path bounds-checks everything, so a shrunken world renders blank rather than panicking.
+  Comment-only regression. Raised by the Acceptance Auditor.
+- **Pre-existing `simd` test flakes under parallel execution**
+  (`serve.rs::more_haul_jobs_than_items_save_is_logged_and_the_daemon_keeps_ticking`). Failed with
+  "daemon stderr closed unexpectedly" at default parallelism, passed in isolation. No rect
+  involvement — unrelated to this diff. **Two candidate causes, and they are not distinguishable
+  from here:** the project's known target-lock/resource contention trap, or contamination from a
+  sibling review layer that ran `pkill -x simd` (self-disclosed by the Feature Auditor, and it
+  signals by process name, so it could have killed another layer's daemon). Recorded so a future
+  green-gate claim showing red here is not mistaken for a 5.2 regression. **Revisit trigger:** if it
+  reproduces outside a concurrent review. Raised by the Edge Case Hunter.
+- **AC17's "equals a hand-written expected mirror" is unmeetable as worded**
+  (`client-core/tests/mirror.rs:45-143`). `Mirror` derives `PartialEq` but all fields are private, so
+  an integration test cannot construct an expected value; the AC is met by 34 field-by-field accessor
+  assertions instead. The evidence is real — the ordering mutant died via this file. A literal
+  `Mirror == Mirror` would also compare the transient `changes` field, which is probably not the
+  intent. AC phrasing to correct at the next story, not a code defect. Raised by the Feature Auditor.
+
+## Deferred from: story 5.2
+
+- `client-core::Mirror::previous_entity()` and `changes()` have no live caller yet. Their
+  decision surface is headlessly tested; Story 5.3 is the wiring story for gui reconciliation
+  and AD-15 interpolation.
+- **`changes()` IS DELTA-ONLY, AND 5.3 MUST READ THIS BEFORE WRITING A RECONCILER.** Wolf's ruling
+  at 5.2's review (2026-08-11): keep the current shape, document the contract. After
+  `apply_snapshot`, `changes()` reports **empty** — no spawned, no despawned, no changed, no dirty
+  tiles — even for entities the snapshot carries (pinned by `client-core/tests/mirror.rs:139-142`).
+  A gui reconciler driven naively by `changes()` will therefore create **nothing** for a world it
+  just received in full: an empty Bevy window beside a correctly-rendering TUI, on every reconnect
+  and every `Load`. **A snapshot means "rebuild everything from `entities()`/`items()`/`tile()`",
+  and the only signal that one arrived is that `previous_entity()` returns `None` for every id** —
+  AD-15's "absence is the signal", which costs a full scan to detect. Second half of the same
+  contract: an out-of-bounds dirty tile in a delta is skipped *and* omitted from `changes().tiles`
+  (`client-core/src/lib.rs:68-73`), so a client repainting only `changes().tiles` diverges silently
+  from one repainting everything. The skip is deliberate and specified (Task 2, "skipped, not an
+  error"); the silent omission from `changes()` is what 5.3 must not build on. Rejected at review:
+  populating `spawned` with every id on a snapshot (asymmetric with tiles), and populating
+  `tiles` with every position (a ~6MB `Vec<[i32;3]>` per snapshot on the shipped 128×128×32 world,
+  for a consumer that does not exist yet). Raised by the Feature Auditor and the Acceptance Auditor.
+
 ## Deferred from: code review of 1-1-a-seeded-frozen-world-exists (2026-08-02)
 
 - **A spawn that ignores the RNG draw is not detected by the test suite**

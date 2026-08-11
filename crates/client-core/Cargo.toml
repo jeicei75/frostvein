@@ -1,11 +1,11 @@
 [package]
-name = "tui"
+name = "client-core"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-anyhow.workspace = true
-client-core = { path = "../client-core" }
-crossterm.workspace = true
 protocol = { path = "../protocol" }
+thiserror.workspace = true
+
+[dev-dependencies]
 serde_json.workspace = true
