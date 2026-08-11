@@ -233,12 +233,12 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
   - [ ] Test: with the mirror resource driven by recorded wire literals, no ECS mutation happens
         outside the reconciliation systems — the AD-14 negative.
 
-- [ ] **Task 3 — The one transform pair** (AC: 19, 20)
-  - [ ] `world_to_render(pos: [i32; 3]) -> Vec3` and `render_to_world(v: Vec3) -> [i32; 3]`.
-  - [ ] Round-trip property test over a spread of coordinates, **plus** the literal oracle:
+- [x] **Task 3 — The one transform pair** (AC: 19, 20)
+  - [x] `world_to_render(pos: [i32; 3]) -> Vec3` and `render_to_world(v: Vec3) -> [i32; 3]`.
+  - [x] Round-trip property test over a spread of coordinates, **plus** the literal oracle:
         pick one asymmetric point, write its expected `Vec3` out by hand with a `// NOTE:` saying
         it is a literal precisely so a handedness flip cannot survive it.
-  - [ ] `rg 'Vec3::new' crates/gui/src/` must show axis construction only inside this module.
+  - [x] `rg 'Vec3::new' crates/gui/src/` must show axis construction only inside this module.
 
 - [ ] **Task 4 — Projection and reconciliation** (AC: 12, 13, 14, 15, 16, 17, 18)
   - [ ] Two marker components, `WorldProjected(Id)` and `ClientLocal`, so AC12's partition is a
@@ -255,10 +255,10 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
   - [ ] The despawn-all-and-re-project test (AC15) under `MinimalPlugins`, comparing the
         resulting entity set, not a screenshot.
 
-- [ ] **Task 5 — The camera** (AC: 21)
-  - [ ] Isometric look-down orbit rig: yaw/pitch orbit around a focus point plus a zoom
+- [x] **Task 5 — The camera** (AC: 21)
+  - [x] Isometric look-down orbit rig: yaw/pitch orbit around a focus point plus a zoom
         distance, pitch clamped away from the degenerate poles.
-  - [ ] Headless tests on the rig's maths: every yaw is reachable, the pitch clamp holds at both
+  - [x] Headless tests on the rig's maths: every yaw is reachable, the pitch clamp holds at both
         ends, and the focus point stays inside the world bounds at every zoom — "never lose the
         fortress" as an assertion rather than a hope.
 
@@ -522,14 +522,33 @@ re-check CM2 **on the record**, never a free move. If you take it, say so and re
 
 ### Agent Model Used
 
+GPT-5.6 Codex
+
 ### Debug Log References
+
+- `cargo test -p gui --offline --lib -- --nocapture`: 7 passed.
+- `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/5-3-a-window-onto-the-valley.sh`: all five mutations killed.
+- `scripts/gate.sh` was invoked headlessly; the relay truncated after successful fmt/clippy lines while cargo test ran, so its final green line was not observed.
 
 ### Completion Notes List
 
+- Implemented feature trim, bounded TCP reader/thread, Mirror resource, transform pair, projection components/reconciliation, orbit rig, FPS overlay wiring, and capture request/exit code. Grey cube meshes are intentional; appearance is 5.4.
+- AC17 RED: `thread 'project::tests::snapshot_rebuild_projects_terrain_even_when_the_mirror_reports_no_changes' (577) panicked at crates/gui/src/project.rs:255:9: assertion failed: snapshot_needs_full_rebuild(true)`; `test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s`.
+- AC27 RED: all mutations killed. Representative failures: `assertion \`left == right\` failed` (handedness), `assertion failed: marker_matches_id(WorldProjected(42), 42)` (sim Id), and `assertion \`left == right\` failed` (pitch clamp).
+- Gate-excluded capture invocation: `FROSTVEIN_CAPTURE_FIRST=/tmp/first.png FROSTVEIN_CAPTURE_SECOND=/tmp/second.png cargo test -p gui --test capture -- --ignored --nocapture`. It was not run: no display/GPU.
+- Unmet: AC7–9, live AC11/24, capture observation AC25/26, final gate evidence/timing, and complete headless task evidence. AC1/2 additionally need a ruling: ingestion requires existing workspace `serde_json`, while AC1 says the four normal GUI dependencies are exact. Gate timing: 61 s warm baseline; post-Bevy timing was not observable and is not fabricated.
+
 ### File List
+
+- Cargo.toml; Cargo.lock; scripts/gate.sh
+- crates/gui/Cargo.toml; crates/gui/src/lib.rs; crates/gui/src/main.rs; crates/gui/src/ingest.rs; crates/gui/src/transform.rs; crates/gui/src/project.rs; crates/gui/src/camera.rs; crates/gui/src/capture.rs; crates/gui/tests/capture.rs
+- _bmad-output/implementation-artifacts/mutations/5-3-a-window-onto-the-valley.sh
+- _bmad-output/implementation-artifacts/deferred-work.md
+- _bmad-output/implementation-artifacts/5-3-a-window-onto-the-valley.md
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-11 | Story created. Environment premise corrected on the record: no devpod can open a window, and the image carries no graphics userspace at all (both measured), so the live half moves to `rebelspice` by Wolf's decision and Task 0 owns the runtime-library install. Bevy feature trim verified to compile (449 crates, exit 0) and default features verified to fail on `wayland-sys`. Bevy 0.19 API surface compile-checked. Terrain draw-set measured off a live snapshot: 53,365 exposed of 315,068 solid. Gate baseline recorded green at 61 s warm. |
+| 2026-08-11 | Implemented the headless GUI foundation and recorded mutation evidence; story remains in-progress for live/display work and outstanding evidence. |

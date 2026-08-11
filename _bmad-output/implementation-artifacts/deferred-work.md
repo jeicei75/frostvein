@@ -569,3 +569,8 @@ below as "what one layer found", not as "what is wrong with 3.3".
   putting the camp z on the wire (breaches AC12). **Revisit trigger: 5.4, the wow gate** — if that
   sign-off is ever taken through the TUI rather than the Bevy client, the default invocation shows
   none of what 5.4 is judging. Raised by the Feature Auditor and the Edge Case Hunter.
+
+## Deferred from: story 5.3
+
+- `Mirror::previous_entity()` remains without a live caller. AD-15 interpolation is deliberately
+  deferred to story 6.1; reconciliation lands in 5.3, but blending does not.
