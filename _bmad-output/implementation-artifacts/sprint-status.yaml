@@ -43,7 +43,9 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-11  # Story 5.2 done (4-layer review, no coverage holes, zero HIGH); next = create-story 5.3. Epic 5 in-progress.
+last_updated: 2026-08-11  # Story 5.3 in-progress (headless half delegated to Codex). Environment premise corrected on the
+                          # record: NO devpod can open a window and the image has no graphics userspace;
+                          # live half moves to rebelspice (Wolf, 2026-08-11). Bevy features trimmed.
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -127,7 +129,7 @@ development_status:
   # in production code — fallback ladder recorded in Epic 5 (force GL via WGPU_BACKEND,
   # then the spine's deferred native Windows build). Eight stories sit downstream.
   # Split line: envelope+lifecycle vs projection+instruments.
-  5-3-a-window-onto-the-valley: backlog
+  5-3-a-window-onto-the-valley: in-progress
   # WOW BEAT 1. Sign-off gate BOTH halves (UX-DR22): Wolf approves a "here is what you
   # will see" artifact BEFORE implementation starts, and the story is done only when he
   # has viewed the built result live against it. CANNOT BE CLOSED BY A DEV AGENT.
