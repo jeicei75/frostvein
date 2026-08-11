@@ -55,9 +55,13 @@ fn reconcile_from_mirror(
 }
 
 fn snapshot(tiles: Vec<Tile>, entities: Vec<Entity>) -> Snapshot {
+    snapshot_with_dims(Dims { x: 2, y: 1, z: 1 }, tiles, entities)
+}
+
+fn snapshot_with_dims(dims: Dims, tiles: Vec<Tile>, entities: Vec<Entity>) -> Snapshot {
     Snapshot {
         msg_type: MessageType::Snapshot,
-        dims: Dims { x: 2, y: 1, z: 1 },
+        dims,
         tiles,
         entities,
         designations: Vec::new(),
@@ -249,6 +253,44 @@ fn dirty_delta_reprojects_only_the_dirty_terrain_cube() {
     app.update();
 
     assert_eq!(projected_scene(&mut app), vec![unchanged]);
+}
+
+#[test]
+fn dirty_delta_reprojects_newly_exposed_neighbours() {
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 5, y: 5, z: 5 },
+        vec![Tile::Solid(Material::Ice); 125],
+        Vec::new(),
+    ));
+    app.update();
+    assert!(
+        !projected_scene(&mut app)
+            .iter()
+            .any(|(_, terrain, _)| *terrain == Some([2, 2, 1])),
+        "the interior neighbour is initially hidden"
+    );
+
+    app.world_mut()
+        .resource_mut::<TestMirror>()
+        .0
+        .apply_delta(delta(
+            vec![TileChange {
+                pos: [2, 2, 2],
+                tile: Tile::Empty,
+            }],
+            Vec::new(),
+        ));
+    app.update();
+
+    let terrain = projected_scene(&mut app)
+        .into_iter()
+        .filter_map(|(_, terrain, _)| terrain)
+        .collect::<Vec<_>>();
+    assert!(terrain.contains(&[2, 2, 1]));
+    assert_eq!(
+        terrain,
+        gui::project::terrain_positions(&app.world().resource::<TestMirror>().0)
+    );
 }
 
 #[test]

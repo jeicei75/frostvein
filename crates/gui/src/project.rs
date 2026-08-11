@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
     MeshMaterial3d, Query, ResMut, Resource, StandardMaterial, Transform, Without,
@@ -6,6 +8,15 @@ use client_core::Mirror;
 use protocol::{Dims, Tile};
 
 use crate::transform::world_to_render;
+
+const NEIGHBOURS: [[i32; 3]; 6] = [
+    [-1, 0, 0],
+    [1, 0, 0],
+    [0, -1, 0],
+    [0, 1, 0],
+    [0, 0, -1],
+    [0, 0, 1],
+];
 
 /// Identifies a simulation-owned render entity by its authoritative simulation id.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,14 +56,6 @@ pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
     if !matches!(mirror.tile(position), Some(Tile::Solid(_))) {
         return false;
     }
-    const NEIGHBOURS: [[i32; 3]; 6] = [
-        [-1, 0, 0],
-        [1, 0, 0],
-        [0, -1, 0],
-        [0, 1, 0],
-        [0, 0, -1],
-        [0, 0, 1],
-    ];
     NEIGHBOURS.into_iter().any(|delta| {
         let neighbour = [
             position[0] + delta[0],
@@ -91,15 +94,26 @@ pub fn reconcile(
             }
         }
     } else {
+        let mut affected = BTreeSet::new();
         for position in dirty_tiles {
-            for (entity, _) in terrain.iter().filter(|(_, tile)| tile.0 == *position) {
+            affected.insert(*position);
+            for delta in NEIGHBOURS {
+                affected.insert([
+                    position[0] + delta[0],
+                    position[1] + delta[1],
+                    position[2] + delta[2],
+                ]);
+            }
+        }
+        for position in affected {
+            for (entity, _) in terrain.iter().filter(|(_, tile)| tile.0 == position) {
                 commands.entity(entity).despawn();
             }
-            if is_exposed(mirror, *position) {
+            if is_exposed(mirror, position) {
                 commands.spawn((
-                    WorldProjected(terrain_id(*position, mirror.dims())),
-                    TerrainTile(*position),
-                    Transform::from_translation(world_to_render(*position)),
+                    WorldProjected(terrain_id(position, mirror.dims())),
+                    TerrainTile(position),
+                    Transform::from_translation(world_to_render(position)),
                 ));
             }
         }

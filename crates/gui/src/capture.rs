@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use bevy::{
     app::AppExit,
     ecs::message::MessageWriter,
-    prelude::{Commands, ResMut, Resource},
-    render::view::screenshot::{Screenshot, save_to_disk},
+    prelude::{Commands, On, ResMut, Resource},
+    render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
 };
 
 #[derive(Resource)]
@@ -27,13 +27,8 @@ impl CaptureState {
 }
 
 /// Captures from the primary window after the real render loop has advanced N frames.
-pub fn capture_after_frames(
-    mut commands: Commands,
-    mut capture: ResMut<CaptureState>,
-    mut exit: MessageWriter<AppExit>,
-) {
+pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureState>) {
     if capture.requested {
-        exit.write(AppExit::Success);
         return;
     }
     capture.elapsed += 1;
@@ -41,6 +36,11 @@ pub fn capture_after_frames(
         capture.requested = true;
         commands
             .spawn(Screenshot::primary_window())
-            .observe(save_to_disk(capture.path.clone()));
+            .observe(save_to_disk(capture.path.clone()))
+            .observe(exit_after_capture);
     }
+}
+
+fn exit_after_capture(_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>) {
+    exit.write(AppExit::Success);
 }

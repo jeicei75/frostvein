@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     io::{BufRead, BufReader, Read},
     net::TcpStream,
     path::PathBuf,
@@ -20,6 +21,7 @@ use bevy::{
         Camera3d, Commands, DefaultPlugins, KeyCode, Query, Res, ResMut, Resource, Transform,
         Without,
     },
+    render::renderer::RenderAdapterInfo,
 };
 use client_core::Mirror;
 use protocol::{Delta, Snapshot};
@@ -51,7 +53,7 @@ struct IngestReceiver(Mutex<Receiver<anyhow::Result<WireMessage>>>);
 #[derive(Resource, Default)]
 struct ProjectionWork {
     snapshot: bool,
-    dirty: bool,
+    dirty_tiles: BTreeSet<[i32; 3]>,
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -65,10 +67,6 @@ pub fn run() -> anyhow::Result<()> {
     let mut reader = BufReader::new(stream);
     let mirror = Mirror::from_snapshot(read_snapshot(&mut reader)?)
         .context("could not build client mirror")?;
-    reader
-        .get_mut()
-        .set_read_timeout(None)
-        .context("could not clear snapshot timeout")?;
     let (sender, receiver) = mpsc::sync_channel(MESSAGE_QUEUE);
     thread::Builder::new()
         .name("server-read".to_string())
@@ -88,9 +86,12 @@ pub fn run() -> anyhow::Result<()> {
         .insert_resource(IngestReceiver(Mutex::new(receiver)))
         .insert_resource(ProjectionWork {
             snapshot: true,
-            dirty: false,
+            dirty_tiles: BTreeSet::new(),
         })
-        .add_systems(Startup, (setup_camera, setup_projection_assets))
+        .add_systems(
+            Startup,
+            (setup_camera, setup_projection_assets, log_adapter),
+        )
         .add_systems(
             Update,
             (
@@ -156,6 +157,17 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn((Camera3d::default(), rig.transform(), rig, ClientLocal));
 }
 
+fn log_adapter(adapter: Option<Res<RenderAdapterInfo>>) {
+    if let Some(adapter) = adapter {
+        println!(
+            "backend={:?} adapter={:?} device_type={:?} driver={:?} driver_info={:?}",
+            adapter.backend, adapter.name, adapter.device_type, adapter.driver, adapter.driver_info
+        );
+    } else {
+        eprintln!("renderer adapter information is unavailable");
+    }
+}
+
 fn camera_controls(
     keys: Res<ButtonInput<KeyCode>>,
     mut cameras: Query<(&mut CameraRig, &mut Transform)>,
@@ -193,11 +205,13 @@ fn ingest_messages(
             Ok(Ok(WireMessage::Snapshot(snapshot))) => {
                 if mirror.0.apply_snapshot(*snapshot).is_ok() {
                     work.snapshot = true;
+                    work.dirty_tiles.clear();
                 }
             }
             Ok(Ok(WireMessage::Delta(delta))) => {
                 mirror.0.apply_delta(*delta);
-                work.dirty = !mirror.0.changes().tiles.is_empty();
+                work.dirty_tiles
+                    .extend(mirror.0.changes().tiles.iter().copied());
             }
             Ok(Err(error)) => eprintln!("server reader stopped: {error:#}"),
             Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
@@ -214,17 +228,14 @@ fn reconcile_projection(
     assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild = std::mem::take(&mut work.snapshot);
-    let dirty = std::mem::take(&mut work.dirty);
-    let changes: &[[i32; 3]] = if dirty {
-        &mirror.0.changes().tiles
-    } else {
-        &[]
-    };
+    let changes = std::mem::take(&mut work.dirty_tiles)
+        .into_iter()
+        .collect::<Vec<_>>();
     reconcile(
         &mut commands,
         &mirror.0,
         rebuild,
-        changes,
+        &changes,
         &projected,
         &terrain,
         assets.as_deref(),
@@ -287,9 +298,19 @@ fn read_messages(
 
 #[cfg(test)]
 mod tests {
-    use bevy::{app::App, dev_tools::fps_overlay::FpsOverlayConfig};
+    use std::sync::{Mutex, mpsc};
 
-    use super::force_capture_overlay_off;
+    use bevy::{
+        app::{App, Update},
+        dev_tools::fps_overlay::FpsOverlayConfig,
+    };
+    use client_core::Mirror;
+    use protocol::{Delta, Dims, MessageType, Snapshot, Speed, Tile, TileChange};
+
+    use super::{
+        IngestReceiver, MirrorResource, ProjectionWork, WireMessage, force_capture_overlay_off,
+        ingest_messages,
+    };
 
     #[test]
     fn capture_forces_the_frame_time_overlay_off() {
@@ -302,5 +323,51 @@ mod tests {
         force_capture_overlay_off(&mut app);
 
         assert!(!app.world().resource::<FpsOverlayConfig>().enabled);
+    }
+
+    #[test]
+    fn ingestion_accumulates_dirty_tiles_from_queued_deltas() {
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Empty, Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        let (sender, receiver) = mpsc::sync_channel(2);
+        for position in [[0, 0, 0], [1, 0, 0]] {
+            sender
+                .send(Ok(WireMessage::Delta(Box::new(Delta {
+                    msg_type: MessageType::Delta,
+                    tick: 1,
+                    tiles: vec![TileChange {
+                        pos: position,
+                        tile: Tile::Solid(protocol::Material::Ice),
+                    }],
+                    entities: Vec::new(),
+                    designations: Vec::new(),
+                    zones: Vec::new(),
+                    items: Vec::new(),
+                    speed: Speed::Normal,
+                }))))
+                .unwrap();
+        }
+        let mut app = App::new();
+        app.insert_resource(MirrorResource(mirror))
+            .insert_resource(IngestReceiver(Mutex::new(receiver)))
+            .init_resource::<ProjectionWork>()
+            .add_systems(Update, ingest_messages);
+
+        app.update();
+
+        assert_eq!(
+            app.world().resource::<ProjectionWork>().dirty_tiles,
+            [[0, 0, 0], [1, 0, 0]].into_iter().collect()
+        );
     }
 }
