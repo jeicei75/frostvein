@@ -528,7 +528,7 @@ GPT-5.6 Codex
 
 - `cargo test -p gui --offline --lib -- --nocapture`: 7 passed.
 - `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/5-3-a-window-onto-the-valley.sh`: all five mutations killed.
-- `scripts/gate.sh` was invoked headlessly; the relay truncated after successful fmt/clippy lines while cargo test ran, so its final green line was not observed.
+- `scripts/gate.sh` passed in the pre-commit hook for `b2dbcb8`; the relay truncated its final output while cargo test ran, but the successful commit independently confirms the green exit.
 
 ### Completion Notes List
 
@@ -536,7 +536,7 @@ GPT-5.6 Codex
 - AC17 RED: `thread 'project::tests::snapshot_rebuild_projects_terrain_even_when_the_mirror_reports_no_changes' (577) panicked at crates/gui/src/project.rs:255:9: assertion failed: snapshot_needs_full_rebuild(true)`; `test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s`.
 - AC27 RED: all mutations killed. Representative failures: `assertion \`left == right\` failed` (handedness), `assertion failed: marker_matches_id(WorldProjected(42), 42)` (sim Id), and `assertion \`left == right\` failed` (pitch clamp).
 - Gate-excluded capture invocation: `FROSTVEIN_CAPTURE_FIRST=/tmp/first.png FROSTVEIN_CAPTURE_SECOND=/tmp/second.png cargo test -p gui --test capture -- --ignored --nocapture`. It was not run: no display/GPU.
-- Unmet: AC7–9, live AC11/24, capture observation AC25/26, final gate evidence/timing, and complete headless task evidence. AC1/2 additionally need a ruling: ingestion requires existing workspace `serde_json`, while AC1 says the four normal GUI dependencies are exact. Gate timing: 61 s warm baseline; post-Bevy timing was not observable and is not fabricated.
+- Unmet: AC7–9, live AC11/24, capture observation AC25/26, post-Bevy gate timing, and complete headless task evidence. AC1/2 additionally need a ruling: ingestion requires existing workspace `serde_json`, while AC1 says the four normal GUI dependencies are exact. Gate timing: 61 s warm baseline; post-Bevy timing was not observable and is not fabricated.
 
 ### File List
 
