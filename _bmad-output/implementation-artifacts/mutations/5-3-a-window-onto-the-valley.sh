@@ -1,12 +1,12 @@
 # Mutation set for story 5.3. Run alone: scripts/mutate.sh \
 #   _bmad-output/implementation-artifacts/mutations/5-3-a-window-onto-the-valley.sh
 
-mutation "snapshot rebuild is disabled" gui snapshot_rebuild_projects_terrain_even_when_the_mirror_reports_no_changes <<'PY'
+mutation "snapshot rebuild is disabled" gui snapshot_rebuild_reaches_reconcile_even_when_changes_are_empty <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = 'fn snapshot_needs_full_rebuild(rebuild_terrain: bool) -> bool {\n    rebuild_terrain\n}\n'
+old = '    if rebuild_terrain {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'fn snapshot_needs_full_rebuild(_rebuild_terrain: bool) -> bool {\n    false\n}\n'))
+p.write_text(s.replace(old, '    if false {\n'))
 PY
 
 mutation "exposed terrain returns every solid tile" gui exposed_predicate_keeps_boundary_solids_but_hides_fully_enclosed_ones <<'PY'
@@ -25,12 +25,12 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    Vec3::new(x as f32, z as f32, y as f32)\n'))
 PY
 
-mutation "reconciliation ignores the simulation id" gui reconciliation_identity_is_the_simulation_id <<'PY'
+mutation "reconciliation ignores the simulation id" gui terrain_ids_never_satisfy_a_simulation_id_lookup <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    marker.0 == id\n'
+old = 'if let Some((bevy_entity, _)) = projected.iter().find(|(_, marker)| marker.0 == id) {'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    marker.0 == 0\n'))
+p.write_text(s.replace(old, 'if let Some((bevy_entity, _)) = projected.iter().find(|(_, marker)| marker.0 == 0) {'))
 PY
 
 mutation "camera pitch clamp is removed" gui orbit_reaches_every_yaw_and_clamps_pitch <<'PY'

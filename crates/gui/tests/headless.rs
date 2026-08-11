@@ -141,9 +141,16 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         state: JobState::Idle,
         light: None,
     };
+    let dwarf_one = Entity {
+        id: 1,
+        kind: EntityKind::Dwarf,
+        pos: [0, 0, 0],
+        state: JobState::Idle,
+        light: None,
+    };
     let mut app = headless_app(snapshot(
         vec![Tile::Solid(Material::Ice), Tile::Empty],
-        vec![dwarf_zero],
+        vec![dwarf_zero, dwarf_one],
     ));
 
     app.update();
@@ -162,6 +169,7 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
 
     let mut terrain_at_origin = 0;
     let mut dwarf_at_position = 0;
+    let mut second_dwarf_at_position = 0;
     let mut query = app
         .world_mut()
         .query::<(&WorldProjected, Option<&TerrainTile>, &Transform)>();
@@ -173,6 +181,10 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         {
             dwarf_at_position += 1;
         }
+        if terrain.is_none() && marker.0 == 1 && transform.translation == world_to_render([0, 0, 0])
+        {
+            second_dwarf_at_position += 1;
+        }
     }
     assert_eq!(
         terrain_at_origin, 1,
@@ -181,6 +193,10 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
     assert_eq!(
         dwarf_at_position, 1,
         "dwarf 0 needs its own projected entity"
+    );
+    assert_eq!(
+        second_dwarf_at_position, 1,
+        "dwarf 1 must remain keyed by its own simulation id"
     );
 }
 
