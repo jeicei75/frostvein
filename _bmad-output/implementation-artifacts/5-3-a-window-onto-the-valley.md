@@ -52,8 +52,20 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
 ### The crate and the graph
 
 1. `crates/gui` exists as a workspace-member binary whose **normal** dependencies are exactly
-   `protocol`, `client-core`, `anyhow` and `bevy`. It carries `#![forbid(unsafe_code)]` and has
-   no `sim-core` edge.
+   `protocol`, `client-core`, `anyhow`, `bevy` and `serde_json`. It carries
+   `#![forbid(unsafe_code)]` and has no `sim-core` edge.
+
+   > **AMENDED 2026-08-11 — Wolf's ruling, taken at dev rather than at review.** The original
+   > list named four and was **unmeetable alongside this story's own guardrails**: decoding the
+   > NDJSON wire needs `serde_json`, while *"no change to `protocol`"* and *"no change to
+   > `client-core`'s API"* close both alternative homes for the decode — and giving
+   > `client-core` an I/O edge would breach AD-13 outright. Raised by the dev agent instead of
+   > being quietly resolved, which is the behaviour the guardrails are meant to produce.
+   > **The one-sentence justification the closed-stack rule requires:** `serde_json` is already
+   > a workspace dependency carried by **both** `tui` and `client-core` for exactly this
+   > purpose, so `gui` carrying it follows the sibling client's precedent rather than opening
+   > the stack. This is the 5th instance of the *AC-unmeetable-as-written* class; unlike the
+   > previous four it was caught at dev rather than at review.
 2. The workspace dependency graph is exactly the M2 closed set, read off the six `Cargo.toml`
    files: `simd → sim-core`, `simd → protocol`, `client-core → protocol`, `tui → protocol`,
    `tui → client-core`, `gui → protocol`, `gui → client-core`. No other edge exists.
@@ -552,3 +564,5 @@ GPT-5.6 Codex
 | --- | --- |
 | 2026-08-11 | Story created. Environment premise corrected on the record: no devpod can open a window, and the image carries no graphics userspace at all (both measured), so the live half moves to `rebelspice` by Wolf's decision and Task 0 owns the runtime-library install. Bevy feature trim verified to compile (449 crates, exit 0) and default features verified to fail on `wayland-sys`. Bevy 0.19 API surface compile-checked. Terrain draw-set measured off a live snapshot: 53,365 exposed of 315,068 solid. Gate baseline recorded green at 61 s warm. |
 | 2026-08-11 | Implemented the headless GUI foundation and recorded mutation evidence; story remains in-progress for live/display work and outstanding evidence. |
+| 2026-08-11 | **AC1 AMENDED on Wolf's ruling** — five normal dependencies, adding `serde_json`. The four-dep list was unmeetable alongside the story's own "no change to `protocol` / `client-core`" guardrails; `tui` and `client-core` already carry `serde_json` for the same decode. 5th instance of the AC-unmeetable-as-written class, and the first caught at dev rather than at review. |
+| 2026-08-11 | Orchestrator verification of the first dev pass: gate independently re-run GREEN (62 s **warm**, so the spine's cold-build trigger is still unarmed and the figure is not yet the answer). Three gaps recorded for the continuation pass: (a) AC17/AC14's evidence rests on identity-function wrappers (`snapshot_needs_full_rebuild`, `marker_matches_id`) that no test reaches through `reconcile`, so a `changes()`-driven reconciler would still pass; (b) terrain ids and sim entity ids share one `WorldProjected` space — `terrain_id([0,0,0]) == 0` collides with dwarf id 0 and the entity-reconcile `find` does not exclude terrain; (c) `crates/gui/tests/headless.rs` was never created, so AC12/15/16/18 and Task 2's AD-14 negative have no coverage. |
