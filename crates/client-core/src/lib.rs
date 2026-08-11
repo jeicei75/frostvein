@@ -167,14 +167,14 @@ impl Mirror {
         }
     }
 
+    // NOTE: compared as u32 rather than casting dims to i32 — the dims come from the
+    // wire, and an axis at or beyond 2^31 casts to a negative i32, which makes every
+    // coordinate compare in-bounds-negative and silently reads back as absent.
     fn tile_index(&self, [x, y, z]: [i32; 3]) -> Option<usize> {
-        if x < 0
-            || y < 0
-            || z < 0
-            || x >= self.dims.x as i32
-            || y >= self.dims.y as i32
-            || z >= self.dims.z as i32
-        {
+        let x = u32::try_from(x).ok()?;
+        let y = u32::try_from(y).ok()?;
+        let z = u32::try_from(z).ok()?;
+        if x >= self.dims.x || y >= self.dims.y || z >= self.dims.z {
             return None;
         }
         Some(
@@ -383,6 +383,24 @@ mod tests {
         mirror.apply_snapshot(snapshot()).unwrap();
         assert!(mirror.previous_entity(7).is_none());
         assert!(mirror.previous_entity(2).is_none());
+    }
+
+    #[test]
+    fn tile_lookup_rejects_negative_and_out_of_range_coordinates() {
+        let mirror = Mirror::from_snapshot(snapshot()).unwrap();
+
+        assert_eq!(mirror.tile([0, 0, 0]), Some(Tile::Empty));
+        assert_eq!(mirror.tile([1, 0, 0]), Some(Tile::Solid(Material::Ice)));
+        for outside in [
+            [-1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1],
+            [2, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+        ] {
+            assert_eq!(mirror.tile(outside), None, "{outside:?} must be outside");
+        }
     }
 
     #[test]
