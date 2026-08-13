@@ -9,12 +9,27 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    if false {\n'))
 PY
 
+# NOTE: this sabotage must COMPILE. Its first version deleted the `if !solid { return false }`
+# guard and left a bare `matches!(...)` expression mid-function, which is a syntax error
+# (`expected `;`, found `NEIGHBOURS``). mutate.sh reports any non-zero cargo exit as KILLED, so a
+# non-compiling mutation prints no assertion and still reads as a kill — the table claimed five
+# kills while pinning four. Found by the orchestrator re-running the table at verification
+# (2026-08-13). Keep the neighbour scan's removal, not the guard's: this must change BEHAVIOUR
+# (every solid tile reads as exposed, 315,068 cubes instead of 53,365), which is what AC13 pins.
 mutation "exposed terrain returns every solid tile" gui exposed_predicate_keeps_boundary_solids_but_hides_fully_enclosed_ones <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    if !matches!(mirror.tile(position), Some(Tile::Solid(_))) {\n        return false;\n    }\n'
+old = """    NEIGHBOURS.into_iter().any(|delta| {
+        let neighbour = [
+            position[0] + delta[0],
+            position[1] + delta[1],
+            position[2] + delta[2],
+        ];
+        !matches!(mirror.tile(neighbour), Some(Tile::Solid(_)))
+    })
+"""
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    matches!(mirror.tile(position), Some(Tile::Solid(_)))\n'))
+p.write_text(s.replace(old, '    true\n'))
 PY
 
 mutation "world transform flips handedness" gui coordinate_transform_preserves_the_pinned_handedness <<'PY'
