@@ -59,7 +59,21 @@ mutation() {
   restore_all
 
   NAMES+=("$name")
-  if [ "$rc" -ne 0 ]; then
+  # A non-zero cargo exit is NOT enough to call a mutation killed: a sabotage that does not
+  # COMPILE also exits non-zero, and it proves nothing about whether any test detects the
+  # behaviour change. Story 5.3 shipped exactly that — its exposed-tile mutation deleted a
+  # guard and left a bare `matches!(...)` mid-function (`expected ';', found 'NEIGHBOURS'`),
+  # so the table claimed five kills while pinning four, and the unpinned one was AC13's
+  # 53,365-vs-315,068-cube predicate. It printed no assertion, and a KILLED row's body is not
+  # something anyone reads. Second false-green of this class in this script; see the
+  # empty-table guard below for the first. A non-compiling mutation is a SURVIVOR: rewrite it
+  # so it compiles and changes behaviour.
+  if printf '%s' "$out" | rg -qN 'could not compile'; then
+    RESULTS+=("NO-COMPILE")
+    survivors=$((survivors + 1))
+    echo "  mutation does NOT COMPILE — proves nothing, treating as a survivor"
+    printf '%s\n' "$out" | rg -N '^error(\[|:)' | head -3
+  elif [ "$rc" -ne 0 ]; then
     RESULTS+=("KILLED")
     printf '%s\n' "$out" | rg -N 'panicked at|assertion|test result: FAILED' | head -4
   else
@@ -88,7 +102,8 @@ for i in "${!NAMES[@]}"; do
 done
 
 if [ "$survivors" -ne 0 ]; then
-  printf '\n%d mutation(s) SURVIVED — those tests are not pinning what they claim.\n' "$survivors"
+  printf '\n%d mutation(s) did not KILL. SURVIVED = the test is not pinning what it claims.\n' "$survivors"
+  printf 'NO-COMPILE / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.\n'
   exit 1
 fi
 printf '\nAll mutations killed.\n'
