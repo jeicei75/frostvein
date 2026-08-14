@@ -571,6 +571,66 @@ GPT-5.6 Codex
 - **The fix was sabotage-verified rather than believed**, per the standing rule that a green check is not evidence. Feeding the tool the OLD 5.3 mutation verbatim now yields `mutation does NOT COMPILE — proves nothing, treating as a survivor`, a `NO-COMPILE` row, and **exit 1** where it previously printed `KILLED` / `All mutations killed.` / exit 0. Re-running the real 5.3 table confirms no regression: all five still `KILLED`, exit 0.
 - **The other nine mutation tables are NOT audited** — Wolf's explicit scope call. They are no longer *silently* at risk though: any vacuous kill in them now surfaces as `NO-COMPILE` the next time that table is run, so the audit happens for free at each story's next mutation run rather than needing a sweep. **If an already-merged story's table reports `NO-COMPILE`, that is a real coverage hole in a shipped story and needs its own decision, not a quiet mutation rewrite.**
 
+### The gingerspice envelope investigation (2026-08-14) — AC9 walked to the end
+
+**Outcome up front: the envelope does NOT hold on gingerspice, on any backend, with stock or
+self-built drivers, and no workaround entered production code.** The live half proceeds on
+`rebelspice` per Wolf's standing 2026-08-11 decision. Everything below is from running binaries
+and package lists, not inference.
+
+**Environment achieved first (Task 0 material, all proven working):** `--device=/dev/dxg`
+passthrough, `/usr/lib/wsl/lib` + WSLg mounts, X11 via XWayland, and runtime graphics userspace
+installed in-container. A Podman rootless quirk blocked `RUN` steps in the Dockerfile
+(`unknown user error looking up user "root"`, subuid mapping — permanent fix is
+`podman system migrate`, not yet applied), so provisioning was done inside the running container.
+`glxinfo -B` with `MESA_LOADER_DRIVER_OVERRIDE=d3d12`: `Device: D3D12 (NVIDIA GeForce RTX 4080
+Laptop GPU)`, `Accelerated: yes` — the GPU is reachable from the container.
+
+**Rung GL (`WGPU_BACKEND=gl`):** first blocked because the binary contained no GL backend at all
+— `wgpu-hal` built `[dx12, vulkan]` only, since the `bevy` facade does not re-export a native
+`gles` feature (only wasm `webgl2`). Fixed by declaring `bevy_render = { features = ["gles"] }`
+(commit `79c212e`, AC1/AC5 amendment). With the backend present:
+`backend=Gl adapter="D3D12 (NVIDIA GeForce RTX 4080 Laptop GPU)" device_type=Other
+driver_info="4.6 (Core Profile) Mesa 25.0.7-2+deb13u1"` — hardware context live, window opened —
+then `panicked at bevy_render-0.19.0/src/view/window/mod.rs:502: Fallback system failed to
+choose present mode. This is a bug. Mode: Fifo, Options: []`. Mechanism read from source, not
+guessed: WSL2 kernel 6.18 exposes no `/dev/dri` (host verified), so no DRI3; Mesa EGL-X11 falls
+back to its software-presentation path whose configs report `NATIVE_RENDERABLE=FALSE`; wgpu-hal
+grades EGL configs in tiers (`egl.rs choose_config`) and on Linux requires tier 2
+(native-render) before marking a surface presentable (`tier_threshold = 2`); a non-presentable
+surface returns `None` capabilities (`adapter.rs:1247`), wgpu hands Bevy empty caps, Bevy hits
+`unreachable!`. **GL on WSLg-without-DRM is refused by wgpu policy; no container or distro
+change can fix a missing kernel device node.**
+
+**Rung Vulkan:** no hardware ICD exists on any relevant stock distro — verified: Debian 13
+container ICD dir (live), Fedora 43 host (live, no ICDs at all), Ubuntu 24.04 and 25.10
+`mesa-vulkan-drivers` package file lists (no dzn); Dozen sits behind Mesa's
+`-Dvulkan-drivers=microsoft-experimental`, which no mainstream distro enables. Dozen was then
+**built from source** (branch 25.0, later `main` @ `git-06962badb1`, 2026-08-14) — legitimate
+environment provisioning, not a production workaround. Results: `vulkaninfo` enumerates
+`Microsoft Direct3D12 (NVIDIA GeForce RTX 4080 Laptop GPU)`, `DRIVER_ID_MESA_DOZEN`,
+`apiVersion 1.2.305`, `conformanceVersion 0.0.0.0` (isolate with `VK_ICD_FILENAMES` — loading
+all ICDs together segfaults vulkaninfo). wgpu hides conformance-major-0 drivers
+(`wgpu-hal vulkan/adapter.rs:2190`: `Adapter is not Vulkan compliant, hiding adapter`); its
+documented testing escape `WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1` (honored because Bevy
+calls `InstanceFlags::with_env()`) exposes it. Then: **`vkcube` presents and spins** (simple
+workload fine), and `gui` prints `backend=Vulkan adapter="Microsoft Direct3D12 (NVIDIA GeForce
+RTX 4080 Laptop GPU)" device_type=DiscreteGpu driver="Dozen"`, opens a window, renders ~3 s —
+and dies on the first full-world frames: `ERROR bevy_render::error_handler: Caught DeviceLost
+error: Unknown Out of memory`. Identical on Dozen 25.0.7 and Dozen 26.3.0-devel.
+`nvidia-smi` watched during the run: ~2.7 GiB / 12 GiB total, `gui` adding ~100 MiB — **VRAM
+flat, so the "Out of memory" is Dozen misreporting an internal failure under the 53,365-cube +
+GPU-preprocessing workload, not real exhaustion.**
+
+**Why we stopped here:** the remaining lever is forcing downlevel limits in `gui` to dodge the
+driver bug — a production-code workaround for a non-conformant driver, exactly what AC9 bans.
+AC8's required observation exists twice over (GL and Vulkan adapter lines above, both from the
+running binary, machine: gingerspice WSLg devpod). AC7 ("renders continuously") is NOT met on
+gingerspice and is not claimed. **Consequence for the Epic 5 retro, stated once:** NFR6's bar is
+defined against this machine, and this machine cannot currently run a hardware wgpu client on
+any stock-or-buildable path; the spine's fallback ladder already names the remaining route
+(native Windows build, deferred). AC24's WSLg figure stays owed with that context attached.
+
 ### File List
 
 - Cargo.toml; Cargo.lock; scripts/gate.sh
@@ -593,4 +653,5 @@ GPT-5.6 Codex
 | 2026-08-11 | Self-gate pass 3 caught zero-frame capture acceptance and unclassified FPS-overlay entities. Both were fixed and test-covered; the three-pass review cap prevents a fourth pass. |
 | 2026-08-13 | Orchestrator re-verification, independent of the dev run: gate GREEN 63.16 s warm, all twelve files present, all commits `Völundr` and per-task, display absence re-measured. **AC27 was falsely green** — the `exposed terrain returns every solid tile` mutation killed by SYNTAX ERROR (`expected ';', found 'NEIGHBOURS'`), and `mutate.sh` counted any non-zero cargo exit as KILLED, so the table claimed five kills while pinning four. Rewritten to remove the neighbour scan rather than the guard; it now dies on `assertion failed: !is_exposed(&enclosed, [1, 1, 1])`. Coverage was checked separately and was already sound, so no test was added or changed. Story stays **in-progress**: Tasks 0 and 8 need a display and are blocked on the `rebelspice` bring-up. |
 | 2026-08-13 | **Task 0's target reconsidered on evidence.** Wolf noted gingerspice was updated and restarted mid-story; measured, the restart landed 2026-08-12 09:09 (after every dev commit) and changed nothing. The cause is a **devcontainer config gap, not host capability**: neither devcontainer.json requests `/dev/dxg`, `/mnt/wslg` or `DISPLAY`, and the Dockerfile is a bare `debian-13` base, so the graphics userspace was never installed and the device nodes were never passed through. gingerspice therefore reopens as the **preferred** Task 0 target, because NFR6's bar is defined against the WSLg + RTX 4080 devpod — it would measure the real bar and close AC24's owed WSLg figure inside 5.3, where rebelspice proves only the envelope. Wolf is testing on gingerspice later today. |
+| 2026-08-14 | **The gingerspice envelope investigation, run live by Wolf with the orchestrator diagnosing.** Devcontainer passthrough proven (`/dev/dxg`, WSLg mounts, X11, hardware GL context via d3d12 gallium). Found and fixed: `gui` contained no GL backend (`bevy` re-exports no native `gles` feature; `bevy_render = { features = ["gles"] }` added, commit `79c212e`, amending AC1 to six deps). GL rung then failed on wgpu's tier-2 presentability policy (no `/dev/dri` on WSL2 → no DRI3 → `NATIVE_RENDERABLE=FALSE` configs → empty present modes → Bevy `unreachable!`). Vulkan rung: Dozen shipped by no distro (Debian/Ubuntu/Fedora verified); built from source twice (25.0.7 and 26.3.0-devel); `vkcube` presents, `gui` renders ~3 s then `DeviceLost: Unknown Out of memory` with VRAM flat — a Dozen defect under the full-world workload, identical on both builds. **AC9 honored: investigation stopped where the next lever would have been a production-code workaround.** AC8's backend/adapter observations recorded from the running binary on both backends. Envelope verdict: does not hold on gingerspice; live half proceeds on rebelspice per the 2026-08-11 decision; NFR6-bar contradiction referred to the Epic 5 retro. Full detail in Dev Agent Record. |
 | 2026-08-13 | **`scripts/mutate.sh` fixed on Wolf's ruling** — a non-compiling sabotage now reports `NO-COMPILE`, counts as a survivor, prints the compile errors and fails the run, instead of reading as a kill. Sabotage-verified: the old 5.3 mutation fed back verbatim now yields `NO-COMPILE` and exit 1 where it previously yielded `All mutations killed.` and exit 0; the real 5.3 table still reports five KILLED at exit 0, so no regression. Second false-green of this class in that script. The other nine tables are deliberately not swept — the class now surfaces on each table's next run. |
