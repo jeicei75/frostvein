@@ -215,24 +215,6 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
 }
 
 #[test]
-fn recorded_wire_data_only_mutates_the_mirror_until_reconciliation_runs() {
-    let snapshot: Snapshot = serde_json::from_str(
-        r#"{
-            "type":"snapshot", "dims":{"x":2,"y":1,"z":1},
-            "tiles":[{"solid":"ice"},"empty"],
-            "entities":[{"id":7,"kind":"dwarf","pos":[1,0,0],"state":"idle","light":null}],
-            "designations":[], "zones":[], "items":[], "speed":"normal", "tick":4
-        }"#,
-    )
-    .unwrap();
-    let mut app = headless_app(snapshot);
-
-    assert_eq!(projected_scene(&mut app).len(), 0);
-    app.update();
-    assert_eq!(projected_scene(&mut app).len(), 2);
-}
-
-#[test]
 fn dirty_delta_reprojects_only_the_dirty_terrain_cube() {
     let mut app = headless_app(snapshot(
         vec![Tile::Solid(Material::Ice), Tile::Solid(Material::Ice)],

@@ -14,9 +14,10 @@ use std::{
 
 use anyhow::{Context, bail};
 use bevy::{
-    app::{App, Startup, Update},
+    app::{App, AppExit, Startup, Update},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
+    ecs::message::MessageWriter,
     input::ButtonInput,
     prelude::{
         Camera3d, Commands, DefaultPlugins, KeyCode, Query, Res, ResMut, Resource, Transform,
@@ -214,6 +215,7 @@ fn ingest_messages(
     receiver: Res<IngestReceiver>,
     mut mirror: ResMut<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     loop {
         match receiver
@@ -222,19 +224,33 @@ fn ingest_messages(
             .expect("ingest receiver mutex poisoned")
             .try_recv()
         {
-            Ok(Ok(WireMessage::Snapshot(snapshot))) => {
-                if mirror.0.apply_snapshot(*snapshot).is_ok() {
+            Ok(Ok(WireMessage::Snapshot(snapshot))) => match mirror.0.apply_snapshot(*snapshot) {
+                Ok(()) => {
                     work.snapshot = true;
                     work.dirty_tiles.clear();
                 }
-            }
+                Err(error) => {
+                    // A frozen window with no diagnostic is worse than a loud exit; the
+                    // sibling client bails on this same condition.
+                    eprintln!("could not apply server snapshot: {error}");
+                    exit.write(AppExit::error());
+                }
+            },
             Ok(Ok(WireMessage::Delta(delta))) => {
                 mirror.0.apply_delta(*delta);
                 work.dirty_tiles
                     .extend(mirror.0.changes().tiles.iter().copied());
             }
-            Ok(Err(error)) => eprintln!("server reader stopped: {error:#}"),
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
+            Ok(Err(error)) => {
+                eprintln!("server reader stopped: {error:#}");
+                exit.write(AppExit::error());
+            }
+            Err(TryRecvError::Disconnected) => {
+                eprintln!("server connection lost");
+                exit.write(AppExit::error());
+                break;
+            }
+            Err(TryRecvError::Empty) => break,
         }
     }
 }
@@ -433,5 +449,118 @@ mod tests {
             app.world().resource::<ProjectionWork>().dirty_tiles,
             [[0, 0, 0], [1, 0, 0]].into_iter().collect()
         );
+    }
+
+    #[test]
+    fn a_wire_snapshot_arms_the_full_rebuild_and_drops_stale_dirty_tiles() {
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Empty, Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        sender
+            .send(Ok(WireMessage::Snapshot(Box::new(Snapshot {
+                msg_type: MessageType::Snapshot,
+                dims: Dims { x: 2, y: 1, z: 1 },
+                tiles: vec![Tile::Solid(protocol::Material::Ice), Tile::Empty],
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Normal,
+                tick: 2,
+            }))))
+            .unwrap();
+        let mut app = App::new();
+        app.insert_resource(MirrorResource(mirror))
+            .insert_resource(IngestReceiver(Mutex::new(receiver)))
+            .insert_resource(ProjectionWork {
+                snapshot: false,
+                dirty_tiles: [[1, 0, 0]].into_iter().collect(),
+            })
+            .add_systems(Update, ingest_messages);
+
+        app.update();
+
+        let work = app.world().resource::<ProjectionWork>();
+        assert!(
+            work.snapshot,
+            "a wire snapshot must arm the full terrain rebuild"
+        );
+        assert!(
+            work.dirty_tiles.is_empty(),
+            "stale dirty tiles must not survive a snapshot"
+        );
+        assert_eq!(app.world().resource::<MirrorResource>().0.tick(), 2);
+    }
+
+    #[test]
+    fn recorded_wire_data_mutates_only_the_mirror() {
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Empty, Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        let (sender, receiver) = mpsc::sync_channel(2);
+        let mut app = App::new();
+        app.insert_resource(MirrorResource(mirror))
+            .insert_resource(IngestReceiver(Mutex::new(receiver)))
+            .init_resource::<ProjectionWork>()
+            .add_systems(Update, ingest_messages);
+        // Settle schedule and system entities before ingesting anything.
+        app.update();
+        let baseline = app.world().entities().len();
+
+        let recorded: Snapshot = serde_json::from_str(
+            r#"{
+                "type":"snapshot", "dims":{"x":2,"y":1,"z":1},
+                "tiles":[{"solid":"ice"},"empty"],
+                "entities":[{"id":7,"kind":"dwarf","pos":[1,0,0],"state":"idle","light":null}],
+                "designations":[], "zones":[], "items":[], "speed":"normal", "tick":4
+            }"#,
+        )
+        .unwrap();
+        let recorded_delta: Delta = serde_json::from_str(
+            r#"{
+                "type":"delta", "tick":5,
+                "tiles":[{"pos":[0,0,0],"tile":{"solid":"ice"}}],
+                "entities":[], "designations":[], "zones":[], "items":[], "speed":"normal"
+            }"#,
+        )
+        .unwrap();
+        sender
+            .send(Ok(WireMessage::Snapshot(Box::new(recorded))))
+            .unwrap();
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(recorded_delta))))
+            .unwrap();
+        app.update();
+
+        assert_eq!(
+            app.world().entities().len(),
+            baseline,
+            "ingestion must never spawn or despawn a Bevy entity"
+        );
+        assert_eq!(
+            app.world().resource::<MirrorResource>().0.tick(),
+            5,
+            "the mirror must have consumed the recorded wire data"
+        );
+        assert!(app.world().resource::<ProjectionWork>().snapshot);
     }
 }

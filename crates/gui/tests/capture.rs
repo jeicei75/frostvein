@@ -2,17 +2,29 @@
 
 use std::{env, fs, path::Path};
 
+/// Counts pixels differing from the image's dominant colour. Bevy's clear colour is a
+/// grey, not black, so "not pure black" would pass an empty scene; the dominant colour
+/// is the background whatever the renderer painted it.
 fn non_background_pixels(path: &Path) -> usize {
-    image::open(path)
+    let image = image::open(path)
         .expect("capture must be a decodable PNG")
-        .to_rgba8()
-        .pixels()
-        .filter(|pixel| pixel.0 != [0, 0, 0, 255])
-        .count()
+        .to_rgba8();
+    let mut counts = std::collections::HashMap::new();
+    for pixel in image.pixels() {
+        *counts.entry(pixel.0).or_insert(0usize) += 1;
+    }
+    let background = counts
+        .into_iter()
+        .max_by_key(|(_, count)| *count)
+        .map(|(pixel, _)| pixel)
+        .expect("capture must contain pixels");
+    image.pixels().filter(|pixel| pixel.0 != background).count()
 }
 
-/// Requires the rebelspice display/daemon harness. The harness sets the two paths
-/// after capturing different daemon ticks with `gui --capture PATH --frames 60`.
+/// Requires a display-capable machine with a cargo toolchain: run `gui --capture PATH
+/// --frames 60` against the same daemon at two different ticks, then set
+/// FROSTVEIN_CAPTURE_FIRST/FROSTVEIN_CAPTURE_SECOND to the two paths. As of 5.3's review
+/// (2026-08-14) this test has never executed anywhere — the debt is inherited by 5.4.
 #[test]
 #[ignore = "requires a real render surface; excluded from the headless gate"]
 fn capture_exists_is_not_black_and_changes_with_the_world() {
