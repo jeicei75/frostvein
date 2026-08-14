@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # default Opus; 1M-context variant, as at 5.1 and 5.2
 
 # Story 5.3: A Window Onto the Valley
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -66,6 +66,14 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
    > purpose, so `gui` carrying it follows the sibling client's precedent rather than opening
    > the stack. This is the 5th instance of the *AC-unmeetable-as-written* class; unlike the
    > previous four it was caught at dev rather than at review.
+
+   > **AMENDED AGAIN 2026-08-14 (commit `79c212e`)** — a sixth normal dependency,
+   > `bevy_render = { workspace = true, features = ["gles"] }`. The `bevy` facade re-exports
+   > no native `gles` feature (only wasm webgl), so AC9's GL rung was unreachable without
+   > declaring `bevy_render` directly; it adds no crate — `bevy_render` 0.19.0 is already in
+   > the graph via `bevy` and moves in lockstep. Recorded in the Change Log the day it
+   > happened; this block brings the AC body in line (review 2026-08-14 found the body still
+   > naming five).
 2. The workspace dependency graph is exactly the M2 closed set, read off the six `Cargo.toml`
    files: `simd → sim-core`, `simd → protocol`, `client-core → protocol`, `tui → protocol`,
    `tui → client-core`, `gui → protocol`, `gui → client-core`. No other edge exists.
@@ -139,6 +147,11 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
 19. Exactly one transform pair, `world_to_render` / `render_to_world`, exists in `gui` for sim
     z-up `[x,y,z]` ↔ Bevy Y-up. Projection, camera and capture all call it; no system does its
     own axis math.
+
+    > **NOTE (review 2026-08-14):** the "and capture" clause is vacuous as written — a window
+    > screenshot has no coordinates to transform, so `capture.rs` cannot call the pair. 6th
+    > instance of the AC-text-defect class; recorded rather than left to be re-derived. The
+    > substantive halves (one pair, sole axis-math site) are met and verified.
 20. The pair is pinned by **two** assertions, because a round-trip test alone cannot catch a
     mirrored world — `(x,y,z) → (x,z,y)` and `(x,y,z) → (x,z,-y)` both round-trip perfectly and
     only one preserves handedness. So: a round-trip property test, **and** a literal-oracle
@@ -322,6 +335,98 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
         that trigger, so record the number even though this story does not act on it.
   - [x] `scripts/gate.sh` green. Branch `5-3-a-window-onto-the-valley`, small commits, imperative
         messages, author `Völundr <jeicei75@gmail.com>`. Push/PR only on Wolf's explicit yes.
+
+### Review Findings
+
+Code review 2026-08-14, four layers (Blind Hunter, Edge Case Hunter — Sonnet; Acceptance
+Auditor, Feature Auditor — Opus), all four completed; Blind Hunter overran its 45-min ceiling
+and delivered on the salvage ping. Every finding labelled `[layer/severity]`.
+
+- [x] [Review][Decision] **Devcontainer hard-coupled to WSLg hosts by an unrecorded change**
+      — RESOLVED (Wolf, 2026-08-14): keep the WSLg config (gingerspice is the preferred Task 0
+      target and it is proven there); patched — the two dropped `remoteEnv` vars restored, new
+      trailing commas removed, change recorded in File List + Change Log with the rebelspice
+      incompatibility named. A rebelspice bring-up needs its own variant (`/dev/dri` + display
+      socket), on the record here.
+      `[.devcontainer/devcontainer.json:12-27]` `[blind+auditor/HIGH]` — commit `79c212e`
+      ("Enable wgpu's gles backend") also rewrote devcontainer.json: unconditional
+      `--device=/dev/dxg` + three WSLg/X11 bind mounts + display env. Proven working on
+      gingerspice (the live investigation used it), but container creation will fail on any
+      host lacking those paths — including rebelspice, the story's designated fallback
+      (native Linux: `/dev/dri`, no `/dev/dxg`). The change appears in no File List, no
+      Change Log, and silently dropped `HERMES_PROFILE` + `NIDAVELLIR_PYTHON_VERSION` from
+      `remoteEnv` (verified harmless — consumers default the same values — but unexplained).
+      Two trailing commas added (JSONC-tolerated). Decide: keep-and-record, revert to a
+      separate change, or keep-with-restorations.
+- [x] [Review][Decision] **AC26's formal capture self-test has never executed on any machine**
+      — RESOLVED (Wolf, 2026-08-14): the debt is handed to 5.4 explicitly, exactly as AC24's
+      WSLg figure was; the test's stale doc comment (naming a nonexistent rebelspice harness)
+      is patched to an accurate recipe. AC26's live half stays OPEN on the record and 5.4
+      inherits it.
+      `[crates/gui/tests/capture.rs]` `[auditor+feature/MED]` — the `--ignored` invocation
+      needs cargo + a display together; no current machine offers both (devpods headless or
+      envelope-broken; native Windows has no toolchain). Its doc comment names a "rebelspice
+      display/daemon harness" that does not exist. Decide the venue or hand the debt to 5.4
+      explicitly, as AC24's WSLg figure already was.
+- [x] [Review][Patch] **Ramp tiles are never rendered — draw set is 59,843 cubes, not AC13's
+      53,365** `[crates/gui/src/project.rs:55-67]` `[auditor+feature/HIGH]` — `is_exposed`
+      matches only `Tile::Solid` in both its gate and its neighbour test, so 5,087 ramps are
+      invisible and count as open neighbours (over-exposing solids behind them).
+      Both Opus layers found this independently with live oracles: ramp-as-solid reproduces
+      the story's 53,365/81,648/8-materials figures *exactly*; the shipped code gives
+      59,843/95,928/6. The `Tile::Ramp` arm in `terrain_material` (line 175) is dead code.
+      Live cross-check: `tui` at `--z 9` draws **450 `▲` ramp glyphs** the GUI omits — the
+      two clients do not show the same world (AC11's glyph list never included `▲`).
+      Fix: treat `Ramp` as solid (drawn + occluding), add a ramp-bearing toy world to the
+      predicate test, log the projected cube count on full rebuild as the oracle instrument.
+- [x] [Review][Patch] **Server disconnect is invisible — the window renders a frozen world
+      forever** `[crates/gui/src/ingest.rs:236-237]` `[edge/MED]` — `Disconnected` is matched
+      with `Empty` and breaks; the one `eprintln` is invisible in a windowed app. `tui` bails
+      loudly on the identical condition. Exit loudly on reader stop.
+- [x] [Review][Patch] **A rejected snapshot is silently swallowed**
+      `[crates/gui/src/ingest.rs:225-229]` `[blind+edge+feature/MED]` — `apply_snapshot`'s
+      `Err` is discarded: no log, no exit; `tui` propagates it fatally. Latent-silent-failure
+      class.
+- [x] [Review][Patch] **AC17 is pinned one level below the wire seam**
+      `[crates/gui/src/ingest.rs:227]` `[auditor/MED]` — deleting `work.snapshot = true`
+      passes every test: headless.rs hand-builds its own rebuild flag, and the only
+      ingest-driven test sends deltas only. Add a snapshot-through-`ingest_messages` test.
+- [x] [Review][Patch] **The AD-14 negative test is vacuous**
+      `[crates/gui/tests/headless.rs]` `[auditor/MED]` — it asserts emptiness before any
+      system has run, in an app whose only system is the reconciler; `ingest_messages` is
+      never in the app under test. Rebuild it as a real negative.
+- [x] [Review][Patch] **Capture range-check counts Bevy's grey clear-color as foreground**
+      `[crates/gui/tests/capture.rs]` `[auditor/MED]` — "non-background" is defined as
+      `!= [0,0,0,255]`, but the clear color is grey, so an empty scene passes ~100%.
+      Code-only patch; cannot be executed here (no display).
+- [x] [Review][Patch] **Story-record hygiene** `[this file]` `[auditor/LOW]` — AC1's body
+      text still names five deps (manifest has six, `bevy_render` recorded only in the Change
+      Log); `scripts/mutate.sh` missing from the File List; AC19's "capture calls the
+      transform pair" clause is vacuous (a window screenshot has no coordinates) — note it as
+      the 6th AC-text-defect instance rather than leaving it to be re-derived.
+- [x] [Review][Defer] Camera focus hardcoded `[64,64,9]`, ignores wire dims; AC21's
+      `zoom_never_moves_the_focus` asserts a constant `[crates/gui/src/ingest.rs:167]`
+      `[edge+auditor/LOW]` — deferred per LOW-tail cap (single fixed world today; visible
+      immediately if it ever fires)
+- [x] [Review][Defer] CLI accepts multiple positional ports, last silently wins (tui bails)
+      `[crates/gui/src/ingest.rs:150]` `[edge/LOW]` — deferred per LOW-tail cap
+- [x] [Review][Defer] `--frames` without `--capture` silently ignored
+      `[crates/gui/src/ingest.rs:132-164]` `[edge/LOW]` — deferred per LOW-tail cap
+- [x] [Review][Defer] `Screenshot` entity spawned in Update carries neither partition marker
+      `[crates/gui/src/capture.rs]` `[auditor/LOW]` — deferred per LOW-tail cap
+- [x] [Review][Defer] F3 toggle stays live during `--capture`; a keypress mid-capture defeats
+      AC23's forcing `[crates/gui/src/ingest.rs:105]` `[blind+auditor/LOW]` — deferred per
+      LOW-tail cap (needs a deliberate keypress)
+- [x] [Review][Defer] `ProjectedItem` inserted but never read — dead code
+      `[crates/gui/src/project.rs:33,155]` `[blind/LOW]` — deferred per LOW-tail cap
+- [x] [Review][Defer] Dead condition: `terrain.get()` always `Err` under
+      `Without<TerrainTile>` `[crates/gui/src/project.rs:137]` `[blind/LOW]` — deferred per
+      LOW-tail cap
+- [x] [Review][Defer] `gate.sh` `run()` label column (28) misaligned with probe loop (40);
+      header comment stale `[scripts/gate.sh:47]` `[auditor/LOW]` — deferred per LOW-tail cap
+- [x] [Review][Defer] `ingest_messages`/`reconcile_projection` ordering incidental (no
+      `.chain()`); small `--frames` screenshots before the first reconcile's spawns apply
+      `[crates/gui/src/ingest.rs:99-107]` `[feature/LOW]` — deferred per LOW-tail cap
 
 ## Dev Notes
 
@@ -680,7 +785,7 @@ the Epic 5 retro — tonight it exists as the reproducible command sequence abov
 
 ### File List
 
-- Cargo.toml; Cargo.lock; scripts/gate.sh
+- Cargo.toml; Cargo.lock; scripts/gate.sh; scripts/mutate.sh; .devcontainer/devcontainer.json
 - crates/gui/Cargo.toml; crates/gui/src/lib.rs; crates/gui/src/main.rs; crates/gui/src/ingest.rs; crates/gui/src/transform.rs; crates/gui/src/project.rs; crates/gui/src/camera.rs; crates/gui/src/capture.rs; crates/gui/tests/headless.rs; crates/gui/tests/capture.rs
 - _bmad-output/implementation-artifacts/mutations/5-3-a-window-onto-the-valley.sh
 - _bmad-output/implementation-artifacts/deferred-work.md
@@ -702,4 +807,6 @@ the Epic 5 retro — tonight it exists as the reproducible command sequence abov
 | 2026-08-13 | **Task 0's target reconsidered on evidence.** Wolf noted gingerspice was updated and restarted mid-story; measured, the restart landed 2026-08-12 09:09 (after every dev commit) and changed nothing. The cause is a **devcontainer config gap, not host capability**: neither devcontainer.json requests `/dev/dxg`, `/mnt/wslg` or `DISPLAY`, and the Dockerfile is a bare `debian-13` base, so the graphics userspace was never installed and the device nodes were never passed through. gingerspice therefore reopens as the **preferred** Task 0 target, because NFR6's bar is defined against the WSLg + RTX 4080 devpod — it would measure the real bar and close AC24's owed WSLg figure inside 5.3, where rebelspice proves only the envelope. Wolf is testing on gingerspice later today. |
 | 2026-08-14 | **THE ENVELOPE HOLDS — live run complete via the native Windows client, Wolf's call, the epic fallback ladder's final rung.** `gui.exe` cross-compiled from the devpod in one pass (no code changes); `simd` stayed in WSL; WSL2 localhost forward. AC8: `backend=Vulkan adapter="NVIDIA GeForce RTX 4080 Laptop GPU" driver_info="591.74"` — native conformant Vulkan, no flags. AC7: window holds, orbit works, ugly-as-spec. AC11: TUI oracle exact (`│=6`, `♠=48`), entities non-zero. AC24: **146 fps**, labelled native-Windows — NFR6-bar redefinition question to the Epic 5 retro. AC25: two captures differ at real offsets. Still open: AC26's formal `--ignored` self-test invocation has never executed live; the Windows build's formal home is owed to correct-course/retro. Task 8 checked. |
 | 2026-08-14 | **The gingerspice envelope investigation, run live by Wolf with the orchestrator diagnosing.** Devcontainer passthrough proven (`/dev/dxg`, WSLg mounts, X11, hardware GL context via d3d12 gallium). Found and fixed: `gui` contained no GL backend (`bevy` re-exports no native `gles` feature; `bevy_render = { features = ["gles"] }` added, commit `79c212e`, amending AC1 to six deps). GL rung then failed on wgpu's tier-2 presentability policy (no `/dev/dri` on WSL2 → no DRI3 → `NATIVE_RENDERABLE=FALSE` configs → empty present modes → Bevy `unreachable!`). Vulkan rung: Dozen shipped by no distro (Debian/Ubuntu/Fedora verified); built from source twice (25.0.7 and 26.3.0-devel); `vkcube` presents, `gui` renders ~3 s then `DeviceLost: Unknown Out of memory` with VRAM flat — a Dozen defect under the full-world workload, identical on both builds. **AC9 honored: investigation stopped where the next lever would have been a production-code workaround.** AC8's backend/adapter observations recorded from the running binary on both backends. Envelope verdict: does not hold on gingerspice; live half proceeds on rebelspice per the 2026-08-11 decision; NFR6-bar contradiction referred to the Epic 5 retro. Full detail in Dev Agent Record. |
+| 2026-08-14 | **Code review, four layers, all completed** (Blind + Edge Case Hunters on Sonnet, Acceptance + Feature Auditors on Opus; Blind overran its 45-min ceiling and was salvaged by the ask-before-kill ping). 2 decisions, 7 patches, 9 deferrals, 2 dismissed. **AC13 was falsified by both Opus layers independently**: `is_exposed` matched only `Tile::Solid`, so the binary drew 59,843 cubes, not the oracle's 53,365 — 5,087 ramps invisible, over-exposed solids behind them, `terrain_material`'s ramp arm dead, and the live TUI showing 450 `▲` at z 9 the GUI omitted. The story's own figures were measured ramp-as-solid (the auditor's variant reproduction is exact to the tile). Second HIGH: the devcontainer rewrite rode unrecorded in `79c212e` (see the resolved decision above). |
+| 2026-08-14 | **Review patches applied, this session (review-patch phase shared with review, fresh context — no dev history here).** Ramps now drawn + occluding (AC13/AC11 parity); full-rebuild path logs the projected cube count as the draw-set oracle instrument; ramp toy-world test pins the predicate and material bucket 6; mutation table's neighbour-scan pattern tracked to the new source. Silent-failure class purged: server disconnect and a rejected snapshot both exit loudly (`AppExit::error()` + stderr), matching `tui`. AC17 pinned at the wire seam (`work.snapshot = true` now has a test through `ingest_messages`); the vacuous AD-14 negative replaced with a real one (entity-count invariant across ingestion of recorded wire literals, in `ingest.rs` tests where the private system is reachable). Capture range-check counts pixels differing from the dominant colour instead of `!= pure black`. Devcontainer: `remoteEnv` vars restored, commas fixed. AC1 body brought to six deps; AC19's vacuous capture clause noted (6th AC-text-defect instance). **Post-patch state, plainly: the 53,365 figure is now what the predicate computes per both auditors' independent live measurements of this exact variant, pinned by unit tests and observable via the new startup count line — but no live window has rendered the ramp-complete valley yet; the next live run confirms it visually.** |
 | 2026-08-13 | **`scripts/mutate.sh` fixed on Wolf's ruling** — a non-compiling sabotage now reports `NO-COMPILE`, counts as a survivor, prints the compile errors and fails the run, instead of reading as a kill. Sabotage-verified: the old 5.3 mutation fed back verbatim now yields `NO-COMPILE` and exit 1 where it previously yielded `All mutations killed.` and exit 0; the real 5.3 table still reports five KILLED at exit 0, so no regression. Second false-green of this class in that script. The other nine tables are deliberately not swept — the class now surfaces on each table's next run. |

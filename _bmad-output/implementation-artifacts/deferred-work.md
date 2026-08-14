@@ -574,3 +574,36 @@ below as "what one layer found", not as "what is wrong with 3.3".
 
 - `Mirror::previous_entity()` remains without a live caller. AD-15 interpolation is deliberately
   deferred to story 6.1; reconciliation lands in 5.3, but blending does not.
+
+## Deferred from: code review of 5-3-a-window-onto-the-valley (2026-08-14)
+
+- Camera focus is hardcoded `[64, 64, 9]` (`crates/gui/src/ingest.rs:167`), ignoring the wire's
+  `dims`; any world other than the shipped 128×128×32 spawns the camera looking outside the
+  terrain with no correcting path. AC21's `zoom_never_moves_the_focus` asserts a constant that
+  no code can change. Cheap fix when it fires: read `MirrorResource` in `setup_camera` (the
+  mirror exists before the App is built). `[edge+auditor/LOW]`
+- CLI accepts multiple positional port arguments and the last silently wins
+  (`crates/gui/src/ingest.rs:150`); `tui` bails on extras with `port_was_set`. Live-verified:
+  `gui 9999 7522` connects to 7522 with no warning. `[edge/LOW]`
+- `--frames N` without `--capture` is accepted and silently discarded
+  (`crates/gui/src/ingest.rs:132-164`); validation is one-directional. `[edge/LOW]`
+- The `--capture` path spawns a `Screenshot` entity during `Update`
+  (`crates/gui/src/capture.rs`) after `classify_client_local` has run at `PostStartup`, so it
+  carries neither partition marker; the AC12 structural test only inspects already-marked
+  entities and cannot see a third class. `[auditor/LOW]`
+- `toggle_overlay` stays registered during `--capture` runs (`crates/gui/src/ingest.rs:105`);
+  an F3 keypress during the N capture frames re-enables the overlay the startup forcing turned
+  off, defeating AC23 on an interactive display. `[blind+auditor/LOW]`
+- `ProjectedItem` (`crates/gui/src/project.rs:33`, inserted at `:155`) is never queried by any
+  system or test — dead code against the YAGNI policy. `[blind/LOW]`
+- Dead condition in the stale-entity despawn loop (`crates/gui/src/project.rs:137`):
+  `terrain.get(bevy_entity)` is structurally always `Err` because the query carries
+  `Without<TerrainTile>`; the clause reads as if it does real work. `[blind/LOW]`
+- `scripts/gate.sh` label columns diverged: `run()` uses `printf '  %-28s'` (line 47) while the
+  probe loop uses `%-40s`, so outputs misalign; the header comment still describes "first four
+  checks" and a single `tui` probe. Task 1 asked for the widening once. `[auditor/LOW]`
+- `ingest_messages` and `reconcile_projection` are registered without `.chain()`
+  (`crates/gui/src/ingest.rs:99-107`); both take `ResMut<ProjectionWork>` so Bevy serialises
+  them, but the order is incidental, and it is load-bearing for AC16's same-frame dirty-tile
+  path. Related: a small `--frames` value screenshots before the first reconcile's queued
+  spawns apply (recipe uses 60, floor is >0). `[feature/LOW]`
