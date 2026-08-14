@@ -9,7 +9,7 @@
     "--network-alias=${localWorkspaceFolderBasename}",
     "--hostname",
     "${localWorkspaceFolderBasename}",
-    "--device=/dev/dxg",
+    "--device=/dev/dxg"
   ],
   "mounts": [
     "source=/mnt/wslg,target=/mnt/wslg,type=bind",
@@ -24,6 +24,8 @@
   "remoteEnv": {
     "MISE_GITHUB_TOKEN": "${localEnv:MISE_GITHUB_TOKEN}",
     "GH_TOKEN": "${localEnv:GH_ASGARD_TOKEN}",
+    "HERMES_PROFILE": "nidavellir",
+    "NIDAVELLIR_PYTHON_VERSION": "3.14"
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,Z",
   "workspaceFolder": "/workspace",
