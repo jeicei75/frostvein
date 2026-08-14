@@ -295,11 +295,15 @@ the bar. Record it labelled with its machine and mark the WSLg figure as still o
         and asserts the images differ. Range-check first: assert a non-zero count of
         non-background pixels **before** drawing any conclusion.
 
-- [ ] **Task 8 — The live run** (AC: 7, 8, 9, 11, 24)
-  - [ ] Run the recipe in Verification. Paste the backend/adapter line verbatim.
-  - [ ] Run `tui` against the same daemon concurrently and record both outputs (AC11).
-  - [ ] If the window does not open: record the error, walk the AC9 ladder, and report. A failed
-        envelope is a legitimate outcome of this story.
+- [x] **Task 8 — The live run** (AC: 7, 8, 9, 11, 24)
+  - [x] Run the recipe in Verification. Paste the backend/adapter line verbatim. *(Done 2026-08-14,
+        via the native-Windows client — see the live-run record in the Dev Agent Record; the
+        Linux-devpod path on gingerspice ends in the AC9 finding recorded there.)*
+  - [x] Run `tui` against the same daemon concurrently and record both outputs (AC11).
+  - [x] If the window does not open: record the error, walk the AC9 ladder, and report. A failed
+        envelope is a legitimate outcome of this story. *(The ladder WAS walked on the
+        gingerspice devpod and the finding recorded; the window then opened via the epic
+        fallback ladder's final rung.)*
 
 - [x] **Task 9 — Mutations, deferrals, gate** (AC: 27)
   - [x] Write the sabotage table. Minimum set: the reconciler is driven by `changes()` alone (the
@@ -631,6 +635,49 @@ defined against this machine, and this machine cannot currently run a hardware w
 any stock-or-buildable path; the spine's fallback ladder already names the remaining route
 (native Windows build, deferred). AC24's WSLg figure stays owed with that context attached.
 
+### The live run (2026-08-14) — the epic fallback ladder's last rung, taken on Wolf's call
+
+**The envelope holds.** After the gingerspice devpod finding above, Wolf directed the next rung
+of the epic's recorded fallback ladder — the native Windows build the spine deferred. `gui.exe`
+was cross-compiled from the devpod in one pass (`rustup target add x86_64-pc-windows-gnu`,
+`gcc-mingw-w64-x86-64`, `CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc
+cargo build -p gui --release --target x86_64-pc-windows-gnu` — 2m40s, no code changes, the
+needed backends were already compiled in). Topology: `simd` in WSL on gingerspice, `gui.exe` on
+the Windows side over WSL2's localhost forward — the M2 crate graph unchanged, clients are
+protocol-only TCP by design.
+
+**AC7 — window opens and renders continuously.** Confirmed live by Wolf: window holds, world
+renders, orbit works (WASD/QE), no crash. "Ugly" per spec — grey boxes are the pass bar.
+
+**AC8 — from the running binary, verbatim:**
+`backend=Vulkan adapter="NVIDIA GeForce RTX 4080 Laptop GPU" device_type=DiscreteGpu
+driver="NVIDIA" driver_info="591.74"` — machine: **gingerspice, native Windows client**. Note it
+is native NVIDIA **Vulkan** (a conformant ICD, so wgpu needed no flags), not even the DX12
+fallback — which also confirms by contrast that the Dozen DeviceLost was the driver's defect,
+not this codebase's Vulkan usage.
+
+**AC11 — concurrent TUI, same daemon, live:** `tui 7431 --frames 6 --z 9` returned `│ = 6` and
+`♠ = 48` — the story's byte-stable terrain oracle, exact. Entity glyphs all non-zero and
+consistent with the camp (`† = 24`, `♨ = 6`, `☺ = 18`). One mirror, two clients, one world.
+
+**AC22/24 — the frame-time figure:** **146 fps** (F3 overlay), labelled: **gingerspice /
+native Windows client / NVIDIA Vulkan 591.74**. This is a THIRD label, distinct from both
+NFR6's WSLg-devpod bar (now known unreachable — see the envelope finding) and the rebelspice
+envelope baseline (not measured; superseded on Wolf's call). The Epic 5 retro inherits the
+NFR6-bar redefinition question with this figure as its first data point.
+
+**AC25 — capture, live observation:** two `--capture` runs at different ticks produced PNGs
+that differ (`fc.exe /b`: first differing bytes at offset `0xAFF96` ≈ 720 KB, second file
+longer) — both far larger than a trivially-black PNG and visually the valley. The formal
+`--ignored` self-test invocation (AC26) still has not executed on any machine — it needs cargo
+plus a display together; recorded honestly as the one instrument test not yet run live.
+
+**Scope note, on the record:** the native Windows build was DEFERRED by the spine; taking it
+tonight was Wolf's explicit call after the devpod finding, as the epic fallback ladder's final
+rung. Its formal home (build script? story? Cargo target docs?) is owed to correct-course or
+the Epic 5 retro — tonight it exists as the reproducible command sequence above and a 187 MB
+`target/x86_64-pc-windows-gnu/release/gui.exe` that is not a tracked artifact.
+
 ### File List
 
 - Cargo.toml; Cargo.lock; scripts/gate.sh
@@ -653,5 +700,6 @@ any stock-or-buildable path; the spine's fallback ladder already names the remai
 | 2026-08-11 | Self-gate pass 3 caught zero-frame capture acceptance and unclassified FPS-overlay entities. Both were fixed and test-covered; the three-pass review cap prevents a fourth pass. |
 | 2026-08-13 | Orchestrator re-verification, independent of the dev run: gate GREEN 63.16 s warm, all twelve files present, all commits `Völundr` and per-task, display absence re-measured. **AC27 was falsely green** — the `exposed terrain returns every solid tile` mutation killed by SYNTAX ERROR (`expected ';', found 'NEIGHBOURS'`), and `mutate.sh` counted any non-zero cargo exit as KILLED, so the table claimed five kills while pinning four. Rewritten to remove the neighbour scan rather than the guard; it now dies on `assertion failed: !is_exposed(&enclosed, [1, 1, 1])`. Coverage was checked separately and was already sound, so no test was added or changed. Story stays **in-progress**: Tasks 0 and 8 need a display and are blocked on the `rebelspice` bring-up. |
 | 2026-08-13 | **Task 0's target reconsidered on evidence.** Wolf noted gingerspice was updated and restarted mid-story; measured, the restart landed 2026-08-12 09:09 (after every dev commit) and changed nothing. The cause is a **devcontainer config gap, not host capability**: neither devcontainer.json requests `/dev/dxg`, `/mnt/wslg` or `DISPLAY`, and the Dockerfile is a bare `debian-13` base, so the graphics userspace was never installed and the device nodes were never passed through. gingerspice therefore reopens as the **preferred** Task 0 target, because NFR6's bar is defined against the WSLg + RTX 4080 devpod — it would measure the real bar and close AC24's owed WSLg figure inside 5.3, where rebelspice proves only the envelope. Wolf is testing on gingerspice later today. |
+| 2026-08-14 | **THE ENVELOPE HOLDS — live run complete via the native Windows client, Wolf's call, the epic fallback ladder's final rung.** `gui.exe` cross-compiled from the devpod in one pass (no code changes); `simd` stayed in WSL; WSL2 localhost forward. AC8: `backend=Vulkan adapter="NVIDIA GeForce RTX 4080 Laptop GPU" driver_info="591.74"` — native conformant Vulkan, no flags. AC7: window holds, orbit works, ugly-as-spec. AC11: TUI oracle exact (`│=6`, `♠=48`), entities non-zero. AC24: **146 fps**, labelled native-Windows — NFR6-bar redefinition question to the Epic 5 retro. AC25: two captures differ at real offsets. Still open: AC26's formal `--ignored` self-test invocation has never executed live; the Windows build's formal home is owed to correct-course/retro. Task 8 checked. |
 | 2026-08-14 | **The gingerspice envelope investigation, run live by Wolf with the orchestrator diagnosing.** Devcontainer passthrough proven (`/dev/dxg`, WSLg mounts, X11, hardware GL context via d3d12 gallium). Found and fixed: `gui` contained no GL backend (`bevy` re-exports no native `gles` feature; `bevy_render = { features = ["gles"] }` added, commit `79c212e`, amending AC1 to six deps). GL rung then failed on wgpu's tier-2 presentability policy (no `/dev/dri` on WSL2 → no DRI3 → `NATIVE_RENDERABLE=FALSE` configs → empty present modes → Bevy `unreachable!`). Vulkan rung: Dozen shipped by no distro (Debian/Ubuntu/Fedora verified); built from source twice (25.0.7 and 26.3.0-devel); `vkcube` presents, `gui` renders ~3 s then `DeviceLost: Unknown Out of memory` with VRAM flat — a Dozen defect under the full-world workload, identical on both builds. **AC9 honored: investigation stopped where the next lever would have been a production-code workaround.** AC8's backend/adapter observations recorded from the running binary on both backends. Envelope verdict: does not hold on gingerspice; live half proceeds on rebelspice per the 2026-08-11 decision; NFR6-bar contradiction referred to the Epic 5 retro. Full detail in Dev Agent Record. |
 | 2026-08-13 | **`scripts/mutate.sh` fixed on Wolf's ruling** — a non-compiling sabotage now reports `NO-COMPILE`, counts as a survivor, prints the compile errors and fails the run, instead of reading as a kill. Sabotage-verified: the old 5.3 mutation fed back verbatim now yields `NO-COMPILE` and exit 1 where it previously yielded `All mutations killed.` and exit 0; the real 5.3 table still reports five KILLED at exit 0, so no regression. Second false-green of this class in that script. The other nine tables are deliberately not swept — the class now surfaces on each table's next run. |
