@@ -1,5 +1,5 @@
 {
-  "name": "nidavellir",
+  "name": "frostvein",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
@@ -8,13 +8,22 @@
     "--network=bifrost",
     "--network-alias=${localWorkspaceFolderBasename}",
     "--hostname",
-    "${localWorkspaceFolderBasename}"
+    "${localWorkspaceFolderBasename}",
+    "--device=/dev/dxg",
   ],
+  "mounts": [
+    "source=/mnt/wslg,target=/mnt/wslg,type=bind",
+    "source=/usr/lib/wsl,target=/usr/lib/wsl,type=bind",
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+  ],
+  "containerEnv": {
+    "DISPLAY": ":0",
+    "WAYLAND_DISPLAY": "wayland-0",
+    "XDG_RUNTIME_DIR": "/mnt/wslg/runtime-dir"
+  },
   "remoteEnv": {
     "MISE_GITHUB_TOKEN": "${localEnv:MISE_GITHUB_TOKEN}",
     "GH_TOKEN": "${localEnv:GH_ASGARD_TOKEN}",
-    "HERMES_PROFILE": "nidavellir",
-    "NIDAVELLIR_PYTHON_VERSION": "3.14"
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,Z",
   "workspaceFolder": "/workspace",

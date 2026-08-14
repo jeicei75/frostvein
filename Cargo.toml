@@ -22,6 +22,14 @@ bevy = { version = "0.19.0", default-features = false, features = [
     "std", "default_app", "3d_bevy_render", "ui_api", "ui_bevy_render",
     "default_font", "bevy_winit", "multi_threaded", "x11", "bevy_dev_tools",
 ] }
+# Declared solely to switch on wgpu's `gles` backend, which the `bevy` facade does
+# not re-export on native (bevy_render has `gles = ["wgpu/gles"]`; bevy_internal
+# and bevy expose only `webgl`/`webgl2`, which are wasm).  Adds no crate — this is
+# already in the graph via bevy 0.19.0 — and moves in lockstep with it, so AC4's
+# never-two-Bevy-versions rule is unaffected.  Without it wgpu-hal builds with
+# [dx12, vulkan] only, and on a WSLg devpod the sole Vulkan device is llvmpipe,
+# so the binary finds no usable GPU.  Story 5.3, Task 8.
+bevy_render = { version = "0.19.0", default-features = false, features = ["gles"] }
 crossterm = "0.29.0"
 rand = "0.10.2"
 rand_chacha = { version = "0.10.0", features = ["serde"] }
