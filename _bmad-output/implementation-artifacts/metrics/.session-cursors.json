@@ -123,6 +123,36 @@
     "schema": 2,
     "turns": 347
   },
+  "26b1d276-d745-4f22-8012-1fece8dc72c1.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 953188,
+        "cache_read": 22724777,
+        "input": 283,
+        "output": 265345
+      },
+      "claude-opus-5": {
+        "cache_creation": 1006611,
+        "cache_read": 9266009,
+        "input": 32727,
+        "output": 70342
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 1976609,
+        "cache_read": 12510078,
+        "input": 304,
+        "output": 92632
+      }
+    },
+    "cache_creation": 3936408,
+    "cache_read": 44500864,
+    "input": 33314,
+    "last_ts": "2026-08-14T14:31:10.133Z",
+    "output": 428319,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 426
+  },
   "282b7e6e-af14-475f-b2e6-1de13aefe9c3.jsonl": {
     "cache_creation": 685065,
     "cache_read": 5622908,
@@ -214,6 +244,24 @@
     "quota_last": null,
     "schema": 2,
     "turns": 306
+  },
+  "92d965c7-7f80-4c02-bb8f-8d371e5b6e26.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 459445,
+        "cache_read": 16211127,
+        "input": 612,
+        "output": 142962
+      }
+    },
+    "cache_creation": 459445,
+    "cache_read": 16211127,
+    "input": 612,
+    "last_ts": "2026-08-11T13:07:07.223Z",
+    "output": 142962,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 125
   },
   "94f176d8-e307-4798-b9ba-be0a0fd12dbe.jsonl": {
     "by_model": {
@@ -486,5 +534,23 @@
     "quota_last": 34.0,
     "schema": 2,
     "turns": 179
+  },
+  "rollout-2026-08-11T14-36-13-019ff140-a572-7611-8ea2-4e2debc76307.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 15043328,
+        "input": 367275,
+        "output": 46935
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 15043328,
+    "input": 367275,
+    "last_ts": "2026-08-11T15:03:57.484Z",
+    "output": 46935,
+    "quota_last": 6.0,
+    "schema": 2,
+    "turns": 129
   }
 }
