@@ -53,7 +53,8 @@ pub fn setup_projection_assets(
 }
 
 pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
-    if !matches!(mirror.tile(position), Some(Tile::Solid(_))) {
+    // Ramps are terrain: drawn and occluding, exactly as the AC13 oracle counts them.
+    if !matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_))) {
         return false;
     }
     NEIGHBOURS.into_iter().any(|delta| {
@@ -62,7 +63,7 @@ pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
             position[1] + delta[1],
             position[2] + delta[2],
         ];
-        !matches!(mirror.tile(neighbour), Some(Tile::Solid(_)))
+        !matches!(mirror.tile(neighbour), Some(Tile::Solid(_) | Tile::Ramp(_)))
     })
 }
 
@@ -80,7 +81,10 @@ pub fn reconcile(
         for (entity, _) in terrain.iter() {
             commands.entity(entity).despawn();
         }
-        for position in terrain_positions(mirror) {
+        let positions = terrain_positions(mirror);
+        // The draw-set oracle instrument: the shipped seed must report 53,365 (AC13).
+        println!("projected {} terrain cubes", positions.len());
+        for position in positions {
             let mut entity = commands.spawn((
                 WorldProjected(terrain_id(position, mirror.dims())),
                 TerrainTile(position),
@@ -245,5 +249,36 @@ mod tests {
         })
         .unwrap();
         assert!(!is_exposed(&enclosed, [1, 1, 1]));
+    }
+
+    #[test]
+    fn ramps_are_drawn_and_occlude_like_solids() {
+        let ramp_edge = mirror(vec![
+            Tile::Ramp(protocol::Material::Ice),
+            Tile::Solid(protocol::Material::Ice),
+        ]);
+        assert!(
+            is_exposed(&ramp_edge, [0, 0, 0]),
+            "a boundary ramp belongs to the draw set"
+        );
+        assert_eq!(terrain_material(&ramp_edge, [0, 0, 0]), 6);
+        let mut tiles = vec![Tile::Solid(protocol::Material::Ice); 27];
+        tiles[12] = Tile::Ramp(protocol::Material::Ice); // [0, 1, 1], a face neighbour of the centre
+        let enclosed = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 3, y: 3, z: 3 },
+            tiles,
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        assert!(
+            !is_exposed(&enclosed, [1, 1, 1]),
+            "a ramp neighbour occludes like a solid"
+        );
     }
 }

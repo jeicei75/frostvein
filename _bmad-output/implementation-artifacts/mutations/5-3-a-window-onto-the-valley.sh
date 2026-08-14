@@ -25,7 +25,7 @@ old = """    NEIGHBOURS.into_iter().any(|delta| {
             position[1] + delta[1],
             position[2] + delta[2],
         ];
-        !matches!(mirror.tile(neighbour), Some(Tile::Solid(_)))
+        !matches!(mirror.tile(neighbour), Some(Tile::Solid(_) | Tile::Ramp(_)))
     })
 """
 assert s.count(old) == 1
