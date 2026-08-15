@@ -451,12 +451,18 @@ gpt-5.6
   exist; implementation then passed its hand-built toy-world assertions.
 - Tasks 4–5 RED: `atmosphere_entities_are_client_local_and_never_world_projected` failed
   before spawning with `stars, aurora, and restrained snow must be present`.
+- Task 11 mutation RED: `scripts/mutate.sh .../5-4-the-cold-boot.sh` killed all four:
+  cap predicate (`project.rs:402`), cold torch table (`appearance.rs:97`), dropped atmosphere
+  marker (`headless.rs:457`), and ignored wire light (`headless.rs:433`, `left: 0`, `right: 5`).
 
 ### Completion Notes List
 
 - Implemented the headless-testable look core: table-driven cold materials, warm wire-driven
   emitters, snow caps, client-local atmosphere/snow, fog, boot constants, and capture warm-pixel
   threshold. Vehicle-only checks remain open.
+- Not run in this devpod: Task 7 by-eye framing/zoom, Task 8 NFR6, Task 9 captures/AC26
+  Windows execution, and Task 11's Wolf closing sign-off. Task 6's fog candidate is implemented;
+  its required live comparison against rim darkening remains vehicle work.
 
 ### File List
 

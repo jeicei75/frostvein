@@ -200,9 +200,12 @@ pub fn reconcile(
         // numeric range. Keep this query filtered to prevent a terrain id colliding
         // with a simulation id until a story needs separate marker types.
         if let Some((bevy_entity, _)) = projected.iter().find(|(_, marker)| marker.0 == id) {
-            commands
-                .entity(bevy_entity)
-                .insert(Transform::from_translation(world_to_render(position)));
+            let mut transform = Transform::from_translation(world_to_render(position));
+            if let Some(mirror_entity) = mirror_entity {
+                transform.scale =
+                    bevy::prelude::Vec3::splat(entity_appearance(mirror_entity.kind).scale);
+            }
+            commands.entity(bevy_entity).insert(transform);
             if let Some(light) = mirror_entity.and_then(|entity| entity.light) {
                 commands.entity(bevy_entity).insert(point_light(light));
             } else {
