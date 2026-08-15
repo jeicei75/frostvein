@@ -7,9 +7,11 @@ white; ice keeps its blue top, while stone, soil, trunks, and foliage remain dar
 desaturated. Near-white is reserved for stars and emitter faces. These choices live in
 `gui`'s material table, not beside draw calls.
 
-Snow is a client-side settled cap: exposed snow, stone, soil, and foliage tops receive
-it, while ice keeps its blue surface and covered terrain retains its bare flank. Ramps
-follow those same material rules because the renderer presents them as full cubes.
+Snow is a client-side settled cap: exposed snow, stone, and soil tops receive it, while
+ice keeps its blue surface and covered terrain retains its bare flank. Foliage receives
+no terrain-style snow slab: its dark, broken silhouette leaves the valley's snow landform
+visible instead of turning every ground-level tree skirt into a bright tile. Ramps follow
+the same material rules because the renderer presents them as full cubes.
 
 ## Sky and lights
 

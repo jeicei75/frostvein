@@ -295,7 +295,8 @@ fn spawn_snow_cap(commands: &mut Commands, assets: &ProjectionAssets, position: 
 pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
     matches!(
         mirror.tile(position),
-        Some(Tile::Solid(material) | Tile::Ramp(material)) if material != Material::Ice
+        Some(Tile::Solid(material) | Tile::Ramp(material))
+            if material != Material::Ice && material != Material::TreeFoliage
     ) && !matches!(
         mirror.tile([position[0], position[1], position[2] + 1]),
         Some(Tile::Solid(_) | Tile::Ramp(_))
@@ -469,8 +470,8 @@ mod tests {
         );
         assert!(has_snow_cap(&toy, [1, 0, 0]), "snow can settle on snow");
         assert!(
-            has_snow_cap(&toy, [2, 0, 0]),
-            "exposed foliage carries a loaded cap"
+            !has_snow_cap(&toy, [2, 0, 0]),
+            "foliage stays dark so ground-level skirts cannot read as snow slabs"
         );
         assert!(has_snow_cap(&toy, [4, 0, 0]), "stone can carry snow");
         assert!(has_snow_cap(&toy, [5, 0, 0]), "soil can carry snow");
