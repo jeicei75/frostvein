@@ -7,6 +7,8 @@ const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.15;
 const BOOT_YAW: f32 = 0.7;
 const BOOT_PITCH: f32 = 0.8;
 const BOOT_DISTANCE: f32 = 90.0;
+pub const BOOT_VERTICAL_FOV: f32 = std::f32::consts::FRAC_PI_4;
+pub const BOOT_ASPECT_RATIO: f32 = 16.0 / 9.0;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct CameraRig {

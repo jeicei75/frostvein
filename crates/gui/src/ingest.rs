@@ -22,7 +22,7 @@ use bevy::{
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Commands, DefaultPlugins, DirectionalLight, KeyCode,
-        Query, Res, ResMut, Resource, Transform, Without,
+        PerspectiveProjection, Projection, Query, Res, ResMut, Resource, Transform, Without,
     },
     render::renderer::RenderAdapterInfo,
 };
@@ -32,7 +32,7 @@ use protocol::{Delta, Snapshot};
 use crate::{
     appearance::night_lighting,
     atmosphere::{aurora_light_transform, fall_snow, setup_atmosphere},
-    camera::CameraRig,
+    camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{CaptureState, capture_after_frames},
     project::{
         ClientLocal, ProjectionAssets, TerrainQuery, TerrainTile, WorldProjected, reconcile,
@@ -189,6 +189,10 @@ fn setup_camera(mut commands: Commands) {
     let (fog_start, fog_end) = fog_falloff(rig.distance);
     commands.spawn((
         Camera3d::default(),
+        Projection::Perspective(PerspectiveProjection {
+            fov: BOOT_VERTICAL_FOV,
+            ..Default::default()
+        }),
         rig.transform(),
         rig,
         AmbientLight {
