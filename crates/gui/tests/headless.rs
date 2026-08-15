@@ -491,7 +491,7 @@ fn capped_stone_keeps_its_bare_cube_beneath_a_snow_cap() {
         .collect::<Vec<_>>();
     colors.sort_unstable();
 
-    assert_eq!(colors, vec![[40, 57, 82], [118, 139, 157]]);
+    assert_eq!(colors, vec![[60, 70, 92], [158, 170, 196]]);
     let caps = app
         .world_mut()
         .query::<(&SnowCap, Option<&ClientLocal>)>()

@@ -74,6 +74,14 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        sky: Color::srgb_u8(20, 20, 20),\n'))
 PY
 
+mutation "snow cap matches snow terrain" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '    Color::srgb_u8(158, 170, 196)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    Color::srgb_u8(136, 150, 178)\n'))
+PY
+
 mutation "aurora leaves the boot frustum" gui atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_frustum <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()

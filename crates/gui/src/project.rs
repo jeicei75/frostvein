@@ -9,7 +9,7 @@ use client_core::Mirror;
 use protocol::{Dims, EntityKind, Material, Tile};
 
 use crate::{
-    appearance::{entity_appearance, light_properties, material_color},
+    appearance::{entity_appearance, light_properties, material_color, snow_cap_color},
     transform::world_to_render,
 };
 
@@ -53,11 +53,12 @@ pub struct ProjectedItem(pub u32);
 #[derive(Resource)]
 pub struct ProjectionAssets {
     cube: Handle<Mesh>,
-    snow_cap: Handle<Mesh>,
+    snow_cap_mesh: Handle<Mesh>,
     stone: Handle<StandardMaterial>,
     soil: Handle<StandardMaterial>,
     ice: Handle<StandardMaterial>,
     snow: Handle<StandardMaterial>,
+    snow_cap: Handle<StandardMaterial>,
     tree_trunk: Handle<StandardMaterial>,
     tree_foliage: Handle<StandardMaterial>,
     dwarf: Handle<StandardMaterial>,
@@ -71,14 +72,15 @@ pub fn setup_projection_assets(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
-    let snow_cap = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
+    let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
     commands.insert_resource(ProjectionAssets {
         cube,
-        snow_cap,
+        snow_cap_mesh,
         stone: materials.add(terrain_standard_material(Material::Stone)),
         soil: materials.add(terrain_standard_material(Material::Soil)),
         ice: materials.add(terrain_standard_material(Material::Ice)),
         snow: materials.add(terrain_standard_material(Material::Snow)),
+        snow_cap: materials.add(snow_cap_standard_material()),
         tree_trunk: materials.add(terrain_standard_material(Material::TreeTrunk)),
         tree_foliage: materials.add(terrain_standard_material(Material::TreeFoliage)),
         dwarf: materials.add(entity_standard_material(EntityKind::Dwarf)),
@@ -90,6 +92,14 @@ pub fn setup_projection_assets(
 fn terrain_standard_material(material: Material) -> StandardMaterial {
     StandardMaterial {
         base_color: material_color(material),
+        perceptual_roughness: 0.9,
+        ..Default::default()
+    }
+}
+
+fn snow_cap_standard_material() -> StandardMaterial {
+    StandardMaterial {
+        base_color: snow_cap_color(),
         perceptual_roughness: 0.9,
         ..Default::default()
     }
@@ -310,8 +320,8 @@ fn spawn_snow_cap(commands: &mut Commands, assets: &ProjectionAssets, position: 
     commands.spawn((
         SnowCap(position),
         ClientLocal,
-        Mesh3d(assets.snow_cap.clone()),
-        MeshMaterial3d(assets.snow.clone()),
+        Mesh3d(assets.snow_cap_mesh.clone()),
+        MeshMaterial3d(assets.snow_cap.clone()),
         Transform::from_translation(world_to_render(position) + Vec3::Y * 0.54),
     ));
 }

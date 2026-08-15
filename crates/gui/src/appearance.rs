@@ -58,13 +58,18 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
 
 pub fn material_color(material: Material) -> Color {
     match material {
-        Material::Stone => Color::srgb_u8(40, 57, 82),
-        Material::Soil => Color::srgb_u8(56, 69, 80),
-        Material::Ice => Color::srgb_u8(84, 133, 160),
-        Material::Snow => Color::srgb_u8(118, 139, 157),
+        Material::Stone => Color::srgb_u8(60, 70, 92),
+        Material::Soil => Color::srgb_u8(56, 52, 62),
+        Material::Ice => Color::srgb_u8(104, 128, 170),
+        Material::Snow => Color::srgb_u8(136, 150, 178),
         Material::TreeTrunk => Color::srgb_u8(43, 47, 58),
         Material::TreeFoliage => Color::srgb_u8(55, 73, 84),
     }
+}
+
+/// Settled snow is brighter than the underlying snow terrain without becoming emissive white.
+pub fn snow_cap_color() -> Color {
+    Color::srgb_u8(158, 170, 196)
 }
 
 pub fn entity_appearance(kind: EntityKind) -> EntityAppearance {
@@ -89,7 +94,9 @@ mod tests {
     use bevy::color::ColorToPacked;
     use protocol::{EntityKind, LightKind, Material};
 
-    use super::{entity_appearance, light_properties, material_color, night_lighting};
+    use super::{
+        entity_appearance, light_properties, material_color, night_lighting, snow_cap_color,
+    };
 
     #[test]
     fn appearance_tables_pin_the_cold_boot_palette() {
@@ -111,10 +118,10 @@ mod tests {
         }
 
         let terrain = [
-            (Material::Stone, [40, 57, 82]),
-            (Material::Soil, [56, 69, 80]),
-            (Material::Ice, [84, 133, 160]),
-            (Material::Snow, [118, 139, 157]),
+            (Material::Stone, [60, 70, 92]),
+            (Material::Soil, [56, 52, 62]),
+            (Material::Ice, [104, 128, 170]),
+            (Material::Snow, [136, 150, 178]),
             (Material::TreeTrunk, [43, 47, 58]),
             (Material::TreeFoliage, [55, 73, 84]),
         ];
@@ -129,6 +136,17 @@ mod tests {
                 "night terrain stays blueward of red"
             );
         }
+
+        let cap = snow_cap_color().to_srgba().to_u8_array_no_alpha();
+        assert_eq!(cap, [158, 170, 196]);
+        assert!(cap[2] >= cap[0], "settled snow stays on the cold side");
+        assert!(
+            cap[0]
+                > material_color(Material::Snow)
+                    .to_srgba()
+                    .to_u8_array_no_alpha()[0],
+            "the cap must remain visibly brighter than snow terrain"
+        );
 
         let lighting = night_lighting();
         assert_eq!(lighting.sky.to_srgba().to_u8_array_no_alpha(), [5, 12, 28]);

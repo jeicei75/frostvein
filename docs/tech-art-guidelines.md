@@ -2,12 +2,14 @@
 
 ## Value and materials
 
-The boot frame is a night scene. Snow is deliberately midtone blue-grey rather than
-white; ice keeps its blue top, while stone, soil, trunks, and foliage remain dark and
-desaturated. Near-white is reserved for stars and emitter faces. These choices live in
-`gui`'s material table, not beside draw calls.
+The boot frame is a night scene. Stone is `(60, 70, 92)`, soil `(56, 52, 62)`, ice
+`(104, 128, 170)`, and terrain snow `(136, 150, 178)`: the approved dark-but-readable
+night palette. A settled snow cap is its own brighter `(158, 170, 196)` material, so caps
+read over snow terrain without becoming white; near-white remains reserved for stars and
+emitter faces. These choices live in `gui`'s appearance tables, not beside draw calls.
 
-Snow is a client-side settled cap: exposed snow, stone, and soil tops receive it, while
+Snow is a client-side settled cap: exposed snow, stone, and soil tops receive the distinct
+cap material, while
 ice keeps its blue surface and covered terrain retains its bare flank. Foliage receives
 no terrain-style snow slab: its dark, broken silhouette leaves the valley's snow landform
 visible instead of turning every ground-level tree skirt into a bright tile. Foliage cubes
