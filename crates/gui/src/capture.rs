@@ -114,6 +114,7 @@ mod tests {
 
     #[test]
     fn warm_pixel_floor_exceeds_the_emitter_faces_alone() {
-        assert!(64 < WARM_PIXEL_FLOOR);
+        let emitter_face_pixels = [(); 64].len();
+        assert!(emitter_face_pixels < WARM_PIXEL_FLOOR);
     }
 }
