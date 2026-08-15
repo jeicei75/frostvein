@@ -253,7 +253,7 @@ the vehicle. **Never fake the live half.**
         Task 2's five-lights test.
   - [ ] `scripts/gate.sh` green (headless, any devpod). Run `mutate.sh` alone, never beside
         a gate.
-  - [ ] Branch `5-4-the-cold-boot`, small commits, imperative messages, author
+  - [x] Branch `5-4-the-cold-boot`, small commits, imperative messages, author
         `Völundr <jeicei75@gmail.com>`. Push/PR only on Wolf's explicit yes.
   - [ ] Hand the closing half to Wolf: live viewing on the vehicle against the approved
         artifact. **The story's status moves to review/done only through him.**
@@ -435,7 +435,7 @@ continuation handoff.
 
 ### Agent Model Used
 
-gpt-5.6
+gpt-5.6-terra
 
 ### Debug Log References
 
@@ -454,6 +454,20 @@ gpt-5.6
 - Task 11 mutation RED: `scripts/mutate.sh .../5-4-the-cold-boot.sh` killed all four:
   cap predicate (`project.rs:402`), cold torch table (`appearance.rs:97`), dropped atmosphere
   marker (`headless.rs:457`), and ignored wire light (`headless.rs:433`, `left: 0`, `right: 5`).
+- Review-fix RED — capture: `cargo test -p gui bgra_capture_bytes_decode_before_warm_pixel_detection --offline`
+  failed before the decoder existed with `error[E0425]: cannot find function decode_rgba8` at
+  `crates/gui/src/capture.rs:88`; after decoding `Bgra8*` to RGBA, the hand-written oracle
+  `[10, 120, 240, 255] -> [240, 120, 10, 255]` passed.
+- Review-fix RED — items: `cargo test -p gui --test headless snapshot_item_receives_a_render_mesh --offline`
+  failed with `a projected item must carry a mesh` at `crates/gui/tests/headless.rs:462`.
+- Review-fix RED — snow flanks: `cargo test -p gui --test headless capped_stone_keeps_its_bare_cube_beneath_a_snow_cap --offline`
+  failed with `left: [[118, 139, 157]]`, `right: [[40, 57, 82], [118, 139, 157]]` at
+  `crates/gui/tests/headless.rs:494`; the bare stone cube was incorrectly snow material.
+- Review-fix mutation run: the runner killed the cap predicate, new snow-flank, cold-torch,
+  and atmosphere-marker mutations. Its sandbox execution window cut off while the fifth
+  mutation was running; running that exact emitter sabotage independently produced
+  `left: 0`, `right: 5` at `headless.rs:435`. Source was restored and the headless GUI suite
+  passed afterwards.
 
 ### Completion Notes List
 
@@ -463,6 +477,15 @@ gpt-5.6
 - Not run in this devpod: Task 7 by-eye framing/zoom, Task 8 NFR6, Task 9 captures/AC26
   Windows execution, and Task 11's Wolf closing sign-off. Task 6's fog candidate is implemented;
   its required live comparison against rim darkening remains vehicle work.
+- Review-fix round: capture range checks now decode RGBA/BGRA by the screenshot texture format;
+  projected items receive the shared stone cube material; capped terrain keeps its bare cube and
+  receives a separate thin snow-cap slab. The required self-gate pass was launched after these
+  commits but its review session was cut off before reaching findings or a verdict; pass 1 found
+  these three defects and pass 2 was likewise cut off before conclusion. No further self-gate
+  pass was run, preserving the three-pass cap.
+- The full `scripts/gate.sh` could not finish before this sandbox's command session was cut off
+  during `cargo test`; focused GUI headless tests and `cargo test --offline` did pass. The gate
+  checkbox remains unchecked and no green gate is claimed.
 
 ### File List
 
@@ -476,6 +499,12 @@ gpt-5.6
 - crates/gui/tests/capture.rs
 - crates/gui/tests/headless.rs
 - docs/tech-art-guidelines.md
+- _bmad-output/implementation-artifacts/mutations/5-4-the-cold-boot.sh
+- _bmad-output/implementation-artifacts/5-4-signoff/README.md
+- _bmad-output/implementation-artifacts/5-4-signoff/artifact_render.py
+- _bmad-output/implementation-artifacts/5-4-signoff/candidate-artifact-2026-08-14.png
+- _bmad-output/implementation-artifacts/5-4-signoff/candidate-artifact-2026-08-15.png
+- _bmad-output/implementation-artifacts/5-4-signoff/capture_snapshot.py
 - _bmad-output/implementation-artifacts/5-4-the-cold-boot.md
 
 ## Change Log
@@ -484,3 +513,4 @@ gpt-5.6
 | --- | --- |
 | 2026-08-14 | Story created. Camp/emitter baseline measured live (`†=24 ♨=6` at z 9); Bevy 0.19 lighting/fog/emissive API verified against registry source; NFR6 venue corrected on the record to the proven native-Windows vehicle (5.3's envelope finding), WSLg figure kept owed; 5.3's AC26 debt and the ramp-complete first-live-view folded in as ACs 17–18. Sign-off gate encoded as blocking Task 0 + closing AC19. |
 | 2026-08-15 | Implemented the headless cold-boot look core and its table, cap, emitter, and atmosphere assertions; live-vehicle verification remains open. |
+| 2026-08-15 | Addressed self-gate pass 1: decode BGRA capture pixels, restore projected item rendering, and render snow as a top slab over bare terrain; added the snow-flank mutation. |
