@@ -12,7 +12,7 @@ use bevy::{
 };
 use client_core::Mirror;
 use gui::{
-    atmosphere::setup_atmosphere,
+    atmosphere::{Atmosphere, setup_atmosphere},
     project::{
         ClientLocal, ProjectedItem, ProjectionAssets, SnowCap, TerrainQuery, TerrainTile,
         WorldProjected, reconcile, setup_projection_assets,
@@ -516,13 +516,14 @@ fn atmosphere_entities_are_client_local_and_never_world_projected() {
         .add_systems(bevy::app::Startup, setup_atmosphere);
     app.update();
 
-    let mut atmosphere = app
-        .world_mut()
-        .query::<(&ClientLocal, Option<&WorldProjected>)>();
+    let mut atmosphere =
+        app.world_mut()
+            .query::<(&Atmosphere, Option<&ClientLocal>, Option<&WorldProjected>)>();
     let entities = atmosphere.iter(app.world()).collect::<Vec<_>>();
+    assert_eq!(entities.len(), 31, "the atmosphere spawn count is pinned");
     assert!(
-        entities.len() >= 20,
-        "stars, aurora, and restrained snow must be present"
+        entities
+            .iter()
+            .all(|(_, local, projected)| local.is_some() && projected.is_none())
     );
-    assert!(entities.iter().all(|(_, projected)| projected.is_none()));
 }

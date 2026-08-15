@@ -14,6 +14,9 @@ use crate::{
 #[derive(Component)]
 pub struct Snowflake;
 
+#[derive(Component)]
+pub struct Atmosphere;
+
 pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, 9.0, -64.0);
 pub const SKYLINE_MAX: f32 = 26.0;
 pub const FAR_TERRAIN_EDGE: f32 = -128.0;
@@ -80,6 +83,7 @@ pub fn setup_atmosphere(
             Mesh3d(cube.clone()),
             MeshMaterial3d(star.clone()),
             Transform::from_translation(position).with_scale(Vec3::splat(0.35)),
+            Atmosphere,
             ClientLocal,
         ));
     }
@@ -88,6 +92,7 @@ pub fn setup_atmosphere(
             Mesh3d(cube.clone()),
             MeshMaterial3d(aurora.clone()),
             Transform::from_translation(position).with_scale(Vec3::new(24.0, 3.0, 0.15)),
+            Atmosphere,
             ClientLocal,
         ));
     }
@@ -97,6 +102,7 @@ pub fn setup_atmosphere(
             MeshMaterial3d(snow.clone()),
             Transform::from_translation(position).with_scale(Vec3::splat(0.12)),
             Snowflake,
+            Atmosphere,
             ClientLocal,
         ));
     }
