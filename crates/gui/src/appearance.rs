@@ -131,6 +131,19 @@ mod tests {
         }
 
         let lighting = night_lighting();
+        assert_eq!(lighting.sky.to_srgba().to_u8_array_no_alpha(), [5, 12, 28]);
+        assert_eq!(
+            lighting.star.to_srgba().to_u8_array_no_alpha(),
+            [173, 196, 220]
+        );
+        assert_eq!(
+            lighting.ambient.to_srgba().to_u8_array_no_alpha(),
+            [47, 76, 104]
+        );
+        assert_eq!(
+            lighting.aurora.to_srgba().to_u8_array_no_alpha(),
+            [73, 157, 144]
+        );
         assert_eq!(lighting.ambient_brightness, 8.0);
         assert_eq!(lighting.directional_illuminance, 8.0);
 
