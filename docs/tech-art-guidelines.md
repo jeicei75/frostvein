@@ -34,11 +34,12 @@ exceeds blue); the table is static until story 6.1 adds flicker.
 
 ## Boot framing
 
-The boot camera uses yaw 0.70, pitch 0.45 radians, and distance 90. It orbits the camp
-but looks through a fixed composition offset toward the far valley: the camp projects to
-78% of the frame height and the far skyline to 30%, each within a 2% tolerance. The offset
-is necessary because a camera that directly looks at the camp would always centre it and
-could not produce the approved foreground composition.
+The boot camera uses yaw 0.70, pitch 0.45 radians, and distance 90. It looks through a
+composition offset toward the far valley: the camp projects to 78% of the frame height and
+the far skyline to 30%, each within a 2% tolerance. The offset scales down below boot distance
+so the 4-unit close zoom keeps the camp in front of the camera; it is fully applied from the
+boot distance through the 500-unit vista. The offset is necessary because a camera that directly
+looks at the camp would always centre it and could not produce the approved foreground composition.
 
 ## Edge treatment
 

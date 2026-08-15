@@ -49,7 +49,10 @@ impl CameraRig {
     }
 
     fn composition_target(&self) -> Vec3 {
-        world_to_render(self.focus) + BOOT_COMPOSITION_OFFSET
+        // Keep the camp in front of the camera at close zoom while retaining the approved
+        // composition at the boot distance and beyond.
+        let composition_scale = (self.distance / BOOT_DISTANCE).min(1.0);
+        world_to_render(self.focus) + BOOT_COMPOSITION_OFFSET * composition_scale
     }
 
     /// Projects a render-space point to normalized screen coordinates at this rig's camera.
@@ -91,11 +94,24 @@ mod tests {
     #[test]
     fn zoom_never_moves_the_focus() {
         let mut rig = CameraRig::new([64, 64, 9]);
-        let focus = rig.composition_target();
         rig.zoom(-10_000.0);
-        assert!((rig.transform().translation.distance(focus) - 4.0).abs() < 0.001);
+        assert!(
+            (rig.transform()
+                .translation
+                .distance(rig.composition_target())
+                - 4.0)
+                .abs()
+                < 0.001
+        );
         rig.zoom(10_000.0);
-        assert!((rig.transform().translation.distance(focus) - 500.0).abs() < 0.001);
+        assert!(
+            (rig.transform()
+                .translation
+                .distance(rig.composition_target())
+                - 500.0)
+                .abs()
+                < 0.001
+        );
     }
 
     #[test]
@@ -119,6 +135,21 @@ mod tests {
             (far_terrain.y - 0.30).abs() <= TOLERANCE,
             "skyline must leave the top third to sky; measured {}",
             far_terrain.y
+        );
+    }
+
+    #[test]
+    fn zoom_limits_keep_the_camp_in_front_of_the_camera() {
+        let mut rig = CameraRig::new([64, 64, 9]);
+        rig.zoom(-10_000.0);
+        assert!(
+            rig.project_world_point([64, 64, 9]).is_some(),
+            "the close zoom limit must keep the camp in front of the camera"
+        );
+        rig.zoom(10_000.0);
+        assert!(
+            rig.project_world_point([64, 64, 9]).is_some(),
+            "the vista zoom limit must keep the camp in front of the camera"
         );
     }
 }

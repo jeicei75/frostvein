@@ -109,6 +109,14 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, 'const BOOT_PITCH: f32 = 0.8;\n'))
 PY
 
+mutation "close zoom loses the camp" gui zoom_limits_keep_the_camp_in_front_of_the_camera <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
+old = '        let composition_scale = (self.distance / BOOT_DISTANCE).min(1.0);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let composition_scale = 1.0;\n'))
+PY
+
 mutation "snowfall collapses back to a diagonal" gui snowfall_fills_a_visible_grid_instead_of_a_single_diagonal_row <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
