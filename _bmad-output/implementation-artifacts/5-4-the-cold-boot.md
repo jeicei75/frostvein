@@ -705,6 +705,36 @@ gpt-5.6-terra
   `cargo test -p gui --offline` did complete green (18 library, 1 capture, and 11 headless
   tests; one display-required capture test ignored). The one required Codex review was started
   but cut off before reporting findings.
+- **Orchestrator verification of the review-patch session (2026-08-15, after both rounds and
+  all 20 commits).** Codex's own gate and mutation runs were sandbox-cut and it correctly
+  claimed neither; both were re-run independently here from a clean tree:
+  - `scripts/gate.sh` **GREEN**, exit 0 (fmt, clippy `-D warnings`, full workspace tests, all
+    three dependency-edge probes, metrics ledger).
+  - `scripts/mutate.sh .../5-4-the-cold-boot.sh` run **alone**: **all 12 mutations KILLED,
+    exit 0**, source restored, tree clean. The table now covers the material-aware cap, ramp
+    caps, the light-contrast *relationship*, the `night_lighting` table, aurora position, both
+    `ClientLocal` partitions, and fog-follows-zoom.
+  - Round 1's own run had exited **1** on `ramps lose their caps` reporting `APPLY-FAILED`
+    (its anchor matched twice in `project.rs` once the predicate changed); round 2 narrowed the
+    anchor and it now kills. *Orchestrator note on its own method: that first run was piped
+    through `tail`, so the shell reported `tail`'s exit 0 and masked the runner's 1 — the
+    failure was caught by reading the printed table, not the status. Capture the exit code
+    before any pipe.*
+  - Git state verified: 20 commits across the two rounds, every one authored
+    `Völundr <jeicei75@gmail.com>`, working tree clean, and the diff confined to `crates/gui`,
+    `docs/`, and implementation-artifacts — no wire change, nothing touched in `sim-core`,
+    `simd`, `protocol`, `client-core`, or `tui` (AC21's scope half holds).
+  - **Self-gate: zero usable `codex review --base main` passes.** One launch per round, both
+    truncated by the sandbox command-parent timeout before findings. Under the three-pass cap
+    that is permitted, but it means this patch cycle carries **no self-gate evidence** — the
+    orchestrator gate/mutation runs and the next code review are the only checks on it.
+  - **The R1 light values are arithmetic, not observation.** Snow's predicted 0.1074 linear
+    (~0.36 sRGB) and the campfire's 3.79× local contrast were derived against the built 0.19
+    tree (`bevy_camera-0.19.0/src/camera.rs:263,274` for the default `Exposure::BLENDER`
+    ev100 9.7 → 1.017e-3; `bevy_pbr-0.19.0/src/render/pbr_functions.wgsl:863` for the exposure
+    multiply; `pbr_ambient.wgsl:28` for the ambient term). No devpod can see whether they are
+    *right* — only that they are no longer numerically impossible. **Task 7's live check is
+    what settles them**, and it is the first thing to look at on the vehicle.
 
 ### File List
 
@@ -737,3 +767,4 @@ gpt-5.6-terra
 | 2026-08-15 | Code review (fresh session, 4 layers, all completed live): 3 decisions ruled by Wolf, 11 patches recorded as action items for a fresh patch session, 5 defers to deferred-work.md, 6 dismissed. Headless substrate verified solid; six frame-level HIGHs predict the composed look fails the artifact comparison (lights ~1/1000 scale, atmosphere authored at render origin, fixed fog vs zoom clamp, uniform ice-hiding cap). Status → in-progress. |
 | 2026-08-15 | Landed the 11 review patches in focused commits; live vehicle tasks remain explicitly open. |
 | 2026-08-15 | REVIEW-PATCH round 2: rebalanced the cold field for default exposure, removed the tautological capture assertion, added/fixed mutations, and raised snow's respawn floor. Full mutation and gate completion remain blocked by the sandbox command-parent timeout. |
+| 2026-08-15 | Orchestrator verified the whole review-patch cycle independently: gate GREEN (exit 0) and all 12 mutations KILLED (exit 0) from a clean tree; scope, authorship and the 20-commit cadence confirmed. All 11 review action items closed. Zero usable self-gate passes (both truncated). Status stays **in-progress**: Tasks 6–9 are vehicle-bound and AC19 is Wolf's alone. |
