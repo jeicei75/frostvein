@@ -14,13 +14,13 @@ use client_core::Mirror;
 use gui::{
     atmosphere::setup_atmosphere,
     project::{
-        ClientLocal, ProjectionAssets, TerrainTile, WorldProjected, reconcile,
+        ClientLocal, ProjectedItem, ProjectionAssets, TerrainTile, WorldProjected, reconcile,
         setup_projection_assets,
     },
     transform::world_to_render,
 };
 use protocol::{
-    Delta, Dims, Entity, EntityKind, JobState, Material, MessageType, Snapshot, Speed, Tile,
+    Delta, Dims, Entity, EntityKind, Item, JobState, Material, MessageType, Snapshot, Speed, Tile,
     TileChange,
 };
 
@@ -439,6 +439,27 @@ fn recorded_camp_snapshot_projects_exactly_five_warm_point_lights() {
         let channels = light.color.to_srgba().to_u8_array_no_alpha();
         channels[0] > channels[2]
     }));
+}
+
+#[test]
+fn snapshot_item_receives_a_render_mesh() {
+    let mut snapshot = snapshot(vec![Tile::Empty, Tile::Empty], Vec::new());
+    snapshot.items = vec![Item {
+        id: 42,
+        pos: [1, 0, 0],
+    }];
+    let mut app = headless_app(snapshot);
+
+    app.update();
+
+    let item = app
+        .world_mut()
+        .query::<(&WorldProjected, &ProjectedItem, Option<&Mesh3d>)>()
+        .iter(app.world())
+        .find(|(projected, _, _)| projected.0 == 42)
+        .expect("the snapshot item must be projected");
+    assert_eq!(item.1.0, 42);
+    assert!(item.2.is_some(), "a projected item must carry a mesh");
 }
 
 #[test]

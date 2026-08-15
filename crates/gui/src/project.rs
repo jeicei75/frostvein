@@ -219,16 +219,23 @@ pub fn reconcile(
             if item_ids.contains(&id) {
                 entity.insert(ProjectedItem(id));
             }
-            if let (Some(assets), Some(mirror_entity)) = (assets, mirror_entity) {
-                let appearance = entity_appearance(mirror_entity.kind);
-                entity.insert((
-                    Mesh3d(assets.cube.clone()),
-                    MeshMaterial3d(assets.entity_material(mirror_entity.kind)),
-                    Transform::from_translation(world_to_render(position))
-                        .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
-                ));
-                if let Some(light) = mirror_entity.light {
-                    entity.insert(point_light(light));
+            if let Some(assets) = assets {
+                if let Some(mirror_entity) = mirror_entity {
+                    let appearance = entity_appearance(mirror_entity.kind);
+                    entity.insert((
+                        Mesh3d(assets.cube.clone()),
+                        MeshMaterial3d(assets.entity_material(mirror_entity.kind)),
+                        Transform::from_translation(world_to_render(position))
+                            .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
+                    ));
+                    if let Some(light) = mirror_entity.light {
+                        entity.insert(point_light(light));
+                    }
+                } else if item_ids.contains(&id) {
+                    entity.insert((
+                        Mesh3d(assets.cube.clone()),
+                        MeshMaterial3d(assets.stone.clone()),
+                    ));
                 }
             }
         }
