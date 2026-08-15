@@ -1,6 +1,9 @@
-use bevy::prelude::{
-    Assets, Commands, Component, Cuboid, Mesh, Mesh3d, MeshMaterial3d, Query, Res, ResMut,
-    StandardMaterial, Time, Transform, Vec3, With,
+use bevy::{
+    color::Alpha,
+    prelude::{
+        AlphaMode, Assets, Commands, Component, Cuboid, Mesh, Mesh3d, MeshMaterial3d, Query, Res,
+        ResMut, StandardMaterial, Time, Transform, Vec3, With,
+    },
 };
 
 use crate::{
@@ -11,6 +14,43 @@ use crate::{
 #[derive(Component)]
 pub struct Snowflake;
 
+pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, 9.0, -64.0);
+pub const SKYLINE_MAX: f32 = 26.0;
+pub const FAR_TERRAIN_EDGE: f32 = -128.0;
+
+pub fn aurora_positions() -> [Vec3; 3] {
+    [
+        Vec3::new(28.0, 32.0, -150.0),
+        Vec3::new(58.0, 36.0, -154.0),
+        Vec3::new(88.0, 40.0, -150.0),
+    ]
+}
+
+pub fn star_positions() -> [Vec3; 12] {
+    std::array::from_fn(|index| {
+        Vec3::new(
+            18.0 + (index % 6) as f32 * 20.0,
+            42.0 + (index / 6) as f32 * 14.0,
+            -146.0 - (index % 3) as f32 * 7.0,
+        )
+    })
+}
+
+pub fn snowflake_positions() -> [Vec3; 16] {
+    std::array::from_fn(|index| {
+        Vec3::new(
+            48.0 + (index % 4) as f32 * 10.0,
+            14.0 + (index / 4) as f32 * 4.0,
+            -78.0 + (index % 4) as f32 * 9.0,
+        )
+    })
+}
+
+pub fn aurora_light_transform() -> Transform {
+    let source = aurora_positions().into_iter().sum::<Vec3>() / 3.0;
+    Transform::from_translation(source).looking_at(CAMP_FOCUS, Vec3::Y)
+}
+
 /// Builds decorative geometry without consulting the mirror: atmosphere has no sim meaning.
 pub fn setup_atmosphere(
     mut commands: Commands,
@@ -19,13 +59,13 @@ pub fn setup_atmosphere(
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
     let star = materials.add(StandardMaterial {
-        emissive: bevy::prelude::Color::WHITE.to_linear(),
+        base_color: night_lighting().star,
         unlit: true,
         ..Default::default()
     });
     let aurora = materials.add(StandardMaterial {
-        base_color: night_lighting().aurora,
-        emissive: night_lighting().aurora.to_linear() * 0.35,
+        base_color: night_lighting().aurora.with_alpha(0.45),
+        alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..Default::default()
     });
@@ -35,39 +75,27 @@ pub fn setup_atmosphere(
         ..Default::default()
     });
 
-    for index in 0..12 {
-        let x = -90.0 + (index % 6) as f32 * 36.0;
-        let y = 30.0 + (index / 6) as f32 * 18.0;
+    for position in star_positions() {
         commands.spawn((
             Mesh3d(cube.clone()),
             MeshMaterial3d(star.clone()),
-            Transform::from_xyz(x, y, -100.0).with_scale(Vec3::splat(0.35)),
+            Transform::from_translation(position).with_scale(Vec3::splat(0.35)),
             ClientLocal,
         ));
     }
-    for index in 0..3 {
+    for position in aurora_positions() {
         commands.spawn((
             Mesh3d(cube.clone()),
             MeshMaterial3d(aurora.clone()),
-            Transform::from_xyz(
-                -35.0 + index as f32 * 35.0,
-                12.0 + index as f32 * 3.0,
-                -85.0,
-            )
-            .with_scale(Vec3::new(22.0, 3.0, 0.15)),
+            Transform::from_translation(position).with_scale(Vec3::new(24.0, 3.0, 0.15)),
             ClientLocal,
         ));
     }
-    for index in 0..16 {
+    for position in snowflake_positions() {
         commands.spawn((
             Mesh3d(cube.clone()),
             MeshMaterial3d(snow.clone()),
-            Transform::from_xyz(
-                -40.0 + (index % 8) as f32 * 11.0,
-                18.0 + (index / 8) as f32 * 8.0,
-                -15.0 + (index % 4) as f32 * 10.0,
-            )
-            .with_scale(Vec3::splat(0.12)),
+            Transform::from_translation(position).with_scale(Vec3::splat(0.12)),
             Snowflake,
             ClientLocal,
         ));
@@ -80,5 +108,44 @@ pub fn fall_snow(time: Res<Time>, mut flakes: Query<&mut Transform, With<Snowfla
         if transform.translation.y < -2.0 {
             transform.translation.y = 28.0;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CAMP_FOCUS, FAR_TERRAIN_EDGE, SKYLINE_MAX, aurora_light_transform, aurora_positions,
+        snowflake_positions, star_positions,
+    };
+
+    #[test]
+    fn atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_read() {
+        for band in aurora_positions() {
+            assert!(
+                band.z < FAR_TERRAIN_EDGE,
+                "aurora belongs beyond the far edge"
+            );
+            assert!(band.y > SKYLINE_MAX, "aurora belongs above the skyline");
+        }
+        for star in star_positions() {
+            assert!(star.y > SKYLINE_MAX, "stars belong above the skyline");
+        }
+        for flake in snowflake_positions() {
+            assert!(
+                flake.distance(CAMP_FOCUS) <= 32.0,
+                "snowfall remains in the camp read"
+            );
+        }
+
+        let source = aurora_positions().into_iter().sum::<bevy::prelude::Vec3>() / 3.0;
+        let toward_camp = (CAMP_FOCUS - source).normalize();
+        assert!(
+            aurora_light_transform()
+                .forward()
+                .as_vec3()
+                .dot(toward_camp)
+                > 0.99,
+            "aurora light must arrive from the band side"
+        );
     }
 }

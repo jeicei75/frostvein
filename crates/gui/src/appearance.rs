@@ -17,6 +17,7 @@ pub struct EntityAppearance {
 #[derive(Debug, Clone, Copy)]
 pub struct NightLighting {
     pub sky: Color,
+    pub star: Color,
     pub ambient: Color,
     pub ambient_brightness: f32,
     pub aurora: Color,
@@ -26,6 +27,7 @@ pub struct NightLighting {
 pub fn night_lighting() -> NightLighting {
     NightLighting {
         sky: Color::srgb_u8(5, 12, 28),
+        star: Color::srgb_u8(173, 196, 220),
         ambient: Color::srgb_u8(47, 76, 104),
         ambient_brightness: 8.0,
         aurora: Color::srgb_u8(73, 157, 144),

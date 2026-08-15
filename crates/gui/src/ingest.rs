@@ -31,7 +31,7 @@ use protocol::{Delta, Snapshot};
 
 use crate::{
     appearance::night_lighting,
-    atmosphere::{fall_snow, setup_atmosphere},
+    atmosphere::{aurora_light_transform, fall_snow, setup_atmosphere},
     camera::CameraRig,
     capture::{CaptureState, capture_after_frames},
     project::{
@@ -206,8 +206,7 @@ fn setup_night_lighting(mut commands: Commands) {
             shadow_maps_enabled: true,
             ..Default::default()
         },
-        Transform::from_xyz(-20.0, 40.0, 20.0)
-            .looking_at(bevy::prelude::Vec3::ZERO, bevy::prelude::Vec3::Y),
+        aurora_light_transform(),
         ClientLocal,
     ));
 }
