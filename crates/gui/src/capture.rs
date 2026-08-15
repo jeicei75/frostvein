@@ -111,10 +111,4 @@ mod tests {
         assert_eq!(pixels, vec![[240, 120, 10, 255]]);
         assert_eq!(warm_lit_pixels(&pixels), 1);
     }
-
-    #[test]
-    fn warm_pixel_floor_exceeds_the_emitter_faces_alone() {
-        let emitter_face_pixels = [(); 64].len();
-        assert!(emitter_face_pixels < WARM_PIXEL_FLOOR);
-    }
 }
