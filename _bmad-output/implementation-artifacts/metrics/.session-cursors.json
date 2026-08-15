@@ -288,6 +288,24 @@
     "output": 250092,
     "turns": 302
   },
+  "ae36158f-661e-4e85-80dd-a3842f429b5d.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 722807,
+        "cache_read": 11801139,
+        "input": 150,
+        "output": 127382
+      }
+    },
+    "cache_creation": 722807,
+    "cache_read": 11801139,
+    "input": 150,
+    "last_ts": "2026-08-14T15:08:14.833Z",
+    "output": 127382,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 81
+  },
   "bb7aef73-12e3-4304-9761-ecf0e9437260.jsonl": {
     "cache_creation": 418931,
     "cache_read": 23660658,
@@ -332,6 +350,36 @@
     "output": 364936,
     "quota_last": null,
     "turns": 371
+  },
+  "f3f7e690-2de5-40b9-a572-170db2c1a7e1.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 485427,
+        "cache_read": 17114770,
+        "input": 260,
+        "output": 237028
+      },
+      "claude-opus-5": {
+        "cache_creation": 773463,
+        "cache_read": 12178267,
+        "input": 290,
+        "output": 99583
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 445210,
+        "cache_read": 7246703,
+        "input": 208,
+        "output": 64018
+      }
+    },
+    "cache_creation": 1704100,
+    "cache_read": 36539740,
+    "input": 758,
+    "last_ts": "2026-08-15T13:48:01.670Z",
+    "output": 400629,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 379
   },
   "ff39ce5d-1295-4d05-b2cb-ea5124daf950.jsonl": {
     "cache_creation": 465870,
@@ -552,5 +600,59 @@
     "quota_last": 6.0,
     "schema": 2,
     "turns": 129
+  },
+  "rollout-2026-08-15T10-40-42-01a00502-7441-72d3-a158-3419133220f0.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 13238272,
+        "input": 394290,
+        "output": 43397
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 13238272,
+    "input": 394290,
+    "last_ts": "2026-08-15T11:02:16.570Z",
+    "output": 43397,
+    "quota_last": 6.0,
+    "schema": 2,
+    "turns": 156
+  },
+  "rollout-2026-08-15T11-05-35-01a00519-3d98-7fe2-bc96-3d1f6d552c5f.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 92160,
+        "input": 26830,
+        "output": 1382
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 92160,
+    "input": 26830,
+    "last_ts": "2026-08-15T11:06:14.788Z",
+    "output": 1382,
+    "quota_last": 7.0,
+    "schema": 2,
+    "turns": 4
+  },
+  "rollout-2026-08-15T11-06-36-01a0051a-2de0-7d72-8c3d-1a81bbd98ec9.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 9890560,
+        "input": 317504,
+        "output": 36617
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 9890560,
+    "input": 317504,
+    "last_ts": "2026-08-15T11:25:43.142Z",
+    "output": 36617,
+    "quota_last": 12.0,
+    "schema": 2,
+    "turns": 113
   }
 }
