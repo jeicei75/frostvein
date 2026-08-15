@@ -294,41 +294,41 @@ rest. The other four predictions are no longer arithmetic — they are observed.
 loud-exit when launched without a reachable daemon — 5.3's disconnect fix working as
 designed; started properly, gui runs stably. No stability finding.)
 
-- [ ] [Review][Decision→Patch] RULED by Wolf 2026-08-15: cap ramps too. `has_snow_cap`
+- [x] [Review][Decision→Patch] RULED by Wolf 2026-08-15: cap ramps too. `has_snow_cap`
       requires `Tile::Solid`, leaving the shipped seed's 3,813 exposed ramp tops (1,914 ice /
       1,899 snow) bare inside a fully capped field — slopes are what AC18's first live view
       highlights. Include `Tile::Ramp` tops under the same material-aware rules as solids
       (they already render as full cubes); pin with a toy-world test. Folds into the
       cap-predicate patch below. Three-layer convergence, probed empirically.
       [blind+edge+auditor/MED] [crates/gui/src/project.rs:294]
-- [ ] [Review][Decision→Patch] RULED by Wolf 2026-08-15: amend AC11 in place + soften the
+- [x] [Review][Decision→Patch] RULED by Wolf 2026-08-15: amend AC11 in place + soften the
       doc. AC11's "chosen **by testing**" is unmeetable headless (seventh instance of the
       AC-text-defect class): the comparison moves to Task 6's vehicle session, recorded as an
       amendment beside AC11; `docs/tech-art-guidelines.md:23-28` is reworded to "candidate,
       pending vehicle comparison" so the deliverable stops running ahead of its evidence.
       [feature+auditor/MED]
-- [ ] [Review][Decision→Patch] RULED by Wolf 2026-08-15: strengthen the AC16 check. The
+- [x] [Review][Decision→Patch] RULED by Wolf 2026-08-15: strengthen the AC16 check. The
       warm-pixel check is vacuous for its purpose — emissive emitter cubes bypass exposure
       (verified in shader source), so `warm > 0` passes even if every `PointLight` attachment
       silently failed (broken-instrument class). After the light rescale, raise the check to
       a named warm-pixel-count floor sized above what the emitter-cube faces alone can
       produce, so it detects "lights not attached".
       [feature+auditor/MED] [crates/gui/src/capture.rs:92]
-- [ ] [Review][Patch] Snow cap is a uniform coat that hides the ice: `has_snow_cap` ignores
+- [x] [Review][Patch] Snow cap is a uniform coat that hides the ice: `has_snow_cap` ignores
       material, capping all 3,650 exposed ice tops snow-white — AC8's "ice breaks the
       expanse" is defeated on the real seed (live census: 16,992 caps = 3,650 ice + 3,817
       snow + 9,525 foliage, zero stone/soil — the toy-world test's stone case never occurs).
       Make the predicate material-aware (ice tops keep ice) per AC7's own "material +
       exposure" wording, and test against seed-shaped material cases. [feature+auditor/HIGH]
       [crates/gui/src/project.rs:294]
-- [ ] [Review][Patch] Warm pools of light are numerically absent: the light table is ~1/1000
+- [x] [Review][Patch] Warm pools of light are numerically absent: the light table is ~1/1000
       of Bevy's reference intensity (torch 900 lm → 71.6 cd vs `PointLight` default
       1,000,000 lm; campfire parity with the cold ambient+directional fill at ~0.5 world
       units, exposure-independent). AC2/AC3's warm-against-cold contrast cannot happen.
       Rescale the table lumens, re-balance ambient (110) / directional (250), and encode the
       warm-vs-cold light-budget relationship as a headless test so it is sabotage-able.
       [feature+auditor/HIGH] [crates/gui/src/appearance.rs:32]
-- [ ] [Review][Patch] Atmosphere is authored around the render origin, not the world/boot
+- [x] [Review][Patch] Atmosphere is authored around the render origin, not the world/boot
       framing: all 16 snowflakes fall outside the boot frustum (43.8°–54.1° off-axis, over
       the map's far-edge strip); the star field contributes ~1 pixel (half off-map, 8/12
       beyond fog end); aurora bands sit inside the terrain volume at skyline height
@@ -337,34 +337,34 @@ designed; started properly, gui runs stably. No stability finding.)
       world footprint/camp focus, aurora behind the 5.1 skyline, translucent; add
       position-pinning headless tests (today no test pins any spatial relationship between
       atmosphere, world, and camera). [feature+auditor/HIGH] [crates/gui/src/atmosphere.rs:38]
-- [ ] [Review][Patch] Fixed `FogFalloff::Linear { start: 85, end: 180 }` versus the 4–500
+- [x] [Review][Patch] Fixed `FogFalloff::Linear { start: 85, end: 180 }` versus the 4–500
       zoom clamp: past ~250 units the whole world is beyond fog end — AC10's full vista is a
       flat sky-colored rectangle (at zoom 500, 100% of terrain pixels ≥95% fogged). Couple
       the fog range to camera distance so both registers survive; the final edge treatment
       remains Task 6's vehicle comparison. [feature+auditor/HIGH]
       [crates/gui/src/ingest.rs:190]
-- [ ] [Review][Patch] `SnowCap` entities carry neither `WorldProjected` nor `ClientLocal` —
+- [x] [Review][Patch] `SnowCap` entities carry neither `WorldProjected` nor `ClientLocal` —
       ~17,000 entities permanently outside the AD-14/15 partition (`classify_client_local`
       runs only at `PostStartup`; caps spawn in `Update`). Spawn them `ClientLocal` (adding
       `WorldProjected` would drag them into entity reconciliation's `Without<TerrainTile>`
       query and get them despawned). [feature+auditor+orchestrator/MED]
       [crates/gui/src/project.rs:284]
-- [ ] [Review][Patch] AC6's partition test asserts a count threshold, not "every": `>= 20`
+- [x] [Review][Patch] AC6's partition test asserts a count threshold, not "every": `>= 20`
       of 31 spawned atmosphere entities tolerates dropping the marker from 11 of them (the
       table's mutation only dies because it hits the 12-star loop; aimed at the 3 aurora
       bands it would survive), and both partition tests assert disjointness, never totality.
       Assert exact counts and totality (including caps). [blind+auditor/MED]
       [crates/gui/tests/headless.rs:505]
-- [ ] [Review][Patch] The warm/cold invariant is a tautology: `assert!(rgb[0] > rgb[2])`
+- [x] [Review][Patch] The warm/cold invariant is a tautology: `assert!(rgb[0] > rgb[2])`
       tests the test's own literal array, not production values — it can never fail on a
       production change (fifth sighting of the self-referential-oracle class). Assert the
       invariant over production table outputs across all enum variants.
       [auditor/MED] [crates/gui/src/appearance.rs:100]
-- [ ] [Review][Patch] `night_lighting()` is a fourth appearance table with no literal-oracle
+- [x] [Review][Patch] `night_lighting()` is a fourth appearance table with no literal-oracle
       test and no mutation — the sky/ambient/aurora palette (ClearColor, fog color, ambient,
       directional tint, aurora material) is entirely unguarded. Pin it.
       [auditor/MED] [crates/gui/src/appearance.rs:24]
-- [ ] [Review][Patch] `Color::WHITE` literal at the star draw site (the one AC13 leak), and
+- [x] [Review][Patch] `Color::WHITE` literal at the star draw site (the one AC13 leak), and
       all three atmosphere materials set `emissive` that `unlit: true` never renders (dead
       code — the stars' actual color is `StandardMaterial::default()` base_color by
       omission). Fold into the atmosphere rework: table-driven `base_color`, drop the dead
@@ -618,6 +618,20 @@ gpt-5.6-terra
   mutation was running; running that exact emitter sabotage independently produced
   `left: 0`, `right: 5` at `headless.rs:435`. Source was restored and the headless GUI suite
   passed afterwards.
+- Review-patch RED — light budget: `appearance_tables_pin_the_cold_boot_palette` initially
+  failed to compile because `NightLighting` lacked `ambient_brightness` and
+  `directional_illuminance` (E0609); after adding the production fields the literal budget
+  oracle passed. Registry sources read: `bevy_light-0.19.0/src/{point_light,ambient_light,
+  directional_light}.rs`, `bevy_light-0.19.0/src/lib.rs`, `bevy_camera-0.19.0/src/camera.rs`,
+  and `bevy_pbr-0.19.0/src/pbr_material.rs`.
+- Review-patch RED — caps: `snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world`
+  failed at `exposed ice keeps its blue top` before the material-aware ramp-inclusive predicate.
+- Review-patch RED — atmosphere: mutating the first aurora z to `-120.0` failed the position
+  test with `aurora belongs beyond the far edge`.
+- Review-patch RED — fog: the initial 180-unit boot fog end failed `the far terrain edge must
+  remain before complete fog`; the range is now `(85,190)` at boot and `(470,900)` at full zoom.
+- Review-patch RED — caps partition: `capped_stone_keeps_its_bare_cube_beneath_a_snow_cap`
+  failed with `snow caps belong to the client-local partition` before spawning `ClientLocal`.
 
 ### Completion Notes List
 
@@ -651,6 +665,12 @@ gpt-5.6-terra
   stale message. (3) The first session's handback claimed completion without surfacing its
   own self-gate pass-1 findings; all three were real, verified in-tree, and fixed only in
   the continuation (`db54e77`, `ae696f5`, `31e60a1`).
+- Review-patch session: rescaled torch/campfire/lantern to 250,000/500,000/180,000 lm with
+  an 8 cd/m² + 8 lux cold fill; moved stars, translucent aurora, and snowfall around the
+  camp/world footprint; material-aware caps preserve ice and include ramps; fog tracks zoom;
+  caps and all 31 atmosphere entities are partitioned ClientLocal. Vehicle-only Tasks 6–9
+  remain open. The capture floor is 100 warm pixels: a conservative floor above the estimated
+  64 pixels from the five emitter faces at distance 90; it still needs native-Windows confirmation.
 
 ### File List
 
@@ -681,3 +701,4 @@ gpt-5.6-terra
 | 2026-08-15 | Addressed self-gate pass 1: decode BGRA capture pixels, restore projected item rendering, and render snow as a top slab over bare terrain; added the snow-flank mutation. |
 | 2026-08-15 | Orchestrator verified independently (gate GREEN, 5/5 mutations killed); Status → review. Vehicle-bound tasks and Wolf's AC19 closing sign-off remain open — review does not close this story. |
 | 2026-08-15 | Code review (fresh session, 4 layers, all completed live): 3 decisions ruled by Wolf, 11 patches recorded as action items for a fresh patch session, 5 defers to deferred-work.md, 6 dismissed. Headless substrate verified solid; six frame-level HIGHs predict the composed look fails the artifact comparison (lights ~1/1000 scale, atmosphere authored at render origin, fixed fog vs zoom clamp, uniform ice-hiding cap). Status → in-progress. |
+| 2026-08-15 | Landed the 11 review patches in focused commits; live vehicle tasks remain explicitly open. |
