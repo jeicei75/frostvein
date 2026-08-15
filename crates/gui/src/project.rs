@@ -162,7 +162,7 @@ pub fn reconcile(
                 .spawn((
                     WorldProjected(terrain_id(position, mirror.dims())),
                     TerrainTile(position),
-                    Transform::from_translation(world_to_render(position)),
+                    terrain_transform(mirror, position),
                 ))
                 .id();
             if let Some(assets) = assets {
@@ -200,7 +200,7 @@ pub fn reconcile(
                     .spawn((
                         WorldProjected(terrain_id(position, mirror.dims())),
                         TerrainTile(position),
-                        Transform::from_translation(world_to_render(position)),
+                        terrain_transform(mirror, position),
                     ))
                     .id();
                 if let Some(assets) = assets {
@@ -278,6 +278,31 @@ fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> Material {
     match mirror.tile(position) {
         Some(Tile::Solid(material) | Tile::Ramp(material)) => material,
         Some(Tile::Empty) | None => Material::Stone,
+    }
+}
+
+fn terrain_transform(mirror: &Mirror, position: [i32; 3]) -> Transform {
+    Transform::from_translation(world_to_render(position))
+        .with_scale(Vec3::splat(foliage_scale(mirror, position)))
+}
+
+/// Keeps cube foliage readable as sparse spruce branches instead of a solid square canopy.
+pub fn foliage_scale(mirror: &Mirror, position: [i32; 3]) -> f32 {
+    if terrain_material(mirror, position) != Material::TreeFoliage {
+        return 1.0;
+    }
+    let foliage_above = (1..=2)
+        .take_while(|offset| {
+            matches!(
+                mirror.tile([position[0], position[1], position[2] + offset]),
+                Some(Tile::Solid(Material::TreeFoliage))
+            )
+        })
+        .count();
+    match foliage_above {
+        0 => 0.72,
+        1 => 0.86,
+        _ => 1.0,
     }
 }
 
@@ -486,5 +511,33 @@ mod tests {
         assert!(has_snow_cap(&toy, [7, 0, 0]), "snow ramps are capped");
         assert!(has_snow_cap(&toy, [8, 0, 0]), "stone ramps are capped");
         assert!(!has_snow_cap(&toy, [9, 0, 0]), "air never receives a cap");
+    }
+
+    #[test]
+    fn foliage_tapers_from_wide_mid_crown_to_narrow_tip_and_skirt() {
+        let spruce = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 6 },
+            tiles: vec![
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+
+        assert_eq!(foliage_scale(&spruce, [0, 0, 0]), 0.72, "skirt");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 2]), 1.0, "mid crown");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 3]), 0.86, "upper crown");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 4]), 0.72, "crown tip");
     }
 }

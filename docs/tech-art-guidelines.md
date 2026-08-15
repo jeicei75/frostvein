@@ -10,8 +10,10 @@ desaturated. Near-white is reserved for stars and emitter faces. These choices l
 Snow is a client-side settled cap: exposed snow, stone, and soil tops receive it, while
 ice keeps its blue surface and covered terrain retains its bare flank. Foliage receives
 no terrain-style snow slab: its dark, broken silhouette leaves the valley's snow landform
-visible instead of turning every ground-level tree skirt into a bright tile. Ramps follow
-the same material rules because the renderer presents them as full cubes.
+visible instead of turning every ground-level tree skirt into a bright tile. Foliage cubes
+taper by their contiguous foliage above: ground skirts and crown tips scale to 0.72, the
+upper crown to 0.86, and the mid-crown stays full scale. Ramps follow the same material
+rules because the renderer presents them as full cubes.
 
 ## Sky and lights
 
