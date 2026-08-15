@@ -750,6 +750,32 @@ gpt-5.6-terra
     rebuild + re-copy as an explicit step, and the running build should be confirmed against
     the last commit time before any visual conclusion is drawn. Same family as the exit-0 rule:
     an unchanged frame is not evidence about the code until the binary is known to contain it.
+- **FIRST REAL BOOT CAPTURE (Wolf, 2026-08-15 ~17:17, native Windows vehicle,
+  `docs/frostvein-5-4-boot.png`, 1280×720).** Non-zero evidence, all of it:
+  - `projected 53365 terrain cubes` — **AC18's oracle line confirmed live**, first window ever
+    opened on the ramp-complete valley.
+  - `capture range check: warm-lit pixels=17648` — AC16's range checks ran and passed.
+    17,648 of 921,600 px = 1.9% of frame. **The warm pools are real and measured.**
+  - Confirmed by eye: the warm/cold contrast works, the eye lands on the camp on light alone
+    (AC3), and the field is a genuine midtone blue-grey rather than black (AC9). **The R1
+    light rescale is validated at the vehicle.**
+  - **The measurement makes the AC16 floor obsolete:** 17,648 with lights attached versus an
+    estimated ~64 from emitter faces alone means the `WARM_PIXEL_FLOOR = 100` cannot detect
+    "lights silently not attached" with any margin. Raise it against the measured value.
+- **RULING REVERSED — trees and landform are back IN SCOPE (Wolf, 2026-08-15, on the capture):**
+  *"let's fix trees and valley landform still."* This supersedes the morning's
+  accept-cube-trees-and-defer ruling, which was made against the artifact script **before**
+  anyone had seen the composed frame. The two decisions turned out to be one: with wire-true
+  tree density the valley reads as a repeating waffle with no silhouette, no slope and no
+  landform, so AC10/AC12/AC18's vista has nothing to carry it.
+  - **Root cause, traced to worldgen (`crates/sim-core/src/worldgen.rs:206-215`):** every tree
+    lays a **3×3 foliage skirt flat on the ground** around its trunk. `has_snow_cap` treats
+    `TreeFoliage` exactly like terrain, so ~9,525 ground-level skirt tiles each receive a full
+    bright snow slab. The repeating lump-with-a-dark-notch is a capped skirt around a dark
+    trunk. The landform is buried under them. This is the very thing AC7's "loaded branches,
+    **not a uniform coat**" forbids — the cap predicate met the letter and inverted the intent.
+  - **Fixable entirely client-side.** Trunk tiles above the skirt are already exposed and drawn,
+    so the fix does not touch `is_exposed` and **the 53,365 oracle holds**. No wire change.
 
 ### File List
 
