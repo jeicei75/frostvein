@@ -5,9 +5,12 @@ use bevy::prelude::{
     MeshMaterial3d, Query, ResMut, Resource, StandardMaterial, Transform, Without,
 };
 use client_core::Mirror;
-use protocol::{Dims, Tile};
+use protocol::{Dims, EntityKind, Material, Tile};
 
-use crate::transform::world_to_render;
+use crate::{
+    appearance::{entity_appearance, material_color},
+    transform::world_to_render,
+};
 
 const NEIGHBOURS: [[i32; 3]; 6] = [
     [-1, 0, 0],
@@ -35,7 +38,15 @@ pub struct ProjectedItem(pub u32);
 #[derive(Resource)]
 pub struct ProjectionAssets {
     cube: Handle<Mesh>,
-    materials: Vec<Handle<StandardMaterial>>,
+    stone: Handle<StandardMaterial>,
+    soil: Handle<StandardMaterial>,
+    ice: Handle<StandardMaterial>,
+    snow: Handle<StandardMaterial>,
+    tree_trunk: Handle<StandardMaterial>,
+    tree_foliage: Handle<StandardMaterial>,
+    dwarf: Handle<StandardMaterial>,
+    torch: Handle<StandardMaterial>,
+    campfire: Handle<StandardMaterial>,
 }
 
 pub fn setup_projection_assets(
@@ -44,12 +55,34 @@ pub fn setup_projection_assets(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
-    // Eight deliberately separate grey materials preserve batching by material while
-    // leaving palette and light appearance to story 5.4.
-    let materials = (0..8)
-        .map(|_| materials.add(StandardMaterial::default()))
-        .collect();
-    commands.insert_resource(ProjectionAssets { cube, materials });
+    commands.insert_resource(ProjectionAssets {
+        cube,
+        stone: materials.add(terrain_standard_material(Material::Stone)),
+        soil: materials.add(terrain_standard_material(Material::Soil)),
+        ice: materials.add(terrain_standard_material(Material::Ice)),
+        snow: materials.add(terrain_standard_material(Material::Snow)),
+        tree_trunk: materials.add(terrain_standard_material(Material::TreeTrunk)),
+        tree_foliage: materials.add(terrain_standard_material(Material::TreeFoliage)),
+        dwarf: materials.add(entity_standard_material(EntityKind::Dwarf)),
+        torch: materials.add(entity_standard_material(EntityKind::Torch)),
+        campfire: materials.add(entity_standard_material(EntityKind::Campfire)),
+    });
+}
+
+fn terrain_standard_material(material: Material) -> StandardMaterial {
+    StandardMaterial {
+        base_color: material_color(material),
+        perceptual_roughness: 0.9,
+        ..Default::default()
+    }
+}
+
+fn entity_standard_material(kind: EntityKind) -> StandardMaterial {
+    StandardMaterial {
+        base_color: entity_appearance(kind).color,
+        perceptual_roughness: 0.75,
+        ..Default::default()
+    }
 }
 
 pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
@@ -93,7 +126,7 @@ pub fn reconcile(
             if let Some(assets) = assets {
                 entity.insert((
                     Mesh3d(assets.cube.clone()),
-                    MeshMaterial3d(assets.materials[terrain_material(mirror, position)].clone()),
+                    MeshMaterial3d(assets.terrain_material(terrain_material(mirror, position))),
                 ));
             }
         }
@@ -122,9 +155,7 @@ pub fn reconcile(
                 if let Some(assets) = assets {
                     entity.insert((
                         Mesh3d(assets.cube.clone()),
-                        MeshMaterial3d(
-                            assets.materials[terrain_material(mirror, position)].clone(),
-                        ),
+                        MeshMaterial3d(assets.terrain_material(terrain_material(mirror, position))),
                     ));
                 }
             }
@@ -133,16 +164,16 @@ pub fn reconcile(
 
     let mut wanted: std::collections::BTreeMap<_, _> = mirror
         .entities()
-        .map(|entity| (entity.id, entity.pos))
+        .map(|entity| (entity.id, (entity.pos, Some(*entity))))
         .collect();
     let item_ids: std::collections::BTreeSet<_> = mirror.items().map(|item| item.id).collect();
-    wanted.extend(mirror.items().map(|item| (item.id, item.pos)));
+    wanted.extend(mirror.items().map(|item| (item.id, (item.pos, None))));
     for (bevy_entity, marker) in projected.iter() {
         if !terrain.get(bevy_entity).is_ok() && !wanted.contains_key(&marker.0) {
             commands.entity(bevy_entity).despawn();
         }
     }
-    for (id, position) in wanted {
+    for (id, (position, mirror_entity)) in wanted {
         // NOTE: terrain and simulation entities retain the same marker component and
         // numeric range. Keep this query filtered to prevent a terrain id colliding
         // with a simulation id until a story needs separate marker types.
@@ -158,26 +189,44 @@ pub fn reconcile(
             if item_ids.contains(&id) {
                 entity.insert(ProjectedItem(id));
             }
-            if let Some(assets) = assets {
+            if let (Some(assets), Some(mirror_entity)) = (assets, mirror_entity) {
+                let appearance = entity_appearance(mirror_entity.kind);
                 entity.insert((
                     Mesh3d(assets.cube.clone()),
-                    MeshMaterial3d(assets.materials[0].clone()),
+                    MeshMaterial3d(assets.entity_material(mirror_entity.kind)),
+                    Transform::from_translation(world_to_render(position))
+                        .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
                 ));
             }
         }
     }
 }
 
-fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> usize {
+fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> Material {
     match mirror.tile(position) {
-        Some(Tile::Solid(protocol::Material::Stone)) => 0,
-        Some(Tile::Solid(protocol::Material::Soil)) => 1,
-        Some(Tile::Solid(protocol::Material::Ice)) => 2,
-        Some(Tile::Solid(protocol::Material::Snow)) => 3,
-        Some(Tile::Solid(protocol::Material::TreeTrunk)) => 4,
-        Some(Tile::Solid(protocol::Material::TreeFoliage)) => 5,
-        Some(Tile::Ramp(_)) => 6,
-        Some(Tile::Empty) | None => 7,
+        Some(Tile::Solid(material) | Tile::Ramp(material)) => material,
+        Some(Tile::Empty) | None => Material::Stone,
+    }
+}
+
+impl ProjectionAssets {
+    fn terrain_material(&self, material: Material) -> Handle<StandardMaterial> {
+        match material {
+            Material::Stone => self.stone.clone(),
+            Material::Soil => self.soil.clone(),
+            Material::Ice => self.ice.clone(),
+            Material::Snow => self.snow.clone(),
+            Material::TreeTrunk => self.tree_trunk.clone(),
+            Material::TreeFoliage => self.tree_foliage.clone(),
+        }
+    }
+
+    fn entity_material(&self, kind: EntityKind) -> Handle<StandardMaterial> {
+        match kind {
+            EntityKind::Dwarf => self.dwarf.clone(),
+            EntityKind::Torch => self.torch.clone(),
+            EntityKind::Campfire => self.campfire.clone(),
+        }
     }
 }
 
@@ -261,7 +310,10 @@ mod tests {
             is_exposed(&ramp_edge, [0, 0, 0]),
             "a boundary ramp belongs to the draw set"
         );
-        assert_eq!(terrain_material(&ramp_edge, [0, 0, 0]), 6);
+        assert_eq!(
+            terrain_material(&ramp_edge, [0, 0, 0]),
+            protocol::Material::Ice
+        );
         let mut tiles = vec![Tile::Solid(protocol::Material::Ice); 27];
         tiles[12] = Tile::Ramp(protocol::Material::Ice); // [0, 1, 1], a face neighbour of the centre
         let enclosed = Mirror::from_snapshot(Snapshot {
