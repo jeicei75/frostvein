@@ -830,6 +830,31 @@ gpt-5.6-terra
     **not a uniform coat**" forbids — the cap predicate met the letter and inverted the intent.
   - **Fixable entirely client-side.** Trunk tiles above the skirt are already exposed and drawn,
     so the fix does not touch `is_exposed` and **the 53,365 oracle holds**. No wire change.
+- **CAPTURE vs APPROVED ARTIFACT — read off `artifact_render.py`, not impressions
+  (orchestrator, 2026-08-15).** The approved artifact encodes its own targets as constants, so
+  the AC19 comparison has numbers behind it:
+  - **`HORIZON = H * 0.30` (`:149`) — the approved framing gives the sky the top THIRD**
+    (script comment `:7`: "sky/aurora given the top third"), and anchors the camp at
+    `H * 0.78` (`:147`). The built boot frame gives the sky roughly **8%**. This is why the
+    aurora and stars had to be squeezed into a ~1.6-unit band to satisfy the frustum test:
+    at `BOOT_PITCH = 0.8` (45.8° down) there is almost no sky to put them in. **Task 7's
+    framing is the gating visual lever for the whole sky half of the story.**
+  - **The material table is systematically darker than the approved target.** Artifact vs
+    shipped: snow `(136,150,178)` vs `(118,139,157)`; ice `(104,128,170)` vs `(84,133,160)`;
+    stone `(60,70,92)` vs `(40,57,82)`; soil `(56,52,62)` vs `(56,69,80)`.
+  - **The artifact has a DISTINCT cap colour** — `SNOWCAP = (158,170,196)` (`:62`), brighter
+    than its own snow `(136,150,178)`. Our `spawn_snow_cap` reuses `assets.snow`, so a cap and
+    the snow terrain under it are **the same colour**. AC7's "white tops, bare dark flanks"
+    cannot read: on a snow tile the cap is invisible by construction. Explains why cap-vs-flank
+    could not be judged in the capture.
+  - **Round 3's foliage decision is CONFIRMED correct against the artifact:**
+    `topc = SNOWCAP if m in ("stone","soil","snow") else base` (`:256`) — the artifact caps
+    only stone/soil/snow, never ice and never foliage. Ice-keeps-blue (round 2) and
+    foliage-uncapped (round 3) both match the approved target. Tree snow in the artifact comes
+    from `draw_spruce`'s own layer tops (`:240-245`), not from a terrain cap.
+  - Round 3's taper (crown base 1.0 → 0.86 → tip 0.72) is the same *shape* as the artifact's
+    `layers` radii 0.82/0.60/0.38 (`:241`); the wire only offers three crown levels, so the
+    ratios cannot match exactly. Not a defect.
 
 - REVIEW-PATCH round 3 landed six focused visual/instrument patches in six commits. The foliage
   rule is intentionally minimal: uncapped, reduced cube branches with a 0.72/0.86/1.0 taper; no
