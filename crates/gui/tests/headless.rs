@@ -14,8 +14,8 @@ use client_core::Mirror;
 use gui::{
     atmosphere::setup_atmosphere,
     project::{
-        ClientLocal, ProjectedItem, ProjectionAssets, SnowCap, TerrainTile, WorldProjected,
-        reconcile, setup_projection_assets,
+        ClientLocal, ProjectedItem, ProjectionAssets, SnowCap, TerrainQuery, TerrainTile,
+        WorldProjected, reconcile, setup_projection_assets,
     },
     transform::world_to_render,
 };
@@ -51,8 +51,7 @@ fn reconcile_from_mirror(
     mirror: Res<TestMirror>,
     mut work: ResMut<ProjectionWork>,
     projected: Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
-    terrain: Query<(BevyEntity, &TerrainTile)>,
-    caps: Query<(BevyEntity, &SnowCap)>,
+    terrain: TerrainQuery,
     assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild_terrain = std::mem::take(&mut work.rebuild_terrain);
@@ -63,7 +62,6 @@ fn reconcile_from_mirror(
         &mirror.0.changes().tiles,
         &projected,
         &terrain,
-        &caps,
         assets.as_deref(),
     );
 }

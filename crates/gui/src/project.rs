@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, PointLight, Query, ResMut, Resource, StandardMaterial, Transform, Vec3,
-    Without,
+    MeshMaterial3d, Or, PointLight, Query, ResMut, Resource, StandardMaterial, Transform, Vec3,
+    With, Without,
 };
 use client_core::Mirror;
 use protocol::{Dims, EntityKind, Material, Tile};
@@ -35,6 +35,17 @@ pub struct TerrainTile(pub [i32; 3]);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SnowCap(pub [i32; 3]);
+
+pub type TerrainQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        BevyEntity,
+        Option<&'static TerrainTile>,
+        Option<&'static SnowCap>,
+    ),
+    Or<(With<TerrainTile>, With<SnowCap>)>,
+>;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedItem(pub u32);
@@ -136,15 +147,11 @@ pub fn reconcile(
     rebuild_terrain: bool,
     dirty_tiles: &[[i32; 3]],
     projected: &Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
-    terrain: &Query<(BevyEntity, &TerrainTile)>,
-    caps: &Query<(BevyEntity, &SnowCap)>,
+    terrain: &TerrainQuery,
     assets: Option<&ProjectionAssets>,
 ) {
     if rebuild_terrain {
-        for (entity, _) in terrain.iter() {
-            commands.entity(entity).despawn();
-        }
-        for (entity, _) in caps.iter() {
+        for (entity, _, _) in terrain.iter() {
             commands.entity(entity).despawn();
         }
         let positions = terrain_positions(mirror);
@@ -181,11 +188,12 @@ pub fn reconcile(
             }
         }
         for position in affected {
-            for (entity, _) in terrain.iter().filter(|(_, tile)| tile.0 == position) {
-                commands.entity(entity).despawn();
-            }
-            for (entity, _) in caps.iter().filter(|(_, cap)| cap.0 == position) {
-                commands.entity(entity).despawn();
+            for (entity, tile, cap) in terrain.iter() {
+                if tile.is_some_and(|tile| tile.0 == position)
+                    || cap.is_some_and(|cap| cap.0 == position)
+                {
+                    commands.entity(entity).despawn();
+                }
             }
             if is_exposed(mirror, position) {
                 let entity = commands
