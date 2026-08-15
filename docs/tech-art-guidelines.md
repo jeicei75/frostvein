@@ -3,26 +3,27 @@
 ## Value and materials
 
 The boot frame is a night scene. Snow is deliberately midtone blue-grey rather than
-white; ice is visibly bluer, and stone, soil, trunks, and foliage remain dark and
-desaturated. Near-white is reserved for emissive sources and stars. These choices live
-in `gui`'s material table, not beside draw calls.
+white; ice keeps its blue top, while stone, soil, trunks, and foliage remain dark and
+desaturated. Near-white is reserved for stars and emitter faces. These choices live in
+`gui`'s material table, not beside draw calls.
 
-Snow is a client-side settled cap: an exposed solid top receives the snow material,
-while covered solids retain their bare flank material. Foliage is treated as a solid
-top, so its branches read as loaded rather than uniformly coated terrain.
+Snow is a client-side settled cap: exposed snow, stone, soil, and foliage tops receive
+it, while ice keeps its blue surface and covered terrain retains its bare flank. Ramps
+follow those same material rules because the renderer presents them as full cubes.
 
 ## Sky and lights
 
-The sky is an illuminant. Cold ambient fill and a low green-blue directional light let
-the aurora catch snow and ice; the horizon bands are emissive geometry behind the
-skyline, never an overhead backdrop. Torch, campfire, and future lantern properties are
-one data table containing colour, lumen intensity, and range. Every entry is warm
-(red exceeds blue); the table is static until story 6.1 adds flicker.
+The sky is an illuminant. Low cold ambient fill and a green-blue directional light let
+the aurora catch snow and ice; the translucent horizon bands sit beyond the far terrain
+edge and above the skyline, never inside terrain or overhead. Torch, campfire, and future
+lantern properties are one data table containing colour, lumen intensity, and range.
+The camp lights use hundreds of thousands of lumens against an 8 cd/m² + 8 lux cold fill,
+so their pools dominate without lifting the night field. Every entry is warm (red exceeds
+blue); the table is static until story 6.1 adds flicker.
 
 ## Edge treatment
 
-The chosen edge treatment is distance fog to the night-sky colour, starting beyond the
-camp read and becoming opaque at the far valley. It was selected over per-rim material
-darkening because fog preserves the material table's value discipline and also supplies
-the required depth separation. The vehicle review must confirm this against the approved
-artifact; it cannot be judged in the devpod.
+Distance fog to the night-sky colour is the current candidate: its range follows the
+camera distance so the far valley survives the whole zoom clamp while preserving depth.
+It is pending the Task 6 vehicle comparison against per-rim material darkening; no final
+edge choice has been made in the devpod.

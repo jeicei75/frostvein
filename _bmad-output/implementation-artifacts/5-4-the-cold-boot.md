@@ -89,6 +89,14 @@ the vehicle. **Never fake the live half.**
     dissolve into the night. The treatment is chosen **by testing** from the addendum's
     candidates — fog skirt, darkness falloff at the rim, sky wrapping below the horizon,
     vignette — and the story records what was tried and why the winner won (UX-DR12).
+
+    **AMENDMENT (Wolf's ruling, 2026-08-15, review finding `[feature+auditor/MED]`):**
+    "chosen **by testing**" is unmeetable headless — an edge treatment is a look, and no
+    devpod can see one (seventh instance of the AC-text-defect class). The comparison moves
+    to **Task 6's vehicle session**: candidates are implemented headless, then compared by
+    eye on the live vehicle, and the winner plus what lost is recorded there. Until that
+    session runs, `docs/tech-art-guidelines.md`'s edge section states its choice as a
+    *candidate pending vehicle comparison*, never as a settled decision.
 12. The vista builds on 5.1's recorded silhouette decision — **YES, shaped there**: surface
     heights span z 10–26 on the shipped seed, pinned by a `sim-core` range test. This story
     does not re-open it; the aurora backlights the skyline that exists.
