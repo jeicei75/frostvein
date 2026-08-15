@@ -2,7 +2,8 @@ use std::collections::BTreeSet;
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, PointLight, Query, ResMut, Resource, StandardMaterial, Transform, Without,
+    MeshMaterial3d, PointLight, Query, ResMut, Resource, StandardMaterial, Transform, Vec3,
+    Without,
 };
 use client_core::Mirror;
 use protocol::{Dims, EntityKind, Material, Tile};
@@ -33,11 +34,15 @@ pub struct ClientLocal;
 pub struct TerrainTile(pub [i32; 3]);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnowCap(pub [i32; 3]);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedItem(pub u32);
 
 #[derive(Resource)]
 pub struct ProjectionAssets {
     cube: Handle<Mesh>,
+    snow_cap: Handle<Mesh>,
     stone: Handle<StandardMaterial>,
     soil: Handle<StandardMaterial>,
     ice: Handle<StandardMaterial>,
@@ -55,8 +60,10 @@ pub fn setup_projection_assets(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
+    let snow_cap = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
     commands.insert_resource(ProjectionAssets {
         cube,
+        snow_cap,
         stone: materials.add(terrain_standard_material(Material::Stone)),
         soil: materials.add(terrain_standard_material(Material::Soil)),
         ice: materials.add(terrain_standard_material(Material::Ice)),
@@ -130,26 +137,35 @@ pub fn reconcile(
     dirty_tiles: &[[i32; 3]],
     projected: &Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
     terrain: &Query<(BevyEntity, &TerrainTile)>,
+    caps: &Query<(BevyEntity, &SnowCap)>,
     assets: Option<&ProjectionAssets>,
 ) {
     if rebuild_terrain {
         for (entity, _) in terrain.iter() {
             commands.entity(entity).despawn();
         }
+        for (entity, _) in caps.iter() {
+            commands.entity(entity).despawn();
+        }
         let positions = terrain_positions(mirror);
         // The draw-set oracle instrument: the shipped seed must report 53,365 (AC13).
         println!("projected {} terrain cubes", positions.len());
         for position in positions {
-            let mut entity = commands.spawn((
-                WorldProjected(terrain_id(position, mirror.dims())),
-                TerrainTile(position),
-                Transform::from_translation(world_to_render(position)),
-            ));
+            let entity = commands
+                .spawn((
+                    WorldProjected(terrain_id(position, mirror.dims())),
+                    TerrainTile(position),
+                    Transform::from_translation(world_to_render(position)),
+                ))
+                .id();
             if let Some(assets) = assets {
-                entity.insert((
+                commands.entity(entity).insert((
                     Mesh3d(assets.cube.clone()),
                     MeshMaterial3d(assets.terrain_material(mirror, position)),
                 ));
+                if has_snow_cap(mirror, position) {
+                    spawn_snow_cap(commands, assets, position);
+                }
             }
         }
     } else {
@@ -168,17 +184,25 @@ pub fn reconcile(
             for (entity, _) in terrain.iter().filter(|(_, tile)| tile.0 == position) {
                 commands.entity(entity).despawn();
             }
+            for (entity, _) in caps.iter().filter(|(_, cap)| cap.0 == position) {
+                commands.entity(entity).despawn();
+            }
             if is_exposed(mirror, position) {
-                let mut entity = commands.spawn((
-                    WorldProjected(terrain_id(position, mirror.dims())),
-                    TerrainTile(position),
-                    Transform::from_translation(world_to_render(position)),
-                ));
+                let entity = commands
+                    .spawn((
+                        WorldProjected(terrain_id(position, mirror.dims())),
+                        TerrainTile(position),
+                        Transform::from_translation(world_to_render(position)),
+                    ))
+                    .id();
                 if let Some(assets) = assets {
-                    entity.insert((
+                    commands.entity(entity).insert((
                         Mesh3d(assets.cube.clone()),
                         MeshMaterial3d(assets.terrain_material(mirror, position)),
                     ));
+                    if has_snow_cap(mirror, position) {
+                        spawn_snow_cap(commands, assets, position);
+                    }
                 }
             }
         }
@@ -249,6 +273,15 @@ fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> Material {
     }
 }
 
+fn spawn_snow_cap(commands: &mut Commands, assets: &ProjectionAssets, position: [i32; 3]) {
+    commands.spawn((
+        SnowCap(position),
+        Mesh3d(assets.snow_cap.clone()),
+        MeshMaterial3d(assets.snow.clone()),
+        Transform::from_translation(world_to_render(position) + Vec3::Y * 0.54),
+    ));
+}
+
 /// The cap is presentation-only: wire terrain remains its original material.
 pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
     matches!(mirror.tile(position), Some(Tile::Solid(_)))
@@ -260,9 +293,6 @@ pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
 
 impl ProjectionAssets {
     fn terrain_material(&self, mirror: &Mirror, position: [i32; 3]) -> Handle<StandardMaterial> {
-        if has_snow_cap(mirror, position) {
-            return self.snow.clone();
-        }
         let material = terrain_material(mirror, position);
         match material {
             Material::Stone => self.stone.clone(),

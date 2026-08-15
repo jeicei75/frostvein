@@ -14,8 +14,8 @@ use client_core::Mirror;
 use gui::{
     atmosphere::setup_atmosphere,
     project::{
-        ClientLocal, ProjectedItem, ProjectionAssets, TerrainTile, WorldProjected, reconcile,
-        setup_projection_assets,
+        ClientLocal, ProjectedItem, ProjectionAssets, SnowCap, TerrainTile, WorldProjected,
+        reconcile, setup_projection_assets,
     },
     transform::world_to_render,
 };
@@ -52,6 +52,7 @@ fn reconcile_from_mirror(
     mut work: ResMut<ProjectionWork>,
     projected: Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
     terrain: Query<(BevyEntity, &TerrainTile)>,
+    caps: Query<(BevyEntity, &SnowCap)>,
     assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild_terrain = std::mem::take(&mut work.rebuild_terrain);
@@ -62,6 +63,7 @@ fn reconcile_from_mirror(
         &mirror.0.changes().tiles,
         &projected,
         &terrain,
+        &caps,
         assets.as_deref(),
     );
 }
@@ -460,6 +462,45 @@ fn snapshot_item_receives_a_render_mesh() {
         .expect("the snapshot item must be projected");
     assert_eq!(item.1.0, 42);
     assert!(item.2.is_some(), "a projected item must carry a mesh");
+}
+
+#[test]
+fn capped_stone_keeps_its_bare_cube_beneath_a_snow_cap() {
+    let mut app = headless_app(snapshot(
+        vec![Tile::Solid(Material::Stone), Tile::Empty],
+        Vec::new(),
+    ));
+
+    app.update();
+
+    let handles = app
+        .world_mut()
+        .query::<&MeshMaterial3d<StandardMaterial>>()
+        .iter(app.world())
+        .map(|material| material.0.clone())
+        .collect::<Vec<_>>();
+    let materials = app.world().resource::<Assets<StandardMaterial>>();
+    let mut colors = handles
+        .iter()
+        .map(|handle| {
+            materials
+                .get(handle)
+                .expect("projected materials must be loaded")
+                .base_color
+                .to_srgba()
+                .to_u8_array_no_alpha()
+        })
+        .collect::<Vec<_>>();
+    colors.sort_unstable();
+
+    assert_eq!(colors, vec![[40, 57, 82], [118, 139, 157]]);
+    let caps = app
+        .world_mut()
+        .query::<&SnowCap>()
+        .iter(app.world())
+        .map(|cap| cap.0)
+        .collect::<Vec<_>>();
+    assert_eq!(caps, vec![[0, 0, 0]], "the capped tile needs one snow slab");
 }
 
 #[test]

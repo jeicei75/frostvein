@@ -35,7 +35,7 @@ use crate::{
     camera::CameraRig,
     capture::{CaptureState, capture_after_frames},
     project::{
-        ClientLocal, ProjectionAssets, TerrainTile, WorldProjected, reconcile,
+        ClientLocal, ProjectionAssets, SnowCap, TerrainTile, WorldProjected, reconcile,
         setup_projection_assets,
     },
 };
@@ -304,6 +304,7 @@ fn reconcile_projection(
     mut work: ResMut<ProjectionWork>,
     projected: Query<(bevy::prelude::Entity, &WorldProjected), Without<TerrainTile>>,
     terrain: Query<(bevy::prelude::Entity, &TerrainTile)>,
+    caps: Query<(bevy::prelude::Entity, &SnowCap)>,
     assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild = std::mem::take(&mut work.snapshot);
@@ -317,6 +318,7 @@ fn reconcile_projection(
         &changes,
         &projected,
         &terrain,
+        &caps,
         assets.as_deref(),
     );
 }
