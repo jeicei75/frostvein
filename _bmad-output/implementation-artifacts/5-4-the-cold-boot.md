@@ -700,6 +700,17 @@ gpt-5.6-terra
   emitters ignore wire light field                             KILLED
   All mutations killed.
   ```
+- REVIEW-PATCH round 3 final gate: `scripts/gate.sh` completed **GREEN** (fmt, clippy, full
+  tests, all dependency probes, metrics ledger). `codex review --base main` completed (session
+  `01a00693-d264-7932-b23f-d45deec77f24`) and raised one P1 claiming initial point lights were
+  absent. It was not reproducible: the reviewer's temporary test instrumentation was restored
+  with `mv`, leaving Cargo's cached test executable newer than the restored source; its own
+  output printed `debug mirror`, although no such code existed in the restored file. After
+  `cargo clean -p gui`, the exact focused test rebuilt and passed. The spawn path already calls
+  `entity.insert(point_light(light))` for every wire-declared light, so no production change is
+  warranted. The review's nested gate failed only when its inner sandbox denied simd loopback
+  binds (`Operation not permitted`); that is environmental and separate from the completed
+  outer gate.
 
 ### Completion Notes List
 
@@ -825,6 +836,9 @@ gpt-5.6-terra
   mesh, LOD, or draw-set change. The complete 16-entry mutation table ran alone and every
   mutation was KILLED. Vehicle viewing is still required to judge the revised trees, snowfall,
   and in-frame sky; no Tasks 6–9 or Wolf's closing sign-off box were changed.
+- The round-3 final gate completed GREEN. One complete `codex review --base main` pass reported
+  a non-reproducible initial-light P1 caused by its stale, temporarily instrumented test binary;
+  after cleaning `gui`, the focused test rebuilt and passed, so no code change was made.
 
 ### File List
 
@@ -859,3 +873,4 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 2: rebalanced the cold field for default exposure, removed the tautological capture assertion, added/fixed mutations, and raised snow's respawn floor. Full mutation and gate completion remain blocked by the sandbox command-parent timeout. |
 | 2026-08-15 | Orchestrator verified the whole review-patch cycle independently: gate GREEN (exit 0) and all 12 mutations KILLED (exit 0) from a clean tree; scope, authorship and the 20-commit cadence confirmed. All 11 review action items closed. Zero usable self-gate passes (both truncated). Status stays **in-progress**: Tasks 6–9 are vehicle-bound and AC19 is Wolf's alone. |
 | 2026-08-15 | REVIEW-PATCH round 3: stopped foliage snow slabs, tapered spruce cubes, spread visible snowfall, disabled the frame graph, frustum-pinned the aurora/stars, and raised the measured warm-pixel floor. All 16 mutations were KILLED; the final gate and self-gate follow. |
+| 2026-08-15 | REVIEW-PATCH round 3 validation: final gate GREEN. The one complete self-gate raised a stale-test-cache false positive; a clean focused rebuild passed. The self-gate's inner simd socket failure was sandbox-only. |
