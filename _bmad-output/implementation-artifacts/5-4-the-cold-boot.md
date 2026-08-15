@@ -888,6 +888,30 @@ gpt-5.6-terra
   - Round 3's taper (crown base 1.0 → 0.86 → tip 0.72) is the same *shape* as the artifact's
     `layers` radii 0.82/0.60/0.38 (`:241`); the wire only offers three crown levels, so the
     ratios cannot match exactly. Not a defect.
+- **TWO SELF-GATE P2s SURFACED IN THE ROUND-4 HANDBACK BUT NOT RECORDED BY IT** (orchestrator,
+  verified in-tree). Codex named them as "pre-existing-style" and left them unfixed; recording
+  them here so they are not lost, and **correcting the characterisation of the first — it is new,
+  introduced by this patch cycle**:
+  1. **Incremental foliage reprojection goes stale.** `foliage_scale`
+     (`crates/gui/src/project.rs:304`) reads **two** tiles above a position (`(1..=2)`), but
+     `reconcile`'s incremental path builds its `affected` set from `NEIGHBOURS`, which is
+     **±1 on each axis** (`:189-196`). A tile changing at `z+2` therefore never marks the tile at
+     `z` dirty, so its foliage cube keeps a stale scale until the next full snapshot rebuild.
+     **NOT pre-existing:** `foliage_scale` and `terrain_transform` were introduced in round 3
+     (`a7e8f5d`); before that the terrain transform had no dependency on tiles above, so the
+     dirty-set radius was sufficient. Round 3 widened the read radius without widening the
+     invalidation radius. Reachable whenever the sim mutates a tile two levels above foliage
+     (tree felling, digging). Cosmetic, self-healing on snapshot. `[orchestrator/LOW]`
+  2. **Emissive material does not follow the wire's `light` field.** Entity materials are chosen
+     by `EntityKind` in `entity_standard_material`, which bakes `emissive` from the light table at
+     asset-creation time, while the `PointLight` component *is* driven per-entity by
+     `mirror_entity.light`. An entity whose wire `light` goes to `None` loses its point light but
+     keeps its emissive glow. Pre-existing to this cycle (Task 2). Unreachable today — no wire
+     path clears `light` on an existing entity — but it is the same latent-desync shape as the
+     recorded id-collision deferral. `[orchestrator/LOW]`
+  - **Process note:** both were stated in the handback and neither reached the story record until
+    the orchestrator transcribed them. A finding that exists only in a handback message is lost at
+    the session boundary. Self-gate findings must land in the Dev Agent Record, fixed or not.
 
 - REVIEW-PATCH round 3 landed six focused visual/instrument patches in six commits. The foliage
   rule is intentionally minimal: uncapped, reduced cube branches with a 0.72/0.86/1.0 taper; no
