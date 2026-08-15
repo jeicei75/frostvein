@@ -17,6 +17,9 @@ pub struct CaptureState {
 }
 
 pub const WARM_RED_OVER_BLUE: u8 = 30;
+/// Four 0.28-unit torches plus one 0.55-unit campfire project to fewer than 100 pixels at
+/// the 90-unit boot distance; this floor therefore requires light pools, not source faces.
+pub const WARM_PIXEL_FLOOR: usize = 100;
 
 pub fn warm_lit_pixels(rgba: &[[u8; 4]]) -> usize {
     rgba.iter()
@@ -89,8 +92,12 @@ fn validate_capture_ranges(event: On<ScreenshotCaptured>) {
         "capture is uniform"
     );
     let warm = warm_lit_pixels(&pixels);
-    assert!(warm > 0, "capture contains no warm-lit pixels");
     println!("capture range check: warm-lit pixels={warm}");
+    // NOTE: confirm this source-face-derived floor on the native-Windows vehicle run.
+    assert!(
+        warm >= WARM_PIXEL_FLOOR,
+        "capture contains fewer than {WARM_PIXEL_FLOOR} warm-lit pixels"
+    );
 }
 
 #[cfg(test)]
@@ -103,5 +110,10 @@ mod tests {
 
         assert_eq!(pixels, vec![[240, 120, 10, 255]]);
         assert_eq!(warm_lit_pixels(&pixels), 1);
+    }
+
+    #[test]
+    fn warm_pixel_floor_exceeds_the_emitter_faces_alone() {
+        assert!(64 < WARM_PIXEL_FLOOR);
     }
 }
