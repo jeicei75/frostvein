@@ -17,7 +17,8 @@ pub struct Snowflake;
 #[derive(Component)]
 pub struct Atmosphere;
 
-pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, 9.0, -64.0);
+pub const CAMP_SURFACE_Y: f32 = 9.0;
+pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
 pub const SKYLINE_MAX: f32 = 26.0;
 pub const FAR_TERRAIN_EDGE: f32 = -128.0;
 
@@ -111,7 +112,7 @@ pub fn setup_atmosphere(
 pub fn fall_snow(time: Res<Time>, mut flakes: Query<&mut Transform, With<Snowflake>>) {
     for mut transform in &mut flakes {
         transform.translation.y -= time.delta_secs() * 1.2;
-        if transform.translation.y < -2.0 {
+        if transform.translation.y < CAMP_SURFACE_Y {
             transform.translation.y = 28.0;
         }
     }
