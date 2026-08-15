@@ -21,6 +21,7 @@ pub const CAMP_SURFACE_Y: f32 = 9.0;
 pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
 pub const SKYLINE_MAX: f32 = 26.0;
 pub const FAR_TERRAIN_EDGE: f32 = -128.0;
+pub const SNOWFLAKE_SCALE: f32 = 0.28;
 
 pub fn aurora_positions() -> [Vec3; 3] {
     [
@@ -40,12 +41,12 @@ pub fn star_positions() -> [Vec3; 12] {
     })
 }
 
-pub fn snowflake_positions() -> [Vec3; 16] {
+pub fn snowflake_positions() -> [Vec3; 36] {
     std::array::from_fn(|index| {
         Vec3::new(
-            48.0 + (index % 4) as f32 * 10.0,
-            14.0 + (index / 4) as f32 * 4.0,
-            -78.0 + (index % 4) as f32 * 9.0,
+            46.0 + (index % 6) as f32 * 7.0,
+            15.0 + (index / 6) as f32 * 2.0,
+            -82.0 + (index / 6) as f32 * 7.0,
         )
     })
 }
@@ -101,7 +102,7 @@ pub fn setup_atmosphere(
         commands.spawn((
             Mesh3d(cube.clone()),
             MeshMaterial3d(snow.clone()),
-            Transform::from_translation(position).with_scale(Vec3::splat(0.12)),
+            Transform::from_translation(position).with_scale(Vec3::splat(SNOWFLAKE_SCALE)),
             Snowflake,
             Atmosphere,
             ClientLocal,
@@ -121,8 +122,8 @@ pub fn fall_snow(time: Res<Time>, mut flakes: Query<&mut Transform, With<Snowfla
 #[cfg(test)]
 mod tests {
     use super::{
-        CAMP_FOCUS, FAR_TERRAIN_EDGE, SKYLINE_MAX, aurora_light_transform, aurora_positions,
-        snowflake_positions, star_positions,
+        CAMP_FOCUS, FAR_TERRAIN_EDGE, SKYLINE_MAX, SNOWFLAKE_SCALE, aurora_light_transform,
+        aurora_positions, snowflake_positions, star_positions,
     };
 
     #[test]
@@ -153,6 +154,19 @@ mod tests {
                 .dot(toward_camp)
                 > 0.99,
             "aurora light must arrive from the band side"
+        );
+    }
+
+    #[test]
+    fn snowfall_fills_a_visible_grid_instead_of_a_single_diagonal_row() {
+        let flakes = snowflake_positions();
+
+        assert_eq!(flakes.len(), 36);
+        assert_eq!(SNOWFLAKE_SCALE, 0.28);
+        assert_eq!(flakes[0].x, flakes[6].x, "rows share x columns");
+        assert_ne!(
+            flakes[0].z, flakes[6].z,
+            "a shared x column must span multiple z rows"
         );
     }
 }

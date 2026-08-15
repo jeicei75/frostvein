@@ -520,7 +520,7 @@ fn atmosphere_entities_are_client_local_and_never_world_projected() {
         app.world_mut()
             .query::<(&Atmosphere, Option<&ClientLocal>, Option<&WorldProjected>)>();
     let entities = atmosphere.iter(app.world()).collect::<Vec<_>>();
-    assert_eq!(entities.len(), 31, "the atmosphere spawn count is pinned");
+    assert_eq!(entities.len(), 51, "the atmosphere spawn count is pinned");
     assert!(
         entities
             .iter()
