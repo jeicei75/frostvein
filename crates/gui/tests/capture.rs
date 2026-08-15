@@ -2,6 +2,8 @@
 
 use std::{env, fs, path::Path};
 
+use gui::capture::warm_lit_pixels;
+
 /// Counts pixels differing from the image's dominant colour. Bevy's clear colour is a
 /// grey, not black, so "not pure black" would pass an empty scene; the dominant colour
 /// is the background whatever the renderer painted it.
@@ -57,4 +59,19 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
         fs::read(second).unwrap(),
         "world changes must change capture bytes"
     );
+    let first_pixels = image::open(first).unwrap().to_rgba8();
+    let pixels = first_pixels
+        .pixels()
+        .map(|pixel| pixel.0)
+        .collect::<Vec<_>>();
+    assert!(
+        warm_lit_pixels(&pixels) > 0,
+        "first capture must contain warm-lit pixels by the named threshold"
+    );
+}
+
+#[test]
+fn warm_pixel_threshold_requires_red_to_exceed_blue_by_the_named_margin() {
+    assert_eq!(warm_lit_pixels(&[[220, 120, 150, 255]]), 1);
+    assert_eq!(warm_lit_pixels(&[[180, 120, 150, 255]]), 0);
 }

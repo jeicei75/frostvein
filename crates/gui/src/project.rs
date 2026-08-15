@@ -2,13 +2,13 @@ use std::collections::BTreeSet;
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, Query, ResMut, Resource, StandardMaterial, Transform, Without,
+    MeshMaterial3d, PointLight, Query, ResMut, Resource, StandardMaterial, Transform, Without,
 };
 use client_core::Mirror;
 use protocol::{Dims, EntityKind, Material, Tile};
 
 use crate::{
-    appearance::{entity_appearance, material_color},
+    appearance::{entity_appearance, light_properties, material_color},
     transform::world_to_render,
 };
 
@@ -78,9 +78,31 @@ fn terrain_standard_material(material: Material) -> StandardMaterial {
 }
 
 fn entity_standard_material(kind: EntityKind) -> StandardMaterial {
-    StandardMaterial {
+    let mut material = StandardMaterial {
         base_color: entity_appearance(kind).color,
         perceptual_roughness: 0.75,
+        ..Default::default()
+    };
+    if let Some(light) = entity_light_kind(kind) {
+        material.emissive = light_properties(light).color.to_linear();
+    }
+    material
+}
+
+fn entity_light_kind(kind: EntityKind) -> Option<protocol::LightKind> {
+    match kind {
+        EntityKind::Dwarf => None,
+        EntityKind::Torch => Some(protocol::LightKind::Torch),
+        EntityKind::Campfire => Some(protocol::LightKind::Campfire),
+    }
+}
+
+fn point_light(kind: protocol::LightKind) -> PointLight {
+    let properties = light_properties(kind);
+    PointLight {
+        color: properties.color,
+        intensity: properties.intensity,
+        range: properties.range,
         ..Default::default()
     }
 }
@@ -126,7 +148,7 @@ pub fn reconcile(
             if let Some(assets) = assets {
                 entity.insert((
                     Mesh3d(assets.cube.clone()),
-                    MeshMaterial3d(assets.terrain_material(terrain_material(mirror, position))),
+                    MeshMaterial3d(assets.terrain_material(mirror, position)),
                 ));
             }
         }
@@ -155,7 +177,7 @@ pub fn reconcile(
                 if let Some(assets) = assets {
                     entity.insert((
                         Mesh3d(assets.cube.clone()),
-                        MeshMaterial3d(assets.terrain_material(terrain_material(mirror, position))),
+                        MeshMaterial3d(assets.terrain_material(mirror, position)),
                     ));
                 }
             }
@@ -181,6 +203,11 @@ pub fn reconcile(
             commands
                 .entity(bevy_entity)
                 .insert(Transform::from_translation(world_to_render(position)));
+            if let Some(light) = mirror_entity.and_then(|entity| entity.light) {
+                commands.entity(bevy_entity).insert(point_light(light));
+            } else {
+                commands.entity(bevy_entity).remove::<PointLight>();
+            }
         } else {
             let mut entity = commands.spawn((
                 WorldProjected(id),
@@ -197,6 +224,9 @@ pub fn reconcile(
                     Transform::from_translation(world_to_render(position))
                         .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
                 ));
+                if let Some(light) = mirror_entity.light {
+                    entity.insert(point_light(light));
+                }
             }
         }
     }
@@ -209,8 +239,21 @@ fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> Material {
     }
 }
 
+/// The cap is presentation-only: wire terrain remains its original material.
+pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
+    matches!(mirror.tile(position), Some(Tile::Solid(_)))
+        && !matches!(
+            mirror.tile([position[0], position[1], position[2] + 1]),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+}
+
 impl ProjectionAssets {
-    fn terrain_material(&self, material: Material) -> Handle<StandardMaterial> {
+    fn terrain_material(&self, mirror: &Mirror, position: [i32; 3]) -> Handle<StandardMaterial> {
+        if has_snow_cap(mirror, position) {
+            return self.snow.clone();
+        }
+        let material = terrain_material(mirror, position);
         match material {
             Material::Stone => self.stone.clone(),
             Material::Soil => self.soil.clone(),
@@ -332,5 +375,34 @@ mod tests {
             !is_exposed(&enclosed, [1, 1, 1]),
             "a ramp neighbour occludes like a solid"
         );
+    }
+
+    #[test]
+    fn snow_cap_marks_only_solid_tops_in_a_hand_built_toy_world() {
+        let toy = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 3 },
+            tiles: vec![
+                Tile::Solid(protocol::Material::Stone),
+                Tile::Solid(protocol::Material::TreeFoliage),
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        assert!(
+            !has_snow_cap(&toy, [0, 0, 0]),
+            "covered stone keeps its dark flank"
+        );
+        assert!(
+            has_snow_cap(&toy, [0, 0, 1]),
+            "exposed foliage carries a loaded cap"
+        );
+        assert!(!has_snow_cap(&toy, [0, 0, 2]), "air never receives a cap");
     }
 }

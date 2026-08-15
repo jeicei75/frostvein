@@ -19,9 +19,10 @@ use bevy::{
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::message::MessageWriter,
     input::ButtonInput,
+    pbr::{DistanceFog, FogFalloff},
     prelude::{
-        Camera3d, Commands, DefaultPlugins, KeyCode, Query, Res, ResMut, Resource, Transform,
-        Without,
+        AmbientLight, Camera3d, ClearColor, Commands, DefaultPlugins, DirectionalLight, KeyCode,
+        Query, Res, ResMut, Resource, Transform, Without,
     },
     render::renderer::RenderAdapterInfo,
 };
@@ -29,6 +30,8 @@ use client_core::Mirror;
 use protocol::{Delta, Snapshot};
 
 use crate::{
+    appearance::night_lighting,
+    atmosphere::{fall_snow, setup_atmosphere},
     camera::CameraRig,
     capture::{CaptureState, capture_after_frames},
     project::{
@@ -90,9 +93,16 @@ pub fn run() -> anyhow::Result<()> {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
         })
+        .insert_resource(ClearColor(night_lighting().sky))
         .add_systems(
             Startup,
-            (setup_camera, setup_projection_assets, log_adapter),
+            (
+                setup_camera,
+                setup_night_lighting,
+                setup_projection_assets,
+                setup_atmosphere,
+                log_adapter,
+            ),
         )
         // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
         // still GUI-local, so classify the complete startup scene after all plugin setup.
@@ -104,6 +114,7 @@ pub fn run() -> anyhow::Result<()> {
                 reconcile_projection,
                 camera_controls,
                 toggle_overlay,
+                fall_snow,
             ),
         );
     if let Some(capture) = args.capture {
@@ -166,7 +177,39 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
 
 fn setup_camera(mut commands: Commands) {
     let rig = CameraRig::new([64, 64, 9]);
-    commands.spawn((Camera3d::default(), rig.transform(), rig, ClientLocal));
+    commands.spawn((
+        Camera3d::default(),
+        rig.transform(),
+        rig,
+        AmbientLight {
+            color: night_lighting().ambient,
+            brightness: 110.0,
+            ..Default::default()
+        },
+        DistanceFog {
+            color: night_lighting().sky,
+            falloff: FogFalloff::Linear {
+                start: 85.0,
+                end: 180.0,
+            },
+            ..Default::default()
+        },
+        ClientLocal,
+    ));
+}
+
+fn setup_night_lighting(mut commands: Commands) {
+    commands.spawn((
+        DirectionalLight {
+            color: night_lighting().aurora,
+            illuminance: 250.0,
+            shadow_maps_enabled: true,
+            ..Default::default()
+        },
+        Transform::from_xyz(-20.0, 40.0, 20.0)
+            .looking_at(bevy::prelude::Vec3::ZERO, bevy::prelude::Vec3::Y),
+        ClientLocal,
+    ));
 }
 
 fn classify_client_local(

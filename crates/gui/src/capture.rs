@@ -15,6 +15,14 @@ pub struct CaptureState {
     requested: bool,
 }
 
+pub const WARM_RED_OVER_BLUE: u8 = 30;
+
+pub fn warm_lit_pixels(rgba: &[[u8; 4]]) -> usize {
+    rgba.iter()
+        .filter(|pixel| pixel[0].saturating_sub(pixel[2]) > WARM_RED_OVER_BLUE)
+        .count()
+}
+
 impl CaptureState {
     pub fn new(path: PathBuf, frames: u32) -> Self {
         Self {
@@ -37,10 +45,34 @@ pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureS
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(capture.path.clone()))
+            .observe(validate_capture_ranges)
             .observe(exit_after_capture);
     }
 }
 
 fn exit_after_capture(_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>) {
     exit.write(AppExit::Success);
+}
+
+fn validate_capture_ranges(event: On<ScreenshotCaptured>) {
+    let bytes = event
+        .image
+        .data
+        .as_deref()
+        .expect("capture screenshot must include pixel data");
+    let pixels = bytes
+        .chunks_exact(4)
+        .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
+        .collect::<Vec<_>>();
+    assert!(
+        pixels.iter().any(|pixel| pixel[..3] != [0, 0, 0]),
+        "capture is black"
+    );
+    assert!(
+        pixels.windows(2).any(|pair| pair[0] != pair[1]),
+        "capture is uniform"
+    );
+    let warm = warm_lit_pixels(&pixels);
+    assert!(warm > 0, "capture contains no warm-lit pixels");
+    println!("capture range check: warm-lit pixels={warm}");
 }

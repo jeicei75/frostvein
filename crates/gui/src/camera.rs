@@ -4,6 +4,9 @@ use crate::transform::world_to_render;
 
 const MIN_PITCH: f32 = 0.15;
 const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.15;
+const BOOT_YAW: f32 = 0.7;
+const BOOT_PITCH: f32 = 0.8;
+const BOOT_DISTANCE: f32 = 90.0;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct CameraRig {
@@ -17,9 +20,9 @@ impl CameraRig {
     pub fn new(focus: [i32; 3]) -> Self {
         Self {
             focus,
-            yaw: 0.7,
-            pitch: 0.8,
-            distance: 90.0,
+            yaw: BOOT_YAW,
+            pitch: BOOT_PITCH,
+            distance: BOOT_DISTANCE,
         }
     }
 

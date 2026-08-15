@@ -14,6 +14,21 @@ pub struct EntityAppearance {
     pub scale: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct NightLighting {
+    pub sky: Color,
+    pub ambient: Color,
+    pub aurora: Color,
+}
+
+pub fn night_lighting() -> NightLighting {
+    NightLighting {
+        sky: Color::srgb_u8(5, 12, 28),
+        ambient: Color::srgb_u8(47, 76, 104),
+        aurora: Color::srgb_u8(73, 157, 144),
+    }
+}
+
 pub fn light_properties(kind: LightKind) -> LightProperties {
     // NOTE: lights are static until story 6.1 adds the flicker column.
     match kind {

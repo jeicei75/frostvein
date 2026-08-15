@@ -1,16 +1,18 @@
 #![forbid(unsafe_code)]
 
+use bevy::color::ColorToPacked;
 use bevy::{
     MinimalPlugins,
     app::{App, Update},
     ecs::system::{Commands, Query, Res, ResMut},
     prelude::{
-        Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, Resource, StandardMaterial,
-        Transform, Without,
+        Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, PointLight, Resource,
+        StandardMaterial, Transform, Without,
     },
 };
 use client_core::Mirror;
 use gui::{
+    atmosphere::setup_atmosphere,
     project::{
         ClientLocal, ProjectionAssets, TerrainTile, WorldProjected, reconcile,
         setup_projection_assets,
@@ -392,4 +394,69 @@ fn world_and_client_local_markers_are_a_structural_partition() {
             .iter(app.world())
             .all(|(_, projected)| projected.is_none())
     );
+}
+
+#[test]
+fn recorded_camp_snapshot_projects_exactly_five_warm_point_lights() {
+    let entities = (0..4)
+        .map(|id| Entity {
+            id,
+            kind: EntityKind::Torch,
+            pos: [60 + id as i32, 64, 9],
+            state: JobState::Idle,
+            light: Some(protocol::LightKind::Torch),
+        })
+        .chain(std::iter::once(Entity {
+            id: 4,
+            kind: EntityKind::Campfire,
+            pos: [64, 64, 9],
+            state: JobState::Idle,
+            light: Some(protocol::LightKind::Campfire),
+        }))
+        .chain(std::iter::once(Entity {
+            id: 5,
+            kind: EntityKind::Dwarf,
+            pos: [64, 65, 9],
+            state: JobState::Idle,
+            light: None,
+        }))
+        .collect();
+    let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], entities));
+
+    app.update();
+
+    let lights = app
+        .world_mut()
+        .query::<&PointLight>()
+        .iter(app.world())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lights.len(),
+        5,
+        "only wire-declared emitters receive lights"
+    );
+    assert!(lights.iter().all(|light| {
+        let channels = light.color.to_srgba().to_u8_array_no_alpha();
+        channels[0] > channels[2]
+    }));
+}
+
+#[test]
+fn atmosphere_entities_are_client_local_and_never_world_projected() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .init_resource::<Assets<Mesh>>()
+        .init_resource::<Assets<StandardMaterial>>()
+        .add_systems(bevy::app::Startup, setup_atmosphere);
+    app.update();
+
+    let mut atmosphere = app
+        .world_mut()
+        .query::<(&ClientLocal, Option<&WorldProjected>)>();
+    let entities = atmosphere.iter(app.world()).collect::<Vec<_>>();
+    assert!(
+        entities.len() >= 20,
+        "stars, aurora, and restrained snow must be present"
+    );
+    assert!(entities.iter().all(|(_, projected)| projected.is_none()));
 }

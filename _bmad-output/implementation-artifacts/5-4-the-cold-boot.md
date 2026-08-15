@@ -181,36 +181,36 @@ the vehicle. **Never fake the live half.**
         self-referential-oracle trap has fired four times in this project; a test that calls
         the table to check the table proves nothing). Assert the warm/cold invariant as data:
         every `LightKind` color has R > B; every night terrain color has B ≥ R.
-- [ ] **Task 2 — Night lighting and warm emitters** (AC: 2, 3, 4, 9)
-  - [ ] Dark cold ambient + `ClearColor` night sky base; a low cool directional fill so
+- [x] **Task 2 — Night lighting and warm emitters** (AC: 2, 3, 4, 9)
+  - [x] Dark cold ambient + `ClearColor` night sky base; a low cool directional fill so
         flanks read (verified in the built tree: `AmbientLight`, `DirectionalLight`,
         `PointLight` in `bevy_light` 0.19; `StandardMaterial::emissive: LinearRgba`).
-  - [ ] Reconciliation attaches a `PointLight` (from the `LightKind` table) plus emissive
+  - [x] Reconciliation attaches a `PointLight` (from the `LightKind` table) plus emissive
         material to every entity whose mirror state has `light: Some(..)` — driven by the
         wire field through the table, never hardcoded per kind at the draw site. On the
         shipped seed that is 4 torches + 1 campfire at the camp, z 9 (ids 5–9), verified
         live at story-creation.
-  - [ ] Headless test: projecting the recorded camp snapshot yields exactly 5 entities
+  - [x] Headless test: projecting the recorded camp snapshot yields exactly 5 entities
         carrying point lights, and their colors match the table's warm side.
-- [ ] **Task 3 — Snow caps and the cold field** (AC: 7, 8)
-  - [ ] Pure cap predicate (suggested: a solid tile whose above-neighbour is empty/out of
+- [x] **Task 3 — Snow caps and the cold field** (AC: 7, 8)
+  - [x] Pure cap predicate (suggested: a solid tile whose above-neighbour is empty/out of
         bounds gets the cap treatment; foliage reads as loaded branches; flanks keep the bare
         material color). Headless tests on a toy world assert capped vs flank vs enclosed.
-  - [ ] Wire it through the projection material choice so a capped stone top and a stone
+  - [x] Wire it through the projection material choice so a capped stone top and a stone
         flank are visibly different — this is what "settled cap, not uniform coat" means in
         cubes.
-- [ ] **Task 4 — The sky: stars, aurora, illumination** (AC: 5, 6)
-  - [ ] Hand-rolled `ClientLocal` entities, no new dependencies: a star field, and aurora
+- [x] **Task 4 — The sky: stars, aurora, illumination** (AC: 5, 6)
+  - [x] Hand-rolled `ClientLocal` entities, no new dependencies: a star field, and aurora
         bands as emissive translucent meshes kept **low against the horizon** behind the 5.1
         skyline. (`Skybox` exists in 0.19 but wants a cubemap asset — hand-rolled geometry
         matches the no-asset-pipeline rule.)
-  - [ ] The illuminant half is an outcome, not a mechanism: cool green-blue light visibly
+  - [x] The illuminant half is an outcome, not a mechanism: cool green-blue light visibly
         catching on snow tops and ice from the aurora side. A tinted directional/ambient
         contribution from the table is the simplest honest candidate.
-  - [ ] Headless test: every entity spawned by the atmosphere systems carries `ClientLocal`
+  - [x] Headless test: every entity spawned by the atmosphere systems carries `ClientLocal`
         and none carries `WorldProjected` (AC6's partition assertion).
-- [ ] **Task 5 — Snowfall** (AC: 6)
-  - [ ] Hand-rolled falling flecks (small cubes/quads), `ClientLocal`, respawning above the
+- [x] **Task 5 — Snowfall** (AC: 6)
+  - [x] Hand-rolled falling flecks (small cubes/quads), `ClientLocal`, respawning above the
         world, drifting down — pure decoration, no sim meaning, sanctioned by NFR5's
         carve-out. Density restrained: it must never obscure the camp read (AC3).
 - [ ] **Task 6 — The world edge** (AC: 11)
@@ -241,8 +241,8 @@ the vehicle. **Never fake the live half.**
   - [ ] Discharge AC26: cross-compile `tests/capture.rs` (`--no-run`, copy the test exe) and
         run it on the Windows side with `FROSTVEIN_CAPTURE_FIRST/SECOND` set. Record the
         outcome either way — a real blocker is a finding, a fake pass is a firing offence.
-- [ ] **Task 10 — Tech-art guidelines, procedural-era half** (AC: 15)
-  - [ ] `docs/tech-art-guidelines.md`: the value ladder (night snow midtone → emissive
+- [x] **Task 10 — Tech-art guidelines, procedural-era half** (AC: 15)
+  - [x] `docs/tech-art-guidelines.md`: the value ladder (night snow midtone → emissive
         white), sky-as-illuminant rule, material color rules, light-table semantics, edge
         treatment choice. Write each section when its decision lands in Tasks 1–6.
 - [ ] **Task 11 — Mutations, gate, closing sign-off** (AC: 19, 20, 21)
@@ -435,6 +435,8 @@ continuation handoff.
 
 ### Agent Model Used
 
+gpt-5.6
+
 ### Debug Log References
 
 - Task 1 RED: `cargo test -p gui appearance_tables_pin_the_cold_boot_palette --offline`
@@ -443,13 +445,36 @@ continuation handoff.
 - Task 1 sabotage RED: changing the Torch table colour to `[62, 140, 255]` made the
   same literal-oracle test fail: `left: [62, 140, 255]`, `right: [255, 140, 62]`
   at `crates/gui/src/appearance.rs:82`. Restored before the green run.
+- Task 2 RED: `cargo test -p gui recorded_camp_snapshot_projects_exactly_five_warm_point_lights --offline`
+  failed before attachment: `left: 0`, `right: 5` at `crates/gui/tests/headless.rs:432`.
+- Task 3 RED: the snow-cap test initially failed to compile because `has_snow_cap` did not
+  exist; implementation then passed its hand-built toy-world assertions.
+- Tasks 4–5 RED: `atmosphere_entities_are_client_local_and_never_world_projected` failed
+  before spawning with `stars, aurora, and restrained snow must be present`.
 
 ### Completion Notes List
 
+- Implemented the headless-testable look core: table-driven cold materials, warm wire-driven
+  emitters, snow caps, client-local atmosphere/snow, fog, boot constants, and capture warm-pixel
+  threshold. Vehicle-only checks remain open.
+
 ### File List
+
+- crates/gui/src/appearance.rs
+- crates/gui/src/atmosphere.rs
+- crates/gui/src/camera.rs
+- crates/gui/src/capture.rs
+- crates/gui/src/ingest.rs
+- crates/gui/src/lib.rs
+- crates/gui/src/project.rs
+- crates/gui/tests/capture.rs
+- crates/gui/tests/headless.rs
+- docs/tech-art-guidelines.md
+- _bmad-output/implementation-artifacts/5-4-the-cold-boot.md
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-14 | Story created. Camp/emitter baseline measured live (`†=24 ♨=6` at z 9); Bevy 0.19 lighting/fog/emissive API verified against registry source; NFR6 venue corrected on the record to the proven native-Windows vehicle (5.3's envelope finding), WSLg figure kept owed; 5.3's AC26 debt and the ramp-complete first-live-view folded in as ACs 17–18. Sign-off gate encoded as blocking Task 0 + closing AC19. |
+| 2026-08-15 | Implemented the headless cold-boot look core and its table, cap, emitter, and atmosphere assertions; live-vehicle verification remains open. |
