@@ -632,6 +632,27 @@ gpt-5.6-terra
   remain before complete fog`; the range is now `(85,190)` at boot and `(470,900)` at full zoom.
 - Review-patch RED — caps partition: `capped_stone_keeps_its_bare_cube_beneath_a_snow_cap`
   failed with `snow caps belong to the client-local partition` before spawning `ClientLocal`.
+- REVIEW-PATCH round 2 — R1: chose shape (a), retaining Bevy's default `Exposure::BLENDER`
+  (`exp2(-9.7) / 1.2 = 1.017e-3`) and lifting the cold fill. For snow's blue channel,
+  `0.337 * 0.140 * 2,000 = 94.4 cd/m²`, or `0.0960` post-exposure; the directional term
+  scales from the verified 8-lux `0.06 cd/m²` estimate to `11.25 cd/m²`, or `0.0114`
+  post-exposure. Total `0.1074` linear is about `0.36` sRGB: midtone, not black. The 6M-lm
+  campfire at six units is `6,000,000 / (4π * 36) = 13,263 lux`; against the 3,500-unit
+  cold-fill budget it is `3.79x`, above the production-table `3x` local-contrast oracle.
+  The old `60x` assertion was removed; mutating the campfire to 5,000 lm targets that
+  relationship test directly.
+- REVIEW-PATCH round 2 — R2: deleted the literal-laundered capture floor assertion. The
+  source-face estimate remains an explicitly vehicle-pending comment, not false test evidence.
+- REVIEW-PATCH round 2 — R3/R5: added the aurora-position mutation (`z = -120`); narrowed the
+  ramp mutation anchor to the `has_snow_cap` predicate so it is unique again. The existing
+  manual aurora mutation had produced `aurora belongs beyond the far edge`.
+- REVIEW-PATCH round 2 — R4: `fall_snow` now resets below the named 9.0 render-space camp
+  surface instead of below terrain at -2.0.
+- REVIEW-PATCH round 2 validation blocker: `mutate.sh` was invoked alone twice from a clean
+  tree, but this environment kills its parent command at roughly 30 seconds while child tests
+  continue. It therefore left temporary mutation edits behind; each was inspected and restored.
+  A complete clean exit-0/KILLED transcript could not be observed here. The subsequent gate
+  invocation was also cut off after fmt and during clippy, so no green gate is claimed.
 
 ### Completion Notes List
 
@@ -671,6 +692,12 @@ gpt-5.6-terra
   caps and all 31 atmosphere entities are partitioned ClientLocal. Vehicle-only Tasks 6–9
   remain open. The capture floor is 100 warm pixels: a conservative floor above the estimated
   64 pixels from the five emitter faces at distance 90; it still needs native-Windows confirmation.
+- REVIEW-PATCH round 2: corrected the default-exposure light budget with shape (a): 2,000
+  ambient brightness, 1,500 directional lux, and 2.5M/6M/2M lm torch/campfire/lantern table
+  entries. The arithmetic above predicts snow at 0.1074 linear (~0.36 sRGB) and campfire
+  local contrast of 3.79x at six units. Deleted the tautological capture test, made snow
+  respawn above the camp surface, and repaired the atmosphere/ramp sabotage coverage. The
+  mutation-table and gate runs are environmentally incomplete; no success claim is made.
 
 ### File List
 
@@ -702,3 +729,4 @@ gpt-5.6-terra
 | 2026-08-15 | Orchestrator verified independently (gate GREEN, 5/5 mutations killed); Status → review. Vehicle-bound tasks and Wolf's AC19 closing sign-off remain open — review does not close this story. |
 | 2026-08-15 | Code review (fresh session, 4 layers, all completed live): 3 decisions ruled by Wolf, 11 patches recorded as action items for a fresh patch session, 5 defers to deferred-work.md, 6 dismissed. Headless substrate verified solid; six frame-level HIGHs predict the composed look fails the artifact comparison (lights ~1/1000 scale, atmosphere authored at render origin, fixed fog vs zoom clamp, uniform ice-hiding cap). Status → in-progress. |
 | 2026-08-15 | Landed the 11 review patches in focused commits; live vehicle tasks remain explicitly open. |
+| 2026-08-15 | REVIEW-PATCH round 2: rebalanced the cold field for default exposure, removed the tautological capture assertion, added/fixed mutations, and raised snow's respawn floor. Full mutation and gate completion remain blocked by the sandbox command-parent timeout. |
