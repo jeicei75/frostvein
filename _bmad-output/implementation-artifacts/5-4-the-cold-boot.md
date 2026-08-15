@@ -653,6 +653,9 @@ gpt-5.6-terra
   continue. It therefore left temporary mutation edits behind; each was inspected and restored.
   A complete clean exit-0/KILLED transcript could not be observed here. The subsequent gate
   invocation was also cut off after fmt and during clippy, so no green gate is claimed.
+- REVIEW-PATCH round 2 self-gate: `codex review --base main` was launched once (session
+  `01a005d7-1804-7751-80fb-ee2402e8db22`), but the same command-parent timeout truncated it
+  during diff inspection, before findings or a verdict. No review finding was withheld.
 
 ### Completion Notes List
 
@@ -698,6 +701,9 @@ gpt-5.6-terra
   local contrast of 3.79x at six units. Deleted the tautological capture test, made snow
   respawn above the camp surface, and repaired the atmosphere/ramp sabotage coverage. The
   mutation-table and gate runs are environmentally incomplete; no success claim is made.
+  `cargo test -p gui --offline` did complete green (18 library, 1 capture, and 11 headless
+  tests; one display-required capture test ignored). The one required Codex review was started
+  but cut off before reporting findings.
 
 ### File List
 
