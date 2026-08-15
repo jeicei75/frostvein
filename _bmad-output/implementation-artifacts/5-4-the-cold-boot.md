@@ -652,7 +652,8 @@ gpt-5.6-terra
   tree, but this environment kills its parent command at roughly 30 seconds while child tests
   continue. It therefore left temporary mutation edits behind; each was inspected and restored.
   A complete clean exit-0/KILLED transcript could not be observed here. The subsequent gate
-  invocation was also cut off after fmt and during clippy, so no green gate is claimed.
+  invocation started while a detached mutation child had dirtied source, then was cut off after
+  fmt and during clippy; it is not validation of the clean tree, so no green gate is claimed.
 - REVIEW-PATCH round 2 self-gate: `codex review --base main` was launched once (session
   `01a005d7-1804-7751-80fb-ee2402e8db22`), but the same command-parent timeout truncated it
   during diff inspection, before findings or a verdict. No review finding was withheld.
