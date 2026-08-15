@@ -57,6 +57,14 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        sky: Color::srgb_u8(20, 20, 20),\n'))
 PY
 
+mutation "aurora crosses terrain edge" gui atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_read <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = 'Vec3::new(28.0, 32.0, -150.0)'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'Vec3::new(28.0, 32.0, -120.0)'))
+PY
+
 mutation "atmosphere loses client local marker" gui atmosphere_entities_are_client_local_and_never_world_projected <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
