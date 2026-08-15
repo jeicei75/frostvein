@@ -912,6 +912,55 @@ gpt-5.6-terra
   - **Process note:** both were stated in the handback and neither reached the story record until
     the orchestrator transcribed them. A finding that exists only in a handback message is lost at
     the session boundary. Self-gate findings must land in the Dev Agent Record, fixed or not.
+- **SECOND BOOT CAPTURE (Wolf, 2026-08-15 ~19:34, `5-4-signoff/boot2.png`).** Verdict:
+  *"not there yet"*. Confirmed fixed by eye: the frame-time graph is gone from captures (T4), the
+  sky band exists, stars and snowfall are visible for the first time, and snow caps read as
+  lighter patches so the landform is emerging. Four defects remain:
+  1. **The camp sits at screen x ≈ 0.227 — half off the left edge.** The approved artifact
+     anchors it at `W * 0.48` (`artifact_render.py:147`). **Orchestrator's spec defect:** round
+     4's framing test was told to pin the *vertical* fractions only (camp 0.78, skyline 0.30), so
+     it passes while the camp drifts horizontally. Cause: `BOOT_COMPOSITION_OFFSET` pushes along
+     world −Z while the camera is yawed 0.7, so the push slides the target along the camera's
+     right vector. The offset must run along the view direction, and the test must pin x too.
+     `[orchestrator/HIGH]`
+  2. **The aurora reads as three flat green rectangles** with hard edges, floating in open sky.
+     `unlit: true` + `AlphaMode::Blend` on a `Cuboid` yields uniform colour and a hard silhouette
+     — no repositioning can fix that; the *mechanism* is wrong. Also fails AC5's "hugs the
+     horizon rather than hanging overhead". `[wolf-live+orchestrator/HIGH]`
+  3. **The far skyline is a raw grid edge** — individual cubes silhouetted against the sky, which
+     AC11 forbids at any zoom. From the new camera the far edge is only ~20% fogged
+     (`fog_falloff(90) = (85, 190)`, far edge ≈ 106 units out). `[orchestrator/MED]`
+  4. **The field is still darker and muddier than the approved artifact**, and trees read as dark
+     clumps rather than spruces. The terrain palette already matches the artifact's constants
+     exactly (round 4), so **the gap is in the lighting, not the material table**. Note the
+     artifact's trees read lighter because its spruce layer tops carry
+     `SPRUCE_SNOW = (172,186,210)` (`artifact_render.py:64`), for which our uncapped foliage has
+     no equivalent — whether trees need their own light-catching treatment is **Wolf's ruling,
+     not a dev decision**. `[wolf-live/MED]`
+
+- **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
+  working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
+  job running. Last commit is the record below. `scripts/gate.sh` GREEN and **20/20 mutations
+  KILLED** on the orchestrator's independent runs at round 4. The cross-compiled
+  `target/x86_64-pc-windows-gnu/release/gui.exe` was rebuilt at 19:03 against commit `2f5ff53`
+  and **is current for `boot2.png`** — but **rebuild and re-copy before any further live run**
+  (the 13:24 stale-binary trap above cost a whole vehicle session).
+  - **NEXT SESSION = round 5, a fresh `--phase review-patch` session**, working the four defects
+    above in order: D1 camp horizontal anchor (fix the offset to push along the view direction,
+    pin camp x ≈ 0.48 as well as y ≈ 0.78), D2 aurora mechanism (a procedurally built gradient
+    `Image` is the preferred honest route — hand-rolled data, no asset pipeline, no new
+    dependency; reposition to hug the horizon and span the frame), D3 retune `fog_falloff` so the
+    far edge actually dissolves at the new framing and strengthen its test to assert a fog
+    *fraction*, D4 close the value gap with arithmetic and re-derive both sides of the contrast
+    oracle rather than loosening it.
+  - **Still owed and vehicle-only:** Tasks 6–9 — the edge-treatment comparison by eye (AC11's
+    amendment), the framing judgement against the artifact, the NFR6 reading (AC14, F3 overlay at
+    working zoom and full vista), and AC26's cross-compiled capture self-test. Plus AC19, which
+    only Wolf can check.
+  - **Cost so far, this patch cycle:** four Codex rounds recorded at `review-patch` —
+    $2.34 + $1.29 + $3.01 + $4.15 ≈ **$10.79 and 22 percentage points of the weekly Codex quota**
+    (14% → 37% of the 7-day window). Worth watching: two more rounds of this size would put the
+    week's quota in the danger zone that blocked dev for six days at story 3.2.
 
 - REVIEW-PATCH round 3 landed six focused visual/instrument patches in six commits. The foliage
   rule is intentionally minimal: uncapped, reduced cube branches with a 0.72/0.86/1.0 taper; no
