@@ -82,12 +82,20 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, 'Vec3::new(64.0, 35.0, -130.0)'))
 PY
 
+mutation "boot pitch loses the approved framing" gui boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
+old = 'const BOOT_PITCH: f32 = 0.45;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'const BOOT_PITCH: f32 = 0.8;\n'))
+PY
+
 mutation "snowfall collapses back to a diagonal" gui snowfall_fills_a_visible_grid_instead_of_a_single_diagonal_row <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = '            -82.0 + (index / 6) as f32 * 7.0,\n'
+old = '            -86.0 + (index / 6) as f32 * 2.0,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            -82.0 + (index % 6) as f32 * 7.0,\n'))
+p.write_text(s.replace(old, '            -86.0 + (index % 6) as f32 * 2.0,\n'))
 PY
 
 mutation "atmosphere loses client local marker" gui atmosphere_entities_are_client_local_and_never_world_projected <<'PY'

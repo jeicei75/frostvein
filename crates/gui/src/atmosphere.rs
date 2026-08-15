@@ -45,9 +45,9 @@ pub fn star_positions() -> [Vec3; 12] {
 pub fn snowflake_positions() -> [Vec3; 36] {
     std::array::from_fn(|index| {
         Vec3::new(
-            46.0 + (index % 6) as f32 * 7.0,
-            15.0 + (index / 6) as f32 * 2.0,
-            -82.0 + (index / 6) as f32 * 7.0,
+            52.0 + (index % 6) as f32 * 4.0,
+            16.0 + (index / 6) as f32 * 2.0,
+            -86.0 + (index / 6) as f32 * 2.0,
         )
     })
 }

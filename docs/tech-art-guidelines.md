@@ -29,6 +29,14 @@ local pools read above that field. The resulting ladder is dark sky and flanks, 
 snow and ice, then warm pools and near-white emitter faces. Every entry is warm (red
 exceeds blue); the table is static until story 6.1 adds flicker.
 
+## Boot framing
+
+The boot camera uses yaw 0.70, pitch 0.45 radians, and distance 90. It orbits the camp
+but looks through a fixed composition offset toward the far valley: the camp projects to
+78% of the frame height and the far skyline to 30%, each within a 2% tolerance. The offset
+is necessary because a camera that directly looks at the camp would always centre it and
+could not produce the approved foreground composition.
+
 ## Edge treatment
 
 Distance fog to the night-sky colour is the current candidate: its range follows the
