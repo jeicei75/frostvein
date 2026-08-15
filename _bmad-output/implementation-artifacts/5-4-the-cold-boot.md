@@ -904,7 +904,8 @@ gpt-5.6-terra
   floor has substantial measured margin. Tasks 6–9 and Wolf's closing sign-off stay open.
 - The round-4 self-gate completed with one legitimate close-zoom visibility finding. It was fixed
   in `2ea6ae3`, the 4–500 zoom regression test passed, and the final 20-mutation standalone run
-  was all KILLED. The final gate follows this record update.
+  was all KILLED. The final `scripts/gate.sh` completed GREEN (fmt, clippy, full workspace tests,
+  all dependency probes, and metrics ledger).
 
 ### File List
 
@@ -943,3 +944,4 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 3 validation: final gate GREEN. The one complete self-gate raised a stale-test-cache false positive; a clean focused rebuild passed. The self-gate's inner simd socket failure was sandbox-only. |
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
+| 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
