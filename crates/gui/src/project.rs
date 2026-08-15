@@ -292,11 +292,13 @@ fn spawn_snow_cap(commands: &mut Commands, assets: &ProjectionAssets, position: 
 
 /// The cap is presentation-only: wire terrain remains its original material.
 pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
-    matches!(mirror.tile(position), Some(Tile::Solid(_)))
-        && !matches!(
-            mirror.tile([position[0], position[1], position[2] + 1]),
-            Some(Tile::Solid(_) | Tile::Ramp(_))
-        )
+    matches!(
+        mirror.tile(position),
+        Some(Tile::Solid(material) | Tile::Ramp(material)) if material != Material::Ice
+    ) && !matches!(
+        mirror.tile([position[0], position[1], position[2] + 1]),
+        Some(Tile::Solid(_) | Tile::Ramp(_))
+    )
 }
 
 impl ProjectionAssets {
@@ -426,13 +428,30 @@ mod tests {
     }
 
     #[test]
-    fn snow_cap_marks_only_solid_tops_in_a_hand_built_toy_world() {
+    fn snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world() {
         let toy = Mirror::from_snapshot(Snapshot {
             msg_type: MessageType::Snapshot,
-            dims: Dims { x: 1, y: 1, z: 3 },
+            dims: Dims { x: 10, y: 1, z: 2 },
             tiles: vec![
-                Tile::Solid(protocol::Material::Stone),
+                Tile::Solid(protocol::Material::Ice),
+                Tile::Solid(protocol::Material::Snow),
                 Tile::Solid(protocol::Material::TreeFoliage),
+                Tile::Solid(protocol::Material::Stone),
+                Tile::Solid(protocol::Material::Stone),
+                Tile::Solid(protocol::Material::Soil),
+                Tile::Ramp(protocol::Material::Ice),
+                Tile::Ramp(protocol::Material::Snow),
+                Tile::Ramp(protocol::Material::Stone),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Solid(protocol::Material::Ice),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
                 Tile::Empty,
             ],
             entities: Vec::new(),
@@ -445,12 +464,25 @@ mod tests {
         .unwrap();
         assert!(
             !has_snow_cap(&toy, [0, 0, 0]),
-            "covered stone keeps its dark flank"
+            "exposed ice keeps its blue top"
         );
+        assert!(has_snow_cap(&toy, [1, 0, 0]), "snow can settle on snow");
         assert!(
-            has_snow_cap(&toy, [0, 0, 1]),
+            has_snow_cap(&toy, [2, 0, 0]),
             "exposed foliage carries a loaded cap"
         );
-        assert!(!has_snow_cap(&toy, [0, 0, 2]), "air never receives a cap");
+        assert!(has_snow_cap(&toy, [4, 0, 0]), "stone can carry snow");
+        assert!(has_snow_cap(&toy, [5, 0, 0]), "soil can carry snow");
+        assert!(
+            !has_snow_cap(&toy, [3, 0, 0]),
+            "covered terrain keeps its dark flank"
+        );
+        assert!(
+            !has_snow_cap(&toy, [6, 0, 0]),
+            "ice ramps keep their blue tops"
+        );
+        assert!(has_snow_cap(&toy, [7, 0, 0]), "snow ramps are capped");
+        assert!(has_snow_cap(&toy, [8, 0, 0]), "stone ramps are capped");
+        assert!(!has_snow_cap(&toy, [9, 0, 0]), "air never receives a cap");
     }
 }
