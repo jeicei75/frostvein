@@ -183,7 +183,7 @@ fn setup_camera(mut commands: Commands) {
         rig,
         AmbientLight {
             color: night_lighting().ambient,
-            brightness: 110.0,
+            brightness: night_lighting().ambient_brightness,
             ..Default::default()
         },
         DistanceFog {
@@ -202,7 +202,7 @@ fn setup_night_lighting(mut commands: Commands) {
     commands.spawn((
         DirectionalLight {
             color: night_lighting().aurora,
-            illuminance: 250.0,
+            illuminance: night_lighting().directional_illuminance,
             shadow_maps_enabled: true,
             ..Default::default()
         },
