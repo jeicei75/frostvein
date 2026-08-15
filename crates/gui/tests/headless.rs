@@ -494,9 +494,15 @@ fn capped_stone_keeps_its_bare_cube_beneath_a_snow_cap() {
     assert_eq!(colors, vec![[40, 57, 82], [118, 139, 157]]);
     let caps = app
         .world_mut()
-        .query::<&SnowCap>()
+        .query::<(&SnowCap, Option<&ClientLocal>)>()
         .iter(app.world())
-        .map(|cap| cap.0)
+        .map(|(cap, local)| {
+            assert!(
+                local.is_some(),
+                "snow caps belong to the client-local partition"
+            );
+            cap.0
+        })
         .collect::<Vec<_>>();
     assert_eq!(caps, vec![[0, 0, 0]], "the capped tile needs one snow slab");
 }

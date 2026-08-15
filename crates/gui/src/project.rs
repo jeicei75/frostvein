@@ -284,6 +284,7 @@ fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> Material {
 fn spawn_snow_cap(commands: &mut Commands, assets: &ProjectionAssets, position: [i32; 3]) {
     commands.spawn((
         SnowCap(position),
+        ClientLocal,
         Mesh3d(assets.snow_cap.clone()),
         MeshMaterial3d(assets.snow.clone()),
         Transform::from_translation(world_to_render(position) + Vec3::Y * 0.54),
