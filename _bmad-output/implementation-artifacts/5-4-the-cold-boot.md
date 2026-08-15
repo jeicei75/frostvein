@@ -728,6 +728,11 @@ gpt-5.6-terra
   this round. The `projected 53365 terrain cubes` value was therefore not freshly observed
   headlessly; it remains statically preserved by the unchanged draw-set path and the prior
   vehicle oracle. Wolf should re-check the startup line during the next live capture.
+- REVIEW-PATCH round 4 self-gate: `codex review --base main` completed and raised one P2:
+  applying the full composition offset at the 4-unit zoom minimum put the camp behind the camera.
+  The fix scales that offset below boot distance and pins both 4 and 500 with
+  `zoom_limits_keep_the_camp_in_front_of_the_camera`; its sabotage (`composition_scale = 1.0`)
+  failed that test. The final standalone runner killed all **20** mutations, source restored.
 - REVIEW-PATCH round 3 final gate: `scripts/gate.sh` completed **GREEN** (fmt, clippy, full
   tests, all dependency probes, metrics ledger). `codex review --base main` completed (session
   `01a00693-d264-7932-b23f-d45deec77f24`) and raised one P1 claiming initial point lights were
@@ -897,6 +902,9 @@ gpt-5.6-terra
   whether foreground trees obscure the lower camp at the new pitch; Wolf must inspect that live.
   Reframing may also change the capture's 17,648 warm-pixel measurement, although the 3,000-pixel
   floor has substantial measured margin. Tasks 6–9 and Wolf's closing sign-off stay open.
+- The round-4 self-gate completed with one legitimate close-zoom visibility finding. It was fixed
+  in `2ea6ae3`, the 4–500 zoom regression test passed, and the final 20-mutation standalone run
+  was all KILLED. The final gate follows this record update.
 
 ### File List
 
@@ -934,3 +942,4 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 3: stopped foliage snow slabs, tapered spruce cubes, spread visible snowfall, disabled the frame graph, frustum-pinned the aurora/stars, and raised the measured warm-pixel floor. All 16 mutations were KILLED; the final gate and self-gate follow. |
 | 2026-08-15 | REVIEW-PATCH round 3 validation: final gate GREEN. The one complete self-gate raised a stale-test-cache false positive; a clean focused rebuild passed. The self-gate's inner simd socket failure was sandbox-only. |
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
+| 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
