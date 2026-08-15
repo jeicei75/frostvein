@@ -735,6 +735,21 @@ gpt-5.6-terra
     multiply; `pbr_ambient.wgsl:28` for the ambient term). No devpod can see whether they are
     *right* — only that they are no longer numerically impossible. **Task 7's live check is
     what settles them**, and it is the first thing to look at on the vehicle.
+- **LIVE CHECK OF THE GATING PATCH (Wolf, 2026-08-15, native Windows vehicle, ~16:50).** The
+  rescaled frame was viewed live and the look has visibly changed: Wolf's verdict is
+  *"works now — well it's a start"*. The R1 light budget is therefore **live-confirmed as no
+  longer the blocker**; the four frame-level HIGHs are no longer masked by an unreadable scene.
+  **This is NOT AC19.** "A start" is not "something he would screenshot unprompted" — wow beat 1
+  remains unsigned, and Tasks 6–9 remain open.
+  - **Trap that cost a live run, recorded so nobody repeats it:** the first attempt at this
+    check showed *no change at all*. Cause: the vehicle's cross-compiled `gui.exe` was built at
+    **13:24**, while the earliest patch commit (`c69ffc4`) landed at **13:58** — the binary
+    predated all 20 patch commits, so the frame was byte-identical to the falsification run.
+    The cross-compile is a manual step in the vehicle recipe and **nothing in the delegated dev
+    flow triggers it**. Any handback that ends "go look at it on the vehicle" must name the
+    rebuild + re-copy as an explicit step, and the running build should be confirmed against
+    the last commit time before any visual conclusion is drawn. Same family as the exit-0 rule:
+    an unchanged frame is not evidence about the code until the binary is known to contain it.
 
 ### File List
 
