@@ -85,9 +85,20 @@ PY
 mutation "aurora leaves the boot frustum" gui atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_frustum <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = 'Vec3::new(64.0, 26.1, -130.0)'
+old = 'Vec3::new(64.0, 31.0, -146.0)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'Vec3::new(64.0, 35.0, -130.0)'))
+p.write_text(s.replace(old, 'Vec3::new(64.0, 60.0, -146.0)'))
+PY
+
+mutation "stars collapse to a thin horizon line" gui stars_span_the_boot_sky_instead_of_a_thin_horizon_line <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+start = s.index('pub fn star_positions() -> [Vec3; 12] {')
+end = s.index('\n}\n\npub fn snowflake_positions', start) + 2
+replacement = '''pub fn star_positions() -> [Vec3; 12] {
+    [Vec3::new(64.0, 30.0, -140.0); 12]
+}'''
+p.write_text(s[:start] + replacement + s[end:])
 PY
 
 mutation "boot pitch loses the approved framing" gui boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third <<'PY'

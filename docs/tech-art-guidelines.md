@@ -20,11 +20,12 @@ rules because the renderer presents them as full cubes.
 ## Sky and lights
 
 The sky is an illuminant. Cold ambient fill and a green-blue directional light let
-the aurora catch snow and ice; the translucent horizon bands sit beyond the far terrain
-edge and immediately above the skyline. Their centres and the stars are pinned inside the
-boot camera frustum, so the visible sky strip carries the aurora rather than placing it
-overhead or out of frame. Torch, campfire, and future lantern properties are one data table
-containing colour, lumen intensity, and range.
+the aurora catch snow and ice; three translucent 56×6 horizon bands sit beyond the far
+terrain edge and immediately above the skyline. The stars scatter across at least 65% of
+the boot sky's width and 25% of its height, rather than forming one horizon row. Their centres
+are pinned inside the boot camera frustum, so the visible sky carries the aurora rather than
+placing it overhead or out of frame. Torch, campfire, and future lantern properties are one
+data table containing colour, lumen intensity, and range.
 At the default camera exposure, the 2,000 cd/m² ambient fill and 1,500 lux directional
 light lift blue-grey snow to a midtone; the 2.5M lm torches and 6M lm campfire make warm
 local pools read above that field. The resulting ladder is dark sky and flanks, midtone

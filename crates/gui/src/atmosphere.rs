@@ -23,23 +23,31 @@ pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
 pub const SKYLINE_MAX: f32 = 26.0;
 pub const FAR_TERRAIN_EDGE: f32 = -128.0;
 pub const SNOWFLAKE_SCALE: f32 = 0.28;
+const AURORA_BAND_SCALE: Vec3 = Vec3::new(56.0, 6.0, 0.15);
 
 pub fn aurora_positions() -> [Vec3; 3] {
     [
-        Vec3::new(64.0, 26.1, -130.0),
-        Vec3::new(76.0, 26.3, -132.0),
-        Vec3::new(88.0, 26.5, -130.0),
+        Vec3::new(8.0, 28.0, -140.0),
+        Vec3::new(64.0, 31.0, -146.0),
+        Vec3::new(100.0, 28.0, -140.0),
     ]
 }
 
 pub fn star_positions() -> [Vec3; 12] {
-    std::array::from_fn(|index| {
-        Vec3::new(
-            68.0 + (index % 6) as f32 * 4.0,
-            27.6 + (index / 6) as f32 * 0.3,
-            -132.0 - (index % 2) as f32 * 2.0,
-        )
-    })
+    [
+        Vec3::new(-180.0, 35.0, -160.0),
+        Vec3::new(-130.0, 33.0, -150.0),
+        Vec3::new(-80.0, 36.0, -155.0),
+        Vec3::new(-35.0, 30.0, -142.0),
+        Vec3::new(10.0, 41.0, -160.0),
+        Vec3::new(45.0, 32.0, -146.0),
+        Vec3::new(75.0, 38.0, -150.0),
+        Vec3::new(95.0, 30.0, -138.0),
+        Vec3::new(104.0, 33.0, -140.0),
+        Vec3::new(-100.0, 28.0, -135.0),
+        Vec3::new(25.0, 28.0, -135.0),
+        Vec3::new(100.0, 32.0, -135.0),
+    ]
 }
 
 pub fn snowflake_positions() -> [Vec3; 36] {
@@ -106,7 +114,7 @@ pub fn setup_atmosphere(
         commands.spawn((
             Mesh3d(cube.clone()),
             MeshMaterial3d(aurora.clone()),
-            Transform::from_translation(position).with_scale(Vec3::new(24.0, 2.0, 0.15)),
+            Transform::from_translation(position).with_scale(AURORA_BAND_SCALE),
             Atmosphere,
             ClientLocal,
         ));
@@ -138,6 +146,7 @@ mod tests {
         CAMP_FOCUS, FAR_TERRAIN_EDGE, SKYLINE_MAX, SNOWFLAKE_SCALE, aurora_light_transform,
         aurora_positions, inside_boot_frustum, snowflake_positions, star_positions,
     };
+    use crate::camera::CameraRig;
 
     #[test]
     fn atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_frustum() {
@@ -196,6 +205,40 @@ mod tests {
         assert_ne!(
             flakes[0].z, flakes[6].z,
             "a shared x column must span multiple z rows"
+        );
+    }
+
+    #[test]
+    fn stars_span_the_boot_sky_instead_of_a_thin_horizon_line() {
+        let rig = CameraRig::new([64, 64, 9]);
+        let screen_positions = star_positions().map(|star| {
+            rig.project_render_point(star)
+                .expect("all stars must stay in front of the boot camera")
+        });
+        let min_x = screen_positions
+            .iter()
+            .map(|position| position.x)
+            .fold(f32::INFINITY, f32::min);
+        let max_x = screen_positions
+            .iter()
+            .map(|position| position.x)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let min_y = screen_positions
+            .iter()
+            .map(|position| position.y)
+            .fold(f32::INFINITY, f32::min);
+        let max_y = screen_positions
+            .iter()
+            .map(|position| position.y)
+            .fold(f32::NEG_INFINITY, f32::max);
+
+        assert!(
+            max_x - min_x >= 0.65,
+            "stars must cross most of the sky width"
+        );
+        assert!(
+            max_y - min_y >= 0.25,
+            "stars must fill more than one horizon row"
         );
     }
 }
