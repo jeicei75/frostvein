@@ -700,6 +700,34 @@ gpt-5.6-terra
   emitters ignore wire light field                             KILLED
   All mutations killed.
   ```
+- REVIEW-PATCH round 4 RED evidence — actual standalone runner output: all 19 mutations were
+  KILLED. New evidence: setting the approved cap colour equal to terrain snow failed the
+  literal cap oracle (`appearance.rs:141`); collapsing every star to one point failed the
+  65%-wide/25%-high sky-span assertion (`atmosphere.rs:222`); restoring `BOOT_PITCH` to 0.8
+  failed the camera projection assertion (`camera.rs:113`). Actual runner tail:
+
+  ```text
+  === snow cap matches snow terrain ===
+  thread 'appearance::tests::appearance_tables_pin_the_cold_boot_palette' panicked at
+  crates/gui/src/appearance.rs:141: assertion `left == right` failed
+  === stars collapse to a thin horizon line ===
+  thread 'atmosphere::tests::stars_span_the_boot_sky_instead_of_a_thin_horizon_line'
+  panicked at crates/gui/src/atmosphere.rs:222: test result: FAILED
+  === boot pitch loses the approved framing ===
+  thread 'camera::tests::boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third'
+  panicked at crates/gui/src/camera.rs:113: test result: FAILED
+  All mutations killed.
+  ```
+- REVIEW-PATCH round 4 framing: `BOOT_YAW = 0.70`, `BOOT_PITCH = 0.45`, and
+  `BOOT_DISTANCE = 90.0`. The pure production projection helper measured the camp focus at
+  0.78 and the `[64, 26, -128]` render-space far skyline at 0.30 from the top, with a stated
+  ±0.02 tolerance. A fixed render-space composition offset `[0.0, 6.7, -37.42]` is required:
+  `CameraRig` otherwise literally looks at the camp and necessarily projects it to 0.50, so
+  the Task 7 wording that yaw/pitch/distance alone can reach 0.78 is a specification defect.
+- REVIEW-PATCH round 4 scope check: `is_exposed` and `terrain_positions` were not changed in
+  this round. The `projected 53365 terrain cubes` value was therefore not freshly observed
+  headlessly; it remains statically preserved by the unchanged draw-set path and the prior
+  vehicle oracle. Wolf should re-check the startup line during the next live capture.
 - REVIEW-PATCH round 3 final gate: `scripts/gate.sh` completed **GREEN** (fmt, clippy, full
   tests, all dependency probes, metrics ledger). `codex review --base main` completed (session
   `01a00693-d264-7932-b23f-d45deec77f24`) and raised one P1 claiming initial point lights were
@@ -864,6 +892,11 @@ gpt-5.6-terra
 - The round-3 final gate completed GREEN. One complete `codex review --base main` pass reported
   a non-reproducible initial-light P1 caused by its stale, temporarily instrumented test binary;
   after cleaning `gui`, the focused test rebuilt and passed, so no code change was made.
+- REVIEW-PATCH round 4: matched the approved artifact's numerical composition, terrain palette,
+  separate settled-snow cap, and broad sky placement. The headless projection test cannot judge
+  whether foreground trees obscure the lower camp at the new pitch; Wolf must inspect that live.
+  Reframing may also change the capture's 17,648 warm-pixel measurement, although the 3,000-pixel
+  floor has substantial measured margin. Tasks 6–9 and Wolf's closing sign-off stay open.
 
 ### File List
 
@@ -882,6 +915,7 @@ gpt-5.6-terra
 - _bmad-output/implementation-artifacts/5-4-signoff/artifact_render.py
 - _bmad-output/implementation-artifacts/5-4-signoff/candidate-artifact-2026-08-14.png
 - _bmad-output/implementation-artifacts/5-4-signoff/candidate-artifact-2026-08-15.png
+- _bmad-output/implementation-artifacts/5-4-signoff/capture-2026-08-15T1717-boot.png
 - _bmad-output/implementation-artifacts/5-4-signoff/capture_snapshot.py
 - _bmad-output/implementation-artifacts/5-4-the-cold-boot.md
 
@@ -899,3 +933,4 @@ gpt-5.6-terra
 | 2026-08-15 | Orchestrator verified the whole review-patch cycle independently: gate GREEN (exit 0) and all 12 mutations KILLED (exit 0) from a clean tree; scope, authorship and the 20-commit cadence confirmed. All 11 review action items closed. Zero usable self-gate passes (both truncated). Status stays **in-progress**: Tasks 6–9 are vehicle-bound and AC19 is Wolf's alone. |
 | 2026-08-15 | REVIEW-PATCH round 3: stopped foliage snow slabs, tapered spruce cubes, spread visible snowfall, disabled the frame graph, frustum-pinned the aurora/stars, and raised the measured warm-pixel floor. All 16 mutations were KILLED; the final gate and self-gate follow. |
 | 2026-08-15 | REVIEW-PATCH round 3 validation: final gate GREEN. The one complete self-gate raised a stale-test-cache false positive; a clean focused rebuild passed. The self-gate's inner simd socket failure was sandbox-only. |
+| 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
