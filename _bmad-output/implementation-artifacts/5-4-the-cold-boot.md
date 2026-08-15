@@ -657,6 +657,49 @@ gpt-5.6-terra
 - REVIEW-PATCH round 2 self-gate: `codex review --base main` was launched once (session
   `01a005d7-1804-7751-80fb-ee2402e8db22`), but the same command-parent timeout truncated it
   during diff inspection, before findings or a verdict. No review finding was withheld.
+- REVIEW-PATCH round 3 — T1/T2: `TreeFoliage` now receives no terrain snow slab, and its cube
+  scale is a pure contiguous-foliage-above rule: skirt/tip `0.72`, upper crown `0.86`, mid crown
+  `1.0`. This is deliberately a scale rule, not mesh generation: it exposes the terrain's own
+  snow landform while keeping the wire-true cube tree draw set. `is_exposed` and
+  `terrain_positions()` are untouched; the latter still calls only that predicate, so the
+  previously live-confirmed `projected 53365 terrain cubes` oracle is statically preserved.
+- REVIEW-PATCH round 3 — T3/T4: snowfall is a visible 6×6 grid (36 flakes at scale `0.28`) with
+  independent x/z axes. The FPS text and its frame-time graph are both disabled for normal boot
+  and capture configuration, and toggled together by F3.
+- REVIEW-PATCH round 3 — T5/T6: aurora and stars are now just beyond the terrain edge and low
+  inside the production 45° boot frustum; the test builds `CameraRig::new([64, 64, 9])` and
+  checks camera basis, vertical and 16:9 horizontal bounds. `WARM_PIXEL_FLOOR` is 3,000, derived
+  from the measured 17,648 warm pixels in `capture-2026-08-15T1717-boot.png` rather than the
+  obsolete 100/64 estimates. No tautological test was added for that measured threshold.
+- REVIEW-PATCH round 3 RED evidence: removing the foliage exclusion failed
+  `snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world` at `foliage stays dark so
+  ground-level skirts cannot read as snow slabs`; changing the taper's `0 => 0.72` to `1.0`
+  failed `foliage_tapers_from_wide_mid_crown_to_narrow_tip_and_skirt` (`left: 1.0`,
+  `right: 0.72`, `skirt`); correlating snowfall z with x failed `a shared x column must span
+  multiple z rows`; removing the capture graph disable failed `assertion failed:
+  !app.world().resource::<FpsOverlayConfig>().frame_time_graph_config.enabled`; raising the first
+  aurora to y=35 failed `aurora must be visible at the boot framing`.
+- REVIEW-PATCH round 3 mutation RED — actual runner output:
+
+  ```text
+  snow cap leaves bare top                                     KILLED
+  ice tops receive snow                                        KILLED
+  foliage receives ground snow slabs                           KILLED
+  spruce skirt loses its taper                                 KILLED
+  ramps lose their caps                                        KILLED
+  snow cap paints stone flanks                                 KILLED
+  torch table goes cold                                        KILLED
+  light budget collapses                                       KILLED
+  night lighting goes unpinned                                 KILLED
+  aurora leaves the boot frustum                               KILLED
+  snowfall collapses back to a diagonal                        KILLED
+  atmosphere loses client local marker                         KILLED
+  snow caps lose client local marker                           KILLED
+  fog stops following zoom                                     KILLED
+  capture keeps its frame graph                                KILLED
+  emitters ignore wire light field                             KILLED
+  All mutations killed.
+  ```
 
 ### Completion Notes List
 
@@ -777,6 +820,12 @@ gpt-5.6-terra
   - **Fixable entirely client-side.** Trunk tiles above the skirt are already exposed and drawn,
     so the fix does not touch `is_exposed` and **the 53,365 oracle holds**. No wire change.
 
+- REVIEW-PATCH round 3 landed six focused visual/instrument patches in six commits. The foliage
+  rule is intentionally minimal: uncapped, reduced cube branches with a 0.72/0.86/1.0 taper; no
+  mesh, LOD, or draw-set change. The complete 16-entry mutation table ran alone and every
+  mutation was KILLED. Vehicle viewing is still required to judge the revised trees, snowfall,
+  and in-frame sky; no Tasks 6–9 or Wolf's closing sign-off box were changed.
+
 ### File List
 
 - crates/gui/src/appearance.rs
@@ -809,3 +858,4 @@ gpt-5.6-terra
 | 2026-08-15 | Landed the 11 review patches in focused commits; live vehicle tasks remain explicitly open. |
 | 2026-08-15 | REVIEW-PATCH round 2: rebalanced the cold field for default exposure, removed the tautological capture assertion, added/fixed mutations, and raised snow's respawn floor. Full mutation and gate completion remain blocked by the sandbox command-parent timeout. |
 | 2026-08-15 | Orchestrator verified the whole review-patch cycle independently: gate GREEN (exit 0) and all 12 mutations KILLED (exit 0) from a clean tree; scope, authorship and the 20-commit cadence confirmed. All 11 review action items closed. Zero usable self-gate passes (both truncated). Status stays **in-progress**: Tasks 6–9 are vehicle-bound and AC19 is Wolf's alone. |
+| 2026-08-15 | REVIEW-PATCH round 3: stopped foliage snow slabs, tapered spruce cubes, spread visible snowfall, disabled the frame graph, frustum-pinned the aurora/stars, and raised the measured warm-pixel floor. All 16 mutations were KILLED; the final gate and self-gate follow. |

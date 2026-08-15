@@ -3,7 +3,7 @@
 mutation "snow cap leaves bare top" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    matches!(\n        mirror.tile(position),\n        Some(Tile::Solid(material) | Tile::Ramp(material)) if material != Material::Ice\n    ) && !matches!(\n'
+old = '    matches!(\n        mirror.tile(position),\n        Some(Tile::Solid(material) | Tile::Ramp(material))\n            if material != Material::Ice && material != Material::TreeFoliage\n    ) && !matches!(\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    false && !matches!(\n'))
 PY
@@ -11,9 +11,25 @@ PY
 mutation "ice tops receive snow" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = 'if material != Material::Ice'
+old = 'if material != Material::Ice && material != Material::TreeFoliage'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'if true'))
+PY
+
+mutation "foliage receives ground snow slabs" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = 'material != Material::Ice && material != Material::TreeFoliage'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'material != Material::Ice'))
+PY
+
+mutation "spruce skirt loses its taper" gui foliage_tapers_from_wide_mid_crown_to_narrow_tip_and_skirt <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        0 => 0.72,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        0 => 1.0,\n'))
 PY
 
 mutation "ramps lose their caps" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
@@ -58,12 +74,20 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        sky: Color::srgb_u8(20, 20, 20),\n'))
 PY
 
-mutation "aurora crosses terrain edge" gui atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_read <<'PY'
+mutation "aurora leaves the boot frustum" gui atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_frustum <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = 'Vec3::new(28.0, 32.0, -150.0)'
+old = 'Vec3::new(64.0, 26.1, -130.0)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'Vec3::new(28.0, 32.0, -120.0)'))
+p.write_text(s.replace(old, 'Vec3::new(64.0, 35.0, -130.0)'))
+PY
+
+mutation "snowfall collapses back to a diagonal" gui snowfall_fills_a_visible_grid_instead_of_a_single_diagonal_row <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '            -82.0 + (index / 6) as f32 * 7.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            -82.0 + (index % 6) as f32 * 7.0,\n'))
 PY
 
 mutation "atmosphere loses client local marker" gui atmosphere_entities_are_client_local_and_never_world_projected <<'PY'
@@ -88,6 +112,15 @@ p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '        190.0_f32.max(camera_distance * 1.8),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        190.0,\n'))
+PY
+
+mutation "capture keeps its frame graph" gui capture_forces_the_frame_time_overlay_off <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = 'fn force_capture_overlay_off(app: &mut App) {\n    let mut config = app.world_mut().resource_mut::<FpsOverlayConfig>();\n    config.enabled = false;\n    config.frame_time_graph_config.enabled = false;\n}\n'
+new = 'fn force_capture_overlay_off(app: &mut App) {\n    let mut config = app.world_mut().resource_mut::<FpsOverlayConfig>();\n    config.enabled = false;\n}\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, new))
 PY
 
 mutation "emitters ignore wire light field" gui recorded_camp_snapshot_projects_exactly_five_warm_point_lights <<'PY'
