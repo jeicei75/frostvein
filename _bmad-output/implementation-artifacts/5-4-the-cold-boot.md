@@ -484,8 +484,11 @@ gpt-5.6-terra
   these three defects and pass 2 was likewise cut off before conclusion. No further self-gate
   pass was run, preserving the three-pass cap.
 - The full `scripts/gate.sh` could not finish before this sandbox's command session was cut off
-  during `cargo test`; focused GUI headless tests and `cargo test --offline` did pass. The gate
-  checkbox remains unchecked and no green gate is claimed.
+  during `cargo test`. Its first run did expose `clippy::too_many_arguments` in the snow-cap
+  cleanup; `f33f3bf` replaced the extra query with a named combined query, then GUI headless
+  tests and GUI clippy passed. The final gate tail was `cargo fmt --check ok`, `cargo clippy
+  -D warnings ok`, then `cargo test` before sandbox termination. The gate checkbox remains
+  unchecked and no green gate is claimed.
 
 ### File List
 
