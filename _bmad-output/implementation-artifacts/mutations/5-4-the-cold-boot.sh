@@ -19,9 +19,10 @@ PY
 mutation "ramps lose their caps" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = 'Tile::Solid(material) | Tile::Ramp(material)'
+old = 'pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {\n    matches!(\n        mirror.tile(position),\n        Some(Tile::Solid(material) | Tile::Ramp(material))'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'Tile::Solid(material)'))
+new = 'pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {\n    matches!(\n        mirror.tile(position),\n        Some(Tile::Solid(material))'
+p.write_text(s.replace(old, new))
 PY
 
 mutation "snow cap paints stone flanks" gui capped_stone_keeps_its_bare_cube_beneath_a_snow_cap <<'PY'
