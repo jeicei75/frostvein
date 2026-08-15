@@ -29,9 +29,9 @@ pub fn night_lighting() -> NightLighting {
         sky: Color::srgb_u8(5, 12, 28),
         star: Color::srgb_u8(173, 196, 220),
         ambient: Color::srgb_u8(47, 76, 104),
-        ambient_brightness: 8.0,
+        ambient_brightness: 2_000.0,
         aurora: Color::srgb_u8(73, 157, 144),
-        directional_illuminance: 8.0,
+        directional_illuminance: 1_500.0,
     }
 }
 
@@ -40,17 +40,17 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
     match kind {
         LightKind::Torch => LightProperties {
             color: Color::srgb_u8(255, 140, 62),
-            intensity: 250_000.0,
+            intensity: 2_500_000.0,
             range: 18.0,
         },
         LightKind::Campfire => LightProperties {
             color: Color::srgb_u8(255, 173, 92),
-            intensity: 500_000.0,
+            intensity: 6_000_000.0,
             range: 26.0,
         },
         LightKind::Lantern => LightProperties {
             color: Color::srgb_u8(255, 195, 110),
-            intensity: 180_000.0,
+            intensity: 2_000_000.0,
             range: 14.0,
         },
     }
@@ -94,9 +94,9 @@ mod tests {
     #[test]
     fn appearance_tables_pin_the_cold_boot_palette() {
         let lights = [
-            (LightKind::Torch, [255, 140, 62], 250_000.0, 18.0),
-            (LightKind::Campfire, [255, 173, 92], 500_000.0, 26.0),
-            (LightKind::Lantern, [255, 195, 110], 180_000.0, 14.0),
+            (LightKind::Torch, [255, 140, 62], 2_500_000.0, 18.0),
+            (LightKind::Campfire, [255, 173, 92], 6_000_000.0, 26.0),
+            (LightKind::Lantern, [255, 195, 110], 2_000_000.0, 14.0),
         ];
         for (kind, rgb, intensity, range) in lights {
             let actual = light_properties(kind);
@@ -144,17 +144,8 @@ mod tests {
             lighting.aurora.to_srgba().to_u8_array_no_alpha(),
             [73, 157, 144]
         );
-        assert_eq!(lighting.ambient_brightness, 8.0);
-        assert_eq!(lighting.directional_illuminance, 8.0);
-
-        let camp_distance_squared = 36.0;
-        let warm_camp_lux = light_properties(LightKind::Campfire).intensity
-            / (4.0 * std::f32::consts::PI * camp_distance_squared);
-        let cold_fill = lighting.ambient_brightness + lighting.directional_illuminance;
-        assert!(
-            warm_camp_lux >= cold_fill * 60.0,
-            "the campfire must dominate cold fill six world units from camp"
-        );
+        assert_eq!(lighting.ambient_brightness, 2_000.0);
+        assert_eq!(lighting.directional_illuminance, 1_500.0);
 
         let entities = [
             (EntityKind::Dwarf, [151, 116, 96], 0.65),
@@ -166,5 +157,19 @@ mod tests {
             assert_eq!(actual.color.to_srgba().to_u8_array_no_alpha(), rgb);
             assert_eq!(actual.scale, scale);
         }
+    }
+
+    #[test]
+    fn campfire_keeps_local_contrast_over_the_midtone_cold_fill() {
+        let camp_distance_squared = 36.0;
+        let warm_camp_lux = light_properties(LightKind::Campfire).intensity
+            / (4.0 * std::f32::consts::PI * camp_distance_squared);
+        let lighting = night_lighting();
+        let cold_fill = lighting.ambient_brightness + lighting.directional_illuminance;
+
+        assert!(
+            warm_camp_lux >= cold_fill * 3.0,
+            "the campfire must dominate its six-unit neighbourhood without blackening the field"
+        );
     }
 }

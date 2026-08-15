@@ -13,13 +13,15 @@ follow those same material rules because the renderer presents them as full cube
 
 ## Sky and lights
 
-The sky is an illuminant. Low cold ambient fill and a green-blue directional light let
+The sky is an illuminant. Cold ambient fill and a green-blue directional light let
 the aurora catch snow and ice; the translucent horizon bands sit beyond the far terrain
 edge and above the skyline, never inside terrain or overhead. Torch, campfire, and future
 lantern properties are one data table containing colour, lumen intensity, and range.
-The camp lights use hundreds of thousands of lumens against an 8 cd/m² + 8 lux cold fill,
-so their pools dominate without lifting the night field. Every entry is warm (red exceeds
-blue); the table is static until story 6.1 adds flicker.
+At the default camera exposure, the 2,000 cd/m² ambient fill and 1,500 lux directional
+light lift blue-grey snow to a midtone; the 2.5M lm torches and 6M lm campfire make warm
+local pools read above that field. The resulting ladder is dark sky and flanks, midtone
+snow and ice, then warm pools and near-white emitter faces. Every entry is warm (red
+exceeds blue); the table is static until story 6.1 adds flicker.
 
 ## Edge treatment
 
