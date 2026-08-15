@@ -4,6 +4,7 @@ use bevy::{
     app::AppExit,
     ecs::message::MessageWriter,
     prelude::{Commands, On, ResMut, Resource},
+    render::render_resource::TextureFormat,
     render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
 };
 
@@ -21,6 +22,24 @@ pub fn warm_lit_pixels(rgba: &[[u8; 4]]) -> usize {
     rgba.iter()
         .filter(|pixel| pixel[0].saturating_sub(pixel[2]) > WARM_RED_OVER_BLUE)
         .count()
+}
+
+fn decode_rgba8(bytes: &[u8], format: TextureFormat) -> Vec<[u8; 4]> {
+    assert!(
+        bytes.len().is_multiple_of(4),
+        "capture pixel data must contain whole four-channel pixels"
+    );
+    match format {
+        TextureFormat::Rgba8Unorm | TextureFormat::Rgba8UnormSrgb => bytes
+            .chunks_exact(4)
+            .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
+            .collect(),
+        TextureFormat::Bgra8Unorm | TextureFormat::Bgra8UnormSrgb => bytes
+            .chunks_exact(4)
+            .map(|pixel| [pixel[2], pixel[1], pixel[0], pixel[3]])
+            .collect(),
+        _ => panic!("capture range check cannot decode {format:?} pixels"),
+    }
 }
 
 impl CaptureState {
@@ -60,10 +79,7 @@ fn validate_capture_ranges(event: On<ScreenshotCaptured>) {
         .data
         .as_deref()
         .expect("capture screenshot must include pixel data");
-    let pixels = bytes
-        .chunks_exact(4)
-        .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
-        .collect::<Vec<_>>();
+    let pixels = decode_rgba8(bytes, event.image.texture_descriptor.format);
     assert!(
         pixels.iter().any(|pixel| pixel[..3] != [0, 0, 0]),
         "capture is black"
@@ -75,4 +91,17 @@ fn validate_capture_ranges(event: On<ScreenshotCaptured>) {
     let warm = warm_lit_pixels(&pixels);
     assert!(warm > 0, "capture contains no warm-lit pixels");
     println!("capture range check: warm-lit pixels={warm}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bgra_capture_bytes_decode_before_warm_pixel_detection() {
+        let pixels = decode_rgba8(&[10, 120, 240, 255], TextureFormat::Bgra8Unorm);
+
+        assert_eq!(pixels, vec![[240, 120, 10, 255]]);
+        assert_eq!(warm_lit_pixels(&pixels), 1);
+    }
 }
