@@ -82,10 +82,7 @@ pub fn run() -> anyhow::Result<()> {
     app.add_plugins(DefaultPlugins)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(FpsOverlayPlugin {
-            config: FpsOverlayConfig {
-                enabled: false,
-                ..Default::default()
-            },
+            config: overlay_config_off(),
         })
         .insert_resource(MirrorResource(mirror))
         .insert_resource(IngestReceiver(Mutex::new(receiver)))
@@ -129,7 +126,18 @@ pub fn run() -> anyhow::Result<()> {
 }
 
 fn force_capture_overlay_off(app: &mut App) {
-    app.world_mut().resource_mut::<FpsOverlayConfig>().enabled = false;
+    let mut config = app.world_mut().resource_mut::<FpsOverlayConfig>();
+    config.enabled = false;
+    config.frame_time_graph_config.enabled = false;
+}
+
+fn overlay_config_off() -> FpsOverlayConfig {
+    let mut config = FpsOverlayConfig {
+        enabled: false,
+        ..Default::default()
+    };
+    config.frame_time_graph_config.enabled = false;
+    config
 }
 
 struct Args {
@@ -266,7 +274,9 @@ fn update_fog_from_camera(mut cameras: Query<(&CameraRig, &mut DistanceFog)>) {
 
 fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut config: ResMut<FpsOverlayConfig>) {
     if keys.just_pressed(KeyCode::F3) {
-        config.enabled = !config.enabled;
+        let enabled = !config.enabled;
+        config.enabled = enabled;
+        config.frame_time_graph_config.enabled = enabled;
     }
 }
 
@@ -412,14 +422,22 @@ mod tests {
     #[test]
     fn capture_forces_the_frame_time_overlay_off() {
         let mut app = App::new();
-        app.insert_resource(FpsOverlayConfig {
+        let mut overlay = FpsOverlayConfig {
             enabled: true,
             ..Default::default()
-        });
+        };
+        overlay.frame_time_graph_config.enabled = true;
+        app.insert_resource(overlay);
 
         force_capture_overlay_off(&mut app);
 
         assert!(!app.world().resource::<FpsOverlayConfig>().enabled);
+        assert!(
+            !app.world()
+                .resource::<FpsOverlayConfig>()
+                .frame_time_graph_config
+                .enabled
+        );
     }
 
     #[test]
