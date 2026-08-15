@@ -42,10 +42,10 @@ assert s.count(old) == 2
 p.write_text(s.replace(old, '            color: Color::srgb_u8(62, 140, 255),\n', 1))
 PY
 
-mutation "light budget collapses" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+mutation "light budget collapses" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 500_000.0,\n'
+old = '            intensity: 6_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 5_000.0,\n'))
 PY
