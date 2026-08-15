@@ -17,9 +17,10 @@ pub struct CaptureState {
 }
 
 pub const WARM_RED_OVER_BLUE: u8 = 30;
-/// Four 0.28-unit torches plus one 0.55-unit campfire project to fewer than 100 pixels at
-/// the 90-unit boot distance; this floor therefore requires light pools, not source faces.
-pub const WARM_PIXEL_FLOOR: usize = 100;
+/// `capture-2026-08-15T1717-boot.png` measured 17,648 warm-lit pixels at the boot framing.
+/// The old 100 floor (and its ~64 emitter-face estimate) could not distinguish missing point
+/// lights from their emissive source faces; 3,000 leaves framing headroom while requiring pools.
+pub const WARM_PIXEL_FLOOR: usize = 3_000;
 
 pub fn warm_lit_pixels(rgba: &[[u8; 4]]) -> usize {
     rgba.iter()
