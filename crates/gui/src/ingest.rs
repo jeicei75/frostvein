@@ -113,6 +113,7 @@ pub fn run() -> anyhow::Result<()> {
                 ingest_messages,
                 reconcile_projection,
                 camera_controls,
+                update_fog_from_camera,
                 toggle_overlay,
                 fall_snow,
             ),
@@ -177,6 +178,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
 
 fn setup_camera(mut commands: Commands) {
     let rig = CameraRig::new([64, 64, 9]);
+    let (fog_start, fog_end) = fog_falloff(rig.distance);
     commands.spawn((
         Camera3d::default(),
         rig.transform(),
@@ -189,8 +191,8 @@ fn setup_camera(mut commands: Commands) {
         DistanceFog {
             color: night_lighting().sky,
             falloff: FogFalloff::Linear {
-                start: 85.0,
-                end: 180.0,
+                start: fog_start,
+                end: fog_end,
             },
             ..Default::default()
         },
@@ -243,6 +245,22 @@ fn camera_controls(
         rig.orbit(yaw, pitch);
         rig.zoom(zoom);
         *transform = rig.transform();
+    }
+}
+
+pub fn fog_falloff(camera_distance: f32) -> (f32, f32) {
+    // NOTE: the vehicle comparison still chooses the final edge treatment; this only keeps
+    // the fog register valid across the pinned zoom clamp.
+    (
+        85.0_f32.max(camera_distance - 30.0),
+        190.0_f32.max(camera_distance * 1.8),
+    )
+}
+
+fn update_fog_from_camera(mut cameras: Query<(&CameraRig, &mut DistanceFog)>) {
+    for (rig, mut fog) in &mut cameras {
+        let (start, end) = fog_falloff(rig.distance);
+        fog.falloff = FogFalloff::Linear { start, end };
     }
 }
 
@@ -387,7 +405,7 @@ mod tests {
 
     use super::{
         ClientLocal, IngestReceiver, MirrorResource, ProjectionWork, WireMessage,
-        classify_client_local, force_capture_overlay_off, ingest_messages,
+        classify_client_local, fog_falloff, force_capture_overlay_off, ingest_messages,
     };
     use crate::project::WorldProjected;
 
@@ -416,6 +434,20 @@ mod tests {
             .is_err(),
             "a zero-frame capture must be rejected before opening a socket"
         );
+    }
+
+    #[test]
+    fn fog_range_tracks_the_camera_without_erasing_the_far_edge() {
+        assert_eq!(fog_falloff(4.0), (85.0, 190.0));
+        assert_eq!(fog_falloff(90.0), (85.0, 190.0));
+        assert_eq!(fog_falloff(500.0), (470.0, 900.0));
+        for distance in [4.0, 90.0, 500.0] {
+            let (_, end) = fog_falloff(distance);
+            assert!(
+                end > distance + 90.0,
+                "the far terrain edge must remain before complete fog"
+            );
+        }
     }
 
     #[test]
