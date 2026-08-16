@@ -21,42 +21,51 @@ pub struct NightLighting {
     pub ambient: Color,
     pub ambient_brightness: f32,
     pub aurora: Color,
+    /// The directional fill's own tint — desaturated aurora, not the curtain colour raw: a
+    /// saturated green-blue light on blue materials is what turned the boot3 field electric.
+    pub directional: Color,
     pub directional_illuminance: f32,
 }
 
-/// The light budget is set from a MEASUREMENT, not an estimate: the round-4 capture's ground
-/// field sat at median sRGB luminance 22.5 against the approved artifact's 112.6, which is a
-/// factor of ~18 in linear light. Ambient and directional are scaled to close that gap, with
-/// the directional share raised from 11% to ~24% of the total so the field keeps its modelling
-/// instead of flattening under pure ambient.
+/// The light budget is set from MEASUREMENT, not estimate — twice now. Round 5 scaled the
+/// round-4 capture's black field (ground median 21 sRGB vs the artifact's 123) up by ~18x
+/// linear; the boot3 vehicle capture then measured 156 — overshot 26% sRGB — with shadows
+/// flooded (p05 87 vs the artifact's 28) and a heavy blue-green cast (the old saturated
+/// ambient/directional tints multiplied onto already-blue materials). This table divides the
+/// budget the other way: a small desaturated ambient so shadow faces go genuinely dark, and a
+/// desaturated cool directional carrying most of the load so lit faces keep their modelling.
 pub fn night_lighting() -> NightLighting {
     NightLighting {
         sky: Color::srgb_u8(5, 12, 28),
         star: Color::srgb_u8(173, 196, 220),
-        ambient: Color::srgb_u8(47, 76, 104),
-        ambient_brightness: 30_000.0,
+        ambient: Color::srgb_u8(120, 140, 165),
+        ambient_brightness: 6_000.0,
         aurora: Color::srgb_u8(73, 157, 144),
-        directional_illuminance: 60_000.0,
+        directional: Color::srgb_u8(150, 190, 180),
+        directional_illuminance: 30_000.0,
     }
 }
 
 pub fn light_properties(kind: LightKind) -> LightProperties {
     // NOTE: lights are static until story 6.1 adds the flicker column.
     match kind {
+        // Intensities sized against the boot3 measurement: the white-clip radius scales as
+        // sqrt(intensity), and 72M lm blew a ~9-tile pool to flat white where the artifact
+        // keeps white for the emitter faces alone (AC9).
         LightKind::Torch => LightProperties {
             color: Color::srgb_u8(255, 140, 62),
-            intensity: 30_000_000.0,
-            range: 26.0,
+            intensity: 14_000_000.0,
+            range: 20.0,
         },
         LightKind::Campfire => LightProperties {
             color: Color::srgb_u8(255, 173, 92),
-            intensity: 72_000_000.0,
-            range: 40.0,
+            intensity: 32_000_000.0,
+            range: 28.0,
         },
         LightKind::Lantern => LightProperties {
             color: Color::srgb_u8(255, 195, 110),
-            intensity: 24_000_000.0,
-            range: 20.0,
+            intensity: 11_000_000.0,
+            range: 16.0,
         },
     }
 }
@@ -134,9 +143,9 @@ mod tests {
     #[test]
     fn appearance_tables_pin_the_cold_boot_palette() {
         let lights = [
-            (LightKind::Torch, [255, 140, 62], 30_000_000.0, 26.0),
-            (LightKind::Campfire, [255, 173, 92], 72_000_000.0, 40.0),
-            (LightKind::Lantern, [255, 195, 110], 24_000_000.0, 20.0),
+            (LightKind::Torch, [255, 140, 62], 14_000_000.0, 20.0),
+            (LightKind::Campfire, [255, 173, 92], 32_000_000.0, 28.0),
+            (LightKind::Lantern, [255, 195, 110], 11_000_000.0, 16.0),
         ];
         for (kind, rgb, intensity, range) in lights {
             let actual = light_properties(kind);
@@ -200,14 +209,18 @@ mod tests {
         );
         assert_eq!(
             lighting.ambient.to_srgba().to_u8_array_no_alpha(),
-            [47, 76, 104]
+            [120, 140, 165]
+        );
+        assert_eq!(
+            lighting.directional.to_srgba().to_u8_array_no_alpha(),
+            [150, 190, 180]
         );
         assert_eq!(
             lighting.aurora.to_srgba().to_u8_array_no_alpha(),
             [73, 157, 144]
         );
-        assert_eq!(lighting.ambient_brightness, 30_000.0);
-        assert_eq!(lighting.directional_illuminance, 60_000.0);
+        assert_eq!(lighting.ambient_brightness, 6_000.0);
+        assert_eq!(lighting.directional_illuminance, 30_000.0);
 
         let entities = [
             (EntityKind::Dwarf, [151, 116, 96], 0.65),

@@ -40,6 +40,11 @@ const GROUND_WINDOW_Y: (f32, f32) = (0.50, 0.90);
 /// to land anywhere near the target.
 pub const GROUND_LUMINANCE_FLOOR: u8 = 70;
 
+/// The other end of AC9's discipline, added after the boot3 capture measured 156 against the
+/// artifact's 123: a field pushed toward white passes the floor as easily as a correct one.
+/// "Night snow stays midtone" needs a ceiling as much as a floor.
+pub const GROUND_LUMINANCE_CEILING: u8 = 180;
+
 fn luminance(pixel: [u8; 4]) -> f32 {
     0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32
 }
@@ -141,6 +146,11 @@ fn validate_capture_ranges(event: On<ScreenshotCaptured>) {
         "the valley floor reads {ground}, below the {GROUND_LUMINANCE_FLOOR} value floor — \
          the frame is a black field, not a lit night"
     );
+    assert!(
+        ground <= GROUND_LUMINANCE_CEILING,
+        "the valley floor reads {ground}, above the {GROUND_LUMINANCE_CEILING} value ceiling — \
+         night snow must stay midtone; only emissive approaches white"
+    );
 }
 
 #[cfg(test)]
@@ -177,6 +187,14 @@ mod tests {
         assert!(median_ground_luminance(&black, 8, 8) < GROUND_LUMINANCE_FLOOR);
         let lit = vec![[95u8, 112, 129, 255]; 64];
         assert!(median_ground_luminance(&lit, 8, 8) >= GROUND_LUMINANCE_FLOOR);
+    }
+
+    #[test]
+    fn a_blown_out_field_fails_the_value_ceiling_that_a_midtone_one_passes() {
+        let blown = vec![[205u8, 215, 230, 255]; 64];
+        assert!(median_ground_luminance(&blown, 8, 8) > GROUND_LUMINANCE_CEILING);
+        let midtone = vec![[95u8, 112, 129, 255]; 64];
+        assert!(median_ground_luminance(&midtone, 8, 8) <= GROUND_LUMINANCE_CEILING);
     }
 
     #[test]

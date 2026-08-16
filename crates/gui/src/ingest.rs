@@ -215,7 +215,7 @@ fn setup_camera(mut commands: Commands) {
 fn setup_night_lighting(mut commands: Commands) {
     commands.spawn((
         DirectionalLight {
-            color: night_lighting().aurora,
+            color: night_lighting().directional,
             illuminance: night_lighting().directional_illuminance,
             shadow_maps_enabled: true,
             ..Default::default()
