@@ -266,9 +266,9 @@ the vehicle. **Never fake the live half.**
         toy-world test; a `LightKind` table entry gone cold (R ≤ B) → dies on Task 1's
         warm-side invariant; atmosphere spawn drops `ClientLocal` → dies on Task 4's
         partition test; emitter light attachment ignores the wire's `light` field → dies on
-        Task 2's five-lights test. *(5 mutations incl. the added snow-flank one — ALL KILLED
-        on the orchestrator's independent full run, exit 0; Codex's own run was sandbox-cut
-        at the fifth.)*
+        Task 2's five-lights test. *(Round 5: the table is now **34 mutations, ALL KILLED** on a
+        clean standalone run from a committed tree, `mutate.sh` exit 0. Earlier: 5 killed at
+        dev, 20 at round 4.)*
   - [x] `scripts/gate.sh` green (headless, any devpod). Run `mutate.sh` alone, never beside
         a gate. *(GATE GREEN on the orchestrator's independent run after all ten commits;
         Codex's own final gate was sandbox-cut during `cargo test` and honestly not claimed.)*
@@ -1065,6 +1065,18 @@ gpt-5.6-terra
     sabotage and **destroyed the uncommitted D6 work with it**. Reapplied and committed. The
     rule this earns: **commit before running mutations**, and never clean a mutation leftover
     with a tree-wide checkout.
+  - **SABOTAGE: 34/34 KILLED** on a clean standalone run from a committed tree (`mutate.sh`
+    exit 0, "All mutations killed"). The table grew from 20 to 34: eleven new cases covering
+    the round-5 surfaces (lateral composition drift, curtain edge fade, ring radius, rim
+    dissolve on/off and its ramp, crown predicate and crown colour, dark light table, blown-out
+    campfire, warm ambient, median-vs-mean, value floor) plus a separate marker sabotage for
+    the aurora curtain — the single-entity case the review warned a count threshold would
+    tolerate. Getting there took three runs and the first two are the interesting ones:
+    run 1 exposed two mutations whose ANCHORS had gone stale against the round-5 source (a
+    `cargo fmt` reflow and a changed `ClientLocal` indentation count) — they reported as
+    survivors while pinning nothing, exactly the failure mode `NO-COMPILE`/`APPLY-FAILED`
+    exists to surface. Run 2 killed a genuine test defect (the median oracle above). Run 3 is
+    the clean one.
   - **HOW THE NEXT VEHICLE RUN REPORTS ITSELF.** Both capture range checks print their measured
     value BEFORE they assert, so the run yields numbers whether it passes or fails:
     `capture range check: warm-lit pixels=N ground-median-luminance=M`. Targets: warm well above
