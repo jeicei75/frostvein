@@ -260,13 +260,24 @@ fn camera_controls(
     }
 }
 
+/// Aerial perspective, measured against the boot framing: the camp reads at depth 71 and the
+/// deepest in-frame terrain at 148, so fog opens just past the camp and saturates just past the
+/// far valley. It is NOT the world-edge treatment — the silhouette starts at depth 86, and fog
+/// tight enough to hide that would erase the valley with it. `rim_level` dissolves the edge.
+///
+/// NOTE: the vehicle comparison still chooses the final edge treatment; this keeps the fog
+/// register valid across the pinned 4-500 zoom clamp.
 pub fn fog_falloff(camera_distance: f32) -> (f32, f32) {
-    // NOTE: the vehicle comparison still chooses the final edge treatment; this only keeps
-    // the fog register valid across the pinned zoom clamp.
     (
-        85.0_f32.max(camera_distance - 30.0),
-        190.0_f32.max(camera_distance * 1.8),
+        75.0_f32.max(camera_distance - 15.0),
+        155.0_f32.max(camera_distance * 1.7),
     )
+}
+
+/// The share of a surface's colour replaced by fog at `depth`, for the linear falloff above.
+pub fn fog_fraction(camera_distance: f32, depth: f32) -> f32 {
+    let (start, end) = fog_falloff(camera_distance);
+    ((depth - start) / (end - start)).clamp(0.0, 1.0)
 }
 
 fn update_fog_from_camera(mut cameras: Query<(&CameraRig, &mut DistanceFog)>) {
@@ -419,7 +430,8 @@ mod tests {
 
     use super::{
         ClientLocal, IngestReceiver, MirrorResource, ProjectionWork, WireMessage,
-        classify_client_local, fog_falloff, force_capture_overlay_off, ingest_messages,
+        classify_client_local, fog_falloff, fog_fraction, force_capture_overlay_off,
+        ingest_messages,
     };
     use crate::project::WorldProjected;
 
@@ -460,16 +472,36 @@ mod tests {
 
     #[test]
     fn fog_range_tracks_the_camera_without_erasing_the_far_edge() {
-        assert_eq!(fog_falloff(4.0), (85.0, 190.0));
-        assert_eq!(fog_falloff(90.0), (85.0, 190.0));
-        assert_eq!(fog_falloff(500.0), (470.0, 900.0));
-        for distance in [4.0, 90.0, 500.0] {
-            let (_, end) = fog_falloff(distance);
-            assert!(
-                end > distance + 90.0,
-                "the far terrain edge must remain before complete fog"
-            );
-        }
+        assert_eq!(fog_falloff(4.0), (75.0, 155.0));
+        assert_eq!(fog_falloff(90.0), (75.0, 155.0));
+        assert_eq!(fog_falloff(500.0), (485.0, 850.0));
+
+        // Depths measured off the boot framing, not guessed: camp 71, nearest skyline 86,
+        // deepest in-frame terrain 148. Assert the FRACTION, so a range that technically
+        // "ends later than the world" but greys the whole valley still fails.
+        const BOOT: f32 = 90.0;
+        assert_eq!(
+            fog_fraction(BOOT, 71.0),
+            0.0,
+            "the camp must sit completely clear of the fog"
+        );
+        let skyline = fog_fraction(BOOT, 86.0);
+        assert!(
+            (0.05..0.30).contains(&skyline),
+            "the near skyline needs air without being erased; {skyline}"
+        );
+        let far = fog_fraction(BOOT, 148.0);
+        assert!(
+            far >= 0.85,
+            "the far valley must read as distance, not as foreground; {far}"
+        );
+
+        // At full vista the world must survive: the whole map inside one fog range would be
+        // the flat sky-coloured rectangle the review found at the fixed range.
+        assert!(
+            fog_fraction(500.0, 500.0) <= 0.10,
+            "the vista must not fog out the world it is meant to show"
+        );
     }
 
     #[test]

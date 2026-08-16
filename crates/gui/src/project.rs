@@ -9,7 +9,10 @@ use client_core::Mirror;
 use protocol::{Dims, EntityKind, Material, Tile};
 
 use crate::{
-    appearance::{entity_appearance, light_properties, material_color, snow_cap_color},
+    appearance::{
+        RIM_LEVELS, entity_appearance, foliage_snow_color, light_properties, material_color,
+        rim_dissolved_color, snow_cap_color,
+    },
     transform::world_to_render,
 };
 
@@ -50,17 +53,62 @@ pub type TerrainQuery<'w, 's> = Query<
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedItem(pub u32);
 
+/// The terrain surfaces that get their own material, including the two presentation-only ones.
+#[derive(Debug, Clone, Copy)]
+enum TerrainSlot {
+    Stone,
+    Soil,
+    Ice,
+    Snow,
+    TreeTrunk,
+    TreeFoliage,
+    FoliageCrown,
+    SnowCap,
+}
+
+const TERRAIN_SLOTS: [TerrainSlot; 8] = [
+    TerrainSlot::Stone,
+    TerrainSlot::Soil,
+    TerrainSlot::Ice,
+    TerrainSlot::Snow,
+    TerrainSlot::TreeTrunk,
+    TerrainSlot::TreeFoliage,
+    TerrainSlot::FoliageCrown,
+    TerrainSlot::SnowCap,
+];
+
+impl TerrainSlot {
+    fn base_color(self) -> bevy::prelude::Color {
+        match self {
+            TerrainSlot::Stone => material_color(Material::Stone),
+            TerrainSlot::Soil => material_color(Material::Soil),
+            TerrainSlot::Ice => material_color(Material::Ice),
+            TerrainSlot::Snow => material_color(Material::Snow),
+            TerrainSlot::TreeTrunk => material_color(Material::TreeTrunk),
+            TerrainSlot::TreeFoliage => material_color(Material::TreeFoliage),
+            TerrainSlot::FoliageCrown => foliage_snow_color(),
+            TerrainSlot::SnowCap => snow_cap_color(),
+        }
+    }
+
+    fn of(material: Material) -> Self {
+        match material {
+            Material::Stone => TerrainSlot::Stone,
+            Material::Soil => TerrainSlot::Soil,
+            Material::Ice => TerrainSlot::Ice,
+            Material::Snow => TerrainSlot::Snow,
+            Material::TreeTrunk => TerrainSlot::TreeTrunk,
+            Material::TreeFoliage => TerrainSlot::TreeFoliage,
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct ProjectionAssets {
     cube: Handle<Mesh>,
     snow_cap_mesh: Handle<Mesh>,
-    stone: Handle<StandardMaterial>,
-    soil: Handle<StandardMaterial>,
-    ice: Handle<StandardMaterial>,
-    snow: Handle<StandardMaterial>,
-    snow_cap: Handle<StandardMaterial>,
-    tree_trunk: Handle<StandardMaterial>,
-    tree_foliage: Handle<StandardMaterial>,
+    /// One handle per (surface, rim step); see `rim_level`.
+    terrain: [[Handle<StandardMaterial>; RIM_LEVELS]; TERRAIN_SLOTS.len()],
     dwarf: Handle<StandardMaterial>,
     torch: Handle<StandardMaterial>,
     campfire: Handle<StandardMaterial>,
@@ -73,33 +121,27 @@ pub fn setup_projection_assets(
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
     let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
+    let terrain = TERRAIN_SLOTS.map(|slot| {
+        std::array::from_fn(|level| {
+            materials.add(terrain_standard_material(rim_dissolved_color(
+                slot.base_color(),
+                level,
+            )))
+        })
+    });
     commands.insert_resource(ProjectionAssets {
         cube,
         snow_cap_mesh,
-        stone: materials.add(terrain_standard_material(Material::Stone)),
-        soil: materials.add(terrain_standard_material(Material::Soil)),
-        ice: materials.add(terrain_standard_material(Material::Ice)),
-        snow: materials.add(terrain_standard_material(Material::Snow)),
-        snow_cap: materials.add(snow_cap_standard_material()),
-        tree_trunk: materials.add(terrain_standard_material(Material::TreeTrunk)),
-        tree_foliage: materials.add(terrain_standard_material(Material::TreeFoliage)),
+        terrain,
         dwarf: materials.add(entity_standard_material(EntityKind::Dwarf)),
         torch: materials.add(entity_standard_material(EntityKind::Torch)),
         campfire: materials.add(entity_standard_material(EntityKind::Campfire)),
     });
 }
 
-fn terrain_standard_material(material: Material) -> StandardMaterial {
+fn terrain_standard_material(base_color: bevy::prelude::Color) -> StandardMaterial {
     StandardMaterial {
-        base_color: material_color(material),
-        perceptual_roughness: 0.9,
-        ..Default::default()
-    }
-}
-
-fn snow_cap_standard_material() -> StandardMaterial {
-    StandardMaterial {
-        base_color: snow_cap_color(),
+        base_color,
         perceptual_roughness: 0.9,
         ..Default::default()
     }
@@ -181,7 +223,7 @@ pub fn reconcile(
                     MeshMaterial3d(assets.terrain_material(mirror, position)),
                 ));
                 if has_snow_cap(mirror, position) {
-                    spawn_snow_cap(commands, assets, position);
+                    spawn_snow_cap(commands, assets, mirror, position);
                 }
             }
         }
@@ -219,7 +261,7 @@ pub fn reconcile(
                         MeshMaterial3d(assets.terrain_material(mirror, position)),
                     ));
                     if has_snow_cap(mirror, position) {
-                        spawn_snow_cap(commands, assets, position);
+                        spawn_snow_cap(commands, assets, mirror, position);
                     }
                 }
             }
@@ -276,7 +318,7 @@ pub fn reconcile(
                 } else if item_ids.contains(&id) {
                     entity.insert((
                         Mesh3d(assets.cube.clone()),
-                        MeshMaterial3d(assets.stone.clone()),
+                        MeshMaterial3d(assets.slot(TerrainSlot::Stone, 0)),
                     ));
                 }
             }
@@ -316,14 +358,58 @@ pub fn foliage_scale(mirror: &Mirror, position: [i32; 3]) -> f32 {
     }
 }
 
-fn spawn_snow_cap(commands: &mut Commands, assets: &ProjectionAssets, position: [i32; 3]) {
+fn spawn_snow_cap(
+    commands: &mut Commands,
+    assets: &ProjectionAssets,
+    mirror: &Mirror,
+    position: [i32; 3],
+) {
     commands.spawn((
         SnowCap(position),
         ClientLocal,
         Mesh3d(assets.snow_cap_mesh.clone()),
-        MeshMaterial3d(assets.snow_cap.clone()),
+        MeshMaterial3d(assets.slot(TerrainSlot::SnowCap, rim_level(position, mirror.dims()))),
         Transform::from_translation(world_to_render(position) + Vec3::Y * 0.54),
     ));
+}
+
+/// How far into the world-edge dissolve a tile sits: 0 for the interior, `RIM_LEVELS - 1` at
+/// the boundary itself. The whole visible skyline at the boot framing IS the map boundary
+/// (measured: silhouette depths 86-145 units against a camp at 71), so distance fog tight
+/// enough to hide it also erases the valley. Keying the dissolve to world position instead of
+/// camera depth removes the edge at every zoom without touching the interior.
+pub fn rim_level(position: [i32; 3], dims: Dims) -> usize {
+    let to_edge = position[0]
+        .min(dims.x as i32 - 1 - position[0])
+        .min(position[1])
+        .min(dims.y as i32 - 1 - position[1])
+        .max(0);
+    if to_edge >= RIM_WIDTH {
+        return 0;
+    }
+    let steps = (RIM_LEVELS - 1) as i32;
+    (steps - to_edge * steps / RIM_WIDTH).clamp(0, steps) as usize
+}
+
+/// How many tiles inward the dissolve reaches.
+pub const RIM_WIDTH: i32 = 10;
+
+/// An exposed spruce crown catches snow light. This is a MATERIAL swap, not a terrain cap:
+/// capping foliage puts a bright slab on every ground-level skirt tile and buries the landform.
+pub fn has_snow_laden_crown(mirror: &Mirror, position: [i32; 3]) -> bool {
+    terrain_material_at(mirror, position) == Some(Material::TreeFoliage)
+        && !matches!(
+            mirror.tile([position[0], position[1], position[2] + 1]),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+}
+
+/// The material actually present, distinguishing air from the `terrain_material` fallback.
+fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> {
+    match mirror.tile(position) {
+        Some(Tile::Solid(material) | Tile::Ramp(material)) => Some(material),
+        Some(Tile::Empty) | None => None,
+    }
 }
 
 /// The cap is presentation-only: wire terrain remains its original material.
@@ -339,16 +425,16 @@ pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
 }
 
 impl ProjectionAssets {
+    fn slot(&self, slot: TerrainSlot, level: usize) -> Handle<StandardMaterial> {
+        self.terrain[slot as usize][level.min(RIM_LEVELS - 1)].clone()
+    }
+
     fn terrain_material(&self, mirror: &Mirror, position: [i32; 3]) -> Handle<StandardMaterial> {
-        let material = terrain_material(mirror, position);
-        match material {
-            Material::Stone => self.stone.clone(),
-            Material::Soil => self.soil.clone(),
-            Material::Ice => self.ice.clone(),
-            Material::Snow => self.snow.clone(),
-            Material::TreeTrunk => self.tree_trunk.clone(),
-            Material::TreeFoliage => self.tree_foliage.clone(),
+        let level = rim_level(position, mirror.dims());
+        if has_snow_laden_crown(mirror, position) {
+            return self.slot(TerrainSlot::FoliageCrown, level);
         }
+        self.slot(TerrainSlot::of(terrain_material(mirror, position)), level)
     }
 
     fn entity_material(&self, kind: EntityKind) -> Handle<StandardMaterial> {
@@ -549,5 +635,89 @@ mod tests {
         assert_eq!(foliage_scale(&spruce, [0, 0, 2]), 1.0, "mid crown");
         assert_eq!(foliage_scale(&spruce, [0, 0, 3]), 0.86, "upper crown");
         assert_eq!(foliage_scale(&spruce, [0, 0, 4]), 0.72, "crown tip");
+    }
+
+    #[test]
+    fn the_world_edge_dissolves_inward_and_leaves_the_interior_alone() {
+        let dims = Dims {
+            x: 128,
+            y: 128,
+            z: 32,
+        };
+        // The interior is untouched, whichever axis you approach from.
+        assert_eq!(rim_level([64, 64, 9], dims), 0);
+        assert_eq!(rim_level([RIM_WIDTH, 64, 9], dims), 0);
+        assert_eq!(rim_level([64, RIM_WIDTH, 9], dims), 0);
+
+        // Every boundary face reaches the last step, or one side of the map keeps a raw edge.
+        for corner in [[0, 64, 9], [127, 64, 9], [64, 0, 9], [64, 127, 9]] {
+            assert_eq!(
+                rim_level(corner, dims),
+                RIM_LEVELS - 1,
+                "the map boundary at {corner:?} must dissolve completely"
+            );
+        }
+
+        // Monotonic inward, so the dissolve reads as a gradient rather than a ring.
+        let walk: Vec<usize> = (0..=RIM_WIDTH)
+            .map(|x| rim_level([x, 64, 9], dims))
+            .collect();
+        for pair in walk.windows(2) {
+            assert!(
+                pair[1] <= pair[0],
+                "the dissolve must ease inward; {walk:?}"
+            );
+        }
+        assert_eq!(walk.first(), Some(&(RIM_LEVELS - 1)));
+        assert_eq!(walk.last(), Some(&0));
+    }
+
+    /// Wolf's ruling, review-patch round 5: trees read as dark clumps because the approved
+    /// artifact carries snow on its spruce layer tops and cube foliage had no equivalent. This
+    /// is a MATERIAL choice on the exposed crown, deliberately not a terrain cap — capping
+    /// foliage was round 3's defect (it buried the landform under ~9,500 bright slabs).
+    #[test]
+    fn only_the_exposed_crown_of_a_spruce_catches_snow_light() {
+        let spruce = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 3 },
+            tiles: vec![
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::Snow),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+
+        assert!(
+            has_snow_laden_crown(&spruce, [0, 0, 1]),
+            "the topmost exposed foliage cube catches the snow light"
+        );
+        assert!(
+            !has_snow_laden_crown(&spruce, [0, 0, 0]),
+            "foliage with foliage above it stays dark inside the crown"
+        );
+        assert!(
+            !has_snow_laden_crown(&spruce, [1, 0, 0]),
+            "snow terrain is not foliage and keeps the terrain cap path"
+        );
+        assert!(
+            !has_snow_laden_crown(&spruce, [0, 0, 2]),
+            "air never catches snow"
+        );
+        // The crown must not ALSO take a terrain cap — that combination was round 3's defect.
+        assert!(
+            !has_snow_cap(&spruce, [0, 0, 1]),
+            "a snow-laden crown is a material, never a terrain slab"
+        );
     }
 }

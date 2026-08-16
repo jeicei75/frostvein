@@ -464,10 +464,17 @@ fn snapshot_item_receives_a_render_mesh() {
 
 #[test]
 fn capped_stone_keeps_its_bare_cube_beneath_a_snow_cap() {
-    let mut app = headless_app(snapshot(
-        vec![Tile::Solid(Material::Stone), Tile::Empty],
-        Vec::new(),
-    ));
+    // A 21-wide world so the tested tile sits at [10, 10, 0], outside the world-edge dissolve.
+    // On a 2x1x1 toy every tile is boundary and every colour is correctly sky.
+    const SPAN: usize = 21;
+    let dims = Dims {
+        x: SPAN as u32,
+        y: SPAN as u32,
+        z: 2,
+    };
+    let mut tiles = vec![Tile::Empty; SPAN * SPAN * 2];
+    tiles[10 + 10 * SPAN] = Tile::Solid(Material::Stone);
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
 
     app.update();
 
@@ -504,7 +511,11 @@ fn capped_stone_keeps_its_bare_cube_beneath_a_snow_cap() {
             cap.0
         })
         .collect::<Vec<_>>();
-    assert_eq!(caps, vec![[0, 0, 0]], "the capped tile needs one snow slab");
+    assert_eq!(
+        caps,
+        vec![[10, 10, 0]],
+        "the capped tile needs one snow slab"
+    );
 }
 
 #[test]
