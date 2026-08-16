@@ -98,6 +98,24 @@ change to hide an edge.
 Per AC11's amendment the final choice is still Wolf's, at the vehicle. What is settled here is
 that fog-alone has been eliminated on evidence.
 
+**The fog colour and the rim's target colour must both be exactly the sky colour, and that is a
+consequence of the sky being a flat `ClearColor`.** A lighter "horizon haze" would be more true
+to a real aurora-lit night — and the approved artifact has one — but with a uniform sky it would
+make far terrain *lighter* than the sky behind it and hand the world its edge straight back. A
+haze colour only becomes available once the sky itself carries a vertical gradient; until then
+these three colours move together or not at all.
+
+## Keeping the sky outside the camera
+
+Sky geometry is hung on rings around the world, so its radius is not a free choice: the camera
+must stay **inside** it at every zoom. At the 500-unit clamp the camera orbits 426 units from the
+world centre, so the 220-unit ring the curtain was first built on would have put the camera
+outside it and swung the aurora across the front of the valley at full vista — the exact register
+AC10 says must carry sky and aurora. The curtain sits at 600 and the star shell at 650, and a
+test pins the camera's furthest excursion below both. Sizes and height bands are scaled to that
+radius, and the "hugs the horizon" rule is asserted as an ANGLE from the boot eye (<= 10 degrees),
+because a raw height threshold stops meaning anything the moment the radius changes.
+
 ## The value floor
 
 `--capture` range-checks the median sRGB luminance of the valley floor (frame centre, x 0.25 to

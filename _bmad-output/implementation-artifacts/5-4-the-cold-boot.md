@@ -1031,12 +1031,50 @@ gpt-5.6-terra
     and asserts the median ground luminance against a floor of 70 (artifact 123, round-4 capture
     21). Median, not mean, so blown-out emitter faces cannot carry a black field over the floor.
     This is the first check in the story that can catch a dark frame without a human looking.
+  - **AC10 DEFECT FOUND BY ANALYSIS, not yet by eye — the sky ring was smaller than the
+    camera's orbit.** After the curtain landed at radius 220, checking the vista register
+    showed the camera reaches **426 units** from the world centre at the 500 zoom clamp, so
+    from roughly zoom 250 upward the camera sits OUTSIDE the ring and the aurora crosses in
+    front of the valley — precisely the register AC10 requires to carry sky and aurora. The
+    three fixed cuboids it replaced had the same latent flaw and worse. Curtain moved to
+    radius 600 and the star shell to 650, bands and star sizes rescaled to suit, with a test
+    that zooms the rig to its clamp and asserts the camera stays inside both. The
+    "hugs the horizon" assertion became an ANGLE from the boot eye (<= 10 deg, production
+    reads -1.0 deg) because a raw height threshold is meaningless once the radius moves.
+  - **THE SABOTAGE CAUGHT A DEFECT IN MY OWN TEST.** The first `median_ground_luminance`
+    oracle used floor values 10/90/100/200 — whose mean and median are BOTH 100 — so the
+    "ground value check reads the mean" mutation SURVIVED: the test could not tell a median
+    from a mean, which is the one thing it exists to pin. Values changed to 10/90/100/250
+    (median 100, mean 112) and the mutation now kills. Sixth sighting of the family the
+    self-referential-oracle rule belongs to, and the first one caught by the mutation table
+    rather than by review.
+  - **Fog colour is coupled to the flat sky, deliberately.** Both the fog colour and the rim
+    dissolve's target must be exactly `night_lighting().sky`. A lighter horizon haze would be
+    truer to an aurora-lit night, and the approved artifact has one — but against a uniform
+    `ClearColor` sky it would make far terrain *lighter* than the sky behind it and hand the
+    world its edge straight back. That option unlocks only when the sky itself carries a
+    vertical gradient; recorded in the guidelines rather than attempted here.
+  - **NFR6 watch-item for Task 8:** the rim dissolve raises terrain material handles from 9 to
+    40 (8 surfaces x 5 steps), which means more draw batches, and the star shell went 12 -> 300
+    entities. Both are small against ~70k meshes, but they join the round-4 note as first
+    suspects if the AC14 reading disappoints.
+
   - **PROCESS FAILURE, recorded rather than tidied away:** the orchestrator edited the mutation
     table *while* `mutate.sh` was executing it (bash reads scripts incrementally, so that run's
     results were void), then ran `git checkout -- crates/` to clear the killed run's leftover
     sabotage and **destroyed the uncommitted D6 work with it**. Reapplied and committed. The
     rule this earns: **commit before running mutations**, and never clean a mutation leftover
     with a tree-wide checkout.
+  - **HOW THE NEXT VEHICLE RUN REPORTS ITSELF.** Both capture range checks print their measured
+    value BEFORE they assert, so the run yields numbers whether it passes or fails:
+    `capture range check: warm-lit pixels=N ground-median-luminance=M`. Targets: warm well above
+    the 3,000 floor (round 4 measured 17,648 with the camp half off-frame; the camp is now
+    centred and the emitters 12x stronger, so it should rise), and **M near the artifact's 123,
+    floor 70**. If M lands between 40 and 70 the ~18x estimate was directionally right and
+    undershot, and the next scale factor is arithmetic — `M_target / M_measured` — not another
+    guess. Note the one interaction to watch: ambient rose 15x alongside the emitters, so the
+    blue channel rose everywhere; the warm test is `R - B > 30`, and a warm count that FALLS
+    despite stronger lights would mean the fill is now competing with the pools.
   - **Still owed and vehicle-only, unchanged:** Tasks 6-9 — the edge comparison by eye, the
     framing judgement against the artifact, the NFR6 reading (AC14), AC26's cross-compiled
     capture self-test. Plus AC19, which only Wolf can check. **Rebuild and re-copy `gui.exe`

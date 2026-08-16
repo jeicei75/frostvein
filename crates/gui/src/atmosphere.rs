@@ -270,7 +270,7 @@ mod tests {
         snowflake_positions, star_positions, star_scale,
     };
     use crate::appearance::night_lighting;
-    use crate::camera::CameraRig;
+    use crate::camera::{BOOT_VERTICAL_FOV, CameraRig};
     use bevy::color::ColorToPacked;
 
     fn boot_eye_height() -> f32 {
@@ -280,13 +280,18 @@ mod tests {
     #[test]
     fn the_aurora_curtain_hugs_the_horizon_beyond_the_world() {
         // AC5 in geometry, as an ANGLE rather than a raw height: a height threshold stops
-        // meaning anything once the ring radius changes.
+        // meaning anything once the ring radius changes. The bar is a quarter of the camera's
+        // vertical half-FOV (22.5 deg), so the curtain can never claim the upper sky. A first
+        // attempt used 10 deg, which at a 600-unit radius let a 140-unit top through at 8 deg
+        // — the sabotage caught it. Production reads -0.95 deg.
+        let ceiling = (BOOT_VERTICAL_FOV * 0.5).to_degrees() / 4.0;
         let elevation = ((AURORA_TOP - boot_eye_height()) / AURORA_RADIUS)
             .atan()
             .to_degrees();
         assert!(
-            elevation <= 10.0,
-            "the curtain must sit on the horizon, not overhead; top is {elevation} deg up"
+            elevation <= ceiling,
+            "the curtain must sit on the horizon, not overhead; top is {elevation} deg up, \
+             ceiling {ceiling}"
         );
         // Compile-time: the curtain must clear the skyline it backlights, and the ring must
         // enclose the whole 128-wide footprint or it would cut through terrain.
