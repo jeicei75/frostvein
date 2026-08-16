@@ -1148,6 +1148,41 @@ gpt-5.6-terra
   - **NOT touched, deliberately:** the aurora (boot3's mid-frame trough is the fold pattern —
     judge after the value rebalance), the framing (camp anchor held), terrain/caps/crowns.
 
+- **REVIEW-PATCH ROUND 7 (2026-08-16, after Wolf's boot4 vehicle run — orchestrator direct).**
+  boot4 measured CLOSE for the first time: ground median 144.6 vs the artifact's 123.3 (17%
+  over, inside the instrument band), ground R/B 0.75 vs 0.74 — **hue matched** — camp p90 238
+  (white core tamed), stars scattered, aurora on the horizon. Wolf's round-7 list: the two
+  measured residuals (still slightly bright, shadows still shallow at p05 77 vs 28), the rim
+  falloff to sky too sharp, maybe too much sky, foreground trees cluttered, and snowfall
+  reading as a camp-attached spotlight.
+  - **The "too much sky" diagnosis:** the far ridge at depth 148 was **94% fogged** at the boot
+    framing, so the skyline vanished into sky colour and the apparent horizon dropped well
+    below the geometric one (pinned at 0.30). But UX-DR12/5.1 want the aurora BACKLIGHTING the
+    skyline — a visible silhouette. Fog end moved 155→230 at boot (far ridge now ~47% fogged,
+    silhouette restored); the fog-fraction test became a BAND (0.35–0.70) so fog can never
+    again silently take back the edge-hiding job that belongs to the rim.
+  - **Rim falloff eased:** width 10→18 tiles, 5→9 levels, and a QUADRATIC ease so the inner
+    half stays subtle and the dissolve commits to sky only at the boundary — the linear ramp
+    read as a hard band. New assertion pins the ease (level ≤ 1/3 max at half depth) plus a
+    sabotage that flattens it back to linear.
+  - **The bright/shadow residuals attacked on BOTH levers:** boot4 proved the light lever weak
+    (a 2.6x ambient cut moved the field only 7%), so round 7 trims the dominant ALBEDOS too —
+    at the boot pitch the caps ARE most of the visible area. Cap (158,170,196)→(146,158,184),
+    crown (172,186,210)→(156,170,196) (the artifact shows SPRUCE_SNOW on thin sprite tops; our
+    cubes show whole faces of it), ambient 6k→4.5k, directional 30k→22k. Contrast band
+    re-checked: 2.67x, inside [1.2, 6.0].
+  - **Foreground clutter:** crown trim above plus a smaller spruce taper (0.72/0.86/1.0 →
+    0.62/0.78/0.95) — every tree glowing at near-cap brightness was most of the clutter.
+  - **Snowfall spread on Wolf's ruling (bigger area, uniform, NO falloff):** disc 21→48 units,
+    48→96 flakes — same sparse density across the whole bowl, because a radial fade is exactly
+    what makes snow look pinned to a point. Tests: hard containment at the disc radius, ≥ half
+    the flakes inside the boot frustum, every camp-adjacent flake (≤20 units) in frame, plus
+    the round-6 desync assertions at the new count. Sabotage: radius ballooned to 200 dies on
+    the frustum-half assertion.
+  - **Sabotage table: 40 mutations.** Dry anchor-check found five staled by this round's edits
+    (taper, cap colour, crown colour, fog end, ambient brightness) — all repaired before any
+    run, seconds instead of a wasted 15-minute cycle.
+
 - **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
   working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
   job running. Last commit is the record below. `scripts/gate.sh` GREEN and **20/20 mutations
@@ -1228,5 +1263,6 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | REVIEW-PATCH round 7 (after Wolf's boot4 run; orchestrator direct). boot4 measured close: median 144.6 vs 123.3, hue matched. Fixed Wolf's list: fog relaxed so the aurora backlights the skyline instead of fogging it out (the real "too much sky" cause), rim widened 10→18 and eased quadratically, albedos trimmed alongside the light budget (the caps dominate visible area — the albedo IS the value lever now), spruce taper reduced, snowfall spread to a 48-unit disc at 96 flakes with uniform density on Wolf's no-falloff ruling. 40-mutation table, dry anchor-check caught 5 stale anchors pre-run. |
 | 2026-08-16 | REVIEW-PATCH round 6 (after Wolf's boot3 live run; orchestrator direct). boot3 measured: value overshoot 156 vs 123 with flooded shadows and blue-green cast; stars on a helix (correlated sampling constants); snowfall in synchronized rows. Fixed: R2/R3 decorrelated scatter for stars and snowfall, budget re-divided toward directional with desaturated tints, emitters cut (white-clip ∝ sqrt I), value check widened to a floor+ceiling band. 38-mutation table with dry anchor-verification before running. |
 | 2026-08-16 | REVIEW-PATCH round 5 (orchestrator implementing directly on Wolf's ruling; Codex quota protected). Targets measured off the approved artifact and `boot2.png` with a purpose-written PNG decoder rather than re-derived from the shader model that mispredicted at round 2. D1 camp anchor solved offline and fixed at the mechanism (offset constrained to the camera view plane); D2 aurora rebuilt as a gradient ring curtain with alpha zero at both edges; D3 fog-alone falsified by measurement and replaced with a world-space rim dissolve; D4 light budget raised ~18x from measurement and the contrast oracle re-derived as a band plus a chromatic term. Wolf's two new rulings landed: snow-catching spruce crowns, and a median-ground-luminance floor in the capture instrument. Tasks 6–9 and AC19 remain vehicle-bound and open. |

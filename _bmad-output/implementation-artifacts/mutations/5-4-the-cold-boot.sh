@@ -27,7 +27,7 @@ PY
 mutation "spruce skirt loses its taper" gui foliage_tapers_from_wide_mid_crown_to_narrow_tip_and_skirt <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        0 => 0.72,\n'
+old = '        0 => 0.62,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        0 => 1.0,\n'))
 PY
@@ -77,7 +77,7 @@ PY
 mutation "snow cap matches snow terrain" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '    Color::srgb_u8(158, 170, 196)\n'
+old = '    Color::srgb_u8(146, 158, 184)\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    Color::srgb_u8(136, 150, 178)\n'))
 PY
@@ -181,9 +181,9 @@ PY
 mutation "fog stops following zoom" gui fog_range_tracks_the_camera_without_erasing_the_far_edge <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        155.0_f32.max(camera_distance * 1.7),\n'
+old = '        230.0_f32.max(camera_distance * 1.7),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        155.0,\n'))
+p.write_text(s.replace(old, '        230.0,\n'))
 PY
 
 mutation "capture keeps its frame graph" gui capture_forces_the_frame_time_overlay_off <<'PY'
@@ -238,7 +238,7 @@ PY
 mutation "crown colour matches bare foliage" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = 'pub fn foliage_snow_color() -> Color {\n    Color::srgb_u8(172, 186, 210)\n}'
+old = 'pub fn foliage_snow_color() -> Color {\n    Color::srgb_u8(156, 170, 196)\n}'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'pub fn foliage_snow_color() -> Color {\n    Color::srgb_u8(55, 73, 84)\n}'))
 PY
@@ -246,7 +246,7 @@ PY
 mutation "light budget slides back to the dark table" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '        ambient_brightness: 6_000.0,\n'
+old = '        ambient_brightness: 4_500.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        ambient_brightness: 30_000.0,\n'))
 PY
@@ -306,4 +306,20 @@ p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 old = 'pub const GROUND_LUMINANCE_CEILING: u8 = 180;'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'pub const GROUND_LUMINANCE_CEILING: u8 = 255;'))
+PY
+
+mutation "rim falloff sharpens back to linear" gui the_world_edge_dissolves_inward_and_leaves_the_interior_alone <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    ((inward * inward * steps) / (RIM_WIDTH * RIM_WIDTH)).clamp(0, steps) as usize\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    ((inward * steps) / RIM_WIDTH).clamp(0, steps) as usize\n'))
+PY
+
+mutation "snowfall shrinks back to a camp spotlight" gui snowfall_scatters_through_the_camp_read_without_marching_in_rows <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = 'const SNOWFLAKE_DISC_RADIUS: f32 = 48.0;'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'const SNOWFLAKE_DISC_RADIUS: f32 = 200.0;'))
 PY
