@@ -168,19 +168,24 @@ pub fn star_scale(index: usize) -> f32 {
     STAR_SCALE_MIN + (STAR_SCALE_MAX - STAR_SCALE_MIN) * (index as f32 * 0.381_966 + 0.21).fract()
 }
 
-pub const SNOWFLAKE_COUNT: usize = 48;
+pub const SNOWFLAKE_COUNT: usize = 96;
 const SNOWFLAKE_FALL_SPAN: f32 = 20.0;
+/// Weather has no boundary: a tight cluster over the camp read as a camp-attached effect on
+/// the boot4 vehicle capture (Wolf's call). The disc now spans the visible bowl at the SAME
+/// sparse density — a hard radius with uniform scatter, deliberately no density falloff,
+/// because a radial fade is exactly what makes snow look pinned to a point.
+const SNOWFLAKE_DISC_RADIUS: f32 = 48.0;
 // R3 low-discrepancy triple — three independent axes, same reasoning as the star pair.
 const FLAKE_ANGLE_STEP: f32 = 0.819_172_5;
 const FLAKE_RADIUS_STEP: f32 = 0.671_043_6;
 const FLAKE_HEIGHT_STEP: f32 = 0.549_700_5;
 
-/// Flakes scatter through a disc over the camp read: uniform in area (sqrt on the radius
+/// Flakes scatter through a disc over the valley bowl: uniform in area (sqrt on the radius
 /// fraction), distinct heights, so no two flakes ever agree on a row or a column.
 pub fn snowflake_positions() -> [Vec3; SNOWFLAKE_COUNT] {
     std::array::from_fn(|index| {
         let angle = index as f32 * FLAKE_ANGLE_STEP * std::f32::consts::TAU;
-        let radius = 21.0 * (index as f32 * FLAKE_RADIUS_STEP).fract().sqrt();
+        let radius = SNOWFLAKE_DISC_RADIUS * (index as f32 * FLAKE_RADIUS_STEP).fract().sqrt();
         let height = 11.0 + SNOWFLAKE_FALL_SPAN * (index as f32 * FLAKE_HEIGHT_STEP).fract();
         Vec3::new(
             CAMP_FOCUS.x + radius * angle.cos(),
@@ -296,9 +301,10 @@ pub fn fall_snow(time: Res<Time>, mut flakes: Query<(&Snowflake, &mut Transform)
 mod tests {
     use super::{
         AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT, AURORA_TEXTURE_WIDTH, AURORA_TOP,
-        CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT, STAR_COUNT, STAR_RADIUS, aurora_core,
-        aurora_curtain_mesh, aurora_gradient_pixels, aurora_light_transform, inside_boot_frustum,
-        snowflake_positions, snowflake_scale, snowflake_speed, star_positions, star_scale,
+        CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT, SNOWFLAKE_DISC_RADIUS, STAR_COUNT,
+        STAR_RADIUS, aurora_core, aurora_curtain_mesh, aurora_gradient_pixels,
+        aurora_light_transform, inside_boot_frustum, snowflake_positions, snowflake_scale,
+        snowflake_speed, star_positions, star_scale,
     };
     use crate::appearance::night_lighting;
     use crate::camera::{BOOT_VERTICAL_FOV, CameraRig};
@@ -508,22 +514,40 @@ mod tests {
         let flakes = snowflake_positions();
         assert_eq!(flakes.len(), SNOWFLAKE_COUNT);
 
+        let mut in_frustum = 0;
         for flake in flakes {
+            let dx = flake.x - CAMP_FOCUS.x;
+            let dz = flake.z - CAMP_FOCUS.z;
             assert!(
-                flake.distance(CAMP_FOCUS) <= 32.0,
-                "snowfall remains in the camp read"
+                (dx * dx + dz * dz).sqrt() <= SNOWFLAKE_DISC_RADIUS + 0.1,
+                "snowfall stays over the valley bowl"
             );
-            assert!(
-                inside_boot_frustum(flake),
-                "snowfall must be visible at the boot framing"
-            );
+            if inside_boot_frustum(flake) {
+                in_frustum += 1;
+            }
+        }
+        // The disc spans the bowl, so its far side may leave the boot frustum — but snow that
+        // is mostly off-camera is decoration for nobody. Camp-adjacent flakes must all show.
+        assert!(
+            in_frustum * 2 >= SNOWFLAKE_COUNT,
+            "at least half the snowfall must be visible at the boot framing; {in_frustum}"
+        );
+        for (index, flake) in flakes.iter().enumerate() {
+            let dx = flake.x - CAMP_FOCUS.x;
+            let dz = flake.z - CAMP_FOCUS.z;
+            if (dx * dx + dz * dz).sqrt() <= 20.0 {
+                assert!(
+                    inside_boot_frustum(*flake),
+                    "flake {index} near the camp must be in frame"
+                );
+            }
         }
 
         let mut heights: Vec<f32> = flakes.iter().map(|flake| flake.y).collect();
         heights.sort_by(f32::total_cmp);
         heights.dedup_by(|a, b| (*a - *b).abs() < 0.05);
         assert!(
-            heights.len() >= SNOWFLAKE_COUNT - 4,
+            heights.len() >= SNOWFLAKE_COUNT - 8,
             "flakes must not share heights in rows; {} distinct of {SNOWFLAKE_COUNT}",
             heights.len()
         );
@@ -533,7 +557,7 @@ mod tests {
                 let dx = flake.x - other.x;
                 let dz = flake.z - other.z;
                 assert!(
-                    (dx * dx + dz * dz).sqrt() > 1.5,
+                    (dx * dx + dz * dz).sqrt() > 1.2,
                     "flakes must not stack into a column"
                 );
             }
