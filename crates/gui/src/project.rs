@@ -387,12 +387,16 @@ pub fn rim_level(position: [i32; 3], dims: Dims) -> usize {
     if to_edge >= RIM_WIDTH {
         return 0;
     }
+    // Quadratic ease: the dissolve stays subtle through its inner half and commits to the sky
+    // only near the boundary. The linear 5-step/10-tile ramp read as a hard band on the boot4
+    // vehicle capture (Wolf: "falloff to sky is too sharp").
     let steps = (RIM_LEVELS - 1) as i32;
-    (steps - to_edge * steps / RIM_WIDTH).clamp(0, steps) as usize
+    let inward = RIM_WIDTH - to_edge;
+    ((inward * inward * steps) / (RIM_WIDTH * RIM_WIDTH)).clamp(0, steps) as usize
 }
 
 /// How many tiles inward the dissolve reaches.
-pub const RIM_WIDTH: i32 = 10;
+pub const RIM_WIDTH: i32 = 18;
 
 /// An exposed spruce crown catches snow light. This is a MATERIAL swap, not a terrain cap:
 /// capping foliage puts a bright slab on every ground-level skirt tile and buries the landform.
@@ -670,6 +674,14 @@ mod tests {
         }
         assert_eq!(walk.first(), Some(&(RIM_LEVELS - 1)));
         assert_eq!(walk.last(), Some(&0));
+
+        // Eased, not linear: at half depth the dissolve must still be gentle, or the ramp
+        // reads as a hard band the way the linear version did on the boot4 capture.
+        let halfway = rim_level([RIM_WIDTH / 2, 64, 9], dims);
+        assert!(
+            halfway <= (RIM_LEVELS - 1) / 3,
+            "the inner half of the rim must stay subtle; level {halfway} at half depth"
+        );
     }
 
     /// Wolf's ruling, review-patch round 5: trees read as dark clumps because the approved

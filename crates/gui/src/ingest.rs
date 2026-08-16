@@ -270,7 +270,7 @@ fn camera_controls(
 pub fn fog_falloff(camera_distance: f32) -> (f32, f32) {
     (
         75.0_f32.max(camera_distance - 15.0),
-        155.0_f32.max(camera_distance * 1.7),
+        230.0_f32.max(camera_distance * 1.7),
     )
 }
 
@@ -472,8 +472,8 @@ mod tests {
 
     #[test]
     fn fog_range_tracks_the_camera_without_erasing_the_far_edge() {
-        assert_eq!(fog_falloff(4.0), (75.0, 155.0));
-        assert_eq!(fog_falloff(90.0), (75.0, 155.0));
+        assert_eq!(fog_falloff(4.0), (75.0, 230.0));
+        assert_eq!(fog_falloff(90.0), (75.0, 230.0));
         assert_eq!(fog_falloff(500.0), (485.0, 850.0));
 
         // Depths measured off the boot framing, not guessed: camp 71, nearest skyline 86,
@@ -487,13 +487,17 @@ mod tests {
         );
         let skyline = fog_fraction(BOOT, 86.0);
         assert!(
-            (0.05..0.30).contains(&skyline),
+            (0.03..0.30).contains(&skyline),
             "the near skyline needs air without being erased; {skyline}"
         );
+        // A BAND, not a floor: at 0.94 fogged (the round-6 range) the ridge vanished into the
+        // sky and the apparent horizon dropped — but the aurora is supposed to BACKLIGHT the
+        // skyline (UX-DR12/5.1), which needs a visible silhouette. The world edge belongs to
+        // the rim dissolve now, not to fog.
         let far = fog_fraction(BOOT, 148.0);
         assert!(
-            far >= 0.85,
-            "the far valley must read as distance, not as foreground; {far}"
+            (0.35..0.70).contains(&far),
+            "the far valley must read as distance yet keep its backlit silhouette; {far}"
         );
 
         // At full vista the world must survive: the whole map inside one fog range would be
