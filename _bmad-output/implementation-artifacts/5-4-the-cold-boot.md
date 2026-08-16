@@ -233,15 +233,20 @@ the vehicle. **Never fake the live half.**
         **Rim falloff implemented and leading**: world-space, so it holds at every zoom and
         yaw. Sky-wrap and vignette not needed. The CHOICE remains Wolf's at the vehicle per
         AC11's amendment — the box below stays open until that session.)*
-  - [ ] Compare the candidates by eye on the live vehicle and record the winner (AC11's
-        amendment — unmeetable headless, moved here from the AC text).
-- [ ] **Task 7 — The boot framing and the continuum** (AC: 10, 12)
-  - [ ] The window opens at the approved artifact's framing: camp in frame, warm light
+  - [x] Compare the candidates by eye on the live vehicle and record the winner (AC11's
+        amendment — unmeetable headless, moved here from the AC text). *(Winner: the
+        world-space rim dissolve + aerial fog, iterated across the boot3–boot6 sessions to
+        Wolf's direction and covered by his closing sign-off; fog-alone falsified at round 5.)*
+- [x] **Task 7 — The boot framing and the continuum** (AC: 10, 12)
+  - [x] The window opens at the approved artifact's framing: camp in frame, warm light
         visible, no input needed. Camera focus [64,64,9] already aims at the camp; adjust
-        opening yaw/pitch/distance to the artifact, as constants.
-  - [ ] Verify by eye at the vehicle: working zoom readable, full vista carries valley + sky
+        opening yaw/pitch/distance to the artifact, as constants. *(Landed at rounds 5–8:
+        camp pinned at (0.50, 0.78); the skyline moved from the artifact's 0.30 to 0.24 on
+        Wolf's live ruling — his judgment overriding the artifact, per the gate's intent.)*
+  - [x] Verify by eye at the vehicle: working zoom readable, full vista carries valley + sky
         + aurora, edges dissolved, silhouette backlit. The zoom clamp (4.0–500.0,
-        `camera.rs:32`) already spans both registers.
+        `camera.rs:32`) already spans both registers. *(Verified across boot3–boot6 sessions;
+        closing sign-off given on boot6.)*
 - [ ] **Task 8 — NFR6 on the live vehicle** (AC: 14)
   - [ ] Read the F3 overlay at working zoom and at full vista with everything lit and
         falling. Record both figures labelled `gingerspice / native Windows / NVIDIA
@@ -1239,6 +1244,16 @@ gpt-5.6-terra
   Remaining open: Wolf's Task 6 edge verdict, the full-vista NFR6 reading, Task 9's second
   differing capture, AC26's cross-compiled self-test, and AC19.
 
+- **AC19 — SIGNED OFF BY WOLF, 2026-08-16, on boot6 live at the vehicle: "wau .. let's ship
+  it .. the game is ready :D".** Wow beat 1 is landed — the reaction the story was built to
+  produce, given unprompted at the sign-off question. The approval followed six live viewing
+  sessions (boot2–boot6) with the frame compared against the approved artifact throughout,
+  and closes the composition too: the shipped edge treatment is the **world-space rim
+  dissolve** (26 tiles, 13 eased levels) with aerial-perspective fog — the AC11 amendment's
+  vehicle comparison ran across those sessions, fog-alone having been falsified on
+  arithmetic at round 5 and the rim iterated to Wolf's eye at rounds 7–8. **Recorded as
+  closing the look; three evidence items remain open below before status moves.**
+
 - **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
   working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
   job running. Last commit is the record below. `scripts/gate.sh` GREEN and **20/20 mutations
@@ -1319,6 +1334,7 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | **AC19 SIGNED OFF by Wolf on boot6: "wau .. let's ship it". Wow beat 1 landed.** Tasks 6 and 7 closed (rim dissolve is the shipped edge treatment; framing verdict his). Remaining before status → review: full-vista NFR6 reading, second differing capture, AC26 attempt. |
 | 2026-08-16 | boot6 on the fresh round-8 binary: instrument printed ground-median 123 (target 123.3), offline decoder agrees at 123.4; warm pixels 28,455; skyline at 0.19–0.22; 40/40 mutations killed. Value and composition both converged — remaining items are Wolf's closing checklist. |
 | 2026-08-16 | ROUND 8 after Wolf's boot5 session: NFR6 working-zoom 140-146 fps recorded (2.3x AC14 headroom); 53365 oracle confirmed; stale-binary capture detected by cross-checking its printed median (145 = boot4) against boot5's actual 123. Skyline lowered 0.30→0.24 on Wolf's live ruling over the artifact; rim widened to 26 tiles/13 levels; fog and star shell re-derived for the new framing. |
 | 2026-08-16 | boot5 measured: ground median 122.7 vs artifact 123.3 — the value target CONVERGED after seven capture-measure-correct cycles. Residual: shadow p05 67.7 vs 28.3, recommended accepted as flat-shading fidelity (retro note). Closing tasks (6, 8, 9, AC19) are vehicle-bound and Wolf's. |
