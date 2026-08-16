@@ -1138,10 +1138,12 @@ gpt-5.6-terra
     1.97x, inside [1.2, 6.0].
   - **D-r6-5 — the value check is now a BAND:** `GROUND_LUMINANCE_CEILING = 180` beside the
     floor of 70. Each end has caught a real failure (round 4 black at 21; boot3 washed at 156).
-  - **Sabotage table: 38 mutations.** All five anchors staled by this round's edits were found
-    by a **dry anchor-check** (grep every `old =` string against the live tree — seconds, no
-    build) before any run; that check is the round's process improvement over round 5's
-    scar #3. New sabotages: helix restore, one-speed snow, one-row snow, directional tint
+  - **Sabotage table: 38 mutations, ALL KILLED** on a clean standalone run from the committed
+    tree (`All mutations killed`, zero survivors/apply-failures). All five anchors staled by
+    this round's edits were found by a **dry anchor-check** (grep every `old =` string against
+    the live tree — seconds, no build) before any run; that check is the round's process
+    improvement over round 5's scar #3, where stale anchors cost a full 15-minute run to
+    surface. New sabotages: helix restore, one-speed snow, one-row snow, directional tint
     unpinned, ceiling unbound.
   - **NOT touched, deliberately:** the aurora (boot3's mid-frame trough is the fold pattern —
     judge after the value rebalance), the framing (camp anchor held), terrain/caps/crowns.
