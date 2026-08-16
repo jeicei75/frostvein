@@ -61,7 +61,7 @@ PY
 mutation "light budget collapses" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 72_000_000.0,\n'
+old = '            intensity: 32_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 5_000.0,\n'))
 PY
@@ -109,7 +109,7 @@ PY
 mutation "stars collapse to a single point" gui the_star_shell_fills_the_visible_sky_wedge <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = '        let azimuth = index as f32 * GOLDEN_ANGLE;\n'
+old = '        let azimuth = index as f32 * STAR_AZIMUTH_STEP * std::f32::consts::TAU;\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        let azimuth = 3.9_f32;\n'))
 PY
@@ -138,12 +138,28 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        let composition_scale = 1.0;\n'))
 PY
 
-mutation "snowfall collapses back to a diagonal" gui snowfall_fills_a_visible_grid_instead_of_a_single_diagonal_row <<'PY'
+mutation "snowfall collapses into one row" gui snowfall_scatters_through_the_camp_read_without_marching_in_rows <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = '            -86.0 + (index / 6) as f32 * 2.0,\n'
+old = '        let height = 11.0 + SNOWFLAKE_FALL_SPAN * (index as f32 * FLAKE_HEIGHT_STEP).fract();\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            -86.0 + (index % 6) as f32 * 2.0,\n'))
+p.write_text(s.replace(old, '        let height = 20.0;\n'))
+PY
+
+mutation "snowfall marches at one speed" gui snowfall_scatters_through_the_camp_read_without_marching_in_rows <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '    0.7 + 0.9 * (index as f32 * 0.618_034).fract()\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    1.2\n'))
+PY
+
+mutation "stars fall back onto the helix" gui stars_scatter_instead_of_lying_on_a_helix <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = 'const STAR_HEIGHT_STEP: f32 = 0.569_840_3;'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'const STAR_HEIGHT_STEP: f32 = 0.754_877_7;'))
 PY
 
 mutation "atmosphere loses client local marker" gui atmosphere_entities_are_client_local_and_never_world_projected <<'PY'
@@ -230,15 +246,15 @@ PY
 mutation "light budget slides back to the dark table" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '        ambient_brightness: 30_000.0,\n'
+old = '        ambient_brightness: 6_000.0,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        ambient_brightness: 2_000.0,\n'))
+p.write_text(s.replace(old, '        ambient_brightness: 30_000.0,\n'))
 PY
 
 mutation "campfire blows the camp to white" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 72_000_000.0,\n'
+old = '            intensity: 32_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 7_200_000_000.0,\n'))
 PY
@@ -246,9 +262,9 @@ PY
 mutation "cold fill turns warm" gui the_cold_fill_is_chromatically_cold_and_the_camp_is_chromatically_warm <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '        ambient: Color::srgb_u8(47, 76, 104),\n'
+old = '        ambient: Color::srgb_u8(120, 140, 165),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        ambient: Color::srgb_u8(104, 76, 47),\n'))
+p.write_text(s.replace(old, '        ambient: Color::srgb_u8(165, 140, 120),\n'))
 PY
 
 mutation "ground value check reads the mean" gui the_ground_median_reads_the_valley_floor_and_ignores_the_sky <<'PY'
@@ -274,4 +290,20 @@ p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
 old = '        Atmosphere,\n        ClientLocal,\n    ));'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        Atmosphere,\n    ));'))
+PY
+
+mutation "directional tint goes unpinned" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        directional: Color::srgb_u8(150, 190, 180),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        directional: Color::srgb_u8(73, 157, 144),\n'))
+PY
+
+mutation "value ceiling stops binding" gui a_blown_out_field_fails_the_value_ceiling_that_a_midtone_one_passes <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = 'pub const GROUND_LUMINANCE_CEILING: u8 = 180;'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'pub const GROUND_LUMINANCE_CEILING: u8 = 255;'))
 PY

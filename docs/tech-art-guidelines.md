@@ -44,11 +44,18 @@ the shell does not read as a lattice. Sky materials set `fog_enabled: false` —
 outside the fog volume and would otherwise be erased with the far terrain.
 
 Torch, campfire, and future lantern properties are one data table containing colour, lumen
-intensity, and range. **The light budget is set from measurement, not estimate.** The round-4
-capture's valley floor read a median sRGB luminance of 22.5 where the approved artifact reads
-112.6 — a factor of ~18 in linear light. Ambient is 30,000 and directional 60,000, with the
-directional share raised from 11% to ~24% of the total so the field keeps its modelling instead
-of flattening under pure ambient; torches are 30M lm and the campfire 72M lm.
+intensity, and range. **The light budget is set from measurement, not estimate — and it took
+two rounds of measurement to converge.** The round-4 capture's valley floor read a median sRGB
+luminance of 22.5 against the artifact's 112.6 (~18x short in linear light); scaling up by that
+factor then measured 156 on the boot3 vehicle capture — 26% over — with shadows flooded (p05 87
+vs the artifact's 28) and a saturated blue-green cast. The overshoot taught the real rule:
+**the budget divides, it doesn't just scale.** A small desaturated ambient (`(120,140,165)` at
+6,000) lets shadow faces go genuinely dark; a desaturated cool directional (`(150,190,180)` at
+30,000) carries the lit faces. Both tints sit near neutral because light colour MULTIPLIES onto
+already-blue materials — the boot3 cast came from lighting blue snow with saturated blue-green
+lights, not from the material table. Torches are 14M lm and the campfire 32M lm: the white-clip
+radius scales as sqrt(intensity), and 72M blew a ~9-tile pool to flat white where AC9 reserves
+white for emissive faces alone.
 
 **Warm against cold is carried by hue, not by a large luminance ratio.** Measured on the
 approved artifact, the camp is only ~1.3x the field in luminance (135.9 vs 104.3) while its
@@ -119,7 +126,15 @@ because a raw height threshold stops meaning anything the moment the radius chan
 ## The value floor
 
 `--capture` range-checks the median sRGB luminance of the valley floor (frame centre, x 0.25 to
-0.75 and y 0.50 to 0.90) against a floor of 70. The approved artifact reads 123 in that window;
-the round-4 capture read 21. No headless test can see a black frame, so the instrument carries
-AC9's value discipline. Median rather than mean, so a handful of blown-out emitter faces cannot
-carry a black field over the floor.
+0.75 and y 0.50 to 0.90) against a floor of 70 AND a ceiling of 180. The approved artifact reads
+123 in that window; the round-4 capture read 21 (black field) and the boot3 capture read 156
+(washed toward white) — each end of the band has now caught a real failure. No headless test can
+see either, so the instrument carries AC9's value discipline in both directions. Median rather
+than mean, so a handful of blown-out emitter faces cannot carry a black field over the floor.
+
+Sky scatter uses low-discrepancy pairs with INDEPENDENT irrationals per axis (the R2/R3
+sequences). Deriving two axes from the same constant correlates them perfectly — the first star
+shell used the golden ratio for azimuth and height and all 300 stars landed on one helix, which
+the vehicle showed as dotted lines across the sky. The same rule covers snowfall: scattered
+disc positions, per-flake fall speeds and phase-preserving respawn, because a shared speed or a
+shared respawn height re-synchronizes the field into marching rows.

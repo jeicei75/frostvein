@@ -1108,6 +1108,44 @@ gpt-5.6-terra
     capture self-test. Plus AC19, which only Wolf can check. **Rebuild and re-copy `gui.exe`
     before the next live run** (the 13:24 stale-binary trap).
 
+- **REVIEW-PATCH ROUND 6 (2026-08-16, after Wolf's boot3 vehicle run — orchestrator direct,
+  same mode as round 5).** Wolf's verdict on `5-4-signoff/boot3.png`: *better but still issues —
+  snowfall broken, etc.* The round-5 landform/framing/aurora-mechanism work held; the value
+  work OVERSHOT, and two sky-scatter bugs surfaced that only a real frame could show.
+  - **Measured against the artifact** (same windows as round 5): ground median **156 vs 123**
+    (26% over sRGB, ~2x linear); ground p05 **87 vs 28** — the shadows were flooded flat by
+    ambient; ground R/B **0.67 vs 0.74** with far higher saturation — the cast came from
+    MULTIPLYING saturated blue/green light tints onto already-blue materials. Camp pool present
+    but its white core ~9 tiles wide where the artifact reserves white for emitter faces (AC9).
+  - **D-r6-1 — the stars lay on a helix (the dotted lines across boot3's sky).** Azimuth used
+    fraction 0.381966 and height fraction 0.618034 of the SAME irrational — and
+    fract(i*0.381966) = 1 − fract(i*0.618034), so height was an exact linear function of
+    azimuth: all 300 stars on one line wrapped around the shell. Fixed with the R2
+    low-discrepancy pair (0.7548777 / 0.5698403); pinned by a bin-spread test on
+    (azimuth±height) mod 1 that reads 2/10 bins on the helix and ≥8/10 scattered.
+  - **D-r6-2 — snowfall marched in formation (Wolf's call).** A 6x6 grid: shared columns, one
+    speed, one respawn height — permanently synchronized rows, and 0.28-scale terrain-snow
+    flakes were invisible against the now-lit field. Rebuilt: 48 flakes scattered through a
+    disc over the camp read (R3 triple, area-uniform), per-flake speeds 0.7–1.6 and sizes
+    0.30–0.48, cap-colour so they read against the field, phase-preserving wrap on respawn.
+  - **D-r6-3 — the budget divides, it doesn't just scale.** Round 5's uniform ~18x lift was
+    directionally right and structurally wrong: ambient 30k flooded shadow faces (p05 87).
+    Rebalanced ambient (120,140,165)x6k / directional (150,190,180)x30k — solved for ground
+    median 123 — with a new `directional` table field so the fill no longer borrows the
+    aurora's saturated curtain colour raw.
+  - **D-r6-4 — emitters cut to size:** white-clip radius scales as sqrt(intensity); campfire
+    72M→32M, torches 30M→14M, lantern 24M→11M, ranges trimmed. Contrast band re-checked:
+    1.97x, inside [1.2, 6.0].
+  - **D-r6-5 — the value check is now a BAND:** `GROUND_LUMINANCE_CEILING = 180` beside the
+    floor of 70. Each end has caught a real failure (round 4 black at 21; boot3 washed at 156).
+  - **Sabotage table: 38 mutations.** All five anchors staled by this round's edits were found
+    by a **dry anchor-check** (grep every `old =` string against the live tree — seconds, no
+    build) before any run; that check is the round's process improvement over round 5's
+    scar #3. New sabotages: helix restore, one-speed snow, one-row snow, directional tint
+    unpinned, ceiling unbound.
+  - **NOT touched, deliberately:** the aurora (boot3's mid-frame trough is the fold pattern —
+    judge after the value rebalance), the framing (camp anchor held), terrain/caps/crowns.
+
 - **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
   working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
   job running. Last commit is the record below. `scripts/gate.sh` GREEN and **20/20 mutations
@@ -1188,4 +1226,5 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | REVIEW-PATCH round 6 (after Wolf's boot3 live run; orchestrator direct). boot3 measured: value overshoot 156 vs 123 with flooded shadows and blue-green cast; stars on a helix (correlated sampling constants); snowfall in synchronized rows. Fixed: R2/R3 decorrelated scatter for stars and snowfall, budget re-divided toward directional with desaturated tints, emitters cut (white-clip ∝ sqrt I), value check widened to a floor+ceiling band. 38-mutation table with dry anchor-verification before running. |
 | 2026-08-16 | REVIEW-PATCH round 5 (orchestrator implementing directly on Wolf's ruling; Codex quota protected). Targets measured off the approved artifact and `boot2.png` with a purpose-written PNG decoder rather than re-derived from the shader model that mispredicted at round 2. D1 camp anchor solved offline and fixed at the mechanism (offset constrained to the camera view plane); D2 aurora rebuilt as a gradient ring curtain with alpha zero at both edges; D3 fog-alone falsified by measurement and replaced with a world-space rim dissolve; D4 light budget raised ~18x from measurement and the contrast oracle re-derived as a band plus a chromatic term. Wolf's two new rulings landed: snow-catching spruce crowns, and a median-ground-luminance floor in the capture instrument. Tasks 6–9 and AC19 remain vehicle-bound and open. |
