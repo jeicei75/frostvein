@@ -48,9 +48,11 @@ pub const AURORA_TEXTURE_HEIGHT: usize = 64;
 const AURORA_PEAK_ALPHA: f32 = 0.55;
 
 pub const STAR_RADIUS: f32 = 650.0;
-pub const STAR_COUNT: usize = 300;
-const STAR_BAND_LOW: f32 = -130.0;
-const STAR_BAND_HIGH: f32 = 120.0;
+// Re-tuned for the round-8 framing (skyline at 24%): the visible sky wedge is thinner, so the
+// shell holds more stars in a band that keeps every visible one above the ridge.
+pub const STAR_COUNT: usize = 450;
+const STAR_BAND_LOW: f32 = -75.0;
+const STAR_BAND_HIGH: f32 = 140.0;
 // Sized for the shell's depth: at 650 units a frame pixel is ~0.75 world units.
 const STAR_SCALE_MIN: f32 = 1.1;
 const STAR_SCALE_MAX: f32 = 3.0;
@@ -460,7 +462,7 @@ mod tests {
         );
         // Every visible star must be above the ridge line, not sprinkled over the valley.
         assert!(
-            visible.iter().all(|screen| screen.y < 0.30),
+            visible.iter().all(|screen| screen.y < 0.24),
             "stars belong in the sky above the skyline"
         );
     }

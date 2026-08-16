@@ -11,8 +11,10 @@ const BOOT_DISTANCE: f32 = 90.0;
 // The push runs along the view direction and straight up — NEVER along the camera's right
 // vector, which slides the camp sideways out of the approved composition (the world -Z
 // push this replaced put it at 23% of the frame instead of the artifact's 48%).
-const BOOT_COMPOSITION_FORWARD: f32 = 24.0;
-const BOOT_COMPOSITION_LIFT: f32 = 6.75;
+// Re-solved 2026-08-16 for Wolf's live ruling that the artifact's top-third sky is too much
+// in the real frame: the skyline now sits at 24% from the top instead of 30%.
+const BOOT_COMPOSITION_FORWARD: f32 = 33.0;
+const BOOT_COMPOSITION_LIFT: f32 = -0.5;
 
 /// The direction the boot camera looks, flattened onto the ground plane. The sky geometry
 /// is placed against this so the aurora sits where the opening frame can see it.
@@ -152,8 +154,8 @@ mod tests {
             camp.y
         );
         assert!(
-            (far_terrain.y - 0.30).abs() <= TOLERANCE,
-            "skyline must leave the top third to sky; measured {}",
+            (far_terrain.y - 0.24).abs() <= TOLERANCE,
+            "skyline must leave the top quarter to sky; measured {}",
             far_terrain.y
         );
     }

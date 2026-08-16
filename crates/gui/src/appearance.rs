@@ -99,7 +99,7 @@ pub fn foliage_snow_color() -> Color {
 
 /// How many quantised steps the world-edge dissolve uses. Per-tile materials would mean one
 /// material per cube; five shared steps read as a gradient and cost five handles per slot.
-pub const RIM_LEVELS: usize = 9;
+pub const RIM_LEVELS: usize = 13;
 
 /// Blends a terrain colour toward the night sky so the world's boundary fades out instead of
 /// ending on a lit cube face. Level 0 is untouched interior; the last level is pure sky.

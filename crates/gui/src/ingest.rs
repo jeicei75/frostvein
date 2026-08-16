@@ -269,8 +269,8 @@ fn camera_controls(
 /// register valid across the pinned 4-500 zoom clamp.
 pub fn fog_falloff(camera_distance: f32) -> (f32, f32) {
     (
-        75.0_f32.max(camera_distance - 15.0),
-        230.0_f32.max(camera_distance * 1.7),
+        70.0_f32.max(camera_distance - 20.0),
+        210.0_f32.max(camera_distance * 1.7),
     )
 }
 
@@ -472,20 +472,20 @@ mod tests {
 
     #[test]
     fn fog_range_tracks_the_camera_without_erasing_the_far_edge() {
-        assert_eq!(fog_falloff(4.0), (75.0, 230.0));
-        assert_eq!(fog_falloff(90.0), (75.0, 230.0));
-        assert_eq!(fog_falloff(500.0), (485.0, 850.0));
+        assert_eq!(fog_falloff(4.0), (70.0, 210.0));
+        assert_eq!(fog_falloff(90.0), (70.0, 210.0));
+        assert_eq!(fog_falloff(500.0), (480.0, 850.0));
 
-        // Depths measured off the boot framing, not guessed: camp 71, nearest skyline 86,
-        // deepest in-frame terrain 148. Assert the FRACTION, so a range that technically
-        // "ends later than the world" but greys the whole valley still fails.
+        // Depths measured off the ROUND-8 boot framing (skyline moved to 24%): camp 60,
+        // nearest skyline 80, deepest in-frame terrain 138. Assert the FRACTION, so a range
+        // that technically "ends later than the world" but greys the valley still fails.
         const BOOT: f32 = 90.0;
         assert_eq!(
-            fog_fraction(BOOT, 71.0),
+            fog_fraction(BOOT, 60.0),
             0.0,
             "the camp must sit completely clear of the fog"
         );
-        let skyline = fog_fraction(BOOT, 86.0);
+        let skyline = fog_fraction(BOOT, 80.0);
         assert!(
             (0.03..0.30).contains(&skyline),
             "the near skyline needs air without being erased; {skyline}"
@@ -494,7 +494,7 @@ mod tests {
         // sky and the apparent horizon dropped — but the aurora is supposed to BACKLIGHT the
         // skyline (UX-DR12/5.1), which needs a visible silhouette. The world edge belongs to
         // the rim dissolve now, not to fog.
-        let far = fog_fraction(BOOT, 148.0);
+        let far = fog_fraction(BOOT, 138.0);
         assert!(
             (0.35..0.70).contains(&far),
             "the far valley must read as distance yet keep its backlit silhouette; {far}"

@@ -397,7 +397,7 @@ pub fn rim_level(position: [i32; 3], dims: Dims) -> usize {
 }
 
 /// How many tiles inward the dissolve reaches.
-pub const RIM_WIDTH: i32 = 18;
+pub const RIM_WIDTH: i32 = 26;
 
 /// An exposed spruce crown catches snow light. This is a MATERIAL swap, not a terrain cap:
 /// capping foliage puts a bright slab on every ground-level skirt tile and buries the landform.
