@@ -181,9 +181,9 @@ PY
 mutation "fog stops following zoom" gui fog_range_tracks_the_camera_without_erasing_the_far_edge <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        230.0_f32.max(camera_distance * 1.7),\n'
+old = '        210.0_f32.max(camera_distance * 1.7),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        230.0,\n'))
+p.write_text(s.replace(old, '        210.0,\n'))
 PY
 
 mutation "capture keeps its frame graph" gui capture_forces_the_frame_time_overlay_off <<'PY'

@@ -1202,6 +1202,32 @@ gpt-5.6-terra
     genuinely viewable), Task 8's NFR6 F3 readings, Task 9's second capture + AC26 self-test,
     and AC19 — all Wolf's session.
 
+- **ROUND 8 (2026-08-16, after Wolf's boot5 session).** Wolf's readings, recorded verbatim:
+  (1) edge still not there — "still too much sky and falloff could be still bigger and
+  smoother"; (2) **NFR6 working-zoom reading: 140–146 fps sustained, occasional dips just
+  under 140** on the full lit/snowing world — AC14's 60-fps bar cleared with 2.3x headroom
+  (`gingerspice / native Windows / NVIDIA 591.74`; full-vista reading still owed);
+  (3) `projected 53365 terrain cubes` confirmed on the shipped seed (AC18's oracle); (4) AC19
+  still open pending the look.
+  - **STALE-BINARY TRAP, THIRD SIGHTING — caught by cross-checking the instrument.** Wolf's
+    capture printed `ground-median-luminance=145`, but boot5.png measures **123** in the exact
+    instrument window — and 145 is precisely boot4's value. The `--capture` run used the
+    round-6 binary while the live viewing used the fresh one. The printed numbers were
+    disqualified from the record; the boot5 PNG itself is the valid measurement. The trap's
+    detection method is now itself measured: the instrument window can be recomputed offline
+    against any capture PNG, so a stale-binary capture is identifiable after the fact.
+  - **boot5 convergence stands: ground median 122.7 vs the artifact's 123.3.** The value story
+    is closed by measurement; rounds 8+ are composition-only.
+  - **"Too much sky" became a FRAMING ruling:** the artifact put the skyline at 30% and Wolf's
+    live judgment overrode it — the 4.1a lesson pointing the other way for once. Composition
+    re-solved offline (forward 24→33, lift 6.75→-0.5, pitch untouched): camp holds (0.500,
+    0.779), skyline moves 0.30→**0.240**. Camp depth 71→60, silhouette 80–133, deepest terrain
+    138; fog re-derived to (70, 210) at boot, fraction test constants updated; vista excursion
+    417 still inside the 600-unit sky ring.
+  - **Falloff bigger and smoother:** rim 18→26 tiles, 9→13 levels, quadratic ease retained.
+  - **Star shell re-tuned for the thinner sky wedge:** 300→450 on the shell, band -75..140,
+    37 visible above the new skyline, x-spread 0.95, none below the ridge.
+
 - **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
   working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
   job running. Last commit is the record below. `scripts/gate.sh` GREEN and **20/20 mutations
@@ -1282,6 +1308,7 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | ROUND 8 after Wolf's boot5 session: NFR6 working-zoom 140-146 fps recorded (2.3x AC14 headroom); 53365 oracle confirmed; stale-binary capture detected by cross-checking its printed median (145 = boot4) against boot5's actual 123. Skyline lowered 0.30→0.24 on Wolf's live ruling over the artifact; rim widened to 26 tiles/13 levels; fog and star shell re-derived for the new framing. |
 | 2026-08-16 | boot5 measured: ground median 122.7 vs artifact 123.3 — the value target CONVERGED after seven capture-measure-correct cycles. Residual: shadow p05 67.7 vs 28.3, recommended accepted as flat-shading fidelity (retro note). Closing tasks (6, 8, 9, AC19) are vehicle-bound and Wolf's. |
 | 2026-08-16 | REVIEW-PATCH round 7 (after Wolf's boot4 run; orchestrator direct). boot4 measured close: median 144.6 vs 123.3, hue matched. Fixed Wolf's list: fog relaxed so the aurora backlights the skyline instead of fogging it out (the real "too much sky" cause), rim widened 10→18 and eased quadratically, albedos trimmed alongside the light budget (the caps dominate visible area — the albedo IS the value lever now), spruce taper reduced, snowfall spread to a 48-unit disc at 96 flakes with uniform density on Wolf's no-falloff ruling. 40-mutation table, dry anchor-check caught 5 stale anchors pre-run. |
 | 2026-08-16 | REVIEW-PATCH round 6 (after Wolf's boot3 live run; orchestrator direct). boot3 measured: value overshoot 156 vs 123 with flooded shadows and blue-green cast; stars on a helix (correlated sampling constants); snowfall in synchronized rows. Fixed: R2/R3 decorrelated scatter for stars and snowfall, budget re-divided toward directional with desaturated tints, emitters cut (white-clip ∝ sqrt I), value check widened to a floor+ceiling band. 38-mutation table with dry anchor-verification before running. |
