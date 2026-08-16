@@ -5,7 +5,7 @@ model: claude-fable-5  # story-creation ran on the session model Wolf set in the
 
 # Story 5.4: The Cold Boot
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -221,7 +221,7 @@ the vehicle. **Never fake the live half.**
   - [x] Hand-rolled falling flecks (small cubes/quads), `ClientLocal`, respawning above the
         world, drifting down — pure decoration, no sim meaning, sanctioned by NFR5's
         carve-out. Density restrained: it must never obscure the camp read (AC3).
-- [ ] **Task 6 — The world edge** (AC: 11)
+- [x] **Task 6 — The world edge** (AC: 11)
   - [x] Try at least two candidates cheaply before choosing: `DistanceFog`/`FogFalloff`
         (present in `bevy_pbr` 0.19 — one component on the camera, doubles as AC4's "air")
         and darkness falloff at the rim (darken material toward the boundary). Sky-wrap and
@@ -261,21 +261,30 @@ the vehicle. **Never fake the live half.**
         there — no devpod can open a window (measured, 5.3's envelope finding). The figure
         above is the proven native-Windows vehicle. The bar-redefinition question stays owed
         to the Epic 5 retro, recorded, never blurred.)*
-- [ ] **Task 9 — Captures and the inherited AC26 debt** (AC: 16, 17, 18)
-  - [ ] Two boot-framing captures at different ticks: range-checks pass (non-black,
+- [x] **Task 9 — Captures and the inherited AC26 debt** (AC: 16, 17, 18)
+  - [x] Two boot-framing captures at different ticks: range-checks pass (non-black,
         non-uniform, warm pixels > 0), images differ, overlay off. Store the keeper in
-        `5-4-signoff/`.
-  - [ ] Check the startup line: `projected 53365 terrain cubes`; confirm slopes by eye
+        `5-4-signoff/`. *(boot6 + boot7, round-8 binary, 2026-08-16. boot6's checks printed
+        `warm-lit pixels=28455 ground-median-luminance=123`; boot7's checks passed at capture
+        time (the binary asserts before exiting 0) and the AC26 test below proved the pair
+        differs. Keeper `boot6.png` retained in `5-4-signoff/`.)*
+  - [x] Check the startup line: `projected 53365 terrain cubes`; confirm slopes by eye
         against `tui --frames 6 --z 9` (▲ non-zero) — the ramp-complete valley seen live for
-        the first time.
-  - [ ] Discharge AC26: cross-compile `tests/capture.rs` (`--no-run`, copy the test exe) and
+        the first time. *(Startup line confirmed verbatim on both capture runs; the
+        ramp-complete valley was viewed live across six vehicle sessions — unbroken slopes
+        confirmed by eye, per AC18.)*
+  - [x] Discharge AC26: cross-compile `tests/capture.rs` (`--no-run`, copy the test exe) and
         run it on the Windows side with `FROSTVEIN_CAPTURE_FIRST/SECOND` set. Record the
         outcome either way — a real blocker is a finding, a fake pass is a firing offence.
+        *(EXECUTED AND PASSED on the vehicle, 2026-08-16 — the first execution ever:
+        `test capture_exists_is_not_black_and_changes_with_the_world ... ok` /
+        `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out;
+        finished in 0.58s`. The 5.3 debt is discharged, not re-deferred.)*
 - [x] **Task 10 — Tech-art guidelines, procedural-era half** (AC: 15)
   - [x] `docs/tech-art-guidelines.md`: the value ladder (night snow midtone → emissive
         white), sky-as-illuminant rule, material color rules, light-table semantics, edge
         treatment choice. Write each section when its decision lands in Tasks 1–6.
-- [ ] **Task 11 — Mutations, gate, closing sign-off** (AC: 19, 20, 21)
+- [x] **Task 11 — Mutations, gate, closing sign-off** (AC: 19, 20, 21)
   - [x] Sabotage table, minimum set: cap predicate inverted (bare tops) → dies on Task 3's
         toy-world test; a `LightKind` table entry gone cold (R ≤ B) → dies on Task 1's
         warm-side invariant; atmosphere spawn drops `ClientLocal` → dies on Task 4's
@@ -288,8 +297,9 @@ the vehicle. **Never fake the live half.**
         Codex's own final gate was sandbox-cut during `cargo test` and honestly not claimed.)*
   - [x] Branch `5-4-the-cold-boot`, small commits, imperative messages, author
         `Völundr <jeicei75@gmail.com>`. Push/PR only on Wolf's explicit yes.
-  - [ ] Hand the closing half to Wolf: live viewing on the vehicle against the approved
-        artifact. **The story's status moves to review/done only through him.**
+  - [x] Hand the closing half to Wolf: live viewing on the vehicle against the approved
+        artifact. **The story's status moves to review/done only through him.** *(Done —
+        six live sessions, sign-off on boot6 recorded above with his calibration.)*
 
 ### Review Findings
 
@@ -1347,6 +1357,7 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | **STORY COMPLETE — Status → review.** Task 9 closed: boot6+boot7 capture pair on the round-8 binary; AC26 EXECUTED AND PASSED on the vehicle (first execution ever — the 5.3 debt discharged): `capture_exists_is_not_black_and_changes_with_the_world ... ok`, 0.58s. All 21 ACs accounted for; every task box checked; 40/40 mutations killed; gate green. Push/PR awaits Wolf's explicit yes. |
 | 2026-08-16 | Wolf's clarification recorded beside the sign-off (boot frame approved, wow deepens with later stories); NFR6 completed: >135 fps at every zoom/orbit incl. full vista (4.5x the AC14 vista bar). Task 8 closed. Remaining: second capture, AC26 attempt. |
 | 2026-08-16 | **AC19 SIGNED OFF by Wolf on boot6: "wau .. let's ship it". Wow beat 1 landed.** Tasks 6 and 7 closed (rim dissolve is the shipped edge treatment; framing verdict his). Remaining before status → review: full-vista NFR6 reading, second differing capture, AC26 attempt. |
 | 2026-08-16 | boot6 on the fresh round-8 binary: instrument printed ground-median 123 (target 123.3), offline decoder agrees at 123.4; warm pixels 28,455; skyline at 0.19–0.22; 40/40 mutations killed. Value and composition both converged — remaining items are Wolf's closing checklist. |
