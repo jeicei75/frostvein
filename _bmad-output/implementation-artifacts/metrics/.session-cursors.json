@@ -241,10 +241,10 @@
   "5248232a-b6d8-482e-9bae-1b42ce4b3a9a.jsonl": {
     "by_model": {
       "claude-fable-5": {
-        "cache_creation": 1368152,
-        "cache_read": 41344113,
-        "input": 264,
-        "output": 197030
+        "cache_creation": 2214090,
+        "cache_read": 67310020,
+        "input": 400,
+        "output": 303155
       },
       "claude-opus-5": {
         "cache_creation": 620596,
@@ -253,14 +253,14 @@
         "output": 409604
       }
     },
-    "cache_creation": 1988748,
-    "cache_read": 130336628,
-    "input": 1080,
-    "last_ts": "2026-08-16T07:40:11.618Z",
-    "output": 606634,
+    "cache_creation": 2834686,
+    "cache_read": 156302535,
+    "input": 1216,
+    "last_ts": "2026-08-16T10:23:24.738Z",
+    "output": 712759,
     "quota_last": null,
     "schema": 2,
-    "turns": 541
+    "turns": 609
   },
   "63c3bc41-0883-4b82-b8cc-a08beb60669c.jsonl": {
     "cache_creation": 605450,
