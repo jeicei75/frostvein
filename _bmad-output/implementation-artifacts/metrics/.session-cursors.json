@@ -238,6 +238,30 @@
     "output": 121989,
     "turns": 106
   },
+  "5248232a-b6d8-482e-9bae-1b42ce4b3a9a.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 1368152,
+        "cache_read": 41344113,
+        "input": 264,
+        "output": 197030
+      },
+      "claude-opus-5": {
+        "cache_creation": 620596,
+        "cache_read": 88992515,
+        "input": 816,
+        "output": 409604
+      }
+    },
+    "cache_creation": 1988748,
+    "cache_read": 130336628,
+    "input": 1080,
+    "last_ts": "2026-08-16T07:40:11.618Z",
+    "output": 606634,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 541
+  },
   "63c3bc41-0883-4b82-b8cc-a08beb60669c.jsonl": {
     "cache_creation": 605450,
     "cache_read": 42243873,

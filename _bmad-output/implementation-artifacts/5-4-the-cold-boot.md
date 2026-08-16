@@ -1184,6 +1184,24 @@ gpt-5.6-terra
     colour, crown colour, fog end, ambient brightness) — all repaired before any run, seconds
     instead of a wasted 15-minute cycle. `gui.exe` rebuilt at round-7 HEAD 07:40.
 
+- **BOOT5 (2026-08-16 07:59, Wolf's vehicle run after round 7): THE VALUE STORY CONVERGED.**
+  Measured against the approved artifact, same windows as every round: ground median **122.7 vs
+  the artifact's 123.3** (0.5% off, from 17% off at boot4 and 5.9x off at boot2); ground R/B
+  0.75 vs 0.74; camp p90 238.9 vs 252 (warm pool, no blowout); by eye the skyline silhouette
+  now reads against the aurora, the rim melts instead of banding, snowfall spans the bowl, and
+  the foreground trees sit quiet. Seven capture-measure-correct cycles landed the field within
+  half a percent of the target — the measurement method is the story here.
+  - **One residual, named and priced:** shadow p05 is 67.7 vs the artifact's 28.3. The
+    artifact's deep darks are its PAINTED tree-sprite shading; flat-shaded cubes lit by any
+    nonzero ambient have a floor. Improved 87→77→68 across three rounds of ambient cuts —
+    clearly diminishing returns. Closing it further would need per-face AO or darker flank
+    materials (which round 4 pinned to the artifact's own constants). **Recommendation: accept
+    as a mesh-fidelity limitation, note it for the Epic 5 retro, do not spend another vehicle
+    round on it.** Whether it blocks the wow beat is Wolf's AC19 call, not a dev decision.
+  - Remaining before close: Task 6's edge verdict by eye (the rim-vs-fog comparison is now
+    genuinely viewable), Task 8's NFR6 F3 readings, Task 9's second capture + AC26 self-test,
+    and AC19 — all Wolf's session.
+
 - **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
   working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
   job running. Last commit is the record below. `scripts/gate.sh` GREEN and **20/20 mutations
@@ -1264,6 +1282,7 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | boot5 measured: ground median 122.7 vs artifact 123.3 — the value target CONVERGED after seven capture-measure-correct cycles. Residual: shadow p05 67.7 vs 28.3, recommended accepted as flat-shading fidelity (retro note). Closing tasks (6, 8, 9, AC19) are vehicle-bound and Wolf's. |
 | 2026-08-16 | REVIEW-PATCH round 7 (after Wolf's boot4 run; orchestrator direct). boot4 measured close: median 144.6 vs 123.3, hue matched. Fixed Wolf's list: fog relaxed so the aurora backlights the skyline instead of fogging it out (the real "too much sky" cause), rim widened 10→18 and eased quadratically, albedos trimmed alongside the light budget (the caps dominate visible area — the albedo IS the value lever now), spruce taper reduced, snowfall spread to a 48-unit disc at 96 flakes with uniform density on Wolf's no-falloff ruling. 40-mutation table, dry anchor-check caught 5 stale anchors pre-run. |
 | 2026-08-16 | REVIEW-PATCH round 6 (after Wolf's boot3 live run; orchestrator direct). boot3 measured: value overshoot 156 vs 123 with flooded shadows and blue-green cast; stars on a helix (correlated sampling constants); snowfall in synchronized rows. Fixed: R2/R3 decorrelated scatter for stars and snowfall, budget re-divided toward directional with desaturated tints, emitters cut (white-clip ∝ sqrt I), value check widened to a floor+ceiling band. 38-mutation table with dry anchor-verification before running. |
 | 2026-08-16 | REVIEW-PATCH round 5 (orchestrator implementing directly on Wolf's ruling; Codex quota protected). Targets measured off the approved artifact and `boot2.png` with a purpose-written PNG decoder rather than re-derived from the shader model that mispredicted at round 2. D1 camp anchor solved offline and fixed at the mechanism (offset constrained to the camera view plane); D2 aurora rebuilt as a gradient ring curtain with alpha zero at both edges; D3 fog-alone falsified by measurement and replaced with a world-space rim dissolve; D4 light budget raised ~18x from measurement and the contrast oracle re-derived as a band plus a chromatic term. Wolf's two new rulings landed: snow-catching spruce crowns, and a median-ground-luminance floor in the capture instrument. Tasks 6–9 and AC19 remain vehicle-bound and open. |
