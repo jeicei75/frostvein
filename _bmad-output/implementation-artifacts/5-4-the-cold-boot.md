@@ -1228,6 +1228,17 @@ gpt-5.6-terra
   - **Star shell re-tuned for the thinner sky wedge:** 300→450 on the shell, band -75..140,
     37 visible above the new skyline, x-spread 0.95, none below the ridge.
 
+- **BOOT6 (2026-08-16 08:31, fresh round-8 binary): INSTRUMENT AND TARGET AGREE.** The
+  capture printed `warm-lit pixels=28455 ground-median-luminance=123` — the in-binary
+  instrument now reads exactly the artifact's 123.3 target, and the orchestrator's offline
+  decoder confirms 123.4 on the same PNG (the two measurement paths agree, which also
+  validates the stale-binary detection from round 8). Startup line `projected 53365 terrain
+  cubes` confirmed again. Skyline measured at 0.19–0.22 of frame height against the 0.24
+  target; ground p90 187.3 vs the artifact's 183.8 — the whole value distribution tracks, not
+  just the median. Round-8 sabotage: **40/40 KILLED** on the standalone run, exit 0.
+  Remaining open: Wolf's Task 6 edge verdict, the full-vista NFR6 reading, Task 9's second
+  differing capture, AC26's cross-compiled self-test, and AC19.
+
 - **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
   working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
   job running. Last commit is the record below. `scripts/gate.sh` GREEN and **20/20 mutations
@@ -1308,6 +1319,7 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | boot6 on the fresh round-8 binary: instrument printed ground-median 123 (target 123.3), offline decoder agrees at 123.4; warm pixels 28,455; skyline at 0.19–0.22; 40/40 mutations killed. Value and composition both converged — remaining items are Wolf's closing checklist. |
 | 2026-08-16 | ROUND 8 after Wolf's boot5 session: NFR6 working-zoom 140-146 fps recorded (2.3x AC14 headroom); 53365 oracle confirmed; stale-binary capture detected by cross-checking its printed median (145 = boot4) against boot5's actual 123. Skyline lowered 0.30→0.24 on Wolf's live ruling over the artifact; rim widened to 26 tiles/13 levels; fog and star shell re-derived for the new framing. |
 | 2026-08-16 | boot5 measured: ground median 122.7 vs artifact 123.3 — the value target CONVERGED after seven capture-measure-correct cycles. Residual: shadow p05 67.7 vs 28.3, recommended accepted as flat-shading fidelity (retro note). Closing tasks (6, 8, 9, AC19) are vehicle-bound and Wolf's. |
 | 2026-08-16 | REVIEW-PATCH round 7 (after Wolf's boot4 run; orchestrator direct). boot4 measured close: median 144.6 vs 123.3, hue matched. Fixed Wolf's list: fog relaxed so the aurora backlights the skyline instead of fogging it out (the real "too much sky" cause), rim widened 10→18 and eased quadratically, albedos trimmed alongside the light budget (the caps dominate visible area — the albedo IS the value lever now), spruce taper reduced, snowfall spread to a 48-unit disc at 96 flakes with uniform density on Wolf's no-falloff ruling. 40-mutation table, dry anchor-check caught 5 stale anchors pre-run. |
