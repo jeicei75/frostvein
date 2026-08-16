@@ -1087,6 +1087,22 @@ gpt-5.6-terra
     guess. Note the one interaction to watch: ambient rose 15x alongside the emitters, so the
     blue channel rose everywhere; the warm test is `R - B > 30`, and a warm count that FALLS
     despite stronger lights would mean the fill is now competing with the pools.
+  - **COST OF RUNNING IT DIRECTLY: $55.44, and 0 percentage points of Codex quota** (the weekly
+    window stays at 37%). Two honest caveats before anyone reads that against the earlier rounds:
+    1. **The "$10.79 for rounds 1-4" figure in the park note is an UNDERCOUNT of the same kind
+       the ledger header warns about.** Those rows record CODEX ONLY — the orchestrator's own
+       supervision, diagnosis, verification and record-writing for those four rounds was never
+       recorded at all. Round 5's row includes all of that, because it is all the same session.
+       The comparison is not $10.79 vs $55.44; it is "four rounds of dev-execution tokens" vs
+       "one round of everything".
+    2. **A large slice of round 5 was spent badly.** The row counts 391 turns for 67 minutes,
+       and a substantial number of those turns were the orchestrator POLLING a background
+       `mutate.sh` run that takes ~15 minutes of wall clock. Three full sabotage runs at that
+       length, supervised by polling, is the single biggest avoidable cost in the round. The
+       fix is procedural, not technical: arm one blocking watcher and stop, or batch the
+       mutation run with other waiting work.
+    The quota argument for running directly held — this round cost none of it, and the story
+    is no longer one bad round away from the 3.2 lockout. The dollar argument did not.
   - **Still owed and vehicle-only, unchanged:** Tasks 6-9 — the edge comparison by eye, the
     framing judgement against the artifact, the NFR6 reading (AC14), AC26's cross-compiled
     capture self-test. Plus AC19, which only Wolf can check. **Rebuild and re-copy `gui.exe`
