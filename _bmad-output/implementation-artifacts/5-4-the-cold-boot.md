@@ -1337,6 +1337,12 @@ gpt-5.6-terra
 - _bmad-output/implementation-artifacts/5-4-signoff/candidate-artifact-2026-08-14.png
 - _bmad-output/implementation-artifacts/5-4-signoff/candidate-artifact-2026-08-15.png
 - _bmad-output/implementation-artifacts/5-4-signoff/capture-2026-08-15T1717-boot.png
+- _bmad-output/implementation-artifacts/5-4-signoff/boot2.png
+- _bmad-output/implementation-artifacts/5-4-signoff/boot3.png
+- _bmad-output/implementation-artifacts/5-4-signoff/boot4.png
+- _bmad-output/implementation-artifacts/5-4-signoff/boot5.png
+- _bmad-output/implementation-artifacts/5-4-signoff/boot6.png
+- _bmad-output/implementation-artifacts/5-4-signoff/boot7.png
 - _bmad-output/implementation-artifacts/5-4-signoff/capture_snapshot.py
 - _bmad-output/implementation-artifacts/5-4-the-cold-boot.md
 
