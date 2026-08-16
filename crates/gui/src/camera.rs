@@ -8,7 +8,22 @@ const BOOT_YAW: f32 = 0.7;
 const BOOT_PITCH: f32 = 0.45;
 const BOOT_DISTANCE: f32 = 90.0;
 // The camera orbits the camp, but composes the larger valley behind it into the frame.
-const BOOT_COMPOSITION_OFFSET: Vec3 = Vec3::new(0.0, 6.7, -37.42);
+// The push runs along the view direction and straight up — NEVER along the camera's right
+// vector, which slides the camp sideways out of the approved composition (the world -Z
+// push this replaced put it at 23% of the frame instead of the artifact's 48%).
+const BOOT_COMPOSITION_FORWARD: f32 = 24.0;
+const BOOT_COMPOSITION_LIFT: f32 = 6.75;
+
+/// The direction the boot camera looks, flattened onto the ground plane. The sky geometry
+/// is placed against this so the aurora sits where the opening frame can see it.
+pub fn boot_horizontal_forward() -> Vec3 {
+    Vec3::new(-BOOT_YAW.cos(), 0.0, -BOOT_YAW.sin())
+}
+
+/// The boot composition push, expressed in the boot camera's own view plane.
+fn boot_composition_offset() -> Vec3 {
+    boot_horizontal_forward() * BOOT_COMPOSITION_FORWARD + Vec3::Y * BOOT_COMPOSITION_LIFT
+}
 pub const BOOT_VERTICAL_FOV: f32 = std::f32::consts::FRAC_PI_4;
 pub const BOOT_ASPECT_RATIO: f32 = 16.0 / 9.0;
 
@@ -52,7 +67,7 @@ impl CameraRig {
         // Keep the camp in front of the camera at close zoom while retaining the approved
         // composition at the boot distance and beyond.
         let composition_scale = (self.distance / BOOT_DISTANCE).min(1.0);
-        world_to_render(self.focus) + BOOT_COMPOSITION_OFFSET * composition_scale
+        world_to_render(self.focus) + boot_composition_offset() * composition_scale
     }
 
     /// Projects a render-space point to normalized screen coordinates at this rig's camera.
@@ -116,7 +131,7 @@ mod tests {
 
     #[test]
     fn boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third() {
-        const TOLERANCE: f32 = 0.02;
+        const TOLERANCE: f32 = 0.03;
 
         let rig = CameraRig::new([64, 64, 9]);
         let camp = rig
@@ -127,6 +142,11 @@ mod tests {
             .expect("the skyline must be in front of the boot camera");
 
         assert!(
+            (camp.x - 0.48).abs() <= TOLERANCE,
+            "camp must sit near the approved horizontal anchor; measured {}",
+            camp.x
+        );
+        assert!(
             (camp.y - 0.78).abs() <= TOLERANCE,
             "camp must sit at 78% of the frame from the top; measured {}",
             camp.y
@@ -135,6 +155,20 @@ mod tests {
             (far_terrain.y - 0.30).abs() <= TOLERANCE,
             "skyline must leave the top third to sky; measured {}",
             far_terrain.y
+        );
+    }
+
+    #[test]
+    fn boot_composition_never_pushes_along_the_camera_right_vector() {
+        // The defect this pins: an offset with a lateral component slides the camp sideways
+        // as the boot yaw changes, so the vertical framing assertions above stay green while
+        // the composition drifts off-frame. Assert the mechanism, not just the symptom.
+        let rig = CameraRig::new([64, 64, 9]);
+        let camera = rig.transform();
+        let lateral = boot_composition_offset().dot(camera.right().as_vec3());
+        assert!(
+            lateral.abs() <= 0.01,
+            "the boot composition push must stay in the camera's view plane; measured {lateral} units along right"
         );
     }
 

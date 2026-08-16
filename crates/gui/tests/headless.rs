@@ -12,7 +12,7 @@ use bevy::{
 };
 use client_core::Mirror;
 use gui::{
-    atmosphere::{Atmosphere, setup_atmosphere},
+    atmosphere::{Atmosphere, STAR_COUNT, setup_atmosphere},
     project::{
         ClientLocal, ProjectedItem, ProjectionAssets, SnowCap, TerrainQuery, TerrainTile,
         WorldProjected, reconcile, setup_projection_assets,
@@ -513,6 +513,7 @@ fn atmosphere_entities_are_client_local_and_never_world_projected() {
     app.add_plugins(MinimalPlugins)
         .init_resource::<Assets<Mesh>>()
         .init_resource::<Assets<StandardMaterial>>()
+        .init_resource::<Assets<bevy::image::Image>>()
         .add_systems(bevy::app::Startup, setup_atmosphere);
     app.update();
 
@@ -520,7 +521,13 @@ fn atmosphere_entities_are_client_local_and_never_world_projected() {
         app.world_mut()
             .query::<(&Atmosphere, Option<&ClientLocal>, Option<&WorldProjected>)>();
     let entities = atmosphere.iter(app.world()).collect::<Vec<_>>();
-    assert_eq!(entities.len(), 51, "the atmosphere spawn count is pinned");
+    // 200 stars + 1 aurora curtain + 36 snowflakes. Pinned exactly: a count threshold would
+    // tolerate the marker being dropped from a whole class of atmosphere entity.
+    assert_eq!(
+        entities.len(),
+        STAR_COUNT + 1 + 36,
+        "the atmosphere spawn count is pinned"
+    );
     assert!(
         entities
             .iter()
