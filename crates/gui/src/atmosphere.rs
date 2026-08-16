@@ -5,19 +5,21 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::{
         AlphaMode, Assets, Commands, Component, Cuboid, Mesh, Mesh3d, MeshMaterial3d, Query, Res,
-        ResMut, StandardMaterial, Time, Transform, Vec3, With,
+        ResMut, StandardMaterial, Time, Transform, Vec3,
     },
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 
 use crate::{
-    appearance::{material_color, night_lighting},
+    appearance::{night_lighting, snow_cap_color},
     camera::{BOOT_ASPECT_RATIO, BOOT_VERTICAL_FOV, CameraRig, boot_horizontal_forward},
     project::ClientLocal,
 };
 
 #[derive(Component)]
-pub struct Snowflake;
+pub struct Snowflake {
+    pub speed: f32,
+}
 
 #[derive(Component)]
 pub struct Atmosphere;
@@ -26,7 +28,6 @@ pub const CAMP_SURFACE_Y: f32 = 9.0;
 pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
 pub const SKYLINE_MAX: f32 = 26.0;
 pub const FAR_TERRAIN_EDGE: f32 = -128.0;
-pub const SNOWFLAKE_SCALE: f32 = 0.28;
 
 /// The horizontal centre of the world footprint; all sky geometry is hung around it.
 pub const SKY_CENTRE: Vec3 = Vec3::new(63.5, 0.0, -63.5);
@@ -53,9 +54,12 @@ const STAR_BAND_HIGH: f32 = 120.0;
 // Sized for the shell's depth: at 650 units a frame pixel is ~0.75 world units.
 const STAR_SCALE_MIN: f32 = 1.1;
 const STAR_SCALE_MAX: f32 = 3.0;
-/// Golden-angle azimuth stepping scatters the shell without a random source or a stored table.
-const GOLDEN_ANGLE: f32 = 2.399_963_2;
-const GOLDEN_RATIO_FRACT: f32 = 0.618_034;
+/// Two axes need two INDEPENDENT irrationals (the R2 low-discrepancy pair). The first build
+/// used the golden ratio for both — fract(i * 0.381966) is exactly 1 - fract(i * 0.618034),
+/// so height was a linear function of azimuth and all 300 stars lay on one helix, which the
+/// boot3 vehicle capture showed as dotted lines across the sky.
+const STAR_AZIMUTH_STEP: f32 = 0.754_877_7;
+const STAR_HEIGHT_STEP: f32 = 0.569_840_3;
 
 /// The compass point the curtain is brightest at, and where its light comes from.
 pub fn aurora_core() -> Vec3 {
@@ -148,9 +152,9 @@ pub fn aurora_gradient_image() -> Image {
 /// above the ridge line and a full dome would put most of the stars out of every frame.
 pub fn star_positions() -> [Vec3; STAR_COUNT] {
     std::array::from_fn(|index| {
-        let azimuth = index as f32 * GOLDEN_ANGLE;
+        let azimuth = index as f32 * STAR_AZIMUTH_STEP * std::f32::consts::TAU;
         let height = STAR_BAND_LOW
-            + (STAR_BAND_HIGH - STAR_BAND_LOW) * (index as f32 * GOLDEN_RATIO_FRACT).fract();
+            + (STAR_BAND_HIGH - STAR_BAND_LOW) * (index as f32 * STAR_HEIGHT_STEP).fract();
         Vec3::new(
             SKY_CENTRE.x + STAR_RADIUS * azimuth.cos(),
             height,
@@ -164,14 +168,35 @@ pub fn star_scale(index: usize) -> f32 {
     STAR_SCALE_MIN + (STAR_SCALE_MAX - STAR_SCALE_MIN) * (index as f32 * 0.381_966 + 0.21).fract()
 }
 
-pub fn snowflake_positions() -> [Vec3; 36] {
+pub const SNOWFLAKE_COUNT: usize = 48;
+const SNOWFLAKE_FALL_SPAN: f32 = 20.0;
+// R3 low-discrepancy triple — three independent axes, same reasoning as the star pair.
+const FLAKE_ANGLE_STEP: f32 = 0.819_172_5;
+const FLAKE_RADIUS_STEP: f32 = 0.671_043_6;
+const FLAKE_HEIGHT_STEP: f32 = 0.549_700_5;
+
+/// Flakes scatter through a disc over the camp read: uniform in area (sqrt on the radius
+/// fraction), distinct heights, so no two flakes ever agree on a row or a column.
+pub fn snowflake_positions() -> [Vec3; SNOWFLAKE_COUNT] {
     std::array::from_fn(|index| {
+        let angle = index as f32 * FLAKE_ANGLE_STEP * std::f32::consts::TAU;
+        let radius = 21.0 * (index as f32 * FLAKE_RADIUS_STEP).fract().sqrt();
+        let height = 11.0 + SNOWFLAKE_FALL_SPAN * (index as f32 * FLAKE_HEIGHT_STEP).fract();
         Vec3::new(
-            52.0 + (index % 6) as f32 * 4.0,
-            16.0 + (index / 6) as f32 * 2.0,
-            -86.0 + (index / 6) as f32 * 2.0,
+            CAMP_FOCUS.x + radius * angle.cos(),
+            height,
+            CAMP_FOCUS.z + radius * angle.sin(),
         )
     })
+}
+
+/// One shared speed keeps the field falling in formation; vary it per flake instead.
+pub fn snowflake_speed(index: usize) -> f32 {
+    0.7 + 0.9 * (index as f32 * 0.618_034).fract()
+}
+
+pub fn snowflake_scale(index: usize) -> f32 {
+    0.3 + 0.18 * (index as f32 * 0.381_966).fract()
 }
 
 pub fn aurora_light_transform() -> Transform {
@@ -218,8 +243,10 @@ pub fn setup_atmosphere(
         cull_mode: None,
         ..Default::default()
     });
+    // Cap colour, not terrain snow: a flake the same colour as the field it falls over is
+    // invisible — settled snow is already the "brighter than terrain" table entry.
     let snow = materials.add(StandardMaterial {
-        base_color: material_color(protocol::Material::Snow),
+        base_color: snow_cap_color(),
         unlit: true,
         ..Default::default()
     });
@@ -240,23 +267,27 @@ pub fn setup_atmosphere(
         Atmosphere,
         ClientLocal,
     ));
-    for position in snowflake_positions() {
+    for (index, position) in snowflake_positions().into_iter().enumerate() {
         commands.spawn((
             Mesh3d(cube.clone()),
             MeshMaterial3d(snow.clone()),
-            Transform::from_translation(position).with_scale(Vec3::splat(SNOWFLAKE_SCALE)),
-            Snowflake,
+            Transform::from_translation(position).with_scale(Vec3::splat(snowflake_scale(index))),
+            Snowflake {
+                speed: snowflake_speed(index),
+            },
             Atmosphere,
             ClientLocal,
         ));
     }
 }
 
-pub fn fall_snow(time: Res<Time>, mut flakes: Query<&mut Transform, With<Snowflake>>) {
-    for mut transform in &mut flakes {
-        transform.translation.y -= time.delta_secs() * 1.2;
+pub fn fall_snow(time: Res<Time>, mut flakes: Query<(&Snowflake, &mut Transform)>) {
+    for (flake, mut transform) in &mut flakes {
+        transform.translation.y -= time.delta_secs() * flake.speed;
         if transform.translation.y < CAMP_SURFACE_Y {
-            transform.translation.y = 28.0;
+            // Wrap by the span rather than resetting to one height, so each flake keeps its
+            // own phase and the field never re-synchronizes into rows.
+            transform.translation.y += SNOWFLAKE_FALL_SPAN;
         }
     }
 }
@@ -265,9 +296,9 @@ pub fn fall_snow(time: Res<Time>, mut flakes: Query<&mut Transform, With<Snowfla
 mod tests {
     use super::{
         AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT, AURORA_TEXTURE_WIDTH, AURORA_TOP,
-        CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_SCALE, STAR_COUNT, STAR_RADIUS, aurora_core,
+        CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT, STAR_COUNT, STAR_RADIUS, aurora_core,
         aurora_curtain_mesh, aurora_gradient_pixels, aurora_light_transform, inside_boot_frustum,
-        snowflake_positions, star_positions, star_scale,
+        snowflake_positions, snowflake_scale, snowflake_speed, star_positions, star_scale,
     };
     use crate::appearance::night_lighting;
     use crate::camera::{BOOT_VERTICAL_FOV, CameraRig};
@@ -429,6 +460,32 @@ mod tests {
     }
 
     #[test]
+    fn stars_scatter_instead_of_lying_on_a_helix() {
+        // The defect this pins, seen on the boot3 vehicle capture as two dotted lines across
+        // the sky: azimuth and height derived from the SAME irrational are perfectly
+        // correlated, so every star lies on one helix around the shell. If height is a linear
+        // function of azimuth, (azimuth_frac + height_frac) mod 1 (or the difference) is a
+        // constant; scattered constants spread both sums across many bins.
+        let mut sum_bins = [false; 10];
+        let mut diff_bins = [false; 10];
+        for star in star_positions() {
+            let azimuth_frac = (star.z - SKY_CENTRE.z)
+                .atan2(star.x - SKY_CENTRE.x)
+                .rem_euclid(std::f32::consts::TAU)
+                / std::f32::consts::TAU;
+            let height_frac = (star.y - -130.0) / (120.0 - -130.0);
+            sum_bins[((azimuth_frac + height_frac).rem_euclid(1.0) * 10.0) as usize % 10] = true;
+            diff_bins[((azimuth_frac - height_frac).rem_euclid(1.0) * 10.0) as usize % 10] = true;
+        }
+        let sums = sum_bins.iter().filter(|hit| **hit).count();
+        let diffs = diff_bins.iter().filter(|hit| **hit).count();
+        assert!(
+            sums >= 8 && diffs >= 8,
+            "stars must scatter, not align on a helix; sum bins {sums}/10, diff bins {diffs}/10"
+        );
+    }
+
+    #[test]
     fn star_sizes_vary_so_the_shell_never_reads_as_a_lattice() {
         let scales: Vec<f32> = (0..12).map(star_scale).collect();
         let min = scales.iter().copied().fold(f32::INFINITY, f32::min);
@@ -443,8 +500,15 @@ mod tests {
     }
 
     #[test]
-    fn snowfall_stays_in_the_camp_read_and_in_frame() {
-        for flake in snowflake_positions() {
+    fn snowfall_scatters_through_the_camp_read_without_marching_in_rows() {
+        // The defect this pins, called by Wolf on the boot3 vehicle run: a 6x6 grid whose
+        // flakes share fixed columns, one speed and one respawn height falls in permanent
+        // military formation. Scatter, distinct heights and distinct speeds are what make it
+        // read as weather.
+        let flakes = snowflake_positions();
+        assert_eq!(flakes.len(), SNOWFLAKE_COUNT);
+
+        for flake in flakes {
             assert!(
                 flake.distance(CAMP_FOCUS) <= 32.0,
                 "snowfall remains in the camp read"
@@ -454,18 +518,41 @@ mod tests {
                 "snowfall must be visible at the boot framing"
             );
         }
-    }
 
-    #[test]
-    fn snowfall_fills_a_visible_grid_instead_of_a_single_diagonal_row() {
-        let flakes = snowflake_positions();
-
-        assert_eq!(flakes.len(), 36);
-        assert_eq!(SNOWFLAKE_SCALE, 0.28);
-        assert_eq!(flakes[0].x, flakes[6].x, "rows share x columns");
-        assert_ne!(
-            flakes[0].z, flakes[6].z,
-            "a shared x column must span multiple z rows"
+        let mut heights: Vec<f32> = flakes.iter().map(|flake| flake.y).collect();
+        heights.sort_by(f32::total_cmp);
+        heights.dedup_by(|a, b| (*a - *b).abs() < 0.05);
+        assert!(
+            heights.len() >= SNOWFLAKE_COUNT - 4,
+            "flakes must not share heights in rows; {} distinct of {SNOWFLAKE_COUNT}",
+            heights.len()
         );
+
+        for (index, flake) in flakes.iter().enumerate() {
+            for other in flakes.iter().skip(index + 1) {
+                let dx = flake.x - other.x;
+                let dz = flake.z - other.z;
+                assert!(
+                    (dx * dx + dz * dz).sqrt() > 1.5,
+                    "flakes must not stack into a column"
+                );
+            }
+        }
+
+        let speeds: Vec<f32> = (0..SNOWFLAKE_COUNT).map(snowflake_speed).collect();
+        let slowest = speeds.iter().copied().fold(f32::INFINITY, f32::min);
+        let fastest = speeds.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            fastest - slowest > 0.3,
+            "one shared speed keeps rows synchronized forever; spread {}",
+            fastest - slowest
+        );
+        assert!(speeds.iter().all(|speed| *speed >= 0.6 && *speed <= 1.8));
+
+        let scales: Vec<f32> = (0..SNOWFLAKE_COUNT).map(snowflake_scale).collect();
+        assert!(scales.iter().all(|scale| *scale >= 0.28 && *scale <= 0.5));
+        let smallest = scales.iter().copied().fold(f32::INFINITY, f32::min);
+        let largest = scales.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        assert!(largest - smallest > 0.1, "flake sizes must vary");
     }
 }
