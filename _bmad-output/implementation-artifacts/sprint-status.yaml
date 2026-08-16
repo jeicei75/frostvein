@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-08-05
+# last_updated: 2026-08-16
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,10 +43,13 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-14  # Story 5.3 DONE after four-layer review + patches: AC13 falsified (ramps never rendered,
-                          # 59,843 vs 53,365 — found independently by both Opus layers) and fixed; silent-failure
-                          # exits added; AC26's live half handed to 5.4 on Wolf's ruling; devcontainer WSLg
-                          # coupling kept + recorded (rebelspice needs its own variant). Gate green, 5/5 mutations killed.
+last_updated: 2026-08-15  # 5.4 dev STARTED (in-progress, delegated to Codex). Earlier same day —
+                          # Task 0 gate OPENED: Wolf approved the sign-off artifact
+                          # (5-4-signoff/candidate-artifact-2026-08-15.png) after a four-pass iteration on the
+                          # parked 08-14 candidate — draft-2 framing, spruce trees with visible trunks, FULL
+                          # wire-true tree density (thinned variant offered, NOT taken → no worldgen change).
+                          # Implementation may start. Prior: 5.3 DONE 2026-08-14 (AC13 falsified+fixed, AC26's
+                          # live half handed to 5.4, gate green, 5/5 mutations killed).
 project: frostvein
 project_key: NOKEY
 tracking_system: file-system
@@ -134,7 +137,20 @@ development_status:
   # WOW BEAT 1. Sign-off gate BOTH halves (UX-DR22): Wolf approves a "here is what you
   # will see" artifact BEFORE implementation starts, and the story is done only when he
   # has viewed the built result live against it. CANNOT BE CLOSED BY A DEV AGENT.
-  5-4-the-cold-boot: backlog
+  # Story file created 2026-08-14. Task 0 APPROVED 2026-08-15 (candidate-artifact-2026-08-15.png,
+  # full wire-true tree density — no worldgen change) so the opening half is met and
+  # implementation may start. Closing half still owed: Wolf views the built boot frame live
+  # against the artifact. Live half runs on the proven native-Windows vehicle; NFR6's WSLg
+  # figure stays owed to the retro. Inherits 5.3's AC26 debt.
+  # Headless half implemented (Codex/terra, 2 sessions) + orchestrator-verified: gate green,
+  # 5/5 mutations killed. Moves to code review. Vehicle-bound remainder (Tasks 6-9 live
+  # halves, AC14/16-18) and Wolf's AC19 closing sign-off stay OPEN — review does not close
+  # this story; only Wolf does.
+  # Code review 2026-08-15 (fresh session, 4 layers): headless substrate solid, but six HIGH
+  # findings predict the composed frame fails the artifact comparison (light scale, atmosphere
+  # placement, fog-vs-zoom, ice-hiding cap). 3 decisions ruled, 11 patches left as action
+  # items for a fresh patch session, 5 defers. Back to in-progress.
+  5-4-the-cold-boot: review
   epic-5-retrospective: optional
   epic-6: backlog
   # WOW BEAT 2 — the beat the PRD calls the magic; a client achieving only beat 1 has

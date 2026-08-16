@@ -81,6 +81,30 @@
     "schema": 2,
     "turns": 230
   },
+  "1ebe48f2-c70b-43fb-b9aa-9a757b0bf99e.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 661630,
+        "cache_read": 22801912,
+        "input": 156,
+        "output": 109810
+      },
+      "claude-opus-5": {
+        "cache_creation": 620596,
+        "cache_read": 88992515,
+        "input": 816,
+        "output": 409604
+      }
+    },
+    "cache_creation": 1282226,
+    "cache_read": 111794427,
+    "input": 972,
+    "last_ts": "2026-08-16T07:05:16.567Z",
+    "output": 519414,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 486
+  },
   "1f0ec2a4-c610-40e6-8599-64ac6ecc070f.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -214,6 +238,30 @@
     "output": 121989,
     "turns": 106
   },
+  "5248232a-b6d8-482e-9bae-1b42ce4b3a9a.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 2214090,
+        "cache_read": 67310020,
+        "input": 400,
+        "output": 303155
+      },
+      "claude-opus-5": {
+        "cache_creation": 620596,
+        "cache_read": 88992515,
+        "input": 816,
+        "output": 409604
+      }
+    },
+    "cache_creation": 2834686,
+    "cache_read": 156302535,
+    "input": 1216,
+    "last_ts": "2026-08-16T10:23:24.738Z",
+    "output": 712759,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 609
+  },
   "63c3bc41-0883-4b82-b8cc-a08beb60669c.jsonl": {
     "cache_creation": 605450,
     "cache_read": 42243873,
@@ -288,6 +336,24 @@
     "output": 250092,
     "turns": 302
   },
+  "ae36158f-661e-4e85-80dd-a3842f429b5d.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 722807,
+        "cache_read": 11801139,
+        "input": 150,
+        "output": 127382
+      }
+    },
+    "cache_creation": 722807,
+    "cache_read": 11801139,
+    "input": 150,
+    "last_ts": "2026-08-14T15:08:14.833Z",
+    "output": 127382,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 81
+  },
   "bb7aef73-12e3-4304-9761-ecf0e9437260.jsonl": {
     "cache_creation": 418931,
     "cache_read": 23660658,
@@ -332,6 +398,36 @@
     "output": 364936,
     "quota_last": null,
     "turns": 371
+  },
+  "f3f7e690-2de5-40b9-a572-170db2c1a7e1.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 485427,
+        "cache_read": 17114770,
+        "input": 260,
+        "output": 237028
+      },
+      "claude-opus-5": {
+        "cache_creation": 773463,
+        "cache_read": 12178267,
+        "input": 290,
+        "output": 99583
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 445210,
+        "cache_read": 7246703,
+        "input": 208,
+        "output": 64018
+      }
+    },
+    "cache_creation": 1704100,
+    "cache_read": 36539740,
+    "input": 758,
+    "last_ts": "2026-08-15T13:48:01.670Z",
+    "output": 400629,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 379
   },
   "ff39ce5d-1295-4d05-b2cb-ea5124daf950.jsonl": {
     "cache_creation": 465870,
@@ -552,5 +648,131 @@
     "quota_last": 6.0,
     "schema": 2,
     "turns": 129
+  },
+  "rollout-2026-08-15T10-40-42-01a00502-7441-72d3-a158-3419133220f0.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 13238272,
+        "input": 394290,
+        "output": 43397
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 13238272,
+    "input": 394290,
+    "last_ts": "2026-08-15T11:02:16.570Z",
+    "output": 43397,
+    "quota_last": 6.0,
+    "schema": 2,
+    "turns": 156
+  },
+  "rollout-2026-08-15T11-05-35-01a00519-3d98-7fe2-bc96-3d1f6d552c5f.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 92160,
+        "input": 26830,
+        "output": 1382
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 92160,
+    "input": 26830,
+    "last_ts": "2026-08-15T11:06:14.788Z",
+    "output": 1382,
+    "quota_last": 7.0,
+    "schema": 2,
+    "turns": 4
+  },
+  "rollout-2026-08-15T11-06-36-01a0051a-2de0-7d72-8c3d-1a81bbd98ec9.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 9890560,
+        "input": 317504,
+        "output": 36617
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 9890560,
+    "input": 317504,
+    "last_ts": "2026-08-15T11:25:43.142Z",
+    "output": 36617,
+    "quota_last": 12.0,
+    "schema": 2,
+    "turns": 113
+  },
+  "rollout-2026-08-15T13-55-29-01a005b4-c9c8-79b1-8547-e6c33073f8ff.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 14103040,
+        "input": 225903,
+        "output": 29086
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 14103040,
+    "input": 225903,
+    "last_ts": "2026-08-15T14:13:36.239Z",
+    "output": 29086,
+    "quota_last": 19.0,
+    "schema": 2,
+    "turns": 114
+  },
+  "rollout-2026-08-15T14-19-51-01a005cb-17a7-7401-a5af-04e8989e35b6.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 5937152,
+        "input": 257272,
+        "output": 22250
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 5937152,
+    "input": 257272,
+    "last_ts": "2026-08-15T14:34:56.826Z",
+    "output": 22250,
+    "quota_last": 22.0,
+    "schema": 2,
+    "turns": 80
+  },
+  "rollout-2026-08-15T17-30-09-01a00679-533e-7892-9628-75a6744bb83b.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 16831488,
+        "input": 374613,
+        "output": 44048
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 16831488,
+    "input": 374613,
+    "last_ts": "2026-08-15T18:05:37.763Z",
+    "output": 44048,
+    "quota_last": 28.0,
+    "schema": 2,
+    "turns": 177
+  },
+  "rollout-2026-08-15T18-10-45-01a0069e-7f58-7fb1-a61d-a5461a159697.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 23527296,
+        "input": 487845,
+        "output": 60228
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 23527296,
+    "input": 487845,
+    "last_ts": "2026-08-15T18:55:39.908Z",
+    "output": 60228,
+    "quota_last": 37.0,
+    "schema": 2,
+    "turns": 216
   }
 }

@@ -607,3 +607,36 @@ below as "what one layer found", not as "what is wrong with 3.3".
   them, but the order is incidental, and it is load-bearing for AC16's same-frame dirty-tile
   path. Related: a small `--frames` value screenshots before the first reconcile's queued
   spawns apply (recipe uses 60, floor is >0). `[feature/LOW]`
+
+## Deferred from: code review of 5-4-the-cold-boot (2026-08-15)
+
+- Entity/item id collision in `reconcile`'s `wanted` map silently erases the entity's kind,
+  light, and appearance (`crates/gui/src/project.rs:219`) — probed: a campfire sharing an
+  item's id renders as a bare stone cube with no light. Unreachable today because
+  `sim-core`'s single `IdAllocator` never collides entity and item ids, but nothing in
+  `gui`/`client-core`/`protocol` documents or asserts that invariant, and 5.4 widened the
+  blast radius from position-only to full identity. `[edge/LOW]`
+- Point lights cast no shadows (`crates/gui/src/project.rs:118`, `..Default::default()` →
+  `shadow_maps_enabled: false`); AC4's "shadow" term is carried entirely by the single
+  250-lux directional. Perf-vs-look tradeoff for a vehicle session, not a headless call.
+  `[auditor/LOW]`
+- Degenerate captures produce misleading diagnostics (`crates/gui/src/capture.rs:76`): an
+  empty pixel buffer asserts "capture is black", a 1-pixel capture always asserts "capture
+  is uniform". Unreachable through a real primary-window screenshot. `[edge/LOW]`
+- The live `App` built by `run()` (`crates/gui/src/ingest.rs:81`) has no test of any kind —
+  every headless test assembles its own `MinimalPlugins` app, so a system dropped from the
+  registration tuples, a mis-ordered resource insert, or changed fog/framing constants would
+  pass the whole suite. Needs a test-architecture decision (what of `run()` is assertable
+  without `DefaultPlugins`). `[feature/MED]`
+- NFR6 headroom note for Task 8: 5.4 adds 16,992 cap-slab entities (+32% over the 53,365
+  terrain cubes) plus a 2048² shadow cascade over ~70k meshes; the 146 fps baseline predates
+  all of it. If AC14's reading fails, this is the measured cause to check first.
+  `[feature+auditor/LOW]`
+- Tree presentation: the wire's trees are foliage-skirted cube stacks, while 5.4's approved
+  sign-off artifact drew "snow-laden spruce sprites instead of per-tile boxes" with visible
+  trunks (`_bmad-output/implementation-artifacts/5-4-signoff/artifact_render.py:7,234`).
+  Wolf ruled 2026-08-15: accept cube trees for 5.4, AC19 judged on light/sky/snow/framing;
+  spruce-like presentation (expose occluded trunks in the draw set + taper foliage scale —
+  changes the exposed-predicate and the 53,365 oracle) is a candidate later story. RETRO
+  NOTE: Task 0 artifact scripts must not substitute geometry the renderer is not tasked to
+  produce. `[wolf-live+orchestrator/HIGH-deferred]`

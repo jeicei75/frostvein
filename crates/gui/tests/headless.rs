@@ -1,24 +1,26 @@
 #![forbid(unsafe_code)]
 
+use bevy::color::ColorToPacked;
 use bevy::{
     MinimalPlugins,
     app::{App, Update},
     ecs::system::{Commands, Query, Res, ResMut},
     prelude::{
-        Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, Resource, StandardMaterial,
-        Transform, Without,
+        Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, PointLight, Resource,
+        StandardMaterial, Transform, Without,
     },
 };
 use client_core::Mirror;
 use gui::{
+    atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, setup_atmosphere},
     project::{
-        ClientLocal, ProjectionAssets, TerrainTile, WorldProjected, reconcile,
-        setup_projection_assets,
+        ClientLocal, ProjectedItem, ProjectionAssets, SnowCap, TerrainQuery, TerrainTile,
+        WorldProjected, reconcile, setup_projection_assets,
     },
     transform::world_to_render,
 };
 use protocol::{
-    Delta, Dims, Entity, EntityKind, JobState, Material, MessageType, Snapshot, Speed, Tile,
+    Delta, Dims, Entity, EntityKind, Item, JobState, Material, MessageType, Snapshot, Speed, Tile,
     TileChange,
 };
 
@@ -49,7 +51,7 @@ fn reconcile_from_mirror(
     mirror: Res<TestMirror>,
     mut work: ResMut<ProjectionWork>,
     projected: Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
-    terrain: Query<(BevyEntity, &TerrainTile)>,
+    terrain: TerrainQuery,
     assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild_terrain = std::mem::take(&mut work.rebuild_terrain);
@@ -391,5 +393,155 @@ fn world_and_client_local_markers_are_a_structural_partition() {
         local
             .iter(app.world())
             .all(|(_, projected)| projected.is_none())
+    );
+}
+
+#[test]
+fn recorded_camp_snapshot_projects_exactly_five_warm_point_lights() {
+    let entities = (0..4)
+        .map(|id| Entity {
+            id,
+            kind: EntityKind::Torch,
+            pos: [60 + id as i32, 64, 9],
+            state: JobState::Idle,
+            light: Some(protocol::LightKind::Torch),
+        })
+        .chain(std::iter::once(Entity {
+            id: 4,
+            kind: EntityKind::Campfire,
+            pos: [64, 64, 9],
+            state: JobState::Idle,
+            light: Some(protocol::LightKind::Campfire),
+        }))
+        .chain(std::iter::once(Entity {
+            id: 5,
+            kind: EntityKind::Dwarf,
+            pos: [64, 65, 9],
+            state: JobState::Idle,
+            light: None,
+        }))
+        .collect();
+    let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], entities));
+
+    app.update();
+
+    let lights = app
+        .world_mut()
+        .query::<&PointLight>()
+        .iter(app.world())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lights.len(),
+        5,
+        "only wire-declared emitters receive lights"
+    );
+    assert!(lights.iter().all(|light| {
+        let channels = light.color.to_srgba().to_u8_array_no_alpha();
+        channels[0] > channels[2]
+    }));
+}
+
+#[test]
+fn snapshot_item_receives_a_render_mesh() {
+    let mut snapshot = snapshot(vec![Tile::Empty, Tile::Empty], Vec::new());
+    snapshot.items = vec![Item {
+        id: 42,
+        pos: [1, 0, 0],
+    }];
+    let mut app = headless_app(snapshot);
+
+    app.update();
+
+    let item = app
+        .world_mut()
+        .query::<(&WorldProjected, &ProjectedItem, Option<&Mesh3d>)>()
+        .iter(app.world())
+        .find(|(projected, _, _)| projected.0 == 42)
+        .expect("the snapshot item must be projected");
+    assert_eq!(item.1.0, 42);
+    assert!(item.2.is_some(), "a projected item must carry a mesh");
+}
+
+#[test]
+fn capped_stone_keeps_its_bare_cube_beneath_a_snow_cap() {
+    // A 56-wide world so the tested tile sits at [27, 27, 0], outside the 26-tile world-edge
+    // dissolve. On a small toy every tile is boundary and every colour is correctly sky.
+    const SPAN: usize = 56;
+    let dims = Dims {
+        x: SPAN as u32,
+        y: SPAN as u32,
+        z: 2,
+    };
+    let mut tiles = vec![Tile::Empty; SPAN * SPAN * 2];
+    tiles[27 + 27 * SPAN] = Tile::Solid(Material::Stone);
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
+
+    app.update();
+
+    let handles = app
+        .world_mut()
+        .query::<&MeshMaterial3d<StandardMaterial>>()
+        .iter(app.world())
+        .map(|material| material.0.clone())
+        .collect::<Vec<_>>();
+    let materials = app.world().resource::<Assets<StandardMaterial>>();
+    let mut colors = handles
+        .iter()
+        .map(|handle| {
+            materials
+                .get(handle)
+                .expect("projected materials must be loaded")
+                .base_color
+                .to_srgba()
+                .to_u8_array_no_alpha()
+        })
+        .collect::<Vec<_>>();
+    colors.sort_unstable();
+
+    assert_eq!(colors, vec![[60, 70, 92], [146, 158, 184]]);
+    let caps = app
+        .world_mut()
+        .query::<(&SnowCap, Option<&ClientLocal>)>()
+        .iter(app.world())
+        .map(|(cap, local)| {
+            assert!(
+                local.is_some(),
+                "snow caps belong to the client-local partition"
+            );
+            cap.0
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        caps,
+        vec![[27, 27, 0]],
+        "the capped tile needs one snow slab"
+    );
+}
+
+#[test]
+fn atmosphere_entities_are_client_local_and_never_world_projected() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .init_resource::<Assets<Mesh>>()
+        .init_resource::<Assets<StandardMaterial>>()
+        .init_resource::<Assets<bevy::image::Image>>()
+        .add_systems(bevy::app::Startup, setup_atmosphere);
+    app.update();
+
+    let mut atmosphere =
+        app.world_mut()
+            .query::<(&Atmosphere, Option<&ClientLocal>, Option<&WorldProjected>)>();
+    let entities = atmosphere.iter(app.world()).collect::<Vec<_>>();
+    // Stars + the aurora curtain + snowflakes. Pinned exactly: a count threshold would
+    // tolerate the marker being dropped from a whole class of atmosphere entity.
+    assert_eq!(
+        entities.len(),
+        STAR_COUNT + 1 + SNOWFLAKE_COUNT,
+        "the atmosphere spawn count is pinned"
+    );
+    assert!(
+        entities
+            .iter()
+            .all(|(_, local, projected)| local.is_some() && projected.is_none())
     );
 }

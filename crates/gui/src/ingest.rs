@@ -19,9 +19,10 @@ use bevy::{
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::message::MessageWriter,
     input::ButtonInput,
+    pbr::{DistanceFog, FogFalloff},
     prelude::{
-        Camera3d, Commands, DefaultPlugins, KeyCode, Query, Res, ResMut, Resource, Transform,
-        Without,
+        AmbientLight, Camera3d, ClearColor, Commands, DefaultPlugins, DirectionalLight, KeyCode,
+        PerspectiveProjection, Projection, Query, Res, ResMut, Resource, Transform, Without,
     },
     render::renderer::RenderAdapterInfo,
 };
@@ -29,10 +30,12 @@ use client_core::Mirror;
 use protocol::{Delta, Snapshot};
 
 use crate::{
-    camera::CameraRig,
+    appearance::night_lighting,
+    atmosphere::{aurora_light_transform, fall_snow, setup_atmosphere},
+    camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{CaptureState, capture_after_frames},
     project::{
-        ClientLocal, ProjectionAssets, TerrainTile, WorldProjected, reconcile,
+        ClientLocal, ProjectionAssets, TerrainQuery, TerrainTile, WorldProjected, reconcile,
         setup_projection_assets,
     },
 };
@@ -79,10 +82,7 @@ pub fn run() -> anyhow::Result<()> {
     app.add_plugins(DefaultPlugins)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(FpsOverlayPlugin {
-            config: FpsOverlayConfig {
-                enabled: false,
-                ..Default::default()
-            },
+            config: overlay_config_off(),
         })
         .insert_resource(MirrorResource(mirror))
         .insert_resource(IngestReceiver(Mutex::new(receiver)))
@@ -90,9 +90,16 @@ pub fn run() -> anyhow::Result<()> {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
         })
+        .insert_resource(ClearColor(night_lighting().sky))
         .add_systems(
             Startup,
-            (setup_camera, setup_projection_assets, log_adapter),
+            (
+                setup_camera,
+                setup_night_lighting,
+                setup_projection_assets,
+                setup_atmosphere,
+                log_adapter,
+            ),
         )
         // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
         // still GUI-local, so classify the complete startup scene after all plugin setup.
@@ -103,7 +110,9 @@ pub fn run() -> anyhow::Result<()> {
                 ingest_messages,
                 reconcile_projection,
                 camera_controls,
+                update_fog_from_camera,
                 toggle_overlay,
+                fall_snow,
             ),
         );
     if let Some(capture) = args.capture {
@@ -117,7 +126,18 @@ pub fn run() -> anyhow::Result<()> {
 }
 
 fn force_capture_overlay_off(app: &mut App) {
-    app.world_mut().resource_mut::<FpsOverlayConfig>().enabled = false;
+    let mut config = app.world_mut().resource_mut::<FpsOverlayConfig>();
+    config.enabled = false;
+    config.frame_time_graph_config.enabled = false;
+}
+
+fn overlay_config_off() -> FpsOverlayConfig {
+    let mut config = FpsOverlayConfig {
+        enabled: false,
+        ..Default::default()
+    };
+    config.frame_time_graph_config.enabled = false;
+    config
 }
 
 struct Args {
@@ -166,7 +186,43 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
 
 fn setup_camera(mut commands: Commands) {
     let rig = CameraRig::new([64, 64, 9]);
-    commands.spawn((Camera3d::default(), rig.transform(), rig, ClientLocal));
+    let (fog_start, fog_end) = fog_falloff(rig.distance);
+    commands.spawn((
+        Camera3d::default(),
+        Projection::Perspective(PerspectiveProjection {
+            fov: BOOT_VERTICAL_FOV,
+            ..Default::default()
+        }),
+        rig.transform(),
+        rig,
+        AmbientLight {
+            color: night_lighting().ambient,
+            brightness: night_lighting().ambient_brightness,
+            ..Default::default()
+        },
+        DistanceFog {
+            color: night_lighting().sky,
+            falloff: FogFalloff::Linear {
+                start: fog_start,
+                end: fog_end,
+            },
+            ..Default::default()
+        },
+        ClientLocal,
+    ));
+}
+
+fn setup_night_lighting(mut commands: Commands) {
+    commands.spawn((
+        DirectionalLight {
+            color: night_lighting().directional,
+            illuminance: night_lighting().directional_illuminance,
+            shadow_maps_enabled: true,
+            ..Default::default()
+        },
+        aurora_light_transform(),
+        ClientLocal,
+    ));
 }
 
 fn classify_client_local(
@@ -204,9 +260,38 @@ fn camera_controls(
     }
 }
 
+/// Aerial perspective, measured against the boot framing: the camp reads at depth 71 and the
+/// deepest in-frame terrain at 148, so fog opens just past the camp and saturates just past the
+/// far valley. It is NOT the world-edge treatment — the silhouette starts at depth 86, and fog
+/// tight enough to hide that would erase the valley with it. `rim_level` dissolves the edge.
+///
+/// NOTE: the vehicle comparison still chooses the final edge treatment; this keeps the fog
+/// register valid across the pinned 4-500 zoom clamp.
+pub fn fog_falloff(camera_distance: f32) -> (f32, f32) {
+    (
+        70.0_f32.max(camera_distance - 20.0),
+        210.0_f32.max(camera_distance * 1.7),
+    )
+}
+
+/// The share of a surface's colour replaced by fog at `depth`, for the linear falloff above.
+pub fn fog_fraction(camera_distance: f32, depth: f32) -> f32 {
+    let (start, end) = fog_falloff(camera_distance);
+    ((depth - start) / (end - start)).clamp(0.0, 1.0)
+}
+
+fn update_fog_from_camera(mut cameras: Query<(&CameraRig, &mut DistanceFog)>) {
+    for (rig, mut fog) in &mut cameras {
+        let (start, end) = fog_falloff(rig.distance);
+        fog.falloff = FogFalloff::Linear { start, end };
+    }
+}
+
 fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut config: ResMut<FpsOverlayConfig>) {
     if keys.just_pressed(KeyCode::F3) {
-        config.enabled = !config.enabled;
+        let enabled = !config.enabled;
+        config.enabled = enabled;
+        config.frame_time_graph_config.enabled = enabled;
     }
 }
 
@@ -260,7 +345,7 @@ fn reconcile_projection(
     mirror: Res<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
     projected: Query<(bevy::prelude::Entity, &WorldProjected), Without<TerrainTile>>,
-    terrain: Query<(bevy::prelude::Entity, &TerrainTile)>,
+    terrain: TerrainQuery,
     assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild = std::mem::take(&mut work.snapshot);
@@ -345,21 +430,30 @@ mod tests {
 
     use super::{
         ClientLocal, IngestReceiver, MirrorResource, ProjectionWork, WireMessage,
-        classify_client_local, force_capture_overlay_off, ingest_messages,
+        classify_client_local, fog_falloff, fog_fraction, force_capture_overlay_off,
+        ingest_messages,
     };
     use crate::project::WorldProjected;
 
     #[test]
     fn capture_forces_the_frame_time_overlay_off() {
         let mut app = App::new();
-        app.insert_resource(FpsOverlayConfig {
+        let mut overlay = FpsOverlayConfig {
             enabled: true,
             ..Default::default()
-        });
+        };
+        overlay.frame_time_graph_config.enabled = true;
+        app.insert_resource(overlay);
 
         force_capture_overlay_off(&mut app);
 
         assert!(!app.world().resource::<FpsOverlayConfig>().enabled);
+        assert!(
+            !app.world()
+                .resource::<FpsOverlayConfig>()
+                .frame_time_graph_config
+                .enabled
+        );
     }
 
     #[test]
@@ -373,6 +467,44 @@ mod tests {
             ])
             .is_err(),
             "a zero-frame capture must be rejected before opening a socket"
+        );
+    }
+
+    #[test]
+    fn fog_range_tracks_the_camera_without_erasing_the_far_edge() {
+        assert_eq!(fog_falloff(4.0), (70.0, 210.0));
+        assert_eq!(fog_falloff(90.0), (70.0, 210.0));
+        assert_eq!(fog_falloff(500.0), (480.0, 850.0));
+
+        // Depths measured off the ROUND-8 boot framing (skyline moved to 24%): camp 60,
+        // nearest skyline 80, deepest in-frame terrain 138. Assert the FRACTION, so a range
+        // that technically "ends later than the world" but greys the valley still fails.
+        const BOOT: f32 = 90.0;
+        assert_eq!(
+            fog_fraction(BOOT, 60.0),
+            0.0,
+            "the camp must sit completely clear of the fog"
+        );
+        let skyline = fog_fraction(BOOT, 80.0);
+        assert!(
+            (0.03..0.30).contains(&skyline),
+            "the near skyline needs air without being erased; {skyline}"
+        );
+        // A BAND, not a floor: at 0.94 fogged (the round-6 range) the ridge vanished into the
+        // sky and the apparent horizon dropped — but the aurora is supposed to BACKLIGHT the
+        // skyline (UX-DR12/5.1), which needs a visible silhouette. The world edge belongs to
+        // the rim dissolve now, not to fog.
+        let far = fog_fraction(BOOT, 138.0);
+        assert!(
+            (0.35..0.70).contains(&far),
+            "the far valley must read as distance yet keep its backlit silhouette; {far}"
+        );
+
+        // At full vista the world must survive: the whole map inside one fog range would be
+        // the flat sky-coloured rectangle the review found at the fixed range.
+        assert!(
+            fog_fraction(500.0, 500.0) <= 0.10,
+            "the vista must not fog out the world it is meant to show"
         );
     }
 

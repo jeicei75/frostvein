@@ -2,12 +2,19 @@ use std::collections::BTreeSet;
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, Query, ResMut, Resource, StandardMaterial, Transform, Without,
+    MeshMaterial3d, Or, PointLight, Query, ResMut, Resource, StandardMaterial, Transform, Vec3,
+    With, Without,
 };
 use client_core::Mirror;
-use protocol::{Dims, Tile};
+use protocol::{Dims, EntityKind, Material, Tile};
 
-use crate::transform::world_to_render;
+use crate::{
+    appearance::{
+        RIM_LEVELS, entity_appearance, foliage_snow_color, light_properties, material_color,
+        rim_dissolved_color, snow_cap_color,
+    },
+    transform::world_to_render,
+};
 
 const NEIGHBOURS: [[i32; 3]; 6] = [
     [-1, 0, 0],
@@ -30,12 +37,81 @@ pub struct ClientLocal;
 pub struct TerrainTile(pub [i32; 3]);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnowCap(pub [i32; 3]);
+
+pub type TerrainQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        BevyEntity,
+        Option<&'static TerrainTile>,
+        Option<&'static SnowCap>,
+    ),
+    Or<(With<TerrainTile>, With<SnowCap>)>,
+>;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedItem(pub u32);
+
+/// The terrain surfaces that get their own material, including the two presentation-only ones.
+#[derive(Debug, Clone, Copy)]
+enum TerrainSlot {
+    Stone,
+    Soil,
+    Ice,
+    Snow,
+    TreeTrunk,
+    TreeFoliage,
+    FoliageCrown,
+    SnowCap,
+}
+
+const TERRAIN_SLOTS: [TerrainSlot; 8] = [
+    TerrainSlot::Stone,
+    TerrainSlot::Soil,
+    TerrainSlot::Ice,
+    TerrainSlot::Snow,
+    TerrainSlot::TreeTrunk,
+    TerrainSlot::TreeFoliage,
+    TerrainSlot::FoliageCrown,
+    TerrainSlot::SnowCap,
+];
+
+impl TerrainSlot {
+    fn base_color(self) -> bevy::prelude::Color {
+        match self {
+            TerrainSlot::Stone => material_color(Material::Stone),
+            TerrainSlot::Soil => material_color(Material::Soil),
+            TerrainSlot::Ice => material_color(Material::Ice),
+            TerrainSlot::Snow => material_color(Material::Snow),
+            TerrainSlot::TreeTrunk => material_color(Material::TreeTrunk),
+            TerrainSlot::TreeFoliage => material_color(Material::TreeFoliage),
+            TerrainSlot::FoliageCrown => foliage_snow_color(),
+            TerrainSlot::SnowCap => snow_cap_color(),
+        }
+    }
+
+    fn of(material: Material) -> Self {
+        match material {
+            Material::Stone => TerrainSlot::Stone,
+            Material::Soil => TerrainSlot::Soil,
+            Material::Ice => TerrainSlot::Ice,
+            Material::Snow => TerrainSlot::Snow,
+            Material::TreeTrunk => TerrainSlot::TreeTrunk,
+            Material::TreeFoliage => TerrainSlot::TreeFoliage,
+        }
+    }
+}
 
 #[derive(Resource)]
 pub struct ProjectionAssets {
     cube: Handle<Mesh>,
-    materials: Vec<Handle<StandardMaterial>>,
+    snow_cap_mesh: Handle<Mesh>,
+    /// One handle per (surface, rim step); see `rim_level`.
+    terrain: [[Handle<StandardMaterial>; RIM_LEVELS]; TERRAIN_SLOTS.len()],
+    dwarf: Handle<StandardMaterial>,
+    torch: Handle<StandardMaterial>,
+    campfire: Handle<StandardMaterial>,
 }
 
 pub fn setup_projection_assets(
@@ -44,12 +120,61 @@ pub fn setup_projection_assets(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
-    // Eight deliberately separate grey materials preserve batching by material while
-    // leaving palette and light appearance to story 5.4.
-    let materials = (0..8)
-        .map(|_| materials.add(StandardMaterial::default()))
-        .collect();
-    commands.insert_resource(ProjectionAssets { cube, materials });
+    let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
+    let terrain = TERRAIN_SLOTS.map(|slot| {
+        std::array::from_fn(|level| {
+            materials.add(terrain_standard_material(rim_dissolved_color(
+                slot.base_color(),
+                level,
+            )))
+        })
+    });
+    commands.insert_resource(ProjectionAssets {
+        cube,
+        snow_cap_mesh,
+        terrain,
+        dwarf: materials.add(entity_standard_material(EntityKind::Dwarf)),
+        torch: materials.add(entity_standard_material(EntityKind::Torch)),
+        campfire: materials.add(entity_standard_material(EntityKind::Campfire)),
+    });
+}
+
+fn terrain_standard_material(base_color: bevy::prelude::Color) -> StandardMaterial {
+    StandardMaterial {
+        base_color,
+        perceptual_roughness: 0.9,
+        ..Default::default()
+    }
+}
+
+fn entity_standard_material(kind: EntityKind) -> StandardMaterial {
+    let mut material = StandardMaterial {
+        base_color: entity_appearance(kind).color,
+        perceptual_roughness: 0.75,
+        ..Default::default()
+    };
+    if let Some(light) = entity_light_kind(kind) {
+        material.emissive = light_properties(light).color.to_linear();
+    }
+    material
+}
+
+fn entity_light_kind(kind: EntityKind) -> Option<protocol::LightKind> {
+    match kind {
+        EntityKind::Dwarf => None,
+        EntityKind::Torch => Some(protocol::LightKind::Torch),
+        EntityKind::Campfire => Some(protocol::LightKind::Campfire),
+    }
+}
+
+fn point_light(kind: protocol::LightKind) -> PointLight {
+    let properties = light_properties(kind);
+    PointLight {
+        color: properties.color,
+        intensity: properties.intensity,
+        range: properties.range,
+        ..Default::default()
+    }
 }
 
 pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
@@ -74,27 +199,32 @@ pub fn reconcile(
     rebuild_terrain: bool,
     dirty_tiles: &[[i32; 3]],
     projected: &Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
-    terrain: &Query<(BevyEntity, &TerrainTile)>,
+    terrain: &TerrainQuery,
     assets: Option<&ProjectionAssets>,
 ) {
     if rebuild_terrain {
-        for (entity, _) in terrain.iter() {
+        for (entity, _, _) in terrain.iter() {
             commands.entity(entity).despawn();
         }
         let positions = terrain_positions(mirror);
         // The draw-set oracle instrument: the shipped seed must report 53,365 (AC13).
         println!("projected {} terrain cubes", positions.len());
         for position in positions {
-            let mut entity = commands.spawn((
-                WorldProjected(terrain_id(position, mirror.dims())),
-                TerrainTile(position),
-                Transform::from_translation(world_to_render(position)),
-            ));
+            let entity = commands
+                .spawn((
+                    WorldProjected(terrain_id(position, mirror.dims())),
+                    TerrainTile(position),
+                    terrain_transform(mirror, position),
+                ))
+                .id();
             if let Some(assets) = assets {
-                entity.insert((
+                commands.entity(entity).insert((
                     Mesh3d(assets.cube.clone()),
-                    MeshMaterial3d(assets.materials[terrain_material(mirror, position)].clone()),
+                    MeshMaterial3d(assets.terrain_material(mirror, position)),
                 ));
+                if has_snow_cap(mirror, position) {
+                    spawn_snow_cap(commands, assets, mirror, position);
+                }
             }
         }
     } else {
@@ -110,22 +240,29 @@ pub fn reconcile(
             }
         }
         for position in affected {
-            for (entity, _) in terrain.iter().filter(|(_, tile)| tile.0 == position) {
-                commands.entity(entity).despawn();
+            for (entity, tile, cap) in terrain.iter() {
+                if tile.is_some_and(|tile| tile.0 == position)
+                    || cap.is_some_and(|cap| cap.0 == position)
+                {
+                    commands.entity(entity).despawn();
+                }
             }
             if is_exposed(mirror, position) {
-                let mut entity = commands.spawn((
-                    WorldProjected(terrain_id(position, mirror.dims())),
-                    TerrainTile(position),
-                    Transform::from_translation(world_to_render(position)),
-                ));
+                let entity = commands
+                    .spawn((
+                        WorldProjected(terrain_id(position, mirror.dims())),
+                        TerrainTile(position),
+                        terrain_transform(mirror, position),
+                    ))
+                    .id();
                 if let Some(assets) = assets {
-                    entity.insert((
+                    commands.entity(entity).insert((
                         Mesh3d(assets.cube.clone()),
-                        MeshMaterial3d(
-                            assets.materials[terrain_material(mirror, position)].clone(),
-                        ),
+                        MeshMaterial3d(assets.terrain_material(mirror, position)),
                     ));
+                    if has_snow_cap(mirror, position) {
+                        spawn_snow_cap(commands, assets, mirror, position);
+                    }
                 }
             }
         }
@@ -133,23 +270,31 @@ pub fn reconcile(
 
     let mut wanted: std::collections::BTreeMap<_, _> = mirror
         .entities()
-        .map(|entity| (entity.id, entity.pos))
+        .map(|entity| (entity.id, (entity.pos, Some(*entity))))
         .collect();
     let item_ids: std::collections::BTreeSet<_> = mirror.items().map(|item| item.id).collect();
-    wanted.extend(mirror.items().map(|item| (item.id, item.pos)));
+    wanted.extend(mirror.items().map(|item| (item.id, (item.pos, None))));
     for (bevy_entity, marker) in projected.iter() {
         if !terrain.get(bevy_entity).is_ok() && !wanted.contains_key(&marker.0) {
             commands.entity(bevy_entity).despawn();
         }
     }
-    for (id, position) in wanted {
+    for (id, (position, mirror_entity)) in wanted {
         // NOTE: terrain and simulation entities retain the same marker component and
         // numeric range. Keep this query filtered to prevent a terrain id colliding
         // with a simulation id until a story needs separate marker types.
         if let Some((bevy_entity, _)) = projected.iter().find(|(_, marker)| marker.0 == id) {
-            commands
-                .entity(bevy_entity)
-                .insert(Transform::from_translation(world_to_render(position)));
+            let mut transform = Transform::from_translation(world_to_render(position));
+            if let Some(mirror_entity) = mirror_entity {
+                transform.scale =
+                    bevy::prelude::Vec3::splat(entity_appearance(mirror_entity.kind).scale);
+            }
+            commands.entity(bevy_entity).insert(transform);
+            if let Some(light) = mirror_entity.and_then(|entity| entity.light) {
+                commands.entity(bevy_entity).insert(point_light(light));
+            } else {
+                commands.entity(bevy_entity).remove::<PointLight>();
+            }
         } else {
             let mut entity = commands.spawn((
                 WorldProjected(id),
@@ -159,25 +304,150 @@ pub fn reconcile(
                 entity.insert(ProjectedItem(id));
             }
             if let Some(assets) = assets {
-                entity.insert((
-                    Mesh3d(assets.cube.clone()),
-                    MeshMaterial3d(assets.materials[0].clone()),
-                ));
+                if let Some(mirror_entity) = mirror_entity {
+                    let appearance = entity_appearance(mirror_entity.kind);
+                    entity.insert((
+                        Mesh3d(assets.cube.clone()),
+                        MeshMaterial3d(assets.entity_material(mirror_entity.kind)),
+                        Transform::from_translation(world_to_render(position))
+                            .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
+                    ));
+                    if let Some(light) = mirror_entity.light {
+                        entity.insert(point_light(light));
+                    }
+                } else if item_ids.contains(&id) {
+                    entity.insert((
+                        Mesh3d(assets.cube.clone()),
+                        MeshMaterial3d(assets.slot(TerrainSlot::Stone, 0)),
+                    ));
+                }
             }
         }
     }
 }
 
-fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> usize {
+fn terrain_material(mirror: &Mirror, position: [i32; 3]) -> Material {
     match mirror.tile(position) {
-        Some(Tile::Solid(protocol::Material::Stone)) => 0,
-        Some(Tile::Solid(protocol::Material::Soil)) => 1,
-        Some(Tile::Solid(protocol::Material::Ice)) => 2,
-        Some(Tile::Solid(protocol::Material::Snow)) => 3,
-        Some(Tile::Solid(protocol::Material::TreeTrunk)) => 4,
-        Some(Tile::Solid(protocol::Material::TreeFoliage)) => 5,
-        Some(Tile::Ramp(_)) => 6,
-        Some(Tile::Empty) | None => 7,
+        Some(Tile::Solid(material) | Tile::Ramp(material)) => material,
+        Some(Tile::Empty) | None => Material::Stone,
+    }
+}
+
+fn terrain_transform(mirror: &Mirror, position: [i32; 3]) -> Transform {
+    Transform::from_translation(world_to_render(position))
+        .with_scale(Vec3::splat(foliage_scale(mirror, position)))
+}
+
+/// Keeps cube foliage readable as sparse spruce branches instead of a solid square canopy.
+pub fn foliage_scale(mirror: &Mirror, position: [i32; 3]) -> f32 {
+    if terrain_material(mirror, position) != Material::TreeFoliage {
+        return 1.0;
+    }
+    let foliage_above = (1..=2)
+        .take_while(|offset| {
+            matches!(
+                mirror.tile([position[0], position[1], position[2] + offset]),
+                Some(Tile::Solid(Material::TreeFoliage))
+            )
+        })
+        .count();
+    // Trimmed at round 7 — full-scale crowns made the boot4 foreground read as clutter.
+    match foliage_above {
+        0 => 0.62,
+        1 => 0.78,
+        _ => 0.95,
+    }
+}
+
+fn spawn_snow_cap(
+    commands: &mut Commands,
+    assets: &ProjectionAssets,
+    mirror: &Mirror,
+    position: [i32; 3],
+) {
+    commands.spawn((
+        SnowCap(position),
+        ClientLocal,
+        Mesh3d(assets.snow_cap_mesh.clone()),
+        MeshMaterial3d(assets.slot(TerrainSlot::SnowCap, rim_level(position, mirror.dims()))),
+        Transform::from_translation(world_to_render(position) + Vec3::Y * 0.54),
+    ));
+}
+
+/// How far into the world-edge dissolve a tile sits: 0 for the interior, `RIM_LEVELS - 1` at
+/// the boundary itself. The whole visible skyline at the boot framing IS the map boundary
+/// (measured: silhouette depths 86-145 units against a camp at 71), so distance fog tight
+/// enough to hide it also erases the valley. Keying the dissolve to world position instead of
+/// camera depth removes the edge at every zoom without touching the interior.
+pub fn rim_level(position: [i32; 3], dims: Dims) -> usize {
+    let to_edge = position[0]
+        .min(dims.x as i32 - 1 - position[0])
+        .min(position[1])
+        .min(dims.y as i32 - 1 - position[1])
+        .max(0);
+    if to_edge >= RIM_WIDTH {
+        return 0;
+    }
+    // Quadratic ease: the dissolve stays subtle through its inner half and commits to the sky
+    // only near the boundary. The linear 5-step/10-tile ramp read as a hard band on the boot4
+    // vehicle capture (Wolf: "falloff to sky is too sharp").
+    let steps = (RIM_LEVELS - 1) as i32;
+    let inward = RIM_WIDTH - to_edge;
+    ((inward * inward * steps) / (RIM_WIDTH * RIM_WIDTH)).clamp(0, steps) as usize
+}
+
+/// How many tiles inward the dissolve reaches.
+pub const RIM_WIDTH: i32 = 26;
+
+/// An exposed spruce crown catches snow light. This is a MATERIAL swap, not a terrain cap:
+/// capping foliage puts a bright slab on every ground-level skirt tile and buries the landform.
+pub fn has_snow_laden_crown(mirror: &Mirror, position: [i32; 3]) -> bool {
+    terrain_material_at(mirror, position) == Some(Material::TreeFoliage)
+        && !matches!(
+            mirror.tile([position[0], position[1], position[2] + 1]),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+}
+
+/// The material actually present, distinguishing air from the `terrain_material` fallback.
+fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> {
+    match mirror.tile(position) {
+        Some(Tile::Solid(material) | Tile::Ramp(material)) => Some(material),
+        Some(Tile::Empty) | None => None,
+    }
+}
+
+/// The cap is presentation-only: wire terrain remains its original material.
+pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
+    matches!(
+        mirror.tile(position),
+        Some(Tile::Solid(material) | Tile::Ramp(material))
+            if material != Material::Ice && material != Material::TreeFoliage
+    ) && !matches!(
+        mirror.tile([position[0], position[1], position[2] + 1]),
+        Some(Tile::Solid(_) | Tile::Ramp(_))
+    )
+}
+
+impl ProjectionAssets {
+    fn slot(&self, slot: TerrainSlot, level: usize) -> Handle<StandardMaterial> {
+        self.terrain[slot as usize][level.min(RIM_LEVELS - 1)].clone()
+    }
+
+    fn terrain_material(&self, mirror: &Mirror, position: [i32; 3]) -> Handle<StandardMaterial> {
+        let level = rim_level(position, mirror.dims());
+        if has_snow_laden_crown(mirror, position) {
+            return self.slot(TerrainSlot::FoliageCrown, level);
+        }
+        self.slot(TerrainSlot::of(terrain_material(mirror, position)), level)
+    }
+
+    fn entity_material(&self, kind: EntityKind) -> Handle<StandardMaterial> {
+        match kind {
+            EntityKind::Dwarf => self.dwarf.clone(),
+            EntityKind::Torch => self.torch.clone(),
+            EntityKind::Campfire => self.campfire.clone(),
+        }
     }
 }
 
@@ -261,7 +531,10 @@ mod tests {
             is_exposed(&ramp_edge, [0, 0, 0]),
             "a boundary ramp belongs to the draw set"
         );
-        assert_eq!(terrain_material(&ramp_edge, [0, 0, 0]), 6);
+        assert_eq!(
+            terrain_material(&ramp_edge, [0, 0, 0]),
+            protocol::Material::Ice
+        );
         let mut tiles = vec![Tile::Solid(protocol::Material::Ice); 27];
         tiles[12] = Tile::Ramp(protocol::Material::Ice); // [0, 1, 1], a face neighbour of the centre
         let enclosed = Mirror::from_snapshot(Snapshot {
@@ -279,6 +552,185 @@ mod tests {
         assert!(
             !is_exposed(&enclosed, [1, 1, 1]),
             "a ramp neighbour occludes like a solid"
+        );
+    }
+
+    #[test]
+    fn snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world() {
+        let toy = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 10, y: 1, z: 2 },
+            tiles: vec![
+                Tile::Solid(protocol::Material::Ice),
+                Tile::Solid(protocol::Material::Snow),
+                Tile::Solid(protocol::Material::TreeFoliage),
+                Tile::Solid(protocol::Material::Stone),
+                Tile::Solid(protocol::Material::Stone),
+                Tile::Solid(protocol::Material::Soil),
+                Tile::Ramp(protocol::Material::Ice),
+                Tile::Ramp(protocol::Material::Snow),
+                Tile::Ramp(protocol::Material::Stone),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Solid(protocol::Material::Ice),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        assert!(
+            !has_snow_cap(&toy, [0, 0, 0]),
+            "exposed ice keeps its blue top"
+        );
+        assert!(has_snow_cap(&toy, [1, 0, 0]), "snow can settle on snow");
+        assert!(
+            !has_snow_cap(&toy, [2, 0, 0]),
+            "foliage stays dark so ground-level skirts cannot read as snow slabs"
+        );
+        assert!(has_snow_cap(&toy, [4, 0, 0]), "stone can carry snow");
+        assert!(has_snow_cap(&toy, [5, 0, 0]), "soil can carry snow");
+        assert!(
+            !has_snow_cap(&toy, [3, 0, 0]),
+            "covered terrain keeps its dark flank"
+        );
+        assert!(
+            !has_snow_cap(&toy, [6, 0, 0]),
+            "ice ramps keep their blue tops"
+        );
+        assert!(has_snow_cap(&toy, [7, 0, 0]), "snow ramps are capped");
+        assert!(has_snow_cap(&toy, [8, 0, 0]), "stone ramps are capped");
+        assert!(!has_snow_cap(&toy, [9, 0, 0]), "air never receives a cap");
+    }
+
+    #[test]
+    fn foliage_tapers_from_wide_mid_crown_to_narrow_tip_and_skirt() {
+        let spruce = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 6 },
+            tiles: vec![
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+
+        assert_eq!(foliage_scale(&spruce, [0, 0, 0]), 0.62, "skirt");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 2]), 0.95, "mid crown");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 3]), 0.78, "upper crown");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 4]), 0.62, "crown tip");
+    }
+
+    #[test]
+    fn the_world_edge_dissolves_inward_and_leaves_the_interior_alone() {
+        let dims = Dims {
+            x: 128,
+            y: 128,
+            z: 32,
+        };
+        // The interior is untouched, whichever axis you approach from.
+        assert_eq!(rim_level([64, 64, 9], dims), 0);
+        assert_eq!(rim_level([RIM_WIDTH, 64, 9], dims), 0);
+        assert_eq!(rim_level([64, RIM_WIDTH, 9], dims), 0);
+
+        // Every boundary face reaches the last step, or one side of the map keeps a raw edge.
+        for corner in [[0, 64, 9], [127, 64, 9], [64, 0, 9], [64, 127, 9]] {
+            assert_eq!(
+                rim_level(corner, dims),
+                RIM_LEVELS - 1,
+                "the map boundary at {corner:?} must dissolve completely"
+            );
+        }
+
+        // Monotonic inward, so the dissolve reads as a gradient rather than a ring.
+        let walk: Vec<usize> = (0..=RIM_WIDTH)
+            .map(|x| rim_level([x, 64, 9], dims))
+            .collect();
+        for pair in walk.windows(2) {
+            assert!(
+                pair[1] <= pair[0],
+                "the dissolve must ease inward; {walk:?}"
+            );
+        }
+        assert_eq!(walk.first(), Some(&(RIM_LEVELS - 1)));
+        assert_eq!(walk.last(), Some(&0));
+
+        // Eased, not linear: at half depth the dissolve must still be gentle, or the ramp
+        // reads as a hard band the way the linear version did on the boot4 capture.
+        let halfway = rim_level([RIM_WIDTH / 2, 64, 9], dims);
+        assert!(
+            halfway <= (RIM_LEVELS - 1) / 3,
+            "the inner half of the rim must stay subtle; level {halfway} at half depth"
+        );
+    }
+
+    /// Wolf's ruling, review-patch round 5: trees read as dark clumps because the approved
+    /// artifact carries snow on its spruce layer tops and cube foliage had no equivalent. This
+    /// is a MATERIAL choice on the exposed crown, deliberately not a terrain cap — capping
+    /// foliage was round 3's defect (it buried the landform under ~9,500 bright slabs).
+    #[test]
+    fn only_the_exposed_crown_of_a_spruce_catches_snow_light() {
+        let spruce = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 3 },
+            tiles: vec![
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::Snow),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+
+        assert!(
+            has_snow_laden_crown(&spruce, [0, 0, 1]),
+            "the topmost exposed foliage cube catches the snow light"
+        );
+        assert!(
+            !has_snow_laden_crown(&spruce, [0, 0, 0]),
+            "foliage with foliage above it stays dark inside the crown"
+        );
+        assert!(
+            !has_snow_laden_crown(&spruce, [1, 0, 0]),
+            "snow terrain is not foliage and keeps the terrain cap path"
+        );
+        assert!(
+            !has_snow_laden_crown(&spruce, [0, 0, 2]),
+            "air never catches snow"
+        );
+        // The crown must not ALSO take a terrain cap — that combination was round 3's defect.
+        assert!(
+            !has_snow_cap(&spruce, [0, 0, 1]),
+            "a snow-laden crown is a material, never a terrain slab"
         );
     }
 }
