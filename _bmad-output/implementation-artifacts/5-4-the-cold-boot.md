@@ -1179,9 +1179,10 @@ gpt-5.6-terra
     the flakes inside the boot frustum, every camp-adjacent flake (≤20 units) in frame, plus
     the round-6 desync assertions at the new count. Sabotage: radius ballooned to 200 dies on
     the frustum-half assertion.
-  - **Sabotage table: 40 mutations.** Dry anchor-check found five staled by this round's edits
-    (taper, cap colour, crown colour, fog end, ambient brightness) — all repaired before any
-    run, seconds instead of a wasted 15-minute cycle.
+  - **Sabotage table: 40 mutations, ALL KILLED** on a clean standalone run from the committed
+    tree (exit 0). Dry anchor-check found five staled by this round's edits (taper, cap
+    colour, crown colour, fog end, ambient brightness) — all repaired before any run, seconds
+    instead of a wasted 15-minute cycle. `gui.exe` rebuilt at round-7 HEAD 07:40.
 
 - **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
   working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
