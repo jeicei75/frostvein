@@ -117,9 +117,9 @@ PY
 mutation "stars become one uniform size" gui star_sizes_vary_so_the_shell_never_reads_as_a_lattice <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = '    STAR_SCALE_MIN\n        + (STAR_SCALE_MAX - STAR_SCALE_MIN) * (index as f32 * 0.381_966 + 0.21).fract()\n'
+old = 'STAR_SCALE_MIN + (STAR_SCALE_MAX - STAR_SCALE_MIN) * (index as f32 * 0.381_966 + 0.21).fract()'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    STAR_SCALE_MIN\n'))
+p.write_text(s.replace(old, 'STAR_SCALE_MIN'))
 PY
 
 mutation "boot pitch loses the approved framing" gui boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third <<'PY'
@@ -150,7 +150,7 @@ mutation "atmosphere loses client local marker" gui atmosphere_entities_are_clie
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
 old = '            ClientLocal,\n'
-assert s.count(old) == 3
+assert s.count(old) == 2
 p.write_text(s.replace(old, '', 1))
 PY
 
@@ -266,4 +266,12 @@ p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 old = 'pub const GROUND_LUMINANCE_FLOOR: u8 = 70;'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'pub const GROUND_LUMINANCE_FLOOR: u8 = 1;'))
+PY
+
+mutation "aurora curtain loses client local marker" gui atmosphere_entities_are_client_local_and_never_world_projected <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '        Atmosphere,\n        ClientLocal,\n    ));'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        Atmosphere,\n    ));'))
 PY

@@ -222,11 +222,19 @@ the vehicle. **Never fake the live half.**
         world, drifting down — pure decoration, no sim meaning, sanctioned by NFR5's
         carve-out. Density restrained: it must never obscure the camp read (AC3).
 - [ ] **Task 6 — The world edge** (AC: 11)
-  - [ ] Try at least two candidates cheaply before choosing: `DistanceFog`/`FogFalloff`
+  - [x] Try at least two candidates cheaply before choosing: `DistanceFog`/`FogFalloff`
         (present in `bevy_pbr` 0.19 — one component on the camera, doubles as AC4's "air")
         and darkness falloff at the rim (darken material toward the boundary). Sky-wrap and
         vignette remain on the list if both disappoint. Record what was tried and why the
         winner won — the decision is owed on the record, like 7.1's control mechanism.
+        *(Round 5: both built and measured. **Fog-alone ELIMINATED on arithmetic** — the whole
+        visible skyline is the map boundary at depths 86–145 against a camp at 71, so any fog
+        range that hides it also erases the valley. Fog retained for aerial perspective only.
+        **Rim falloff implemented and leading**: world-space, so it holds at every zoom and
+        yaw. Sky-wrap and vignette not needed. The CHOICE remains Wolf's at the vehicle per
+        AC11's amendment — the box below stays open until that session.)*
+  - [ ] Compare the candidates by eye on the live vehicle and record the winner (AC11's
+        amendment — unmeetable headless, moved here from the AC text).
 - [ ] **Task 7 — The boot framing and the continuum** (AC: 10, 12)
   - [ ] The window opens at the approved artifact's framing: camp in frame, warm light
         visible, no input needed. Camera focus [64,64,9] already aims at the camp; adjust
@@ -745,6 +753,31 @@ gpt-5.6-terra
   binds (`Operation not permitted`); that is environmental and separate from the completed
   outer gate.
 
+- REVIEW-PATCH round 5 RED — D1 framing: adding a camp-x assertion to
+  `boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third` failed with
+  `camp must sit near the approved horizontal anchor; measured 0.22709101`, matching both
+  `boot2.png`'s measured 0.227 and the orchestrator's offline projection model to five
+  digits — the model and production agree, so the fix could be solved rather than tuned.
+- REVIEW-PATCH round 5 RED — D2 aurora: after the reframing, the round-4 test
+  `atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_frustum` failed with
+  `aurora must be visible at the boot framing` (caught by the pre-commit gate, which
+  refused the D1-only commit). D1 and D2 are coupled and landed together.
+- REVIEW-PATCH round 5 RED — D4 light budget: `appearance_tables_pin_the_cold_boot_palette`
+  failed `left: 2500000.0, right: 30000000.0` after the literal oracles were moved to the
+  measured targets and before the production table followed.
+- REVIEW-PATCH round 5 RED — D5 crowns: `only_the_exposed_crown_of_a_spruce_catches_snow_light`
+  failed to compile with `E0425: cannot find function has_snow_laden_crown` before the
+  predicate existed.
+- REVIEW-PATCH round 5 RED — D3 rim: `capped_stone_keeps_its_bare_cube_beneath_a_snow_cap`
+  failed `left: [[5, 12, 28], [5, 12, 28]], right: [[60, 70, 92], [158, 170, 196]]` — the
+  rim dissolve correctly resolved every tile of a 2x1x1 toy world to sky, so the test was
+  rebuilt on a 21-wide world with a genuine interior tile.
+- REVIEW-PATCH round 5 — **the stale-cache trap fired again, on a CLEAN TREE at `b637d29`**:
+  `recorded_camp_snapshot_projects_exactly_five_warm_point_lights` failed `left: 0, right: 5`
+  before a line of round-5 work existed. `cargo clean -p gui` made it 11/11 green with no
+  source change. This is its SECOND sighting — round 3 lost a complete self-gate to the same
+  false positive. It is indistinguishable by eye from the emitter sabotage's signature.
+
 ### Completion Notes List
 
 - Implemented the headless-testable look core: table-driven cold materials, warm wire-driven
@@ -938,6 +971,77 @@ gpt-5.6-terra
      no equivalent — whether trees need their own light-catching treatment is **Wolf's ruling,
      not a dev decision**. `[wolf-live/MED]`
 
+- **REVIEW-PATCH ROUND 5 (2026-08-16, orchestrator implementing DIRECTLY on Wolf's explicit
+  ruling — the delegated-Codex default was set aside for this round to keep the measurement
+  harness in-session and to protect the Codex weekly quota at 37%).** The round's method
+  changed, and that is the point: instead of re-deriving predictions from Bevy's shader model
+  — which mispredicted at round 2 (it forecast snow at ~0.36 sRGB; the capture measured 0.09)
+  — every target was **measured off the two images we already had**, with a pure-Python PNG
+  decoder written for the purpose (no numpy/PIL in the devpod).
+  - **The measurement that drove the round** (median sRGB luminance, frame-centre window
+    x 0.25-0.75, y 0.50-0.90 — the valley floor):
+
+    | region | approved artifact | `boot2.png` | gap |
+    | --- | --- | --- | --- |
+    | valley floor, median | 123.3 | 21.0 | 5.9x sRGB = **~18x linear** |
+    | valley floor, p90 | 183.8 | 46.2 | our brightest ground is darker than their typical |
+    | sky, mean | 10.1 | 11.7 | **already correct** — `ClearColor` was never the problem |
+    | camp window, median | 137.2 | 23.5 | 5.8x |
+    | camp window, p99 | 253.6 | 194.0 | only 1.3x — **the emitters were never the problem** |
+
+    The camp's *peak* being nearly right while its *median* was 5.8x low is the signature of
+    too little fill, not too little torch. D4 was therefore an ambient/directional problem.
+  - **The warm/cold oracle was re-derived, not loosened.** Measuring the approved artifact
+    shows the camp is only **~1.3x** the field in luminance (135.9 vs 104.3) while its R/B
+    goes 0.72 -> 0.97: the read is carried by HUE. The old `warm >= cold * 3.0` floor with no
+    ceiling was satisfiable both by the 1/1000-scale table that shipped black and by a camp
+    blown to white. Replaced by a band (1.2x-6.0x, production lands at 1.77x) plus a chromatic
+    assertion that every light's R/B is at least twice the ambient's.
+  - **D1 was solved offline, not tuned.** An independent projection model reproduced `boot2`'s
+    camp position to five digits (0.22709 measured vs 0.227 modelled), which located the cause
+    exactly: `BOOT_COMPOSITION_OFFSET` carried a **28.6-unit component along the camera's right
+    vector**. Constraining the push to the view plane puts the camp at 0.500 (artifact: 0.48)
+    and the ridge at 0.300 (artifact `HORIZON`: 0.30). The new test asserts the *mechanism* —
+    zero lateral component — not just the screen fraction, so a future yaw change cannot
+    reintroduce the drift silently.
+  - **D3 as recorded is FALSIFIED, and the fix changed accordingly.** Measuring the silhouette
+    column by column: the entire visible skyline at the boot framing **is** the map boundary,
+    at depths **86 to 145**, while the camp sits at depth **71**. Fog tight enough to hide the
+    nearest silhouette point erases the valley with it — "retune `fog_falloff` so the far edge
+    dissolves" is not achievable at this framing. Fog was retuned for aerial perspective only
+    (75/155 at boot), and the edge is now dissolved in **world space**: `rim_level` blends
+    terrain toward the sky over the outermost 10 tiles in 5 quantised steps, which works at
+    every zoom and yaw rather than at one tuned distance. **The draw set is unchanged — the
+    tiles are still drawn, so AC18's 53,365 oracle holds.** This is the "fog skirt" candidate
+    walked to the end and eliminated on arithmetic; per AC11's amendment the final choice is
+    still Wolf's at the vehicle, but fog-alone is now excluded on evidence rather than taste.
+  - **D2's mechanism was replaced, not repositioned.** Three `unlit` + `AlphaMode::Blend`
+    cuboids can only ever be flat rectangles with hard edges. The aurora is now a **ring
+    curtain** (radius 220, 48 segments) sampling a procedurally generated RGBA gradient whose
+    alpha is forced to exactly zero at both strip edges by a `sin(pi v)` term — no silhouette
+    by construction — with low-frequency folds so it does not read as a ribbon. Its top (45)
+    sits below the boot camera's eye height (55), which is AC5's "hugs the horizon rather than
+    hanging overhead" expressed as a testable geometric fact. Stars moved to a shell of 200 at
+    radius 250; **48 land in frame spanning 99% of its width**. Both sky materials set
+    `fog_enabled: false` — at depth ~260 the retuned fog would otherwise erase the entire sky.
+  - **D5 (Wolf's ruling this session): exposed spruce crowns catch snow.** Foliage with nothing
+    solid above takes a `(172, 186, 210)` material matching the artifact's `SPRUCE_SNOW`. A
+    material swap, deliberately not a terrain cap — capping foliage was round 3's defect.
+  - **D6 (Wolf's ruling this session): the value floor is now instrumented.** `--capture` reports
+    and asserts the median ground luminance against a floor of 70 (artifact 123, round-4 capture
+    21). Median, not mean, so blown-out emitter faces cannot carry a black field over the floor.
+    This is the first check in the story that can catch a dark frame without a human looking.
+  - **PROCESS FAILURE, recorded rather than tidied away:** the orchestrator edited the mutation
+    table *while* `mutate.sh` was executing it (bash reads scripts incrementally, so that run's
+    results were void), then ran `git checkout -- crates/` to clear the killed run's leftover
+    sabotage and **destroyed the uncommitted D6 work with it**. Reapplied and committed. The
+    rule this earns: **commit before running mutations**, and never clean a mutation leftover
+    with a tree-wide checkout.
+  - **Still owed and vehicle-only, unchanged:** Tasks 6-9 — the edge comparison by eye, the
+    framing judgement against the artifact, the NFR6 reading (AC14), AC26's cross-compiled
+    capture self-test. Plus AC19, which only Wolf can check. **Rebuild and re-copy `gui.exe`
+    before the next live run** (the 13:24 stale-binary trap).
+
 - **PARKED 2026-08-15 ~19:40 on Wolf's call — resume tomorrow morning.** State at park:
   working tree clean, everything committed, **nothing pushed** (Wolf's hold stands), no background
   job running. Last commit is the record below. `scripts/gate.sh` GREEN and **20/20 mutations
@@ -1018,3 +1122,4 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | REVIEW-PATCH round 5 (orchestrator implementing directly on Wolf's ruling; Codex quota protected). Targets measured off the approved artifact and `boot2.png` with a purpose-written PNG decoder rather than re-derived from the shader model that mispredicted at round 2. D1 camp anchor solved offline and fixed at the mechanism (offset constrained to the camera view plane); D2 aurora rebuilt as a gradient ring curtain with alpha zero at both edges; D3 fog-alone falsified by measurement and replaced with a world-space rim dissolve; D4 light budget raised ~18x from measurement and the contrast oracle re-derived as a band plus a chromatic term. Wolf's two new rulings landed: snow-catching spruce crowns, and a median-ground-luminance floor in the capture instrument. Tasks 6–9 and AC19 remain vehicle-bound and open. |

@@ -148,8 +148,9 @@ mod tests {
     use super::*;
 
     /// Hand-written oracle: a 4x4 frame whose centre window is exactly the four pixels at
-    /// rows 2..4, columns 1..3. Values chosen so the median is a value that appears ONCE, so a
-    /// mean or an off-by-one window cannot produce it by accident.
+    /// rows 2..4, columns 1..3. Values are chosen so the MEAN (112) differs from the MEDIAN
+    /// (100) — the first attempt used 10/90/100/200, where both are 100 and a mean-based
+    /// implementation passed the test unchanged. The sabotage caught it.
     #[test]
     fn the_ground_median_reads_the_valley_floor_and_ignores_the_sky() {
         let sky = [0u8, 0, 0, 255];
@@ -159,7 +160,7 @@ mod tests {
         frame[2 * 4 + 1] = grey(10);
         frame[2 * 4 + 2] = grey(90);
         frame[3 * 4 + 1] = grey(100);
-        frame[3 * 4 + 2] = grey(200);
+        frame[3 * 4 + 2] = grey(250);
 
         assert_eq!(median_ground_luminance(&frame, 4, 4), 100);
         // The sky rows are bright here and must NOT be able to lift the reading.

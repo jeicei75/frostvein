@@ -32,11 +32,13 @@ pub const SNOWFLAKE_SCALE: f32 = 0.28;
 pub const SKY_CENTRE: Vec3 = Vec3::new(63.5, 0.0, -63.5);
 
 /// The aurora is a curtain on a ring around the world, not a billboard: the camera orbits,
-/// so a single flat quad would turn edge-on. Bottom and top are chosen so the curtain spans
-/// the sky wedge this camera can see, and the top stays BELOW the boot camera's eye height —
-/// that is what "hugs the horizon rather than hanging overhead" means in geometry.
-pub const AURORA_RADIUS: f32 = 220.0;
-pub const AURORA_BOTTOM: f32 = -25.0;
+/// so a single flat quad would turn edge-on. The radius must exceed the camera's furthest
+/// horizontal excursion (426 units at the 500 zoom clamp) or the vista swings the camera
+/// OUTSIDE the ring and the curtain crosses in front of the valley. Bottom and top are chosen
+/// so the curtain spans the sky wedge this camera can see while its top stays at or below the
+/// boot eye line — that is "hugs the horizon rather than hanging overhead" in geometry.
+pub const AURORA_RADIUS: f32 = 600.0;
+pub const AURORA_BOTTOM: f32 = -162.0;
 pub const AURORA_TOP: f32 = 45.0;
 const AURORA_SEGMENTS: usize = 48;
 pub const AURORA_TEXTURE_WIDTH: usize = 256;
@@ -44,12 +46,13 @@ pub const AURORA_TEXTURE_HEIGHT: usize = 64;
 /// Peak opacity of the curtain. Well below 1.0 so stars read through it (AC5's translucency).
 const AURORA_PEAK_ALPHA: f32 = 0.55;
 
-pub const STAR_RADIUS: f32 = 250.0;
-pub const STAR_COUNT: usize = 200;
-const STAR_BAND_LOW: f32 = -30.0;
-const STAR_BAND_HIGH: f32 = 110.0;
-const STAR_SCALE_MIN: f32 = 0.55;
-const STAR_SCALE_MAX: f32 = 1.15;
+pub const STAR_RADIUS: f32 = 650.0;
+pub const STAR_COUNT: usize = 300;
+const STAR_BAND_LOW: f32 = -130.0;
+const STAR_BAND_HIGH: f32 = 120.0;
+// Sized for the shell's depth: at 650 units a frame pixel is ~0.75 world units.
+const STAR_SCALE_MIN: f32 = 1.1;
+const STAR_SCALE_MAX: f32 = 3.0;
 /// Golden-angle azimuth stepping scatters the shell without a random source or a stored table.
 const GOLDEN_ANGLE: f32 = 2.399_963_2;
 const GOLDEN_RATIO_FRACT: f32 = 0.618_034;
@@ -262,7 +265,7 @@ pub fn fall_snow(time: Res<Time>, mut flakes: Query<&mut Transform, With<Snowfla
 mod tests {
     use super::{
         AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT, AURORA_TEXTURE_WIDTH, AURORA_TOP,
-        CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_SCALE, STAR_COUNT, aurora_core,
+        CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_SCALE, STAR_COUNT, STAR_RADIUS, aurora_core,
         aurora_curtain_mesh, aurora_gradient_pixels, aurora_light_transform, inside_boot_frustum,
         snowflake_positions, star_positions, star_scale,
     };
@@ -276,12 +279,14 @@ mod tests {
 
     #[test]
     fn the_aurora_curtain_hugs_the_horizon_beyond_the_world() {
-        // AC5 in geometry: the curtain never rises above the camera's own eye line, so it
-        // cannot read as hanging overhead however the ring is sliced.
+        // AC5 in geometry, as an ANGLE rather than a raw height: a height threshold stops
+        // meaning anything once the ring radius changes.
+        let elevation = ((AURORA_TOP - boot_eye_height()) / AURORA_RADIUS)
+            .atan()
+            .to_degrees();
         assert!(
-            AURORA_TOP < boot_eye_height(),
-            "the curtain top ({AURORA_TOP}) must stay below the boot eye ({})",
-            boot_eye_height()
+            elevation <= 10.0,
+            "the curtain must sit on the horizon, not overhead; top is {elevation} deg up"
         );
         // Compile-time: the curtain must clear the skyline it backlights, and the ring must
         // enclose the whole 128-wide footprint or it would cut through terrain.
@@ -290,6 +295,21 @@ mod tests {
         assert!(
             inside_boot_frustum(aurora_core()),
             "the bright core of the curtain must be visible at the boot framing"
+        );
+
+        // The defect this pins: at the 500 zoom clamp the camera orbits 426 units out. A ring
+        // smaller than that puts the camera OUTSIDE it, and the curtain crosses the valley.
+        let mut vista = CameraRig::new([64, 64, 9]);
+        vista.zoom(10_000.0);
+        let eye = vista.transform().translation;
+        let excursion = ((eye.x - SKY_CENTRE.x).powi(2) + (eye.z - SKY_CENTRE.z).powi(2)).sqrt();
+        assert!(
+            excursion < AURORA_RADIUS,
+            "the camera must stay inside the curtain at every zoom; {excursion} vs {AURORA_RADIUS}"
+        );
+        assert!(
+            excursion < STAR_RADIUS,
+            "the camera must stay inside the star shell at every zoom; {excursion} vs {STAR_RADIUS}"
         );
 
         let toward_camp = (CAMP_FOCUS - aurora_core()).normalize();
@@ -409,11 +429,12 @@ mod tests {
         let min = scales.iter().copied().fold(f32::INFINITY, f32::min);
         let max = scales.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         assert!(
-            max - min > 0.25,
+            max - min > 0.6,
             "star scales must actually vary; spread {}",
             max - min
         );
-        assert!(scales.iter().all(|scale| *scale >= 0.5 && *scale <= 1.2));
+        // Literal bounds, sized for the 650-unit shell where a frame pixel is ~0.75 units.
+        assert!(scales.iter().all(|scale| *scale >= 1.1 && *scale <= 3.0));
     }
 
     #[test]
