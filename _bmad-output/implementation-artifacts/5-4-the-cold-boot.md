@@ -247,11 +247,20 @@ the vehicle. **Never fake the live half.**
         + aurora, edges dissolved, silhouette backlit. The zoom clamp (4.0–500.0,
         `camera.rs:32`) already spans both registers. *(Verified across boot3–boot6 sessions;
         closing sign-off given on boot6.)*
-- [ ] **Task 8 — NFR6 on the live vehicle** (AC: 14)
-  - [ ] Read the F3 overlay at working zoom and at full vista with everything lit and
+- [x] **Task 8 — NFR6 on the live vehicle** (AC: 14)
+  - [x] Read the F3 overlay at working zoom and at full vista with everything lit and
         falling. Record both figures labelled `gingerspice / native Windows / NVIDIA
         591.74`. Baseline for regression sense: 146 fps at 5.3's unlit fidelity.
-  - [ ] State plainly in the record that the WSLg figure is still owed and why.
+        *(Wolf, 2026-08-16, round-8 build, full 128x128x32 world, all lights, snowfall:
+        **140–146 fps at working zoom** (occasional dips just under 140), **>135 fps at
+        every zoom and orbit angle including full vista**. AC14's bars — 60 working / 30
+        vista — cleared at 2.3x and 4.5x. Against the 146-fps unlit baseline, the entire
+        cold-boot look costs roughly nothing.)*
+  - [x] State plainly in the record that the WSLg figure is still owed and why.
+        *(Stated again: NFR6 as written names a WSLg-devpod figure that is unmeasurable
+        there — no devpod can open a window (measured, 5.3's envelope finding). The figure
+        above is the proven native-Windows vehicle. The bar-redefinition question stays owed
+        to the Epic 5 retro, recorded, never blurred.)*
 - [ ] **Task 9 — Captures and the inherited AC26 debt** (AC: 16, 17, 18)
   - [ ] Two boot-framing captures at different ticks: range-checks pass (non-black,
         non-uniform, warm pixels > 0), images differ, overlay off. Store the keeper in
@@ -1245,8 +1254,12 @@ gpt-5.6-terra
   differing capture, AC26's cross-compiled self-test, and AC19.
 
 - **AC19 — SIGNED OFF BY WOLF, 2026-08-16, on boot6 live at the vehicle: "wau .. let's ship
-  it .. the game is ready :D".** Wow beat 1 is landed — the reaction the story was built to
-  produce, given unprompted at the sign-off question. The approval followed six live viewing
+  it .. the game is ready :D"** — followed in the next breath by the honest calibration:
+  *"just joking so still work to do but I think we can continue with the rest of the stories
+  to make the wow really happen."* Read together, per the orchestrator's understanding: the
+  boot frame is approved and 5.4 closes; the full wow deepens through the coming stories
+  (6.1's motion and flicker onward). Both quotes kept so the record carries the sign-off at
+  its true strength. The approval followed six live viewing
   sessions (boot2–boot6) with the frame compared against the approved artifact throughout,
   and closes the composition too: the shipped edge treatment is the **world-space rim
   dissolve** (26 tiles, 13 eased levels) with aerial-perspective fog — the AC11 amendment's
@@ -1334,6 +1347,7 @@ gpt-5.6-terra
 | 2026-08-15 | REVIEW-PATCH round 4: numerically matched the approved boot framing, terrain palette, distinct snow-cap material, and sky span; added three sabotage cases. Vehicle-only judgement and Wolf's closing tasks remain open. |
 | 2026-08-15 | REVIEW-PATCH round 4 self-gate: fixed the reported close-zoom camp disappearance by scaling composition below boot distance; all 20 mutations KILLED. |
 | 2026-08-15 | REVIEW-PATCH round 4 final validation: `scripts/gate.sh` GREEN after the self-gate fix; no Tasks 6–9 or Wolf-only closing boxes changed. |
+| 2026-08-16 | Wolf's clarification recorded beside the sign-off (boot frame approved, wow deepens with later stories); NFR6 completed: >135 fps at every zoom/orbit incl. full vista (4.5x the AC14 vista bar). Task 8 closed. Remaining: second capture, AC26 attempt. |
 | 2026-08-16 | **AC19 SIGNED OFF by Wolf on boot6: "wau .. let's ship it". Wow beat 1 landed.** Tasks 6 and 7 closed (rim dissolve is the shipped edge treatment; framing verdict his). Remaining before status → review: full-vista NFR6 reading, second differing capture, AC26 attempt. |
 | 2026-08-16 | boot6 on the fresh round-8 binary: instrument printed ground-median 123 (target 123.3), offline decoder agrees at 123.4; warm pixels 28,455; skyline at 0.19–0.22; 40/40 mutations killed. Value and composition both converged — remaining items are Wolf's closing checklist. |
 | 2026-08-16 | ROUND 8 after Wolf's boot5 session: NFR6 working-zoom 140-146 fps recorded (2.3x AC14 headroom); 53365 oracle confirmed; stale-binary capture detected by cross-checking its printed median (145 = boot4) against boot5's actual 123. Skyline lowered 0.30→0.24 on Wolf's live ruling over the artifact; rim widened to 26 tiles/13 levels; fog and star shell re-derived for the new framing. |
