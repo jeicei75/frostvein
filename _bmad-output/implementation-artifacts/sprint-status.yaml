@@ -150,7 +150,7 @@ development_status:
   # findings predict the composed frame fails the artifact comparison (light scale, atmosphere
   # placement, fog-vs-zoom, ice-hiding cap). 3 decisions ruled, 11 patches left as action
   # items for a fresh patch session, 5 defers. Back to in-progress.
-  5-4-the-cold-boot: review
+  5-4-the-cold-boot: done
   epic-5-retrospective: optional
   epic-6: backlog
   # WOW BEAT 2 — the beat the PRD calls the magic; a client achieving only beat 1 has
