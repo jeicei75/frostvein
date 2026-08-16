@@ -44,8 +44,8 @@ PY
 mutation "snow cap paints stone flanks" gui capped_stone_keeps_its_bare_cube_beneath_a_snow_cap <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    fn terrain_material(&self, mirror: &Mirror, position: [i32; 3]) -> Handle<StandardMaterial> {\n        let material = terrain_material(mirror, position);\n'
-new = '    fn terrain_material(&self, mirror: &Mirror, position: [i32; 3]) -> Handle<StandardMaterial> {\n        if has_snow_cap(mirror, position) {\n            return self.snow.clone();\n        }\n        let material = terrain_material(mirror, position);\n'
+old = '        let level = rim_level(position, mirror.dims());\n'
+new = '        let level = rim_level(position, mirror.dims());\n        if has_snow_cap(mirror, position) {\n            return self.slot(TerrainSlot::Snow, level);\n        }\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, new))
 PY
@@ -61,7 +61,7 @@ PY
 mutation "light budget collapses" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 6_000_000.0,\n'
+old = '            intensity: 72_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 5_000.0,\n'))
 PY
@@ -82,23 +82,44 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    Color::srgb_u8(136, 150, 178)\n'))
 PY
 
-mutation "aurora leaves the boot frustum" gui atmosphere_positions_stay_outside_the_terrain_and_inside_the_boot_frustum <<'PY'
+mutation "aurora climbs overhead" gui the_aurora_curtain_hugs_the_horizon_beyond_the_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = 'Vec3::new(64.0, 31.0, -146.0)'
+old = 'pub const AURORA_TOP: f32 = 45.0;'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'Vec3::new(64.0, 60.0, -146.0)'))
+p.write_text(s.replace(old, 'pub const AURORA_TOP: f32 = 140.0;'))
 PY
 
-mutation "stars collapse to a thin horizon line" gui stars_span_the_boot_sky_instead_of_a_thin_horizon_line <<'PY'
+mutation "aurora curtain regains a hard edge" gui the_aurora_gradient_fades_to_nothing_at_both_edges <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-start = s.index('pub fn star_positions() -> [Vec3; 12] {')
-end = s.index('\n}\n\npub fn snowflake_positions', start) + 2
-replacement = '''pub fn star_positions() -> [Vec3; 12] {
-    [Vec3::new(64.0, 30.0, -140.0); 12]
-}'''
-p.write_text(s[:start] + replacement + s[end:])
+old = '            let edges = (v * std::f32::consts::PI).sin();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let edges = 1.0;\n'))
+PY
+
+mutation "aurora ring collapses off the world" gui the_curtain_mesh_is_a_closed_ring_at_the_aurora_radius <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '        let x = SKY_CENTRE.x + AURORA_RADIUS * angle.cos();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let x = SKY_CENTRE.x + AURORA_RADIUS * 0.5 * angle.cos();\n'))
+PY
+
+mutation "stars collapse to a single point" gui the_star_shell_fills_the_visible_sky_wedge <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '        let azimuth = index as f32 * GOLDEN_ANGLE;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let azimuth = 3.9_f32;\n'))
+PY
+
+mutation "stars become one uniform size" gui star_sizes_vary_so_the_shell_never_reads_as_a_lattice <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '    STAR_SCALE_MIN\n        + (STAR_SCALE_MAX - STAR_SCALE_MIN) * (index as f32 * 0.381_966 + 0.21).fract()\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    STAR_SCALE_MIN\n'))
 PY
 
 mutation "boot pitch loses the approved framing" gui boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third <<'PY'
@@ -144,9 +165,9 @@ PY
 mutation "fog stops following zoom" gui fog_range_tracks_the_camera_without_erasing_the_far_edge <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        190.0_f32.max(camera_distance * 1.8),\n'
+old = '        155.0_f32.max(camera_distance * 1.7),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        190.0,\n'))
+p.write_text(s.replace(old, '        155.0,\n'))
 PY
 
 mutation "capture keeps its frame graph" gui capture_forces_the_frame_time_overlay_off <<'PY'
@@ -164,4 +185,85 @@ p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '                    if let Some(light) = mirror_entity.light {\n                        entity.insert(point_light(light));\n                    }\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    let _ = mirror_entity.light;\n'))
+PY
+
+mutation "boot composition drifts sideways again" gui boot_composition_never_pushes_along_the_camera_right_vector <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
+old = '    boot_horizontal_forward() * BOOT_COMPOSITION_FORWARD + Vec3::Y * BOOT_COMPOSITION_LIFT\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    Vec3::new(0.0, BOOT_COMPOSITION_LIFT, -37.42)\n'))
+PY
+
+mutation "world edge stops dissolving" gui the_world_edge_dissolves_inward_and_leaves_the_interior_alone <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    if to_edge >= RIM_WIDTH {\n        return 0;\n    }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if true {\n        return 0;\n    }\n'))
+PY
+
+mutation "rim dissolve never reaches the sky" gui the_rim_dissolve_runs_from_the_untouched_material_to_the_bare_sky <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '    let blend = (level.min(RIM_LEVELS - 1) as f32 / steps).clamp(0.0, 1.0);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let blend = (level.min(RIM_LEVELS - 1) as f32 / steps).clamp(0.0, 0.5);\n'))
+PY
+
+mutation "spruce crowns stop catching snow" gui only_the_exposed_crown_of_a_spruce_catches_snow_light <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    terrain_material_at(mirror, position) == Some(Material::TreeFoliage)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    false && terrain_material_at(mirror, position) == Some(Material::TreeFoliage)\n'))
+PY
+
+mutation "crown colour matches bare foliage" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = 'pub fn foliage_snow_color() -> Color {\n    Color::srgb_u8(172, 186, 210)\n}'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'pub fn foliage_snow_color() -> Color {\n    Color::srgb_u8(55, 73, 84)\n}'))
+PY
+
+mutation "light budget slides back to the dark table" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        ambient_brightness: 30_000.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        ambient_brightness: 2_000.0,\n'))
+PY
+
+mutation "campfire blows the camp to white" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '            intensity: 72_000_000.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            intensity: 7_200_000_000.0,\n'))
+PY
+
+mutation "cold fill turns warm" gui the_cold_fill_is_chromatically_cold_and_the_camp_is_chromatically_warm <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        ambient: Color::srgb_u8(47, 76, 104),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        ambient: Color::srgb_u8(104, 76, 47),\n'))
+PY
+
+mutation "ground value check reads the mean" gui the_ground_median_reads_the_valley_floor_and_ignores_the_sky <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '    samples.sort_unstable();\n    samples[samples.len() / 2]\n'
+assert s.count(old) == 1
+new = '    (samples.iter().map(|v| *v as u32).sum::<u32>() / samples.len() as u32) as u8\n'
+p.write_text(s.replace(old, new))
+PY
+
+mutation "ground value floor drops to nothing" gui a_black_field_fails_the_value_floor_that_a_lit_one_passes <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = 'pub const GROUND_LUMINANCE_FLOOR: u8 = 70;'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'pub const GROUND_LUMINANCE_FLOOR: u8 = 1;'))
 PY
