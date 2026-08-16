@@ -351,10 +351,11 @@ pub fn foliage_scale(mirror: &Mirror, position: [i32; 3]) -> f32 {
             )
         })
         .count();
+    // Trimmed at round 7 — full-scale crowns made the boot4 foreground read as clutter.
     match foliage_above {
-        0 => 0.72,
-        1 => 0.86,
-        _ => 1.0,
+        0 => 0.62,
+        1 => 0.78,
+        _ => 0.95,
     }
 }
 
@@ -635,10 +636,10 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(foliage_scale(&spruce, [0, 0, 0]), 0.72, "skirt");
-        assert_eq!(foliage_scale(&spruce, [0, 0, 2]), 1.0, "mid crown");
-        assert_eq!(foliage_scale(&spruce, [0, 0, 3]), 0.86, "upper crown");
-        assert_eq!(foliage_scale(&spruce, [0, 0, 4]), 0.72, "crown tip");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 0]), 0.62, "skirt");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 2]), 0.95, "mid crown");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 3]), 0.78, "upper crown");
+        assert_eq!(foliage_scale(&spruce, [0, 0, 4]), 0.62, "crown tip");
     }
 
     #[test]

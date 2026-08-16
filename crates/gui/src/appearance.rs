@@ -39,10 +39,10 @@ pub fn night_lighting() -> NightLighting {
         sky: Color::srgb_u8(5, 12, 28),
         star: Color::srgb_u8(173, 196, 220),
         ambient: Color::srgb_u8(120, 140, 165),
-        ambient_brightness: 6_000.0,
+        ambient_brightness: 4_500.0,
         aurora: Color::srgb_u8(73, 157, 144),
         directional: Color::srgb_u8(150, 190, 180),
-        directional_illuminance: 30_000.0,
+        directional_illuminance: 22_000.0,
     }
 }
 
@@ -82,14 +82,19 @@ pub fn material_color(material: Material) -> Color {
 }
 
 /// Settled snow is brighter than the underlying snow terrain without becoming emissive white.
+/// Trimmed ~8% at round 7: at the boot pitch the caps dominate the visible area, so the
+/// field's measured brightness tracks THIS albedo more than the light table — boot4 proved
+/// the light lever weak (a 2.6x ambient cut moved the field only 7%).
 pub fn snow_cap_color() -> Color {
-    Color::srgb_u8(158, 170, 196)
+    Color::srgb_u8(146, 158, 184)
 }
 
-/// Snow caught on an exposed spruce crown. Matches the approved artifact's `SPRUCE_SNOW`, which
-/// is why its trees read as spruces in a lit field while bare cube foliage reads as dark clumps.
+/// Snow caught on an exposed spruce crown. Started as the artifact's `SPRUCE_SNOW` (172,186,210)
+/// and trimmed at round 7: the artifact shows that colour on thin sprite tops, while our cubes
+/// show whole faces of it — every tree glowing at near-cap brightness is what made the boot4
+/// foreground read as clutter.
 pub fn foliage_snow_color() -> Color {
-    Color::srgb_u8(172, 186, 210)
+    Color::srgb_u8(156, 170, 196)
 }
 
 /// How many quantised steps the world-edge dissolve uses. Per-tile materials would mean one
@@ -180,7 +185,7 @@ mod tests {
         }
 
         let crown = foliage_snow_color().to_srgba().to_u8_array_no_alpha();
-        assert_eq!(crown, [172, 186, 210]);
+        assert_eq!(crown, [156, 170, 196]);
         assert!(crown[2] >= crown[0], "lit crowns stay on the cold side");
         assert!(
             crown[0]
@@ -191,7 +196,7 @@ mod tests {
         );
 
         let cap = snow_cap_color().to_srgba().to_u8_array_no_alpha();
-        assert_eq!(cap, [158, 170, 196]);
+        assert_eq!(cap, [146, 158, 184]);
         assert!(cap[2] >= cap[0], "settled snow stays on the cold side");
         assert!(
             cap[0]
@@ -219,8 +224,8 @@ mod tests {
             lighting.aurora.to_srgba().to_u8_array_no_alpha(),
             [73, 157, 144]
         );
-        assert_eq!(lighting.ambient_brightness, 6_000.0);
-        assert_eq!(lighting.directional_illuminance, 30_000.0);
+        assert_eq!(lighting.ambient_brightness, 4_500.0);
+        assert_eq!(lighting.directional_illuminance, 22_000.0);
 
         let entities = [
             (EntityKind::Dwarf, [151, 116, 96], 0.65),
