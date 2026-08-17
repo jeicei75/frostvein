@@ -4,6 +4,7 @@ use bevy::color::ColorToPacked;
 use bevy::{
     MinimalPlugins,
     app::App,
+    ecs::system::RunSystemOnce,
     prelude::{
         Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, PointLight, StandardMaterial,
         Transform,
@@ -12,7 +13,7 @@ use bevy::{
 use client_core::Mirror;
 use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, setup_atmosphere},
-    ingest::{MirrorResource, ProjectionWork, projection_systems},
+    ingest::{MirrorResource, ProjectionWork, projection_systems, reconcile_projection},
     project::{
         ClientLocal, ProjectedItem, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
     },
@@ -158,6 +159,33 @@ fn projection_pipeline_blends_at_a_midpoint() {
     assert!(
         midpoint.x > 0.0 && midpoint.x < 2.0,
         "the shared projection schedule must run the blend: {midpoint:?}"
+    );
+}
+
+#[test]
+fn later_production_reconciliation_does_not_clobber_a_blended_translation() {
+    let id = 72;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(0.01);
+    app.update();
+    let midpoint = projected_translation(&mut app, id);
+    assert!(midpoint.x > 0.0 && midpoint.x < 2.0);
+
+    app.world_mut()
+        .run_system_once(reconcile_projection)
+        .expect("production reconciliation must run");
+    assert_eq!(
+        projected_translation(&mut app, id),
+        midpoint,
+        "reconciliation must leave translation to the blend after spawn"
     );
 }
 
