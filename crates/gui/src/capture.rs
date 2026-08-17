@@ -1,12 +1,18 @@
-use std::path::PathBuf;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
 use bevy::{
     app::AppExit,
     ecs::message::MessageWriter,
-    prelude::{Commands, On, ResMut, Resource},
+    prelude::{Commands, On, Res, ResMut, Resource},
     render::render_resource::TextureFormat,
     render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
 };
+use protocol::JobState;
+
+use crate::{blend::TickClock, ingest::MirrorResource};
 
 #[derive(Resource)]
 pub struct CaptureState {
@@ -14,6 +20,70 @@ pub struct CaptureState {
     frames: u32,
     elapsed: u32,
     requested: bool,
+    expect_work: bool,
+    motion: MotionStats,
+}
+
+#[derive(Default, Debug)]
+pub struct MotionStats {
+    ticks: BTreeSet<u64>,
+    positions: BTreeMap<u32, [i32; 3]>,
+    pub position_changes: usize,
+    pub mid_blend_frames: usize,
+    pub max_working: usize,
+    pub item_count: usize,
+}
+
+impl MotionStats {
+    pub fn observe(
+        &mut self,
+        tick: u64,
+        entities: impl Iterator<Item = (u32, [i32; 3], JobState)>,
+        item_count: usize,
+        mid_blend: bool,
+    ) {
+        self.ticks.insert(tick);
+        let entities = entities.collect::<Vec<_>>();
+        for (id, position, _) in &entities {
+            if self
+                .positions
+                .insert(*id, *position)
+                .is_some_and(|old| old != *position)
+            {
+                self.position_changes += 1;
+            }
+        }
+        self.max_working = self.max_working.max(
+            entities
+                .iter()
+                .filter(|(_, _, state)| *state == JobState::Work)
+                .count(),
+        );
+        self.item_count = item_count;
+        self.mid_blend_frames += usize::from(mid_blend);
+    }
+
+    pub fn assert_valid(&self, expect_work: bool) {
+        assert!(
+            self.ticks.len() >= 100,
+            "capture observed only {} delivered ticks",
+            self.ticks.len()
+        );
+        assert!(
+            self.position_changes > 0,
+            "capture observed no dwarf position changes"
+        );
+        assert!(
+            self.mid_blend_frames > 0,
+            "capture rendered no mid-blend entities"
+        );
+        if expect_work {
+            // NOTE: these global counts are site counts in this scenario: it has the only work
+            // and the only items, without teaching the client a dig-site rectangle.
+            assert!(self.max_working >= 1, "capture observed no working dwarves");
+            assert!(self.item_count >= 1, "capture observed no stone items");
+        }
+    }
 }
 
 pub const WARM_RED_OVER_BLUE: u8 = 30;
@@ -87,14 +157,41 @@ fn decode_rgba8(bytes: &[u8], format: TextureFormat) -> Vec<[u8; 4]> {
 }
 
 impl CaptureState {
-    pub fn new(path: PathBuf, frames: u32) -> Self {
+    pub fn new(path: PathBuf, frames: u32, expect_work: bool) -> Self {
         Self {
             path,
             frames,
             elapsed: 0,
             requested: false,
+            expect_work,
+            motion: MotionStats::default(),
         }
     }
+}
+
+pub fn accumulate_motion(
+    mirror: Option<Res<MirrorResource>>,
+    clock: Res<TickClock>,
+    capture: Option<ResMut<CaptureState>>,
+) {
+    let (Some(mirror), Some(mut capture)) = (mirror, capture) else {
+        return;
+    };
+    let mid_blend = clock.factor() > 0.0
+        && clock.factor() < 1.0
+        && mirror
+            .0
+            .entities()
+            .any(|entity| mirror.0.previous_entity(entity.id).is_some());
+    capture.motion.observe(
+        mirror.0.tick(),
+        mirror
+            .0
+            .entities()
+            .map(|entity| (entity.id, entity.pos, entity.state)),
+        mirror.0.items().count(),
+        mid_blend,
+    );
 }
 
 /// Captures from the primary window after the real render loop has advanced N frames.
@@ -104,6 +201,15 @@ pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureS
     }
     capture.elapsed += 1;
     if capture.elapsed >= capture.frames {
+        capture.motion.assert_valid(capture.expect_work);
+        println!(
+            "motion: ticks observed={} dwarf position changes={} mid-blend frames={} max working dwarves={} item count={}",
+            capture.motion.ticks.len(),
+            capture.motion.position_changes,
+            capture.motion.mid_blend_frames,
+            capture.motion.max_working,
+            capture.motion.item_count
+        );
         capture.requested = true;
         commands
             .spawn(Screenshot::primary_window())
@@ -203,5 +309,25 @@ mod tests {
 
         assert_eq!(pixels, vec![[240, 120, 10, 255]]);
         assert_eq!(warm_lit_pixels(&pixels), 1);
+    }
+
+    #[test]
+    fn motion_instrument_rejects_stillness_and_accepts_the_required_observation() {
+        let mut still = MotionStats::default();
+        for tick in 0..100 {
+            still.observe(tick, [(1, [2, 3, 4], JobState::Idle)].into_iter(), 0, false);
+        }
+        assert!(std::panic::catch_unwind(|| still.assert_valid(false)).is_err());
+
+        let mut moving = MotionStats::default();
+        for tick in 0..100 {
+            moving.observe(
+                tick,
+                [(1, [tick as i32, 3, 4], JobState::Work)].into_iter(),
+                1,
+                tick > 0,
+            );
+        }
+        moving.assert_valid(true);
     }
 }

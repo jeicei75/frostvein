@@ -2,7 +2,7 @@
 
 use std::{env, fs, path::Path};
 
-use gui::capture::warm_lit_pixels;
+use gui::{camera::CameraRig, capture::warm_lit_pixels};
 
 /// Counts pixels differing from the image's dominant colour. Bevy's clear colour is a
 /// grey, not black, so "not pure black" would pass an empty scene; the dominant colour
@@ -23,10 +23,8 @@ fn non_background_pixels(path: &Path) -> usize {
     image.pixels().filter(|pixel| pixel.0 != background).count()
 }
 
-/// Requires a display-capable machine with a cargo toolchain: run `gui --capture PATH
-/// --frames 60` against the same daemon at two different ticks, then set
-/// FROSTVEIN_CAPTURE_FIRST/FROSTVEIN_CAPTURE_SECOND to the two paths. As of 5.3's review
-/// (2026-08-14) this test has never executed anywhere — the debt is inherited by 5.4.
+/// Requires a display-capable machine with a cargo toolchain. The comparison is intentionally
+/// restricted to the projected dig-site window: snowfall alone makes full PNG bytes differ.
 #[test]
 #[ignore = "requires a real render surface; excluded from the headless gate"]
 fn capture_exists_is_not_black_and_changes_with_the_world() {
@@ -54,12 +52,43 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
         non_background_pixels(second) > 0,
         "second capture must contain non-background pixels before comparison"
     );
-    assert_ne!(
-        fs::read(first).unwrap(),
-        fs::read(second).unwrap(),
-        "world changes must change capture bytes"
-    );
     let first_pixels = image::open(first).unwrap().to_rgba8();
+    let second_pixels = image::open(second).unwrap().to_rgba8();
+    assert_eq!(first_pixels.dimensions(), second_pixels.dimensions());
+    let rig = CameraRig::new([64, 64, 9]);
+    let projected = (58..=64)
+        .flat_map(|x| (68..=69).map(move |y| [x, y, 9]))
+        .map(|point| {
+            rig.project_world_point(point)
+                .expect("dig site must project")
+        })
+        .collect::<Vec<_>>();
+    let width = first_pixels.width() as f32;
+    let height = first_pixels.height() as f32;
+    let min_x = projected.iter().map(|p| p.x).fold(1.0, f32::min) - 0.02;
+    let max_x = projected.iter().map(|p| p.x).fold(0.0, f32::max) + 0.02;
+    let min_y = projected.iter().map(|p| p.y).fold(1.0, f32::min) - 0.02;
+    let max_y = projected.iter().map(|p| p.y).fold(0.0, f32::max) + 0.02;
+    let changes = first_pixels
+        .enumerate_pixels()
+        .filter(|(x, y, pixel)| {
+            let inside = (*x as f32 / width >= min_x)
+                && (*x as f32 / width <= max_x)
+                && (*y as f32 / height >= min_y)
+                && (*y as f32 / height <= max_y);
+            let other = second_pixels.get_pixel(*x, *y);
+            let distance = pixel.0[..3]
+                .iter()
+                .zip(other.0[..3].iter())
+                .map(|(a, b)| a.abs_diff(*b) as u16)
+                .sum::<u16>();
+            inside && distance > 30
+        })
+        .count();
+    assert!(
+        changes > 0,
+        "the dig-site window must differ between captures"
+    );
     let pixels = first_pixels
         .pixels()
         .map(|pixel| pixel.0)
