@@ -183,83 +183,83 @@ NFR6 reading and the captures is headless-testable in any devpod under `MinimalP
         `what-you-will-see.md` approved on its own — record that the pair was skipped and why. Do
         not substitute a hand-drawn render for the renderer's own output.
 
-- [ ] **Task 1 — The blend clock and the blend** (AC: 2, 3, 5, 6)
-  - [ ] Add `TickClock` (a `ClientLocal` resource, see the skeleton in Dev Notes) advanced each
+- [x] **Task 1 — The blend clock and the blend** (AC: 2, 3, 5, 6)
+  - [x] Add `TickClock` (a `ClientLocal` resource, see the skeleton in Dev Notes) advanced each
         frame from `Time` and reset **only when a delta advances the mirror's tick** — a paused
         daemon keeps emitting deltas at loop rate (AD-2) and resetting on those would corrupt the
         measured interval. Clamp the measured interval to `[MIN_TICK_INTERVAL, MAX_TICK_INTERVAL]`
         so a stalled server cannot produce a huge denominator, and clamp the factor to `[0,1]`.
-  - [ ] Add `blend_entities`: build the id → `&Entity` map once per frame from `mirror.entities()`,
+  - [x] Add `blend_entities`: build the id → `&Entity` map once per frame from `mirror.entities()`,
         then set `transform.translation` for every non-terrain `WorldProjected` entity —
         `previous_entity(id)` present → lerp previous → current by the factor; absent (spawned this
         tick, or after a snapshot) → snap; an id that is an item and not an entity → snap to its
         item position. `// NOTE:` the per-frame map: there are ~10 dynamic entities, so this stays
         cheaper than adding a lookup to `client-core` and keeps the diff gui-only.
-  - [ ] Stop `reconcile` re-inserting a `Transform` for entities it did not just spawn
+  - [x] Stop `reconcile` re-inserting a `Transform` for entities it did not just spawn
         (`crates/gui/src/project.rs:286-297`) — spawn sets translation and scale once, the blend
         owns translation thereafter.
-  - [ ] `.chain()` the Update systems in the load-bearing order `ingest_messages →
+  - [x] `.chain()` the Update systems in the load-bearing order `ingest_messages →
         reconcile_projection → blend_entities → flicker_lights` (this also closes the incidental-
         ordering finding at deferred-work.md:605-609, which is now load-bearing rather than
         incidental).
-  - [ ] Extract the Update registration into one function (e.g. `pub fn projection_systems(app)`)
+  - [x] Extract the Update registration into one function (e.g. `pub fn projection_systems(app)`)
         called by `run()` **and** by the headless tests, so a dropped system is a red test.
-  - [ ] Tests: strictly-between at factor 0.5 (assert against a hand-written expected midpoint, not
+  - [x] Tests: strictly-between at factor 0.5 (assert against a hand-written expected midpoint, not
         against the production lerp); factor 1 lands exactly on the current position; elapsed far
         past the interval still lands exactly on the current position and never beyond; an entity
         with no previous state snaps; a re-run of reconcile after the blend does not move the
         entity back to its snapped position (AC5).
 
-- [ ] **Task 2 — A rewind snaps** (AC: 4, 6)
-  - [ ] Verify (do not re-implement) that `Mirror::apply_snapshot` clears `previous_entities`
+- [x] **Task 2 — A rewind snaps** (AC: 4, 6)
+  - [x] Verify (do not re-implement) that `Mirror::apply_snapshot` clears `previous_entities`
         (`crates/client-core/src/lib.rs:50-54`, `:147-168`) and that the blend therefore cannot
         cross a snapshot. Reset the blend clock on a snapshot as well, so the first post-snapshot
         frame has no stale elapsed time.
-  - [ ] Test: run frames with a blend in progress, apply a snapshot placing the same entity far
+  - [x] Test: run frames with a blend in progress, apply a snapshot placing the same entity far
         away, run one frame at a mid-range clock, assert the transform equals the snapshot position
         exactly.
 
-- [ ] **Task 3 — Flicker** (AC: 10, 11, 6)
-  - [ ] Extend `LightProperties` with the flicker columns the 5.4 `// NOTE:` at
+- [x] **Task 3 — Flicker** (AC: 10, 11, 6)
+  - [x] Extend `LightProperties` with the flicker columns the 5.4 `// NOTE:` at
         `crates/gui/src/appearance.rs:50` promises, and delete that NOTE. Add `flicker_scale(kind,
         id, seconds)` — pure, no RNG, no wire input (skeleton in Dev Notes).
-  - [ ] Add a `ProjectedLight(LightKind)` component written by `reconcile` on spawn and only when
+  - [x] Add a `ProjectedLight(LightKind)` component written by `reconcile` on spawn and only when
         the kind changes, so reconcile stops re-inserting `point_light()` every frame
         (`crates/gui/src/project.rs:293-297`); add `flicker_lights` writing
         `PointLight.intensity` each frame from the table × `flicker_scale`.
-  - [ ] Tests: the scale stays inside the named band across a time sweep; two ids of the same kind
+  - [x] Tests: the scale stays inside the named band across a time sweep; two ids of the same kind
         diverge at the same instant; the two kinds diverge; the function is deterministic for the
         same `(id, seconds)`; and an app-level test that runs reconcile after the flicker and finds
         the flickered intensity intact (AC11).
-  - [ ] `// NOTE:` that only the point light flickers, not the emitter's emissive material — per-
+  - [x] `// NOTE:` that only the point light flickers, not the emitter's emissive material — per-
         entity materials would mean one `StandardMaterial` handle per emitter.
 
-- [ ] **Task 4 — Debris chips at the dig face** (AC: 8, 9)
-  - [ ] In `reconcile`'s dirty-tile branch, when the updated tile is `Empty`, despawn any existing
+- [x] **Task 4 — Debris chips at the dig face** (AC: 8, 9)
+  - [x] In `reconcile`'s dirty-tile branch, when the updated tile is `Empty`, despawn any existing
         chips at that position and spawn `CHIPS_PER_TILE` small `ClientLocal` `DigChip` cubes at
         deterministic offsets derived from the tile position (no RNG). Despawn all chips on a
         snapshot rebuild alongside terrain. Chips take a debris colour from the appearance table:
         the removed tile's material is **not** available — AD-18 forbids double-buffering tiles, so
         the mirror keeps no previous tile.
-  - [ ] Test: a delta emptying a solid tile spawns exactly `CHIPS_PER_TILE` chips near that
+  - [x] Test: a delta emptying a solid tile spawns exactly `CHIPS_PER_TILE` chips near that
         position, all `ClientLocal` and none `WorldProjected`; a delta that changes a tile to
         something solid spawns none; the same position twice does not double the chips; a snapshot
         rebuild clears them.
-  - [ ] Test (AC9): `CameraRig::new([64,64,9]).project_world_point(p)` is inside `[0,1]²` for every
+  - [x] Test (AC9): `CameraRig::new([64,64,9]).project_world_point(p)` is inside `[0,1]²` for every
         tile of the named dig site.
 
-- [ ] **Task 5 — The instrument** (AC: 14, 15)
-  - [ ] Extend `CaptureState` (`crates/gui/src/capture.rs`) to accumulate across the `--frames N`
+- [x] **Task 5 — The instrument** (AC: 14, 15)
+  - [x] Extend `CaptureState` (`crates/gui/src/capture.rs`) to accumulate across the `--frames N`
         run: ticks observed (distinct mirror ticks), dwarf position changes, frames in which at
         least one entity rendered mid-blend, max concurrent dwarves in `JobState::Work`, and the
         item count at capture time. Print one line, then assert per AC14. Add the `--expect-work`
         flag (and reject it without `--capture`, the way `--capture` already requires `--frames`).
-  - [ ] Keep the 5.4 warm-pixel and ground-luminance checks exactly as they are — they still guard
+  - [x] Keep the 5.4 warm-pixel and ground-luminance checks exactly as they are — they still guard
         the beat-1 look this story must not regress.
-  - [ ] Unit-test the accumulator itself against a hand-built sequence of mirror states (a
+  - [x] Unit-test the accumulator itself against a hand-built sequence of mirror states (a
         stationary world produces zero position changes and fails; a moving one passes) — the
         instrument is an evidence channel and an untested one manufactures false evidence.
-  - [ ] Update the `--ignored` capture self-test to compare the **dig-site window** computed from
+  - [x] Update the `--ignored` capture self-test to compare the **dig-site window** computed from
         `CameraRig::project_world_point` plus a margin, replacing the whole-file byte comparison,
         and say in its doc comment why (snowfall alone satisfies byte inequality).
 
@@ -275,16 +275,16 @@ NFR6 reading and the captures is headless-testable in any devpod under `MinimalP
   - [ ] Confirm by eye and state in the record: dwarves slide rather than snap; light breathes;
         chips and rubble sit at the dug tiles; nothing else changed about the beat-1 frame.
 
-- [ ] **Task 7 — Tech-art guidelines** (AC: 10 supporting)
-  - [ ] Add one short section to `docs/tech-art-guidelines.md`: motion is presentation (blend
+- [x] **Task 7 — Tech-art guidelines** (AC: 10 supporting)
+  - [x] Add one short section to `docs/tech-art-guidelines.md`: motion is presentation (blend
         between delivered ticks, never predict), flicker semantics and the band the table uses,
         and debris as client-local evidence. Written as the decisions are made, not reconstructed.
 
-- [ ] **Task 8 — Evidence and the gate** (AC: 18, 19)
-  - [ ] Write `_bmad-output/implementation-artifacts/mutations/6-1-the-world-moves.sh` following
+- [x] **Task 8 — Evidence and the gate** (AC: 18, 19)
+  - [x] Write `_bmad-output/implementation-artifacts/mutations/6-1-the-world-moves.sh` following
         5.4's format; run `scripts/mutate.sh` **alone** (it rewrites source in place) and paste the
         RED table.
-  - [ ] `scripts/gate.sh` green; confirm the diff touches no crate but `gui`.
+  - [x] `scripts/gate.sh` green; confirm the diff touches no crate but `gui`.
 
 - [ ] **Task 9 — Wolf's closing sign-off** (AC: 17)
   - [ ] Wolf views live against the approved artifact and signs off wow beat 2. **A dev agent
@@ -625,6 +625,19 @@ story-creation:
   Implementation is delegated to Codex from here; Task 0 is closed and is not to be re-opened or
   re-edited by the dev agent.
 
+### Completion Notes — 2026-08-17 implementation
+
+- Tasks 1–5 and 7 are implemented headlessly. The vehicle-only `--ignored` capture test was
+  written and compiled but deliberately not executed; Task 6 and Task 9 remain unchecked.
+- RED evidence before implementation: `cargo test -p gui --test headless
+  blend_midpoint_is_strictly_between_the_delivered_positions --offline` failed with
+  `error[E0583]: file not found for module 'blend'` at `crates/gui/src/lib.rs:5:1`.
+- Sabotage was run alone. The first mutation produced: `assertion 'left == right' failed` in
+  `blend::tests::midpoint_and_snap_are_literal_wire_positions` after interpolation was allowed
+  to extrapolate. The remaining table entries were also killed by their named assertions.
+- The requested `docs/dev-workflow.md` path is absent; its applicable workflow rules are present
+  in `docs/technical-preferences.md`.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/6-1-signoff/what-you-will-see.md` (new)
@@ -635,6 +648,13 @@ story-creation:
 - `_bmad-output/implementation-artifacts/6-1-the-world-moves.md` (modified — Status, Task 0
   checkbox, Dev Agent Record, Change Log)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — 6.1 → in-progress)
+- `crates/gui/src/blend.rs` (new — delivered-tick interpolation clock and transform blend)
+- `crates/gui/src/appearance.rs`, `capture.rs`, `ingest.rs`, `lib.rs`, `project.rs` (modified —
+  flicker, capture evidence, shared projection wiring, client-local debris)
+- `crates/gui/tests/headless.rs`, `tests/capture.rs` (modified — motion/debris/framing coverage and
+  projected-window capture comparison)
+- `docs/tech-art-guidelines.md` (modified — presentation-motion decisions)
+- `_bmad-output/implementation-artifacts/mutations/6-1-the-world-moves.sh` (new)
 
 ## Change Log
 
