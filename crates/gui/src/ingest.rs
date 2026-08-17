@@ -18,11 +18,12 @@ use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::message::MessageWriter,
+    ecs::schedule::IntoScheduleConfigs,
     input::ButtonInput,
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Commands, DefaultPlugins, DirectionalLight, KeyCode,
-        PerspectiveProjection, Projection, Query, Res, ResMut, Resource, Transform, Without,
+        PerspectiveProjection, Projection, Query, Res, ResMut, Resource, Time, Transform, Without,
     },
     render::renderer::RenderAdapterInfo,
 };
@@ -32,11 +33,12 @@ use protocol::{Delta, Snapshot};
 use crate::{
     appearance::night_lighting,
     atmosphere::{aurora_light_transform, fall_snow, setup_atmosphere},
+    blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
-    capture::{CaptureState, capture_after_frames},
+    capture::{CaptureState, accumulate_motion, capture_after_frames},
     project::{
-        ClientLocal, ProjectionAssets, TerrainQuery, TerrainTile, WorldProjected, reconcile,
-        setup_projection_assets,
+        ClientLocal, DigChipQuery, ProjectionAssets, TerrainQuery, TerrainTile, WorldProjected,
+        blend_entities, flicker_lights, reconcile, setup_projection_assets,
     },
 };
 
@@ -50,15 +52,15 @@ enum WireMessage {
 }
 
 #[derive(Resource)]
-struct MirrorResource(Mirror);
+pub struct MirrorResource(pub Mirror);
 
 #[derive(Resource)]
 struct IngestReceiver(Mutex<Receiver<anyhow::Result<WireMessage>>>);
 
 #[derive(Resource, Default)]
-struct ProjectionWork {
-    snapshot: bool,
-    dirty_tiles: BTreeSet<[i32; 3]>,
+pub struct ProjectionWork {
+    pub snapshot: bool,
+    pub dirty_tiles: BTreeSet<[i32; 3]>,
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -107,22 +109,36 @@ pub fn run() -> anyhow::Result<()> {
         .add_systems(
             Update,
             (
-                ingest_messages,
-                reconcile_projection,
                 camera_controls,
                 update_fog_from_camera,
                 toggle_overlay,
                 fall_snow,
             ),
         );
+    projection_systems(&mut app);
     if let Some(capture) = args.capture {
         // Capture output must never contain the diagnostic overlay.
         force_capture_overlay_off(&mut app);
-        app.insert_resource(CaptureState::new(capture, args.frames));
-        app.add_systems(Update, capture_after_frames);
+        app.insert_resource(CaptureState::new(capture, args.frames, args.expect_work));
+        app.add_systems(Update, (accumulate_motion, capture_after_frames).chain());
     }
     app.run();
     Ok(())
+}
+
+/// Registers the load-bearing wire-to-presentation pipeline for both the live app and headless
+/// tests. Keeping it in one place makes an omitted live system observable in the suite.
+pub fn projection_systems(app: &mut App) {
+    app.init_resource::<TickClock>().add_systems(
+        Update,
+        (
+            ingest_messages,
+            reconcile_projection,
+            blend_projection,
+            flicker_projection,
+        )
+            .chain(),
+    );
 }
 
 fn force_capture_overlay_off(app: &mut App) {
@@ -144,6 +160,7 @@ struct Args {
     port: u16,
     capture: Option<PathBuf>,
     frames: u32,
+    expect_work: bool,
 }
 
 fn parse_args() -> anyhow::Result<Args> {
@@ -154,6 +171,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut port = protocol::DEFAULT_PORT;
     let mut capture = None;
     let mut frames = None;
+    let mut expect_work = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -167,6 +185,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                     .parse()
                     .context("invalid --frames count")?,
             );
+        } else if arg == "--expect-work" {
+            expect_work = true;
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -177,10 +197,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if capture.is_some() && frames == Some(0) {
         bail!("--capture --frames must be positive");
     }
+    if expect_work && capture.is_none() {
+        bail!("--expect-work requires --capture");
+    }
     Ok(Args {
         port,
         capture,
         frames: frames.unwrap_or(0),
+        expect_work,
     })
 }
 
@@ -297,11 +321,15 @@ fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut config: ResMut<FpsOverlay
 
 /// The only GUI system that reads protocol message types; it mutates only the mirror.
 fn ingest_messages(
-    receiver: Res<IngestReceiver>,
+    receiver: Option<Res<IngestReceiver>>,
     mut mirror: ResMut<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
+    mut clock: ResMut<TickClock>,
     mut exit: MessageWriter<AppExit>,
 ) {
+    let Some(receiver) = receiver else {
+        return;
+    };
     loop {
         match receiver
             .0
@@ -313,6 +341,7 @@ fn ingest_messages(
                 Ok(()) => {
                     work.snapshot = true;
                     work.dirty_tiles.clear();
+                    clock.reset(mirror.0.tick());
                 }
                 Err(error) => {
                     // A frozen window with no diagnostic is worse than a loud exit; the
@@ -323,6 +352,7 @@ fn ingest_messages(
             },
             Ok(Ok(WireMessage::Delta(delta))) => {
                 mirror.0.apply_delta(*delta);
+                clock.observe_tick(mirror.0.tick());
                 work.dirty_tiles
                     .extend(mirror.0.changes().tiles.iter().copied());
             }
@@ -340,12 +370,29 @@ fn ingest_messages(
     }
 }
 
+fn blend_projection(
+    mirror: Res<MirrorResource>,
+    mut clock: ResMut<TickClock>,
+    time: Res<Time>,
+    mut projected: Query<(&WorldProjected, &mut Transform), Without<TerrainTile>>,
+) {
+    blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);
+}
+
 fn reconcile_projection(
     mut commands: Commands,
     mirror: Res<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
-    projected: Query<(bevy::prelude::Entity, &WorldProjected), Without<TerrainTile>>,
+    projected: Query<
+        (
+            bevy::prelude::Entity,
+            &WorldProjected,
+            Option<&crate::project::ProjectedLight>,
+        ),
+        Without<TerrainTile>,
+    >,
     terrain: TerrainQuery,
+    chips: DigChipQuery,
     assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild = std::mem::take(&mut work.snapshot);
@@ -359,8 +406,20 @@ fn reconcile_projection(
         &changes,
         &projected,
         &terrain,
+        &chips,
         assets.as_deref(),
     );
+}
+
+fn flicker_projection(
+    time: Res<Time>,
+    mut lights: Query<(
+        &WorldProjected,
+        &crate::project::ProjectedLight,
+        &mut bevy::prelude::PointLight,
+    )>,
+) {
+    flicker_lights(time.elapsed_secs(), &mut lights);
 }
 
 fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
@@ -433,6 +492,7 @@ mod tests {
         classify_client_local, fog_falloff, fog_fraction, force_capture_overlay_off,
         ingest_messages,
     };
+    use crate::blend::TickClock;
     use crate::project::WorldProjected;
 
     #[test]
@@ -573,6 +633,7 @@ mod tests {
         app.insert_resource(MirrorResource(mirror))
             .insert_resource(IngestReceiver(Mutex::new(receiver)))
             .init_resource::<ProjectionWork>()
+            .init_resource::<TickClock>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -618,6 +679,7 @@ mod tests {
                 snapshot: false,
                 dirty_tiles: [[1, 0, 0]].into_iter().collect(),
             })
+            .init_resource::<TickClock>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -653,6 +715,7 @@ mod tests {
         app.insert_resource(MirrorResource(mirror))
             .insert_resource(IngestReceiver(Mutex::new(receiver)))
             .init_resource::<ProjectionWork>()
+            .init_resource::<TickClock>()
             .add_systems(Update, ingest_messages);
         // Settle schedule and system entities before ingesting anything.
         app.update();

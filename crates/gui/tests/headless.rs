@@ -14,11 +14,19 @@ use client_core::Mirror;
 use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, setup_atmosphere},
     project::{
-        ClientLocal, ProjectedItem, ProjectionAssets, SnowCap, TerrainQuery, TerrainTile,
-        WorldProjected, reconcile, setup_projection_assets,
+        ClientLocal, DigChipQuery, ProjectedItem, ProjectionAssets, SnowCap, TerrainQuery,
+        TerrainTile, WorldProjected, reconcile, setup_projection_assets,
     },
     transform::world_to_render,
 };
+
+#[test]
+fn blend_midpoint_is_strictly_between_the_delivered_positions() {
+    assert_eq!(
+        gui::blend::blended_translation(Some([2, 3, 4]), [4, 3, 4], 0.5),
+        bevy::prelude::Vec3::new(3.0, 4.0, -3.0),
+    );
+}
 use protocol::{
     Delta, Dims, Entity, EntityKind, Item, JobState, Material, MessageType, Snapshot, Speed, Tile,
     TileChange,
@@ -50,8 +58,16 @@ fn reconcile_from_mirror(
     mut commands: Commands,
     mirror: Res<TestMirror>,
     mut work: ResMut<ProjectionWork>,
-    projected: Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
+    projected: Query<
+        (
+            BevyEntity,
+            &WorldProjected,
+            Option<&gui::project::ProjectedLight>,
+        ),
+        Without<TerrainTile>,
+    >,
     terrain: TerrainQuery,
+    chips: DigChipQuery,
     assets: Option<Res<ProjectionAssets>>,
 ) {
     let rebuild_terrain = std::mem::take(&mut work.rebuild_terrain);
@@ -62,6 +78,7 @@ fn reconcile_from_mirror(
         &mirror.0.changes().tiles,
         &projected,
         &terrain,
+        &chips,
         assets.as_deref(),
     );
 }
@@ -544,4 +561,65 @@ fn atmosphere_entities_are_client_local_and_never_world_projected() {
             .iter()
             .all(|(_, local, projected)| local.is_some() && projected.is_none())
     );
+}
+
+#[test]
+fn empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_them() {
+    let mut app = headless_app(snapshot(
+        vec![Tile::Solid(Material::Ice), Tile::Empty],
+        Vec::new(),
+    ));
+    app.update();
+    app.world_mut()
+        .resource_mut::<TestMirror>()
+        .0
+        .apply_delta(delta(
+            vec![TileChange {
+                pos: [0, 0, 0],
+                tile: Tile::Empty,
+            }],
+            Vec::new(),
+        ));
+    app.update();
+    let mut chips = app.world_mut().query::<(
+        &gui::project::DigChip,
+        Option<&ClientLocal>,
+        Option<&WorldProjected>,
+    )>();
+    assert_eq!(
+        chips.iter(app.world()).count(),
+        gui::project::CHIPS_PER_TILE
+    );
+    assert!(
+        chips
+            .iter(app.world())
+            .all(|(_, local, world)| local.is_some() && world.is_none())
+    );
+
+    app.world_mut()
+        .resource_mut::<TestMirror>()
+        .0
+        .apply_snapshot(snapshot(
+            vec![Tile::Solid(Material::Ice), Tile::Empty],
+            Vec::new(),
+        ))
+        .unwrap();
+    app.world_mut()
+        .resource_mut::<ProjectionWork>()
+        .rebuild_terrain = true;
+    app.update();
+    assert_eq!(chips.iter(app.world()).count(), 0);
+}
+
+#[test]
+fn named_dig_site_stays_inside_the_boot_camera_frame() {
+    let rig = gui::camera::CameraRig::new([64, 64, 9]);
+    for x in 58..=64 {
+        for y in 68..=69 {
+            let point = rig
+                .project_world_point([x, y, 9])
+                .expect("dig site must be in front of the camera");
+            assert!((0.0..=1.0).contains(&point.x) && (0.0..=1.0).contains(&point.y));
+        }
+    }
 }

@@ -6,6 +6,9 @@ pub struct LightProperties {
     pub color: Color,
     pub intensity: f32,
     pub range: f32,
+    /// Fraction of the base intensity available to presentation-only flicker.
+    pub flicker_amplitude: f32,
+    pub flicker_hz: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -47,7 +50,6 @@ pub fn night_lighting() -> NightLighting {
 }
 
 pub fn light_properties(kind: LightKind) -> LightProperties {
-    // NOTE: lights are static until story 6.1 adds the flicker column.
     match kind {
         // Intensities sized against the boot3 measurement: the white-clip radius scales as
         // sqrt(intensity), and 72M lm blew a ~9-tile pool to flat white where the artifact
@@ -56,17 +58,75 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
             color: Color::srgb_u8(255, 140, 62),
             intensity: 14_000_000.0,
             range: 20.0,
+            flicker_amplitude: 0.07,
+            flicker_hz: 1.7,
         },
         LightKind::Campfire => LightProperties {
             color: Color::srgb_u8(255, 173, 92),
             intensity: 32_000_000.0,
             range: 28.0,
+            flicker_amplitude: 0.11,
+            flicker_hz: 0.9,
         },
         LightKind::Lantern => LightProperties {
             color: Color::srgb_u8(255, 195, 110),
             intensity: 11_000_000.0,
             range: 16.0,
+            flicker_amplitude: 0.05,
+            flicker_hz: 1.3,
         },
+    }
+}
+
+/// Client-side light animation: deterministic from the delivered id and local elapsed time.
+pub fn flicker_scale(kind: LightKind, id: u32, seconds: f32) -> f32 {
+    let properties = light_properties(kind);
+    let phase = id as f32 * 1.618_034 + kind as u8 as f32 * 0.73;
+    let primary = (seconds * properties.flicker_hz * std::f32::consts::TAU + phase).sin();
+    let secondary =
+        (seconds * (properties.flicker_hz * 1.73) * std::f32::consts::TAU + phase * 0.37).sin()
+            * 0.3;
+    1.0 + properties.flicker_amplitude * (primary + secondary) / 1.3
+}
+
+/// Neutral crushed stone is intentionally independent of the removed wire tile material.
+pub fn debris_color() -> Color {
+    Color::srgb_u8(86, 91, 106)
+}
+
+#[cfg(test)]
+mod flicker_tests {
+    use super::*;
+
+    #[test]
+    fn flicker_is_bounded_distinct_and_deterministic() {
+        assert_eq!(light_properties(LightKind::Torch).flicker_amplitude, 0.07);
+        assert_eq!(
+            light_properties(LightKind::Campfire).flicker_amplitude,
+            0.11
+        );
+        for kind in [LightKind::Torch, LightKind::Campfire] {
+            let properties = light_properties(kind);
+            for step in 0..100 {
+                let scale = flicker_scale(kind, 6, step as f32 * 0.1);
+                assert!(
+                    (1.0 - properties.flicker_amplitude..=1.0 + properties.flicker_amplitude)
+                        .contains(&scale)
+                );
+            }
+        }
+        assert_ne!(
+            flicker_scale(LightKind::Torch, 6, 1.0),
+            flicker_scale(LightKind::Torch, 7, 1.0)
+        );
+        assert_ne!(
+            flicker_scale(LightKind::Torch, 6, 1.0),
+            flicker_scale(LightKind::Campfire, 6, 1.0)
+        );
+        assert_eq!(
+            flicker_scale(LightKind::Torch, 6, 1.0),
+            flicker_scale(LightKind::Torch, 6, 1.0)
+        );
     }
 }
 
