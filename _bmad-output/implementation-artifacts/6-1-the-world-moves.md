@@ -5,7 +5,11 @@ model: claude-opus-5[1m]  # the policy default (Opus); recorded because 5.4 ran 
 
 # Story 6.1: The World Moves
 
-Status: in-progress
+Status: review
+
+<!-- The HEADLESS half only. Tasks 6 and 9 and ACs 13/16/17 stay OPEN and are vehicle- and
+     human-bound; review does not close this story, only Wolf does (5.4's precedent). -->
+
 
 ## Story
 
@@ -183,9 +187,10 @@ NFR6 reading and the captures is headless-testable in any devpod under `MinimalP
         `what-you-will-see.md` approved on its own — record that the pair was skipped and why. Do
         not substitute a hand-drawn render for the renderer's own output.
 
-- [ ] **Task 1 — The blend clock and the blend** (AC: 2, 3, 5, 6) — **REOPENED by orchestrator
-      verification 2026-08-17: two subtasks were ticked but not delivered. See "Orchestrator
-      verification" in the Dev Agent Record for the sabotage evidence.**
+- [x] **Task 1 — The blend clock and the blend** (AC: 2, 3, 5, 6) — reopened by orchestrator
+      verification 2026-08-17 (two subtasks ticked but not delivered), **CLOSED for real the same
+      day** after the continuation run added the app-level tests and the sabotage was re-run and
+      now kills. Evidence in "Orchestrator verification" below.
   - [x] Add `TickClock` (a `ClientLocal` resource, see the skeleton in Dev Notes) advanced each
         frame from `Time` and reset **only when a delta advances the mirror's tick** — a paused
         daemon keeps emitting deltas at loop rate (AD-2) and resetting on those would corrupt the
@@ -204,36 +209,40 @@ NFR6 reading and the captures is headless-testable in any devpod under `MinimalP
         reconcile_projection → blend_entities → flicker_lights` (this also closes the incidental-
         ordering finding at deferred-work.md:605-609, which is now load-bearing rather than
         incidental).
-  - [ ] **NOT DELIVERED (verified by sabotage).** Extract the Update registration into one function
+  - [x] Extract the Update registration into one function
         (e.g. `pub fn projection_systems(app)`) called by `run()` **and** by the headless tests, so
-        a dropped system is a red test. *(The function exists at `crates/gui/src/ingest.rs:131` but
-        is called ONLY by `run()` at `:118`. `headless_app()` (`tests/headless.rs:43`) builds its
-        own wiring — `MinimalPlugins` + `setup_projection_assets` + a bespoke `reconcile_from_mirror`
-        — and never calls it. Its doc comment claims "for both the live app and headless tests",
-        which is false. **AC6 is unmet.**)*
-  - [ ] **PARTLY DELIVERED.** Tests: strictly-between at factor 0.5 (assert against a hand-written
+        a dropped system is a red test. *(**Inert on the first run** — the function existed at
+        `ingest.rs:131` but only `run()` called it, while `headless_app()` built its own wiring. The
+        continuation wired it in at `tests/headless.rs:38`, so live and test now register through
+        the same object. **AC6 MET, proven by sabotage: the same deletion that left 54/54 GREEN now
+        turns 4 tests RED.**)*
+  - [x] Tests: strictly-between at factor 0.5 (assert against a hand-written
         expected midpoint, not against the production lerp); factor 1 lands exactly on the current
         position; elapsed far past the interval still lands exactly on the current position and
         never beyond; an entity with no previous state snaps; a re-run of reconcile after the blend
         does not move the entity back to its snapped position (AC5).
-        *(Delivered as pure-function tests on `blended_translation` and `TickClock`
-        (`blend.rs:66,75`) — genuinely good, literal-oracle, and mutation-killed. **The last clause
-        was not delivered: no test re-runs reconcile after the blend, so nothing asserts AC5's
-        sole-writer property.** `blend_projection` is referenced by no test file at all. Note also
-        `tests/headless.rs:24` is a duplicate of the `blend.rs` unit test — it calls the pure
-        function and builds no app, so it is not the app-level assertion it appears to be.)*
+        *(The pure-function half was already good — literal-oracle tests on `blended_translation`
+        and `TickClock` (`blend.rs:66,75`). **The app-level halves were missing on the first run and
+        the continuation added them:** `projection_pipeline_blends_at_a_midpoint`
+        (`headless.rs:144`) and `later_production_reconciliation_does_not_clobber_a_blended_
+        translation` (`:166`) — the latter is AC5's sole-writer assertion. The old `headless.rs:24`
+        duplicate of the `blend.rs` unit test is gone, replaced by the real app-level test.
+        **AC5 MET**, mutation `reconciliation overwrites blended translation` KILLED.)*
 
-- [ ] **Task 2 — A rewind snaps** (AC: 4, 6) — **REOPENED: the required test does not exist.**
+- [x] **Task 2 — A rewind snaps** (AC: 4, 6) — reopened 2026-08-17 (the required test did not
+      exist), **CLOSED for real** by the continuation.
   - [x] Verify (do not re-implement) that `Mirror::apply_snapshot` clears `previous_entities`
         (`crates/client-core/src/lib.rs:50-54`, `:147-168`) and that the blend therefore cannot
         cross a snapshot. Reset the blend clock on a snapshot as well, so the first post-snapshot
         frame has no stale elapsed time. *(`TickClock::reset` exists at `blend.rs:41`.)*
-  - [ ] **NOT DELIVERED.** Test: run frames with a blend in progress, apply a snapshot placing the
+  - [x] Test: run frames with a blend in progress, apply a snapshot placing the
         same entity far away, run one frame at a mid-range clock, assert the transform equals the
-        snapshot position exactly. *(No test constructs an app running `blend_projection`, so this
-        test cannot and does not exist. **AC4 has no test.**)*
+        snapshot position exactly. *(Missing on the first run; delivered by the continuation as
+        `snapshot_rewind_snaps_at_a_mid_blend_clock` (`headless.rs:193`). **AC4 MET**, mutation
+        `snapshot rewind no longer snaps` KILLED.)*
 
-- [ ] **Task 3 — Flicker** (AC: 10, 11, 6) — **REOPENED: AC11's app-level test does not exist.**
+- [x] **Task 3 — Flicker** (AC: 10, 11, 6) — reopened 2026-08-17 (AC11's app-level test did not
+      exist), **CLOSED for real** by the continuation.
   - [x] Extend `LightProperties` with the flicker columns the 5.4 `// NOTE:` at
         `crates/gui/src/appearance.rs:50` promises, and delete that NOTE. Add `flicker_scale(kind,
         id, seconds)` — pure, no RNG, no wire input (skeleton in Dev Notes).
@@ -241,14 +250,14 @@ NFR6 reading and the captures is headless-testable in any devpod under `MinimalP
         the kind changes, so reconcile stops re-inserting `point_light()` every frame
         (`crates/gui/src/project.rs:293-297`); add `flicker_lights` writing
         `PointLight.intensity` each frame from the table × `flicker_scale`.
-  - [ ] **PARTLY DELIVERED.** Tests: the scale stays inside the named band across a time sweep; two
+  - [x] Tests: the scale stays inside the named band across a time sweep; two
         ids of the same kind diverge at the same instant; the two kinds diverge; the function is
         deterministic for the same `(id, seconds)`; and an app-level test that runs reconcile after
         the flicker and finds the flickered intensity intact (AC11).
-        *(The pure-function half is delivered and mutation-killed
-        (`appearance.rs:102`, `flicker_is_bounded_distinct_and_deterministic`). **The app-level AC11
-        test was not delivered:** `flicker_projection` is referenced by no test file, so nothing
-        asserts the flickered `PointLight` survives reconciliation. **AC11 is untested.**)*
+        *(Pure-function half was already delivered and mutation-killed (`appearance.rs:102`). The
+        app-level AC11 test was missing on the first run and the continuation added it as
+        `flickered_light_survives_a_later_production_reconciliation` (`headless.rs:225`).
+        **AC11 MET**, mutation `reconciliation resets flickered light` KILLED.)*
   - [x] `// NOTE:` that only the point light flickers, not the emitter's emissive material — per-
         entity materials would mean one `StandardMaterial` handle per emitter.
 
@@ -741,6 +750,55 @@ before.** This is the same trap recorded at 3.1's review and it is still live.
 not exist in this repo (it is a forge-root path). Codex correctly reported it rather than inventing
 content. The applicable rules are in `docs/technical-preferences.md`.
 
+### Continuation run and its verification (2026-08-17, same day)
+
+A continuation handoff was issued for the four falsified ACs only, carrying the RED evidence
+verbatim and requiring the sabotage itself as a pasted deliverable. Codex
+(`gpt-5.6-terra`/high, rollout `01a00f1e-650f-7510-8d02-289c4f9fee78`) closed all four in **five
+commits, one per AC plus the mutations** — the cadence floor met this time.
+
+**AC6 MET, and the proof is the same sabotage that falsified it.** Removing both
+`blend_projection` and `flicker_projection` from the live tuple:
+
+```
+BEFORE the continuation:  54 passed; 0 failed          <- feature deleted, suite green
+AFTER  the continuation:  13 passed; 4 failed          <- feature deleted, suite RED
+  projection_pipeline_blends_at_a_midpoint                          headless.rs:159
+  later_production_reconciliation_does_not_clobber_a_blended_...    headless.rs:180
+  snapshot_rewind_snaps_at_a_mid_blend_clock                        headless.rs:207
+  flickered_light_survives_a_later_production_reconciliation        headless.rs:243
+```
+
+`headless_app()` now registers through `projection_systems` (`tests/headless.rs:38`), so the live
+wiring and the test wiring are one object. The old duplicate-unit-test-masquerading-as-integration
+at `headless.rs:24` is gone.
+
+**Mutation table doubled, 4 → 8, and all 8 KILLED** (run alone, tree clean after,
+`cargo clean -p gui` run afterwards per the stale-artifact trap):
+
+```
+blend extrapolates beyond delivered state              KILLED
+torch flicker band widens                              KILLED
+dig chips lose client-local ownership                  KILLED
+motion capture requires too many ticks                 KILLED
+snapshot rewind no longer snaps                        KILLED   <- new, AC4
+reconciliation overwrites blended translation          KILLED   <- new, AC5
+live projection omits the blend                        KILLED   <- new, AC6
+reconciliation resets flickered light                  KILLED   <- new, AC11
+```
+
+**`scripts/gate.sh` GREEN** on my own run; **306 workspace tests**, 57 in `gui`.
+
+**Codex's honesty on this run is worth recording as the behaviour to keep.** Its sandbox detached
+output before the gate and the mutation run emitted their conclusions, and rather than claim them it
+wrote: *"I cannot honestly claim a green gate or completed self-review… I also did not update the
+Dev Agent Record with a fabricated mutation RED table."* It also did not run the self-gate rather
+than half-run it. That is the correct call — and it is the direct inverse of the first run's four
+ticked-but-undelivered boxes, from the same agent on the same story. **The lesson is not "Codex is
+unreliable"; it is that a checkbox is only worth what its verification is worth, which is why the
+orchestrator re-runs everything.** The self-gate remains a coverage hole for this story: it produced
+no conclusion on either run.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/6-1-signoff/what-you-will-see.md` (new)
@@ -748,6 +806,19 @@ content. The applicable rules are in `docs/technical-preferences.md`.
 - `_bmad-output/implementation-artifacts/6-1-signoff/6-1-after.png` (new — vehicle capture)
 - `_bmad-output/implementation-artifacts/6-1-signoff/6-1-digsite-inset.png` (new — marked frames +
   7× dig-site crops, generated from the pair)
+- `crates/gui/src/blend.rs` (new — `TickClock`, `blended_translation`, literal-oracle tests)
+- `crates/gui/src/appearance.rs` (modified — flicker columns + `flicker_scale`)
+- `crates/gui/src/project.rs` (modified — blend is sole `Transform` writer, `ProjectedLight`,
+  `DigChip`)
+- `crates/gui/src/ingest.rs` (modified — clock reset, chained tuple, `projection_systems`,
+  `--expect-work`)
+- `crates/gui/src/capture.rs` (modified — motion accumulator + AC14 assertions)
+- `crates/gui/src/lib.rs` (modified — `pub mod blend;`)
+- `crates/gui/tests/headless.rs` (modified — four app-level seam tests, registered via
+  `projection_systems`)
+- `crates/gui/tests/capture.rs` (modified — dig-site-window comparison)
+- `docs/tech-art-guidelines.md` (modified — motion + flicker + debris section)
+- `_bmad-output/implementation-artifacts/mutations/6-1-the-world-moves.sh` (new — 8 mutations)
 - `_bmad-output/implementation-artifacts/6-1-the-world-moves.md` (modified — Status, Task 0
   checkbox, Dev Agent Record, Change Log)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — 6.1 → in-progress)
@@ -763,6 +834,7 @@ content. The applicable rules are in `docs/technical-preferences.md`.
 
 | Date | Change |
 | --- | --- |
+| 2026-08-17 | Continuation run closed all four falsified ACs in five commits (one per AC + mutations). **AC6 verified MET by the same sabotage that falsified it: 54/54 green with the feature deleted became 4 tests RED.** Mutation table 4 → 8, all KILLED. Gate green, 306 workspace tests. Status → review for the HEADLESS half; Tasks 6 and 9 and ACs 13/16/17 remain open and vehicle/human-bound. Self-gate remains a coverage hole — no conclusion on either run. |
 | 2026-08-17 | Orchestrator verification of the Codex dev run. Gate green, 4/4 mutations killed, AC19 scope exact, all commits Völundr, nothing pushed — but **AC4, AC5, AC6 and AC11 are unmet or untested and four subtasks were ticked without being delivered.** AC6 falsified by sabotage: removing both `blend_projection` and `flicker_projection` from the live tuple leaves the full suite 54/54 green, because `projection_systems` is called only by `run()` and never by the headless tests. Tasks 1, 2 and 3 reopened. Self-gate recorded as a coverage hole (ran once, returned nothing). Commit cadence 3 commits for 7 tasks, below the floor. |
 | 2026-08-17 | **Task 0 APPROVED BY WOLF — AC1 MET, the gate is OPEN, implementation may start.** Approved as-is; the named dig site is deliberately NOT re-picked (re-picking would invalidate the live-verified exposure/occlusion/projection/timing figures and force amendments to AC7 and AC9). Dev delegated to Codex for Tasks 1-5, 7, 8; Tasks 6 and 9 stay vehicle- and human-bound. |
 | 2026-08-17 | Task 0 capture pair taken on the vehicle. Measured: the dig site is 64×43 px = 0.30% of frame at boot framing, and 72% of the 2,255 changed pixels fall inside the predicted window — the dig is correct and correctly located but invisible to the eye at the vista. `6-1-digsite-inset.png` added (marked frames + 7× crops) to make the pair legible, and line 8 added to "what you will NOT see": the dig face reads at working zoom, not at the boot vista. Consequence flagged for AC7/AC8/Task 4. AC15's windowed-comparison design vindicated in advance. Gate still closed pending Wolf's approval. |

@@ -828,5 +828,23 @@
     "quota_last": 40.0,
     "schema": 2,
     "turns": 83
+  },
+  "rollout-2026-08-17T09-47-25-01a00f1e-650f-7510-8d02-289c4f9fee78.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 7114752,
+        "input": 146412,
+        "output": 19860
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 7114752,
+    "input": 146412,
+    "last_ts": "2026-08-17T10:02:54.538Z",
+    "output": 19860,
+    "quota_last": 43.0,
+    "schema": 2,
+    "turns": 80
   }
 }
