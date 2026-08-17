@@ -43,7 +43,18 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-15  # 5.4 dev STARTED (in-progress, delegated to Codex). Earlier same day —
+last_updated: 2026-08-17  # 6.1 TASK 0 CLOSED — Wolf APPROVED the sign-off artifact, AC1 met, gate
+                          # OPEN, implementation delegated to Codex. Beat 2 signs without UX-DR14's
+                          # carried stone; dig site not re-picked; the dig face reads at working
+                          # zoom, not at the boot vista (measured: 0.30% of frame).
+                          # Prior same day: 6.1 STORY CREATED (ready-for-dev) and Epic 6 opened. Dig site named and
+                          # verified live on the shipped seed: rect [58,68,9]-[64,69,9] = 8 mineral
+                          # tiles, all sky-exposed and unoccluded at the boot framing, dug in 52 ticks,
+                          # 8 stone items left standing; wander motion baseline 47% of ticks. Task 0
+                          # carries a BLOCKING clarification for Wolf: UX-DR14's "picks something up
+                          # and carries it" is not on the wire (a carried stone keeps its pickup tile),
+                          # so beat 2 is signed without it or a sim story is spun. Prior:
+                          # 5.4 dev STARTED (in-progress, delegated to Codex). Earlier same day —
                           # Task 0 gate OPENED: Wolf approved the sign-off artifact
                           # (5-4-signoff/candidate-artifact-2026-08-15.png) after a four-pass iteration on the
                           # parked 08-14 candidate — draft-2 framing, spruce trees with visible trunks, FULL
@@ -152,12 +163,33 @@ development_status:
   # items for a fresh patch session, 5 defers. Back to in-progress.
   5-4-the-cold-boot: done
   epic-5-retrospective: optional
-  epic-6: backlog
+  epic-6: in-progress
   # WOW BEAT 2 — the beat the PRD calls the magic; a client achieving only beat 1 has
   # FAILED the milestone. Sign-off gate applies. Also cannot be closed by a dev agent.
   # Its dig must be at a surface-visible face designated from a TUI client (readiness
   # fix #4) — z-slicing does not arrive until 7.1.
-  6-1-the-world-moves: backlog
+  # Story file created 2026-08-16. Named dig site [58,68,9]-[64,69,9] (8 mineral tiles, verified
+  # sky-exposed + unoccluded + fully dug live). Task 0 sign-off artifact is the blocking gate and
+  # is a VEHICLE session on the shipped 5.4 binary — the dig and its rubble already work, so the
+  # artifact is the renderer's own before/after pair plus a "what you will NOT see" list.
+  # Dev STARTED 2026-08-16. TASK 0 CLOSED — WOLF APPROVED THE ARTIFACT 2026-08-17, AC1 MET, THE
+  # GATE IS OPEN. Two rulings, both recorded in 6-1-signoff/what-you-will-see.md: (1) wow beat 2 is
+  # signed WITHOUT UX-DR14's carried stone — no sim story, no wire change, clause FORMALLY NOT
+  # DELIVERED IN M2, and it is unobservable here anyway since 6.1 places no stockpile so no haul job
+  # and no carrying ever occurs; (2) the named dig site is NOT re-picked.
+  # THE PAIR PRODUCED A FINDING and it is the gate working at the price of two screenshots. Wolf's
+  # first reaction was "did not see the difference" and he was RIGHT: the dig site is 64x43 px =
+  # 0.30% of a 1280x720 boot frame. Measured — 2,255 pixels differ between the pair and 1,625 (72%)
+  # fall inside the window CameraRig predicted, so the dig is correct AND correctly located, merely
+  # sub-legible at the vista. 6-1-digsite-inset.png (marked frames + 7x crops) makes it legible, and
+  # line 8 was added to "what you will NOT see": THE DIG FACE READS AT WORKING ZOOM, NOT AT THE BOOT
+  # VISTA. Consequence for AC7/AC8/Task 4 — rubble and debris chips are sub-legible at boot framing,
+  # so the opening frame's visible weight rests on dwarf motion and light flicker (camp-scale).
+  # AC15's windowed-comparison design is vindicated before a line of it is written: whole-frame
+  # inequality here is satisfied by snowfall alone.
+  # Dev now delegated to Codex — Tasks 1-5, 7, 8. Tasks 6 (live vehicle) and 9 (Wolf's closing
+  # sign-off) stay vehicle- and human-bound and must never be faked.
+  6-1-the-world-moves: in-progress
   # FIRST ON THE M2 CUT LIST. Cutting it leaves Epic 6's wow intact.
   6-2-lanterns-in-the-dark: backlog
   epic-6-retrospective: optional
