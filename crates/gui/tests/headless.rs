@@ -222,6 +222,43 @@ fn snapshot_rewind_snaps_at_a_mid_blend_clock() {
 }
 
 #[test]
+fn flickered_light_survives_a_later_production_reconciliation() {
+    let id = 74;
+    let emitter = Entity {
+        id,
+        kind: EntityKind::Torch,
+        pos: [0, 0, 0],
+        state: JobState::Idle,
+        light: Some(protocol::LightKind::Torch),
+    };
+    let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
+    app.update();
+
+    let flickered = app
+        .world_mut()
+        .query::<(&WorldProjected, &PointLight)>()
+        .iter(app.world())
+        .find_map(|(projected, light)| (projected.0 == id).then_some(light.intensity))
+        .expect("the emitter must have a point light");
+    assert_ne!(
+        flickered,
+        gui::appearance::light_properties(protocol::LightKind::Torch).intensity,
+        "the shared projection schedule must run the flicker"
+    );
+
+    app.world_mut()
+        .run_system_once(reconcile_projection)
+        .expect("production reconciliation must run");
+    let after_reconcile = app
+        .world_mut()
+        .query::<(&WorldProjected, &PointLight)>()
+        .iter(app.world())
+        .find_map(|(projected, light)| (projected.0 == id).then_some(light.intensity))
+        .expect("reconciliation must retain the point light");
+    assert_eq!(after_reconcile, flickered);
+}
+
+#[test]
 fn snapshot_rebuild_reaches_reconcile_even_when_changes_are_empty() {
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], Vec::new()));
     app.update();
