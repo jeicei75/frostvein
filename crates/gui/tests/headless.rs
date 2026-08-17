@@ -3,84 +3,70 @@
 use bevy::color::ColorToPacked;
 use bevy::{
     MinimalPlugins,
-    app::{App, Update},
-    ecs::system::{Commands, Query, Res, ResMut},
+    app::App,
     prelude::{
-        Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, PointLight, Resource,
-        StandardMaterial, Transform, Without,
+        Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, PointLight, StandardMaterial,
+        Transform,
     },
 };
 use client_core::Mirror;
 use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, setup_atmosphere},
+    ingest::{MirrorResource, ProjectionWork, projection_systems},
     project::{
-        ClientLocal, DigChipQuery, ProjectedItem, ProjectionAssets, SnowCap, TerrainQuery,
-        TerrainTile, WorldProjected, reconcile, setup_projection_assets,
+        ClientLocal, ProjectedItem, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
     },
     transform::world_to_render,
 };
-
-#[test]
-fn blend_midpoint_is_strictly_between_the_delivered_positions() {
-    assert_eq!(
-        gui::blend::blended_translation(Some([2, 3, 4]), [4, 3, 4], 0.5),
-        bevy::prelude::Vec3::new(3.0, 4.0, -3.0),
-    );
-}
 use protocol::{
     Delta, Dims, Entity, EntityKind, Item, JobState, Material, MessageType, Snapshot, Speed, Tile,
     TileChange,
 };
-
-#[derive(Resource)]
-struct TestMirror(Mirror);
-
-#[derive(Resource)]
-struct ProjectionWork {
-    rebuild_terrain: bool,
-}
 
 fn headless_app(snapshot: Snapshot) -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .init_resource::<Assets<Mesh>>()
         .init_resource::<Assets<StandardMaterial>>()
-        .insert_resource(TestMirror(Mirror::from_snapshot(snapshot).unwrap()))
+        .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
         .insert_resource(ProjectionWork {
-            rebuild_terrain: true,
+            snapshot: true,
+            dirty_tiles: Default::default(),
         })
-        .add_systems(bevy::app::Startup, setup_projection_assets)
-        .add_systems(Update, reconcile_from_mirror);
+        .add_systems(bevy::app::Startup, setup_projection_assets);
+    projection_systems(&mut app);
     app
 }
 
-fn reconcile_from_mirror(
-    mut commands: Commands,
-    mirror: Res<TestMirror>,
-    mut work: ResMut<ProjectionWork>,
-    projected: Query<
-        (
-            BevyEntity,
-            &WorldProjected,
-            Option<&gui::project::ProjectedLight>,
-        ),
-        Without<TerrainTile>,
-    >,
-    terrain: TerrainQuery,
-    chips: DigChipQuery,
-    assets: Option<Res<ProjectionAssets>>,
-) {
-    let rebuild_terrain = std::mem::take(&mut work.rebuild_terrain);
-    reconcile(
-        &mut commands,
-        &mirror.0,
-        rebuild_terrain,
-        &mirror.0.changes().tiles,
-        &projected,
-        &terrain,
-        &chips,
-        assets.as_deref(),
-    );
+fn apply_delta(app: &mut App, delta: Delta) {
+    let (dirty_tiles, tick) = {
+        let mut mirror = app.world_mut().resource_mut::<MirrorResource>();
+        mirror.0.apply_delta(delta);
+        (mirror.0.changes().tiles.clone(), mirror.0.tick())
+    };
+    {
+        let mut work = app.world_mut().resource_mut::<ProjectionWork>();
+        work.dirty_tiles.extend(dirty_tiles);
+    }
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .observe_tick(tick);
+}
+
+fn apply_snapshot(app: &mut App, snapshot: Snapshot) {
+    let tick = {
+        let mut mirror = app.world_mut().resource_mut::<MirrorResource>();
+        mirror.0.apply_snapshot(snapshot).unwrap();
+        mirror.0.tick()
+    };
+    {
+        let mut work = app.world_mut().resource_mut::<ProjectionWork>();
+        work.snapshot = true;
+        work.dirty_tiles.clear();
+    }
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .reset(tick);
 }
 
 fn snapshot(tiles: Vec<Tile>, entities: Vec<Entity>) -> Snapshot {
@@ -102,15 +88,37 @@ fn snapshot_with_dims(dims: Dims, tiles: Vec<Tile>, entities: Vec<Entity>) -> Sn
 }
 
 fn delta(tiles: Vec<TileChange>, entities: Vec<Entity>) -> Delta {
+    delta_at(1, tiles, entities)
+}
+
+fn delta_at(tick: u64, tiles: Vec<TileChange>, entities: Vec<Entity>) -> Delta {
     Delta {
         msg_type: MessageType::Delta,
-        tick: 1,
+        tick,
         tiles,
         entities,
         designations: Vec::new(),
         zones: Vec::new(),
         items: Vec::new(),
         speed: Speed::Normal,
+    }
+}
+
+fn projected_translation(app: &mut App, id: u32) -> bevy::prelude::Vec3 {
+    app.world_mut()
+        .query::<(&WorldProjected, &Transform)>()
+        .iter(app.world())
+        .find_map(|(projected, transform)| (projected.0 == id).then_some(transform.translation))
+        .expect("the wire entity must have a projection")
+}
+
+fn dwarf(id: u32, pos: [i32; 3]) -> Entity {
+    Entity {
+        id,
+        kind: EntityKind::Dwarf,
+        pos,
+        state: JobState::Idle,
+        light: None,
     }
 }
 
@@ -132,29 +140,43 @@ fn projected_scene(app: &mut App) -> Vec<(u32, Option<[i32; 3]>, [i32; 3])> {
 }
 
 #[test]
+fn projection_pipeline_blends_at_a_midpoint() {
+    let id = 71;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(0.01);
+    app.update();
+
+    let midpoint = projected_translation(&mut app, id);
+    assert!(
+        midpoint.x > 0.0 && midpoint.x < 2.0,
+        "the shared projection schedule must run the blend: {midpoint:?}"
+    );
+}
+
+#[test]
 fn snapshot_rebuild_reaches_reconcile_even_when_changes_are_empty() {
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], Vec::new()));
     app.update();
-    app.world_mut()
-        .resource_mut::<TestMirror>()
-        .0
-        .apply_snapshot(snapshot(
-            vec![Tile::Solid(Material::Ice), Tile::Empty],
-            Vec::new(),
-        ))
-        .unwrap();
+    apply_snapshot(
+        &mut app,
+        snapshot(vec![Tile::Solid(Material::Ice), Tile::Empty], Vec::new()),
+    );
     assert!(
         app.world()
-            .resource::<TestMirror>()
+            .resource::<MirrorResource>()
             .0
             .changes()
             .tiles
             .is_empty()
     );
-    app.world_mut()
-        .resource_mut::<ProjectionWork>()
-        .rebuild_terrain = true;
-
     app.update();
 
     let terrain = app
@@ -247,18 +269,18 @@ fn dirty_delta_reprojects_only_the_dirty_terrain_cube() {
         .copied()
         .expect("the unaffected terrain cube must be projected first");
 
-    app.world_mut()
-        .resource_mut::<TestMirror>()
-        .0
-        .apply_delta(delta(
+    apply_delta(
+        &mut app,
+        delta(
             vec![TileChange {
                 pos: [0, 0, 0],
                 tile: Tile::Empty,
             }],
             Vec::new(),
-        ));
+        ),
+    );
     assert_eq!(
-        app.world().resource::<TestMirror>().0.changes().tiles,
+        app.world().resource::<MirrorResource>().0.changes().tiles,
         vec![[0, 0, 0]]
     );
     app.update();
@@ -281,16 +303,16 @@ fn dirty_delta_reprojects_newly_exposed_neighbours() {
         "the interior neighbour is initially hidden"
     );
 
-    app.world_mut()
-        .resource_mut::<TestMirror>()
-        .0
-        .apply_delta(delta(
+    apply_delta(
+        &mut app,
+        delta(
             vec![TileChange {
                 pos: [2, 2, 2],
                 tile: Tile::Empty,
             }],
             Vec::new(),
-        ));
+        ),
+    );
     app.update();
 
     let terrain = projected_scene(&mut app)
@@ -300,7 +322,7 @@ fn dirty_delta_reprojects_newly_exposed_neighbours() {
     assert!(terrain.contains(&[2, 2, 1]));
     assert_eq!(
         terrain,
-        gui::project::terrain_positions(&app.world().resource::<TestMirror>().0)
+        gui::project::terrain_positions(&app.world().resource::<MirrorResource>().0)
     );
     let newly_exposed = app
         .world_mut()
@@ -325,19 +347,19 @@ fn out_of_bounds_dirty_tiles_leave_the_projection_equal_to_a_full_repaint() {
         Vec::new(),
     ));
     app.update();
-    app.world_mut()
-        .resource_mut::<TestMirror>()
-        .0
-        .apply_delta(delta(
+    apply_delta(
+        &mut app,
+        delta(
             vec![TileChange {
                 pos: [2, 0, 0],
                 tile: Tile::Solid(Material::Ice),
             }],
             Vec::new(),
-        ));
+        ),
+    );
     assert!(
         app.world()
-            .resource::<TestMirror>()
+            .resource::<MirrorResource>()
             .0
             .changes()
             .tiles
@@ -345,7 +367,7 @@ fn out_of_bounds_dirty_tiles_leave_the_projection_equal_to_a_full_repaint() {
     );
     app.update();
 
-    let full_repaint = gui::project::terrain_positions(&app.world().resource::<TestMirror>().0);
+    let full_repaint = gui::project::terrain_positions(&app.world().resource::<MirrorResource>().0);
     let projected_terrain = projected_scene(&mut app)
         .into_iter()
         .filter_map(|(_, terrain, _)| terrain)
@@ -378,9 +400,7 @@ fn despawning_world_projection_then_reconciling_recreates_the_same_scene() {
         app.world_mut().entity_mut(entity).despawn();
     }
     assert!(projected_scene(&mut app).is_empty());
-    app.world_mut()
-        .resource_mut::<ProjectionWork>()
-        .rebuild_terrain = true;
+    app.world_mut().resource_mut::<ProjectionWork>().snapshot = true;
     app.update();
 
     assert_eq!(projected_scene(&mut app), expected);
@@ -570,16 +590,16 @@ fn empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_
         Vec::new(),
     ));
     app.update();
-    app.world_mut()
-        .resource_mut::<TestMirror>()
-        .0
-        .apply_delta(delta(
+    apply_delta(
+        &mut app,
+        delta(
             vec![TileChange {
                 pos: [0, 0, 0],
                 tile: Tile::Empty,
             }],
             Vec::new(),
-        ));
+        ),
+    );
     app.update();
     let mut chips = app.world_mut().query::<(
         &gui::project::DigChip,
@@ -596,17 +616,10 @@ fn empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_
             .all(|(_, local, world)| local.is_some() && world.is_none())
     );
 
-    app.world_mut()
-        .resource_mut::<TestMirror>()
-        .0
-        .apply_snapshot(snapshot(
-            vec![Tile::Solid(Material::Ice), Tile::Empty],
-            Vec::new(),
-        ))
-        .unwrap();
-    app.world_mut()
-        .resource_mut::<ProjectionWork>()
-        .rebuild_terrain = true;
+    apply_snapshot(
+        &mut app,
+        snapshot(vec![Tile::Solid(Material::Ice), Tile::Empty], Vec::new()),
+    );
     app.update();
     assert_eq!(chips.iter(app.world()).count(), 0);
 }

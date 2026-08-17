@@ -379,7 +379,7 @@ fn blend_projection(
     blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);
 }
 
-fn reconcile_projection(
+pub fn reconcile_projection(
     mut commands: Commands,
     mirror: Res<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
