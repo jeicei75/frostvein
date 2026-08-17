@@ -31,3 +31,35 @@ old = 'self.ticks.len() >= 100'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'self.ticks.len() >= 101'))
 PY
+
+mutation "snapshot rewind no longer snaps" gui snapshot_rewind_snaps_at_a_mid_blend_clock <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/blend.rs'); s = p.read_text()
+old = '        None => world_to_render(current),'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        None => Vec3::ZERO,'))
+PY
+
+mutation "reconciliation overwrites blended translation" gui later_production_reconciliation_does_not_clobber_a_blended_translation <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '            if let Some(light) = mirror_entity.and_then(|entity| entity.light) {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            commands.entity(bevy_entity).insert(Transform::from_translation(world_to_render(position)));\n            if let Some(light) = mirror_entity.and_then(|entity| entity.light) {'))
+PY
+
+mutation "live projection omits the blend" gui projection_pipeline_blends_at_a_midpoint <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            blend_projection,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "reconciliation resets flickered light" gui flickered_light_survives_a_later_production_reconciliation <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                if projected_light.is_none_or(|existing| existing.0 != light) {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                if true {'))
+PY
