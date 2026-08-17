@@ -190,6 +190,38 @@ fn later_production_reconciliation_does_not_clobber_a_blended_translation() {
 }
 
 #[test]
+fn snapshot_rewind_snaps_at_a_mid_blend_clock() {
+    let id = 73;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(0.01);
+    app.update();
+    let midpoint = projected_translation(&mut app, id);
+    assert!(midpoint.x > 0.0 && midpoint.x < 2.0);
+
+    let mut rewind = snapshot(vec![Tile::Empty, Tile::Empty], vec![dwarf(id, [19, 0, 0])]);
+    rewind.tick = 2;
+    apply_snapshot(&mut app, rewind);
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(0.01);
+    app.update();
+
+    assert_eq!(
+        projected_translation(&mut app, id),
+        world_to_render([19, 0, 0]),
+        "a snapshot must snap even while the clock is half way through an interval"
+    );
+}
+
+#[test]
 fn snapshot_rebuild_reaches_reconcile_even_when_changes_are_empty() {
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], Vec::new()));
     app.update();
