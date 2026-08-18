@@ -783,6 +783,76 @@ fn empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_
     assert_eq!(chips.iter(app.world()).count(), 0);
 }
 
+/// Wolf, at the second live viewing: "digging .. I don't think anything changed". The dig ran
+/// correctly; the presentation erased it. Every tile of the named site exposes soil, and the cap
+/// rule drew fresh snow on it BRIGHTER than the snow that was dug away, so a finished excavation
+/// read as untouched ground one voxel lower.
+#[test]
+fn a_dug_tile_leaves_bare_ground_not_fresh_snow() {
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 1, y: 1, z: 3 },
+        vec![
+            Tile::Solid(Material::Soil),
+            Tile::Solid(Material::Snow),
+            Tile::Empty,
+        ],
+        Vec::new(),
+    ));
+    app.update();
+    let capped_before = app
+        .world_mut()
+        .query::<&SnowCap>()
+        .iter(app.world())
+        .filter(|cap| cap.0 == [0, 0, 0])
+        .count();
+    assert_eq!(
+        capped_before, 0,
+        "buried soil is not exposed and must never be capped"
+    );
+
+    // Dig the snow at z=1, exposing the soil beneath it to the sky.
+    apply_delta(
+        &mut app,
+        delta(
+            vec![TileChange {
+                pos: [0, 0, 1],
+                tile: Tile::Empty,
+            }],
+            vec![],
+        ),
+    );
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&SnowCap>()
+            .iter(app.world())
+            .filter(|cap| cap.0 == [0, 0, 0])
+            .count(),
+        0,
+        "a dug tile must leave bare ground: capping the floor with snow brighter than the tile \
+         that was removed makes the excavation invisible"
+    );
+}
+
+#[test]
+fn snow_still_caps_the_natural_surface() {
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 1, y: 1, z: 2 },
+        vec![Tile::Solid(Material::Snow), Tile::Empty],
+        Vec::new(),
+    ));
+    app.update();
+    assert_eq!(
+        app.world_mut()
+            .query::<&SnowCap>()
+            .iter(app.world())
+            .count(),
+        1,
+        "excluding soil must not stop snow terrain being capped"
+    );
+}
+
 #[test]
 fn named_dig_site_stays_inside_the_boot_camera_frame() {
     // Re-picked at the live viewing (Wolf, 2026-08-18). The original [58,68,9]-[64,69,9]

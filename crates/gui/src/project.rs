@@ -522,11 +522,19 @@ fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> 
 }
 
 /// The cap is presentation-only: wire terrain remains its original material.
+/// NOTE: soil is excluded because soil is never the natural surface here — the world's skin is
+/// snow and ice, and soil only becomes sky-exposed when something DUG the tile above it. Capping
+/// it drew fresh snow (146,158,184) on the trench floor, brighter than the snow it replaced
+/// (136,150,178), so an excavation erased itself the moment it finished. Measured before the
+/// change: 1,016 soil tiles are already exposed at boot and NONE of them carried a cap (they all
+/// have solid rock above), so this alters exactly 0 of the 5,716 caps in the approved boot frame.
 pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
     matches!(
         mirror.tile(position),
         Some(Tile::Solid(material) | Tile::Ramp(material))
-            if material != Material::Ice && material != Material::TreeFoliage
+            if material != Material::Ice
+                && material != Material::TreeFoliage
+                && material != Material::Soil
     ) && !matches!(
         mirror.tile([position[0], position[1], position[2] + 1]),
         Some(Tile::Solid(_) | Tile::Ramp(_))
@@ -704,7 +712,15 @@ mod tests {
             "foliage stays dark so ground-level skirts cannot read as snow slabs"
         );
         assert!(has_snow_cap(&toy, [4, 0, 0]), "stone can carry snow");
-        assert!(has_snow_cap(&toy, [5, 0, 0]), "soil can carry snow");
+        // CHANGED 2026-08-18 from "soil can carry snow" (5.4's rule) at Wolf's second live
+        // viewing: soil is never the natural surface on this seed, so a sky-exposed soil tile is
+        // excavated ground, and capping it drew snow brighter than the tile that was dug away.
+        // NOTE: stone has the same latent shape, but no named dig site exposes it, so the rule
+        // stays narrow rather than general.
+        assert!(
+            !has_snow_cap(&toy, [5, 0, 0]),
+            "sky-exposed soil is dug ground and must stay bare"
+        );
         assert!(
             !has_snow_cap(&toy, [3, 0, 0]),
             "covered terrain keeps its dark flank"

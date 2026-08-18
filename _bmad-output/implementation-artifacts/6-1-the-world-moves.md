@@ -1171,6 +1171,45 @@ its window now points at the new site, and the 2026-08-17 capture pair is of the
 approved artifact carries an amendment note rather than a rewrite; its PNGs are kept as the record
 of what was actually approved on 2026-08-17.
 
+
+### Second live viewing (2026-08-18): flicker CLOSED, and the dig had a SECOND defect
+
+**AC10 is MET live — Wolf: "flickering works now".** The 4x amplitude raise was the right call and
+the mechanism needed no change at all.
+
+**The dig still read as unchanged, and the cause was a second, independent defect.** Both of the
+2026-08-18 diagnoses were correct; they were simply two different bugs, and fixing the first left
+the second standing:
+
+1. *(fixed earlier)* Four undiggable ramps stood as a wall through the excavation — Wolf's finding.
+2. **The trench floor re-whitened.** Every one of the 8 site tiles exposes `soil` at z=8, and
+   `has_snow_cap` capped any solid non-ice tile with open sky above it. So the dug floor was drawn
+   at `snow_cap_color` **(146,158,184)** — *brighter* than the snow that was removed
+   **(136,150,178)**. A finished excavation did not merely fail to show; it left the site marginally
+   whiter than before. This was my original diagnosis, dropped when Wolf corrected the wall
+   observation; he was right about the wall and it was wrong to drop the other.
+
+**Fix: soil is excluded from the snow-cap rule.** Soil is never the natural surface on this seed —
+the world's skin is snow and ice — so a sky-exposed soil tile is *excavated ground*. The dug floor
+now renders at `material_color(Soil)` **(56,52,62)** against surrounding snow **(136,150,178)**:
+roughly a **3x luminance step**, from "slightly brighter than before" to "much darker than
+everything around it". Two tests pin it, and the 5.4 assertion that said *"soil can carry snow"* was
+changed in place with its reason rather than deleted. `// NOTE:` stone has the same latent shape but
+no named site exposes it, so the rule stays narrow.
+
+**Measured safety:** 1,016 soil tiles are already sky-adjacent at boot and **none of them carried a
+cap** (all have solid rock above), so this changes **0 of the 5,716 caps** in the approved boot
+frame. The 53,365-cube terrain oracle counts terrain positions, not caps, and is untouched.
+
+**A second error of mine, recorded because it cost a viewing.** The re-picked site is **3x smaller
+on screen** than the one it replaced — 845 px (0.092% of frame) against 2,658 px (0.288%). I
+optimised for "no ramps" and never checked projected area; its 2-wide axis runs toward the camera
+and foreshortens. Contrast, not area, is what now has to carry the dig's legibility — which is why
+the cap fix matters more than the site choice did. **The debris chips are also effectively invisible
+at this framing**: `CHIPS_PER_TILE` cubes at scale 0.14 are ~1.4 px each at the boot vista. AC8 is
+met as written (they exist, are `ClientLocal`, and are deterministic) but they contribute nothing to
+what a human sees from the opening camera.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/6-1-signoff/what-you-will-see.md` (new)
@@ -1213,6 +1252,7 @@ all already listed above.)*
 
 | Date | Change |
 | --- | --- |
+| 2026-08-18 | **Second live viewing: AC10 CLOSED ('flickering works now'); the dig had a SECOND, independent defect.** Every dug tile exposes soil, and the cap rule drew fresh snow (146,158,184) on the trench floor — BRIGHTER than the snow removed (136,150,178) — so a finished excavation left the site whiter than before. Soil is now excluded from snow caps: the floor renders at (56,52,62), a ~3x luminance step against its surroundings. Measured safe: 0 of 5,716 boot caps change. 5.4's 'soil can carry snow' assertion amended in place with its reason; two new tests pin the rule. Also recorded: the re-picked site is 3x smaller on screen than the original (845 px vs 2,658 px) — my error — so contrast, not area, now carries the dig; and the debris chips are ~1.4 px at boot framing, met as specified but invisible. |
 | 2026-08-18 | **Live viewing: two rulings by Wolf, both fixed.** (1) The flicker read as STATIC though the mechanism ran correctly (5,587 distinct intensities measured) -- amplitude raised torch 0.07 -> 0.30 and campfire 0.11 -> 0.40 on his ruling, band literals and peak assertion moved with it. (2) **The dig site is RE-PICKED to `[55,62,9]`-`[56,65,9]`**: the original straddled a slope and 4 undiggable `Tile::Ramp` tiles stood as a contiguous wall through the excavation -- the story knew 8 of 14 were diggable but nobody drew that the leftovers were contiguous (8th AC-text defect, first caught only by a human eye). A first replacement was rejected by raytrace: 5 of 6 tiles occluded by trees. The chosen site is the ONLY 8-tile rect near the camp that is solid + sky-exposed + unoccluded + in frame (19 tiles qualify at all), re-verified live: all 8 dug in 52 ticks (identical to the original), 8 items, NOTHING left standing. AC7's tile count needs no amendment. ACs 12/13/14 stand; **AC15 must be re-run** against the new window. |
 | 2026-08-18 | **Code review (4 layers, fresh context) + patch round.** The feature was watched running live against a real daemon, and AC6 confirmed genuinely closed — but **three one-line deletions (`observe_tick`, `delta_secs`, `elapsed_secs`) each killed wow beat 2 with the suite 57/57 GREEN**, the same defect class as run one's inert `projection_systems`, one level below where AC6 looks. 1 decision + 8 patches applied: three production-drive tests, the motion line printed before its assertion, the mid-blend counter now reading real `Transform`s instead of the clock, `ProjectionSet` ordering for the instrument, literal flicker-band assertions (the old one was a tautology), a same-frame burst guard on the tick clock, a running-max item count, and a 200-pixel floor on AC15's window. Wolf ruled the `--frames 600` before-run up to 1,500 — at 10 Hz against >135 fps it was ~44 ticks and would have panicked before writing any PNG on Task 6's first command; the Task 0 recipe was left untouched as a record of what was actually run, and the Task 6 outputs renamed so they cannot overwrite the approved pair. Gate GREEN cold, 311 workspace tests, **mutations 8 → 14, all KILLED**. 16 LOW findings deferred with file:line. Status → in-progress: Tasks 6 and 9 and ACs 7/12/13/15/16/17 remain OPEN and vehicle- and human-bound. |
 | 2026-08-17 | Continuation run closed all four falsified ACs in five commits (one per AC + mutations). **AC6 verified MET by the same sabotage that falsified it: 54/54 green with the feature deleted became 4 tests RED.** Mutation table 4 → 8, all KILLED. Gate green, 306 workspace tests. Status → review for the HEADLESS half; Tasks 6 and 9 and ACs 13/16/17 remain open and vehicle/human-bound. Self-gate remains a coverage hole — no conclusion on either run. |
