@@ -171,10 +171,10 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         count on the wire is unchanged (no double-emission); a save round-trip preserves lantern
         state with no new `SaveState` field; a seeded scenario run is identical twice.
 
-- [ ] **Task 2 — Re-rule the two lantern guards** (AC: 6, 7)
-  - [ ] Decide and record: does a dwarf lantern reach `emitter_entity`? Add the test that proves it
+- [x] **Task 2 — Re-rule the two lantern guards** (AC: 6, 7)
+  - [x] Decide and record: does a dwarf lantern reach `emitter_entity`? Add the test that proves it
         does not (or remove the `unreachable!` with the reason).
-  - [ ] Decide and record: is a *static* lantern emitter in a save still bogus? If yes, rename
+  - [x] Decide and record: is a *static* lantern emitter in a save still bogus? If yes, rename
         `loading_rejects_lantern_emitters_before_the_wire_bridge` — its name asserts a world state
         this story changes. If no, delete guard and test together with the reason.
 
@@ -412,6 +412,10 @@ Codex (GPT-5)
   `every snapshot dwarf must carry the lantern wire value` at `crates/simd/src/bridge.rs:406`;
   0 passed, 1 failed. The test independently expected `Some(protocol::LightKind::Lantern)` on each
   of the exactly five dwarf entities in both outputs.
+- Task 2 guard sabotage RED, after temporarily replacing `entity_kind(Lantern)`'s guard with
+  `EntityKind::Dwarf`, `cargo test --offline -p simd static_lantern_emitters_remain_rejected_by_the_bridge_guard`:
+  `test did not panic as expected at crates/simd/src/bridge.rs:431:8`; 0 passed, 1 failed. The
+  `unreachable!` was restored immediately after the observed failure.
 
 ### Completion Notes List
 
@@ -420,6 +424,11 @@ Codex (GPT-5)
   bridge dwarf arms now map that value to the existing protocol variant. `cargo test --offline -p
   sim-core -p simd` passed (49 sim-core unit, 10 save/load, 30 scenario, 12 worldgen, 16 simd unit,
   and 61 simd serve tests).
+- Task 2: Dwarf lanterns stay exclusively on the dwarf bridge arm; the static-emitter reader
+  contains only torches and the campfire, so the existing `emitter_entity` lantern guard remains
+  true. A malformed saved *static* lantern emitter remains invalid; renamed its test to
+  `loading_rejects_static_lantern_emitters_before_the_wire_bridge` to state that distinction.
+  `cargo test --offline -p simd` passed (18 unit and 61 serve tests).
 
 ### File List
 
@@ -437,3 +446,4 @@ Codex (GPT-5)
 | --- | --- |
 | 2026-08-18 | Story created. **The epic's central wire claim was falsified against source: `protocol::LightKind::Lantern`, `sim_core::LightKind::Lantern` and `Entity.light` all already exist, so AD-16's sanctioned wire diff is already spent and this story adds no protocol change** — AC3 pins that. Verified live off the wire that all five dwarves carry `light: None` today. Found two existing lantern guards that this story must re-rule rather than trip over: `emitter_entity`'s `unreachable!` and `load_world_from`'s rejection with its now-misnamed test. Identified the `Emitter`-component trap (double-emission plus a daemon panic) and the two-site `light: None` half-fix. Flagged the ground-luminance ceiling — not NFR6 — as the story's real look risk. |
 | 2026-08-18 | Task 1 complete: every dwarf now carries the uniform, non-persisted lantern through both bridge paths; no protocol change. |
+| 2026-08-18 | Task 2 complete: re-ruled static lantern emitters as invalid while proving dwarf lanterns bypass that path. |

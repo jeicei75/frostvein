@@ -741,7 +741,7 @@ mod tests {
     }
 
     #[test]
-    fn loading_rejects_lantern_emitters_before_the_wire_bridge() {
+    fn loading_rejects_static_lantern_emitters_before_the_wire_bridge() {
         let path = std::env::temp_dir().join(format!(
             "frostvein-5-1-lantern-save-{}.json",
             std::process::id()

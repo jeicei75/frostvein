@@ -410,6 +410,44 @@ mod tests {
     }
 
     #[test]
+    fn dwarf_lanterns_never_enter_the_static_emitter_path() {
+        let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+
+        assert_eq!(
+            world.emitters().len(),
+            5,
+            "the camp has only static emitters"
+        );
+        assert!(world.emitters().iter().all(|(_, _, light)| {
+            matches!(
+                light,
+                sim_core::LightKind::Torch | sim_core::LightKind::Campfire
+            )
+        }));
+
+        let snapshot = snapshot(&world, protocol::Speed::Normal);
+        assert_eq!(
+            snapshot.entities.len(),
+            10,
+            "dwarves must not be emitted twice"
+        );
+        assert!(snapshot.entities[..5].iter().all(|entity| {
+            entity.kind == protocol::EntityKind::Dwarf
+                && entity.light == Some(protocol::LightKind::Lantern)
+        }));
+    }
+
+    #[test]
+    #[should_panic(expected = "lanterns are not live emitters")]
+    fn static_lantern_emitters_remain_rejected_by_the_bridge_guard() {
+        super::emitter_entity((
+            sim_core::Id(99),
+            sim_core::Pos { x: 1, y: 2, z: 3 },
+            sim_core::LightKind::Lantern,
+        ));
+    }
+
+    #[test]
     fn snapshot_and_delta_carry_the_same_emitters() {
         let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
         let expected: Vec<_> = world
