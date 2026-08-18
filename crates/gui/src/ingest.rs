@@ -120,11 +120,24 @@ pub fn run() -> anyhow::Result<()> {
         // Capture output must never contain the diagnostic overlay.
         force_capture_overlay_off(&mut app);
         app.insert_resource(CaptureState::new(capture, args.frames, args.expect_work));
-        app.add_systems(Update, (accumulate_motion, capture_after_frames).chain());
+        // The instrument reads what the projection chain just wrote, so it must run after it.
+        // Bevy's ambiguity detection defaults to `LogLevel::Ignore`, so an unordered read here
+        // would be resolved silently and sample the frame at an undefined point.
+        app.add_systems(
+            Update,
+            (accumulate_motion, capture_after_frames)
+                .chain()
+                .after(ProjectionSet),
+        );
     }
     app.run();
     Ok(())
 }
+
+/// The whole wire-to-presentation chain, so anything that reads its output can be ordered
+/// behind it by name rather than by registration accident.
+#[derive(bevy::prelude::SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ProjectionSet;
 
 /// Registers the load-bearing wire-to-presentation pipeline for both the live app and headless
 /// tests. Keeping it in one place makes an omitted live system observable in the suite.
@@ -137,7 +150,8 @@ pub fn projection_systems(app: &mut App) {
             blend_projection,
             flicker_projection,
         )
-            .chain(),
+            .chain()
+            .in_set(ProjectionSet),
     );
 }
 
@@ -641,6 +655,61 @@ mod tests {
         assert_eq!(
             app.world().resource::<ProjectionWork>().dirty_tiles,
             [[0, 0, 0], [1, 0, 0]].into_iter().collect()
+        );
+    }
+
+    /// The headless seam tests drive `observe_tick` by hand, so nothing asserted that the
+    /// production ingest path re-bases the clock: deleting `clock.observe_tick(...)` here left
+    /// the whole suite green while every dwarf snapped tile to tile on the vehicle.
+    #[test]
+    fn ingesting_a_delta_rebases_the_blend_clock_from_the_wire() {
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Empty, Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(protocol::Delta {
+                msg_type: MessageType::Delta,
+                tick: 1,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Normal,
+            }))))
+            .unwrap();
+        let mut app = App::new();
+        app.insert_resource(MirrorResource(mirror))
+            .insert_resource(IngestReceiver(Mutex::new(receiver)))
+            .init_resource::<ProjectionWork>()
+            .init_resource::<TickClock>()
+            .add_systems(Update, ingest_messages);
+        // A full cadence has already elapsed on the client when the delta lands.
+        app.world_mut().resource_mut::<TickClock>().advance(0.1);
+
+        app.update();
+
+        let clock = app.world().resource::<TickClock>();
+        assert_eq!(
+            clock.last_tick(),
+            1,
+            "ingest must re-base the blend clock on the delivered tick"
+        );
+        assert_eq!(clock.elapsed(), 0.0, "the new interval starts at the delta");
+        assert_eq!(
+            clock.interval(),
+            0.1,
+            "the cadence is measured from the wire, never assumed"
         );
     }
 

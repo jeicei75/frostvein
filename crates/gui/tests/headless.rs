@@ -113,6 +113,14 @@ fn projected_translation(app: &mut App, id: u32) -> bevy::prelude::Vec3 {
         .expect("the wire entity must have a projection")
 }
 
+fn projected_intensity(app: &mut App, id: u32) -> f32 {
+    app.world_mut()
+        .query::<(&WorldProjected, &PointLight)>()
+        .iter(app.world())
+        .find_map(|(projected, light)| (projected.0 == id).then_some(light.intensity))
+        .expect("the emitter must have a point light")
+}
+
 fn dwarf(id: u32, pos: [i32; 3]) -> Entity {
     Entity {
         id,
@@ -218,6 +226,60 @@ fn snapshot_rewind_snaps_at_a_mid_blend_clock() {
         projected_translation(&mut app, id),
         world_to_render([19, 0, 0]),
         "a snapshot must snap even while the clock is half way through an interval"
+    );
+}
+
+/// The four seam tests above hand-drive `TickClock::advance`, so they pass whether or not the
+/// production system ever moves the clock. Replacing `time.delta_secs()` with `0.0` in
+/// `blend_projection` left the whole suite green; this is the test that catches it.
+#[test]
+fn production_drives_the_blend_clock_from_frame_time() {
+    let id = 75;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
+    let before = app.world().resource::<gui::blend::TickClock>().elapsed();
+    assert_eq!(before, 0.0, "a delivered tick re-bases the clock");
+
+    // Deliberately no hand-advanced clock: only the production blend system may move it.
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    app.update();
+
+    let after = app.world().resource::<gui::blend::TickClock>().elapsed();
+    assert!(
+        after > before,
+        "the production blend system must advance the clock from frame time, was {before} then {after}"
+    );
+}
+
+/// Same class one level down: `flickered_light_survives_...` only asserts the intensity differs
+/// from the table value, which is true at t=0 from the per-id phase offset alone. Replacing
+/// `time.elapsed_secs()` with `0.0` left the suite green — nothing asserted a light CHANGES.
+#[test]
+fn production_drives_the_flicker_from_elapsed_time() {
+    let id = 76;
+    let emitter = Entity {
+        id,
+        kind: EntityKind::Torch,
+        pos: [0, 0, 0],
+        state: JobState::Idle,
+        light: Some(protocol::LightKind::Torch),
+    };
+    let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
+    app.update();
+    let first = projected_intensity(&mut app, id);
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    app.update();
+    let second = projected_intensity(&mut app, id);
+
+    assert_ne!(
+        first, second,
+        "the production flicker system must animate the light from elapsed time"
     );
 }
 
