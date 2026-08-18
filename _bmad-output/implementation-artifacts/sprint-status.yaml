@@ -310,7 +310,7 @@ development_status:
   # every inherited recipe reads as broken; and entity visibility above the slice is a decision to
   # rule and test, not to leave undefined. This is also the story that gives 6.1's one-voxel dig
   # actual DEPTH. BLOCKED on Task 0 -- Wolf's artifact approval.
-  7-1-slice-into-the-mountain: ready-for-dev
+  7-1-slice-into-the-mountain: in-progress
   # Renders designations/zones issued from a TUI client — gui issues nothing here. That
   # placement is deliberate: the rendering survives if Epic 8's input work is cut.
   7-2-read-the-working-zoom: backlog

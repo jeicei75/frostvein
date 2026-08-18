@@ -1,10 +1,11 @@
 ---
 model: claude-opus-5[1m]  # policy default (Opus); recorded per the model policy so the ledger row is readable
+baseline_commit: db1c8475902a9822aec2b07052a56d2a8f6568e8
 ---
 
 # Story 7.1: Slice Into the Mountain
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- First story of Epic 7. Not on any cut list. It is also the story that gives the dig DEPTH:
      6.1's excavation is one voxel deep because a designation is a 2D rect at one z, and Wolf's
@@ -140,13 +141,19 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
         remain scaled cubes. **Raise explicitly:** which control won and why, so Wolf rules on the
         control *before* it is built rather than at the viewing.
 
-- [ ] **Task 1 — Choose the control by testing** (AC: 2, 3, 4)
-  - [ ] Try the candidates and record what each felt like. Note that the wheel is currently
-        **unbound**, so "modifier+wheel" is available today but collides with UX-DR2's intended
-        wheel-zoom later; `<`/`>` gives TUI parity and no collision at all.
-  - [ ] Record the ruling and the reasoning in the story — this AC is satisfied by the *record*,
-        not merely by a working control.
-  - [ ] Decide and record what happens to the chosen control when the wheel later becomes zoom.
+- [x] **Task 1 — Choose the control by testing** (AC: 2, 3, 4)
+  - [x] Tried the candidates against the actual client path. The wheel is **unbound in code** today,
+        but modifier+wheel would need to move when UX-DR2 gives the wheel to continuous zoom; it was
+        therefore rejected before adding a migration. Slice-follows-selection was rejected because
+        `gui` has no picking or selection in 7.1. Dedicated `<`/`>` is a discrete, immediate
+        keyboard step in the headless production schedule and matches `tui --z N`. No live vehicle
+        "feel" observation was possible in this devpod; the input/rebuild behaviour was tested
+        headlessly and the live feel remains Task 5/Wolf's call.
+  - [x] **PROVISIONAL (Wolf has not confirmed):** `<` lowers and `>` raises the client-local slice.
+        It wins TUI parity, has no current binding collision (`Q`/`E` retain zoom), and is one cheap
+        binding to reverse at the viewing.
+  - [x] When UX-DR2 later gives the wheel to zoom, `<`/`>` remain unchanged; no wheel slice binding
+        needs migration.
 
 - [ ] **Task 2 — The slice** (AC: 5, 6, 7, 8)
   - [ ] Add the slice level as a `ClientLocal` resource (the `TickClock` precedent in

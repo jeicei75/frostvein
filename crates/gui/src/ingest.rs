@@ -40,6 +40,7 @@ use crate::{
         ClientLocal, DigChipQuery, ProjectionAssets, TerrainQuery, TerrainTile, WorldProjected,
         blend_entities, flicker_lights, reconcile, setup_projection_assets,
     },
+    slice::SliceLevel,
 };
 
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
@@ -80,6 +81,10 @@ pub fn run() -> anyhow::Result<()> {
         .spawn(move || read_messages(reader, sender))
         .context("could not spawn server reader thread")?;
 
+    let slice = args.slice_level.map_or_else(
+        || SliceLevel::at_world_top(mirror.dims()),
+        |level| SliceLevel::pinned(mirror.dims(), level),
+    );
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
@@ -87,6 +92,7 @@ pub fn run() -> anyhow::Result<()> {
             config: overlay_config_off(),
         })
         .insert_resource(MirrorResource(mirror))
+        .insert_resource(slice)
         .insert_resource(IngestReceiver(Mutex::new(receiver)))
         .insert_resource(ProjectionWork {
             snapshot: true,
@@ -142,10 +148,15 @@ pub struct ProjectionSet;
 /// Registers the load-bearing wire-to-presentation pipeline for both the live app and headless
 /// tests. Keeping it in one place makes an omitted live system observable in the suite.
 pub fn projection_systems(app: &mut App) {
+    if !app.world().contains_resource::<SliceLevel>() {
+        let dims = app.world().resource::<MirrorResource>().0.dims();
+        app.insert_resource(SliceLevel::at_world_top(dims));
+    }
     app.init_resource::<TickClock>().add_systems(
         Update,
         (
             ingest_messages,
+            slice_controls,
             reconcile_projection,
             blend_projection,
             flicker_projection,
@@ -175,6 +186,7 @@ struct Args {
     capture: Option<PathBuf>,
     frames: u32,
     expect_work: bool,
+    slice_level: Option<i32>,
 }
 
 fn parse_args() -> anyhow::Result<Args> {
@@ -186,6 +198,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut capture = None;
     let mut frames = None;
     let mut expect_work = false;
+    let mut slice_level = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -201,6 +214,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             );
         } else if arg == "--expect-work" {
             expect_work = true;
+        } else if arg == "--z" {
+            let value = args.next().context("--z requires a level")?;
+            slice_level = Some(
+                value
+                    .to_string_lossy()
+                    .parse()
+                    .context("invalid --z level")?,
+            );
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -214,11 +235,15 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if expect_work && capture.is_none() {
         bail!("--expect-work requires --capture");
     }
+    if slice_level.is_some() && capture.is_none() {
+        bail!("--z requires --capture");
+    }
     Ok(Args {
         port,
         capture,
         frames: frames.unwrap_or(0),
         expect_work,
+        slice_level,
     })
 }
 
@@ -295,6 +320,26 @@ fn camera_controls(
         rig.orbit(yaw, pitch);
         rig.zoom(zoom);
         *transform = rig.transform();
+    }
+}
+
+/// `<` / `>` use the comma and period keys today. The planned wheel zoom remains unclaimed until
+/// UX-DR2 lands, so this client-local binding does not create a future migration.
+fn slice_controls(
+    keys: Res<ButtonInput<KeyCode>>,
+    mirror: Res<MirrorResource>,
+    mut slice: ResMut<SliceLevel>,
+    mut work: ResMut<ProjectionWork>,
+) {
+    let mut changed = slice.rebind(mirror.0.dims());
+    if keys.just_pressed(KeyCode::Comma) {
+        changed |= slice.step(-1);
+    }
+    if keys.just_pressed(KeyCode::Period) {
+        changed |= slice.step(1);
+    }
+    if changed {
+        work.snapshot = true;
     }
 }
 
@@ -393,9 +438,13 @@ fn blend_projection(
     blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);
 }
 
+// Each parameter is a distinct ECS partition; bundling them solely to reduce the system signature
+// would obscure the client-local slice boundary from the mirror and projection queries.
+#[allow(clippy::too_many_arguments)]
 pub fn reconcile_projection(
     mut commands: Commands,
     mirror: Res<MirrorResource>,
+    slice: Res<SliceLevel>,
     mut work: ResMut<ProjectionWork>,
     projected: Query<
         (
@@ -416,6 +465,7 @@ pub fn reconcile_projection(
     reconcile(
         &mut commands,
         &mirror.0,
+        *slice,
         rebuild,
         &changes,
         &projected,

@@ -1,13 +1,16 @@
 #![forbid(unsafe_code)]
 
+use std::collections::BTreeSet;
+
 use bevy::color::ColorToPacked;
 use bevy::{
     MinimalPlugins,
     app::App,
     ecs::system::RunSystemOnce,
+    input::ButtonInput,
     prelude::{
-        Assets, Entity as BevyEntity, Mesh, Mesh3d, MeshMaterial3d, PointLight, StandardMaterial,
-        Transform,
+        Assets, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, PointLight,
+        StandardMaterial, Transform,
     },
 };
 use client_core::Mirror;
@@ -17,6 +20,7 @@ use gui::{
     project::{
         ClientLocal, ProjectedItem, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
     },
+    slice::SliceLevel,
     transform::world_to_render,
 };
 use protocol::{
@@ -27,6 +31,7 @@ use protocol::{
 fn headless_app(snapshot: Snapshot) -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
+        .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<Assets<Mesh>>()
         .init_resource::<Assets<StandardMaterial>>()
         .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
@@ -156,6 +161,57 @@ fn projected_scene(app: &mut App) -> Vec<(u32, Option<[i32; 3]>, [i32; 3])> {
         .collect::<Vec<_>>();
     scene.sort_unstable();
     scene
+}
+
+#[test]
+fn keyboard_slice_rebuilds_the_cut_face_and_hides_surface_entities() {
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut app = headless_app(snapshot_with_dims(
+        dims,
+        vec![Tile::Solid(Material::Stone); 27],
+        vec![dwarf(91, [1, 1, 2]), dwarf(92, [1, 1, 1])],
+    ));
+    app.update();
+    assert_eq!(
+        app.world().resource::<SliceLevel>().level(),
+        2,
+        "the boot frame starts at the world top"
+    );
+
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Comma);
+    app.update();
+
+    let terrain = app
+        .world_mut()
+        .query::<&TerrainTile>()
+        .iter(app.world())
+        .map(|tile| tile.0)
+        .collect::<BTreeSet<_>>();
+    let expected = (0..3)
+        .flat_map(|x| (0..3).map(move |y| [x, y, 0]))
+        .chain((0..3).flat_map(|x| (0..3).map(move |y| [x, y, 1])))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        terrain, expected,
+        "the z=1 cut must include its buried floor while hiding z=2 terrain"
+    );
+
+    let projected = app
+        .world_mut()
+        .query::<&WorldProjected>()
+        .iter(app.world())
+        .map(|marker| marker.0)
+        .collect::<BTreeSet<_>>();
+    assert!(
+        !projected.contains(&91),
+        "a surface dwarf must not float above a slice"
+    );
+    assert!(
+        projected.contains(&92),
+        "an entity at the slice remains visible"
+    );
 }
 
 #[test]
@@ -730,7 +786,11 @@ fn recorded_camp_snapshot_projects_exactly_five_warm_point_lights() {
             light: None,
         }))
         .collect();
-    let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], entities));
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 2, y: 1, z: 10 },
+        vec![Tile::Empty; 20],
+        entities,
+    ));
 
     app.update();
 
