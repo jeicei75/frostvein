@@ -276,12 +276,41 @@ development_status:
   # NOTHING PUSHED.
   6-1-the-world-moves: in-progress
   # FIRST ON THE M2 CUT LIST. Cutting it leaves Epic 6's wow intact.
-  6-2-lanterns-in-the-dark: backlog
+  # STORY CREATED 2026-08-18 (ready-for-dev). THE EPIC'S CENTRAL WIRE CLAIM IS STALE AND WAS
+  # FALSIFIED AGAINST SOURCE: protocol::LightKind::Lantern, sim_core::LightKind::Lantern and
+  # Entity.light ALL ALREADY EXIST, so AD-16's sanctioned M2 wire diff was spent at 5.1 and this
+  # story adds NO protocol change -- AC3 pins that and it materially shrinks the story. The work is
+  # switching two hardcoded `light: None` sites (bridge.rs:27 snapshot, :82 delta -- fixing only one
+  # lights dwarves on connect then drops them, which looks like a flicker bug) and making the world
+  # say every dwarf carries one. gui needs ~zero change: reconcile already spawns a PointLight for
+  # any entity with a wire light, 6.1's flicker animates it, and 6.1's blend makes the pool slide
+  # with the dwarf for free. TRAP FOUND: do NOT give dwarves the existing Emitter component --
+  # emitters() would double-emit them AND drive them into entity_kind()'s unreachable!(), panicking
+  # the daemon. TWO EXISTING GUARDS must be re-ruled rather than tripped over: that unreachable!,
+  # and load_world_from's lantern rejection whose test name (`..._before_the_wire_bridge`) asserts a
+  # world state this story changes. THE REAL LOOK RISK IS THE GROUND-LUMINANCE CEILING, NOT NFR6:
+  # 6.1 measured >143 fps (4.8x headroom) but 5.4's frame measured ground-median 123 against a
+  # ceiling of 180, and this adds five 11M-lumen lights inside the camp. Verified live off the wire:
+  # all 5 dwarves carry light: None today. BLOCKED on Task 0 -- Wolf's artifact approval.
+  6-2-lanterns-in-the-dark: ready-for-dev
   epic-6-retrospective: optional
-  epic-7: backlog
+  epic-7: in-progress
   # Resolves the addendum's open control collision BY TESTING, on the record: the
   # mousewheel is already claimed by the zoom continuum and one wheel cannot drive both.
-  7-1-slice-into-the-mountain: backlog
+  # ^ STORY CREATED 2026-08-18 (ready-for-dev) AND THAT PREMISE IS STALE. Falsified against source:
+  # `gui` binds NO mouse input of any kind -- no MouseWheel, no MouseButton, no CursorMoved -- and
+  # camera zoom sits on the Q/E KEYS (camera_controls). The wheel is UNCLAIMED IN CODE; the
+  # collision is planned (UX-DR2 intends the wheel) rather than implemented. That does not dissolve
+  # the decision, it changes it: the wheel is available today but costs a migration when zoom
+  # arrives, while `<`/`>` costs nothing and matches tui --z. AC3 requires the ruling against this
+  # reality. CUT-FACE TRAP FOUND: a naive `z <= level` filter over the existing draw set yields a
+  # HOLLOW SHELL, because a buried tile is not `is_exposed` -- the `z == level` arm that draws the
+  # floor of the cut IS the feature. Also flagged: the pinned 53,365-cube draw-set oracle is a
+  # FULL-DEPTH figure that slicing necessarily changes, so the startup line must name its level or
+  # every inherited recipe reads as broken; and entity visibility above the slice is a decision to
+  # rule and test, not to leave undefined. This is also the story that gives 6.1's one-voxel dig
+  # actual DEPTH. BLOCKED on Task 0 -- Wolf's artifact approval.
+  7-1-slice-into-the-mountain: ready-for-dev
   # Renders designations/zones issued from a TUI client — gui issues nothing here. That
   # placement is deliberate: the rendering survives if Epic 8's input work is cut.
   7-2-read-the-working-zoom: backlog
