@@ -195,12 +195,12 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         equals the dwarf's rendered translation (AC11); a dwarf with `light: None` gets no
         `PointLight` (the negative case that proves the light is wire-driven, not kind-driven).
 
-- [ ] **Task 5 — The instrument** (AC: 15, 16)
-  - [ ] Extend `CaptureState` (`crates/gui/src/capture.rs`) to accumulate lit-terrain counts at the
+- [x] **Task 5 — The instrument** (AC: 15, 16)
+  - [x] Extend `CaptureState` (`crates/gui/src/capture.rs`) to accumulate lit-terrain counts at the
         dwarves' successive positions, print one lantern line **before** any assertion (6.1's
         lesson: a failing run must still print its numbers), then assert non-zero and moved.
-  - [ ] Keep 6.1's motion line and 5.4's range checks exactly as they are.
-  - [ ] Unit-test the accumulator against a hand-built mirror sequence — a still world fails, a
+  - [x] Keep 6.1's motion line and 5.4's range checks exactly as they are.
+  - [x] Unit-test the accumulator against a hand-built mirror sequence — a still world fails, a
         moving one passes.
 
 - [ ] **Task 6 — The live vehicle session** (AC: 9, 13, 14, 15)
@@ -421,6 +421,10 @@ Codex (GPT-5)
   a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table` failed at
   `crates/gui/tests/headless.rs:224`: `a wire-declared lantern must project a point light`; 0
   passed, 1 failed. The generic reconciliation branch was restored immediately.
+- Task 5 RED, before implementation, `cargo test --offline -p gui
+  lantern_instrument_requires_a_lit_region_to_move` failed to compile with `E0433: cannot find
+  type LanternStats in this scope` at `crates/gui/src/capture.rs:372` and `:378`; the test named
+  the missing accumulator before it was added.
 
 ### Completion Notes List
 
@@ -444,6 +448,12 @@ Codex (GPT-5)
   lantern table's colour/range/intensity band, an unlit dwarf gets no light, and the lantern lives
   on the same mid-blended `WorldProjected` transform as the dwarf. `cargo test --offline -p gui`
   passed (42 library, 24 headless integration, and 1 non-ignored capture test).
+- Task 5: Added the capture-only `LanternStats` accumulator. After the shared projection set, it
+  derives each lantern dwarf's lit terrain set from the same rendered `PointLight` transform and
+  terrain transforms, records only successive delivered dwarf positions, prints the lantern line
+  before either assertion, and requires non-zero lit terrain plus a changed first/last region.
+  The existing motion line and image range checks are unchanged. `cargo test --offline -p gui`
+  passed (43 library, 24 headless integration, and 1 non-ignored capture test).
 
 ### File List
 
@@ -453,6 +463,7 @@ Codex (GPT-5)
 - crates/sim-core/tests/worldgen.rs
 - crates/simd/src/bridge.rs
 - crates/gui/tests/headless.rs
+- crates/gui/src/capture.rs
 - _bmad-output/implementation-artifacts/6-2-lanterns-in-the-dark.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
@@ -465,3 +476,4 @@ Codex (GPT-5)
 | 2026-08-18 | Task 2 complete: re-ruled static lantern emitters as invalid while proving dwarf lanterns bypass that path. |
 | 2026-08-18 | Task 3 complete: recorded the no-TUI-change ruling. |
 | 2026-08-18 | Task 4 complete: verified the existing generic moving-light path and added its lantern guardrail tests. |
+| 2026-08-18 | Task 5 complete: added the moving-lantern capture accumulator and its still-versus-moving test. |
