@@ -429,6 +429,8 @@ gpt-5.6 (Codex)
   the level guard and the production-path regression above; `cargo test --offline -p gui` then passed.
 - **Follow-up gate — 2026-08-18:** after repeating the mutation pass and mandated `cargo clean -p
   gui`, `scripts/gate.sh` again reached `GATE GREEN`.
+- **Self-review pass 2 — 2026-08-18:** `codex review --base 6-2-lanterns-in-the-dark` returned
+  no actionable correctness issues, so the three-pass cap was not approached.
 
 ### Completion Notes List
 
@@ -471,3 +473,4 @@ gpt-5.6 (Codex)
 | 2026-08-18 | Story created. **The epic's control-collision premise was falsified against source: `gui` binds no mouse input of any kind and camera zoom sits on `Q`/`E` keys, so the wheel is unclaimed in code** — the collision is planned (UX-DR2 intends the wheel) rather than implemented, and AC3 requires the story to choose against that reality. Identified the cut-face trap: a naive `z <= level` filter over the existing exposure rule yields a hollow shell, because a buried tile is not "exposed" — the `z == level` arm is the whole feature. Flagged that the pinned 53,365-cube draw-set oracle is a full-depth figure that slicing necessarily changes, so the line must name its level or every inherited recipe reads as broken. Raised entity visibility above the slice as a decision to rule and test rather than leave undefined. |
 | 2026-08-18 | Implemented the headless slice, capture instrument, always-on level readout, and tech-art rule. `<`/`>` is explicitly **PROVISIONAL (Wolf has not confirmed)**. Seven mutations killed and the gate is green; vehicle-only Task 5 and Wolf-only Task 8 remain open. |
 | 2026-08-18 | Self-review pass 1 caught dig chips from a later empty-tile delta floating above the cut. Added the slice-level guard and production-path regression; the repeated mutation run and follow-up gate are green. |
+| 2026-08-18 | Self-review pass 2 returned no actionable correctness issues; stopped at two passes. |
