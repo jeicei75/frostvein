@@ -81,7 +81,7 @@ NFR6 reading and the captures is headless-testable in any devpod under `MinimalP
 
 ### Work leaves evidence at the dig face
 
-7. **The named dig site is `[58,68,9]`–`[64,69,9]`** — 8 mineral tiles (ice/snow), every one
+7. **The named dig site is `[55,62,9]`–`[56,65,9]`** — 8 mineral tiles (ice/snow), every one
    sky-exposed and unoccluded at the boot framing, designated **from a TUI client on the same
    daemon** (the Bevy client issues no commands until Epic 8). When it is dug, the sim's stone
    items render as world-projected entities at the dug tiles and stay there — no stockpile is
@@ -469,7 +469,20 @@ endanger the capture range checks.
 
 - Camp at z 9 near map centre: campfire id 5 at `[64,64,9]`, torches ids 6–9 at `[62,62]`,
   `[66,62]`, `[62,66]`, `[66,66]`; dwarves ids 0–4. The camp floor is z 8, so dwarves stand at z 9.
-- **The named dig site `[58,68,9]`–`[64,69,9]` designates exactly 8 tiles** (ice + snow, all
+- **AMENDED 2026-08-18 (Wolf's ruling at the live viewing). The named dig site is now
+  `[55,62,9]`–`[56,65,9]`: a 2x4 rect of 8 tiles, ALL of them solid.** The original
+  `[58,68,9]`–`[64,69,9]` is superseded — it straddled a slope, and slope tiles are `Tile::Ramp`,
+  which is not diggable, so four of them stood as a contiguous wall through the middle of the
+  finished excavation. The site was re-verified live end to end before any vehicle run: 8
+  designations, first dwarf in `Work` at ~24 ticks, **all 8 tiles dug in 52 ticks — the same figure
+  as the original** — 8 stone items left standing, max 2 dwarves working at once, and **nothing left
+  standing inside the site**. Projection `(0.424,0.692)`–`(0.455,0.721)`, the same v-band as the
+  original, so it reads at the same place in the composition; 9.2 tiles from the campfire (range 28)
+  and 7 from the nearest torch (range 20). It is the ONLY rect near the camp that is all-solid,
+  sky-exposed, unoccluded from the boot camera AND in frame — 19 tiles in the whole neighbourhood
+  meet all four constraints, so the choice was forced, not preferred. **AC7's "8 mineral tiles"
+  needs no amendment.** Superseded original, kept for the record:
+- **The superseded site `[58,68,9]`–`[64,69,9]` designated exactly 8 tiles** (ice + snow, all
   `Tile::Solid` — `Tile::Ramp` is **not** diggable, `crates/sim-core/src/lib.rs:1339-1341`), all of
   them the top of the world at that column and all unoccluded from the boot camera. Projected
   screen positions run `(0.49,0.70)`–`(0.53,0.73)` — lower centre of frame, inside the camp's light.
@@ -627,9 +640,10 @@ CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
 
 ```bash
 ./target/debug/tui 7451 --z 9 --frames 3 \
-  --key d,h,h,h,h,h,h,j,j,j,j,enter,l,l,l,l,l,l,j,enter
-# d = dig mode (cursor resets to 64,64) · 6x h and 4x j reach [58,68] · enter anchors
-# 6x l and 1x j reach [64,69] · enter commits the rect [58,68,9]-[64,69,9]
+  --key d,h,h,h,h,h,h,h,h,h,k,k,enter,l,j,j,j,enter
+# d = dig mode (cursor resets to 64,64) · 9x h and 2x k reach [55,62] · enter anchors
+# 1x l and 3x j reach [56,65] · enter commits the rect [55,62,9]-[56,65,9]
+# EXECUTED LIVE 2026-08-18: 8 designations, all 8 tiles dug in 52 ticks, 8 items, nothing standing.
 ```
 
 **The motion capture (the obligation the dev agent inherits — it cannot run until the blend
@@ -1100,6 +1114,63 @@ changed-pixel count and the window bounds before asserting. **This does not requ
 AC is met by the pass; the print is so the next operator gets the number rather than only the
 verdict. It is inside the `#[ignore]`d vehicle test, so the headless gate is unaffected.
 
+
+### The live viewing and its two rulings (2026-08-18) — Task 6 partially re-opened
+
+Wolf viewed the built result on the vehicle. **Dwarves slide** — AC2's headline outcome confirmed
+live. Two findings came out of it, both his, both correct, and both fixed here.
+
+**RULING 1 — the flicker read as STATIC, and the mechanism was never the problem.** Measured in a
+real app the campfire's `PointLight` takes 5,587 distinct intensity values with a 22% peak-to-peak
+swing, so it was animating exactly as designed. At torch ±7% / campfire ±11% — about a tenth of a
+stop, through HDR tonemapping — it is simply below the threshold at which a light pool reads as
+breathing. AC10's mechanism clauses were met and **AC10's observable intent was not**, which on this
+project means not met. **Wolf's ruling: strong — torch 0.30, campfire 0.40** (~4x), on the reasoning
+that a timid bump risks a second failed viewing and a whole extra vehicle session. The hand-written
+band literals and the peak-reached assertion moved with the table, so the test still cannot go
+tautological. Warm-pixel headroom is ample: the floor is 3,000 and the vehicle measured ~28,800.
+This was the exact risk the code review flagged in advance and carried into the runbook.
+
+**RULING 2 — THE DIG SITE IS RE-PICKED.** Wolf: *"after digging tile walls are still in place"*. He
+was right and my first diagnosis (snow caps re-whitening the trench floor) was wrong. Measured
+cause: the named rect straddles a **slope**, and the sim represents slope tiles as `Tile::Ramp`,
+which is **not diggable** (`sim-core:1339-1341`). Of the 14 tiles in `[58,68,9]`–`[64,69,9]`, 8 were
+solid, 2 already empty, and **4 were ramps at x=58–61, y=69 — contiguous**. They stood at full
+height while the row in front was excavated: a wall through the middle of the dig.
+
+**The story KNEW 8 of 14 were diggable and recorded it at creation. What nobody drew was that the
+leftovers are contiguous rather than scattered.** That makes it the eighth instance of the
+AC-text-defect class this story's own Dev Notes track — and the first one caught only by a human
+eye on the vehicle, which is precisely what the sign-off gate exists for.
+
+**A false start worth recording, because it is the argument for checking before sending Wolf back to
+the vehicle.** The first replacement I proposed, `[64,57,9]`–`[66,58,9]`, was all-solid and in frame
+— and a raytrace from the boot camera found **5 of its 6 tiles occluded by tree foliage**. It would
+have been strictly worse than the site it replaced, and the failure would have surfaced only at the
+next live viewing.
+
+**The replacement, chosen on four constraints at once:** solid + sky-exposed + unoccluded from the
+boot camera + in frame. Exactly **19 tiles in the whole neighbourhood** satisfy all four, and
+`[55,62,9]`–`[56,65,9]` is the only 8-tile rect among them — the choice was forced, not preferred.
+**Re-verified live end to end before any vehicle run**, with the real TUI key sequence:
+
+```
+8 designations issued · first dwarf in Work at ~24 ticks · ALL 8 TILES DUG IN 52 TICKS
+8 stone items left standing · max 2 dwarves working at once
+tiles still standing inside the site: NONE - clean excavation, no wall
+projection (0.424,0.692)-(0.455,0.721)  -- same v-band as the original
+```
+
+52 ticks is **identical** to the original site's measured figure, and the tile count is unchanged,
+so **AC7's "8 mineral tiles" needs no amendment** and AC9's framing assertion simply moves. New key
+sequence: `d,h,h,h,h,h,h,h,h,h,k,k,enter,l,j,j,j,enter`.
+
+**What this costs in already-collected evidence.** ACs 12, 13 and 14 stand — they are about motion,
+frame rate and the instrument, none of which depend on which tiles are dug. **AC15 must be re-run**:
+its window now points at the new site, and the 2026-08-17 capture pair is of the old one. The
+approved artifact carries an amendment note rather than a rewrite; its PNGs are kept as the record
+of what was actually approved on 2026-08-17.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/6-1-signoff/what-you-will-see.md` (new)
@@ -1142,6 +1213,7 @@ all already listed above.)*
 
 | Date | Change |
 | --- | --- |
+| 2026-08-18 | **Live viewing: two rulings by Wolf, both fixed.** (1) The flicker read as STATIC though the mechanism ran correctly (5,587 distinct intensities measured) -- amplitude raised torch 0.07 -> 0.30 and campfire 0.11 -> 0.40 on his ruling, band literals and peak assertion moved with it. (2) **The dig site is RE-PICKED to `[55,62,9]`-`[56,65,9]`**: the original straddled a slope and 4 undiggable `Tile::Ramp` tiles stood as a contiguous wall through the excavation -- the story knew 8 of 14 were diggable but nobody drew that the leftovers were contiguous (8th AC-text defect, first caught only by a human eye). A first replacement was rejected by raytrace: 5 of 6 tiles occluded by trees. The chosen site is the ONLY 8-tile rect near the camp that is solid + sky-exposed + unoccluded + in frame (19 tiles qualify at all), re-verified live: all 8 dug in 52 ticks (identical to the original), 8 items, NOTHING left standing. AC7's tile count needs no amendment. ACs 12/13/14 stand; **AC15 must be re-run** against the new window. |
 | 2026-08-18 | **Code review (4 layers, fresh context) + patch round.** The feature was watched running live against a real daemon, and AC6 confirmed genuinely closed — but **three one-line deletions (`observe_tick`, `delta_secs`, `elapsed_secs`) each killed wow beat 2 with the suite 57/57 GREEN**, the same defect class as run one's inert `projection_systems`, one level below where AC6 looks. 1 decision + 8 patches applied: three production-drive tests, the motion line printed before its assertion, the mid-blend counter now reading real `Transform`s instead of the clock, `ProjectionSet` ordering for the instrument, literal flicker-band assertions (the old one was a tautology), a same-frame burst guard on the tick clock, a running-max item count, and a 200-pixel floor on AC15's window. Wolf ruled the `--frames 600` before-run up to 1,500 — at 10 Hz against >135 fps it was ~44 ticks and would have panicked before writing any PNG on Task 6's first command; the Task 0 recipe was left untouched as a record of what was actually run, and the Task 6 outputs renamed so they cannot overwrite the approved pair. Gate GREEN cold, 311 workspace tests, **mutations 8 → 14, all KILLED**. 16 LOW findings deferred with file:line. Status → in-progress: Tasks 6 and 9 and ACs 7/12/13/15/16/17 remain OPEN and vehicle- and human-bound. |
 | 2026-08-17 | Continuation run closed all four falsified ACs in five commits (one per AC + mutations). **AC6 verified MET by the same sabotage that falsified it: 54/54 green with the feature deleted became 4 tests RED.** Mutation table 4 → 8, all KILLED. Gate green, 306 workspace tests. Status → review for the HEADLESS half; Tasks 6 and 9 and ACs 13/16/17 remain open and vehicle/human-bound. Self-gate remains a coverage hole — no conclusion on either run. |
 | 2026-08-17 | Orchestrator verification of the Codex dev run. Gate green, 4/4 mutations killed, AC19 scope exact, all commits Völundr, nothing pushed — but **AC4, AC5, AC6 and AC11 are unmet or untested and four subtasks were ticked without being delivered.** AC6 falsified by sabotage: removing both `blend_projection` and `flicker_projection` from the live tuple leaves the full suite 54/54 green, because `projection_systems` is called only by `run()` and never by the headless tests. Tasks 1, 2 and 3 reopened. Self-gate recorded as a coverage hole (ran once, returned nothing). Commit cadence 3 commits for 7 tasks, below the floor. |

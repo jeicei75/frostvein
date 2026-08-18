@@ -56,12 +56,12 @@ and are the baseline this run is compared against.
 
 ```bash
 ./target/debug/tui 7451 --z 9 --frames 3 \
-  --key d,h,h,h,h,h,h,j,j,j,j,enter,l,l,l,l,l,l,j,enter
+  --key d,h,h,h,h,h,h,h,h,h,k,k,enter,l,j,j,j,enter
 ```
 
-`d` enters dig mode and resets the cursor to (64,64); 6×`h` + 4×`j` reach `[58,68]`; `enter`
-anchors; 6×`l` + 1×`j` reach `[64,69]`; `enter` commits the rect `[58,68,9]`–`[64,69,9]` = 8
-mineral tiles. Measured at story-creation: designation reaches the wire ~2 ticks later, the first
+`d` enters dig mode and resets the cursor to (64,64); 9×`h` + 2×`k` reach `[55,62]`; `enter`
+anchors; 1×`l` + 3×`j` reach `[56,65]`; `enter` commits the rect `[55,62,9]`–`[56,65,9]` = 8
+mineral tiles, **all eight of them diggable**. Measured live on 2026-08-18 against this exact sequence: designation reaches the wire ~2 ticks later, the first
 dwarf enters `Work` ~24 ticks after that, **all 8 tiles are dug within 52 ticks (~5 s)**, and 8
 stone items then stand at the site permanently.
 

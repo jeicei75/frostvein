@@ -1,5 +1,17 @@
 # Story 6.1 sign-off artifact — "here is what you will see" (UX-DR22 opening half)
 
+> **AMENDMENT 2026-08-18 — read this before the rest of the file.** Two things below are
+> superseded by Wolf's rulings at the live viewing. **(1) The named dig site moved** from
+> `[58,68,9]`–`[64,69,9]` to `[55,62,9]`–`[56,65,9]`. The original straddled a slope; slope tiles
+> are `Tile::Ramp` and are not diggable, so four of them stood as a contiguous wall through the
+> middle of the finished excavation — Wolf saw it live and was right. The replacement is 2x4, all
+> eight tiles solid, all sky-exposed, unoccluded and in frame, and was re-verified live end to end
+> (8 dug in 52 ticks, 8 items, nothing left standing). **(2) The flicker amplitude was raised** from
+> torch 0.07 / campfire 0.11 to **0.30 / 0.40**: the mechanism ran correctly all along, but at ~0.1
+> stop it read as static to the eye. The before/after PNGs in this directory are of the ORIGINAL
+> site and are kept as the record of what was actually approved on 2026-08-17; they are no longer
+> the comparison baseline for the dig. Everything else here still stands.
+
 **Status: PART (c) RULED BY WOLF 2026-08-16. PART (a) TAKEN 2026-08-17 and measured — it produced
 a finding, now line 8 of part (c). AWAITING WOLF'S APPROVAL of the artifact as a whole. Until that
 approval, no implementation commit and no Codex handoff (AC1).**

@@ -785,13 +785,28 @@ fn empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_
 
 #[test]
 fn named_dig_site_stays_inside_the_boot_camera_frame() {
+    // Re-picked at the live viewing (Wolf, 2026-08-18). The original [58,68,9]-[64,69,9]
+    // straddled a slope, and slope tiles are `Tile::Ramp`, which is not diggable -- four of them
+    // stood as a contiguous wall through the middle of the excavation. This site is the ONLY
+    // 2x4 rect near the camp that is all-solid, sky-exposed, unoccluded from the boot camera and
+    // in frame; 19 tiles in the whole neighbourhood meet all four constraints.
     let rig = gui::camera::CameraRig::new([64, 64, 9]);
-    for x in 58..=64 {
-        for y in 68..=69 {
+    let mut projected = Vec::new();
+    for x in 55..=56 {
+        for y in 62..=65 {
             let point = rig
                 .project_world_point([x, y, 9])
                 .expect("dig site must be in front of the camera");
-            assert!((0.0..=1.0).contains(&point.x) && (0.0..=1.0).contains(&point.y));
+            assert!(
+                (0.0..=1.0).contains(&point.x) && (0.0..=1.0).contains(&point.y),
+                "[{x},{y},9] projects outside the boot frame at {point:?}"
+            );
+            projected.push(point);
         }
     }
+    let min_x = projected.iter().map(|p| p.x).fold(f32::MAX, f32::min);
+    let max_x = projected.iter().map(|p| p.x).fold(f32::MIN, f32::max);
+    let min_y = projected.iter().map(|p| p.y).fold(f32::MAX, f32::min);
+    let max_y = projected.iter().map(|p| p.y).fold(f32::MIN, f32::max);
+    println!("dig site projects to u {min_x:.3}-{max_x:.3} v {min_y:.3}-{max_y:.3}");
 }

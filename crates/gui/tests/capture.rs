@@ -56,8 +56,8 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
     let second_pixels = image::open(second).unwrap().to_rgba8();
     assert_eq!(first_pixels.dimensions(), second_pixels.dimensions());
     let rig = CameraRig::new([64, 64, 9]);
-    let projected = (58..=64)
-        .flat_map(|x| (68..=69).map(move |y| [x, y, 9]))
+    let projected = (55..=56)
+        .flat_map(|x| (62..=65).map(move |y| [x, y, 9]))
         .map(|point| {
             rig.project_world_point(point)
                 .expect("dig site must project")
@@ -85,10 +85,14 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
             inside && distance > 30
         })
         .count();
-    // Measured on the approved 6-1-signoff pair with this exact window: 1,651 pixels changed
+    // Measured on the 2026-08-17 pair over the ORIGINAL site's window: 1,651 pixels changed
     // inside it against 604 across the whole rest of the frame, i.e. ~5 expected inside from
     // snowfall and aurora alone. A bare `> 0` would therefore pass on atmosphere with ~99.5%
     // probability -- the same vacuity the whole-file byte comparison had, just smaller.
+    // NOTE: the floor is carried over to the re-picked site (same tile count, same v-band, a
+    // narrower u-span) and is deliberately conservative at ~12% of that measured signal. The
+    // count is printed below, so the first vehicle run on the new site re-calibrates it on
+    // evidence rather than on this inference.
     const DIG_SITE_CHANGED_PIXEL_FLOOR: usize = 200;
     // Reported before it is asserted, for the same reason the motion line is: a bare pass tells
     // the operator the bar was cleared but not by how much, and the margin is the interesting
