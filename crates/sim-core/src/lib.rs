@@ -115,6 +115,10 @@ pub enum LightKind {
     Lantern,
 }
 
+/// Every dwarf carries the same permanent lantern.
+// NOTE: this becomes saved per-dwarf state only when a future story lets a lantern be dropped.
+pub const DWARF_LIGHT: LightKind = LightKind::Lantern;
+
 #[derive(Resource)]
 struct Camp(Pos);
 
@@ -1485,9 +1489,9 @@ impl World {
     }
 
     /// Sorted ascending by `Id` — stable order is required by AD-7.
-    // NOTE: the carried stone deliberately did NOT become a fourth field here. `carrying()` is a
-    // sibling reader instead, which leaves this tuple — and therefore `simd`'s bridge — untouched.
-    pub fn dwarves(&self) -> Vec<(Id, Pos, JobState)> {
+    // NOTE: `DWARF_LIGHT` is a uniform property, not saved per-dwarf state, until lanterns can be
+    // dropped. `carrying()` remains the sibling reader for the one mutable dwarf property.
+    pub fn dwarves(&self) -> Vec<(Id, Pos, JobState, LightKind)> {
         let mut dwarves: Vec<_> = self
             .ecs
             .iter_entities()
@@ -1497,6 +1501,7 @@ impl World {
                     *entity.get::<Id>()?,
                     *entity.get::<Pos>()?,
                     *entity.get::<JobState>()?,
+                    DWARF_LIGHT,
                 ))
             })
             .collect();
@@ -3352,7 +3357,11 @@ mod tests {
         let mut world = World::generate(42, Dims::DEFAULT);
         let before = world.dwarves();
 
-        assert!(before.iter().all(|(_, _, state)| *state == JobState::Idle));
+        assert!(
+            before
+                .iter()
+                .all(|(_, _, state, _)| *state == JobState::Idle)
+        );
         world.step();
         let after = world.dwarves();
 

@@ -1,10 +1,11 @@
 ---
 model: claude-opus-5[1m]  # policy default (Opus); recorded per the model policy so the ledger row is readable
+baseline_commit: 538e1f8
 ---
 
 # Story 6.2: Lanterns in the Dark
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- FIRST ITEM ON THE M2 CUT LIST. If the story cap binds, this is what goes — Epic 6 keeps its
      wow because torches and the campfire already carry the warm/cold read. Do not treat that as
@@ -159,14 +160,14 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         Wolf approved at 5.4 — name the ground-median ceiling as the measured bar and the lantern
         intensity as the knob.
 
-- [ ] **Task 1 — The lantern in the world** (AC: 2, 4, 5)
-  - [ ] Give every dwarf a lantern in `sim-core` and expose it to the bridge. **Do NOT attach the
+- [x] **Task 1 — The lantern in the world** (AC: 2, 4, 5)
+  - [x] Give every dwarf a lantern in `sim-core` and expose it to the bridge. **Do NOT attach the
         existing `Emitter` component** — see Dev Notes; it would double-emit the dwarf and drive it
         into the static-emitter path's `unreachable!`.
-  - [ ] Set `light` on the dwarf arm of **both** bridge paths (`crates/simd/src/bridge.rs:24-28`
+  - [x] Set `light` on the dwarf arm of **both** bridge paths (`crates/simd/src/bridge.rs:24-28`
         snapshot, `:79-83` delta). Both are currently `light: None`; changing one is the obvious
         half-fix and AC2 exists to catch it.
-  - [ ] Tests: every dwarf on a fresh snapshot and on a delta carries `Some(Lantern)`; the dwarf
+  - [x] Tests: every dwarf on a fresh snapshot and on a delta carries `Some(Lantern)`; the dwarf
         count on the wire is unchanged (no double-emission); a save round-trip preserves lantern
         state with no new `SaveState` field; a seeded scenario run is identical twice.
 
@@ -403,14 +404,36 @@ task; restate RED evidence in any continuation handoff.
 
 ### Agent Model Used
 
+Codex (GPT-5)
+
 ### Debug Log References
+
+- Task 1 RED, `cargo test --offline -p simd every_dwarf_carries_a_lantern_in_snapshot_and_delta_without_duplication`:
+  `every snapshot dwarf must carry the lantern wire value` at `crates/simd/src/bridge.rs:406`;
+  0 passed, 1 failed. The test independently expected `Some(protocol::LightKind::Lantern)` on each
+  of the exactly five dwarf entities in both outputs.
 
 ### Completion Notes List
 
+- Task 1: Added `sim_core::DWARF_LIGHT`, a uniform `LightKind::Lantern` value returned by the
+  widened `World::dwarves()` reader. It is not an ECS `Emitter` or saved per-dwarf state. Both
+  bridge dwarf arms now map that value to the existing protocol variant. `cargo test --offline -p
+  sim-core -p simd` passed (49 sim-core unit, 10 save/load, 30 scenario, 12 worldgen, 16 simd unit,
+  and 61 simd serve tests).
+
 ### File List
+
+- crates/sim-core/src/lib.rs
+- crates/sim-core/tests/save_load.rs
+- crates/sim-core/tests/scenario.rs
+- crates/sim-core/tests/worldgen.rs
+- crates/simd/src/bridge.rs
+- _bmad-output/implementation-artifacts/6-2-lanterns-in-the-dark.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-18 | Story created. **The epic's central wire claim was falsified against source: `protocol::LightKind::Lantern`, `sim_core::LightKind::Lantern` and `Entity.light` all already exist, so AD-16's sanctioned wire diff is already spent and this story adds no protocol change** — AC3 pins that. Verified live off the wire that all five dwarves carry `light: None` today. Found two existing lantern guards that this story must re-rule rather than trip over: `emitter_entity`'s `unreachable!` and `load_world_from`'s rejection with its now-misnamed test. Identified the `Emitter`-component trap (double-emission plus a daemon panic) and the two-site `light: None` half-fix. Flagged the ground-luminance ceiling — not NFR6 — as the story's real look risk. |
+| 2026-08-18 | Task 1 complete: every dwarf now carries the uniform, non-persisted lantern through both bridge paths; no protocol change. |
