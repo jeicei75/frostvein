@@ -183,14 +183,14 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         the one-paragraph reasoning for "no TUI change" in the Dev Agent Record. No `tui` code
         change is expected; if one proves necessary, that is a story-spec defect — raise it.
 
-- [ ] **Task 4 — The moving light in `gui`** (AC: 9, 10, 11, 12)
-  - [ ] Verify (do not re-implement) that `reconcile` already spawns a `PointLight` and a
+- [x] **Task 4 — The moving light in `gui`** (AC: 9, 10, 11, 12)
+  - [x] Verify (do not re-implement) that `reconcile` already spawns a `PointLight` and a
         `ProjectedLight` for any entity carrying a light, and that 6.1's `flicker_lights` already
         animates it from the table. **The expected `gui` diff is close to zero** — if you find
         yourself special-casing dwarves, stop: AC10 forbids it.
-  - [ ] Confirm the light rides the blended transform (6.1's `blend_entities` owns translation for
+  - [x] Confirm the light rides the blended transform (6.1's `blend_entities` owns translation for
         every non-terrain `WorldProjected` entity, and the `PointLight` is on that same entity).
-  - [ ] Tests: a dwarf entity carrying `Some(Lantern)` gets a `PointLight` whose colour, intensity
+  - [x] Tests: a dwarf entity carrying `Some(Lantern)` gets a `PointLight` whose colour, intensity
         and range come from the table row; at a mid-blend clock the light entity's translation
         equals the dwarf's rendered translation (AC11); a dwarf with `light: None` gets no
         `PointLight` (the negative case that proves the light is wire-driven, not kind-driven).
@@ -416,6 +416,11 @@ Codex (GPT-5)
   `EntityKind::Dwarf`, `cargo test --offline -p simd static_lantern_emitters_remain_rejected_by_the_bridge_guard`:
   `test did not panic as expected at crates/simd/src/bridge.rs:431:8`; 0 passed, 1 failed. The
   `unreachable!` was restored immediately after the observed failure.
+- Task 4 projection sabotage RED, after temporarily changing the generic initial-spawn light
+  branch to `None`, `cargo test --offline -p gui --test headless
+  a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table` failed at
+  `crates/gui/tests/headless.rs:224`: `a wire-declared lantern must project a point light`; 0
+  passed, 1 failed. The generic reconciliation branch was restored immediately.
 
 ### Completion Notes List
 
@@ -433,6 +438,12 @@ Codex (GPT-5)
   position, and crowd/item contention; it never reads `Entity.light`. A lantern glyph would not
   distinguish any dwarf because every dwarf carries one. `client-core::Mirror` retains the wire
   entity (including its light field) unchanged for both clients, preserving parity.
+- Task 4: No `gui` production change. Existing generic reconciliation already creates a
+  `PointLight` and `ProjectedLight` for every wire `Some(light)`, and the shared schedule already
+  flickers it from the `LightKind` table. Headless tests now prove a lantern dwarf gets the
+  lantern table's colour/range/intensity band, an unlit dwarf gets no light, and the lantern lives
+  on the same mid-blended `WorldProjected` transform as the dwarf. `cargo test --offline -p gui`
+  passed (42 library, 24 headless integration, and 1 non-ignored capture test).
 
 ### File List
 
@@ -441,6 +452,7 @@ Codex (GPT-5)
 - crates/sim-core/tests/scenario.rs
 - crates/sim-core/tests/worldgen.rs
 - crates/simd/src/bridge.rs
+- crates/gui/tests/headless.rs
 - _bmad-output/implementation-artifacts/6-2-lanterns-in-the-dark.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
@@ -452,3 +464,4 @@ Codex (GPT-5)
 | 2026-08-18 | Task 1 complete: every dwarf now carries the uniform, non-persisted lantern through both bridge paths; no protocol change. |
 | 2026-08-18 | Task 2 complete: re-ruled static lantern emitters as invalid while proving dwarf lanterns bypass that path. |
 | 2026-08-18 | Task 3 complete: recorded the no-TUI-change ruling. |
+| 2026-08-18 | Task 4 complete: verified the existing generic moving-light path and added its lantern guardrail tests. |
