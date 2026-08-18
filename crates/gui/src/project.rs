@@ -305,7 +305,9 @@ pub fn reconcile(
                     commands.entity(entity).despawn();
                 }
             }
-            if matches!(mirror.tile(*position), Some(Tile::Empty)) {
+            if position[2] <= slice.level()
+                && matches!(mirror.tile(*position), Some(Tile::Empty))
+            {
                 for offset in chip_offsets() {
                     let mut entity = commands.spawn((
                         DigChip(*position),

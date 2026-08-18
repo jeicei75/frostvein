@@ -215,6 +215,39 @@ fn keyboard_slice_rebuilds_the_cut_face_and_hides_surface_entities() {
 }
 
 #[test]
+fn sliced_view_does_not_spawn_dig_chips_above_the_cut() {
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 1, y: 1, z: 2 },
+        vec![Tile::Solid(Material::Stone); 2],
+        Vec::new(),
+    ));
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Comma);
+    app.update();
+
+    apply_delta(
+        &mut app,
+        delta(vec![TileChange {
+            pos: [0, 0, 1],
+            tile: Tile::Empty,
+        }], Vec::new()),
+    );
+    app.update();
+
+    let chips = app
+        .world_mut()
+        .query::<&gui::project::DigChip>()
+        .iter(app.world())
+        .count();
+    assert_eq!(
+        chips, 0,
+        "a later dig above the selected level must not leave floating debris"
+    );
+}
+
+#[test]
 fn top_slice_is_the_full_depth_draw_set_and_cannot_rise_above_the_world() {
     let mut app = headless_app(snapshot_with_dims(
         Dims { x: 3, y: 3, z: 3 },

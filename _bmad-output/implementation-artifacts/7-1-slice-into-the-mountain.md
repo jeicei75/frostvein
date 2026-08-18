@@ -402,6 +402,12 @@ gpt-5.6 (Codex)
   error[E0433]: cannot find type `DrawStats` in this scope
     --> crates/gui/src/capture.rs:427:21
   ```
+- **RED — self-review regression, before the live-delta fix:**
+  ```text
+  assertion `left == right` failed: a later dig above the selected level must not leave floating debris
+    left: 4
+   right: 0
+  ```
 - **Mutation RED evidence — 2026-08-18:** `scripts/mutate.sh` was run alone, followed by
   `cargo clean -p gui`. All seven mutations were killed by a genuine assertion:
 
@@ -418,6 +424,9 @@ gpt-5.6 (Codex)
 - **Gate — 2026-08-18:** `scripts/gate.sh` reached `GATE GREEN` after the cold mutation cleanup:
   fmt, clippy, workspace tests, all three `sim-core` dependency probes, and metrics-ledger tests
   passed.
+- **Self-review pass 1 — 2026-08-18:** `codex review --base 6-2-lanterns-in-the-dark` found one
+  actionable P2: a dirty `Empty` tile above the selected slice still spawned `DigChip` debris. Added
+  the level guard and the production-path regression above; `cargo test --offline -p gui` then passed.
 
 ### Completion Notes List
 
@@ -425,7 +434,7 @@ gpt-5.6 (Codex)
   `<`/`>` controls (comma/period physical keys), explicit world-bound clamps, and no wire activity.
 - Terrain filtering is `z <= level && (is_exposed || z == level terrain)`, preserving the existing
   exposure rule and drawing the cut floor. A control change marks the existing snapshot rebuild;
-  entities and items above the level are removed from the projection.
+  entities, items, and later dig-chip debris above the level are removed from the projection.
 - Added `Slice: z N/top — surface|underground` as an always-on UI readout. The value and its
   surface/underground wording are headlessly tested; legibility and whether the cut reads clearly
   still require the Task 5 vehicle viewing.
@@ -444,7 +453,7 @@ gpt-5.6 (Codex)
   file list, and review status.
 - `_bmad-output/implementation-artifacts/mutations/7-1-slice-into-the-mountain.sh` — seven-kill
   sabotage table.
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` — story tracking to `in-progress`.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — story tracking to `review`.
 - `crates/gui/src/slice.rs` — client-local level, clamp/readout, and unit tests.
 - `crates/gui/src/project.rs` — level-aware terrain and dynamic-projection filtering.
 - `crates/gui/src/ingest.rs` — keyboard controls, on-screen readout, capture parsing, and schedule
@@ -459,3 +468,4 @@ gpt-5.6 (Codex)
 | --- | --- |
 | 2026-08-18 | Story created. **The epic's control-collision premise was falsified against source: `gui` binds no mouse input of any kind and camera zoom sits on `Q`/`E` keys, so the wheel is unclaimed in code** — the collision is planned (UX-DR2 intends the wheel) rather than implemented, and AC3 requires the story to choose against that reality. Identified the cut-face trap: a naive `z <= level` filter over the existing exposure rule yields a hollow shell, because a buried tile is not "exposed" — the `z == level` arm is the whole feature. Flagged that the pinned 53,365-cube draw-set oracle is a full-depth figure that slicing necessarily changes, so the line must name its level or every inherited recipe reads as broken. Raised entity visibility above the slice as a decision to rule and test rather than leave undefined. |
 | 2026-08-18 | Implemented the headless slice, capture instrument, always-on level readout, and tech-art rule. `<`/`>` is explicitly **PROVISIONAL (Wolf has not confirmed)**. Seven mutations killed and the gate is green; vehicle-only Task 5 and Wolf-only Task 8 remain open. |
+| 2026-08-18 | Self-review pass 1 caught dig chips from a later empty-tile delta floating above the cut. Added the slice-level guard and production-path regression; a follow-up gate and review remain required. |
