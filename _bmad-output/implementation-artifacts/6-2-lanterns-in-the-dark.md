@@ -178,8 +178,8 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         `loading_rejects_lantern_emitters_before_the_wire_bridge` — its name asserts a world state
         this story changes. If no, delete guard and test together with the reason.
 
-- [ ] **Task 3 — The TUI ruling** (AC: 8)
-  - [ ] Confirm by reading `crates/tui/src/view.rs` that nothing renders `Entity.light`, and record
+- [x] **Task 3 — The TUI ruling** (AC: 8)
+  - [x] Confirm by reading `crates/tui/src/view.rs` that nothing renders `Entity.light`, and record
         the one-paragraph reasoning for "no TUI change" in the Dev Agent Record. No `tui` code
         change is expected; if one proves necessary, that is a story-spec defect — raise it.
 
@@ -429,6 +429,10 @@ Codex (GPT-5)
   true. A malformed saved *static* lantern emitter remains invalid; renamed its test to
   `loading_rejects_static_lantern_emitters_before_the_wire_bridge` to state that distinction.
   `cargo test --offline -p simd` passed (18 unit and 61 serve tests).
+- Task 3: No `tui` change. `tui::view::render` selects cells only by `EntityKind`, job state,
+  position, and crowd/item contention; it never reads `Entity.light`. A lantern glyph would not
+  distinguish any dwarf because every dwarf carries one. `client-core::Mirror` retains the wire
+  entity (including its light field) unchanged for both clients, preserving parity.
 
 ### File List
 
@@ -447,3 +451,4 @@ Codex (GPT-5)
 | 2026-08-18 | Story created. **The epic's central wire claim was falsified against source: `protocol::LightKind::Lantern`, `sim_core::LightKind::Lantern` and `Entity.light` all already exist, so AD-16's sanctioned wire diff is already spent and this story adds no protocol change** — AC3 pins that. Verified live off the wire that all five dwarves carry `light: None` today. Found two existing lantern guards that this story must re-rule rather than trip over: `emitter_entity`'s `unreachable!` and `load_world_from`'s rejection with its now-misnamed test. Identified the `Emitter`-component trap (double-emission plus a daemon panic) and the two-site `light: None` half-fix. Flagged the ground-luminance ceiling — not NFR6 — as the story's real look risk. |
 | 2026-08-18 | Task 1 complete: every dwarf now carries the uniform, non-persisted lantern through both bridge paths; no protocol change. |
 | 2026-08-18 | Task 2 complete: re-ruled static lantern emitters as invalid while proving dwarf lanterns bypass that path. |
+| 2026-08-18 | Task 3 complete: recorded the no-TUI-change ruling. |
