@@ -215,6 +215,36 @@ fn keyboard_slice_rebuilds_the_cut_face_and_hides_surface_entities() {
 }
 
 #[test]
+fn top_slice_is_the_full_depth_draw_set_and_cannot_rise_above_the_world() {
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 3, y: 3, z: 3 },
+        vec![Tile::Solid(Material::Stone); 27],
+        Vec::new(),
+    ));
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Period);
+    app.update();
+
+    assert_eq!(app.world().resource::<SliceLevel>().level(), 2);
+    let terrain = app
+        .world_mut()
+        .query::<&TerrainTile>()
+        .iter(app.world())
+        .map(|tile| tile.0)
+        .collect::<BTreeSet<_>>();
+    let expected = (0..3)
+        .flat_map(|x| (0..3).flat_map(move |y| (0..3).map(move |z| [x, y, z])))
+        .filter(|position| *position != [1, 1, 1])
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        terrain, expected,
+        "the top level keeps the complete full-depth boundary, with no above-world slice"
+    );
+}
+
+#[test]
 fn projection_pipeline_blends_at_a_midpoint() {
     let id = 71;
     let mut app = headless_app(snapshot(

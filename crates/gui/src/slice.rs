@@ -53,6 +53,10 @@ impl SliceLevel {
             "underground"
         }
     }
+
+    pub fn readout(self) -> String {
+        format!("Slice: z {}/{} — {}", self.level, self.top, self.label())
+    }
 }
 
 #[cfg(test)]
@@ -71,5 +75,13 @@ mod tests {
         assert!(slice.step(99));
         assert_eq!(slice.level(), 2);
         assert!(!slice.step(1), "the top cannot go above dims.z - 1");
+    }
+
+    #[test]
+    fn the_readout_names_the_current_level_and_whether_it_is_surface_or_underground() {
+        let mut slice = SliceLevel::at_world_top(Dims { x: 1, y: 1, z: 3 });
+        assert_eq!(slice.readout(), "Slice: z 2/2 — surface");
+        slice.step(-1);
+        assert_eq!(slice.readout(), "Slice: z 1/2 — underground");
     }
 }

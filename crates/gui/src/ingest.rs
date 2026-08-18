@@ -22,8 +22,9 @@ use bevy::{
     input::ButtonInput,
     pbr::{DistanceFog, FogFalloff},
     prelude::{
-        AmbientLight, Camera3d, ClearColor, Commands, DefaultPlugins, DirectionalLight, KeyCode,
-        PerspectiveProjection, Projection, Query, Res, ResMut, Resource, Time, Transform, Without,
+        AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
+        DirectionalLight, KeyCode, Node, PerspectiveProjection, PositionType, Projection, Query,
+        Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform, With, Without, px,
     },
     render::renderer::RenderAdapterInfo,
 };
@@ -106,6 +107,7 @@ pub fn run() -> anyhow::Result<()> {
                 setup_night_lighting,
                 setup_projection_assets,
                 setup_atmosphere,
+                setup_slice_readout,
                 log_adapter,
             ),
         )
@@ -117,6 +119,7 @@ pub fn run() -> anyhow::Result<()> {
             (
                 camera_controls,
                 update_fog_from_camera,
+                update_slice_readout,
                 toggle_overlay,
                 fall_snow,
             ),
@@ -286,6 +289,31 @@ fn setup_night_lighting(mut commands: Commands) {
         aurora_light_transform(),
         ClientLocal,
     ));
+}
+
+#[derive(Component)]
+struct SliceReadout;
+
+fn setup_slice_readout(mut commands: Commands, slice: Res<SliceLevel>) {
+    commands.spawn((
+        Text::new(slice.readout()),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::srgb(0.86, 0.91, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(16),
+            left: px(16),
+            ..Default::default()
+        },
+        SliceReadout,
+        ClientLocal,
+    ));
+}
+
+fn update_slice_readout(slice: Res<SliceLevel>, mut readout: Query<&mut Text, With<SliceReadout>>) {
+    for mut text in &mut readout {
+        *text = Text::new(slice.readout());
+    }
 }
 
 fn classify_client_local(
@@ -592,6 +620,29 @@ mod tests {
             .is_err(),
             "a zero-frame capture must be rejected before opening a socket"
         );
+    }
+
+    #[test]
+    fn capture_slice_level_requires_capture_and_is_retained_for_pinning() {
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--z"),
+                std::ffi::OsString::from("9"),
+            ])
+            .is_err(),
+            "a level without a capture has no reproducible instrument to pin"
+        );
+        let args = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("slice.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("12"),
+            std::ffi::OsString::from("--z"),
+            std::ffi::OsString::from("9"),
+        ])
+        .expect("a capture level must parse");
+        assert_eq!(args.slice_level, Some(9));
     }
 
     #[test]
