@@ -58,14 +58,14 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
             color: Color::srgb_u8(255, 140, 62),
             intensity: 14_000_000.0,
             range: 20.0,
-            flicker_amplitude: 0.07,
+            flicker_amplitude: 0.30,
             flicker_hz: 1.7,
         },
         LightKind::Campfire => LightProperties {
             color: Color::srgb_u8(255, 173, 92),
             intensity: 32_000_000.0,
             range: 28.0,
-            flicker_amplitude: 0.11,
+            flicker_amplitude: 0.40,
             flicker_hz: 0.9,
         },
         LightKind::Lantern => LightProperties {
@@ -100,10 +100,10 @@ mod flicker_tests {
 
     #[test]
     fn flicker_is_bounded_distinct_and_deterministic() {
-        assert_eq!(light_properties(LightKind::Torch).flicker_amplitude, 0.07);
+        assert_eq!(light_properties(LightKind::Torch).flicker_amplitude, 0.30);
         assert_eq!(
             light_properties(LightKind::Campfire).flicker_amplitude,
-            0.11
+            0.40
         );
         // The band is asserted against HAND-WRITTEN literals, never against the table the
         // function reads. `flicker_scale` is `1.0 + amplitude * (..) / 1.3` with the bracket
@@ -111,8 +111,8 @@ mod flicker_tests {
         // amplitude and cannot go red — the self-referential-test shape this project has
         // already been bitten by three times.
         for (kind, low, high) in [
-            (LightKind::Torch, 0.93, 1.07),
-            (LightKind::Campfire, 0.89, 1.11),
+            (LightKind::Torch, 0.70, 1.30),
+            (LightKind::Campfire, 0.60, 1.40),
         ] {
             for step in 0..1000 {
                 let scale = flicker_scale(kind, 6, step as f32 * 0.01);
@@ -127,7 +127,7 @@ mod flicker_tests {
             .map(|step| flicker_scale(LightKind::Torch, 6, step as f32 * 0.01))
             .fold(1.0f32, f32::max);
         assert!(
-            torch_peak > 1.05,
+            torch_peak > 1.20,
             "the torch must actually use its band, peaked at {torch_peak}"
         );
         assert_ne!(
