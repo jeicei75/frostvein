@@ -20,3 +20,4 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 > because no `review-patch` row was taken before story creation began. All of it is billed here.
 > **The true story-creation cost for this file is a fraction of the figure shown.** The lesson is
 > mechanical, not analytical: take the phase row when the phase ends, not when the next one does.
+| dev | codex | gpt-5.6-terra | 211 | 633,424 | 0 | 22,545,920 | 61,336 | 23,240,680 | $4.22 | `rollout-2026-08-18T14-23-55-01a01541-e593-7210-a7c7-18a3e14a6314.jsonl` | 2026-08-18 15:10 UTC · rates 2026-08-01 | 38 | 9pp |
