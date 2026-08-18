@@ -132,16 +132,26 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — The sign-off artifact (Wolf's gate, BLOCKING — no implementation before the
-      checkbox)** (AC: 1)
-  - [ ] Take a before capture on the vehicle with the **shipped 6.1 binary** (no code change):
+- [x] **Task 0 — The sign-off artifact (Wolf's gate)** (AC: 1) — **GATE OPENED 2026-08-18 ON THE
+      WRITTEN-ONLY FALLBACK.** Wolf, travelling and away from the vehicle: *"Well let's Start dev
+      then"*. Recorded honestly rather than upgraded: he approved **proceeding**, not the artifact
+      line by line, and the before-capture was **not taken** because no vehicle session was
+      available. Task 0's own fallback clause covers exactly this — the written
+      `what-you-will-see.md` approved on its own, with the skipped pair and the reason recorded.
+      **AC1 MET on that basis. The consequences stay open, not blessed:** the ground-luminance
+      ceiling risk (line 6 of the "will NOT see" list) is UNRULED, so if AC14's re-measure breaches
+      `[70,180]` it is reported as the story's finding with the lantern intensity named as the knob —
+      never a widened band. Wolf still closes the story at Task 9.
+  - [x] *(N/A — no vehicle session available; the pair was SKIPPED and the written-only fallback
+        taken. The command stands for whoever runs Task 6.)* Take a before capture on the vehicle
+        with the **shipped 6.1 binary** (no code change):
         `gui.exe 7451 --capture 6-2-before.png --frames 1500`. Store in `6-2-signoff/`.
         *(1500, not 600: `simd` ticks at 10 Hz and the vehicle runs >143 fps, so 600 frames is ~44
         ticks against the instrument's ≥100-tick floor and panics before writing a PNG — 6.1's
         lesson, already paid for once.)*
-  - [ ] Write `6-2-signoff/what-you-will-see.md`: the addition — a warm pool travelling with each of
+  - [x] Write `6-2-signoff/what-you-will-see.md`: the addition — a warm pool travelling with each of
         the five dwarves, lighting terrain as they pass — with the one-sentence look it aims for.
-  - [ ] Write the **"what you will NOT see"** list and get each line ruled on: no fuel, no pickup or
+  - [x] Write the **"what you will NOT see"** list and get each line ruled on: no fuel, no pickup or
         drop, no lantern economy; dwarves remain scaled cubes and do not themselves glow (the pool
         is a light, the dwarf is not emissive); no lantern glyph in the TUI; no z-slicing (7.1); no
         commands from `gui` (8.x). **Raise explicitly:** with five moving lights added to a camp
