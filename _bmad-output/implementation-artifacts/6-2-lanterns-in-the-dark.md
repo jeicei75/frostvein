@@ -425,6 +425,10 @@ Codex (GPT-5)
   lantern_instrument_requires_a_lit_region_to_move` failed to compile with `E0433: cannot find
   type LanternStats in this scope` at `crates/gui/src/capture.rs:372` and `:378`; the test named
   the missing accumulator before it was added.
+- Task 5 review-fix RED, after adding the vanished-final-region case, `cargo test --offline -p gui
+  lantern_instrument_requires_a_lit_region_to_move` failed at `crates/gui/src/capture.rs:471`:
+  `assertion failed: std::panic::catch_unwind(|| vanished.assert_valid()).is_err()`; the old
+  accumulator incorrectly accepted a non-empty first region followed by an empty final region.
 - Task 8 mutation RED table (run alone; all KILLED on genuine assertions):
 
   | Mutation | Result |
@@ -436,6 +440,7 @@ Codex (GPT-5)
   | wire-declared lanterns no longer create lights | `headless.rs:224` assertion; 0 passed, 1 failed |
   | lantern capture accepts an unmoved region | `catch_unwind(...).is_err()` assertion; 0 passed, 1 failed |
   | lantern capture loses its lit-terrain count | `capture.rs:138` assertion; 0 passed, 1 failed |
+  | lantern capture accepts an empty final region | `catch_unwind(...).is_err()` assertion; 0 passed, 1 failed |
 
 ### Completion Notes List
 
@@ -468,9 +473,14 @@ Codex (GPT-5)
 - Task 7: Added the short moving-lights guideline: wire-carried moving lights use the same
   `LightKind` table lookup as static lights, and dwarves are never special-cased warm.
 - Task 8: `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/6-2-lanterns-in-the-dark.sh`
-  ran alone: all seven mutations were KILLED, then `cargo clean -p gui` ran afterwards as required.
+  ran alone again after the review fix: all eight mutations were KILLED, then `cargo clean -p gui` ran afterwards as required.
   The subsequent `scripts/gate.sh` was GREEN. `git diff --stat 6-1-the-world-moves...HEAD --
   crates/protocol` is empty; there is no protocol, client-core, or tui change.
+- Self-review pass 1 (`codex review --base 6-1-the-world-moves`) raised two P2 findings in the
+  lantern instrument: an empty final region could falsely count as movement, and all terrain was
+  scanned on every capture frame. Fixed both: `assert_valid` now requires a non-empty final region,
+  with a RED regression test and mutation; `accumulate_motion` first compares the five delivered
+  lantern positions and only builds terrain regions after they change. A post-fix full gate passed.
 - Tasks 6 and 9 remain unchecked: this devpod cannot run the required gingerspice native Windows /
   NVIDIA live session, and Wolf alone supplies the closing sign-off. Status is `review` for the
   completed headless implementation and evidence.
@@ -500,4 +510,4 @@ Codex (GPT-5)
 | 2026-08-18 | Task 4 complete: verified the existing generic moving-light path and added its lantern guardrail tests. |
 | 2026-08-18 | Task 5 complete: added the moving-lantern capture accumulator and its still-versus-moving test. |
 | 2026-08-18 | Task 7 complete: documented the generic moving-light rule. |
-| 2026-08-18 | Task 8 complete: seven sabotage mutations killed; post-mutation GUI clean and full gate green. Status set to review with the vehicle and Wolf sign-off tasks explicitly open. |
+| 2026-08-18 | Task 8 complete: eight sabotage mutations killed after self-review fixes; post-mutation GUI clean and full gate green. Status set to review with the vehicle and Wolf sign-off tasks explicitly open. |

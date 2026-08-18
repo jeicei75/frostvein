@@ -62,3 +62,11 @@ old = '        self.lit_terrain_tiles += region.len();\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        self.lit_terrain_tiles = 0;\n'))
 PY
+
+mutation "lantern capture accepts an empty final region" gui capture::tests::lantern_instrument_requires_a_lit_region_to_move <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '            !self.last_region.is_empty(),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            true,\n'))
+PY

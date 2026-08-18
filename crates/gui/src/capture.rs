@@ -128,6 +128,10 @@ impl LanternStats {
         self.last_positions = positions;
     }
 
+    fn needs_observation(&self, positions: &BTreeMap<u32, [i32; 3]>) -> bool {
+        self.first_region.is_none() || positions != &self.last_positions
+    }
+
     fn moved(&self) -> bool {
         self.first_region
             .as_ref()
@@ -138,6 +142,10 @@ impl LanternStats {
         assert!(
             self.lit_terrain_tiles > 0,
             "capture observed no terrain lit by dwarf lanterns"
+        );
+        assert!(
+            !self.last_region.is_empty(),
+            "capture's final dwarf lantern observation lit no terrain"
         );
         assert!(
             self.moved(),
@@ -263,28 +271,37 @@ pub fn accumulate_motion(
         mirror.0.items().count(),
         mid_blend,
     );
-    let terrain = terrain
+    let lanterns = projected
         .iter()
-        .map(|(tile, transform)| (tile.0, transform.translation))
-        .collect::<Vec<_>>();
-    capture
-        .lantern
-        .observe(projected.iter().filter_map(|(marker, transform, light)| {
+        .filter_map(|(marker, transform, light)| {
             let entity = mirror.0.entities().find(|entity| entity.id == marker.0)?;
             let light = light?;
-            (entity.kind == EntityKind::Dwarf && entity.light == Some(LightKind::Lantern)).then(
-                || {
-                    let lit_region = terrain
-                        .iter()
-                        .filter(|(_, terrain_translation)| {
-                            transform.translation.distance(*terrain_translation) <= light.range
-                        })
-                        .map(|(position, _)| *position)
-                        .collect();
-                    (entity.id, entity.pos, lit_region)
-                },
-            )
-        }));
+            (entity.kind == EntityKind::Dwarf && entity.light == Some(LightKind::Lantern))
+                .then_some((entity.id, entity.pos, transform.translation, light.range))
+        })
+        .collect::<Vec<_>>();
+    let positions = lanterns
+        .iter()
+        .map(|(id, position, _, _)| (*id, *position))
+        .collect::<BTreeMap<_, _>>();
+    if capture.lantern.needs_observation(&positions) {
+        let terrain = terrain
+            .iter()
+            .map(|(tile, transform)| (tile.0, transform.translation))
+            .collect::<Vec<_>>();
+        capture.lantern.observe(lanterns.into_iter().map(
+            |(id, position, light_translation, range)| {
+                let lit_region = terrain
+                    .iter()
+                    .filter(|(_, terrain_translation)| {
+                        light_translation.distance(*terrain_translation) <= range
+                    })
+                    .map(|(position, _)| *position)
+                    .collect();
+                (id, position, lit_region)
+            },
+        ));
+    }
 }
 
 /// Captures from the primary window after the real render loop has advanced N frames.
@@ -464,5 +481,10 @@ mod tests {
         moving.observe([(7, [2, 3, 4], BTreeSet::from([[1, 2, 3], [2, 2, 3]]))].into_iter());
         moving.observe([(7, [3, 3, 4], BTreeSet::from([[2, 2, 3], [3, 2, 3]]))].into_iter());
         moving.assert_valid();
+
+        let mut vanished = LanternStats::default();
+        vanished.observe([(7, [2, 3, 4], BTreeSet::from([[1, 2, 3], [2, 2, 3]]))].into_iter());
+        vanished.observe(std::iter::empty());
+        assert!(std::panic::catch_unwind(|| vanished.assert_valid()).is_err());
     }
 }
