@@ -451,6 +451,57 @@ gpt-5.6 (Codex)
 - Scope check: `git diff --stat 6-2-lanterns-in-the-dark..HEAD -- crates/protocol crates/simd
   crates/sim-core crates/client-core crates/tui` is empty.
 
+
+### Orchestrator verification of the Codex dev run (2026-08-18)
+
+Codex (`gpt-5.6-terra`, reasoning effort **high**, session `01a01541-e593-7210-a7c7-18a3e14a6314`)
+exited 0. **Exit 0 was not trusted.**
+
+**Verified GOOD, independently:**
+
+- **No auth failure** — every `401` match in the log is a source line number, not an error.
+- **Scope holds exactly (AC17).** `git diff --stat 6-2-lanterns-in-the-dark..HEAD` over `sim-core`,
+  `simd`, `protocol`, `client-core`, `tui`, `Cargo.toml` and `Cargo.lock` is **empty**. The slice is
+  `gui`-only, which is AC11's client-local requirement proven structurally rather than asserted.
+- **`scripts/gate.sh` GREEN** on my own run, and again after the mutation round with
+  `cargo clean -p gui` between.
+- **Commit cadence MET — 10 commits for 7 dev tasks**, all `Völundr`, nothing pushed. Second story
+  running to the floor since it started being asked for in the prompt.
+- **Self-gate CONCLUDED in two of three passes** — pass 1 found and fixed floating dig chips above
+  the cut (a genuine defect: client-local debris ignoring the slice), pass 2 clean.
+- **7/7 mutations KILLED**, run alone, tree clean afterwards — including
+  `cut face no longer fills buried terrain`, which is the trap the story was written around, and
+  `slice input stops requesting the established rebuild path`.
+- **AC13 satisfied:** the draw-set oracle now prints `projected {} terrain cubes at z {}`, so it
+  names the level it counted instead of silently changing the pinned figure.
+
+**THE SABOTAGE THAT MATTERED — and this time it held.** Both 6.1 and 6.2 were caught by tests that
+hand-fed their inputs, so I attacked the same seam here: is the slice driven through the
+**production control path**, or poked into the resource by the tests?
+
+```
+slice_controls REMOVED from the live projection tuple  -> 2 headless tests RED  ✅
+both `<` / `>` key bindings deleted outright           -> 2 headless tests RED  ✅
+```
+
+The tests press real keys through the registered system, so an unbound or unregistered control is a
+red suite rather than a silent hole. That is the discipline 6.1's review had to add by hand; it
+arrived built-in here. `keyboard_slice_rebuilds_the_cut_face_and_hides_surface_entities` is the test
+carrying it.
+
+**Recorded, not a defect:** the oracle line changed from `projected 53365 terrain cubes` to
+`projected 53365 terrain cubes at z 31`. That is AC13 working as specified, but any older recipe
+grepping the exact former string will no longer match — 5.4's and 6.1's verification blocks quote
+it. Anyone re-running those should match the prefix, not the whole line.
+
+**PROVISIONAL AND OWED TO WOLF:** the `<` / `>` binding is **my** call, not his — he was travelling
+and did not answer. AC2 requires the ruling recorded, and it is recorded as provisional. It is one
+key binding and cheap to reverse at the viewing.
+
+**Still OPEN and not closable by any agent:** Task 5 (the live vehicle session) and Task 8 (Wolf's
+sign-off), and with them AC8's dug corridors seen from below, AC9/AC10's legibility — *is the cut
+face confusing?* — and AC14's NFR6 reading at a slice level.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/7-1-slice-into-the-mountain.md` — task record, evidence,
@@ -470,6 +521,7 @@ gpt-5.6 (Codex)
 
 | Date | Change |
 | --- | --- |
+| 2026-08-18 | Orchestrator verification of the Codex dev run. Gate green on my own run, scope exact (`gui`-only, so AC11's client-local rule holds structurally), 10 commits all Völundr, nothing pushed, self-gate concluded in 2 of 3 passes after finding floating dig chips above the cut. 7/7 mutations KILLED including the cut-face trap. **The seam that caught 6.1 and 6.2 held here:** removing `slice_controls` from the live tuple, and deleting both key bindings, each turn 2 headless tests RED — the tests drive the slice through the production control path rather than poking the resource. Recorded: the draw-set oracle now reads `...terrain cubes at z N`, so older recipes quoting the exact old string must match the prefix. The `<`/`>` ruling remains PROVISIONAL — mine, not Wolf's. |
 | 2026-08-18 | Story created. **The epic's control-collision premise was falsified against source: `gui` binds no mouse input of any kind and camera zoom sits on `Q`/`E` keys, so the wheel is unclaimed in code** — the collision is planned (UX-DR2 intends the wheel) rather than implemented, and AC3 requires the story to choose against that reality. Identified the cut-face trap: a naive `z <= level` filter over the existing exposure rule yields a hollow shell, because a buried tile is not "exposed" — the `z == level` arm is the whole feature. Flagged that the pinned 53,365-cube draw-set oracle is a full-depth figure that slicing necessarily changes, so the line must name its level or every inherited recipe reads as broken. Raised entity visibility above the slice as a decision to rule and test rather than leave undefined. |
 | 2026-08-18 | Implemented the headless slice, capture instrument, always-on level readout, and tech-art rule. `<`/`>` is explicitly **PROVISIONAL (Wolf has not confirmed)**. Seven mutations killed and the gate is green; vehicle-only Task 5 and Wolf-only Task 8 remain open. |
 | 2026-08-18 | Self-review pass 1 caught dig chips from a later empty-tile delta floating above the cut. Added the slice-level guard and production-path regression; the repeated mutation run and follow-up gate are green. |
