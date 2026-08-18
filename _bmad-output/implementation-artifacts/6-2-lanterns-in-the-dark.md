@@ -481,6 +481,8 @@ Codex (GPT-5)
   scanned on every capture frame. Fixed both: `assert_valid` now requires a non-empty final region,
   with a RED regression test and mutation; `accumulate_motion` first compares the five delivered
   lantern positions and only builds terrain regions after they change. A post-fix full gate passed.
+- Self-review pass 2 (`codex review --base 6-1-the-world-moves`) completed with no actionable
+  findings. Review stopped after two passes, below the three-pass cap.
 - Tasks 6 and 9 remain unchecked: this devpod cannot run the required gingerspice native Windows /
   NVIDIA live session, and Wolf alone supplies the closing sign-off. Status is `review` for the
   completed headless implementation and evidence.
@@ -511,3 +513,4 @@ Codex (GPT-5)
 | 2026-08-18 | Task 5 complete: added the moving-lantern capture accumulator and its still-versus-moving test. |
 | 2026-08-18 | Task 7 complete: documented the generic moving-light rule. |
 | 2026-08-18 | Task 8 complete: eight sabotage mutations killed after self-review fixes; post-mutation GUI clean and full gate green. Status set to review with the vehicle and Wolf sign-off tasks explicitly open. |
+| 2026-08-18 | Self-review pass 2 found no actionable findings; review stopped after two passes. |
