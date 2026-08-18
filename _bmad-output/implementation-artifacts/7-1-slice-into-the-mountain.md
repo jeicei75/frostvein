@@ -155,33 +155,33 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
   - [x] When UX-DR2 later gives the wheel to zoom, `<`/`>` remain unchanged; no wheel slice binding
         needs migration.
 
-- [ ] **Task 2 — The slice** (AC: 5, 6, 7, 8)
-  - [ ] Add the slice level as a `ClientLocal` resource (the `TickClock` precedent in
+- [x] **Task 2 — The slice** (AC: 5, 6, 7, 8)
+  - [x] Add the slice level as a `ClientLocal` resource (the `TickClock` precedent in
         `crates/gui/src/blend.rs` is the shape to copy), defaulting to the world top so the boot
         frame is unchanged.
-  - [ ] Change the terrain draw set so a tile is drawn when `z <= level` **and** (`is_exposed` at
+  - [x] Change the terrain draw set so a tile is drawn when `z <= level` **and** (`is_exposed` at
         full depth **or** `z == level`) — the second arm is what makes the cut face appear. Keep
         `is_exposed` itself intact; slicing is a view filter over it, not a new exposure rule.
-  - [ ] Hide world-projected entities above the level (or record the opposite ruling).
-  - [ ] Rebuild the terrain when the level changes, reusing the existing snapshot-rebuild path
+  - [x] Hide world-projected entities above the level (or record the opposite ruling).
+  - [x] Rebuild the terrain when the level changes, reusing the existing snapshot-rebuild path
         rather than adding a second one.
-  - [ ] Tests: shown/hidden sets at a mid level; the cut face appears at `z == level`; clamping at
+  - [x] Tests: shown/hidden sets at a mid level; the cut face appears at `z == level`; clamping at
         `0` and at `dims.z-1`; at the top level the drawn set is **identical** to today's full-depth
         set (AC4); an entity above the level is hidden and one below is not.
 
-- [ ] **Task 3 — Knowing where you are** (AC: 9, 10)
-  - [ ] Draw the current level on screen, legible at the boot framing and independent of the F3
+- [x] **Task 3 — Knowing where you are** (AC: 9, 10)
+  - [x] Draw the current level on screen, legible at the boot framing and independent of the F3
         diagnostic overlay.
-  - [ ] Test what can be tested headlessly (the value the readout is fed), and state plainly in the
+  - [x] Test what can be tested headlessly (the value the readout is fed), and state plainly in the
         record which half is only confirmable by eye at Task 5.
 
-- [ ] **Task 4 — The instrument** (AC: 12, 13)
-  - [ ] Add `--z N` to `gui`'s arg parsing, rejecting it without `--capture` the way `--expect-work`
+- [x] **Task 4 — The instrument** (AC: 12, 13)
+  - [x] Add `--z N` to `gui`'s arg parsing, rejecting it without `--capture` the way `--expect-work`
         already is (`crates/gui/src/ingest.rs`).
-  - [ ] Print the drawn-tile count **and the level it counted** before any assertion; assert the
+  - [x] Print the drawn-tile count **and the level it counted** before any assertion; assert the
         count is non-zero at the requested level.
-  - [ ] Keep 6.1's motion line and 5.4's range checks exactly as they are.
-  - [ ] Unit-test the accumulator: a level with nothing to draw fails, a level with terrain passes.
+  - [x] Keep 6.1's motion line and 5.4's range checks exactly as they are.
+  - [x] Unit-test the accumulator: a level with nothing to draw fails, a level with terrain passes.
 
 - [ ] **Task 5 — The live vehicle session** (AC: 8, 9, 10, 14)
   - [ ] Cross-compile and launch per Verification; slice down to the 6.1 dig site and confirm the
@@ -191,8 +191,8 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
   - [ ] Confirm by eye and state in the record: the level readout is legible; underground reads as
         underground; the cut face is not confusing.
 
-- [ ] **Task 6 — Tech-art guidelines** (AC: 5 supporting)
-  - [ ] Add one short section to `docs/tech-art-guidelines.md`: slicing is a view filter over the
+- [x] **Task 6 — Tech-art guidelines** (AC: 5 supporting)
+  - [x] Add one short section to `docs/tech-art-guidelines.md`: slicing is a view filter over the
         existing exposure rule, the cut face is the same material, and the level is client-local.
 
 - [ ] **Task 7 — Evidence and the gate** (AC: 16, 17)
