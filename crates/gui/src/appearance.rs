@@ -105,16 +105,31 @@ mod flicker_tests {
             light_properties(LightKind::Campfire).flicker_amplitude,
             0.11
         );
-        for kind in [LightKind::Torch, LightKind::Campfire] {
-            let properties = light_properties(kind);
-            for step in 0..100 {
-                let scale = flicker_scale(kind, 6, step as f32 * 0.1);
+        // The band is asserted against HAND-WRITTEN literals, never against the table the
+        // function reads. `flicker_scale` is `1.0 + amplitude * (..) / 1.3` with the bracket
+        // normalised to +/-1.3, so a table-derived bound holds by construction for ANY
+        // amplitude and cannot go red — the self-referential-test shape this project has
+        // already been bitten by three times.
+        for (kind, low, high) in [
+            (LightKind::Torch, 0.93, 1.07),
+            (LightKind::Campfire, 0.89, 1.11),
+        ] {
+            for step in 0..1000 {
+                let scale = flicker_scale(kind, 6, step as f32 * 0.01);
                 assert!(
-                    (1.0 - properties.flicker_amplitude..=1.0 + properties.flicker_amplitude)
-                        .contains(&scale)
+                    (low..=high).contains(&scale),
+                    "{kind:?} left its named band at {step}: {scale}"
                 );
             }
         }
+        // The band must also be REACHED, or a flicker of zero amplitude would satisfy it.
+        let torch_peak = (0..1000)
+            .map(|step| flicker_scale(LightKind::Torch, 6, step as f32 * 0.01))
+            .fold(1.0f32, f32::max);
+        assert!(
+            torch_peak > 1.05,
+            "the torch must actually use its band, peaked at {torch_peak}"
+        );
         assert_ne!(
             flicker_scale(LightKind::Torch, 6, 1.0),
             flicker_scale(LightKind::Torch, 7, 1.0)
