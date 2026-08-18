@@ -15,8 +15,32 @@ use protocol::{EntityKind, JobState, LightKind};
 use crate::{
     ingest::MirrorResource,
     project::{TerrainTile, WorldProjected},
+    slice::SliceLevel,
     transform::world_to_render,
 };
+
+#[derive(Debug, Clone, Copy)]
+struct DrawStats {
+    level: i32,
+    terrain_tiles: usize,
+}
+
+impl DrawStats {
+    fn new(level: i32, terrain_tiles: usize) -> Self {
+        Self {
+            level,
+            terrain_tiles,
+        }
+    }
+
+    fn assert_valid(self) {
+        assert!(
+            self.terrain_tiles > 0,
+            "capture drew no terrain cubes at requested z {}",
+            self.level
+        );
+    }
+}
 
 #[derive(Resource)]
 pub struct CaptureState {
@@ -305,7 +329,12 @@ pub fn accumulate_motion(
 }
 
 /// Captures from the primary window after the real render loop has advanced N frames.
-pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureState>) {
+pub fn capture_after_frames(
+    mut commands: Commands,
+    mut capture: ResMut<CaptureState>,
+    slice: Res<SliceLevel>,
+    terrain: Query<&TerrainTile>,
+) {
     if capture.requested {
         return;
     }
@@ -313,6 +342,14 @@ pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureS
     if capture.elapsed >= capture.frames {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
+        let draw = DrawStats::new(slice.level(), terrain.iter().count());
+        // Print the actual count before every assertion. A successful process with a blank cut is
+        // not a capture result; this remains truthful when a requested level changes the draw set.
+        println!(
+            "slice: z {} projected {} terrain cubes",
+            draw.level, draw.terrain_tiles
+        );
+        draw.assert_valid();
         println!(
             "lantern: dwarf positions observed={:?} lit terrain tiles at dwarf positions={} moved={}",
             capture.lantern.positions,
@@ -420,6 +457,16 @@ mod tests {
         assert!(median_ground_luminance(&blown, 8, 8) > GROUND_LUMINANCE_CEILING);
         let midtone = vec![[95u8, 112, 129, 255]; 64];
         assert!(median_ground_luminance(&midtone, 8, 8) <= GROUND_LUMINANCE_CEILING);
+    }
+
+    #[test]
+    fn draw_count_instrument_rejects_an_empty_level_and_accepts_terrain() {
+        let empty = DrawStats::new(4, 0);
+        assert!(
+            std::panic::catch_unwind(|| empty.assert_valid()).is_err(),
+            "a capture must not claim success when its requested slice drew nothing"
+        );
+        DrawStats::new(4, 12).assert_valid();
     }
 
     #[test]
