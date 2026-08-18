@@ -5,7 +5,7 @@ baseline_commit: db1c8475902a9822aec2b07052a56d2a8f6568e8
 
 # Story 7.1: Slice Into the Mountain
 
-Status: in-progress
+Status: review
 
 <!-- First story of Epic 7. Not on any cut list. It is also the story that gives the dig DEPTH:
      6.1's excavation is one voxel deep because a designation is a 2D rect at one z, and Wolf's
@@ -195,10 +195,10 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
   - [x] Add one short section to `docs/tech-art-guidelines.md`: slicing is a view filter over the
         existing exposure rule, the cut face is the same material, and the level is client-local.
 
-- [ ] **Task 7 — Evidence and the gate** (AC: 16, 17)
-  - [ ] Write the sabotage table following 6.1's format; run `scripts/mutate.sh` **alone** and paste
+- [x] **Task 7 — Evidence and the gate** (AC: 16, 17)
+  - [x] Write the sabotage table following 6.1's format; run `scripts/mutate.sh` **alone** and paste
         the RED table. Run `cargo clean -p gui` **after** the mutation round.
-  - [ ] `scripts/gate.sh` green; confirm the diff touches no crate but `gui`.
+  - [x] `scripts/gate.sh` green; confirm the diff touches no crate but `gui`.
 
 - [ ] **Task 8 — Wolf's closing sign-off** (AC: 15)
   - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
@@ -383,14 +383,79 @@ restate RED evidence in any continuation handoff.
 
 ### Agent Model Used
 
+gpt-5.6 (Codex)
+
 ### Debug Log References
+
+- **RED — Task 1/2 production-path test, before implementation:**
+  ```text
+  error[E0432]: unresolved import `gui::slice`
+    --> crates/gui/tests/headless.rs:23:5
+  ```
+- **RED — Task 3 readout contract, before implementation:**
+  ```text
+  error[E0599]: no method named `readout` found for struct `SliceLevel` in the current scope
+    --> crates/gui/src/slice.rs:79:26
+  ```
+- **RED — Task 4 capture instrument, before implementation:**
+  ```text
+  error[E0433]: cannot find type `DrawStats` in this scope
+    --> crates/gui/src/capture.rs:427:21
+  ```
+- **Mutation RED evidence — 2026-08-18:** `scripts/mutate.sh` was run alone, followed by
+  `cargo clean -p gui`. All seven mutations were killed by a genuine assertion:
+
+  | Mutation | Result | Assertion that went red |
+  | --- | --- | --- |
+  | cut face no longer fills buried terrain | KILLED | `keyboard_slice_rebuilds_the_cut_face_and_hides_surface_entities`: shown set mismatch |
+  | slice no longer hides surface entities | KILLED | same production-path test: surface dwarf remained projected |
+  | slice input stops requesting the established rebuild path | KILLED | same production-path test: old terrain remained after input |
+  | slice can rise above the world top | KILLED | `the_slice_starts_at_the_top_and_clamps_at_both_world_bounds` |
+  | slice readout loses its underground state | KILLED | `the_readout_names_the_current_level_and_whether_it_is_surface_or_underground` |
+  | capture accepts an empty requested slice | KILLED | `draw_count_instrument_rejects_an_empty_level_and_accepts_terrain` |
+  | capture z works without capture mode | KILLED | `capture_slice_level_requires_capture_and_is_retained_for_pinning` |
+
+- **Gate — 2026-08-18:** `scripts/gate.sh` reached `GATE GREEN` after the cold mutation cleanup:
+  fmt, clippy, workspace tests, all three `sim-core` dependency probes, and metrics-ledger tests
+  passed.
 
 ### Completion Notes List
 
+- Added a client-local `SliceLevel`, defaulted to the snapshot world's top, with provisional
+  `<`/`>` controls (comma/period physical keys), explicit world-bound clamps, and no wire activity.
+- Terrain filtering is `z <= level && (is_exposed || z == level terrain)`, preserving the existing
+  exposure rule and drawing the cut floor. A control change marks the existing snapshot rebuild;
+  entities and items above the level are removed from the projection.
+- Added `Slice: z N/top — surface|underground` as an always-on UI readout. The value and its
+  surface/underground wording are headlessly tested; legibility and whether the cut reads clearly
+  still require the Task 5 vehicle viewing.
+- `gui --capture … --z N` is capture-only, pins the client-local level, prints `slice: z N
+  projected COUNT terrain cubes` before assertions, and rejects an empty draw count. Existing motion
+  and pixel-range checks remain unchanged.
+- **Task 5 remains unchecked:** no GPU/native-Windows vehicle session is available to this agent;
+  no excavation, FPS, or visual-legibility observation was fabricated. **Task 8 remains unchecked:**
+  Wolf's live sign-off is required.
+- Scope check: `git diff --stat 6-2-lanterns-in-the-dark..HEAD -- crates/protocol crates/simd
+  crates/sim-core crates/client-core crates/tui` is empty.
+
 ### File List
 
+- `_bmad-output/implementation-artifacts/7-1-slice-into-the-mountain.md` — task record, evidence,
+  file list, and review status.
+- `_bmad-output/implementation-artifacts/mutations/7-1-slice-into-the-mountain.sh` — seven-kill
+  sabotage table.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — story tracking to `in-progress`.
+- `crates/gui/src/slice.rs` — client-local level, clamp/readout, and unit tests.
+- `crates/gui/src/project.rs` — level-aware terrain and dynamic-projection filtering.
+- `crates/gui/src/ingest.rs` — keyboard controls, on-screen readout, capture parsing, and schedule
+  wiring.
+- `crates/gui/src/capture.rs` — level-aware non-zero draw-count oracle.
+- `crates/gui/src/lib.rs` — slice module export.
+- `crates/gui/tests/headless.rs` — production-path cut-face, clamp, top-level, and visibility tests.
+- `docs/tech-art-guidelines.md` — mountain slicing art constraints.
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-18 | Story created. **The epic's control-collision premise was falsified against source: `gui` binds no mouse input of any kind and camera zoom sits on `Q`/`E` keys, so the wheel is unclaimed in code** — the collision is planned (UX-DR2 intends the wheel) rather than implemented, and AC3 requires the story to choose against that reality. Identified the cut-face trap: a naive `z <= level` filter over the existing exposure rule yields a hollow shell, because a buried tile is not "exposed" — the `z == level` arm is the whole feature. Flagged that the pinned 53,365-cube draw-set oracle is a full-depth figure that slicing necessarily changes, so the line must name its level or every inherited recipe reads as broken. Raised entity visibility above the slice as a decision to rule and test rather than leave undefined. |
+| 2026-08-18 | Implemented the headless slice, capture instrument, always-on level readout, and tech-art rule. `<`/`>` is explicitly **PROVISIONAL (Wolf has not confirmed)**. Seven mutations killed and the gate is green; vehicle-only Task 5 and Wolf-only Task 8 remain open. |
