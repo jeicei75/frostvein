@@ -1013,6 +1013,93 @@ warm-pixel floor, but a *subtle* breath. Given the "did not see the difference" 
 0 pair, if it reads too faint the amplitude column (`appearance.rs:61`, `:68`) is the single-number
 knob and widening it will not endanger the capture range checks.
 
+
+### Task 6 — the live vehicle session (2026-08-18, gingerspice / native Windows / NVIDIA)
+
+Vehicle: `NVIDIA GeForce RTX 4080 Laptop GPU`, `DiscreteGpu`, Vulkan, driver `591.74`. Startup line
+read `projected 53365 terrain cubes` on every run — unchanged from 5.4.
+
+**The "before" capture** — `gui.exe 7451 --capture 6-1-motion-before.png --frames 1500`, zero
+commands issued:
+
+```
+motion: ticks observed=107 dwarf position changes=49 mid-blend frames=628 max working dwarves=0 item count=0
+capture range check: warm-lit pixels=29072 ground-median-luminance=123
+```
+
+**AC12 IS MET BY THIS RUN** — ≥100 delivered ticks with zero commands issued, a non-zero count of
+dwarf position changes and a non-zero count of mid-blend frames. Two corroborations rather than bare
+green: `49/107 = 45.8%` of ticks carried a dwarf position change against the **47% wander baseline
+measured independently at story-creation** on the same seed; and ground-median **123** is exactly
+5.4's converged figure (123 measured / 123.3 in the approved artifact), so **wow beat 1's look is
+undisturbed by this story**.
+
+The `--frames 1500` correction earned itself immediately: at the story's original 600 this run would
+have observed ~44 ticks and panicked before writing any PNG.
+
+**The first "after" attempt FAILED, and the failure is worth keeping.**
+
+```
+motion: ticks observed=143 dwarf position changes=65 mid-blend frames=689 max working dwarves=0 item count=8
+thread panicked at crates/gui/src/capture.rs:89: capture observed no working dwarves
+```
+
+`item count=8` with `max working=0` says the eight tiles were **already dug when the window opened** —
+the designation had completed between the two runs. Not a defect: `WORK_TICKS` is 5, so 8 tiles are
+40 tick-units of work, and the accumulator samples every frame (~14 samples per tick here), which
+cannot miss work that is actually happening. The instrument correctly refused to certify a run in
+which it observed none.
+
+**This is review patch #2 paying for itself on its first live use.** The motion line printed BEFORE
+the panic, so all five numbers were available to diagnose with. Under the code as originally
+delivered the assertion ran first and the operator would have seen only
+`capture observed no working dwarves` — indistinguishable from "the feature is dead".
+
+**The "after" capture** — daemon restarted for a fresh world, `--frames 3000 --expect-work`, dig
+designated from a TUI client early in the window:
+
+```
+motion: ticks observed=259 dwarf position changes=158 mid-blend frames=1364 max working dwarves=3 item count=8
+capture range check: warm-lit pixels=28777 ground-median-luminance=123
+Screenshot saved to 6-1-motion-after.png
+```
+
+**All five AC14 assertions passed, including both `--expect-work` halves.** Again corroborated
+rather than merely green: `max working dwarves=3` is **exactly** the "up to 3 dwarves working at
+once" measured at story-creation, and `item count=8` is **exactly** the 8 mineral tiles of the named
+site `[58,68,9]`–`[64,69,9]`. Position changes rose to 61% of ticks (158/259) against the 45–47%
+idle baseline, consistent with dwarves pathing to the dig. Ground-median held at **123** across both
+runs, dig in progress and all lights flickering.
+
+
+**AC13 — the NFR6 reading, MET.** F3 overlay, dig in progress, all lights flickering, full
+128x128x32 world: **sustained >143 fps at BOTH working zoom and full vista**, labelled
+**`gingerspice / native Windows / NVIDIA`** (RTX 4080 Laptop, Vulkan, driver 591.74). That is
+**2.4x** the 60 fps working-zoom bar and **4.8x** the 30 fps vista bar. Consistent with 5.4's
+">135 fps at every zoom" on the same vehicle, so this story's blend, flicker and debris cost no
+measurable frame time. The WSLg-devpod figure NFR6 names remains unmeasurable here (5.3's envelope
+finding) and stays formally owed to the Epic 5/6 retro's bar-redefinition question — recorded, not
+blurred.
+
+**Operator note for whoever repeats this:** the AC15 self-test recipe in this story is written for
+`cmd.exe` (`set VAR=value`). Run from PowerShell it silently sets nothing and the test panics with
+`first capture path is required` — which is the test being correct, not a defect. PowerShell needs
+`$env:FROSTVEIN_CAPTURE_FIRST = "..."`, and absolute paths, since `gui.exe` writes the PNGs relative
+to its launch directory while the test resolves relative to its own.
+
+
+**AC15 — MET on the vehicle.** `capture_exists_is_not_black_and_changes_with_the_world` PASSED
+against the pair produced above, so the projected dig-site window carries **≥200 changed pixels** —
+a threshold snowfall and the aurora cannot reach (measured on the approved Task 0 pair: ~5 expected
+inside the window from atmosphere alone, against 1,651 of real signal). The whole-file byte
+comparison this replaced would have passed on atmosphere alone.
+
+The run also surfaced a small gap of the same class the review patched in `capture.rs`: **the test
+asserted without reporting**, so a pass yielded the verdict but not the margin. It now prints the
+changed-pixel count and the window bounds before asserting. **This does not require a re-run** — the
+AC is met by the pass; the print is so the next operator gets the number rather than only the
+verdict. It is inside the `#[ignore]`d vehicle test, so the headless gate is unaffected.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/6-1-signoff/what-you-will-see.md` (new)

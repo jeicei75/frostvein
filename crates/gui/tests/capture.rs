@@ -90,6 +90,13 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
     // snowfall and aurora alone. A bare `> 0` would therefore pass on atmosphere with ~99.5%
     // probability -- the same vacuity the whole-file byte comparison had, just smaller.
     const DIG_SITE_CHANGED_PIXEL_FLOOR: usize = 200;
+    // Reported before it is asserted, for the same reason the motion line is: a bare pass tells
+    // the operator the bar was cleared but not by how much, and the margin is the interesting
+    // number when the question is whether the dig reads at all.
+    println!(
+        "dig-site window: {changes} changed pixels (floor {DIG_SITE_CHANGED_PIXEL_FLOOR}), \
+         window u {min_x:.3}-{max_x:.3} v {min_y:.3}-{max_y:.3}"
+    );
     assert!(
         changes >= DIG_SITE_CHANGED_PIXEL_FLOOR,
         "the dig-site window must carry real change, not atmosphere: {changes} pixels differ, \
