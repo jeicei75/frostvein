@@ -157,3 +157,30 @@ created and no carrying occurs — UX-DR14's carried-stone clause is formally no
 The two `motion:` lines, the two range-check lines, the self-test result, the two fps figures, and
 your sentences from §5 and §8. I check them against ACs 7, 12, 13, 15 and 16, tick what they close,
 and put the story in front of you for Task 9 — **the sign-off only you can give.**
+
+---
+
+## SECOND SESSION (2026-08-18) — what changed and what is already banked
+
+**Rebuild `gui.exe` first.** Two changes since the last run: the flicker amplitude is 4x stronger
+(torch 0.30, campfire 0.40) and the named dig site moved to `[55,62,9]`–`[56,65,9]`, off the slope
+that left an undiggable ramp wall through the old excavation.
+
+**Already banked — do not re-run:**
+
+- **AC12** — the before-run closed it (107 ticks, 49 position changes, 628 mid-blend, zero commands).
+- **AC13** — >143 fps at both working zoom and full vista. Amplitude does not change frame cost.
+- **AC14** — both runs printed a valid motion line; the `--expect-work` halves passed.
+
+**Must be re-run, because the site moved:**
+
+- **AC15** — the self-test's window now points at the new site, so the 2026-08-17 pair no longer
+  matches it. Needs a fresh before/after pair and a fresh self-test run. It now prints the
+  changed-pixel count before asserting, so the first run on the new site re-calibrates the 200-pixel
+  floor on evidence.
+- **AC7** — the dig should now read as a clean 2x4 face with nothing standing in it.
+- **AC16** — the TUI cross-check beside the Bevy window was never run.
+
+**The two questions this session exists to answer:** does the light now **breathe**, and does the
+dig now read as a **worked face** rather than a slope scrape? Everything else is measurement that is
+already in hand.
