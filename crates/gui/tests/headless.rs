@@ -229,10 +229,13 @@ fn sliced_view_does_not_spawn_dig_chips_above_the_cut() {
 
     apply_delta(
         &mut app,
-        delta(vec![TileChange {
-            pos: [0, 0, 1],
-            tile: Tile::Empty,
-        }], Vec::new()),
+        delta(
+            vec![TileChange {
+                pos: [0, 0, 1],
+                tile: Tile::Empty,
+            }],
+            Vec::new(),
+        ),
     );
     app.update();
 
