@@ -269,10 +269,10 @@
   "4c1ab160-bb71-41d8-bcc7-bbce20e39195.jsonl": {
     "by_model": {
       "claude-opus-5": {
-        "cache_creation": 1122633,
-        "cache_read": 36834770,
-        "input": 604,
-        "output": 273423
+        "cache_creation": 3749976,
+        "cache_read": 96167720,
+        "input": 990,
+        "output": 631844
       },
       "claude-sonnet-5": {
         "cache_creation": 495134,
@@ -281,14 +281,14 @@
         "output": 71536
       }
     },
-    "cache_creation": 1617767,
-    "cache_read": 42232074,
-    "input": 812,
-    "last_ts": "2026-08-18T08:09:02.632Z",
-    "output": 344959,
+    "cache_creation": 4245110,
+    "cache_read": 101565024,
+    "input": 1198,
+    "last_ts": "2026-08-18T13:09:22.083Z",
+    "output": 703380,
     "quota_last": null,
     "schema": 2,
-    "turns": 406
+    "turns": 599
   },
   "4d12c2fa-c5f4-40af-af73-1132ea7b814a.jsonl": {
     "cache_creation": 643943,
