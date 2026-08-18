@@ -404,7 +404,9 @@ task; restate RED evidence in any continuation handoff.
 
 ### Agent Model Used
 
-Codex (GPT-5)
+`gpt-5.6-terra` (Codex/Völundr, reasoning effort high) — dev.
+`claude-opus-5[1m]` — orchestration, verification and the sabotage round.
+*(Exact ids per the model policy: a family nickname is what makes an old ledger row unreadable.)*
 
 ### Debug Log References
 
@@ -487,6 +489,73 @@ Codex (GPT-5)
   NVIDIA live session, and Wolf alone supplies the closing sign-off. Status is `review` for the
   completed headless implementation and evidence.
 
+
+### Orchestrator verification of the Codex dev run (2026-08-18)
+
+Codex (`gpt-5.6-terra`, reasoning effort **high**, session `01a0150d-45ad-71e0-8627-2cd6dd87730f`)
+exited 0. **Exit 0 was not trusted.**
+
+**Verified GOOD, independently:**
+
+- **No auth failure.** All 8 log matches for `401|Missing bearer|Unauthorized` are the handoff
+  prompt's own text and `:401` source line numbers. No real 401.
+- **Scope holds exactly.** `git diff --stat 6-1-the-world-moves..HEAD` over `crates/protocol`,
+  `crates/client-core`, `crates/tui`, `Cargo.toml` and `Cargo.lock` is **empty** — AC3 and AC19
+  hold, and the story's central finding (the wire diff was already spent) is borne out: **this story
+  changed no wire type at all.**
+- **`scripts/gate.sh` GREEN** on my own run, and again after the mutation round with
+  `cargo clean -p gui` in between.
+- **Commit cadence MET — 9 commits for 8 dev tasks**, all authored `Völundr <jeicei75@gmail.com>`,
+  nothing pushed (`refs/remotes` has no `6-2` branch). This is the first story where the floor was
+  actually asked for in the handoff prompt rather than only in AGENTS.md, and it is the first story
+  that met it.
+- **Self-gate ran and CONCLUDED** — two passes, the first raising two P2 capture issues (both
+  fixed), the second returning nothing actionable, so it stopped at two of the three allowed. That
+  is a real result rather than 6.1's coverage hole, where the self-gate produced no conclusion on
+  either run.
+- **`gui` needed almost nothing, exactly as the story predicted.** The only `crates/gui/src` file
+  touched is `capture.rs` — the instrument. `project.rs` and `appearance.rs` are **untouched**, so
+  the moving light came free from 6.1's reconcile + blend, and AC10's "no dwarf special-casing"
+  holds structurally rather than by assertion.
+- **END TO END ON A LIVE DAEMON, which no test can fake.** Built `simd` from this branch, ran it,
+  and read the wire:
+
+  ```
+  SNAPSHOT path: ids 0-4 dwarf light=lantern   (5/5)   ids 5-9 campfire/torch unchanged
+  DELTA    path: ids 0-4 dwarf light=lantern   (5/5)   ids 5-9 campfire/torch unchanged
+  entity count still exactly 10 -- no double-emission through the Emitter trap
+  ```
+
+  Both bridge arms carry it, so the half-fix failure mode the story warned about did not occur.
+- **9/9 mutations KILLED** (8 from the dev run + 1 I added, below), run alone, tree verified clean
+  afterwards. The table includes **separate** mutations for the snapshot arm and the delta arm,
+  which is the right shape for AC2.
+
+**ONE GAP I FOUND BY SABOTAGE, and closed.** AC10 says dwarves must not be special-cased warm
+*anywhere* in `gui`. Reconciliation has **two** light-insertion arms — the spawn arm
+(`crates/gui/src/project.rs:368`) and the existing-entity arm (`:340`). Sabotaging each separately:
+
+```
+SPAWN arm lights every dwarf regardless of the wire   -> an_unlit_dwarf_gets_no_point_light RED  ✅
+EXISTING-ENTITY arm, same sabotage                    -> 68/68 GREEN                          ❌
+```
+
+The negative case was asserted only on the **spawn frame**. The identical defect on a later
+reconcile pass was invisible — **6.1's defect class exactly**, where reconcile misbehaved on frames
+the spawn-frame tests never reached. Closed by extending `an_unlit_dwarf_gets_no_point_light` to run
+a second `app.update()` plus a production `reconcile_projection` pass and re-assert, and by adding
+the mutation `reconciliation lights a dwarf the wire left unlit`, which now KILLS.
+
+**Recorded, not fixed:** the instrument identifies its subjects as
+`kind == Dwarf && light == Some(Lantern)` (`crates/gui/src/capture.rs:131`). That is measurement
+rather than rendering, so it does not violate AC10 — but it does hardcode the dwarf/lantern pairing
+in `gui`, and it is worth a review layer's opinion.
+
+**Still OPEN and not closable by any agent:** Task 6 (the live vehicle session) and Task 9 (Wolf's
+sign-off), and with them **AC9's look, AC13's NFR6 reading and AC14's re-measured range checks —
+including the ground-luminance ceiling, which is this story's real look risk and remains UNRULED**
+because the artifact was approved on the written-only fallback.
+
 ### File List
 
 - crates/sim-core/src/lib.rs
@@ -505,6 +574,7 @@ Codex (GPT-5)
 
 | Date | Change |
 | --- | --- |
+| 2026-08-18 | Orchestrator verification of the Codex dev run. Gate green on my own run, scope exact (**no `crates/protocol` change at all** — the story's stale-premise finding borne out), 9 commits all Völundr, nothing pushed, self-gate concluded in 2 of 3 passes. **Verified end to end on a live daemon: all 5 dwarves carry `lantern` on BOTH wire paths, entity count still 10, no double-emission.** `gui` needed only `capture.rs` — the moving light came free from 6.1. **One gap found by sabotage and closed:** AC10's negative case was asserted only on the spawn frame; the same dwarf-special-casing applied to reconciliation's existing-entity arm left 68/68 green. Test extended across a reconcile pass, mutation added, table now 9/9 KILLED. |
 | 2026-08-18 | Story created. **The epic's central wire claim was falsified against source: `protocol::LightKind::Lantern`, `sim_core::LightKind::Lantern` and `Entity.light` all already exist, so AD-16's sanctioned wire diff is already spent and this story adds no protocol change** — AC3 pins that. Verified live off the wire that all five dwarves carry `light: None` today. Found two existing lantern guards that this story must re-rule rather than trip over: `emitter_entity`'s `unreachable!` and `load_world_from`'s rejection with its now-misnamed test. Identified the `Emitter`-component trap (double-emission plus a daemon panic) and the two-site `light: None` half-fix. Flagged the ground-luminance ceiling — not NFR6 — as the story's real look risk. |
 | 2026-08-18 | Task 1 complete: every dwarf now carries the uniform, non-persisted lantern through both bridge paths; no protocol change. |
 | 2026-08-18 | Task 2 complete: re-ruled static lantern emitters as invalid while proving dwarf lanterns bypass that path. |

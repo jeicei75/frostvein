@@ -70,3 +70,13 @@ old = '            !self.last_region.is_empty(),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            true,\n'))
 PY
+
+mutation "reconciliation lights a dwarf the wire left unlit" gui an_unlit_dwarf_gets_no_point_light <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '            if let Some(light) = mirror_entity.and_then(|entity| entity.light) {'
+assert s.count(old) == 1
+new = ('            if let Some(light) = mirror_entity.and_then(|entity| entity.light.or_else(|| '
+       '(entity.kind == protocol::EntityKind::Dwarf).then_some(protocol::LightKind::Lantern))) {')
+p.write_text(s.replace(old, new, 1))
+PY

@@ -289,6 +289,25 @@ fn an_unlit_dwarf_gets_no_point_light() {
         !has_light,
         "point lights must be driven by wire light, not dwarf kind"
     );
+
+    // The spawn frame is not enough. Reconciliation has a SECOND light-insertion arm for entities
+    // that already exist, and sabotaging only that arm left the whole suite green: the same
+    // dwarf-kind special-casing on a later frame was invisible. This is 6.1's defect class --
+    // reconcile doing something wrong on a frame the spawn-frame test never reaches.
+    app.update();
+    app.world_mut()
+        .run_system_once(reconcile_projection)
+        .expect("production reconciliation must run");
+    let has_light_later = app
+        .world_mut()
+        .query::<(&WorldProjected, Option<&PointLight>)>()
+        .iter(app.world())
+        .find_map(|(projected, light)| (projected.0 == id).then_some(light.is_some()))
+        .expect("the dwarf remains projected");
+    assert!(
+        !has_light_later,
+        "a later reconciliation pass must not light an unlit dwarf either"
+    );
 }
 
 #[test]
