@@ -211,8 +211,8 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
   - [ ] Confirm by eye and state in the record: a warm pool travels with each dwarf and lights the
         terrain it passes; the camp does not read blown out against the 5.4 frame.
 
-- [ ] **Task 7 — Tech-art guidelines** (AC: 10 supporting)
-  - [ ] Add one short section to `docs/tech-art-guidelines.md`: a moving light is the same table
+- [x] **Task 7 — Tech-art guidelines** (AC: 10 supporting)
+  - [x] Add one short section to `docs/tech-art-guidelines.md`: a moving light is the same table
         lookup as a static one, and dwarves are lit by carrying a light on the wire rather than by
         being dwarves.
 
@@ -454,6 +454,8 @@ Codex (GPT-5)
   before either assertion, and requires non-zero lit terrain plus a changed first/last region.
   The existing motion line and image range checks are unchanged. `cargo test --offline -p gui`
   passed (43 library, 24 headless integration, and 1 non-ignored capture test).
+- Task 7: Added the short moving-lights guideline: wire-carried moving lights use the same
+  `LightKind` table lookup as static lights, and dwarves are never special-cased warm.
 
 ### File List
 
@@ -464,6 +466,7 @@ Codex (GPT-5)
 - crates/simd/src/bridge.rs
 - crates/gui/tests/headless.rs
 - crates/gui/src/capture.rs
+- docs/tech-art-guidelines.md
 - _bmad-output/implementation-artifacts/6-2-lanterns-in-the-dark.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
@@ -477,3 +480,4 @@ Codex (GPT-5)
 | 2026-08-18 | Task 3 complete: recorded the no-TUI-change ruling. |
 | 2026-08-18 | Task 4 complete: verified the existing generic moving-light path and added its lantern guardrail tests. |
 | 2026-08-18 | Task 5 complete: added the moving-lantern capture accumulator and its still-versus-moving test. |
+| 2026-08-18 | Task 7 complete: documented the generic moving-light rule. |
