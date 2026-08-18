@@ -5,7 +5,7 @@ baseline_commit: 538e1f8
 
 # Story 6.2: Lanterns in the Dark
 
-Status: in-progress
+Status: review
 
 <!-- FIRST ITEM ON THE M2 CUT LIST. If the story cap binds, this is what goes — Epic 6 keeps its
      wow because torches and the campfire already carry the warm/cold read. Do not treat that as
@@ -216,11 +216,11 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         lookup as a static one, and dwarves are lit by carrying a light on the wire rather than by
         being dwarves.
 
-- [ ] **Task 8 — Evidence and the gate** (AC: 18, 19)
-  - [ ] Write the sabotage table following 6.1's format; run `scripts/mutate.sh` **alone** and paste
+- [x] **Task 8 — Evidence and the gate** (AC: 18, 19)
+  - [x] Write the sabotage table following 6.1's format; run `scripts/mutate.sh` **alone** and paste
         the RED table. Run `cargo clean -p gui` **after** the mutation round (the stale-artifact trap
         has fired twice).
-  - [ ] `scripts/gate.sh` green; confirm `crates/protocol` is untouched.
+  - [x] `scripts/gate.sh` green; confirm `crates/protocol` is untouched.
 
 - [ ] **Task 9 — Wolf's closing sign-off** (AC: 17)
   - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
@@ -425,6 +425,17 @@ Codex (GPT-5)
   lantern_instrument_requires_a_lit_region_to_move` failed to compile with `E0433: cannot find
   type LanternStats in this scope` at `crates/gui/src/capture.rs:372` and `:378`; the test named
   the missing accumulator before it was added.
+- Task 8 mutation RED table (run alone; all KILLED on genuine assertions):
+
+  | Mutation | Result |
+  | --- | --- |
+  | snapshot dwarf arm drops lanterns | `bridge.rs:403` assertion; 0 passed, 1 failed |
+  | delta dwarf arm drops lanterns | `bridge.rs:403` assertion; 0 passed, 1 failed |
+  | static emitter bridge accepts lanterns | expected-panic test failed; 0 passed, 1 failed |
+  | saved static lantern emitters load | `main.rs:756` assertion; 0 passed, 1 failed |
+  | wire-declared lanterns no longer create lights | `headless.rs:224` assertion; 0 passed, 1 failed |
+  | lantern capture accepts an unmoved region | `catch_unwind(...).is_err()` assertion; 0 passed, 1 failed |
+  | lantern capture loses its lit-terrain count | `capture.rs:138` assertion; 0 passed, 1 failed |
 
 ### Completion Notes List
 
@@ -456,6 +467,13 @@ Codex (GPT-5)
   passed (43 library, 24 headless integration, and 1 non-ignored capture test).
 - Task 7: Added the short moving-lights guideline: wire-carried moving lights use the same
   `LightKind` table lookup as static lights, and dwarves are never special-cased warm.
+- Task 8: `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/6-2-lanterns-in-the-dark.sh`
+  ran alone: all seven mutations were KILLED, then `cargo clean -p gui` ran afterwards as required.
+  The subsequent `scripts/gate.sh` was GREEN. `git diff --stat 6-1-the-world-moves...HEAD --
+  crates/protocol` is empty; there is no protocol, client-core, or tui change.
+- Tasks 6 and 9 remain unchecked: this devpod cannot run the required gingerspice native Windows /
+  NVIDIA live session, and Wolf alone supplies the closing sign-off. Status is `review` for the
+  completed headless implementation and evidence.
 
 ### File List
 
@@ -467,6 +485,7 @@ Codex (GPT-5)
 - crates/gui/tests/headless.rs
 - crates/gui/src/capture.rs
 - docs/tech-art-guidelines.md
+- _bmad-output/implementation-artifacts/mutations/6-2-lanterns-in-the-dark.sh
 - _bmad-output/implementation-artifacts/6-2-lanterns-in-the-dark.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
@@ -481,3 +500,4 @@ Codex (GPT-5)
 | 2026-08-18 | Task 4 complete: verified the existing generic moving-light path and added its lantern guardrail tests. |
 | 2026-08-18 | Task 5 complete: added the moving-lantern capture accumulator and its still-versus-moving test. |
 | 2026-08-18 | Task 7 complete: documented the generic moving-light rule. |
+| 2026-08-18 | Task 8 complete: seven sabotage mutations killed; post-mutation GUI clean and full gate green. Status set to review with the vehicle and Wolf sign-off tasks explicitly open. |
