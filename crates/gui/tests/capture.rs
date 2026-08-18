@@ -85,9 +85,15 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
             inside && distance > 30
         })
         .count();
+    // Measured on the approved 6-1-signoff pair with this exact window: 1,651 pixels changed
+    // inside it against 604 across the whole rest of the frame, i.e. ~5 expected inside from
+    // snowfall and aurora alone. A bare `> 0` would therefore pass on atmosphere with ~99.5%
+    // probability -- the same vacuity the whole-file byte comparison had, just smaller.
+    const DIG_SITE_CHANGED_PIXEL_FLOOR: usize = 200;
     assert!(
-        changes > 0,
-        "the dig-site window must differ between captures"
+        changes >= DIG_SITE_CHANGED_PIXEL_FLOOR,
+        "the dig-site window must carry real change, not atmosphere: {changes} pixels differ, \
+         floor is {DIG_SITE_CHANGED_PIXEL_FLOOR}"
     );
     let pixels = first_pixels
         .pixels()

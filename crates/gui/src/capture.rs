@@ -6,13 +6,17 @@ use std::{
 use bevy::{
     app::AppExit,
     ecs::message::MessageWriter,
-    prelude::{Commands, On, Res, ResMut, Resource},
+    prelude::{Commands, On, Query, Res, ResMut, Resource, Transform, Without},
     render::render_resource::TextureFormat,
     render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
 };
 use protocol::JobState;
 
-use crate::{blend::TickClock, ingest::MirrorResource};
+use crate::{
+    ingest::MirrorResource,
+    project::{TerrainTile, WorldProjected},
+    transform::world_to_render,
+};
 
 #[derive(Resource)]
 pub struct CaptureState {
@@ -59,7 +63,9 @@ impl MotionStats {
                 .filter(|(_, _, state)| *state == JobState::Work)
                 .count(),
         );
-        self.item_count = item_count;
+        // A running maximum, like `max_working` above: both answer "did this happen at any point
+        // in the run?", and items can be hauled away before the final observed frame.
+        self.item_count = self.item_count.max(item_count);
         self.mid_blend_frames += usize::from(mid_blend);
     }
 
@@ -171,18 +177,27 @@ impl CaptureState {
 
 pub fn accumulate_motion(
     mirror: Option<Res<MirrorResource>>,
-    clock: Res<TickClock>,
     capture: Option<ResMut<CaptureState>>,
+    projected: Query<(&WorldProjected, &Transform), Without<TerrainTile>>,
 ) {
     let (Some(mirror), Some(mut capture)) = (mirror, capture) else {
         return;
     };
-    let mid_blend = clock.factor() > 0.0
-        && clock.factor() < 1.0
-        && mirror
-            .0
-            .entities()
-            .any(|entity| mirror.0.previous_entity(entity.id).is_some());
+    // A frame counts as mid-blend only if some entity that ACTUALLY MOVED between the two
+    // delivered ticks is ACTUALLY DRAWN somewhere other than either endpoint. Reading the clock
+    // instead would count a frozen world — `apply_delta` stores a previous entry for every
+    // surviving entity, moving or not — and would pass with the blend deleted entirely.
+    let mid_blend = projected.iter().any(|(marker, transform)| {
+        let Some(entity) = mirror.0.entities().find(|entity| entity.id == marker.0) else {
+            return false;
+        };
+        let Some(previous) = mirror.0.previous_entity(marker.0) else {
+            return false;
+        };
+        previous.pos != entity.pos
+            && transform.translation != world_to_render(previous.pos)
+            && transform.translation != world_to_render(entity.pos)
+    });
     capture.motion.observe(
         mirror.0.tick(),
         mirror
@@ -201,7 +216,8 @@ pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureS
     }
     capture.elapsed += 1;
     if capture.elapsed >= capture.frames {
-        capture.motion.assert_valid(capture.expect_work);
+        // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
+        // run whose five numbers are needed to diagnose it, and a panic prints none of them.
         println!(
             "motion: ticks observed={} dwarf position changes={} mid-blend frames={} max working dwarves={} item count={}",
             capture.motion.ticks.len(),
@@ -210,6 +226,7 @@ pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureS
             capture.motion.max_working,
             capture.motion.item_count
         );
+        capture.motion.assert_valid(capture.expect_work);
         capture.requested = true;
         commands
             .spawn(Screenshot::primary_window())
@@ -329,5 +346,22 @@ mod tests {
             );
         }
         moving.assert_valid(true);
+
+        // Items hauled away before the last observed frame still happened. `max_working` and
+        // `item_count` answer the same "at any point in the run?" question and must agree.
+        let mut items_then_gone = MotionStats::default();
+        for tick in 0..100 {
+            items_then_gone.observe(
+                tick,
+                [(1, [tick as i32, 3, 4], JobState::Work)].into_iter(),
+                usize::from(tick < 50),
+                tick > 0,
+            );
+        }
+        assert_eq!(
+            items_then_gone.item_count, 1,
+            "the item count is a running maximum, not the last frame's reading"
+        );
+        items_then_gone.assert_valid(true);
     }
 }
