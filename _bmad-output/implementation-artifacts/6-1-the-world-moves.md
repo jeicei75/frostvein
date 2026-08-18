@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # the policy default (Opus); recorded because 5.4 ran 
 
 # Story 6.1: The World Moves
 
-Status: review
+Status: in-progress
 
 <!-- The HEADLESS half only. Tasks 6 and 9 and ACs 13/16/17 stay OPEN and are vehicle- and
      human-bound; review does not close this story, only Wolf does (5.4's precedent). -->
@@ -317,6 +317,114 @@ NFR6 reading and the captures is headless-testable in any devpod under `MinimalP
   - [ ] Wolf views live against the approved artifact and signs off wow beat 2. **A dev agent
         cannot check this box.**
 
+### Review Findings — code review 2026-08-18 (4 layers, all live)
+
+Four layers, none a coverage hole: every layer verified `cargo 1.97.1` and executed code rather
+than reading it. Territory note: R1's split names `sim-core` / `simd`+`tui`+`protocol`, none of
+which this gui-only diff touches, so it was adapted for this story — Blind Hunter took the pure
+logic (`blend.rs`, `appearance.rs`), Edge Case Hunter the shell (`project.rs`, `ingest.rs`,
+`capture.rs`, `tests/`). Both Opus auditors kept whole-diff scope. **R1 has no mapping for the M2
+crates and needs one at the Epic 5/6 retro.**
+
+Convergences (the signal this project tracks): the unordered `accumulate_motion` was raised
+independently by **three** layers (edge + auditor + feature); the self-referential flicker band by
+two (auditor + blind); the capture-recipe/print-order defect by two (auditor + feature).
+
+- [x] [Review][Decision] **The story's own capture recipe cannot pass its own instrument** — `simd`
+      ticks at 10 Hz (`crates/simd/src/main.rs:20`) and 5.4 measured >135 fps on gingerspice, so
+      `--frames 600` ≈ 4.4 s ≈ **~44 delivered ticks** against `assert!(ticks.len() >= 100)`
+      (`crates/gui/src/capture.rs:67`). The **before** run panics *before* `Screenshot::primary_window()`
+      is spawned — the operator gets a panic and **no PNG at all**, on the first command of Task 6.
+      The `--frames 2000` after-run is fine (~148 ticks). The recipe appears twice, and one copy is
+      inside the artifact **Wolf approved**: this story's Verification block and
+      `6-1-signoff/what-you-will-see.md`. Needs ≥1,400 frames at 135 fps. Wolf's call because it
+      amends an approved artifact.
+
+- [x] [Review][Patch] **HIGH — the three "drive" lines are untested; each is a one-line deletion that
+      kills wow beat 2 with a green suite** [`crates/gui/src/ingest.rs:355`, `:379`, `:422`] —
+      independently re-verified by the orchestrator on a throwaway copy under `/tmp`: deleting
+      `clock.observe_tick(...)` (clock never re-bases, factor pins at 1.0, **every dwarf snaps**),
+      or `time.delta_secs()` → `0.0` (factor stays 0, client renders permanently one tick behind),
+      or `time.elapsed_secs()` → `0.0` (**nothing breathes**) each leaves **57/57 GREEN**. This is the
+      same defect class as the first Codex run's inert `projection_systems`, one level below where
+      AC6 looks: AC6 proves a system is *in the tuple* and says nothing about the tuple's *inputs*.
+      The four new app-level tests all call `TickClock::advance(0.01)` by hand
+      (`tests/headless.rs:154`, `:176`, `:203`), so they pass whether or not production ever drives
+      the clock. Fix: app-level tests that let the production systems drive time across
+      `app.update()` and assert a transform actually moves and an intensity actually changes between
+      two frames; plus the three matching entries in the mutation table.
+- [x] [Review][Patch] **The motion line is printed *after* the assertion, so a failing run prints no
+      motion line** [`crates/gui/src/capture.rs:204-212`] — AC14 requires it "before any conclusion".
+      On the vehicle run that fails, the operator gets one panic and none of the five numbers needed
+      to diagnose it. One-line reorder.
+- [x] [Review][Patch] **The "mid-blend frames" counter never reads a rendered position**
+      [`crates/gui/src/capture.rs:180-185`] — it is `factor ∈ (0,1) && any entity has a previous
+      state`, and `Mirror::apply_delta` stores a previous entry for *every surviving entity*, moving
+      or not, so it degenerates to "the clock is mid-interval" and is true in a frozen world. It
+      observes no `Transform`. Measured: under the sabotaged clock above it still logged 23
+      strictly-between frames, so **AC14's blend assertion passes with the blend dead** — inert
+      against this story's most likely live failure.
+- [x] [Review][Patch] **`accumulate_motion` is ordered against nothing** [`crates/gui/src/ingest.rs:123`]
+      — registered as its own `Update` chain with no `.after()`/`.before()` edge to
+      `projection_systems`. It takes `Res<TickClock>` while `blend_projection` takes `ResMut<TickClock>`;
+      Bevy's `ambiguity_detection` defaults to `LogLevel::Ignore` and this repo never overrides it,
+      so the conflict is resolved silently. The story calls that ordering load-bearing; the
+      instrument reading it sits outside the chain. **Raised by three layers.**
+- [x] [Review][Patch] **The flicker band assertion is a tautology and cannot fail**
+      [`crates/gui/src/appearance.rs:83-90`] — `flicker_scale` is
+      `1.0 + amplitude * (primary + secondary) / 1.3` with the bracket normalised to ±1.3, so
+      containment within `1.0 ± amplitude` holds **by construction for any amplitude**, and the test
+      reads `flicker_amplitude` from the same table it is validating. The `torch flicker band widens`
+      mutation (0.07 → 0.70) is killed only by the separate constant-pinning
+      `assert_eq!(light_properties(Torch).flicker_amplitude, 0.07)`. AC10's "named band" has no test
+      that can go red. This is the self-referential-test antipattern already hit at 1.1, 1.2 and 1.3.
+      Fix: assert against hardcoded literals.
+- [x] [Review][Patch] **Two distinct-tick deltas in one frame collapse the measured interval to the
+      0.02 s floor** [`crates/gui/src/blend.rs:34-36`] — `observe_tick` sets
+      `interval = elapsed.clamp(MIN, MAX)` and the first delta of the pair already zeroed `elapsed`,
+      so the second measures `0.0` → `MIN_TICK_INTERVAL`, and `factor()` saturates to 1.0 for the
+      rest of that interval. The Dev Notes accepted "the entity covers two tiles in one interval";
+      they did not accept a clock that stays corrupted into later frames. No test exercises a
+      distinct-tick burst — the existing queued-delta test reuses `tick: 1`, which the
+      `tick > last_tick` guard makes a no-op.
+- [x] [Review][Patch] **AC15's windowed capture comparison is a near-vacuous `> 0`**
+      [`crates/gui/tests/capture.rs:88-91`] — measured against the real approved pair with the test's
+      own window math: 1,651 changed pixels inside the window vs an expected ~5 from atmosphere alone
+      at the outside density, so `> 0` passes on snowfall with ≈99.5% probability. The AC exists
+      *because* whole-frame inequality is vacuous; a `> 0` threshold in an 8,165 px window barely
+      improves on it. A threshold in the low hundreds would bite.
+- [x] [Review][Patch] **`item_count` overwrites instead of taking a running maximum**
+      [`crates/gui/src/capture.rs:56-62`] — `max_working` uses `.max(...)`, `item_count` uses plain
+      assignment, so items present during the run but gone at the final observed frame fail
+      `--expect-work`'s `item_count >= 1`. A false negative on a run the instrument should accept,
+      inconsistent with how the sibling counter answers the same "did it happen at any point"
+      question.
+
+- [x] [Review][Defer] NaN passes through `f32::clamp`, so the "clamped to [0,1]" guarantee has a hole [`crates/gui/src/blend.rs:47`, `:55`] — deferred, unreachable (Bevy never emits a NaN `delta_secs()`) and guarding it is error handling for an impossible scenario, which ground rule 1 makes a defect in itself
+- [x] [Review][Defer] `flicker_scale` phase collides exactly for ids ≥ 2^24, so two emitters pulse in perfect sync [`crates/gui/src/appearance.rs:84`] — deferred, needs ~16.7M `IdAllocator` allocations
+- [x] [Review][Defer] Flicker aliases from ~3.2 days of client uptime and freezes entirely at ~11.6 days (f32 `elapsed_secs` precision) [`crates/gui/src/appearance.rs:85-88`] — deferred, out of reach for a demo client
+- [x] [Review][Defer] `observe_tick(0)` is a silent no-op (`>` not `>=`) [`crates/gui/src/blend.rs:33`] — deferred, not reachable given reset-before-delta ordering
+- [x] [Review][Defer] `TickClock::reset` leaves a stale `interval` across a snapshot boundary [`crates/gui/src/blend.rs:41-44`] — deferred, snaps early rather than smearing, never extrapolates
+- [x] [Review][Defer] `DigChip` entities accumulate without bound across many distinct dug tiles with no rebuild [`crates/gui/src/project.rs:294-318`] — deferred, pre-existing YAGNI boundary
+- [x] [Review][Defer] The dig-chip test asserts count and markers only — no position, no determinism, and Task 4's two negative cases untested; `chip_offsets()` is a fixed array, not "derived from the tile position" as Task 4's text says [`crates/gui/tests/headless.rs:684-722`, `crates/gui/src/project.rs:382-389`] — deferred
+- [x] [Review][Defer] AC3's mutation targets the redundant clamp in `blended_translation`, not the load-bearing one in `TickClock::factor` [`mutations/6-1-the-world-moves.sh:3-9`] — deferred
+- [x] [Review][Defer] Making `--expect-work` a no-op leaves 57/57 green — the flag's effect is untested [`crates/gui/src/ingest.rs:189`, `:201`] — deferred
+- [x] [Review][Defer] `MIN_TICK_INTERVAL` is never exercised by any test [`crates/gui/src/blend.rs:35`] — deferred
+- [x] [Review][Defer] Reconcile no longer refreshes an existing entity's scale, so an entity spawned before `ProjectionAssets` exists keeps scale 1.0 permanently and a wire kind change no longer restyles it [`crates/gui/src/project.rs:335-350`] — deferred, not live under `run()`
+- [x] [Review][Defer] `MotionStats` counter fields and both interval constants are `pub` with no reader outside their module [`crates/gui/src/capture.rs:31-34`, `crates/gui/src/blend.rs:7-8`] — deferred
+- [x] [Review][Defer] Deleting `clock.reset` on snapshot leaves 57/57 green [`crates/gui/src/ingest.rs:344`] — deferred, harmless today only because `apply_snapshot` clears `previous_entities`
+- [x] [Review][Defer] Three `// NOTE:`s the story's tasks asked for are absent — the per-frame id map, the two-deltas-in-one-frame limitation, and point-light-not-emitter-material — deferred
+- [x] [Review][Defer] AC18's "RED output pasted into the Dev Agent Record" is half-satisfied: the KILLED table and suite counts are pasted, no RED assertion text for the four new mutations — deferred, format not fabrication
+- [x] [Review][Defer] `deferred-work.md` was not updated by this story, so entries it closed still read as open — 5.3's "`previous_entity()` remains without a live caller" and 5.3's review's incidental-`.chain()` finding are both closed here, and 5.4's "`run()` has no test of any kind" is partly closed by AC6 and needs narrowing rather than deletion — deferred *(raised by the orchestrator, not by a layer)*
+
+**Carried into Task 6, not a defect:** the flicker band actually reached is torch ±7.0% and campfire
+±11.0% (14% / 22% peak-to-peak) at 1.7 Hz / 0.9 Hz — comfortably inside 5.4's warm-pixel floor
+(17,648 measured against a 3,000 floor), but a *subtle* breath. Given Wolf's "did not see the
+difference" reaction to the Task 0 pair, if he judges it too faint at the live viewing the amplitude
+column (`crates/gui/src/appearance.rs:61`, `:68`) is the single-number knob and widening it will not
+endanger the capture range checks.
+
+
 ## Dev Notes
 
 ### Scope guardrails — do NOT build these here
@@ -528,12 +636,18 @@ CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
 exists):**
 
 ```bash
-# 1. before the dig
-gui.exe 7451 --capture 6-1-before.png --frames 600
+# 1. before the dig. --frames 1500, NOT 600: simd ticks at 10 Hz and the vehicle runs >135 fps,
+#    so 600 frames is ~4.4 s ~= 44 ticks and the instrument's >=100-tick floor panics BEFORE the
+#    screenshot is spawned — a failed command and no PNG at all. 1500 frames ~= 11 s ~= 110 ticks.
+gui.exe 7451 --capture 6-1-motion-before.png --frames 1500
 # 2. designate (command above)
 # 3. across the dig — size --frames so the run spans >=100 ticks; the instrument asserts it
-gui.exe 7451 --capture 6-1-after.png --frames 2000 --expect-work
+gui.exe 7451 --capture 6-1-motion-after.png --frames 2000 --expect-work
 ```
+
+**Do not reuse the Task 0 filenames.** `6-1-before.png` and `6-1-after.png` are the pair Wolf
+approved and are the baseline this run is compared against; writing over them destroys the
+comparison. Hence the `6-1-motion-*` names above.
 
 **Required non-zero observations** (paste both printed lines into the record): the motion line
 reports ticks observed ≥ 100, dwarf position changes > 0, blend frames > 0, max working ≥ 1 and
@@ -546,7 +660,10 @@ result.**
 ```bash
 cargo test -p gui --test capture --no-run --target x86_64-pc-windows-gnu
 # copy the test exe to the Windows side, then run it with
-# FROSTVEIN_CAPTURE_FIRST=6-1-before.png FROSTVEIN_CAPTURE_SECOND=6-1-after.png <exe> --ignored
+# FROSTVEIN_CAPTURE_FIRST=6-1-motion-before.png FROSTVEIN_CAPTURE_SECOND=6-1-motion-after.png \
+#   <exe> --ignored
+# The window comparison now has a floor of 200 changed pixels, not >0: the approved pair measured
+# 1,651 inside the window against ~5 expected from snowfall and aurora alone.
 ```
 
 **NFR6 reading (AC13):** F3 overlay on, dig in progress, read sustained fps at working zoom and at
@@ -799,6 +916,103 @@ unreliable"; it is that a checkbox is only worth what its verification is worth,
 orchestrator re-runs everything.** The self-gate remains a coverage hole for this story: it produced
 no conclusion on either run.
 
+
+### Code review and patch round (2026-08-18, orchestrator = Claude Opus, fresh context)
+
+Four layers, none a coverage hole — every layer verified `cargo 1.97.1` and executed code. The
+Feature Auditor ran the real pipeline against a live daemon with a real TUI designation and
+**watched the feature work**: 592 distinct sub-tile positions per dwarf, 2,095 of 5,594 frames
+strictly between delivered positions, 32 `ClientLocal` chips for 8 dug tiles with **zero**
+mis-marked as `WorldProjected`, 8 wire stone items persisting, and 5,582 distinct intensities per
+emitter across the table band. AC6 is genuinely closed and was verified structurally.
+
+**The review's headline finding, and it is the same defect class as the first Codex run's inert
+`projection_systems`, one level below where AC6 looks.** AC6 proves a system is *in the tuple*; it
+says nothing about the tuple's *inputs*. Three one-line deletions each killed wow beat 2 with the
+suite fully green. Re-verified independently by the orchestrator on a `git archive` copy under
+`/tmp` (the repo was never mutated):
+
+```
+delete  clock.observe_tick(mirror.0.tick())   ingest.rs:355 -> 57/57 GREEN (every dwarf snaps)
+        time.delta_secs()          -> 0.0     ingest.rs:379 -> 57/57 GREEN (one tick behind, forever)
+        time.elapsed_secs()        -> 0.0     ingest.rs:422 -> 57/57 GREEN (nothing breathes)
+```
+
+The four seam tests added by the continuation run all call `TickClock::advance(0.01)` **by hand**,
+so they pass whether or not production ever drives the clock. Closed by three tests that let
+production drive time — `ingesting_a_delta_rebases_the_blend_clock_from_the_wire` (`ingest.rs`,
+through the real `IngestReceiver`), `production_drives_the_blend_clock_from_frame_time` and
+`production_drives_the_flicker_from_elapsed_time` (`headless.rs`, real `Time` across `app.update()`)
+— plus three matching mutations. All three deletions now turn a named test RED.
+
+**Nine changes applied (1 decision + 8 patches), all verified in one pass:**
+
+1. The three untested drive lines above — three new tests, three new mutations.
+2. `capture.rs` — the motion line now prints **before** `assert_valid`, per AC14's "before any
+   conclusion". A failing vehicle run previously produced a panic and none of the five numbers.
+3. `capture.rs` — the mid-blend counter now reads **actual rendered `Transform`s**: a frame counts
+   only if an entity that genuinely moved between the two delivered ticks is drawn away from both
+   endpoints. It previously read only the clock, and `apply_delta` stores a previous entry for every
+   surviving entity, so it was true in a frozen world — measured to still log 23 "strictly-between"
+   frames with the blend sabotaged. AC14's blend assertion was inert against this story's most
+   likely live failure.
+4. `ingest.rs` — new `ProjectionSet`; the capture chain is `.after(ProjectionSet)`. It previously
+   read `Res<TickClock>` with no ordering edge to the `ResMut` writer, and Bevy's
+   `ambiguity_detection` defaults to `LogLevel::Ignore`, so the conflict resolved silently. **Raised
+   independently by three layers.**
+5. `appearance.rs` — the flicker band is asserted against **hand-written literals**. It read
+   `flicker_amplitude` from the same table it validated, and since `flicker_scale` is
+   `1.0 + amplitude * (..)/1.3` with the bracket normalised to ±1.3, containment held by
+   construction for *any* amplitude: the assertion could not fail. A peak-reached assertion was
+   added too, or a zero-amplitude flicker would satisfy the band. This is the self-referential-test
+   antipattern already hit at 1.1, 1.2 and 1.3.
+6. `blend.rs` — a same-frame burst of distinct-tick deltas no longer collapses `interval` to its
+   0.02 s floor. The first delta zeroes `elapsed`, so the second measured ~0 and saturated the
+   blend for the rest of the frame. The Dev Notes accepted "two tiles in one interval"; they did
+   not accept a clock that stays corrupted afterwards.
+7. `capture.rs` — `item_count` is a running maximum, matching `max_working`. Items hauled away
+   before the final frame previously failed `--expect-work` on a run that should pass.
+8. `tests/capture.rs` — AC15's window comparison now has a floor of **200 changed pixels**, not
+   `> 0`. Measured on the approved pair: 1,651 changed inside the window against ~5 expected from
+   snowfall and aurora alone, so `> 0` passed on atmosphere with ~99.5% probability.
+9. **Wolf's ruling on the capture recipe.** `simd` ticks at 10 Hz and the vehicle runs >135 fps, so
+   the story's own `--frames 600` before-run is ~44 ticks against the instrument's ≥100 floor — it
+   would have **panicked before writing any PNG, on the first command of Task 6**. Raised to 1,500.
+   The Task 0 recipe was deliberately **left untouched**: that pair was taken with the shipped 5.4
+   binary, which has no motion assertions, and rewriting it would falsify a record of what was run.
+   A second trap found in the same block and fixed: the Task 6 capture used the *same filenames* as
+   the approved Task 0 pair and would have overwritten the baseline it is compared against — the
+   outputs are now `6-1-motion-before.png` / `6-1-motion-after.png`.
+
+**Verification (one pass, after all nine):** `scripts/gate.sh` **GREEN** on a cold rebuild
+(`cargo clean -p gui` run after the mutation round, per the stale-artifact trap). **311 workspace
+tests**, `gui` 42 lib + 19 headless + 1 capture. **Mutation table 8 → 14, ALL 14 KILLED**, run
+alone, each on a genuine named assertion, tree verified restored afterwards.
+
+**Sixteen LOW findings went straight to `deferred-work.md`** with file:line per the cap-the-low-tail
+rule — including three real-but-unreachable ones from the Blind Hunter (NaN through `f32::clamp`;
+`flicker_scale` colliding exactly for ids ≥ 2^24; the flicker aliasing from ~3.2 days of uptime and
+freezing at ~11.6), and one raised by the orchestrator rather than a layer: **this story closed two
+`deferred-work.md` entries without updating the register**, so 5.3's "`previous_entity()` has no live
+caller" and its review's incidental-`.chain()` finding still read as open.
+
+**Process findings for the Epic 5/6 retro.** (1) **R1's layer-territory split has no mapping for the
+M2 crates** — it names `sim-core` / `simd`+`tui`+`protocol`, none of which a gui-only diff touches,
+so a literal reading would have left both hunters idle and the diff to the auditors alone. It was
+adapted for this story (Blind → pure logic, Edge → shell) and needs a real mapping. (2) Convergence
+was measurable this time: the unordered instrument read was found by **three** layers, the
+self-referential band and the capture-recipe defect by **two** each.
+
+**WHAT THIS REVIEW DOES NOT ESTABLISH, stated plainly:** nothing here has been observed on the
+vehicle. **ACs 7, 12, 13, 15, 16 and 17 remain OPEN and unobserved**, and Tasks 6 and 9 are
+untouched. Unit-green is not feature-proof. This review does not close the story — only Wolf does.
+
+**One thing to watch at the live viewing, not a defect:** the flicker band actually reached is torch
+±7.0% and campfire ±11.0% (14% / 22% peak-to-peak) at 1.7 Hz / 0.9 Hz — safely inside 5.4's
+warm-pixel floor, but a *subtle* breath. Given the "did not see the difference" reaction to the Task
+0 pair, if it reads too faint the amplitude column (`appearance.rs:61`, `:68`) is the single-number
+knob and widening it will not endanger the capture range checks.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/6-1-signoff/what-you-will-see.md` (new)
@@ -830,10 +1044,18 @@ no conclusion on either run.
 - `docs/tech-art-guidelines.md` (modified — presentation-motion decisions)
 - `_bmad-output/implementation-artifacts/mutations/6-1-the-world-moves.sh` (new)
 
+- `_bmad-output/implementation-artifacts/deferred-work.md` (modified — 16 LOW review findings,
+  each with file:line, plus the note that this story closed two entries without updating them)
+
+*(The 2026-08-18 review-patch round touched no new files: `crates/gui/src/{appearance,blend,capture,
+ingest}.rs`, `crates/gui/tests/{headless,capture}.rs`, the mutation script and this story file were
+all already listed above.)*
+
 ## Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-08-18 | **Code review (4 layers, fresh context) + patch round.** The feature was watched running live against a real daemon, and AC6 confirmed genuinely closed — but **three one-line deletions (`observe_tick`, `delta_secs`, `elapsed_secs`) each killed wow beat 2 with the suite 57/57 GREEN**, the same defect class as run one's inert `projection_systems`, one level below where AC6 looks. 1 decision + 8 patches applied: three production-drive tests, the motion line printed before its assertion, the mid-blend counter now reading real `Transform`s instead of the clock, `ProjectionSet` ordering for the instrument, literal flicker-band assertions (the old one was a tautology), a same-frame burst guard on the tick clock, a running-max item count, and a 200-pixel floor on AC15's window. Wolf ruled the `--frames 600` before-run up to 1,500 — at 10 Hz against >135 fps it was ~44 ticks and would have panicked before writing any PNG on Task 6's first command; the Task 0 recipe was left untouched as a record of what was actually run, and the Task 6 outputs renamed so they cannot overwrite the approved pair. Gate GREEN cold, 311 workspace tests, **mutations 8 → 14, all KILLED**. 16 LOW findings deferred with file:line. Status → in-progress: Tasks 6 and 9 and ACs 7/12/13/15/16/17 remain OPEN and vehicle- and human-bound. |
 | 2026-08-17 | Continuation run closed all four falsified ACs in five commits (one per AC + mutations). **AC6 verified MET by the same sabotage that falsified it: 54/54 green with the feature deleted became 4 tests RED.** Mutation table 4 → 8, all KILLED. Gate green, 306 workspace tests. Status → review for the HEADLESS half; Tasks 6 and 9 and ACs 13/16/17 remain open and vehicle/human-bound. Self-gate remains a coverage hole — no conclusion on either run. |
 | 2026-08-17 | Orchestrator verification of the Codex dev run. Gate green, 4/4 mutations killed, AC19 scope exact, all commits Völundr, nothing pushed — but **AC4, AC5, AC6 and AC11 are unmet or untested and four subtasks were ticked without being delivered.** AC6 falsified by sabotage: removing both `blend_projection` and `flicker_projection` from the live tuple leaves the full suite 54/54 green, because `projection_systems` is called only by `run()` and never by the headless tests. Tasks 1, 2 and 3 reopened. Self-gate recorded as a coverage hole (ran once, returned nothing). Commit cadence 3 commits for 7 tasks, below the floor. |
 | 2026-08-17 | **Task 0 APPROVED BY WOLF — AC1 MET, the gate is OPEN, implementation may start.** Approved as-is; the named dig site is deliberately NOT re-picked (re-picking would invalidate the live-verified exposure/occlusion/projection/timing figures and force amendments to AC7 and AC9). Dev delegated to Codex for Tasks 1-5, 7, 8; Tasks 6 and 9 stay vehicle- and human-bound. |

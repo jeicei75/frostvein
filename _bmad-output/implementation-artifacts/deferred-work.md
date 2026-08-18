@@ -640,3 +640,88 @@ below as "what one layer found", not as "what is wrong with 3.3".
   changes the exposed-predicate and the 53,365 oracle) is a candidate later story. RETRO
   NOTE: Task 0 artifact scripts must not substitute geometry the renderer is not tasked to
   produce. `[wolf-live+orchestrator/HIGH-deferred]`
+
+## Deferred from: code review of 6-1-the-world-moves (2026-08-18)
+
+Four layers, none a coverage hole. R1's territory split has **no mapping for the M2 crates** — it
+names `sim-core` / `simd`+`tui`+`protocol`, none of which a gui-only diff touches — so it was
+adapted for this story (Blind Hunter → `blend.rs`+`appearance.rs`, Edge Case Hunter → `project.rs`,
+`ingest.rs`, `capture.rs`, `tests/`). **Give R1 a real M2 mapping at the Epic 5/6 retro.**
+
+- NaN passes through `f32::clamp`, so `TickClock::factor` and `blended_translation`'s "clamped to
+  [0,1]" guarantee has a hole: a NaN `elapsed` is *stored* at `crates/gui/src/blend.rs:35` and does
+  not self-heal until the next successful `observe_tick`, and `Vec3::lerp` with a NaN `t` yields a
+  garbage screen position. Unreachable — Bevy never emits a NaN `delta_secs()` — and guarding it is
+  error handling for an impossible scenario, which ground rule 1 makes a defect in itself.
+  `crates/gui/src/blend.rs:47`, `:55`. `[blind/LOW]`
+- `flicker_scale`'s per-id phase collides *exactly* for ids ≥ 2^24: `id as f32` stops distinguishing
+  consecutive integers, so two emitters of the same kind pulse in perfect sync for all time —
+  an unconditional violation of AC10's distinctness clause, not a near-miss. Needs ~16.7M
+  `IdAllocator` allocations (entities and dug-stone items share one monotonic `u32`), so it is out
+  of reach this milestone. `crates/gui/src/appearance.rs:84`. `[blind/LOW]`
+- The flicker aliases from ~3.2 days of client uptime and freezes entirely at ~11.6 days: at 60 fps
+  the f32 ULP of `Time::elapsed_secs()` exceeds one frame delta once elapsed > 2^24/60 ≈ 279,620 s,
+  after which successive frames feed `flicker_scale` bit-identical seconds. Measured, not argued.
+  `crates/gui/src/appearance.rs:85-88`. `[blind/LOW]`
+- `TickClock::observe_tick(0)` is a silent no-op — the guard is `tick > self.last_tick` and
+  `Default` sets `last_tick: 0`. Not reachable today (a snapshot's `reset` always precedes the first
+  delta, and world ticks start at 0), but a future protocol delivering a `Delta` before a `Snapshot`
+  would swallow tick 0 rather than be defended against. `crates/gui/src/blend.rs:33`. `[blind/LOW]`
+- `TickClock::reset` zeroes `elapsed` and `last_tick` but leaves `interval` at whatever was last
+  measured, so the first frames after a reconnect blend against a stale cadence. Never extrapolates
+  (worst case it snaps early), so recorded rather than fixed. `crates/gui/src/blend.rs:41-44`.
+  `[blind/LOW]`
+- `DigChip` entities have no lifetime cap: a tile's chips are removed only when that exact position
+  is dirtied again or a full snapshot rebuild occurs, so a long session digging many distinct,
+  never-revisited tiles accumulates chip entities without bound.
+  `crates/gui/src/project.rs:294-318`. `[edge/LOW]`
+- A tile emptied by a delta that lands in the same frame as, and after, a snapshot permanently loses
+  its debris chips: `reconcile_projection` takes `rebuild = true` and `mem::take`s `dirty_tiles`,
+  while the whole dig-chip block sits behind `if !rebuild_terrain`. No test covers snapshot-then-
+  delta in one frame. Cosmetic — chips are `ClientLocal` eye candy with no sim meaning.
+  `crates/gui/src/ingest.rs:398-401`, `crates/gui/src/project.rs:294`. `[edge/LOW]`
+- The dig-chip test asserts count and markers only: never that the chips are *at* the tile, never
+  AC8's "identical for the same position on every run" determinism, and neither of Task 4's two
+  negative cases (a tile changing to something solid spawns none; the same position twice does not
+  double). The de-dup loop is unguarded by any assertion. Separately `chip_offsets()` is a **fixed**
+  array, not "deterministic offsets derived from the tile position" as Task 4 specifies, so every
+  dug tile gets an identical four-chip arrangement — satisfies AC8's wording, deviates from the task
+  text, and nothing tests either reading. `crates/gui/tests/headless.rs:684-722`,
+  `crates/gui/src/project.rs:382-389`. `[auditor/LOW]`
+- AC3's mutation removes the clamp in `blended_translation` (`crates/gui/src/blend.rs:55`), but that
+  clamp is dead defence — the only production caller passes an already-clamped `clock.factor()`. The
+  load-bearing clamp in `TickClock::factor` (`:47`) has a test but no mutation, so the sabotage table
+  proves the belt and not the braces. `mutations/6-1-the-world-moves.sh:3-9`. `[auditor/LOW]`
+- Making `--expect-work` a no-op leaves 57/57 green. The flag is reachable and its rejection without
+  `--capture` is real, but neither is defended by a test; the sibling `--capture`-requires-`--frames`
+  guard *is* tested. `crates/gui/src/ingest.rs:189`, `:201`. `[auditor+feature/LOW]`
+- `MIN_TICK_INTERVAL` is never exercised: the only clock test walks the high end via `advance(10.0)`.
+  Zeroing the floor would make `factor()` divide by ~0, kept benign only by the outer clamp — half
+  of Task 1's clamp subtask is unproved and unmutated. `crates/gui/src/blend.rs:35`. `[auditor/LOW]`
+- Reconcile no longer refreshes an existing entity's scale (a consequence of the AC5 sole-writer
+  edit, not an AC violation): scale is set at spawn only and only when `ProjectionAssets` exists, so
+  an entity spawned in a frame without assets keeps scale 1.0 permanently and a wire kind change no
+  longer restyles it. Not live under `run()`, where assets exist from the first `Update`. No test
+  covers either path. `crates/gui/src/project.rs:335-350`. `[auditor/LOW]`
+- Speculative public surface: `MotionStats`'s four counter fields and both `TickClock` interval
+  constants are `pub` with no reader outside their own module. `crates/gui/src/capture.rs:31-34`,
+  `crates/gui/src/blend.rs:7-8`. `[auditor/LOW]`
+- Deleting `clock.reset(...)` on snapshot leaves 57/57 green — harmless today only because
+  `Mirror::apply_snapshot` clears `previous_entities` so the snap still happens, i.e. the reset is
+  belt over an existing brace and nothing would catch its loss.
+  `crates/gui/src/ingest.rs:344`. `[feature/LOW]`
+- Three `// NOTE:`s the story's own tasks asked for are absent: the per-frame id map and the
+  two-deltas-in-one-frame limitation (Task 1), and point-light-not-emitter-material (Task 3). Only
+  the AC14 global-counts NOTE exists. `[feature/LOW]`
+- AC18's "RED output pasted into the Dev Agent Record" is half-satisfied: the 8-row KILLED table and
+  the before/after suite counts are pasted, but no RED assertion text for the four mutations added by
+  the continuation run. The table is what `mutate.sh` prints, so this is a format gap rather than a
+  fabrication. `[auditor/LOW]`
+- **This register was not updated by story 6.1, so entries the story closed still read as open.**
+  Closed by 6.1: 5.3's "`Mirror::previous_entity()` remains without a live caller" — the blend is now
+  that caller; and 5.3's review's "`ingest_messages` and `reconcile_projection` are registered
+  without `.chain()` … the order is incidental" — the order is now `.chain()`ed and load-bearing.
+  Partly closed: 5.4's "the live `App` built by `run()` has no test of any kind" `[feature/MED]` —
+  AC6's shared `projection_systems` now gives the live tuple app-level coverage, so the entry needs
+  **narrowing to the parts still untested** (fog/framing constants, resource-insert order) rather
+  than deletion. `[orchestrator/LOW]`

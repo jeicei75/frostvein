@@ -63,3 +63,51 @@ old = '                if projected_light.is_none_or(|existing| existing.0 != li
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                if true {'))
 PY
+
+mutation "live ingest stops re-basing the blend clock" gui ingest::tests::ingesting_a_delta_rebases_the_blend_clock_from_the_wire <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '                clock.observe_tick(mirror.0.tick());\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "the blend clock is never advanced by frame time" gui production_drives_the_blend_clock_from_frame_time <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = 'blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'blend_entities(&mirror.0, &mut clock, 0.0, &mut projected);'))
+PY
+
+mutation "the flicker is never advanced by elapsed time" gui production_drives_the_flicker_from_elapsed_time <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = 'flicker_lights(time.elapsed_secs(), &mut lights);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'flicker_lights(0.0, &mut lights);'))
+PY
+
+mutation "a same-frame tick burst collapses the measured cadence" gui blend::tests::a_burst_of_ticks_in_one_frame_keeps_the_measured_cadence <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/blend.rs'); s = p.read_text()
+old = '            if self.elapsed >= MIN_TICK_INTERVAL {\n                self.interval = self.elapsed.clamp(MIN_TICK_INTERVAL, MAX_TICK_INTERVAL);\n            }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            self.interval = self.elapsed.clamp(MIN_TICK_INTERVAL, MAX_TICK_INTERVAL);\n'))
+PY
+
+mutation "the flicker band widens past its named literals" gui appearance::flicker_tests::flicker_is_bounded_distinct_and_deterministic <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '    1.0 + properties.flicker_amplitude * (primary + secondary) / 1.3'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    1.0 + properties.flicker_amplitude * (primary + secondary) / 0.5'))
+PY
+
+mutation "the item count stops being a running maximum" gui capture::tests::motion_instrument_rejects_stillness_and_accepts_the_required_observation <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = 'self.item_count = self.item_count.max(item_count);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'self.item_count = item_count;'))
+PY

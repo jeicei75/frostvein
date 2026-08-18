@@ -43,7 +43,14 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-17  # 6.1 HEADLESS HALF DONE → review (two Codex runs; four seam ACs were
+last_updated: 2026-08-18  # 6.1 CODE REVIEWED + PATCHED → in-progress. Four layers, none a coverage
+                          # hole; the feature was watched running live and AC6 is genuinely closed,
+                          # but three one-line deletions each killed wow beat 2 with the suite GREEN —
+                          # run one's defect class, one level below where AC6 looks. 1 decision + 8
+                          # patches applied, gate green cold, mutations 8 → 14 all killed, 16 LOW
+                          # deferred. Tasks 6 + 9 and ACs 7/12/13/15/16/17 still OPEN — nothing has
+                          # been observed on the vehicle. Prior same day:
+                          # 6.1 HEADLESS HALF DONE → review (two Codex runs; four seam ACs were
                           # ticked-but-undelivered on run one and falsified by sabotage, closed for
                           # real on run two; 8/8 mutations, gate green). Task 0 approved earlier the
                           # same day. Tasks 6 + 9 and ACs 13/16/17 remain owed to the vehicle and to
@@ -206,7 +213,40 @@ development_status:
   # The self-gate is a COVERAGE HOLE for this story — it produced no conclusion on either run.
   # STILL OPEN and NOT closable by any agent: Tasks 6 (live vehicle) + 9 (Wolf's sign-off),
   # ACs 13/16/17. Review does not close this story; only Wolf does.
-  6-1-the-world-moves: review
+  # CODE REVIEW 2026-08-18 (4 layers, fresh context, none a coverage hole) -> back to in-progress.
+  # The Feature Auditor ran the real pipeline against a live daemon and WATCHED IT WORK (592 distinct
+  # sub-tile positions per dwarf, 32 client-local chips for 8 dug tiles with zero mis-marked, 5,582
+  # distinct intensities per emitter), and AC6 is genuinely closed. BUT THE HEADLINE FINDING IS THE
+  # SAME DEFECT CLASS AS RUN ONE, ONE LEVEL DOWN: AC6 proves a system is in the tuple and says nothing
+  # about the tuple's INPUTS. Three one-line deletions -- observe_tick, delta_secs, elapsed_secs --
+  # EACH KILLED WOW BEAT 2 WITH THE SUITE 57/57 GREEN, re-verified by the orchestrator on a /tmp copy.
+  # The continuation run's four seam tests all hand-drive TickClock::advance, so they pass whether or
+  # not production ever drives the clock. Closed by three production-drive tests + three mutations.
+  # 1 decision + 8 patches applied and verified in one pass. Also fixed: the motion line printed AFTER
+  # its assertion (a failing vehicle run gave a panic and none of the five numbers); the mid-blend
+  # counter read only the clock, never a Transform, so it was true in a frozen world and still logged
+  # 23 "strictly-between" frames with the blend sabotaged; the instrument read TickClock with no
+  # ordering edge (raised by THREE layers; Bevy's ambiguity detection defaults to Ignore); the flicker
+  # band assertion was a TAUTOLOGY (table-derived bound on a formula normalised to the same amplitude
+  # -- the 1.1/1.2/1.3 self-referential antipattern again); a same-frame delta burst collapsed the tick
+  # interval to its floor; item_count overwrote instead of taking a running max; AC15's window compare
+  # was a near-vacuous >0 (measured 1,651 real vs ~5 from atmosphere) and now has a 200-pixel floor.
+  # WOLF RULED the capture recipe: --frames 600 at 10 Hz against >135 fps is ~44 ticks against the
+  # instrument's >=100 floor, so TASK 6'S FIRST COMMAND WOULD HAVE PANICKED BEFORE WRITING ANY PNG.
+  # Raised to 1,500; the Task 0 recipe deliberately left untouched (that pair ran on the 5.4 binary,
+  # which has no motion assertions -- rewriting it would falsify the record), and the Task 6 outputs
+  # renamed to 6-1-motion-*.png so they cannot overwrite the approved pair they are compared against.
+  # Gate GREEN on a cold rebuild, 311 workspace tests, MUTATIONS 8 -> 14 ALL KILLED. 16 LOW findings
+  # deferred with file:line, including one the orchestrator raised rather than a layer: this story
+  # closed two deferred-work.md entries without updating the register.
+  # FOR THE RETRO: (1) R1's layer-territory split HAS NO MAPPING FOR THE M2 CRATES -- it names
+  # sim-core / simd+tui+protocol, none of which a gui-only diff touches, so a literal reading leaves
+  # both hunters idle; adapted for this story (Blind -> pure logic, Edge -> shell) and needs a real
+  # mapping. (2) Convergence was measurable: 3 layers on the unordered instrument read, 2 each on the
+  # self-referential band and the capture-recipe defect.
+  # STILL OPEN and NOT closable by any agent: Tasks 6 (live vehicle) + 9 (Wolf's sign-off), and
+  # ACs 7/12/13/15/16/17 -- NOTHING IN THIS STORY HAS BEEN OBSERVED ON THE VEHICLE. Only Wolf closes it.
+  6-1-the-world-moves: in-progress
   # FIRST ON THE M2 CUT LIST. Cutting it leaves Epic 6's wow intact.
   6-2-lanterns-in-the-dark: backlog
   epic-6-retrospective: optional
