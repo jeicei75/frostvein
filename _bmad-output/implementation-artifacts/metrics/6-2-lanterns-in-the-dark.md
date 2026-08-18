@@ -20,3 +20,15 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 > because no `review-patch` row was taken before story creation began. All of it is billed here.
 > **The true story-creation cost for this file is a fraction of the figure shown.** The lesson is
 > mechanical, not analytical: take the phase row when the phase ends, not when the next one does.
+| dev | codex | gpt-5.6-terra | 180 | 435,834 | 0 | 23,570,688 | 48,244 | 24,054,766 | $3.97 | `rollout-2026-08-18T14-01-56-01a0152d-c755-7f43-8d09-13cb70bfa92c.jsonl` | 2026-08-18 14:19 UTC · rates 2026-08-01 | 39 | 9pp |
+| dev | codex | gpt-5.6-terra | 193 | 530,295 | 0 | 24,284,160 | 55,588 | 24,870,043 | $4.25 | `rollout-2026-08-18T13-26-26-01a0150d-45ad-71e0-8627-2cd6dd87730f.jsonl` | 2026-08-18 14:20 UTC · rates 2026-08-01 | 39 | 9pp |
+
+> **ROW CORRECTION (2026-08-18).** The FIRST `dev`/`codex` row above bills rollout `01a0152d`, which
+> is a **self-review sibling**, not the dev run — I selected it by grepping rollouts for the story
+> key, and the review child mentions the story too. The dev run is `01a0150d` (13:26, matching the
+> launch banner's session id), recorded in the row beneath it. This is the known
+> pick-the-wrong-rollout trap and the fix is the one already written down: identify the transcript
+> by the **launch banner's session id**, not by grep. **Read the two rows as overlapping, not
+> additive** — the script counts nested siblings sharing a cwd, so the review cost appears in both.
+> `quota_pp` is the axis that actually binds here, and it is account-wide: the window moved 44% → 53%
+> across the whole story.
