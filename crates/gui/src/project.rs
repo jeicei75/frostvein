@@ -329,17 +329,13 @@ pub fn reconcile(
         .filter(|entity| entity.pos[2] <= slice.level())
         .map(|entity| (entity.id, (entity.pos, Some(*entity))))
         .collect();
-    let item_ids: std::collections::BTreeSet<_> = mirror
+    let visible_items: Vec<_> = mirror
         .items()
         .filter(|item| item.pos[2] <= slice.level())
-        .map(|item| item.id)
+        .map(|item| (item.id, item.pos))
         .collect();
-    wanted.extend(
-        mirror
-            .items()
-            .filter(|item| item.pos[2] <= slice.level())
-            .map(|item| (item.id, (item.pos, None))),
-    );
+    let item_ids: std::collections::BTreeSet<_> = visible_items.iter().map(|(id, _)| *id).collect();
+    wanted.extend(visible_items.iter().map(|(id, pos)| (*id, (*pos, None))));
     for (bevy_entity, marker, _) in projected.iter() {
         if !terrain.get(bevy_entity).is_ok() && !wanted.contains_key(&marker.0) {
             commands.entity(bevy_entity).despawn();
@@ -607,6 +603,25 @@ pub fn terrain_positions_at(mirror: &Mirror, level: i32) -> Vec<[i32; 3]> {
         }
     });
     positions
+}
+
+/// Whether any solid or ramp tile sits strictly above `level`. This is what makes the readout's
+/// surface/underground claim true — `level == top` only says where the cut is, never whether
+/// anything covers it. Scans top-down and returns on the first hit, so the common case (rock
+/// directly overhead) costs one lookup.
+pub fn has_terrain_above(mirror: &Mirror, level: i32) -> bool {
+    let dims = mirror.dims();
+    let top = dims.z.saturating_sub(1) as i32;
+    for z in ((level + 1)..=top).rev() {
+        for y in 0..dims.y as i32 {
+            for x in 0..dims.x as i32 {
+                if matches!(mirror.tile([x, y, z]), Some(Tile::Solid(_) | Tile::Ramp(_))) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn is_visible_at_slice(mirror: &Mirror, position: [i32; 3], level: i32) -> bool {

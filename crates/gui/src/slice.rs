@@ -46,16 +46,21 @@ impl SliceLevel {
         self.set(self.level)
     }
 
-    pub fn label(self) -> &'static str {
-        if self.level == self.top {
-            "surface"
-        } else {
-            "underground"
-        }
+    /// `covered` is whether any solid or ramp tile sits strictly above the cut, which the caller
+    /// reads from the mirror. Position alone cannot answer AC10's question: a cut one level under
+    /// an empty sky draws the same picture as the surface, so `level == top` said "underground"
+    /// for a view that was the surface.
+    pub fn label(self, covered: bool) -> &'static str {
+        if covered { "underground" } else { "surface" }
     }
 
-    pub fn readout(self) -> String {
-        format!("Slice: z {}/{} — {}", self.level, self.top, self.label())
+    pub fn readout(self, covered: bool) -> String {
+        format!(
+            "Slice: z {}/{} — {}",
+            self.level,
+            self.top,
+            self.label(covered)
+        )
     }
 }
 
@@ -80,8 +85,26 @@ mod tests {
     #[test]
     fn the_readout_names_the_current_level_and_whether_it_is_surface_or_underground() {
         let mut slice = SliceLevel::at_world_top(Dims { x: 1, y: 1, z: 3 });
-        assert_eq!(slice.readout(), "Slice: z 2/2 — surface");
+        assert_eq!(slice.readout(false), "Slice: z 2/2 — surface");
         slice.step(-1);
-        assert_eq!(slice.readout(), "Slice: z 1/2 — underground");
+        assert_eq!(slice.readout(true), "Slice: z 1/2 — underground");
+    }
+
+    #[test]
+    fn the_label_follows_cover_rather_than_position() {
+        // The defect this replaced: a cut below the top with nothing above it drew the surface
+        // picture and called it underground.
+        let mut slice = SliceLevel::at_world_top(Dims { x: 1, y: 1, z: 3 });
+        slice.step(-1);
+        assert_eq!(
+            slice.label(false),
+            "surface",
+            "nothing above is not underground"
+        );
+        assert_eq!(slice.label(true), "underground");
+        // And the top of the world is not automatically the surface: an overhang can cover it.
+        slice.step(99);
+        assert_eq!(slice.level(), 2);
+        assert_eq!(slice.label(true), "underground");
     }
 }
