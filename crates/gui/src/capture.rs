@@ -10,7 +10,8 @@ use bevy::{
     render::render_resource::TextureFormat,
     render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
 };
-use protocol::{EntityKind, JobState, LightKind};
+use client_core::Mirror;
+use protocol::{EntityKind, JobState, LightKind, Tile};
 
 use crate::{
     ingest::MirrorResource,
@@ -23,23 +24,73 @@ use crate::{
 struct DrawStats {
     level: i32,
     terrain_tiles: usize,
+    /// Tiles drawn exactly AT the cut, i.e. the floor of the cut.
+    cut_face_tiles: usize,
+    /// Tiles the mirror says the cut face must contain. Read from the world, not from the draw
+    /// set, so it is an independent oracle rather than a restatement of what was drawn.
+    expected_cut_face: usize,
 }
 
 impl DrawStats {
-    fn new(level: i32, terrain_tiles: usize) -> Self {
+    fn new(
+        level: i32,
+        terrain_tiles: usize,
+        cut_face_tiles: usize,
+        expected_cut_face: usize,
+    ) -> Self {
         Self {
             level,
             terrain_tiles,
+            cut_face_tiles,
+            expected_cut_face,
         }
     }
 
+    /// `terrain_tiles > 0` alone cannot fail for this story's own defect. World-boundary tiles are
+    /// always exposed, so a HOLLOW SHELL — the cut with no floor drawn — keeps the global count
+    /// comfortably positive and passes identically to a correct cut. Measured on a 9x9x9 block:
+    /// 258 tiles correct against 209 hollow, both far above zero. The cut face is the feature, so
+    /// the cut face is what the instrument has to count.
     fn assert_valid(self) {
         assert!(
             self.terrain_tiles > 0,
             "capture drew no terrain cubes at requested z {}",
             self.level
         );
+        assert_eq!(
+            self.cut_face_tiles, self.expected_cut_face,
+            "capture drew a hollow cut at z {}: the mirror has {} solid tiles at that level but \
+             {} were drawn — the cut face is the feature, and it is missing",
+            self.level, self.expected_cut_face, self.cut_face_tiles
+        );
     }
+}
+
+/// Whether a missing lantern at this cut is a defect rather than an operator choice. Asks the
+/// MIRROR whether any dwarf sits at or below the cut: an empty observation means "the slice hides
+/// them" AND "entity projection is broken", and keying off the observation alone let every capture
+/// below the top — which is every capture this story takes — exit 0 on a total lantern regression.
+fn lantern_assertions_apply(mirror: &Mirror, level: i32) -> bool {
+    mirror
+        .entities()
+        .any(|entity| entity.kind == EntityKind::Dwarf && entity.pos[2] <= level)
+}
+
+/// The tiles the mirror says the cut face must contain: solid or ramp, exactly at the cut.
+fn expected_cut_face(mirror: &Mirror, level: i32) -> usize {
+    let dims = mirror.dims();
+    let mut count = 0;
+    for y in 0..dims.y as i32 {
+        for x in 0..dims.x as i32 {
+            if matches!(
+                mirror.tile([x, y, level]),
+                Some(Tile::Solid(_) | Tile::Ramp(_))
+            ) {
+                count += 1;
+            }
+        }
+    }
+    count
 }
 
 #[derive(Resource)]
@@ -180,12 +231,6 @@ impl LanternStats {
 
     fn moved(&self) -> bool {
         !self.moved_ids.is_empty()
-    }
-
-    /// Whether any dwarf lantern was projected at all. A requested slice below the dwarves hides
-    /// every one of them, which is an operator choice rather than a defect.
-    fn observed(&self) -> bool {
-        !self.positions.is_empty()
     }
 
     fn assert_valid(&self) {
@@ -380,6 +425,7 @@ pub fn capture_after_frames(
     mut commands: Commands,
     mut capture: ResMut<CaptureState>,
     slice: Res<SliceLevel>,
+    mirror: Res<MirrorResource>,
     terrain: Query<&TerrainTile>,
 ) {
     if capture.requested {
@@ -389,14 +435,21 @@ pub fn capture_after_frames(
     if capture.elapsed >= capture.frames {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
-        let draw = DrawStats::new(slice.level(), terrain.iter().count());
+        let draw = DrawStats::new(
+            slice.level(),
+            terrain.iter().count(),
+            terrain
+                .iter()
+                .filter(|tile| tile.0[2] == slice.level())
+                .count(),
+            expected_cut_face(&mirror.0, slice.level()),
+        );
         // Print the actual count before every assertion. A successful process with a blank cut is
         // not a capture result; this remains truthful when a requested level changes the draw set.
         println!(
-            "slice: z {} projected {} terrain cubes",
-            draw.level, draw.terrain_tiles
+            "slice: z {} projected {} terrain cubes ({} of {} cut-face tiles at z {})",
+            draw.level, draw.terrain_tiles, draw.cut_face_tiles, draw.expected_cut_face, draw.level
         );
-        draw.assert_valid();
         println!(
             "lantern: dwarf positions observed={:?} lit terrain tiles at dwarf positions={} moved={}",
             capture.lantern.positions,
@@ -411,14 +464,22 @@ pub fn capture_after_frames(
             capture.motion.max_working,
             capture.motion.item_count
         );
+        // EVERY number is printed above, before ANY assertion below: a run that fails its
+        // thresholds is exactly the run whose numbers are needed to diagnose it, and a panic
+        // prints none of them. The draw check was briefly asserted up at its own print, which
+        // silenced the lantern, motion and range numbers on precisely those failures.
+        draw.assert_valid();
         // A cut below the dwarves hides every lantern, so the lantern assertions would report a
-        // defect when the operator merely asked for a lower slice. At full depth a missing lantern
-        // is still a real failure and is still asserted.
-        if capture.lantern.observed() || slice.level() == slice.top() {
+        // defect when the operator merely asked for a lower slice. Ask the MIRROR whether any
+        // dwarf is at or below the cut rather than trusting the observation: `observed()` is
+        // empty both when the slice legitimately hides them AND when entity projection is broken
+        // entirely, so keying off it alone made every non-top capture — which is every capture
+        // this story takes — exit 0 on a total lantern regression.
+        if lantern_assertions_apply(&mirror.0, slice.level()) {
             capture.lantern.assert_valid();
         } else {
             println!(
-                "lantern: no dwarf lantern projected at z {} — the requested slice hides them, \
+                "lantern: no dwarf sits at or below z {} — the requested slice hides them all, \
                  lantern assertions skipped",
                 slice.level()
             );
@@ -517,14 +578,76 @@ mod tests {
         assert!(median_ground_luminance(&midtone, 8, 8) <= GROUND_LUMINANCE_CEILING);
     }
 
+    fn mirror_with_dwarf_at(z: i32) -> Mirror {
+        use protocol::{Dims, Entity, Snapshot, Speed};
+        Mirror::from_snapshot(Snapshot {
+            msg_type: protocol::MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 3 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone); 3],
+            entities: vec![Entity {
+                id: 1,
+                kind: EntityKind::Dwarf,
+                pos: [0, 0, z],
+                state: JobState::Idle,
+                light: Some(LightKind::Lantern),
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .expect("a hand-built snapshot must load")
+    }
+
+    #[test]
+    fn lantern_assertions_follow_the_mirror_not_the_observation() {
+        // The defect: the gate keyed off "did we observe a lantern?", which is empty BOTH when the
+        // cut legitimately hides the dwarves AND when entity projection is broken outright — so a
+        // total lantern regression exited 0 at every level below the top.
+        let mirror = mirror_with_dwarf_at(2);
+        assert!(
+            !lantern_assertions_apply(&mirror, 1),
+            "a cut below every dwarf genuinely hides the lanterns, so skipping is correct"
+        );
+        assert!(
+            lantern_assertions_apply(&mirror, 2),
+            "a dwarf sitting at the cut must still be holding a visible lantern"
+        );
+        assert!(
+            lantern_assertions_apply(&mirror_with_dwarf_at(0), 1),
+            "a dwarf BELOW the cut is visible, so a missing lantern there is a real defect"
+        );
+    }
+
     #[test]
     fn draw_count_instrument_rejects_an_empty_level_and_accepts_terrain() {
-        let empty = DrawStats::new(4, 0);
+        let empty = DrawStats::new(4, 0, 0, 0);
         assert!(
             std::panic::catch_unwind(|| empty.assert_valid()).is_err(),
             "a capture must not claim success when its requested slice drew nothing"
         );
-        DrawStats::new(4, 12).assert_valid();
+        DrawStats::new(4, 12, 5, 5).assert_valid();
+    }
+
+    #[test]
+    fn draw_count_instrument_rejects_a_hollow_cut_that_kept_its_total_up() {
+        // The defect the old instrument could not see: boundary tiles keep the global count high
+        // while the cut face itself is missing. These are the measured 9x9x9 figures — 258 tiles
+        // correct against 209 hollow, 81 cut-face tiles against 32.
+        let hollow = DrawStats::new(4, 209, 32, 81);
+        assert!(
+            std::panic::catch_unwind(|| hollow.assert_valid()).is_err(),
+            "a cut drawn with no floor is not a capture result, however many tiles it drew"
+        );
+        DrawStats::new(4, 258, 81, 81).assert_valid();
+    }
+
+    #[test]
+    fn a_level_with_no_solid_tiles_is_a_legitimate_empty_cut_face() {
+        // Slicing into open sky above the mountain: the mirror says nothing is there, so drawing
+        // nothing at the cut is correct and must not be read as a hollow shell.
+        DrawStats::new(30, 53_365, 0, 0).assert_valid();
     }
 
     #[test]
