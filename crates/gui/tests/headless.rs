@@ -1,8 +1,15 @@
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
+
+/// Independent of `appearance.rs` on purpose: a lantern dimmer than this cannot read as a warm
+/// pool, whatever the table says. Deliberately far below the shipped 11,000,000 so it constrains
+/// only the dark end and never has to move when the look is tuned.
+const LANTERN_VISIBLE_INTENSITY_FLOOR: f32 = 1_000_000.0;
 
 use bevy::color::ColorToPacked;
+use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::{
     MinimalPlugins,
     app::App,
@@ -16,7 +23,10 @@ use bevy::{
 use client_core::Mirror;
 use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, setup_atmosphere},
-    ingest::{MirrorResource, ProjectionWork, projection_systems, reconcile_projection},
+    capture::{CaptureState, accumulate_motion},
+    ingest::{
+        MirrorResource, ProjectionSet, ProjectionWork, projection_systems, reconcile_projection,
+    },
     project::{
         ClientLocal, ProjectedItem, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
     },
@@ -352,7 +362,18 @@ fn a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table() {
     assert_eq!(light.range, expected.range);
     assert!(
         (0.95 * expected.intensity..=1.05 * expected.intensity).contains(&light.intensity),
-        "the lantern intensity must remain inside its independently named ±5% table band"
+        "the projected lantern intensity must match the appearance table it is sourced from"
+    );
+    // The band above is the table checked against itself, which is the right oracle for AC10
+    // (the value came from the table, not a draw site) and no oracle at all for AC9 (the pool is
+    // visible): zero the table row and the band becomes 0.0..=0.0, which 0.0 satisfies. Nothing
+    // else in the suite reads intensity — the capture instrument only reads `range` — and
+    // WARM_PIXEL_FLOOR was baselined from the torches and campfire alone, before lanterns existed.
+    // This literal floor is what stands between an invisible lantern and Wolf discovering it on a
+    // vehicle session.
+    assert!(
+        light.intensity >= LANTERN_VISIBLE_INTENSITY_FLOOR,
+        "the lantern must be bright enough to read as a warm pool, not merely present"
     );
 }
 
@@ -828,7 +849,7 @@ fn world_and_client_local_markers_are_a_structural_partition() {
 }
 
 #[test]
-fn recorded_camp_snapshot_projects_exactly_five_warm_point_lights() {
+fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf() {
     let entities = (0..4)
         .map(|id| Entity {
             id,
@@ -874,6 +895,57 @@ fn recorded_camp_snapshot_projects_exactly_five_warm_point_lights() {
         let channels = light.color.to_srgba().to_u8_array_no_alpha();
         channels[0] > channels[2]
     }));
+}
+
+/// The test above keeps a dwarf the wire left unlit, so on its own the suite held no headless
+/// picture of the camp as it NOW ships. Its name used to claim it was the recorded camp and assert
+/// exactly five lights, while the live daemon emits ten — the stale-oracle shape AC7 forbids.
+#[test]
+fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
+    let entities = (0..4)
+        .map(|id| Entity {
+            id,
+            kind: EntityKind::Torch,
+            pos: [60 + id as i32, 64, 9],
+            state: JobState::Idle,
+            light: Some(protocol::LightKind::Torch),
+        })
+        .chain(std::iter::once(Entity {
+            id: 4,
+            kind: EntityKind::Campfire,
+            pos: [64, 64, 9],
+            state: JobState::Idle,
+            light: Some(protocol::LightKind::Campfire),
+        }))
+        .chain((5..10).map(|id| lantern_dwarf(id, [60 + id as i32 - 5, 65, 9])))
+        .collect();
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 2, y: 1, z: 10 },
+        vec![Tile::Empty; 20],
+        entities,
+    ));
+
+    app.update();
+
+    let lantern = gui::appearance::light_properties(protocol::LightKind::Lantern);
+    let lights = app
+        .world_mut()
+        .query::<&PointLight>()
+        .iter(app.world())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lights.len(),
+        10,
+        "five static emitters and five dwarf lanterns"
+    );
+    assert_eq!(
+        lights
+            .iter()
+            .filter(|light| light.range == lantern.range)
+            .count(),
+        5,
+        "every dwarf in the shipped camp carries a lantern"
+    );
 }
 
 #[test]
@@ -1157,4 +1229,81 @@ fn named_dig_site_stays_inside_the_boot_camera_frame() {
     let min_y = projected.iter().map(|p| p.y).fold(f32::MAX, f32::min);
     let max_y = projected.iter().map(|p| p.y).fold(f32::MIN, f32::max);
     println!("dig site projects to u {min_x:.3}-{max_x:.3} v {min_y:.3}-{max_y:.3}");
+}
+
+/// AC16 asks for the instrument to be driven by a hand-built sequence of MIRROR STATES. Driving
+/// `LanternStats` with region literals leaves the production extraction — the dwarf/lantern filter,
+/// the `light.range` read and the terrain sweep that turns a mirror plus transforms into a lit
+/// region — with no caller outside a run that needs a window, so deleting that whole block left the
+/// suite green. These two tests drive `accumulate_motion` itself.
+fn lantern_capture_app(dwarf_at: [i32; 3]) -> App {
+    // The world must be WIDER than twice the lantern's 16-unit range (`world_to_render` is 1:1),
+    // or every terrain tile sits inside the pool from every dwarf position and the lit region
+    // cannot change no matter how far the dwarf walks. The first draft of this test used a 3x3x3
+    // world and failed for exactly that reason — the instrument was right and the test was wrong.
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 40, y: 1, z: 1 },
+        vec![Tile::Solid(Material::Stone); 40],
+        vec![lantern_dwarf(0, dwarf_at)],
+    ));
+    app.insert_resource(CaptureState::new(
+        PathBuf::from("/dev/null"),
+        u32::MAX,
+        false,
+    ));
+    app.add_systems(bevy::app::Update, accumulate_motion.after(ProjectionSet));
+    app
+}
+
+#[test]
+fn accumulate_motion_derives_a_moving_lit_region_from_mirror_states() {
+    let mut app = lantern_capture_app([0, 0, 0]);
+    app.update();
+    apply_delta(
+        &mut app,
+        delta(Vec::new(), vec![lantern_dwarf(0, [17, 0, 0])]),
+    );
+    // The blend must be driven before the observation. `accumulate_motion` samples on a delivered
+    // POSITION change, which lands at factor ~0 with the light still rendered at the old tile, so
+    // without this the pool has not moved yet when the instrument looks at it.
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(1.0);
+    app.update();
+
+    let capture = app.world().resource::<CaptureState>();
+    assert!(
+        capture.lantern_lit_tiles() > 0,
+        "the production sweep must light terrain inside the lantern's range"
+    );
+    assert!(
+        capture.lantern_moved(),
+        "a dwarf that changed tiles must move its own lit region"
+    );
+    assert_eq!(
+        capture.lantern_positions(),
+        &BTreeSet::from([[0, 0, 0], [17, 0, 0]]),
+        "both delivered dwarf positions must be observed"
+    );
+}
+
+#[test]
+fn accumulate_motion_reports_no_movement_for_a_dwarf_that_never_moves() {
+    let mut app = lantern_capture_app([0, 0, 0]);
+    app.update();
+    apply_delta(
+        &mut app,
+        delta(Vec::new(), vec![lantern_dwarf(0, [0, 0, 0])]),
+    );
+    app.update();
+
+    let capture = app.world().resource::<CaptureState>();
+    assert!(
+        capture.lantern_lit_tiles() > 0,
+        "a still dwarf still lights the terrain it stands on"
+    );
+    assert!(
+        !capture.lantern_moved(),
+        "a world whose dwarf never moves must not report a moved lit region"
+    );
 }
