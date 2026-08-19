@@ -17,7 +17,7 @@ use bevy::{
     input::ButtonInput,
     prelude::{
         Assets, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, PointLight,
-        StandardMaterial, Transform,
+        StandardMaterial, Text, Transform,
     },
 };
 use client_core::Mirror;
@@ -25,7 +25,8 @@ use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, setup_atmosphere},
     capture::{CaptureState, accumulate_motion},
     ingest::{
-        MirrorResource, ProjectionSet, ProjectionWork, projection_systems, reconcile_projection,
+        MirrorResource, ProjectionSet, ProjectionWork, SliceReadout, projection_systems,
+        reconcile_projection,
     },
     project::{
         ClientLocal, ProjectedItem, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
@@ -52,6 +53,23 @@ fn headless_app(snapshot: Snapshot) -> App {
         .add_systems(bevy::app::Startup, setup_projection_assets);
     projection_systems(&mut app);
     app
+}
+
+/// Presses a key for exactly one frame. `MinimalPlugins` brings no `InputPlugin`, so nothing ever
+/// runs `ButtonInput::clear()` and a pressed key stays JUST-pressed forever — a test that presses
+/// once and then updates twice silently moves two levels and asserts against the wrong world.
+/// Production is unaffected: `DefaultPlugins` carries `InputPlugin`.
+fn press_once(app: &mut App, key: KeyCode) {
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(key);
+    app.update();
+    // `release` before `clear`: clearing alone drops `just_pressed` but leaves the key in
+    // `pressed`, and a later `press` of a key already held registers nothing at all — so the
+    // second tap of the same key would silently do nothing.
+    let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+    input.release(key);
+    input.clear();
 }
 
 fn apply_delta(app: &mut App, delta: Delta) {
@@ -188,10 +206,7 @@ fn keyboard_slice_rebuilds_the_cut_face_and_hides_surface_entities() {
         "the boot frame starts at the world top"
     );
 
-    app.world_mut()
-        .resource_mut::<ButtonInput<KeyCode>>()
-        .press(KeyCode::Comma);
-    app.update();
+    press_once(&mut app, KeyCode::Comma);
 
     let terrain = app
         .world_mut()
@@ -225,6 +240,89 @@ fn keyboard_slice_rebuilds_the_cut_face_and_hides_surface_entities() {
 }
 
 #[test]
+fn the_level_readout_is_drawn_on_the_live_path_and_follows_the_cut() {
+    // AC9's whole mechanism. Both its systems lived in `run()` only, where no test could reach
+    // them: deleting them left the suite green while "always know which level you are on" was
+    // gone. They now register through `projection_systems`, so this test holds them.
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    // Rock only on the bottom two levels: z 2 is open sky, so a cut at z 1 has nothing above it.
+    let mut tiles = vec![Tile::Solid(Material::Stone); 18];
+    tiles.extend(vec![Tile::Empty; 9]);
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
+    app.update();
+
+    let readout = |app: &mut App| {
+        app.world_mut()
+            .query::<(&Text, &SliceReadout)>()
+            .iter(app.world())
+            .map(|(text, _)| text.0.clone())
+            .collect::<Vec<_>>()
+    };
+
+    // Independent oracle: the expected strings are written here, not read back from SliceLevel.
+    assert_eq!(
+        readout(&mut app),
+        vec!["Slice: z 2/2 — surface".to_string()],
+        "the readout must exist at boot and name the level"
+    );
+
+    press_once(&mut app, KeyCode::Comma);
+    assert_eq!(
+        readout(&mut app),
+        vec!["Slice: z 1/2 — surface".to_string()],
+        "z 1 has only empty sky above it, so it is not underground"
+    );
+
+    press_once(&mut app, KeyCode::Comma);
+    assert_eq!(
+        readout(&mut app),
+        vec!["Slice: z 0/2 — underground".to_string()],
+        "z 0 is covered by the rock at z 1"
+    );
+}
+
+#[test]
+fn items_above_the_cut_are_hidden_with_the_entities() {
+    // The entity filter is defended by the sabotage table; the item filter was not, and removing
+    // both item filters left the whole suite green.
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut snapshot = snapshot_with_dims(
+        dims,
+        vec![Tile::Solid(Material::Stone); 27],
+        vec![dwarf(91, [1, 1, 1])],
+    );
+    snapshot.items = vec![
+        Item {
+            id: 501,
+            pos: [0, 0, 2],
+        },
+        Item {
+            id: 502,
+            pos: [0, 1, 1],
+        },
+    ];
+    let mut app = headless_app(snapshot);
+    app.update();
+
+    press_once(&mut app, KeyCode::Comma);
+
+    let projected = app
+        .world_mut()
+        .query::<&WorldProjected>()
+        .iter(app.world())
+        .map(|marker| marker.0)
+        .collect::<BTreeSet<_>>();
+    assert!(
+        !projected.contains(&501),
+        "an item above the cut must not float over the slice"
+    );
+    assert!(
+        projected.contains(&502),
+        "an item at or below the cut stays visible"
+    );
+}
+
+#[test]
 fn sliced_view_does_not_spawn_dig_chips_above_the_cut() {
     let mut app = headless_app(snapshot_with_dims(
         Dims { x: 1, y: 1, z: 2 },
@@ -232,10 +330,7 @@ fn sliced_view_does_not_spawn_dig_chips_above_the_cut() {
         Vec::new(),
     ));
     app.update();
-    app.world_mut()
-        .resource_mut::<ButtonInput<KeyCode>>()
-        .press(KeyCode::Comma);
-    app.update();
+    press_once(&mut app, KeyCode::Comma);
 
     apply_delta(
         &mut app,
@@ -268,10 +363,7 @@ fn top_slice_is_the_full_depth_draw_set_and_cannot_rise_above_the_world() {
         Vec::new(),
     ));
     app.update();
-    app.world_mut()
-        .resource_mut::<ButtonInput<KeyCode>>()
-        .press(KeyCode::Period);
-    app.update();
+    press_once(&mut app, KeyCode::Period);
 
     assert_eq!(app.world().resource::<SliceLevel>().level(), 2);
     let terrain = app
