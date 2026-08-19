@@ -46,9 +46,7 @@ mutation "lantern capture accepts an unmoved region" gui capture::tests::lantern
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 old = '''    fn moved(&self) -> bool {
-        self.first_region
-            .as_ref()
-            .is_some_and(|first| *first != self.last_region)
+        !self.moved_ids.is_empty()
     }
 '''
 assert s.count(old) == 1
@@ -58,12 +56,12 @@ PY
 mutation "lantern capture loses its lit-terrain count" gui capture::tests::lantern_instrument_requires_a_lit_region_to_move <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
-old = '        self.lit_terrain_tiles += region.len();\n'
+old = '        self.lit_tiles.extend(region.iter().copied());\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        self.lit_terrain_tiles = 0;\n'))
+p.write_text(s.replace(old, ''))
 PY
 
-mutation "lantern capture accepts an empty final region" gui capture::tests::lantern_instrument_requires_a_lit_region_to_move <<'PY'
+mutation "lantern capture accepts an empty final region" gui capture::tests::a_final_observation_that_lit_nothing_fails_even_after_a_dwarf_moved <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 old = '            !self.last_region.is_empty(),\n'
@@ -79,4 +77,42 @@ assert s.count(old) == 1
 new = ('            if let Some(light) = mirror_entity.and_then(|entity| entity.light.or_else(|| '
        '(entity.kind == protocol::EntityKind::Dwarf).then_some(protocol::LightKind::Lantern))) {')
 p.write_text(s.replace(old, new, 1))
+PY
+
+# --- Added by the 2026-08-19 code review. Each one reverts a patch that review applied. ---
+
+mutation "lantern capture latches an empty first region" gui capture::tests::an_empty_first_observation_cannot_stand_in_for_movement <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '            if lit.is_empty() {\n                continue;\n            }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "lantern movement forgets a dwarf that wandered back" gui capture::tests::a_dwarf_that_returns_to_where_it_started_still_counts_as_having_moved <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '        !self.moved_ids.is_empty()\n'
+assert s.count(old) == 1
+new = ('        self.first_regions\n'
+       '            .values()\n'
+       '            .next()\n'
+       '            .is_some_and(|first| *first != self.last_region)\n')
+p.write_text(s.replace(old, new, 1))
+PY
+
+mutation "the capture stops deriving lit regions from mirror states" gui accumulate_motion_derives_a_moving_lit_region_from_mirror_states <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '    if capture.lantern.needs_observation(&positions) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if false {\n', 1))
+PY
+
+mutation "the lantern goes dark but stays present" gui a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '            intensity: 11_000_000.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            intensity: 0.0,\n', 1))
 PY
