@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-19  # 6.2 code-reviewed (4 layers) -> in-progress, 12 patches applied, vehicle session owed.
+last_updated: 2026-08-19  # 7.1 code-reviewed (4 layers, no coverage holes) -> in-progress, 13 patches applied, 13/13 mutations killed, vehicle session owed.
                           # hole; the feature was watched running live and AC6 is genuinely closed,
                           # but three one-line deletions each killed wow beat 2 with the suite GREEN —
                           # run one's defect class, one level below where AC6 looks. 1 decision + 8
@@ -330,7 +330,34 @@ development_status:
   # every inherited recipe reads as broken; and entity visibility above the slice is a decision to
   # rule and test, not to leave undefined. This is also the story that gives 6.1's one-voxel dig
   # actual DEPTH. BLOCKED on Task 0 -- Wolf's artifact approval.
-  7-1-slice-into-the-mountain: review
+  7-1-slice-into-the-mountain: in-progress
+  # CODE REVIEW 2026-08-19 (4 layers, fresh context, NONE a coverage hole -- a first this epic).
+  # THE CUT ITSELF IS PROVEN: Blind Hunter fuzzed the real projection over ~1.1M position checks and
+  # 4,000 ECS steps with 0 failures; the Feature Auditor drove a LIVE simd and measured 15,316 of
+  # 16,071 cut-face tiles supplied only by the z==level arm. The hollow-shell trap named at creation
+  # is genuinely closed and all 12 live-path hops are WIRED -- no dead capability.
+  # EVERY DEFECT WAS IN THE OBSERVABILITY LAYER, NOT THE FEATURE. 19 findings: 3 decision (all ruled
+  # by Wolf same session), 10 patch, 5 defer, 1 dismissed. Two HIGHs, both the 6.1 untested-drive-line
+  # class reproduced: the ENTIRE on-screen readout (AC9's mechanism) and the --z PIN could each be
+  # deleted or made inert with a green suite. The capture instrument was LEVEL-BLIND -- `terrain_tiles
+  # > 0` cannot see a hollow cut, measured 209 vs 258 with 49 floor tiles missing, so the one story
+  # whose headline defect is the hollow shell had an instrument that could not detect it.
+  # WOLF'S RULINGS: label keys off terrain above the cut, not position; `--z` no longer requires
+  # `--capture` (AC11's own recipe line would have errored as written); lantern assertions now ask the
+  # mirror whether a dwarf sits at or below the cut rather than trusting an empty observation.
+  # ALL 13 PATCHES APPLIED same session, batched, ONE verification pass. Suite 84 -> 90. Sabotage
+  # table 7 -> 13 mutations, 13/13 KILLED. GATE GREEN, run and observed.
+  # AC-TEXT-DEFECT CLASS, 10th INSTANCE: AC11/AC17's stated proof `git diff main..HEAD` returns 6
+  # files on this stacked branch. The review's FIRST correction was also wrong (6-2..HEAD still
+  # catches 6.2's post-7.1 patch commit) -- on a stacked branch only the story's own commit range
+  # answers it. Worth generalising: every M2 story is stacked, so every such AC is wrong by default.
+  # BACK TO in-progress, NOT done. Unit-green is not feature-proof: AC8 (dug corridors seen), AC9/AC10
+  # legibility, AC14 (no fps figure exists at any slice level), AC12's live capture, and BOTH halves of
+  # Wolf's gate (AC1 opened on a written-only fallback, AC15 untouched) remain OPEN pending the
+  # vehicle. The `<`/`>` ruling is still PROVISIONAL -- Wolf has never chosen it.
+  # SCOPE LESSON: the review baseline (the story's own baseline_commit) HID a coupled hunk -- 6.2's
+  # 75f04a2 made the lantern assertion read slice.level(). Recovered only because every layer is told
+  # the diff is scope, not source. On stacked branches, diff-scoping alone is not enough.
   # Renders designations/zones issued from a TUI client — gui issues nothing here. That
   # placement is deliberate: the rendering survives if Epic 8's input work is cut.
   # STORY CREATED 2026-08-19 (ready-for-dev). THE EPIC'S OWN AC IS UNMEETABLE AND WAS FALSIFIED

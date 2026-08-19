@@ -5,7 +5,7 @@ baseline_commit: db1c8475902a9822aec2b07052a56d2a8f6568e8
 
 # Story 7.1: Slice Into the Mountain
 
-Status: review
+Status: in-progress
 
 <!-- First story of Epic 7. Not on any cut list. It is also the story that gives the dig DEPTH:
      6.1's excavation is one voxel deep because a designation is a 2D rect at one z, and Wolf's
@@ -84,7 +84,17 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
 11. The slice level is **client-local view state and never wire state**: the daemon does not know or
     care which level a client is looking at, `gui` sends nothing when it changes, and **two clients
     on the same daemon can sit at different levels simultaneously** (NFR5, AD-14). Asserted, not
-    assumed: `git diff --stat main..HEAD -- crates/protocol crates/simd crates/sim-core` is empty.
+    assumed: **both of these are empty** —
+    `git diff --stat db1c847..3a5abb1 -- crates/protocol crates/simd crates/sim-core crates/client-core`
+    (7.1's own commit range) and `git diff --stat -- crates/protocol crates/simd crates/sim-core
+    crates/client-core` (the review patches, uncommitted). Verified empty 2026-08-19.
+    *(Corrected at code review 2026-08-19. The original text named `main..HEAD`, which returns 6
+    files — all inherited from the unmerged 6.1/6.2 predecessors this branch is stacked on. The
+    review's first correction, `6-2-lanterns-in-the-dark..HEAD`, was ALSO wrong: 6.2's own patch
+    commit `75f04a2` landed after 7.1's commits and touches `sim-core`, so a branch-tip range can
+    never be clean here. On a stacked branch only the story's explicit commit range answers this
+    question, and anyone pasting an "empty" result from the original command would have been
+    recording false evidence.)*
 
 ### The instrument
 
@@ -114,9 +124,10 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
 16. A sabotage table exists at
     `_bmad-output/implementation-artifacts/mutations/7-1-slice-into-the-mountain.sh` and every
     mutation is KILLED on a genuine assertion, with the RED table pasted into the Dev Agent Record.
-17. `scripts/gate.sh` is green and the diff touches only `crates/gui`, `docs/` and
+17. `scripts/gate.sh` is green and **7.1's own commits** touch only `crates/gui`, `docs/` and
     implementation-artifacts: **no wire change**, and no change to `sim-core`, `simd`, `protocol`,
-    `client-core` or `tui`.
+    `client-core` or `tui`. *(Same correction as AC11: scope the check to this story's commit
+    range, not to `main..HEAD`, while the branch is stacked on unmerged predecessors.)*
 
 ## Tasks / Subtasks
 
@@ -203,6 +214,141 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
 - [ ] **Task 8 — Wolf's closing sign-off** (AC: 15)
   - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
         this box.**
+
+### Review Findings
+
+Four-layer code review, 2026-08-19, fresh context. No layer was a coverage hole: all four verified
+`cargo 1.97.1`, built in isolated `CARGO_TARGET_DIR`s, and executed code. R1 territories were
+extended to `crates/gui` on Wolf's ruling (gui predates neither hunter's named territory): Blind
+Hunter took `slice.rs`/`project.rs`/`ingest.rs`, Edge Case Hunter took `capture.rs`/`lib.rs`/
+`tests/headless.rs`/`docs/`; both Opus auditors kept whole-diff scope.
+
+**The cut itself is proven.** Blind Hunter fuzzed the real `terrain_positions_at`/`is_exposed`/
+`SliceLevel` across ~1.1M position checks and 4,000 ECS steps with zero failures; the Feature
+Auditor drove a live `simd` and measured 15,316 of 16,071 cut-face tiles supplied only by the
+`z == level` arm. The hollow-shell trap named at story creation is genuinely closed. Every defect
+below sits in the layer that *observes* the feature, not the feature.
+
+- [x] [Review][Patch] **RULED 2026-08-19 (Wolf): label keys off terrain above the cut** — "underground"
+      iff any solid/ramp tile exists strictly above the cut level. The surface/underground label is
+      positional, not content-derived —
+      `label()` is `if level == top { "surface" } else { "underground" }`, with no relation to where
+      terrain actually is. Measured against the live world: z 31 and z 30 draw an identical 53,365
+      cubes with zero terrain at z 30, yet one `<` press flips the readout to "underground"; z 10-30
+      all read "underground" while the cut plane sits in open sky above a mountain whose camp is at
+      z 9. AC10 requires it be unambiguous whether you are looking at underground or the surface.
+      This is a mechanism defect, not a legibility question for Wolf — but what the label should key
+      off (terrain above the cut? cut plane intersecting solid? highest solid in view?) is a design
+      call. `[feature+auditor/MED]` `crates/gui/src/slice.rs:56-62`
+- [x] [Review][Patch] **RULED 2026-08-19 (Wolf): allow `--z` without `--capture`** — drop the `bail!`,
+      which fixes the broken recipe line and lets the client boot pinned. No page-step key. The client
+      cannot boot at a level, and AC11's own recipe line would error — `--z` is gated behind `bail!("--z requires --capture")`, so the interactive client
+      always starts at the top; reaching the 6.1 dig site is 22 discrete `just_pressed` taps with no
+      key-repeat, no page-step and no jump-to-N. The AC-extract's own recipe `gui.exe 7451 --z 9 ...`
+      carries no `--capture` and would exit with an error as written. Decide whether `--z` should be
+      allowed without `--capture` (which fixes both) before Task 5. `[feature/MED]`
+      `crates/gui/src/ingest.rs:241`, `:363-368`
+- [x] [Review][Patch] **RULED 2026-08-19 (Wolf): fix it** — add `Res<MirrorResource>` to
+      `capture_after_frames` and assert lanterns iff at least one dwarf sits at or below the cut.
+      Lantern assertions are skipped at every non-top level — the 6.2 guard
+      `if capture.lantern.observed() || slice.level() == slice.top()` cannot distinguish "the
+      operator sliced below the dwarves" from "the slice filter broke entity projection entirely",
+      so at any level below top a regression projecting zero lanterns exits 0. Every 7.1 capture is
+      at z 9, so this is the common case, not the edge. It does print a line, so it is not silent.
+      The fix needs `capture_after_frames` to read the mirror (does any dwarf sit at or below the
+      cut?), which is a new resource dependency in 6.2's reviewed code — Wolf's call whether to
+      spend it. `[auditor/MED]` `crates/gui/src/capture.rs:414-425`
+- [x] [Review][Patch] The on-screen readout is registered outside `projection_systems` and has no
+      test; deleting both its systems leaves 84/84 green — AC9's entire mechanism is undefended,
+      and `projection_systems`' own doc comment states the rule that was skipped
+      `[feature+auditor/HIGH]` `crates/gui/src/ingest.rs:110`, `:122`, `:295-317`
+- [x] [Review][Patch] `--z` pinning is untested and can be made completely inert with a green suite
+      — replacing `SliceLevel::pinned` with `at_world_top` passes 84/84, so `gui --z 9 --capture`
+      would silently photograph the full-depth view and manufacture false evidence for AC8/AC12
+      `[auditor/HIGH]` `crates/gui/src/ingest.rs:85-88`
+- [x] [Review][Patch] `DrawStats::assert_valid` is level-blind — `terrain_tiles > 0` over a global
+      count, and world-boundary tiles are always exposed, so a hollow-shell cut with no floor passes
+      identically to a correct one (measured 209 vs 258 on a 9x9x9 block, 49 floor tiles missing).
+      The doc comment claims a guarantee the code does not deliver `[edge/MED]`
+      `crates/gui/src/capture.rs:36-42`
+- [x] [Review][Patch] `draw.assert_valid()` was inserted ahead of the lantern, motion and 5.4 range
+      diagnostics, inverting the convention the comment directly above it states — a capture whose
+      slice draws nothing now panics with none of the other five numbers printed `[auditor/MED]`
+      `crates/gui/src/capture.rs:399`
+- [x] [Review][Patch] The readout has no `GlobalZIndex` (defaults to 0) and sits under Bevy's FPS
+      overlay, which uses `GlobalZIndex(i32::MAX - 32)` at font 32 from the origin — the overlap
+      covers the level number itself, in exactly the session AC14 requires reading both
+      `[feature/MED]` `crates/gui/src/ingest.rs:300-307`
+- [x] [Review][Patch] Item visibility above the slice has no oracle — removing both
+      `item.pos[2] <= slice.level()` filters leaves 84/84 green; the sabotage table mutates only the
+      entity filter `[auditor/MED]` `crates/gui/src/project.rs:331-341`
+- [x] [Review][Patch] AC11/AC17's stated proof command is false on a stacked branch —
+      `git diff --stat main..HEAD -- crates/protocol crates/simd crates/sim-core` returns 6 files,
+      all inherited from the unmerged 6.1/6.2 predecessors. The substance is clean (a per-commit
+      audit of 7.1's 13 commits shows only `crates/gui/`, `docs/`, `_bmad-output/`), but the AC's
+      own check cannot pass and will mislead anyone who runs it. 10th instance of the AC-text-defect
+      class `[feature+auditor/MED]` story AC11 + AC17
+- [x] [Review][Patch] The sign-off artifact contradicts the code — it promises "The boot frame is
+      unchanged" while the implementation adds a permanent 22px readout that
+      `force_capture_overlay_off` does not suppress, so it will appear in `7-1-slice.png` and every
+      future 5.4/6.1/6.2 capture. It also names no keys, so Wolf must be told them out of band at
+      Task 5, and the binding is physically `,`/`.` (bare comma steps too), not literally `<`/`>`.
+      Verified harmless to the 5.4 range checks: the readout is blue-dominant and outside the
+      luminance sample region `[auditor+feature/MED]`
+      `_bmad-output/implementation-artifacts/7-1-signoff/what-you-will-see.md`
+- [x] [Review][Patch] `MinimalPlugins` never runs `ButtonInput::clear()`, so a pressed key stays
+      just-pressed forever — the Feature Auditor's probe took two level steps from one press. The
+      three new tests survive by luck; the next one to press a slice key and update twice will
+      assert against the wrong world. Production is unaffected `[feature/LOW, patched as it sits in
+      a file this round already edits]` `crates/gui/tests/headless.rs:32`
+- [x] [Review][Patch] `mirror.items()` is filtered by `pos[2] <= slice.level()` twice — once for
+      `item_ids`, again in `wanted.extend(...)` `[blind/LOW, patched as it sits in a function this
+      round already edits]` `crates/gui/src/project.rs:331-341`
+- [x] [Review][Defer] `SliceLevel::rebind` is untested and speculative — replacing it with `false`
+      passes 84/84; it guards a snapshot changing world dims, which cannot happen while
+      `Dims::DEFAULT` is a constant `[auditor/LOW]` `crates/gui/src/slice.rs:44-47` — deferred
+- [x] [Review][Defer] The capture's own slice line is untested (deleting the `println!` leaves
+      84/84 green) and its format disagrees with the startup oracle's — `slice: z 9 projected 36788
+      terrain cubes` vs `projected 36788 terrain cubes at z 9`, so a recipe grepping one shape
+      misses the other `[auditor/LOW]` `crates/gui/src/capture.rs:395-398` — deferred
+- [x] [Review][Defer] An out-of-range `--z` clamps silently with no diagnostic (`--z 999` becomes
+      31, `--z -5` becomes 0); the printed line is honest about the level actually used
+      `[auditor/LOW]` `crates/gui/src/slice.rs:17-21` — deferred
+- [x] [Review][Defer] `update_slice_readout` rebuilds the whole `Text` every frame with no
+      `is_changed()` guard `[feature/LOW]` `crates/gui/src/ingest.rs:313-317` — deferred
+- [x] [Review][Defer] 6.1's vehicle runbook still quotes the pre-slice oracle string exactly;
+      it now reads `projected 53365 terrain cubes at z 31` (a prefix match, so a human is fine)
+      `[auditor/LOW]` `_bmad-output/implementation-artifacts/6-1-signoff/task-6-vehicle-runbook.md:86`
+      — deferred
+
+**Patch round applied 2026-08-19 (same session, batched — one verification pass, not one per fix).**
+All 13 patches landed. Suite 84 -> 90 tests. The sabotage table grew 7 -> 13 mutations and
+**13/13 KILLED**; `scripts/gate.sh` **GATE GREEN**, run and observed, after the mandated
+`cargo clean -p gui` (the mutation round restores file contents without bumping mtimes, so the
+first post-mutation test run was still executing the last mutant — the exact trap Task 7 warns of).
+
+Two corrections made during the patch round, recorded because both were mine:
+1. **AC11's first correction was also wrong.** Rescoping to `6-2-lanterns-in-the-dark..HEAD` still
+   catches `75f04a2`, 6.2's patch commit, which landed *after* 7.1's commits and touches
+   `sim-core`. On a stacked branch only the story's explicit commit range answers the question.
+2. **The review's own diff baseline hid a coupled hunk.** `75f04a2` made the lantern assertion read
+   `slice.level()`, so it belongs to this story's surface; it was excluded as already-reviewed and
+   recovered only because the layers were told to read HEAD, not just the diff.
+
+**Dismissed as noise (1):** the Acceptance Auditor's confirmation that the guardrail's performance
+premise holds (slicing reduces the draw set at every level below the top, measured across all 32
+levels, never above 53,365) — informational, not a defect.
+
+**Convergence between layers (4 of 19 findings):** the untested readout (feature+auditor), the
+label defect (feature+auditor), AC11's false proof command (feature+auditor), and the `,`/`.`
+binding (feature+auditor). Notably better than Epic 3's 1-in-8, and both convergent pairs crossed
+the Opus auditors rather than the territorialised hunters.
+
+**Scope note:** the review baseline was `db1c847` (the story's own `baseline_commit`), which
+excluded 6.2's later patch commits. `75f04a2` made the lantern assertion slice-conditional and is
+therefore coupled to this story — the Acceptance Auditor caught it by reading HEAD rather than only
+the diff, and it is carried above as a decision item.
+
 
 ## Dev Notes
 

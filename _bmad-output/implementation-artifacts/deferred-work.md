@@ -758,3 +758,29 @@ executed a single line of its production path.**
   (`review-accept`, `review-orchestrator`, `review-sim-core`, `review-tui`, `review-protocol`).
   Headroom was fine (439 GB free) and nothing was deleted during the review, but the P2 isolation rule
   shipped without a cleanup step and the cost accumulates one review at a time. `[orchestrator/LOW]`
+
+## Deferred from: code review of 7-1-slice-into-the-mountain (2026-08-19)
+
+- **`SliceLevel::rebind` is untested and speculative.** Replacing it with `false` leaves 84/84
+  green. It keeps a retained client-local level valid if a later snapshot changes world dimensions,
+  which cannot happen while `Dims::DEFAULT` is a constant — an untested branch defending an
+  impossible case, against this repo's YAGNI-is-policy rule. `crates/gui/src/slice.rs:44-47`
+  `[auditor/LOW]`
+- **The capture's slice line is untested, and its format disagrees with the startup oracle's.**
+  Deleting the `println!` entirely leaves 84/84 green; only `DrawStats::assert_valid` is covered.
+  The two lines carry the same number in two shapes — `slice: z 9 projected 36788 terrain cubes`
+  vs `projected 36788 terrain cubes at z 9` — so a recipe grepping for one misses the other.
+  `crates/gui/src/capture.rs:395-398` vs `crates/gui/src/project.rs:236-240` `[auditor/LOW]`
+- **An out-of-range `--z` clamps silently.** `--z 999` becomes z 31 and `--z -5` becomes z 0 with
+  no diagnostic. Not false evidence — the printed line names the level actually used — but an
+  operator scripting a capture at a level the world does not have gets a silent success.
+  `crates/gui/src/slice.rs:17-21` `[auditor/LOW]`
+- **`update_slice_readout` rebuilds the whole `Text` every frame** with no `is_changed()` guard,
+  re-triggering text layout and glyph work for the life of the process. One small node, so almost
+  certainly invisible against AC14's 60 fps floor. `crates/gui/src/ingest.rs:313-317`
+  `[feature/LOW]`
+- **6.1's vehicle runbook quotes the pre-slice oracle string exactly.** It says "Also expected at
+  startup: `projected 53365 terrain cubes`"; the line now reads `projected 53365 terrain cubes at
+  z 31`. A prefix match, so a human reading it is fine, but 7.1 changed the format without updating
+  the runbook that quotes it.
+  `_bmad-output/implementation-artifacts/6-1-signoff/task-6-vehicle-runbook.md:86` `[auditor/LOW]`
