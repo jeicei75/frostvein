@@ -779,8 +779,7 @@ executed a single line of its production path.**
   re-triggering text layout and glyph work for the life of the process. One small node, so almost
   certainly invisible against AC14's 60 fps floor. `crates/gui/src/ingest.rs:313-317`
   `[feature/LOW]`
-- **6.1's vehicle runbook quotes the pre-slice oracle string exactly.** It says "Also expected at
-  startup: `projected 53365 terrain cubes`"; the line now reads `projected 53365 terrain cubes at
-  z 31`. A prefix match, so a human reading it is fine, but 7.1 changed the format without updating
-  the runbook that quotes it.
-  `_bmad-output/implementation-artifacts/6-1-signoff/task-6-vehicle-runbook.md:86` `[auditor/LOW]`
+- ~~**6.1's vehicle runbook quotes the pre-slice oracle string exactly.**~~ **CLOSED 2026-08-19**,
+  same session — fixed while writing the vehicle runbooks rather than left to rot, since the runbook
+  is handed to Wolf. The line now names the `at z 31` suffix and says to match the prefix.
+  `_bmad-output/implementation-artifacts/6-1-signoff/task-6-vehicle-runbook.md` `[auditor/LOW]`

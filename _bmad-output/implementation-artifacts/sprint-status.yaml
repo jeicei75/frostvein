@@ -43,7 +43,11 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-19  # 7.1 code-reviewed (4 layers, no coverage holes) -> in-progress, 13 patches applied, 13/13 mutations killed, vehicle session owed.
+last_updated: 2026-08-19  # 7.1 code-reviewed (4 layers, no coverage holes) -> in-progress, 13 patches applied, 13/13 mutations killed.
+                          # VEHICLE RUNBOOKS WRITTEN for all three in-progress stories (6.1, 6.2, 7.1). They share ONE binary --
+                          # 7.1's branch is stacked on 6.2 on 6.1 -- so all three live sessions run in ONE sitting off one gui.exe
+                          # and one simd. Spine: _bmad-output/implementation-artifacts/vehicle-session-runbook.md. Order 6.1 -> 6.2
+                          # -> 7.1 (6.1 designates the dig the other two need). NOTHING ELSE blocks any of the three.
                           # hole; the feature was watched running live and AC6 is genuinely closed,
                           # but three one-line deletions each killed wow beat 2 with the suite GREEN —
                           # run one's defect class, one level below where AC6 looks. 1 decision + 8

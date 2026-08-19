@@ -1,5 +1,8 @@
 # Task 6 — the live vehicle session (story 6.1, wow beat 2)
 
+**Read `../vehicle-session-runbook.md` first** — 6.1, 6.2 and 7.1 all run on one binary in one
+sitting, and this story goes first because it designates the dig the other two want.
+
 Everything in story 6.1 except this session is done, reviewed, patched and green. This is the
 half no devpod can run: **no devpod has graphics userspace** (measured at 5.3, both fallbacks
 walked to the end), so the window opens only on **gingerspice — native Windows client,
@@ -83,7 +86,9 @@ motion: ticks observed=>=100  dwarf position changes=>0  mid-blend frames=>0
         max working dwarves=>=1  item count=>=1
 ```
 
-Also expected at startup: `projected 53365 terrain cubes`.
+Also expected at startup: `projected 53365 terrain cubes at z 31`. **The `at z 31` suffix is
+new** (story 7.1 made the oracle name its level); the 53,365 figure itself is unchanged at full
+depth. Match the prefix, not the whole string.
 
 ## 5. AC16 — the TUI cross-check (rung 1)
 
@@ -151,6 +156,15 @@ created and no carrying occurs — UX-DR14's carried-stone clause is formally no
 (your ruling, 2026-08-16). Do not read its absence as a defect.
 
 ---
+
+## One new thing on screen since this runbook was written
+
+Story 7.1 added a permanent level readout at the top-left — `Slice: z 31/31 — surface`. It is **not**
+suppressed in capture mode, so it will appear in this story's PNGs too. Expected, not a regression:
+it was verified blue-dominant (so it cannot register as a warm pixel) and outside the ground-median
+sample region, leaving the range checks below untouched.
+
+The client still boots at full depth, so nothing else about the beat-1 frame changes.
 
 ## What comes back to me
 
