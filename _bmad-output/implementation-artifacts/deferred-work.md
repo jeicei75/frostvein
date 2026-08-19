@@ -725,3 +725,36 @@ adapted for this story (Blind Hunter → `blend.rs`+`appearance.rs`, Edge Case H
   AC6's shared `projection_systems` now gives the live tuple app-level coverage, so the entry needs
   **narrowing to the parts still untested** (fog/framing constants, resource-insert order) rather
   than deletion. `[orchestrator/LOW]`
+
+## Deferred from: code review of 6-2-lanterns-in-the-dark (2026-08-19)
+
+Four layers, none a coverage hole. Only the LOW tail is deferred here; both HIGHs, all five MEDs and
+four LOWs (three of them silent-failure/record traps) went to the story's Review Findings as patch
+items. Context that outlives the story: **the wire half of 6.2 is proven on a live daemon, the
+rendered half has no evidence of any kind, and the instrument built to supply that evidence has never
+executed a single line of its production path.**
+
+- Two of AC11's three assertions are tautological — `assert_eq!(translation, projected_translation(…))`
+  compares a value to itself, because the `PointLight` sits on the same entity as the `WorldProjected`
+  /`Transform` it is compared against, so only one `Transform` exists. AC11 as written is unfalsifiable
+  given the chosen architecture. Left standing because the third assertion (translation strictly
+  between the two endpoint x's) genuinely dies if the blend is deleted, so AC11 keeps real coverage.
+  AC-text defect, not an implementation one. `[auditor/LOW]`
+- AC4's and AC5's lantern assertions cannot fail, and AC5's scenario test does not exist. `dwarves()`
+  appends the compile-time `DWARF_LIGHT` to every tuple, so the round-trip comparison can never
+  disagree on the light and the determinism comparison has no random input to vary; `scenario.rs`
+  gained **no new test function**, only mechanical `(_, _, _, _)` destructuring updates, while AC5 names
+  a scenario test. The oracles that do carry weight are the literal `*light == LightKind::Lantern`
+  check and the diff proving `SavedDwarf` gained no field. Satisfied-by-construction is the honest,
+  YAGNI-correct outcome of the story's own "simplest encoding" decision — **re-word the ACs, do not
+  change the code.** 10th instance of the AC-text-defect class. `[auditor+feature/LOW]`
+- The mutation table covers both bridge arms, both guards, both reconcile light arms and three
+  `LanternStats` assertions, but nothing sabotages AC11's blend, the `DWARF_LIGHT` constant, or the
+  save round-trip. AC11 is the story's headline interaction and its one falsifiable assertion is
+  unsabotaged. This is the residue once the extraction-block mutation named in the story's second HIGH
+  patch item is added. `[auditor/LOW]`
+- **Process, not code — the per-layer build isolation has no reaper.** This review's four
+  `CARGO_TARGET_DIR`s cost **~92 GB**, and `/tmp` already held ~25 GB of orphans from earlier reviews
+  (`review-accept`, `review-orchestrator`, `review-sim-core`, `review-tui`, `review-protocol`).
+  Headroom was fine (439 GB free) and nothing was deleted during the review, but the P2 isolation rule
+  shipped without a cleanup step and the cost accumulates one review at a time. `[orchestrator/LOW]`

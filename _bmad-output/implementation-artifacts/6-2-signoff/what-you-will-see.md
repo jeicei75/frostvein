@@ -1,11 +1,18 @@
 # Story 6.2 sign-off artifact — "here is what you will see" (UX-DR22 opening half)
 
-**Status: WRITTEN HALVES DRAFTED 2026-08-18, AWAITING WOLF.** Part (a), the before capture, is
-**owed** — it needs one vehicle session and no code (the shipped 6.1 binary takes it). Until Wolf
-approves this file as a whole, AC1 is unmet, no implementation commit may land and no Codex handoff
-may be issued.
+**Status: APPROVED BY WOLF 2026-08-19 on the written halves. AC1 is MET.** Ruled at the code review:
+"Well let's Start dev then" stands as approval of the written-only artifact, which is what opened the
+gate on 2026-08-18. Part (a), the before capture, is **WAIVED** — no devpod has a graphics userspace,
+so it could not be taken before dev, and taking it after the change would not be a *before* capture.
+The comparison AC17 needs is therefore Wolf's own memory of the 6.1 vista against the live 6.2 one,
+not a stored PNG; that is a known thinning of the artifact and is recorded here rather than left
+implicit.
 
-## (a) The before capture — OWED, one command on the vehicle
+*(Until 2026-08-19 this header still read "AWAITING WOLF … AC1 is unmet", contradicting the story's
+MET claim for a full day. The code review caught the contradiction; the header, not the story, was
+the stale half.)*
+
+## (a) The before capture — WAIVED 2026-08-19 (kept for the record)
 
 ```cmd
 gui.exe 7451 --capture 6-2-before.png --frames 1500

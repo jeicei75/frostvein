@@ -45,6 +45,30 @@
     "output": 196956,
     "turns": 86
   },
+  "1aa059ab-f566-4f18-ad48-1aef43662cfc.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 1184164,
+        "cache_read": 56016818,
+        "input": 844,
+        "output": 440859
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 301775,
+        "cache_read": 8996222,
+        "input": 288,
+        "output": 48753
+      }
+    },
+    "cache_creation": 1485939,
+    "cache_read": 65013040,
+    "input": 1132,
+    "last_ts": "2026-08-19T11:15:57.763Z",
+    "output": 489612,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 566
+  },
   "1b3fdcbe-fe14-4d32-a873-1884cd5bf5d9.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -352,6 +376,24 @@
     "quota_last": null,
     "schema": 2,
     "turns": 306
+  },
+  "904d4c0f-090b-44e1-9f39-9e6d9e4356f7.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 1681810,
+        "cache_read": 23687116,
+        "input": 568,
+        "output": 261363
+      }
+    },
+    "cache_creation": 1681810,
+    "cache_read": 23687116,
+    "input": 568,
+    "last_ts": "2026-08-19T09:18:05.136Z",
+    "output": 261363,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 284
   },
   "92d965c7-7f80-4c02-bb8f-8d371e5b6e26.jsonl": {
     "by_model": {

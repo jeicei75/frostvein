@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-18  # 6.2 headless implementation and evidence complete; vehicle / Wolf tasks remain open.
+last_updated: 2026-08-19  # 6.2 code-reviewed (4 layers) -> in-progress, 12 patches applied, vehicle session owed.
                           # hole; the feature was watched running live and AC6 is genuinely closed,
                           # but three one-line deletions each killed wow beat 2 with the suite GREEN —
                           # run one's defect class, one level below where AC6 looks. 1 decision + 8
@@ -292,7 +292,27 @@ development_status:
   # 6.1 measured >143 fps (4.8x headroom) but 5.4's frame measured ground-median 123 against a
   # ceiling of 180, and this adds five 11M-lumen lights inside the camp. Verified live off the wire:
   # all 5 dwarves carry light: None today. BLOCKED on Task 0 -- Wolf's artifact approval.
-  6-2-lanterns-in-the-dark: review
+  6-2-lanterns-in-the-dark: in-progress
+  # CODE REVIEW 2026-08-19 (4 layers, fresh context, none a coverage hole) -> back to in-progress.
+  # THE WIRE HALF IS PROVEN AND THE EVIDENCE APPARATUS WAS NOT. Both bridge arms verified by reading
+  # bytes off a live daemon (10 entities, dwarves 0-4 all lantern, 3 consecutive deltas); AC3/AC19's
+  # negative claims confirmed by command; both guards still honest; gate green. Two HIGHs, both in the
+  # capture instrument: an empty first observation LATCHED an empty region, after which moved() was
+  # permanently true and a stationary world passed AC15's central assertion; and accumulate_motion --
+  # the production code deriving the lit region -- had ZERO test callers and had never executed once
+  # anywhere, so deleting the whole extraction block left the suite green. 12 patches applied, one
+  # verification pass: gate GREEN, 52 gui unit + 30 headless tests green.
+  # AC14's BAND WAS NOT WIDENED (floors/ceiling byte-identical) -- the one thing review was told to
+  # assume had been quietly done, was not done. But it was never re-measured with lanterns lit.
+  # THE SABOTAGE TABLE CAUGHT THE REVIEW'S OWN PATCH: first run 10 KILLED / 2 SURVIVED / 1
+  # APPLY-FAILED. Both survivors were new tests passing for the wrong reason -- one held its dwarf
+  # still so needs_observation's early return swallowed the observations it meant to make. Tests
+  # repaired, table re-run. Mutations 9 -> 13.
+  # WOLF RULED AT REVIEW: AC1 APPROVED (written-only artifact stands; part (a) before-capture WAIVED,
+  # no devpod can render one) -- artifact header corrected, it had contradicted the story for a day.
+  # AC13, AC14, AC17 and the rendered halves of AC9/AC15 STAY OPEN pending a gingerspice session.
+  # Deferred: 3 LOW AC-text defects (AC11 tautologies, AC4/AC5 unfalsifiable-by-construction) + the
+  # per-layer build isolation having no reaper (~92GB/review).
   epic-6-retrospective: optional
   epic-7: in-progress
   # Resolves the addendum's open control collision BY TESTING, on the record: the
@@ -313,7 +333,30 @@ development_status:
   7-1-slice-into-the-mountain: review
   # Renders designations/zones issued from a TUI client — gui issues nothing here. That
   # placement is deliberate: the rendering survives if Epic 8's input work is cut.
-  7-2-read-the-working-zoom: backlog
+  # STORY CREATED 2026-08-19 (ready-for-dev). THE EPIC'S OWN AC IS UNMEETABLE AND WAS FALSIFIED
+  # AGAINST SOURCE: it requires mark entities be "created, updated and despawned by sim `Id`", but
+  # designations are `BTreeMap<Pos, DesignationKind>` (sim-core:447) and zones `BTreeSet<Pos>` (:451) --
+  # neither is an ECS entity and neither carries an Id at sim, save or wire level, while Entity and Item
+  # both do. Meeting it literally means a wire change AD-16 forbids (M2's sanctioned diff was spent at
+  # 5.1). AC10 is written KEYED BY POSITION and the AD-14 amendment is recorded as owed to the spine --
+  # AD-14 names designations and zones as world-projected AND says reconciliation is keyed by sim Id, and
+  # those two halves cannot both hold. 9th instance of the AC-text-defect class, caught at creation.
+  # THE STORY IS SMALLER THAN IT LOOKS: every noun is ALREADY on the wire and ALREADY mirrored --
+  # Snapshot/Delta carry designations+zones, Mirror exposes them and already does absence-is-deletion,
+  # so client-core needs ZERO change and gui has simply never read them. Channel designations are real
+  # end to end (distinct sim validity rules, distinct TUI glyph/hue, daemon test sends literal "channel").
+  # Items ALREADY RENDER, so they are in the legibility bar but are not new work. gui-only story.
+  # RECIPE EXECUTED LIVE AT CREATION and it found the trap: DESIGNATIONS ARE CONSUMED BY THE DWARVES.
+  # 6.1's 8-tile site is fully dug in ~52 ticks against a ~110-tick capture window, so the obvious recipe
+  # photographs an EMPTY SITE and exits 0 -- the 3.2/3.3 false-failure class again. Measured: an 8x12 rect
+  # yields 79 marks (17 of 96 silently dropped by the diggability filter), decaying 68/59/51 at t+40/60/100
+  # and PLATEAUING AT 50 from t+120 as the rest become unreachable (FR8 queues, never drops). The recipe
+  # uses that rect. Also measured: a TUI-dragged 2x2 stockpile yields TWO zone tiles (the is_standable
+  # filter), and a zone tile sits one level ABOVE the rock -- digs at z=9, zones at z=10 -- so a capture
+  # pinned to --z 9 hides the zone entirely. Pin --z 10. TUI key sequence lands 8/8, verbatim from 6.1.
+  # Baseline 328 workspace tests green. Task 0 (Wolf's artifact) is the blocking gate; Tasks 6/7 are
+  # vehicle- and human-bound. BLOCKED on Task 0.
+  7-2-read-the-working-zoom: ready-for-dev
   epic-7-retrospective: optional
   epic-8: backlog
   # M2's hardest input work and the main story-count driver, isolated on purpose.
