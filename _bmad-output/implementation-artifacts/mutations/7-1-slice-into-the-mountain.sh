@@ -103,3 +103,32 @@ old = '.any(|entity| entity.kind == EntityKind::Dwarf && entity.pos[2] <= level)
 assert s.count(old) == 1
 p.write_text(s.replace(old, '.any(|entity| entity.kind == EntityKind::Dwarf)'))
 PY
+
+# --- Added 2026-08-20 from the live vehicle session. The z 9 capture panicked on the inherited
+# --- ground-luminance floor and wrote NO PNG: `save_to_disk` and the range checks were two
+# --- observers on one event and Bevy ran the checks first. The failing run destroyed its own
+# --- evidence, which is the exact inverse of this instrument's "exit 0 is not a result" rule.
+
+mutation "a failing range check destroys the frame that would explain it" gui capture::tests::the_capture_is_written_before_it_is_judged <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = 'fn save_before_validate(save: impl FnOnce(), validate: impl FnOnce()) {\n    save();\n    validate();\n}'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'fn save_before_validate(save: impl FnOnce(), validate: impl FnOnce()) {\n    validate();\n    save();\n}'))
+PY
+
+mutation "the calibrated band is skipped at full depth too" gui capture::tests::the_calibrated_band_judges_the_boot_framing_and_stands_aside_at_a_cut <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '    slice.level() >= slice.top()\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    false\n'))
+PY
+
+mutation "a cut is still judged against the boot-framing band" gui capture::tests::the_calibrated_band_judges_the_boot_framing_and_stands_aside_at_a_cut <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '    if !band_applies {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if false {\n'))
+PY

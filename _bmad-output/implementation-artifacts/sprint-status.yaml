@@ -43,7 +43,33 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-19  # 7.1 code-reviewed (4 layers, no coverage holes) -> in-progress, 13 patches applied, 13/13 mutations killed.
+last_updated: 2026-08-20  # VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
+                          # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
+                          # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
+                          # (1) 6.1 stone items spawned at scale 1.0 -- a terrain-sized block standing in the tile it
+                          # was dug from, so a dug tile visually REFILLED and a worked face read as untouched rock;
+                          # it also geometrically enclosed AC8's debris chips, which could never be seen. Fixed at
+                          # STONE_ITEM_SCALE 0.4 (the largest scale keeping all four chips outside the cube).
+                          # (2) 7.1 a FAILING capture wrote no PNG at all -- save_to_disk and the range checks were
+                          # two observers on one event and Bevy ran validation first, so the run whose frame most
+                          # needed looking at produced no frame. Now sequenced in one observer.
+                          # (3) 7.1 the 5.4 range band was judging a scene it was never calibrated against: at a cut
+                          # the sample window shows interior rock, not sky-lit snow, so z 9 read 67 vs the 70 floor
+                          # and panicked on a picture Wolf confirmed fine. Band now scoped to the world top; the
+                          # black/uniform gates stay unconditional. This is the SAME correction the 08-19 review made
+                          # one assertion higher (lanterns) and stopped short of -- the hole relocated one level down.
+                          # Sabotage 14->17 (6.1), 13/13 (6.2), 14->16 (7.1), ALL KILLED; gate GREEN cold on each branch.
+                          # CARRIED OPEN past sign-off, recorded not blurred: the CAMPFIRE still reads blown at full
+                          # depth (diagnosis: 04e6de5 raised its amplitude 0.11->0.40, peaking at 44.8M, 40% above the
+                          # value 5.4 sized against the approved artifact -- not 6.2's lanterns); 7.1's AC10
+                          # surface/underground ruling never given; ,/. controls still PROVISIONAL and the mousewheel
+                          # confirmed unclaimed in code. 6.1's AC15 is closed on PRE-FIX evidence (2,557 px measured
+                          # on the binary where the item was a full block) -- a fresh pair was offered and declined.
+                          # A SABOTAGE ROW NAMING A TUNED LITERAL DIES SILENTLY WHEN THE KNOB MOVES: 6.1's torch
+                          # flicker row had been dead since 04e6de5; 6.2's lantern row was retargeted with the drop.
+                          # NEXT = 7.2 (ready-for-dev, BLOCKED on Task 0, Wolf's artifact).
+                          
+                          # Prior 2026-08-19: 7.1 code-reviewed (4 layers, no coverage holes) -> in-progress, 13 patches applied, 13/13 mutations killed.
                           # VEHICLE RUNBOOKS WRITTEN for all three in-progress stories (6.1, 6.2, 7.1). They share ONE binary --
                           # 7.1's branch is stacked on 6.2 on 6.1 -- so all three live sessions run in ONE sitting off one gui.exe
                           # and one simd. Spine: _bmad-output/implementation-artifacts/vehicle-session-runbook.md. Order 6.1 -> 6.2
@@ -176,7 +202,7 @@ development_status:
   # items for a fresh patch session, 5 defers. Back to in-progress.
   5-4-the-cold-boot: done
   epic-5-retrospective: optional
-  epic-6: in-progress
+  epic-6: done
   # WOW BEAT 2 — the beat the PRD calls the magic; a client achieving only beat 1 has
   # FAILED the milestone. Sign-off gate applies. Also cannot be closed by a dev agent.
   # Its dig must be at a surface-visible face designated from a TUI client (readiness
@@ -296,7 +322,7 @@ development_status:
   # 6.1 measured >143 fps (4.8x headroom) but 5.4's frame measured ground-median 123 against a
   # ceiling of 180, and this adds five 11M-lumen lights inside the camp. Verified live off the wire:
   # all 5 dwarves carry light: None today. BLOCKED on Task 0 -- Wolf's artifact approval.
-  6-2-lanterns-in-the-dark: in-progress
+  6-2-lanterns-in-the-dark: done
   # CODE REVIEW 2026-08-19 (4 layers, fresh context, none a coverage hole) -> back to in-progress.
   # THE WIRE HALF IS PROVEN AND THE EVIDENCE APPARATUS WAS NOT. Both bridge arms verified by reading
   # bytes off a live daemon (10 entities, dwarves 0-4 all lantern, 3 consecutive deltas); AC3/AC19's
@@ -334,7 +360,7 @@ development_status:
   # every inherited recipe reads as broken; and entity visibility above the slice is a decision to
   # rule and test, not to leave undefined. This is also the story that gives 6.1's one-voxel dig
   # actual DEPTH. BLOCKED on Task 0 -- Wolf's artifact approval.
-  7-1-slice-into-the-mountain: in-progress
+  7-1-slice-into-the-mountain: done
   # CODE REVIEW 2026-08-19 (4 layers, fresh context, NONE a coverage hole -- a first this epic).
   # THE CUT ITSELF IS PROVEN: Blind Hunter fuzzed the real projection over ~1.1M position checks and
   # 4,000 ECS steps with 0 failures; the Feature Auditor drove a LIVE simd and measured 15,316 of

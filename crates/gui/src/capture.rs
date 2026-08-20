@@ -488,8 +488,7 @@ pub fn capture_after_frames(
         capture.requested = true;
         commands
             .spawn(Screenshot::primary_window())
-            .observe(save_to_disk(capture.path.clone()))
-            .observe(validate_capture_ranges)
+            .observe(save_then_validate(capture.path.clone(), *slice))
             .observe(exit_after_capture);
     }
 }
@@ -498,13 +497,81 @@ fn exit_after_capture(_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit
     exit.write(AppExit::Success);
 }
 
-fn validate_capture_ranges(event: On<ScreenshotCaptured>) {
-    let bytes = event
-        .image
-        .data
-        .as_deref()
-        .expect("capture screenshot must include pixel data");
-    let pixels = decode_rgba8(bytes, event.image.texture_descriptor.format);
+/// Writes the PNG and only THEN validates it, in one observer.
+///
+/// These were two observers on the same entity — `save_to_disk` registered first, the range
+/// checks second — and Bevy runs entity observers for one event in an unspecified order. It
+/// consistently ran the checks first, so a failing range check panicked before the file was
+/// ever written: the run whose frame most needed looking at was the one run that produced no
+/// frame. Measured on the vehicle 2026-08-20, and visible in every passing run's log too, where
+/// `capture range check:` prints above `Screenshot saved to`.
+///
+/// Sequencing them inside a single observer is the fix; registration order cannot express it.
+fn save_then_validate(path: PathBuf, slice: SliceLevel) -> impl FnMut(On<ScreenshotCaptured>) {
+    let mut save = save_to_disk(path);
+    move |event: On<ScreenshotCaptured>| {
+        let bytes = event
+            .image
+            .data
+            .as_deref()
+            .expect("capture screenshot must include pixel data")
+            .to_vec();
+        let format = event.image.texture_descriptor.format;
+        let size = event.image.texture_descriptor.size;
+        // The saver consumes the event, so the pixels are taken first. It is synchronous: it
+        // writes the file and logs before returning, so the PNG exists by the next line.
+        save_before_validate(
+            || save(event),
+            || {
+                validate_capture_ranges(
+                    &bytes,
+                    format,
+                    size.width,
+                    size.height,
+                    range_band_applies(slice),
+                    slice.level(),
+                )
+            },
+        );
+    }
+}
+
+/// Writes first, judges second — the ordering itself, split out so it can be tested.
+///
+/// *(Mechanism is the requirement here, the same justification AC5 and AC6 carry: the live saver
+/// needs a real render surface, so the only way this ordering can go red in `cargo test` is if the
+/// sequence exists apart from the Bevy plumbing it sequences.)*
+fn save_before_validate(save: impl FnOnce(), validate: impl FnOnce()) {
+    save();
+    validate();
+}
+
+/// Whether 5.4's calibrated band describes the frame about to be judged.
+///
+/// The floor and ceiling were measured on the APPROVED ARTIFACT at the boot framing, and their own
+/// wording says what they watch: "the valley floor", "night snow stays midtone". A cut removes
+/// everything above it, so the sample window stops showing sky-lit snow and starts showing the
+/// interior rock the cut exposes — darker by material, not by any light regression. Measured on the
+/// vehicle 2026-08-20: a z 9 capture read 67 against the 70 floor and Wolf confirmed by eye that
+/// the picture was fine.
+///
+/// This is the same correction the 2026-08-19 review made one assertion higher up, for the lantern
+/// checks, and stopped short of making here: an operator asking for a lower slice must not read as
+/// a defect. Scoped strictly to cuts BELOW the top, so every full-depth capture — which is every
+/// capture stories 6.1 and 6.2 take — is judged exactly as before.
+fn range_band_applies(slice: SliceLevel) -> bool {
+    slice.level() >= slice.top()
+}
+
+fn validate_capture_ranges(
+    bytes: &[u8],
+    format: TextureFormat,
+    width: u32,
+    height: u32,
+    band_applies: bool,
+    level: i32,
+) {
+    let pixels = decode_rgba8(bytes, format);
     assert!(
         pixels.iter().any(|pixel| pixel[..3] != [0, 0, 0]),
         "capture is black"
@@ -514,9 +581,17 @@ fn validate_capture_ranges(event: On<ScreenshotCaptured>) {
         "capture is uniform"
     );
     let warm = warm_lit_pixels(&pixels);
-    let size = event.image.texture_descriptor.size;
-    let ground = median_ground_luminance(&pixels, size.width, size.height);
+    let ground = median_ground_luminance(&pixels, width, height);
     println!("capture range check: warm-lit pixels={warm} ground-median-luminance={ground}");
+    // The numbers print either way. Only the calibrated band is conditional, and `capture is
+    // black` / `capture is uniform` above are not — a slice capture is never left ungated.
+    if !band_applies {
+        println!(
+            "capture range check: the cut at z {level} is below the world top, where 5.4's band \
+             was measured on sky-lit snow — warm and ground assertions skipped"
+        );
+        return;
+    }
     // NOTE: confirm this source-face-derived floor on the native-Windows vehicle run.
     assert!(
         warm >= WARM_PIXEL_FLOOR,
@@ -537,6 +612,79 @@ fn validate_capture_ranges(event: On<ScreenshotCaptured>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The band must still bite at full depth, and must NOT bite at a cut. A dark frame is the
+    /// discriminator: identical pixels, opposite verdicts, decided only by where the cut sits.
+    ///
+    /// The dark value is hand-written at 20 — comfortably under the shipped floor without being
+    /// derived from it, so raising the floor cannot quietly make this test vacuous.
+    #[test]
+    fn the_calibrated_band_judges_the_boot_framing_and_stands_aside_at_a_cut() {
+        let dims = protocol::Dims { x: 4, y: 4, z: 8 };
+        let top = SliceLevel::at_world_top(dims);
+        let cut = SliceLevel::pinned(dims, 3);
+        assert!(range_band_applies(top), "full depth is the calibrated case");
+        assert!(
+            !range_band_applies(cut),
+            "a cut exposes interior rock, which the band was never measured against"
+        );
+
+        // A near-black field with one lighter pixel: dark enough to fail the ground floor, varied
+        // enough to clear the unconditional `black` and `uniform` gates above it.
+        let mut bytes = vec![20u8; 4 * 64];
+        bytes[0..4].copy_from_slice(&[30, 30, 30, 255]);
+
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let at_top = std::panic::catch_unwind(|| {
+            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 8, 8, true, top.level());
+        });
+        let at_cut = std::panic::catch_unwind(|| {
+            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 8, 8, false, cut.level());
+        });
+        std::panic::set_hook(previous);
+
+        assert!(
+            at_top.is_err(),
+            "a black field at the boot framing is still the failure 5.4's floor exists to catch"
+        );
+        assert!(
+            at_cut.is_ok(),
+            "the same frame at a cut must not be judged against a band measured on sky-lit snow"
+        );
+    }
+
+    /// The run that fails its range checks is the run whose frame most needs looking at, and until
+    /// 2026-08-20 it was the one run that produced no frame: `save_to_disk` and the range checks
+    /// were two observers on one event, Bevy runs those in an unspecified order, and it picked the
+    /// checks first. Measured on the vehicle — a z 9 capture panicked on the ground-luminance floor
+    /// and wrote no PNG — and visible in every passing run's log too, where `capture range check:`
+    /// prints above `Screenshot saved to`.
+    ///
+    /// The validation must still fail loudly. The point is only that the evidence survives it.
+    #[test]
+    fn the_capture_is_written_before_it_is_judged() {
+        let saved = std::cell::Cell::new(false);
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            save_before_validate(
+                || saved.set(true),
+                || panic!("the valley floor reads 67, below the 70 value floor"),
+            );
+        }));
+        std::panic::set_hook(previous);
+
+        assert!(
+            outcome.is_err(),
+            "a failing range check must still panic — this is not a way to silence it"
+        );
+        assert!(
+            saved.get(),
+            "the PNG must be written before the range checks can panic, or a failing capture \
+             destroys the frame that would explain it"
+        );
+    }
 
     /// Hand-written oracle: a 4x4 frame whose centre window is exactly the four pixels at
     /// rows 2..4, columns 1..3. Values are chosen so the MEAN (112) differs from the MEDIAN

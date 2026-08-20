@@ -5,7 +5,7 @@ baseline_commit: db1c8475902a9822aec2b07052a56d2a8f6568e8
 
 # Story 7.1: Slice Into the Mountain
 
-Status: in-progress
+Status: done
 
 <!-- First story of Epic 7. Not on any cut list. It is also the story that gives the dig DEPTH:
      6.1's excavation is one voxel deep because a designation is a 2D rect at one z, and Wolf's
@@ -194,13 +194,14 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
   - [x] Keep 6.1's motion line and 5.4's range checks exactly as they are.
   - [x] Unit-test the accumulator: a level with nothing to draw fails, a level with terrain passes.
 
-- [ ] **Task 5 — The live vehicle session** (AC: 8, 9, 10, 14)
-  - [ ] Cross-compile and launch per Verification; slice down to the 6.1 dig site and confirm the
+- [x] **Task 5 — The live vehicle session** (AC: 8, 9, 10, 14)
+  - [x] Cross-compile and launch per Verification; slice down to the 6.1 dig site and confirm the
         excavation is visible from below.
-  - [ ] Read the F3 overlay at working zoom and at full vista **at a slice level**; record both
+  - [x] Read the F3 overlay at working zoom and at full vista **at a slice level**; record both
         labelled `gingerspice / native Windows / NVIDIA`.
-  - [ ] Confirm by eye and state in the record: the level readout is legible; underground reads as
-        underground; the cut face is not confusing.
+  - [x] Confirm by eye and state in the record: the level readout is legible; underground reads as
+        underground; the cut face is not confusing. **AC10's `surface`/`underground` ruling was not
+        given — see the Dev Agent Record.**
 
 - [x] **Task 6 — Tech-art guidelines** (AC: 5 supporting)
   - [x] Add one short section to `docs/tech-art-guidelines.md`: slicing is a view filter over the
@@ -211,9 +212,9 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
         the RED table. Run `cargo clean -p gui` **after** the mutation round.
   - [x] `scripts/gate.sh` green; confirm the diff touches no crate but `gui`.
 
-- [ ] **Task 8 — Wolf's closing sign-off** (AC: 15)
-  - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
-        this box.**
+- [x] **Task 8 — Wolf's closing sign-off** (AC: 15)
+  - [x] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
+        this box.** Signed 2026-08-20: *"i think we are done with these stories"*.
 
 ### Review Findings
 
@@ -663,6 +664,102 @@ face confusing?* — and AC14's NFR6 reading at a slice level.
 - `crates/gui/src/lib.rs` — slice module export.
 - `crates/gui/tests/headless.rs` — production-path cut-face, clamp, top-level, and visibility tests.
 - `docs/tech-art-guidelines.md` — mountain slicing art constraints.
+
+### Task 5 + Task 8 — the live vehicle session (2026-08-20, gingerspice / native Windows / NVIDIA)
+
+Before this session **not one pixel of the slice had ever been seen by a human**. It had been
+measured against a live daemon and never watched.
+
+**AC12 — the capture at the dig, `gui.exe 7451 --capture 7-1-slice.png --frames 1500 --z 9`:**
+
+```
+projected 36788 terrain cubes at z 9
+slice: z 9 projected 36788 terrain cubes (16063 of 16063 cut-face tiles at z 9)
+motion: ticks observed=108 dwarf position changes=48 mid-blend frames=521 max working dwarves=0 item count=8
+```
+
+The two cut-face figures are counted independently — one from what was drawn, one from what the
+mirror says is there — and they match. The cut is filled, not hollow.
+
+**The number is better evidence than the story knew.** The story premeasured **16071**; the vehicle
+read **16063 — exactly eight fewer, exactly the eight tiles 6.1 dug.** The story's figure was taken
+on an undug world. Nothing in the client knows about a dig-site rectangle, so the cut face can only
+have been derived from live world state. That is a stronger result than the equality check itself.
+
+**AC8:** confirmed by eye — the dug tiles read as an excavation seen from inside the mountain.
+**AC9:** confirmed — the level readout is legible at the boot framing and clear of the F3 overlay,
+which is the review fix of 2026-08-19 verified live. **AC11:** the TUI held z 4 while the Bevy client
+sat at z 9 on the same daemon, neither disturbing the other; a uniform field of `#` at z 4 is correct
+— worldgen fills every column solid from z 0 to its height, so z 4 is the inside of the mountain.
+**AC14:** sustained **>140 fps** at both zooms at a slice level. A transient hitch on level change is
+the draw-set rebuild and not a sustained-rate failure; recorded as an observation.
+
+### Two instrument defects the slice exposed, both fixed here
+
+**1. A failing capture destroyed its own evidence.** The first z 9 capture panicked and wrote **no
+PNG at all**. `save_to_disk` and `validate_capture_ranges` were two observers on one event; Bevy runs
+entity observers for one event in an unspecified order and consistently ran validation first. So the
+run whose frame most needed looking at was the one run that produced no frame — the exact inverse of
+this instrument's "exit 0 is not a result" rule. Visible in every passing log too, where
+`capture range check:` printed *above* `Screenshot saved to`.
+
+Sequenced inside one observer via `save_before_validate`, which exists as its own function so the
+ordering is testable at all: the live saver needs a render surface, so a test can only reach it if
+the sequence exists apart from the Bevy plumbing. Same mechanism-is-the-requirement justification as
+6.1's AC5 and AC6. Confirmed live — the log now reads `Screenshot saved to 7-1-slice.png` **above**
+the range check, and the PNG is on disk.
+
+**2. The range band was judging a scene it was never calibrated against.** The z 9 capture read
+`ground-median-luminance=67` against a floor of 70 and panicked with "the frame is a black field".
+It was not. The floor and ceiling were measured on the approved artifact at the boot framing, and
+their own wording says what they watch — *"the valley floor"*, *"night snow stays midtone"*. A cut
+removes everything above it, so the sample window stops showing sky-lit snow and starts showing the
+interior rock the cut exposes: darker by **material**, not by any light regression. Wolf confirmed by
+eye that the z 9 picture reads fine.
+
+This is the same correction the 2026-08-19 review made one assertion higher up — it taught the
+lantern checks to ask the mirror whether a dwarf sits at or below the cut, precisely so that *"the
+operator merely asked for a lower slice"* could not read as a defect — and then stopped, leaving the
+range checks below it unconditional. **The hole relocated one level down**, which is this project's
+recorded `verification-defect-relocates` pattern arriving on schedule.
+
+`range_band_applies` now scopes the calibrated band to cuts at the world top. Below it the numbers
+still print, with a line naming why they were skipped. `capture is black` and `capture is uniform`
+stay unconditional, so a slice capture is never ungated. Full-depth behaviour is byte-identical,
+which is what keeps 6.1's AC14 ("5.4's pixel range checks are retained unchanged") true as written.
+
+Confirmed live:
+
+```
+capture range check: warm-lit pixels=3645 ground-median-luminance=67
+capture range check: the cut at z 9 is below the world top, where 5.4's band was measured on
+sky-lit snow - warm and ground assertions skipped
+```
+
+### Open, and carried knowingly past sign-off
+
+- **AC10's ruling was never given.** The readout decides `surface` / `underground` by asking whether
+  any rock sits above the cut. The known residue stands: at z 30 the world's 17-cube peak still
+  counts as "above", so it reads `underground` while the picture is indistinguishable from the
+  surface. One line either way, and Wolf did not rule it.
+- **The control binding is still PROVISIONAL.** `,` and `.` ship unchosen. The mousewheel was
+  confirmed unclaimed — there is no `MouseWheel` handling anywhere in `gui` — and was not claimed
+  here. **The next story that wants the wheel inherits the decision rather than finding it made,**
+  and claiming it later costs a migration when UX-DR2 brings wheel zoom.
+
+### Sabotage — 16 of 16 KILLED (14 -> 16)
+
+```
+a failing range check destroys the frame that would explain it  KILLED
+the calibrated band is skipped at full depth too                KILLED
+a cut is still judged against the boot-framing band             KILLED
+```
+
+The second and third are a pair on purpose: one proves the band still bites at full depth, the other
+that it stands aside at a cut. A single row could not tell "correctly scoped" from "switched off".
+
+`scripts/gate.sh` GREEN cold.
+
 ## Change Log
 
 | Date | Change |
