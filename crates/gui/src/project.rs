@@ -10,8 +10,9 @@ use protocol::{Dims, EntityKind, Material, Tile};
 
 use crate::{
     appearance::{
-        RIM_LEVELS, debris_color, entity_appearance, flicker_scale, foliage_snow_color,
-        light_properties, material_color, rim_dissolved_color, snow_cap_color,
+        RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, entity_appearance,
+        flicker_scale, foliage_snow_color, light_properties, material_color, rim_dissolved_color,
+        snow_cap_color,
     },
     blend::{TickClock, blended_translation},
     transform::world_to_render,
@@ -372,11 +373,19 @@ pub fn reconcile(
                     entity.insert((
                         Mesh3d(assets.cube.clone()),
                         MeshMaterial3d(assets.slot(TerrainSlot::Stone, 0)),
+                        Transform::from_translation(item_translation(position))
+                            .with_scale(Vec3::splat(STONE_ITEM_SCALE)),
                     ));
                 }
             }
         }
     }
+}
+
+/// Where a stone item is drawn: the tile centre, dropped onto the tile floor. Both the spawn and
+/// `blend_entities` call this so the two cannot drift apart.
+fn item_translation(position: [i32; 3]) -> Vec3 {
+    world_to_render(position) + Vec3::new(0.0, STONE_ITEM_DROP, 0.0)
 }
 
 fn chip_offsets() -> [Vec3; CHIPS_PER_TILE] {
@@ -425,7 +434,10 @@ pub fn blend_entities(
             );
         } else if let Some(position) = items.get(&marker.0) {
             // Items have no previous wire state; snapping is the only wire-true presentation.
-            transform.translation = world_to_render(*position);
+            // Must go through `item_translation` for the same reason the spawn does: this is the
+            // sole writer of translation after spawn, so a bare `world_to_render` here would lift
+            // every item back off the tile floor on the frame after it appeared.
+            transform.translation = item_translation(*position);
         }
     }
 }
@@ -595,6 +607,39 @@ mod tests {
     use protocol::{Dims, MessageType, Snapshot, Speed, Tile};
 
     use super::*;
+
+    /// The invariant Wolf's eye caught on the vehicle and no instrument could: a stone item must
+    /// not swallow the debris chips that share its tile. At the scale-1.0 the item branch used to
+    /// inherit, every chip lies inside the item's own volume and AC8's debris is unseeable.
+    ///
+    /// The item's own size is pinned in the headless test, against a hand-written literal read
+    /// back off the spawned entity — asserting `scale == STONE_ITEM_SCALE` here would hold for ANY
+    /// value including the 1.0 that caused the defect. This is the fourth story bitten by that shape.
+    #[test]
+    fn a_stone_item_never_encloses_its_chips() {
+        // Every chip must lie OUTSIDE the item's own volume, on some axis, or it is invisible
+        // wherever an item stands.
+        let half = STONE_ITEM_SCALE / 2.0;
+        for offset in chip_offsets() {
+            let drop = Vec3::new(0.0, STONE_ITEM_DROP, 0.0);
+            let separation = offset - drop;
+            assert!(
+                separation.x.abs() > half || separation.y.abs() > half || separation.z.abs() > half,
+                "chip at {offset:?} sits inside the item cube and can never be seen"
+            );
+        }
+    }
+
+    /// The item must rest on the tile floor, not float at its centre — and the blend, which is the
+    /// sole writer of translation after spawn, must agree with the spawn about where that is.
+    #[test]
+    fn an_item_rests_on_the_tile_floor_at_spawn_and_after_the_blend() {
+        let position = [3, 4, 5];
+        let resting = world_to_render(position).y - 0.3;
+        assert!((item_translation(position).y - resting).abs() < 1e-6);
+        assert_eq!(item_translation(position).x, world_to_render(position).x);
+        assert_eq!(item_translation(position).z, world_to_render(position).z);
+    }
 
     fn mirror(tiles: Vec<Tile>) -> Mirror {
         Mirror::from_snapshot(Snapshot {

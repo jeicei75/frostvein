@@ -658,6 +658,45 @@ fn snapshot_item_receives_a_render_mesh() {
     assert!(item.2.is_some(), "a projected item must carry a mesh");
 }
 
+/// The live half of the same invariant, through the real wiring: reconcile spawns the item and
+/// `blend_entities` then writes its translation every frame. Both must place it as rubble resting
+/// on the tile floor. A bare `world_to_render` in either one lifts it back to the tile centre, and
+/// a missing scale restores the terrain-sized block that made a dug tile read as untouched rock.
+///
+/// Literals are hand-written rather than read from the appearance table, so this cannot pass by
+/// agreeing with whatever the table happens to say.
+#[test]
+fn a_projected_item_is_rubble_resting_on_the_tile_floor() {
+    let mut snapshot = snapshot(vec![Tile::Empty, Tile::Empty], Vec::new());
+    snapshot.items = vec![Item {
+        id: 42,
+        pos: [1, 0, 0],
+    }];
+    let mut app = headless_app(snapshot);
+
+    // Twice: the first update spawns, the second lets the blend write over what the spawn set.
+    app.update();
+    app.update();
+
+    let transform = *app
+        .world_mut()
+        .query::<(&ProjectedItem, &Transform)>()
+        .iter(app.world())
+        .find(|(item, _)| item.0 == 42)
+        .expect("the snapshot item must be projected")
+        .1;
+    assert!(
+        (transform.scale.x - 0.4).abs() < 1e-6,
+        "a stone item must be rubble, not a terrain-sized block: {}",
+        transform.scale.x
+    );
+    assert!(
+        (transform.translation.y - (world_to_render([1, 0, 0]).y - 0.3)).abs() < 1e-6,
+        "a stone item must rest on the tile floor, not float at its centre: {}",
+        transform.translation.y
+    );
+}
+
 #[test]
 fn capped_stone_keeps_its_bare_cube_beneath_a_snow_cap() {
     // A 56-wide world so the tested tile sits at [27, 27, 0], outside the 26-tile world-edge

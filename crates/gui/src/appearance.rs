@@ -94,6 +94,21 @@ pub fn debris_color() -> Color {
     Color::srgb_u8(86, 91, 106)
 }
 
+/// A stone item is rubble left standing at a dug tile, not a replacement block.
+///
+/// Until 2026-08-20 the item branch inserted a mesh and material without touching the spawned
+/// `Transform`, so it inherited scale 1.0 — a cube the exact size of a terrain cube, in stone
+/// material, standing in the tile it was just dug out of. Two consequences, both found by eye on
+/// the vehicle and invisible to every instrument: a dug tile visually refilled, so a worked face
+/// read as untouched rock; and the debris chips (within +/-0.39 of the tile centre) sat inside
+/// the item's own +/-0.5 volume, so AC8's chips could never be seen where an item stood. The
+/// capture self-test passed throughout, because the pixels DID change.
+pub const STONE_ITEM_SCALE: f32 = 0.4;
+
+/// Rests the shrunken item on the tile floor rather than leaving it floating mid-voxel, which is
+/// where a centred sub-unit cube would otherwise sit. The chips are already low for this reason.
+pub const STONE_ITEM_DROP: f32 = -(0.5 - STONE_ITEM_SCALE / 2.0);
+
 #[cfg(test)]
 mod flicker_tests {
     use super::*;

@@ -274,7 +274,7 @@ development_status:
   # STILL OPEN: AC15 must be RE-RUN (its window moved with the site), AC7's eyeball, AC16's TUI
   # cross-check, and AC17 — Wolf's sign-off, which no agent can close. Gate green, 11 commits,
   # NOTHING PUSHED.
-  6-1-the-world-moves: in-progress
+  6-1-the-world-moves: done
   # FIRST ON THE M2 CUT LIST. Cutting it leaves Epic 6's wow intact.
   # STORY CREATED 2026-08-18 (ready-for-dev). THE EPIC'S CENTRAL WIRE CLAIM IS STALE AND WAS
   # FALSIFIED AGAINST SOURCE: protocol::LightKind::Lantern, sim_core::LightKind::Lantern and
