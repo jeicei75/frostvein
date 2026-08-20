@@ -112,7 +112,10 @@ PY
 mutation "the lantern goes dark but stays present" gui a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 11_000_000.0,\n'
+# NOTE: retargeted 2026-08-20 with the intensity drop below. A row naming a tuned literal goes
+# silently dead the moment the knob moves -- see the flicker row in 6.1's table, dead from
+# 04e6de5 until it was caught.
+old = '            intensity: 5_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 0.0,\n', 1))
 PY

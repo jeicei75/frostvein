@@ -5,7 +5,7 @@ baseline_commit: 538e1f8
 
 # Story 6.2: Lanterns in the Dark
 
-Status: in-progress
+Status: done
 
 <!-- FIRST ITEM ON THE M2 CUT LIST. If the story cap binds, this is what goes — Epic 6 keeps its
      wow because torches and the campfire already carry the warm/cold read. Do not treat that as
@@ -205,13 +205,14 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
   - [x] Unit-test the accumulator against a hand-built mirror sequence — a still world fails, a
         moving one passes.
 
-- [ ] **Task 6 — The live vehicle session** (AC: 9, 13, 14, 15)
-  - [ ] Cross-compile and launch per Verification; capture, paste the printed lantern line, motion
+- [x] **Task 6 — The live vehicle session** (AC: 9, 13, 14, 15)
+  - [x] Cross-compile and launch per Verification; capture, paste the printed lantern line, motion
         line and range-check line into the Dev Agent Record.
-  - [ ] Read the F3 overlay at working zoom and at full vista with all five lanterns moving; record
+  - [x] Read the F3 overlay at working zoom and at full vista with all five lanterns moving; record
         both labelled `gingerspice / native Windows / NVIDIA`.
-  - [ ] Confirm by eye and state in the record: a warm pool travels with each dwarf and lights the
-        terrain it passes; the camp does not read blown out against the 5.4 frame.
+  - [x] Confirm by eye and state in the record: a warm pool travels with each dwarf and lights the
+        terrain it passes; the camp does not read blown out against the 5.4 frame. **Half of this
+        one came back a finding — see the Dev Agent Record.**
 
 - [x] **Task 7 — Tech-art guidelines** (AC: 10 supporting)
   - [x] Add one short section to `docs/tech-art-guidelines.md`: a moving light is the same table
@@ -224,9 +225,10 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         has fired twice).
   - [x] `scripts/gate.sh` green; confirm `crates/protocol` is untouched.
 
-- [ ] **Task 9 — Wolf's closing sign-off** (AC: 17)
-  - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
-        this box.**
+- [x] **Task 9 — Wolf's closing sign-off** (AC: 17)
+  - [x] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
+        this box.** Signed 2026-08-20: *"i think we are done with these stories"* — given with the
+        campfire finding below open and knowingly carried.
 
 ### Review Findings — code review 2026-08-19 (4 layers, all live, fresh context)
 
@@ -825,6 +827,82 @@ still never run is not evidence that the feature works.
 - _bmad-output/implementation-artifacts/mutations/6-2-lanterns-in-the-dark.sh
 - _bmad-output/implementation-artifacts/6-2-lanterns-in-the-dark.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
+
+
+### Task 6 + Task 9 — the live vehicle session (2026-08-20, gingerspice / native Windows / NVIDIA)
+
+6.2 rode the same binary and the same `simd` as 6.1 and 7.1, per `vehicle-session-runbook.md`, so
+the lantern instrument printed on every capture of the sitting rather than only its own.
+
+**AC15 — the lantern line, at full depth and at a cut:**
+
+```
+lantern: dwarf positions observed={...58 positions...} lit terrain tiles at dwarf positions=3171 moved=true
+lantern: dwarf positions observed={...26 positions...} lit terrain tiles at dwarf positions=1718 moved=true
+```
+
+`moved=true` on every run — the assertion this instrument exists for. The lit-tile count falling
+3171 -> 1718 between full depth and the z 9 cut is the slice removing terrain from under the pools,
+not a lantern regression: `lantern_assertions_apply` asks the mirror whether a dwarf sits at or below
+the cut, and at z 9 all five do, so the assertions ran rather than being skipped.
+
+**AC13:** sustained **>140 fps** at working zoom and full vista, `gingerspice / native Windows /
+NVIDIA`, with five moving lanterns on the stacked 6.1 + 6.2 + 7.1 binary. NFR6's working-zoom bar is
+60. Five moving point lights on top of five static emitters cost nothing measurable.
+
+**AC9 / AC14 — by eye.** Wolf: *"I can see light moving with dwarves"* — the pool travels with the
+dwarf and lights the terrain it crosses, which is the half of AC9 that separates a real moving light
+from a glow stuck to a cube. Confirmed.
+
+### The finding this story's own runbook predicted, and what was done about it
+
+The runbook named the risk in advance: *"the range check only guards the ground median inside
+[70,180] — it cannot tell you whether the camp LOOKS over-lit. That judgement is yours and there is
+no instrument for it."* It came back exactly there. Wolf, at full depth: **"Camp is too blown out"**,
+and after the first drop, **"campfire light is maybe still too blown"**.
+
+The ground median measured **123 on the same frame — the approved artifact's own figure, to the
+digit.** The field was never wrong; a local highlight was. No range check can see that, and this is
+the second time in this epic that the only instrument capable of catching a defect was Wolf's eye.
+
+**Applied:** lantern **11,000,000 / range 16 -> 5,000,000 / range 14**. The white-clip radius scales
+as sqrt(intensity), so the blown pool shrinks by about a third.
+
+**NOT applied, and carried open: the campfire.** After the lantern drop Wolf still reads the campfire
+as blown, and the diagnosis points away from this story:
+
+- `flicker_lights` multiplies the base intensity by a band of `1 +/- amplitude`.
+- Commit **04e6de5** took the campfire amplitude **0.11 -> 0.40**, so its peak went 35.5M -> **44.8M**
+  — 40% above the value story 5.4 sized against the artifact Wolf approved, on a light whose own
+  comment records that 72M "blew a ~9-tile pool to flat white".
+
+So the blow-out is most likely **6.1's amplitude raise reaching past 5.4's approved ceiling**, not
+6.2's lanterns and not 5.4's calibration. Two fixes were put to Wolf — (a) base 32M -> 23M so the
+*peak* lands on the approved brightness while the fire keeps breathing, or (b) amplitude 0.40 -> 0.25
+so the still frame matches and the breathing calms — and **neither was chosen before sign-off**.
+Recorded here as open rather than closed: **the campfire reads over-lit at full depth as shipped.**
+
+### The cost of tuning a look-constant here
+
+Dropping one intensity required three hand-written literals to move with it: the palette pin in
+`appearance::tests`, this story's `the lantern goes dark but stays present` sabotage row, and a
+doc comment in `headless.rs` naming the shipped figure. The palette pin went red immediately and
+caught the change, which is the pin working. The sabotage row would have gone **silently dead** —
+the same failure 6.1's `torch flicker band widens` row suffered from 04e6de5 until 2026-08-20.
+
+**A sabotage row naming a tuned literal dies the moment the knob moves, and dies quietly.** Any
+future look change must retarget its rows in the same commit.
+
+### Sabotage — 13 of 13 KILLED
+
+`the lantern goes dark but stays present` retargeted to the new intensity and re-verified:
+
+```
+=== the lantern goes dark but stays present ===
+thread 'a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table' panicked at crates/gui/tests/headless.rs:466:5
+```
+
+`scripts/gate.sh` GREEN cold.
 
 ## Change Log
 

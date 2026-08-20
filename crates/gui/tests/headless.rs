@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 /// Independent of `appearance.rs` on purpose: a lantern dimmer than this cannot read as a warm
-/// pool, whatever the table says. Deliberately far below the shipped 11,000,000 so it constrains
+/// pool, whatever the table says. Deliberately far below the shipped 5,000,000 so it constrains
 /// only the dark end and never has to move when the look is tuned.
 const LANTERN_VISIBLE_INTENSITY_FLOOR: f32 = 1_000_000.0;
 
