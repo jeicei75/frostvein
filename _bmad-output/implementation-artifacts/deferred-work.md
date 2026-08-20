@@ -725,3 +725,61 @@ adapted for this story (Blind Hunter → `blend.rs`+`appearance.rs`, Edge Case H
   AC6's shared `projection_systems` now gives the live tuple app-level coverage, so the entry needs
   **narrowing to the parts still untested** (fog/framing constants, resource-insert order) rather
   than deletion. `[orchestrator/LOW]`
+
+## Deferred from: code review of 6-2-lanterns-in-the-dark (2026-08-19)
+
+Four layers, none a coverage hole. Only the LOW tail is deferred here; both HIGHs, all five MEDs and
+four LOWs (three of them silent-failure/record traps) went to the story's Review Findings as patch
+items. Context that outlives the story: **the wire half of 6.2 is proven on a live daemon, the
+rendered half has no evidence of any kind, and the instrument built to supply that evidence has never
+executed a single line of its production path.**
+
+- Two of AC11's three assertions are tautological — `assert_eq!(translation, projected_translation(…))`
+  compares a value to itself, because the `PointLight` sits on the same entity as the `WorldProjected`
+  /`Transform` it is compared against, so only one `Transform` exists. AC11 as written is unfalsifiable
+  given the chosen architecture. Left standing because the third assertion (translation strictly
+  between the two endpoint x's) genuinely dies if the blend is deleted, so AC11 keeps real coverage.
+  AC-text defect, not an implementation one. `[auditor/LOW]`
+- AC4's and AC5's lantern assertions cannot fail, and AC5's scenario test does not exist. `dwarves()`
+  appends the compile-time `DWARF_LIGHT` to every tuple, so the round-trip comparison can never
+  disagree on the light and the determinism comparison has no random input to vary; `scenario.rs`
+  gained **no new test function**, only mechanical `(_, _, _, _)` destructuring updates, while AC5 names
+  a scenario test. The oracles that do carry weight are the literal `*light == LightKind::Lantern`
+  check and the diff proving `SavedDwarf` gained no field. Satisfied-by-construction is the honest,
+  YAGNI-correct outcome of the story's own "simplest encoding" decision — **re-word the ACs, do not
+  change the code.** 10th instance of the AC-text-defect class. `[auditor+feature/LOW]`
+- The mutation table covers both bridge arms, both guards, both reconcile light arms and three
+  `LanternStats` assertions, but nothing sabotages AC11's blend, the `DWARF_LIGHT` constant, or the
+  save round-trip. AC11 is the story's headline interaction and its one falsifiable assertion is
+  unsabotaged. This is the residue once the extraction-block mutation named in the story's second HIGH
+  patch item is added. `[auditor/LOW]`
+- **Process, not code — the per-layer build isolation has no reaper.** This review's four
+  `CARGO_TARGET_DIR`s cost **~92 GB**, and `/tmp` already held ~25 GB of orphans from earlier reviews
+  (`review-accept`, `review-orchestrator`, `review-sim-core`, `review-tui`, `review-protocol`).
+  Headroom was fine (439 GB free) and nothing was deleted during the review, but the P2 isolation rule
+  shipped without a cleanup step and the cost accumulates one review at a time. `[orchestrator/LOW]`
+
+## Deferred from: code review of 7-1-slice-into-the-mountain (2026-08-19)
+
+- **`SliceLevel::rebind` is untested and speculative.** Replacing it with `false` leaves 84/84
+  green. It keeps a retained client-local level valid if a later snapshot changes world dimensions,
+  which cannot happen while `Dims::DEFAULT` is a constant — an untested branch defending an
+  impossible case, against this repo's YAGNI-is-policy rule. `crates/gui/src/slice.rs:44-47`
+  `[auditor/LOW]`
+- **The capture's slice line is untested, and its format disagrees with the startup oracle's.**
+  Deleting the `println!` entirely leaves 84/84 green; only `DrawStats::assert_valid` is covered.
+  The two lines carry the same number in two shapes — `slice: z 9 projected 36788 terrain cubes`
+  vs `projected 36788 terrain cubes at z 9` — so a recipe grepping for one misses the other.
+  `crates/gui/src/capture.rs:395-398` vs `crates/gui/src/project.rs:236-240` `[auditor/LOW]`
+- **An out-of-range `--z` clamps silently.** `--z 999` becomes z 31 and `--z -5` becomes z 0 with
+  no diagnostic. Not false evidence — the printed line names the level actually used — but an
+  operator scripting a capture at a level the world does not have gets a silent success.
+  `crates/gui/src/slice.rs:17-21` `[auditor/LOW]`
+- **`update_slice_readout` rebuilds the whole `Text` every frame** with no `is_changed()` guard,
+  re-triggering text layout and glyph work for the life of the process. One small node, so almost
+  certainly invisible against AC14's 60 fps floor. `crates/gui/src/ingest.rs:313-317`
+  `[feature/LOW]`
+- ~~**6.1's vehicle runbook quotes the pre-slice oracle string exactly.**~~ **CLOSED 2026-08-19**,
+  same session — fixed while writing the vehicle runbooks rather than left to rot, since the runbook
+  is handed to Wolf. The line now names the `at z 31` suffix and says to match the prefix.
+  `_bmad-output/implementation-artifacts/6-1-signoff/task-6-vehicle-runbook.md` `[auditor/LOW]`

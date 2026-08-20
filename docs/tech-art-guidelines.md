@@ -153,3 +153,10 @@ rebuild clears them. They make digging read as work without inventing simulation
 A moving light uses the same `LightKind` appearance-table lookup as a static one. A dwarf is not
 special-cased warm: when its wire entity carries a light, reconciliation attaches that table-driven
 point light to the dwarf's blended projection, so the pool moves with the delivered entity.
+
+## Mountain slices
+
+Slicing is a client-local view filter over the existing full-depth exposure rule: below the selected
+level, exposed terrain remains visible, while solid terrain at the selected level supplies the cut
+face. The cut face uses the normal terrain material—no hatching, shading variant, or simulation/wire
+state is introduced. The visible z-level is always shown as surface or underground in the client UI.

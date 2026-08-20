@@ -17,18 +17,21 @@ use bevy::{
     app::{App, AppExit, Startup, Update},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
+    ecs::change_detection::DetectChanges,
     ecs::message::MessageWriter,
     ecs::schedule::IntoScheduleConfigs,
     input::ButtonInput,
     pbr::{DistanceFog, FogFalloff},
     prelude::{
-        AmbientLight, Camera3d, ClearColor, Commands, DefaultPlugins, DirectionalLight, KeyCode,
-        PerspectiveProjection, Projection, Query, Res, ResMut, Resource, Time, Transform, Without,
+        AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
+        DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
+        Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform, With,
+        Without, px,
     },
     render::renderer::RenderAdapterInfo,
 };
 use client_core::Mirror;
-use protocol::{Delta, Snapshot};
+use protocol::{Delta, Dims, Snapshot};
 
 use crate::{
     appearance::night_lighting,
@@ -38,8 +41,9 @@ use crate::{
     capture::{CaptureState, accumulate_motion, capture_after_frames},
     project::{
         ClientLocal, DigChipQuery, ProjectionAssets, TerrainQuery, TerrainTile, WorldProjected,
-        blend_entities, flicker_lights, reconcile, setup_projection_assets,
+        blend_entities, flicker_lights, has_terrain_above, reconcile, setup_projection_assets,
     },
+    slice::SliceLevel,
 };
 
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
@@ -80,6 +84,7 @@ pub fn run() -> anyhow::Result<()> {
         .spawn(move || read_messages(reader, sender))
         .context("could not spawn server reader thread")?;
 
+    let slice = initial_slice(mirror.dims(), args.slice_level);
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
@@ -87,6 +92,7 @@ pub fn run() -> anyhow::Result<()> {
             config: overlay_config_off(),
         })
         .insert_resource(MirrorResource(mirror))
+        .insert_resource(slice)
         .insert_resource(IngestReceiver(Mutex::new(receiver)))
         .insert_resource(ProjectionWork {
             snapshot: true,
@@ -142,17 +148,38 @@ pub struct ProjectionSet;
 /// Registers the load-bearing wire-to-presentation pipeline for both the live app and headless
 /// tests. Keeping it in one place makes an omitted live system observable in the suite.
 pub fn projection_systems(app: &mut App) {
-    app.init_resource::<TickClock>().add_systems(
-        Update,
-        (
-            ingest_messages,
-            reconcile_projection,
-            blend_projection,
-            flicker_projection,
+    if !app.world().contains_resource::<SliceLevel>() {
+        let dims = app.world().resource::<MirrorResource>().0.dims();
+        app.insert_resource(SliceLevel::at_world_top(dims));
+    }
+    app.init_resource::<TickClock>()
+        .add_systems(Startup, setup_slice_readout)
+        .add_systems(
+            Update,
+            (
+                ingest_messages,
+                slice_controls,
+                reconcile_projection,
+                blend_projection,
+                flicker_projection,
+            )
+                .chain()
+                .in_set(ProjectionSet),
         )
-            .chain()
-            .in_set(ProjectionSet),
-    );
+        // AC9's whole mechanism. It lived in `run()` only, where no test could reach it, and
+        // deleting both systems left the suite green — 6.1's untested-drive-line defect on the
+        // half of the story the readout exists for. It must read the level AFTER the keyboard has
+        // written it, or the displayed level trails the cut by one frame.
+        .add_systems(Update, update_slice_readout.after(ProjectionSet));
+}
+
+/// The `--z` pin has to REACH the resource, not merely parse. Inside `run()` it was unreachable
+/// from any test, and a mutation that ignored the flag entirely stayed green.
+pub fn initial_slice(dims: Dims, requested: Option<i32>) -> SliceLevel {
+    requested.map_or_else(
+        || SliceLevel::at_world_top(dims),
+        |level| SliceLevel::pinned(dims, level),
+    )
 }
 
 fn force_capture_overlay_off(app: &mut App) {
@@ -175,6 +202,7 @@ struct Args {
     capture: Option<PathBuf>,
     frames: u32,
     expect_work: bool,
+    slice_level: Option<i32>,
 }
 
 fn parse_args() -> anyhow::Result<Args> {
@@ -186,6 +214,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut capture = None;
     let mut frames = None;
     let mut expect_work = false;
+    let mut slice_level = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -201,6 +230,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             );
         } else if arg == "--expect-work" {
             expect_work = true;
+        } else if arg == "--z" {
+            let value = args.next().context("--z requires a level")?;
+            slice_level = Some(
+                value
+                    .to_string_lossy()
+                    .parse()
+                    .context("invalid --z level")?,
+            );
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -219,6 +256,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         capture,
         frames: frames.unwrap_or(0),
         expect_work,
+        slice_level,
     })
 }
 
@@ -263,6 +301,51 @@ fn setup_night_lighting(mut commands: Commands) {
     ));
 }
 
+#[derive(Component)]
+pub struct SliceReadout;
+
+fn setup_slice_readout(
+    mut commands: Commands,
+    slice: Res<SliceLevel>,
+    mirror: Res<MirrorResource>,
+) {
+    let covered = has_terrain_above(&mirror.0, slice.level());
+    commands.spawn((
+        Text::new(slice.readout(covered)),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::srgb(0.86, 0.91, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            // Below the F3 overlay, which Bevy pins to the origin at font size 32. The two must be
+            // readable together: AC14's fps reading is taken AT a slice level.
+            top: px(44),
+            left: px(16),
+            ..Default::default()
+        },
+        // The overlay claims `i32::MAX - 32`. Without an explicit index this node defaults to 0
+        // and is drawn underneath it, covering the level number itself.
+        GlobalZIndex(i32::MAX - 16),
+        SliceReadout,
+        ClientLocal,
+    ));
+}
+
+fn update_slice_readout(
+    slice: Res<SliceLevel>,
+    mirror: Res<MirrorResource>,
+    mut readout: Query<&mut Text, With<SliceReadout>>,
+) {
+    // `has_terrain_above` walks the world, so it must not run every frame. Both inputs are
+    // change-detected; nothing else can alter the answer.
+    if !slice.is_changed() && !mirror.is_changed() {
+        return;
+    }
+    let covered = has_terrain_above(&mirror.0, slice.level());
+    for mut text in &mut readout {
+        *text = Text::new(slice.readout(covered));
+    }
+}
+
 fn classify_client_local(
     mut commands: Commands,
     unclassified: Query<bevy::prelude::Entity, (Without<WorldProjected>, Without<ClientLocal>)>,
@@ -295,6 +378,26 @@ fn camera_controls(
         rig.orbit(yaw, pitch);
         rig.zoom(zoom);
         *transform = rig.transform();
+    }
+}
+
+/// `<` / `>` use the comma and period keys today. The planned wheel zoom remains unclaimed until
+/// UX-DR2 lands, so this client-local binding does not create a future migration.
+fn slice_controls(
+    keys: Res<ButtonInput<KeyCode>>,
+    mirror: Res<MirrorResource>,
+    mut slice: ResMut<SliceLevel>,
+    mut work: ResMut<ProjectionWork>,
+) {
+    let mut changed = slice.rebind(mirror.0.dims());
+    if keys.just_pressed(KeyCode::Comma) {
+        changed |= slice.step(-1);
+    }
+    if keys.just_pressed(KeyCode::Period) {
+        changed |= slice.step(1);
+    }
+    if changed {
+        work.snapshot = true;
     }
 }
 
@@ -393,9 +496,13 @@ fn blend_projection(
     blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);
 }
 
+// Each parameter is a distinct ECS partition; bundling them solely to reduce the system signature
+// would obscure the client-local slice boundary from the mirror and projection queries.
+#[allow(clippy::too_many_arguments)]
 pub fn reconcile_projection(
     mut commands: Commands,
     mirror: Res<MirrorResource>,
+    slice: Res<SliceLevel>,
     mut work: ResMut<ProjectionWork>,
     projected: Query<
         (
@@ -416,6 +523,7 @@ pub fn reconcile_projection(
     reconcile(
         &mut commands,
         &mirror.0,
+        *slice,
         rebuild,
         &changes,
         &projected,
@@ -542,6 +650,43 @@ mod tests {
             .is_err(),
             "a zero-frame capture must be rejected before opening a socket"
         );
+    }
+
+    #[test]
+    fn the_z_flag_reaches_the_slice_resource_rather_than_merely_parsing() {
+        // Independent oracle: the expected level is written here, not read back from `Args`.
+        // Replacing `SliceLevel::pinned` with `at_world_top` left the whole suite green, so
+        // `--z 9 --capture` would have silently photographed the full-depth view.
+        let dims = Dims { x: 4, y: 4, z: 32 };
+        assert_eq!(super::initial_slice(dims, Some(9)).level(), 9);
+        assert_eq!(super::initial_slice(dims, None).level(), 31);
+        // And the pin is clamped by the same rule as every other level change.
+        assert_eq!(super::initial_slice(dims, Some(999)).level(), 31);
+        assert_eq!(super::initial_slice(dims, Some(-5)).level(), 0);
+    }
+
+    #[test]
+    fn capture_slice_level_requires_capture_and_is_retained_for_pinning() {
+        // `--z` no longer requires `--capture`: the interactive client must be able to boot at a
+        // level, or reaching the dig site is 22 keypresses and the vehicle recipe cannot run.
+        let interactive = super::parse_args_from([
+            std::ffi::OsString::from("--z"),
+            std::ffi::OsString::from("9"),
+        ])
+        .expect("a level without a capture boots the interactive client pinned");
+        assert_eq!(interactive.slice_level, Some(9));
+        assert!(interactive.capture.is_none());
+        let args = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("slice.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("12"),
+            std::ffi::OsString::from("--z"),
+            std::ffi::OsString::from("9"),
+        ])
+        .expect("a capture level must parse");
+        assert_eq!(args.slice_level, Some(9));
     }
 
     #[test]

@@ -70,8 +70,8 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
         },
         LightKind::Lantern => LightProperties {
             color: Color::srgb_u8(255, 195, 110),
-            intensity: 11_000_000.0,
-            range: 16.0,
+            intensity: 5_000_000.0,
+            range: 14.0,
             flicker_amplitude: 0.05,
             flicker_hz: 1.3,
         },
@@ -240,7 +240,9 @@ mod tests {
         let lights = [
             (LightKind::Torch, [255, 140, 62], 14_000_000.0, 20.0),
             (LightKind::Campfire, [255, 173, 92], 32_000_000.0, 28.0),
-            (LightKind::Lantern, [255, 195, 110], 11_000_000.0, 16.0),
+            // Dropped from 11M/16 on 2026-08-20: five moving lanterns over five static
+            // emitters read blown out on the vehicle, which no range check can see.
+            (LightKind::Lantern, [255, 195, 110], 5_000_000.0, 14.0),
         ];
         for (kind, rgb, intensity, range) in lights {
             let actual = light_properties(kind);

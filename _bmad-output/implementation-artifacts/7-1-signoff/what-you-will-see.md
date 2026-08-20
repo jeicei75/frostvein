@@ -44,12 +44,31 @@ Each line needs your ruling.
 4. **No deeper digging.** Slicing changes what you *see*, not what has been dug. The 6.1 excavation
    is one voxel deep because a designation covers one z-level, and that does not change here — you
    will be looking into a shallow cut, more legible than before but still shallow.
-5. **The boot frame is unchanged.** The client starts at the top level, so the opening composition
-   you approved at 5.4 is exactly as it was.
+5. **The boot frame is unchanged EXCEPT for one new line of text.** The client still starts at the
+   top level, so the 3D composition you approved at 5.4 is exactly as it was — but AC9 requires the
+   level always be readable, so a permanent readout (`Slice: z 31/31 — surface`) now sits at the
+   top-left in pale blue, below the F3 overlay's corner. **It is not suppressed in capture mode**,
+   so it will appear in `7-1-slice.png` and in every future 5.4/6.1/6.2 capture. *(Corrected at
+   code review 2026-08-19: this line previously claimed the boot frame was wholly unchanged, which
+   contradicted the code you are being asked to sign off. Verified harmless to the inherited 5.4
+   range checks — the readout is blue-dominant, so it cannot register as a warm lantern pixel, and
+   it sits outside the ground-luminance sample region.)*
 6. **Dwarves remain scaled cubes.**
 7. **Entities above the cut are hidden** along with the terrain, so nobody floats over an opened
    mountain. *(If you would rather see surface dwarves while looking underground, say so — it is a
    ruling either way, and the story tests whichever you pick.)*
+
+## The keys, so you are not told them out of band
+
+`,` steps the cut **down** one level, `.` steps it **up**. These are the physical comma and period
+keys, which is what makes `<` / `>` work — but the unshifted keys step too, so the binding is a
+superset of the recorded `<` / `>` ruling. Nothing on screen names them; this list is where you
+find them until the ruling is confirmed.
+
+The world is 32 levels deep and the client boots at z 31. The 6.1 dig site is at **z 9**, which is
+22 taps away, so at the viewing use `gui.exe <port> --z 9` to boot straight to it — `--z` no longer
+requires `--capture` (changed at code review 2026-08-19; it previously refused to run without one,
+which would have made this recipe error out).
 
 ## The control — rule this now, not at the viewing
 
