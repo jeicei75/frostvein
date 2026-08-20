@@ -15,6 +15,7 @@ use crate::{
         snow_cap_color,
     },
     blend::{TickClock, blended_translation},
+    slice::SliceLevel,
     transform::world_to_render,
 };
 
@@ -216,6 +217,7 @@ pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
 pub fn reconcile(
     commands: &mut Commands,
     mirror: &Mirror,
+    slice: SliceLevel,
     rebuild_terrain: bool,
     dirty_tiles: &[[i32; 3]],
     projected: &Query<(BevyEntity, &WorldProjected, Option<&ProjectedLight>), Without<TerrainTile>>,
@@ -230,9 +232,13 @@ pub fn reconcile(
         for (entity, _, _) in terrain.iter() {
             commands.entity(entity).despawn();
         }
-        let positions = terrain_positions(mirror);
+        let positions = terrain_positions_at(mirror, slice.level());
         // The draw-set oracle instrument: the shipped seed must report 53,365 (AC13).
-        println!("projected {} terrain cubes", positions.len());
+        println!(
+            "projected {} terrain cubes at z {}",
+            positions.len(),
+            slice.level()
+        );
         for position in positions {
             let entity = commands
                 .spawn((
@@ -271,7 +277,7 @@ pub fn reconcile(
                     commands.entity(entity).despawn();
                 }
             }
-            if is_exposed(mirror, position) {
+            if is_visible_at_slice(mirror, position, slice.level()) {
                 let entity = commands
                     .spawn((
                         WorldProjected(terrain_id(position, mirror.dims())),
@@ -299,7 +305,7 @@ pub fn reconcile(
                     commands.entity(entity).despawn();
                 }
             }
-            if matches!(mirror.tile(*position), Some(Tile::Empty)) {
+            if position[2] <= slice.level() && matches!(mirror.tile(*position), Some(Tile::Empty)) {
                 for offset in chip_offsets() {
                     let mut entity = commands.spawn((
                         DigChip(*position),
@@ -320,10 +326,16 @@ pub fn reconcile(
 
     let mut wanted: std::collections::BTreeMap<_, _> = mirror
         .entities()
+        .filter(|entity| entity.pos[2] <= slice.level())
         .map(|entity| (entity.id, (entity.pos, Some(*entity))))
         .collect();
-    let item_ids: std::collections::BTreeSet<_> = mirror.items().map(|item| item.id).collect();
-    wanted.extend(mirror.items().map(|item| (item.id, (item.pos, None))));
+    let visible_items: Vec<_> = mirror
+        .items()
+        .filter(|item| item.pos[2] <= slice.level())
+        .map(|item| (item.id, item.pos))
+        .collect();
+    let item_ids: std::collections::BTreeSet<_> = visible_items.iter().map(|(id, _)| *id).collect();
+    wanted.extend(visible_items.iter().map(|(id, pos)| (*id, (*pos, None))));
     for (bevy_entity, marker, _) in projected.iter() {
         if !terrain.get(bevy_entity).is_ok() && !wanted.contains_key(&marker.0) {
             commands.entity(bevy_entity).despawn();
@@ -576,13 +588,47 @@ impl ProjectionAssets {
 }
 
 pub fn terrain_positions(mirror: &Mirror) -> Vec<[i32; 3]> {
+    terrain_positions_at(mirror, mirror.dims().z.saturating_sub(1) as i32)
+}
+
+/// The client-local draw set at a slice: retain full-depth exposure, then add the terrain floor
+/// at the selected z. The latter arm is what makes a cut a filled cross-section rather than a
+/// hollow shell; `is_exposed` remains the full-depth rule for ramps and the existing oracle.
+pub fn terrain_positions_at(mirror: &Mirror, level: i32) -> Vec<[i32; 3]> {
+    let level = level.clamp(0, mirror.dims().z.saturating_sub(1) as i32);
     let mut positions = Vec::new();
     for_each_position(mirror.dims(), |position| {
-        if is_exposed(mirror, position) {
+        if is_visible_at_slice(mirror, position, level) {
             positions.push(position);
         }
     });
     positions
+}
+
+/// Whether any solid or ramp tile sits strictly above `level`. This is what makes the readout's
+/// surface/underground claim true — `level == top` only says where the cut is, never whether
+/// anything covers it. Scans top-down and returns on the first hit, so the common case (rock
+/// directly overhead) costs one lookup.
+pub fn has_terrain_above(mirror: &Mirror, level: i32) -> bool {
+    let dims = mirror.dims();
+    let top = dims.z.saturating_sub(1) as i32;
+    for z in ((level + 1)..=top).rev() {
+        for y in 0..dims.y as i32 {
+            for x in 0..dims.x as i32 {
+                if matches!(mirror.tile([x, y, z]), Some(Tile::Solid(_) | Tile::Ramp(_))) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn is_visible_at_slice(mirror: &Mirror, position: [i32; 3], level: i32) -> bool {
+    position[2] <= level
+        && (is_exposed(mirror, position)
+            || (position[2] == level
+                && matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_)))))
 }
 
 fn terrain_id([x, y, z]: [i32; 3], dims: Dims) -> u32 {

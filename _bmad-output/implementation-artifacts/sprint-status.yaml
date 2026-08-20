@@ -43,7 +43,37 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-18  # 6.2 headless implementation and evidence complete; vehicle / Wolf tasks remain open.
+last_updated: 2026-08-20  # VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
+                          # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
+                          # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
+                          # (1) 6.1 stone items spawned at scale 1.0 -- a terrain-sized block standing in the tile it
+                          # was dug from, so a dug tile visually REFILLED and a worked face read as untouched rock;
+                          # it also geometrically enclosed AC8's debris chips, which could never be seen. Fixed at
+                          # STONE_ITEM_SCALE 0.4 (the largest scale keeping all four chips outside the cube).
+                          # (2) 7.1 a FAILING capture wrote no PNG at all -- save_to_disk and the range checks were
+                          # two observers on one event and Bevy ran validation first, so the run whose frame most
+                          # needed looking at produced no frame. Now sequenced in one observer.
+                          # (3) 7.1 the 5.4 range band was judging a scene it was never calibrated against: at a cut
+                          # the sample window shows interior rock, not sky-lit snow, so z 9 read 67 vs the 70 floor
+                          # and panicked on a picture Wolf confirmed fine. Band now scoped to the world top; the
+                          # black/uniform gates stay unconditional. This is the SAME correction the 08-19 review made
+                          # one assertion higher (lanterns) and stopped short of -- the hole relocated one level down.
+                          # Sabotage 14->17 (6.1), 13/13 (6.2), 14->16 (7.1), ALL KILLED; gate GREEN cold on each branch.
+                          # CARRIED OPEN past sign-off, recorded not blurred: the CAMPFIRE still reads blown at full
+                          # depth (diagnosis: 04e6de5 raised its amplitude 0.11->0.40, peaking at 44.8M, 40% above the
+                          # value 5.4 sized against the approved artifact -- not 6.2's lanterns); 7.1's AC10
+                          # surface/underground ruling never given; ,/. controls still PROVISIONAL and the mousewheel
+                          # confirmed unclaimed in code. 6.1's AC15 is closed on PRE-FIX evidence (2,557 px measured
+                          # on the binary where the item was a full block) -- a fresh pair was offered and declined.
+                          # A SABOTAGE ROW NAMING A TUNED LITERAL DIES SILENTLY WHEN THE KNOB MOVES: 6.1's torch
+                          # flicker row had been dead since 04e6de5; 6.2's lantern row was retargeted with the drop.
+                          # NEXT = 7.2 (ready-for-dev, BLOCKED on Task 0, Wolf's artifact).
+                          
+                          # Prior 2026-08-19: 7.1 code-reviewed (4 layers, no coverage holes) -> in-progress, 13 patches applied, 13/13 mutations killed.
+                          # VEHICLE RUNBOOKS WRITTEN for all three in-progress stories (6.1, 6.2, 7.1). They share ONE binary --
+                          # 7.1's branch is stacked on 6.2 on 6.1 -- so all three live sessions run in ONE sitting off one gui.exe
+                          # and one simd. Spine: _bmad-output/implementation-artifacts/vehicle-session-runbook.md. Order 6.1 -> 6.2
+                          # -> 7.1 (6.1 designates the dig the other two need). NOTHING ELSE blocks any of the three.
                           # hole; the feature was watched running live and AC6 is genuinely closed,
                           # but three one-line deletions each killed wow beat 2 with the suite GREEN —
                           # run one's defect class, one level below where AC6 looks. 1 decision + 8
@@ -172,7 +202,7 @@ development_status:
   # items for a fresh patch session, 5 defers. Back to in-progress.
   5-4-the-cold-boot: done
   epic-5-retrospective: optional
-  epic-6: in-progress
+  epic-6: done
   # WOW BEAT 2 — the beat the PRD calls the magic; a client achieving only beat 1 has
   # FAILED the milestone. Sign-off gate applies. Also cannot be closed by a dev agent.
   # Its dig must be at a surface-visible face designated from a TUI client (readiness
@@ -292,7 +322,27 @@ development_status:
   # 6.1 measured >143 fps (4.8x headroom) but 5.4's frame measured ground-median 123 against a
   # ceiling of 180, and this adds five 11M-lumen lights inside the camp. Verified live off the wire:
   # all 5 dwarves carry light: None today. BLOCKED on Task 0 -- Wolf's artifact approval.
-  6-2-lanterns-in-the-dark: review
+  6-2-lanterns-in-the-dark: done
+  # CODE REVIEW 2026-08-19 (4 layers, fresh context, none a coverage hole) -> back to in-progress.
+  # THE WIRE HALF IS PROVEN AND THE EVIDENCE APPARATUS WAS NOT. Both bridge arms verified by reading
+  # bytes off a live daemon (10 entities, dwarves 0-4 all lantern, 3 consecutive deltas); AC3/AC19's
+  # negative claims confirmed by command; both guards still honest; gate green. Two HIGHs, both in the
+  # capture instrument: an empty first observation LATCHED an empty region, after which moved() was
+  # permanently true and a stationary world passed AC15's central assertion; and accumulate_motion --
+  # the production code deriving the lit region -- had ZERO test callers and had never executed once
+  # anywhere, so deleting the whole extraction block left the suite green. 12 patches applied, one
+  # verification pass: gate GREEN, 52 gui unit + 30 headless tests green.
+  # AC14's BAND WAS NOT WIDENED (floors/ceiling byte-identical) -- the one thing review was told to
+  # assume had been quietly done, was not done. But it was never re-measured with lanterns lit.
+  # THE SABOTAGE TABLE CAUGHT THE REVIEW'S OWN PATCH: first run 10 KILLED / 2 SURVIVED / 1
+  # APPLY-FAILED. Both survivors were new tests passing for the wrong reason -- one held its dwarf
+  # still so needs_observation's early return swallowed the observations it meant to make. Tests
+  # repaired, table re-run. Mutations 9 -> 13.
+  # WOLF RULED AT REVIEW: AC1 APPROVED (written-only artifact stands; part (a) before-capture WAIVED,
+  # no devpod can render one) -- artifact header corrected, it had contradicted the story for a day.
+  # AC13, AC14, AC17 and the rendered halves of AC9/AC15 STAY OPEN pending a gingerspice session.
+  # Deferred: 3 LOW AC-text defects (AC11 tautologies, AC4/AC5 unfalsifiable-by-construction) + the
+  # per-layer build isolation having no reaper (~92GB/review).
   epic-6-retrospective: optional
   epic-7: in-progress
   # Resolves the addendum's open control collision BY TESTING, on the record: the
@@ -310,10 +360,60 @@ development_status:
   # every inherited recipe reads as broken; and entity visibility above the slice is a decision to
   # rule and test, not to leave undefined. This is also the story that gives 6.1's one-voxel dig
   # actual DEPTH. BLOCKED on Task 0 -- Wolf's artifact approval.
-  7-1-slice-into-the-mountain: ready-for-dev
+  7-1-slice-into-the-mountain: done
+  # CODE REVIEW 2026-08-19 (4 layers, fresh context, NONE a coverage hole -- a first this epic).
+  # THE CUT ITSELF IS PROVEN: Blind Hunter fuzzed the real projection over ~1.1M position checks and
+  # 4,000 ECS steps with 0 failures; the Feature Auditor drove a LIVE simd and measured 15,316 of
+  # 16,071 cut-face tiles supplied only by the z==level arm. The hollow-shell trap named at creation
+  # is genuinely closed and all 12 live-path hops are WIRED -- no dead capability.
+  # EVERY DEFECT WAS IN THE OBSERVABILITY LAYER, NOT THE FEATURE. 19 findings: 3 decision (all ruled
+  # by Wolf same session), 10 patch, 5 defer, 1 dismissed. Two HIGHs, both the 6.1 untested-drive-line
+  # class reproduced: the ENTIRE on-screen readout (AC9's mechanism) and the --z PIN could each be
+  # deleted or made inert with a green suite. The capture instrument was LEVEL-BLIND -- `terrain_tiles
+  # > 0` cannot see a hollow cut, measured 209 vs 258 with 49 floor tiles missing, so the one story
+  # whose headline defect is the hollow shell had an instrument that could not detect it.
+  # WOLF'S RULINGS: label keys off terrain above the cut, not position; `--z` no longer requires
+  # `--capture` (AC11's own recipe line would have errored as written); lantern assertions now ask the
+  # mirror whether a dwarf sits at or below the cut rather than trusting an empty observation.
+  # ALL 13 PATCHES APPLIED same session, batched, ONE verification pass. Suite 84 -> 90. Sabotage
+  # table 7 -> 13 mutations, 13/13 KILLED. GATE GREEN, run and observed.
+  # AC-TEXT-DEFECT CLASS, 10th INSTANCE: AC11/AC17's stated proof `git diff main..HEAD` returns 6
+  # files on this stacked branch. The review's FIRST correction was also wrong (6-2..HEAD still
+  # catches 6.2's post-7.1 patch commit) -- on a stacked branch only the story's own commit range
+  # answers it. Worth generalising: every M2 story is stacked, so every such AC is wrong by default.
+  # BACK TO in-progress, NOT done. Unit-green is not feature-proof: AC8 (dug corridors seen), AC9/AC10
+  # legibility, AC14 (no fps figure exists at any slice level), AC12's live capture, and BOTH halves of
+  # Wolf's gate (AC1 opened on a written-only fallback, AC15 untouched) remain OPEN pending the
+  # vehicle. The `<`/`>` ruling is still PROVISIONAL -- Wolf has never chosen it.
+  # SCOPE LESSON: the review baseline (the story's own baseline_commit) HID a coupled hunk -- 6.2's
+  # 75f04a2 made the lantern assertion read slice.level(). Recovered only because every layer is told
+  # the diff is scope, not source. On stacked branches, diff-scoping alone is not enough.
   # Renders designations/zones issued from a TUI client — gui issues nothing here. That
   # placement is deliberate: the rendering survives if Epic 8's input work is cut.
-  7-2-read-the-working-zoom: backlog
+  # STORY CREATED 2026-08-19 (ready-for-dev). THE EPIC'S OWN AC IS UNMEETABLE AND WAS FALSIFIED
+  # AGAINST SOURCE: it requires mark entities be "created, updated and despawned by sim `Id`", but
+  # designations are `BTreeMap<Pos, DesignationKind>` (sim-core:447) and zones `BTreeSet<Pos>` (:451) --
+  # neither is an ECS entity and neither carries an Id at sim, save or wire level, while Entity and Item
+  # both do. Meeting it literally means a wire change AD-16 forbids (M2's sanctioned diff was spent at
+  # 5.1). AC10 is written KEYED BY POSITION and the AD-14 amendment is recorded as owed to the spine --
+  # AD-14 names designations and zones as world-projected AND says reconciliation is keyed by sim Id, and
+  # those two halves cannot both hold. 9th instance of the AC-text-defect class, caught at creation.
+  # THE STORY IS SMALLER THAN IT LOOKS: every noun is ALREADY on the wire and ALREADY mirrored --
+  # Snapshot/Delta carry designations+zones, Mirror exposes them and already does absence-is-deletion,
+  # so client-core needs ZERO change and gui has simply never read them. Channel designations are real
+  # end to end (distinct sim validity rules, distinct TUI glyph/hue, daemon test sends literal "channel").
+  # Items ALREADY RENDER, so they are in the legibility bar but are not new work. gui-only story.
+  # RECIPE EXECUTED LIVE AT CREATION and it found the trap: DESIGNATIONS ARE CONSUMED BY THE DWARVES.
+  # 6.1's 8-tile site is fully dug in ~52 ticks against a ~110-tick capture window, so the obvious recipe
+  # photographs an EMPTY SITE and exits 0 -- the 3.2/3.3 false-failure class again. Measured: an 8x12 rect
+  # yields 79 marks (17 of 96 silently dropped by the diggability filter), decaying 68/59/51 at t+40/60/100
+  # and PLATEAUING AT 50 from t+120 as the rest become unreachable (FR8 queues, never drops). The recipe
+  # uses that rect. Also measured: a TUI-dragged 2x2 stockpile yields TWO zone tiles (the is_standable
+  # filter), and a zone tile sits one level ABOVE the rock -- digs at z=9, zones at z=10 -- so a capture
+  # pinned to --z 9 hides the zone entirely. Pin --z 10. TUI key sequence lands 8/8, verbatim from 6.1.
+  # Baseline 328 workspace tests green. Task 0 (Wolf's artifact) is the blocking gate; Tasks 6/7 are
+  # vehicle- and human-bound. BLOCKED on Task 0.
+  7-2-read-the-working-zoom: ready-for-dev
   epic-7-retrospective: optional
   epic-8: backlog
   # M2's hardest input work and the main story-count driver, isolated on purpose.

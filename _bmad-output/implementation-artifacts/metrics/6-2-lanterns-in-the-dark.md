@@ -32,3 +32,11 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 > additive** — the script counts nested siblings sharing a cwd, so the review cost appears in both.
 > `quota_pp` is the axis that actually binds here, and it is account-wide: the window moved 44% → 53%
 > across the whole story.
+| review | claude | claude-opus-5, claude-sonnet-5 | 566 | 1,132 | 1,485,939 | 65,013,040 | 489,612 | 66,989,723 | $51.00 | `1aa059ab-f566-4f18-ad48-1aef43662cfc.jsonl` | 2026-08-19 11:16 UTC · rates 2026-08-01 | 115 | — |
+
+> **The `review` row above is review AND its patch round, not review alone.** The convention reserves
+> `review-patch` for patches applied in a SEPARATE later session; here Wolf chose "apply every patch
+> now", so the four review layers, the 12 patches, TWO full sabotage runs (13 mutations each) and
+> three `scripts/gate.sh` runs are all inside this one delta. Do not compare it against a review-only
+> row from an earlier epic. The four review subagents are 21,415,763 tokens — **32.0% of the
+> session** — which is the fan-out that ledger rows before 2026-08-08 silently omitted.

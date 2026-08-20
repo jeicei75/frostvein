@@ -1449,8 +1449,10 @@ impl World {
         claims
     }
 
-    /// Sorted ascending by dwarf `Id`. A sibling reader to `claims()` and `items()`, which is
-    /// why `dwarves()` keeps its three-tuple shape and the clients need no new arm.
+    /// Sorted ascending by dwarf `Id`. A sibling reader to `claims()` and `items()`, so carried
+    /// state stays out of `dwarves()` and the clients need no new arm. (`dwarves()` itself is a
+    /// four-tuple since 6.2 added the uniform lantern; the split this comment describes is about
+    /// what belongs in a sibling reader, not about that tuple's width.)
     pub fn carrying(&self) -> Vec<(Id, Option<u32>)> {
         let mut carrying: Vec<_> = self
             .ecs

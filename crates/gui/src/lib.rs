@@ -7,4 +7,5 @@ pub mod camera;
 pub mod capture;
 pub mod ingest;
 pub mod project;
+pub mod slice;
 pub mod transform;

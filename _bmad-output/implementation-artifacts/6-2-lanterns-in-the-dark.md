@@ -5,7 +5,7 @@ baseline_commit: 538e1f8
 
 # Story 6.2: Lanterns in the Dark
 
-Status: review
+Status: done
 
 <!-- FIRST ITEM ON THE M2 CUT LIST. If the story cap binds, this is what goes — Epic 6 keeps its
      wow because torches and the campfire already carry the warm/cold read. Do not treat that as
@@ -27,8 +27,10 @@ written list of what this story adds, (c) an explicit **"what you will NOT see"*
 not optional — 5.4's artifact drew geometry the renderer was never tasked to produce, and 6.1's
 artifact under-stated what would read at the boot vista.
 
-**Closing half (AC14):** done only when Wolf has viewed the built result live on the vehicle and
-signed off. A capture serves the comparison; it never replaces the live viewing (AD-17).
+**Closing half (AC17):** done only when Wolf has viewed the built result live on the vehicle and
+signed off. A capture serves the comparison; it never replaces the live viewing (AD-17). *(This
+line read "AC14" until the 2026-08-19 review: AC14 is the 5.4 capture range checks, a separate open
+obligation, and filing both under one number hid one of them.)*
 
 ## The live vehicle — unchanged, do not re-derive
 
@@ -203,13 +205,14 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
   - [x] Unit-test the accumulator against a hand-built mirror sequence — a still world fails, a
         moving one passes.
 
-- [ ] **Task 6 — The live vehicle session** (AC: 9, 13, 14, 15)
-  - [ ] Cross-compile and launch per Verification; capture, paste the printed lantern line, motion
+- [x] **Task 6 — The live vehicle session** (AC: 9, 13, 14, 15)
+  - [x] Cross-compile and launch per Verification; capture, paste the printed lantern line, motion
         line and range-check line into the Dev Agent Record.
-  - [ ] Read the F3 overlay at working zoom and at full vista with all five lanterns moving; record
+  - [x] Read the F3 overlay at working zoom and at full vista with all five lanterns moving; record
         both labelled `gingerspice / native Windows / NVIDIA`.
-  - [ ] Confirm by eye and state in the record: a warm pool travels with each dwarf and lights the
-        terrain it passes; the camp does not read blown out against the 5.4 frame.
+  - [x] Confirm by eye and state in the record: a warm pool travels with each dwarf and lights the
+        terrain it passes; the camp does not read blown out against the 5.4 frame. **Half of this
+        one came back a finding — see the Dev Agent Record.**
 
 - [x] **Task 7 — Tech-art guidelines** (AC: 10 supporting)
   - [x] Add one short section to `docs/tech-art-guidelines.md`: a moving light is the same table
@@ -222,9 +225,213 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         has fired twice).
   - [x] `scripts/gate.sh` green; confirm `crates/protocol` is untouched.
 
-- [ ] **Task 9 — Wolf's closing sign-off** (AC: 17)
-  - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
-        this box.**
+- [x] **Task 9 — Wolf's closing sign-off** (AC: 17)
+  - [x] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
+        this box.** Signed 2026-08-20: *"i think we are done with these stories"* — given with the
+        campfire finding below open and knowingly carried.
+
+### Review Findings — code review 2026-08-19 (4 layers, all live, fresh context)
+
+Four layers, **none a coverage hole**: every layer verified `cargo 1.97.1 (c980f4866 2026-06-30)` and
+executed code rather than reading it. Diff range `538e1f8..9f4c806` (the frontmatter
+`baseline_commit`), read at HEAD `ec308bd` with 7.1 stacked on top — layers took 6.2-era source via
+`git show 9f4c806:<path>` and confirmed each finding sits inside the range. Review ran in its own
+session; no dev context inherited.
+
+**R1 territory mapping — the open item 6.1's review raised is now answered.** 6.1's review recorded
+"R1 has no mapping for the M2 crates and needs one at the Epic 5/6 retro". Ruled by Wolf at this
+review: `crates/gui` and `crates/client-core` belong to the **Edge Case Hunter**, as client shells of
+the same class as `tui`. Without that ruling `gui` — 244 of this story's 369 changed code lines —
+would have belonged to no hunter at all. Both Opus auditors kept whole-diff scope.
+
+**Convergence, the evidence R1 rests on: 5 of 15 deduped findings were raised independently by two
+layers** — the empty-first-region latch (auditor + feature), the untested `accumulate_motion`
+(auditor + feature), the dark-lantern blind spot (auditor + feature), AC4/AC5's unfalsifiable
+assertions (auditor + feature), and `moved()`'s weak oracle (edge + feature). That is **1-in-3
+against Epic 3's 1-in-8**. Every convergence involves the Feature Auditor; the Blind Hunter's
+territory (`sim-core`, 83 lines) yielded one LOW. **No finding sat in a hunter's excluded territory,
+so R1's revert rule is not triggered.**
+
+**The theme, stated plainly: the wire half is proven and the evidence apparatus is not.** Both bridge
+arms were verified by reading bytes off a live daemon — 10 entities, dwarves 0–4 all `lantern`, three
+consecutive deltas, ids unique, no duplication. What has never run even once is the instrument built
+to prove the *rendered* half: `accumulate_motion` has exactly one production caller, zero test
+callers, and no devpod can execute it (`Failed to build event loop: neither WAYLAND_DISPLAY nor
+WAYLAND_SOCKET nor DISPLAY is set`). `scripts/gate.sh` was run by the Acceptance Auditor and is
+**green**.
+
+**AC14's band was NOT widened** — `WARM_PIXEL_FLOOR = 3_000`, `GROUND_LUMINANCE_FLOOR = 70`,
+`GROUND_LUMINANCE_CEILING = 180` are byte-identical to their pre-6.2 values, verified by
+`git diff 538e1f8..9f4c806 -- crates/gui/src/capture.rs | grep 'FLOOR\|CEILING'` printing nothing.
+The one thing the review was told to assume had been quietly done, was not done. It was, however,
+never re-measured with lanterns lit.
+
+- [x] [Review][Decision — RULED BY WOLF 2026-08-19: APPROVED, AC1 CLOSED] **AC1 — the sign-off artifact still says AC1 is unmet** — `6-2-signoff/`
+      holds one file, `what-you-will-see.md`, whose own header reads *"Status: WRITTEN HALVES
+      DRAFTED 2026-08-18, AWAITING WOLF … Until Wolf approves this file as a whole, AC1 is unmet, no
+      implementation commit may land."* It was never updated after Task 0 opened the gate on the
+      written-only fallback, so the artifact of record contradicts the story's MET claim. Part (a),
+      the before-capture, is absent (honestly recorded as skipped — no devpod can render one).
+      **Wolf's call:** does "Well let's Start dev then" stand as approval of the written-only
+      artifact, closing AC1, or does AC1 stay open? Only he can rule it, and the artifact's header
+      needs correcting either way.
+      **RULING (Wolf, 2026-08-19): APPROVED.** "Well let's Start dev then" stands as approval of
+      the written-only artifact; **AC1 is MET**. Carried to the patch list: update the artifact
+      header to record the approval and its date, and note part (a) as **waived** because no
+      devpod can render a before-capture.
+- [x] [Review][Decision — RULED BY WOLF 2026-08-19: AC14 STAYS OPEN, STORY RETURNS TO in-progress] **AC14 — the story's own named real look risk is UNRULED and unmeasured** —
+      the band is intact, but **no capture has ever been taken with lanterns lit**: Task 6 is `[ ]`,
+      `6-2-signoff/` holds no PNG, and the capture cannot run in any devpod. Five lights were added
+      inside a camp whose approved frame measured ground-median **123** against a ceiling of **180**,
+      and line 6 of the "what you will NOT see" list records the ceiling as explicitly UNRULED.
+      **Wolf's call:** does 6.2 leave review with AC14 open pending a gingerspice session, or does
+      the live capture block the story? This is the single largest open item and no automated
+      evidence exists in either direction.
+      **RULING (Wolf, 2026-08-19): the vehicle session is owed.** 6.2 returns to `in-progress`
+      with **AC13, AC14, AC17 and the rendered halves of AC9 and AC15 OPEN** pending gingerspice.
+      The band being intact is not evidence that five new lights respect it. Patches land first,
+      so the live session runs against an instrument that can actually fail.
+
+- [x] [Review][Patch] **HIGH — an empty first observation latches an empty region and makes AC15's
+      `moved()` assertion permanently, silently true** [`crates/gui/src/capture.rs:126`] —
+      `observe()` early-returns only when `first_region.is_some()`, so a first call whose computed
+      region is empty falls through and `first_region.get_or_insert_with(|| region.clone())` latches
+      `Some({})`. From then on `moved()` — `first != last_region` — holds regardless of whether any
+      dwarf ever moves, and `lit_terrain_tiles > 0` and `!last_region.is_empty()` are both satisfied
+      by later frames. The entire AC15 movement assertion goes vacuous. The dev's own self-review
+      found and fixed the **mirror image** of this — the empty *last* region, guarded at
+      `assert_valid` — and did not add the symmetric guard, which reads as oversight rather than
+      choice. Orchestrator correction to the layers' reachability reasoning: the mirror is **not**
+      empty at startup (`run()` blocks on `read_snapshot` and builds the `Mirror` before
+      `App::new()`, `ingest.rs:71-95`), so the trigger is not "no entities yet" but **any first frame
+      whose `terrain` query is not yet populated** — the lit region is computed against that query,
+      so lanterns can be present while every `lit_region` comes back empty. Reachability is
+      **UNPROVEN because the code has never executed anywhere**, which is itself the point. Rated
+      HIGH regardless: this is the broken-instrument class that made 2.2's live evidence an artefact,
+      against an AC whose whole text is "exit 0 is not a result". Fix is unambiguous — only latch a
+      non-empty first region.
+- [x] [Review][Patch] **HIGH — `accumulate_motion`, the production code that feeds the instrument, has
+      zero test callers and has never executed once** [`crates/gui/src/capture.rs:265-330`,
+      `crates/gui/src/ingest.rs:137`] — `rg -n accumulate_motion crates/` returns three hits: the
+      definition, the import, and the single registration inside `if let Some(capture) = args.capture`
+      in `run()`, which panics without a display. The ~35 lines that actually *derive* the lit region
+      on the live path — the `EntityKind::Dwarf && light == Some(Lantern)` filter, the `light.range`
+      read, the `distance <= range` terrain sweep, and the `needs_observation` gate — are exercised by
+      nothing. **Deleting the whole `if capture.lantern.needs_observation(...) { ... }` block leaves
+      the entire suite green.** AC16 asks for a test "driving a hand-built sequence of **mirror
+      states**"; the shipped test drives hand-built `BTreeSet` region literals, so the mirror →
+      transforms → region derivation is never touched, and the mutation table has three mutations on
+      `LanternStats` and **zero** on the extraction block. This is the same defect class as 6.1's
+      inert `projection_systems` and it is what leaves the finding above unknowable. Fix: a headless
+      test that drives `accumulate_motion` through mirror states + transforms, plus a matching
+      mutation.
+- [x] [Review][Patch] **MED — nothing in the automated suite can tell a lit lantern from a dark one**
+      [`crates/gui/tests/headless.rs:354-356`, `crates/gui/src/capture.rs:294-300`] — the intensity
+      assertion is `(0.95 * expected.intensity ..= 1.05 * expected.intensity).contains(&light.intensity)`
+      where `expected = light_properties(Lantern)`, i.e. the table is checked against itself; with the
+      row zeroed the band becomes `0.0..=0.0` and `0.0` sits inside it. Its comment calls this an
+      "independently named ±5% table band", which is false — nothing about it is independent. The
+      assertion is legitimate for **AC10** (the value came from the table, not a draw site) and
+      useless for **AC9** (the pool is visible). Meanwhile the instrument reads `light.range` and
+      **never `intensity` or `color`**, so `range: 0.0` would be caught and `intensity: 0.0` would
+      not; and `WARM_PIXEL_FLOOR = 3_000` was baselined at 17,648 warm pixels **from torches and the
+      campfire alone**, before lanterns existed, so a dead lantern clears it with 5x headroom. The
+      real backstop is AC17 — Wolf's eyes — which costs a scarce vehicle session to discover a defect
+      a literal-valued assertion catches for free. This is the self-referential-test antipattern, hit
+      at 1.1, 1.2, 1.3 and 6.1's flicker band, now a fifth time. Fix: pin a literal minimum intensity.
+- [x] [Review][Patch] **MED — the lantern line never samples a mid-blend frame, so it cannot tell a
+      sliding pool from a snapping one** [`crates/gui/src/capture.rs:311`] — `needs_observation`
+      gates on the **wire** position map, so `observe()` runs only on frames where a delivered
+      position just changed, i.e. exactly the frames where `TickClock::factor()` has reset to ~0.
+      Every mid-blend frame is skipped. The assertion therefore proves "the union of lit terrain
+      differs between two *wire* positions", which would pass unchanged with `blend_entities` deleted
+      and the light snapping tile to tile. The story's own trap note — "the instrument must measure
+      the pool MOVING, not the light existing" — is half-satisfied: it catches the light existing.
+      Mitigated globally by 6.1's `mid_blend_frames > 0`, and AC11 has headless evidence, so this is
+      a hole in *this* instrument rather than an undetectable regression.
+- [x] [Review][Patch] **MED — `recorded_camp_snapshot_projects_exactly_five_warm_point_lights` is now
+      a stale oracle, which is exactly what AC7 forbids, one test over**
+      [`crates/gui/tests/headless.rs:831`] — the dev correctly renamed the `simd` test per AC7, then
+      left this one, whose name claims to be *the recorded camp*, hand-building its dwarf with
+      `light: None` (`:852`) and asserting the camp projects **exactly five** point lights. The live
+      daemon emits **ten** in that camp. The test is not wrong as a wire-driven-not-kind-driven check,
+      but its name asserts a state of the camp this story just changed — AC7's rule verbatim — and the
+      suite consequently holds no headless picture of the camp as it now ships. Fix: rename to what it
+      actually checks, and add a camp-as-shipped case.
+- [x] [Review][Patch] **MED — `moved()` is a weak oracle in both directions and will produce a false
+      failure on the vehicle** [`crates/gui/src/capture.rs:158-162`] — it compares only the **first**
+      and **last** observation, retaining nothing in between, and it unions all five dwarves' lit
+      tiles into a single aggregate set rather than tracking per-dwarf regions. Two consequences: a
+      dwarf that wanders away and returns, or five dwarves whose aggregate union coincides at the two
+      sampled instants, panics on a perfectly working feature; and a single stuck dwarf is masked by
+      its moving neighbours. Improbable, not impossible — and a false failure burns a gingerspice
+      session and reads as a real defect, which is this project's documented 3.2/3.3 false-failure
+      class. Fix: track per-dwarf regions, or assert movement against any observation rather than the
+      last.
+- [x] [Review][Patch] **MED — 6.2's lantern assertion is not slice-aware and will panic on a correct
+      run once 7.1 lands** [`crates/gui/src/capture.rs:367`] — 7.1's `reconcile` drops wire entities
+      above the cut (`project.rs:326`, `.filter(|entity| entity.pos[2] <= slice.level())`) and dwarves
+      stand at z 9, so at HEAD `gui <port> --capture <p> --frames N --z 5` observes zero lantern
+      dwarves and `capture.lantern.assert_valid()` — called unconditionally — panics with *"capture
+      observed no terrain lit by dwarf lanterns"*, reporting a defect when the operator merely asked
+      for a lower slice. 7.1's own `DrawStats::assert_valid` **is** level-aware; 6.2's is not.
+      Whoever runs Task 6 with `--z` hits this, and 7.1's story notes explicitly instruct pinning
+      `--z 10`. Found by the Feature Auditor as a cross-story interaction. Fix: skip or gate the
+      lantern asserts when no lantern entity is projected at the requested cut.
+- [x] [Review][Patch] **LOW (silent-failure exception) — `lit terrain tiles at dwarf positions=N` is a
+      running sum, not a tile count** [`crates/gui/src/capture.rs:148`] — `self.lit_terrain_tiles +=
+      region.len()` accumulates every observation's region size, so on the vehicle (5 dwarves, range
+      16, 100+ observations) the line prints a six- or seven-figure number that reads as a tile count,
+      cannot be compared against any run or threshold, and is not what AC15 asks for. Measured by the
+      Feature Auditor's probe: 10 observations of a 5-tile pool printed `50` where distinct tiles ever
+      lit was `14`. Patched despite LOW under the frostvein silent-failure exception — a wrong number
+      on an observability instrument that no test and no human will catch — and it sits in the same
+      struct as the two HIGHs.
+- [x] [Review][Patch] **LOW — a doc comment this story falsified still claims `dwarves()` is a
+      three-tuple** [`crates/sim-core/src/lib.rs:1452-1454`] — the comment on `carrying()` reads *"A
+      sibling reader to claims() and items(), which is why dwarves() keeps its three-tuple shape and
+      the clients need no new arm."* 6.2 widened `dwarves()` to a four-tuple (`:1494`). The comment
+      pre-dates the story and 6.2 never touched it, but 6.2's own change is what makes it false. Same
+      class as AC7's "do not leave a test whose name asserts a state of the world this story just
+      changed", one level down at the comment. One line.
+- [x] [Review][Patch] **LOW (record) — the gate section points at the wrong AC number** [story file,
+      "The sign-off gate"] — *"Closing half (AC14): done only when Wolf has viewed the built result
+      live"*. The closing sign-off is **AC17**; AC14 is the 5.4 capture range checks. Two different
+      open obligations filed under one number, in the section every agent reads first.
+- [x] [Review][Patch] **LOW (record) — the 9th mutation has no pasted RED row** [`mutations/6-2-lanterns-in-the-dark.sh`]
+      — the table declares 9 mutations; the RED table in the Dev Agent Record has 8 rows. The 9th,
+      `reconciliation lights a dwarf the wire left unlit` (added by the orchestrator after it found
+      the spawn-arm-only gap), is described in prose as "now KILLS" with no result line. AC18
+      requires the RED table pasted.
+
+- [x] [Review][Defer] **Two of AC11's three assertions are tautological** [`crates/gui/tests/headless.rs`,
+      `a_dwarf_lantern_stays_on_its_blended_projection_transform`] — `assert_eq!(translation,
+      projected_translation(&mut app, id))` compares a value to itself, since the `PointLight` is a
+      component on the same entity as the `WorldProjected`/`Transform` it is compared against, so
+      there is only one `Transform`; `assert!(has_light, …)` is likewise structural. AC11 as written
+      ("the light's translation equals the dwarf's rendered translation") is unfalsifiable given the
+      chosen architecture — an AC-text defect, not an implementation one. **Deferred because the third
+      assertion is genuinely falsifiable** (translation strictly between the two endpoint x's, which
+      dies if the blend is deleted), so AC11 retains real coverage. `[auditor/LOW]`
+- [x] [Review][Defer] **AC4's and AC5's lantern assertions cannot fail, and AC5's scenario test does
+      not exist** [`crates/sim-core/src/lib.rs` `DWARF_LIGHT`, `crates/sim-core/tests/scenario.rs`] —
+      `dwarves()` appends a compile-time constant to every tuple, so the round-trip comparison can
+      never disagree on the light and the determinism comparison has no random input to vary.
+      `scenario.rs` gained **no new test function** — only mechanical `(_, _, _, _)` destructuring
+      updates — while AC5 asks for a scenario test by name. The oracles that *do* carry weight are the
+      literal `*light == LightKind::Lantern` check and the diff proving `SavedDwarf` gained no field
+      (8 fields, confirmed). **Deferred as an AC-text defect**: this is the sanctioned consequence of
+      the story's own "simplest encoding" decision, and satisfied-by-construction is the honest,
+      YAGNI-correct outcome. The ACs should be re-worded rather than the code changed.
+      `[auditor+feature/LOW]`
+- [x] [Review][Defer] **The mutation table has no coverage of AC11's blend, `DWARF_LIGHT`, or the save
+      round-trip** [`mutations/6-2-lanterns-in-the-dark.sh`] — the 9 mutations cover both bridge arms,
+      both guards, both reconcile light arms and three `LanternStats` assertions. Nothing sabotages
+      the blend that AC11's "the pool slides" depends on, nor the lantern constant, nor the save path.
+      AC11 is the story's headline interaction and its one falsifiable assertion is unsabotaged.
+      **Deferred as the residue** once the extraction-block mutation from the second HIGH is added.
+      `[auditor/LOW]`
+
 
 ## Dev Notes
 
@@ -556,6 +763,57 @@ sign-off), and with them **AC9's look, AC13's NFR6 reading and AC14's re-measure
 including the ground-luminance ceiling, which is this story's real look risk and remains UNRULED**
 because the artifact was approved on the written-only fallback.
 
+### Code review and patch round (2026-08-19, orchestrator = Claude Opus, fresh context)
+
+Four layers, none a coverage hole; findings and their triage are in **Review Findings** above. This
+records what the patch round actually did and what it cost to be sure of it.
+
+**Applied: 12 patches** — 2 HIGH, 5 MED, 5 LOW (three of them silent-failure or record traps, two of
+them story-file record fixes). The three LOW AC-text defects were deferred to `deferred-work.md`
+rather than patched, per the review-cost rule; they are AC wording to fix at re-authoring, not code.
+
+**One verification pass, not one per patch:** `scripts/gate.sh` **GREEN** (fmt, clippy `-D warnings`,
+full workspace tests, all three no-`sim-core`-edge probes, metrics ledger), 52 `gui` unit tests and 30
+headless tests green.
+
+**THE SABOTAGE TABLE CAUGHT THE REVIEW'S OWN PATCH, TWICE.** First run: **10 KILLED / 2 SURVIVED / 1
+APPLY-FAILED**. This is the entry worth carrying forward, because both survivors were *new tests
+written by this review* that passed for the wrong reason:
+
+- `lantern capture latches an empty first region` SURVIVED. The new test held its dwarf at ONE
+  position across all three observations, so `needs_observation`'s early return swallowed
+  observations two and three and the test passed on an unrelated assert. The dwarf has to keep
+  changing position while its lit region stays constant for the sabotage to bite. Fixed.
+- `lantern capture accepts an empty final region` SURVIVED. Making `moved()` per-dwarf and sticky
+  made it catch the vanished case on its own, which left `!last_region.is_empty()` pinned by
+  nothing. Fixed with a dedicated test where a dwarf moves and *then* the lanterns go dark.
+- `lantern capture accepts an unmoved region` APPLY-FAILED — an ORIGINAL mutation that still pointed
+  at the pre-patch `moved()` body. A patch that rewrites a mutated line silently breaks its own
+  sabotage; re-pointed.
+
+Second run: **13/13 KILLED.** Mutations went 9 → 13.
+
+**A finding proved itself during the patch round.** The new headless test would not go green until it
+explicitly advanced `TickClock` before the observing frame — because `accumulate_motion` samples on a
+delivered POSITION change, which lands at factor ~0 with the light still rendered at the old tile.
+That is direct empirical confirmation of the mid-blend sampling finding, stronger than the static
+trace that raised it. The narrow fix was taken deliberately: sampling every frame would run the
+terrain sweep across the whole draw set each frame and corrupt the very fps reading AC13 asks for, so
+the gate stays and a `// NOTE:` now records what the lantern line does and does not evidence. **This
+is the one patch where the limitation was documented rather than removed** — flagged rather than
+buried.
+
+**Not covered by any test, and said plainly:** the slice-awareness fix (`capture.rs`, skipping the
+lantern asserts when a requested cut hides every dwarf) has **no test**, because `capture_after_frames`
+needs a window and no devpod has one. It is a one-branch guard verified by reading only.
+
+**What this round did NOT prove.** Nothing here rendered a pixel. The windowed client cannot start in
+any devpod (`Failed to build event loop: neither WAYLAND_DISPLAY nor WAYLAND_SOCKET nor DISPLAY is
+set`), so **AC13, AC14, AC17 and the rendered halves of AC9 and AC15 remain OPEN** pending a
+gingerspice session. The instrument is now considerably harder to fool than it was, which is the point
+of doing this before the vehicle session rather than after — but a trustworthy instrument that has
+still never run is not evidence that the feature works.
+
 ### File List
 
 - crates/sim-core/src/lib.rs
@@ -569,6 +827,82 @@ because the artifact was approved on the written-only fallback.
 - _bmad-output/implementation-artifacts/mutations/6-2-lanterns-in-the-dark.sh
 - _bmad-output/implementation-artifacts/6-2-lanterns-in-the-dark.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
+
+
+### Task 6 + Task 9 — the live vehicle session (2026-08-20, gingerspice / native Windows / NVIDIA)
+
+6.2 rode the same binary and the same `simd` as 6.1 and 7.1, per `vehicle-session-runbook.md`, so
+the lantern instrument printed on every capture of the sitting rather than only its own.
+
+**AC15 — the lantern line, at full depth and at a cut:**
+
+```
+lantern: dwarf positions observed={...58 positions...} lit terrain tiles at dwarf positions=3171 moved=true
+lantern: dwarf positions observed={...26 positions...} lit terrain tiles at dwarf positions=1718 moved=true
+```
+
+`moved=true` on every run — the assertion this instrument exists for. The lit-tile count falling
+3171 -> 1718 between full depth and the z 9 cut is the slice removing terrain from under the pools,
+not a lantern regression: `lantern_assertions_apply` asks the mirror whether a dwarf sits at or below
+the cut, and at z 9 all five do, so the assertions ran rather than being skipped.
+
+**AC13:** sustained **>140 fps** at working zoom and full vista, `gingerspice / native Windows /
+NVIDIA`, with five moving lanterns on the stacked 6.1 + 6.2 + 7.1 binary. NFR6's working-zoom bar is
+60. Five moving point lights on top of five static emitters cost nothing measurable.
+
+**AC9 / AC14 — by eye.** Wolf: *"I can see light moving with dwarves"* — the pool travels with the
+dwarf and lights the terrain it crosses, which is the half of AC9 that separates a real moving light
+from a glow stuck to a cube. Confirmed.
+
+### The finding this story's own runbook predicted, and what was done about it
+
+The runbook named the risk in advance: *"the range check only guards the ground median inside
+[70,180] — it cannot tell you whether the camp LOOKS over-lit. That judgement is yours and there is
+no instrument for it."* It came back exactly there. Wolf, at full depth: **"Camp is too blown out"**,
+and after the first drop, **"campfire light is maybe still too blown"**.
+
+The ground median measured **123 on the same frame — the approved artifact's own figure, to the
+digit.** The field was never wrong; a local highlight was. No range check can see that, and this is
+the second time in this epic that the only instrument capable of catching a defect was Wolf's eye.
+
+**Applied:** lantern **11,000,000 / range 16 -> 5,000,000 / range 14**. The white-clip radius scales
+as sqrt(intensity), so the blown pool shrinks by about a third.
+
+**NOT applied, and carried open: the campfire.** After the lantern drop Wolf still reads the campfire
+as blown, and the diagnosis points away from this story:
+
+- `flicker_lights` multiplies the base intensity by a band of `1 +/- amplitude`.
+- Commit **04e6de5** took the campfire amplitude **0.11 -> 0.40**, so its peak went 35.5M -> **44.8M**
+  — 40% above the value story 5.4 sized against the artifact Wolf approved, on a light whose own
+  comment records that 72M "blew a ~9-tile pool to flat white".
+
+So the blow-out is most likely **6.1's amplitude raise reaching past 5.4's approved ceiling**, not
+6.2's lanterns and not 5.4's calibration. Two fixes were put to Wolf — (a) base 32M -> 23M so the
+*peak* lands on the approved brightness while the fire keeps breathing, or (b) amplitude 0.40 -> 0.25
+so the still frame matches and the breathing calms — and **neither was chosen before sign-off**.
+Recorded here as open rather than closed: **the campfire reads over-lit at full depth as shipped.**
+
+### The cost of tuning a look-constant here
+
+Dropping one intensity required three hand-written literals to move with it: the palette pin in
+`appearance::tests`, this story's `the lantern goes dark but stays present` sabotage row, and a
+doc comment in `headless.rs` naming the shipped figure. The palette pin went red immediately and
+caught the change, which is the pin working. The sabotage row would have gone **silently dead** —
+the same failure 6.1's `torch flicker band widens` row suffered from 04e6de5 until 2026-08-20.
+
+**A sabotage row naming a tuned literal dies the moment the knob moves, and dies quietly.** Any
+future look change must retarget its rows in the same commit.
+
+### Sabotage — 13 of 13 KILLED
+
+`the lantern goes dark but stays present` retargeted to the new intensity and re-verified:
+
+```
+=== the lantern goes dark but stays present ===
+thread 'a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table' panicked at crates/gui/tests/headless.rs:466:5
+```
+
+`scripts/gate.sh` GREEN cold.
 
 ## Change Log
 
