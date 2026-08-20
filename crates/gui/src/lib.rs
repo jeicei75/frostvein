@@ -2,6 +2,7 @@
 
 pub mod appearance;
 pub mod atmosphere;
+pub mod blend;
 pub mod camera;
 pub mod capture;
 pub mod ingest;

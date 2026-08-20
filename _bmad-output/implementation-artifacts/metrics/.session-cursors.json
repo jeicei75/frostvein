@@ -45,6 +45,24 @@
     "output": 196956,
     "turns": 86
   },
+  "1b3fdcbe-fe14-4d32-a873-1884cd5bf5d9.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 846727,
+        "cache_read": 20672426,
+        "input": 258,
+        "output": 165490
+      }
+    },
+    "cache_creation": 846727,
+    "cache_read": 20672426,
+    "input": 258,
+    "last_ts": "2026-08-16T12:11:47.762Z",
+    "output": 165490,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 129
+  },
   "1bbd4569-2781-485a-81a7-ec5a969d58c9.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -147,6 +165,24 @@
     "schema": 2,
     "turns": 347
   },
+  "230f62b5-1e99-49b3-84d6-e59fa45424bc.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 243960,
+        "cache_read": 5565342,
+        "input": 124,
+        "output": 59578
+      }
+    },
+    "cache_creation": 243960,
+    "cache_read": 5565342,
+    "input": 124,
+    "last_ts": "2026-08-16T12:50:33.158Z",
+    "output": 59578,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 62
+  },
   "26b1d276-d745-4f22-8012-1fece8dc72c1.jsonl": {
     "by_model": {
       "claude-fable-5": {
@@ -229,6 +265,30 @@
     "input": 120,
     "output": 75311,
     "turns": 64
+  },
+  "4c1ab160-bb71-41d8-bcc7-bbce20e39195.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 3749976,
+        "cache_read": 96167720,
+        "input": 990,
+        "output": 631844
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 495134,
+        "cache_read": 5397304,
+        "input": 208,
+        "output": 71536
+      }
+    },
+    "cache_creation": 4245110,
+    "cache_read": 101565024,
+    "input": 1198,
+    "last_ts": "2026-08-18T13:09:22.083Z",
+    "output": 703380,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 599
   },
   "4d12c2fa-c5f4-40af-af73-1132ea7b814a.jsonl": {
     "cache_creation": 643943,
@@ -774,5 +834,41 @@
     "quota_last": 37.0,
     "schema": 2,
     "turns": 216
+  },
+  "rollout-2026-08-17T09-21-30-01a00f06-ac14-7d21-8992-ba08c966669f.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 7525632,
+        "input": 245292,
+        "output": 29877
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 7525632,
+    "input": 245292,
+    "last_ts": "2026-08-17T09:36:14.296Z",
+    "output": 29877,
+    "quota_last": 40.0,
+    "schema": 2,
+    "turns": 83
+  },
+  "rollout-2026-08-17T09-47-25-01a00f1e-650f-7510-8d02-289c4f9fee78.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 7114752,
+        "input": 146412,
+        "output": 19860
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 7114752,
+    "input": 146412,
+    "last_ts": "2026-08-17T10:02:54.538Z",
+    "output": 19860,
+    "quota_last": 43.0,
+    "schema": 2,
+    "turns": 80
   }
 }

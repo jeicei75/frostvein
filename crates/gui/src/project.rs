@@ -10,9 +10,11 @@ use protocol::{Dims, EntityKind, Material, Tile};
 
 use crate::{
     appearance::{
-        RIM_LEVELS, entity_appearance, foliage_snow_color, light_properties, material_color,
-        rim_dissolved_color, snow_cap_color,
+        RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, entity_appearance,
+        flicker_scale, foliage_snow_color, light_properties, material_color, rim_dissolved_color,
+        snow_cap_color,
     },
+    blend::{TickClock, blended_translation},
     transform::world_to_render,
 };
 
@@ -52,6 +54,19 @@ pub type TerrainQuery<'w, 's> = Query<
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedItem(pub u32);
+
+/// The light kind delivered for a projected emitter. Reconciliation only changes this when the
+/// wire changes kind; presentation owns its animated intensity afterwards.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedLight(pub protocol::LightKind);
+
+pub const CHIPS_PER_TILE: usize = 4;
+
+/// A presentation-only chip from a tile removal. It deliberately has no simulation id.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DigChip(pub [i32; 3]);
+
+pub type DigChipQuery<'w, 's> = Query<'w, 's, (BevyEntity, &'static DigChip)>;
 
 /// The terrain surfaces that get their own material, including the two presentation-only ones.
 #[derive(Debug, Clone, Copy)]
@@ -112,6 +127,7 @@ pub struct ProjectionAssets {
     dwarf: Handle<StandardMaterial>,
     torch: Handle<StandardMaterial>,
     campfire: Handle<StandardMaterial>,
+    debris: Handle<StandardMaterial>,
 }
 
 pub fn setup_projection_assets(
@@ -136,6 +152,7 @@ pub fn setup_projection_assets(
         dwarf: materials.add(entity_standard_material(EntityKind::Dwarf)),
         torch: materials.add(entity_standard_material(EntityKind::Torch)),
         campfire: materials.add(entity_standard_material(EntityKind::Campfire)),
+        debris: materials.add(terrain_standard_material(debris_color())),
     });
 }
 
@@ -193,16 +210,23 @@ pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
 }
 
 /// Reconciles the small dynamic set by simulation `Id`; terrain is rebuilt after a snapshot.
+// The three query parameters are kept explicit: they are distinct ECS partitions, and bundling
+// them solely to satisfy this lint would obscure the `ClientLocal` / `WorldProjected` boundary.
+#[allow(clippy::too_many_arguments)]
 pub fn reconcile(
     commands: &mut Commands,
     mirror: &Mirror,
     rebuild_terrain: bool,
     dirty_tiles: &[[i32; 3]],
-    projected: &Query<(BevyEntity, &WorldProjected), Without<TerrainTile>>,
+    projected: &Query<(BevyEntity, &WorldProjected, Option<&ProjectedLight>), Without<TerrainTile>>,
     terrain: &TerrainQuery,
+    chips: &DigChipQuery,
     assets: Option<&ProjectionAssets>,
 ) {
     if rebuild_terrain {
+        for (entity, _) in chips.iter() {
+            commands.entity(entity).despawn();
+        }
         for (entity, _, _) in terrain.iter() {
             commands.entity(entity).despawn();
         }
@@ -268,13 +292,39 @@ pub fn reconcile(
         }
     }
 
+    if !rebuild_terrain {
+        for position in dirty_tiles {
+            for (entity, chip) in chips.iter() {
+                if chip.0 == *position {
+                    commands.entity(entity).despawn();
+                }
+            }
+            if matches!(mirror.tile(*position), Some(Tile::Empty)) {
+                for offset in chip_offsets() {
+                    let mut entity = commands.spawn((
+                        DigChip(*position),
+                        ClientLocal,
+                        Transform::from_translation(world_to_render(*position) + offset)
+                            .with_scale(Vec3::splat(0.14)),
+                    ));
+                    if let Some(assets) = assets {
+                        entity.insert((
+                            Mesh3d(assets.cube.clone()),
+                            MeshMaterial3d(assets.debris.clone()),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     let mut wanted: std::collections::BTreeMap<_, _> = mirror
         .entities()
         .map(|entity| (entity.id, (entity.pos, Some(*entity))))
         .collect();
     let item_ids: std::collections::BTreeSet<_> = mirror.items().map(|item| item.id).collect();
     wanted.extend(mirror.items().map(|item| (item.id, (item.pos, None))));
-    for (bevy_entity, marker) in projected.iter() {
+    for (bevy_entity, marker, _) in projected.iter() {
         if !terrain.get(bevy_entity).is_ok() && !wanted.contains_key(&marker.0) {
             commands.entity(bevy_entity).despawn();
         }
@@ -283,17 +333,21 @@ pub fn reconcile(
         // NOTE: terrain and simulation entities retain the same marker component and
         // numeric range. Keep this query filtered to prevent a terrain id colliding
         // with a simulation id until a story needs separate marker types.
-        if let Some((bevy_entity, _)) = projected.iter().find(|(_, marker)| marker.0 == id) {
-            let mut transform = Transform::from_translation(world_to_render(position));
-            if let Some(mirror_entity) = mirror_entity {
-                transform.scale =
-                    bevy::prelude::Vec3::splat(entity_appearance(mirror_entity.kind).scale);
-            }
-            commands.entity(bevy_entity).insert(transform);
+        if let Some((bevy_entity, _, projected_light)) =
+            projected.iter().find(|(_, marker, _)| marker.0 == id)
+        {
+            // Translation belongs solely to `blend_entities` after spawn. Re-inserting it here
+            // makes an otherwise-correct blend present-but-inert on the next reconcile.
             if let Some(light) = mirror_entity.and_then(|entity| entity.light) {
-                commands.entity(bevy_entity).insert(point_light(light));
+                if projected_light.is_none_or(|existing| existing.0 != light) {
+                    commands
+                        .entity(bevy_entity)
+                        .insert((point_light(light), ProjectedLight(light)));
+                }
             } else {
-                commands.entity(bevy_entity).remove::<PointLight>();
+                commands
+                    .entity(bevy_entity)
+                    .remove::<(PointLight, ProjectedLight)>();
             }
         } else {
             let mut entity = commands.spawn((
@@ -313,15 +367,77 @@ pub fn reconcile(
                             .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
                     ));
                     if let Some(light) = mirror_entity.light {
-                        entity.insert(point_light(light));
+                        entity.insert((point_light(light), ProjectedLight(light)));
                     }
                 } else if item_ids.contains(&id) {
                     entity.insert((
                         Mesh3d(assets.cube.clone()),
                         MeshMaterial3d(assets.slot(TerrainSlot::Stone, 0)),
+                        Transform::from_translation(item_translation(position))
+                            .with_scale(Vec3::splat(STONE_ITEM_SCALE)),
                     ));
                 }
             }
+        }
+    }
+}
+
+/// Where a stone item is drawn: the tile centre, dropped onto the tile floor. Both the spawn and
+/// `blend_entities` call this so the two cannot drift apart.
+fn item_translation(position: [i32; 3]) -> Vec3 {
+    world_to_render(position) + Vec3::new(0.0, STONE_ITEM_DROP, 0.0)
+}
+
+fn chip_offsets() -> [Vec3; CHIPS_PER_TILE] {
+    [
+        Vec3::new(-0.26, -0.32, -0.16),
+        Vec3::new(0.19, -0.26, -0.24),
+        Vec3::new(-0.12, -0.20, 0.21),
+        Vec3::new(0.27, -0.30, 0.14),
+    ]
+}
+
+/// Keeps point lights alive as presentation state rather than re-inserting table intensity.
+pub fn flicker_lights(
+    seconds: f32,
+    lights: &mut Query<(&WorldProjected, &ProjectedLight, &mut PointLight)>,
+) {
+    for (id, kind, mut light) in lights.iter_mut() {
+        light.intensity = light_properties(kind.0).intensity * flicker_scale(kind.0, id.0, seconds);
+    }
+}
+
+/// Applies presentation interpolation to dynamic wire projections only.
+pub fn blend_entities(
+    mirror: &Mirror,
+    clock: &mut TickClock,
+    elapsed_seconds: f32,
+    projected: &mut Query<(&WorldProjected, &mut Transform), Without<TerrainTile>>,
+) {
+    clock.advance(elapsed_seconds);
+    let entities = mirror
+        .entities()
+        .map(|entity| (entity.id, entity))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let items = mirror
+        .items()
+        .map(|item| (item.id, item.pos))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for (marker, mut transform) in projected.iter_mut() {
+        if let Some(entity) = entities.get(&marker.0) {
+            transform.translation = blended_translation(
+                mirror
+                    .previous_entity(marker.0)
+                    .map(|previous| previous.pos),
+                entity.pos,
+                clock.factor(),
+            );
+        } else if let Some(position) = items.get(&marker.0) {
+            // Items have no previous wire state; snapping is the only wire-true presentation.
+            // Must go through `item_translation` for the same reason the spawn does: this is the
+            // sole writer of translation after spawn, so a bare `world_to_render` here would lift
+            // every item back off the tile floor on the frame after it appeared.
+            transform.translation = item_translation(*position);
         }
     }
 }
@@ -418,11 +534,19 @@ fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> 
 }
 
 /// The cap is presentation-only: wire terrain remains its original material.
+/// NOTE: soil is excluded because soil is never the natural surface here — the world's skin is
+/// snow and ice, and soil only becomes sky-exposed when something DUG the tile above it. Capping
+/// it drew fresh snow (146,158,184) on the trench floor, brighter than the snow it replaced
+/// (136,150,178), so an excavation erased itself the moment it finished. Measured before the
+/// change: 1,016 soil tiles are already exposed at boot and NONE of them carried a cap (they all
+/// have solid rock above), so this alters exactly 0 of the 5,716 caps in the approved boot frame.
 pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
     matches!(
         mirror.tile(position),
         Some(Tile::Solid(material) | Tile::Ramp(material))
-            if material != Material::Ice && material != Material::TreeFoliage
+            if material != Material::Ice
+                && material != Material::TreeFoliage
+                && material != Material::Soil
     ) && !matches!(
         mirror.tile([position[0], position[1], position[2] + 1]),
         Some(Tile::Solid(_) | Tile::Ramp(_))
@@ -483,6 +607,39 @@ mod tests {
     use protocol::{Dims, MessageType, Snapshot, Speed, Tile};
 
     use super::*;
+
+    /// The invariant Wolf's eye caught on the vehicle and no instrument could: a stone item must
+    /// not swallow the debris chips that share its tile. At the scale-1.0 the item branch used to
+    /// inherit, every chip lies inside the item's own volume and AC8's debris is unseeable.
+    ///
+    /// The item's own size is pinned in the headless test, against a hand-written literal read
+    /// back off the spawned entity — asserting `scale == STONE_ITEM_SCALE` here would hold for ANY
+    /// value including the 1.0 that caused the defect. This is the fourth story bitten by that shape.
+    #[test]
+    fn a_stone_item_never_encloses_its_chips() {
+        // Every chip must lie OUTSIDE the item's own volume, on some axis, or it is invisible
+        // wherever an item stands.
+        let half = STONE_ITEM_SCALE / 2.0;
+        for offset in chip_offsets() {
+            let drop = Vec3::new(0.0, STONE_ITEM_DROP, 0.0);
+            let separation = offset - drop;
+            assert!(
+                separation.x.abs() > half || separation.y.abs() > half || separation.z.abs() > half,
+                "chip at {offset:?} sits inside the item cube and can never be seen"
+            );
+        }
+    }
+
+    /// The item must rest on the tile floor, not float at its centre — and the blend, which is the
+    /// sole writer of translation after spawn, must agree with the spawn about where that is.
+    #[test]
+    fn an_item_rests_on_the_tile_floor_at_spawn_and_after_the_blend() {
+        let position = [3, 4, 5];
+        let resting = world_to_render(position).y - 0.3;
+        assert!((item_translation(position).y - resting).abs() < 1e-6);
+        assert_eq!(item_translation(position).x, world_to_render(position).x);
+        assert_eq!(item_translation(position).z, world_to_render(position).z);
+    }
 
     fn mirror(tiles: Vec<Tile>) -> Mirror {
         Mirror::from_snapshot(Snapshot {
@@ -600,7 +757,15 @@ mod tests {
             "foliage stays dark so ground-level skirts cannot read as snow slabs"
         );
         assert!(has_snow_cap(&toy, [4, 0, 0]), "stone can carry snow");
-        assert!(has_snow_cap(&toy, [5, 0, 0]), "soil can carry snow");
+        // CHANGED 2026-08-18 from "soil can carry snow" (5.4's rule) at Wolf's second live
+        // viewing: soil is never the natural surface on this seed, so a sky-exposed soil tile is
+        // excavated ground, and capping it drew snow brighter than the tile that was dug away.
+        // NOTE: stone has the same latent shape, but no named dig site exposes it, so the rule
+        // stays narrow rather than general.
+        assert!(
+            !has_snow_cap(&toy, [5, 0, 0]),
+            "sky-exposed soil is dug ground and must stay bare"
+        );
         assert!(
             !has_snow_cap(&toy, [3, 0, 0]),
             "covered terrain keeps its dark flank"

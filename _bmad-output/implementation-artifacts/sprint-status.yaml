@@ -43,7 +43,27 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-15  # 5.4 dev STARTED (in-progress, delegated to Codex). Earlier same day —
+last_updated: 2026-08-18  # 6.1 CODE REVIEWED + PATCHED → in-progress. Four layers, none a coverage
+                          # hole; the feature was watched running live and AC6 is genuinely closed,
+                          # but three one-line deletions each killed wow beat 2 with the suite GREEN —
+                          # run one's defect class, one level below where AC6 looks. 1 decision + 8
+                          # patches applied, gate green cold, mutations 8 → 14 all killed, 16 LOW
+                          # deferred. Tasks 6 + 9 and ACs 7/12/13/15/16/17 still OPEN — nothing has
+                          # been observed on the vehicle. Prior same day:
+                          # 6.1 HEADLESS HALF DONE → review (two Codex runs; four seam ACs were
+                          # ticked-but-undelivered on run one and falsified by sabotage, closed for
+                          # real on run two; 8/8 mutations, gate green). Task 0 approved earlier the
+                          # same day. Tasks 6 + 9 and ACs 13/16/17 remain owed to the vehicle and to
+                          # Wolf. Beat 2 signs without UX-DR14's carried stone; dig site not
+                          # re-picked; the dig face reads at working zoom (measured: 0.30% of frame).
+                          # Prior same day: 6.1 STORY CREATED (ready-for-dev) and Epic 6 opened. Dig site named and
+                          # verified live on the shipped seed: rect [58,68,9]-[64,69,9] = 8 mineral
+                          # tiles, all sky-exposed and unoccluded at the boot framing, dug in 52 ticks,
+                          # 8 stone items left standing; wander motion baseline 47% of ticks. Task 0
+                          # carries a BLOCKING clarification for Wolf: UX-DR14's "picks something up
+                          # and carries it" is not on the wire (a carried stone keeps its pickup tile),
+                          # so beat 2 is signed without it or a sim story is spun. Prior:
+                          # 5.4 dev STARTED (in-progress, delegated to Codex). Earlier same day —
                           # Task 0 gate OPENED: Wolf approved the sign-off artifact
                           # (5-4-signoff/candidate-artifact-2026-08-15.png) after a four-pass iteration on the
                           # parked 08-14 candidate — draft-2 framing, spruce trees with visible trunks, FULL
@@ -152,19 +172,145 @@ development_status:
   # items for a fresh patch session, 5 defers. Back to in-progress.
   5-4-the-cold-boot: done
   epic-5-retrospective: optional
-  epic-6: backlog
+  epic-6: in-progress
   # WOW BEAT 2 — the beat the PRD calls the magic; a client achieving only beat 1 has
   # FAILED the milestone. Sign-off gate applies. Also cannot be closed by a dev agent.
   # Its dig must be at a surface-visible face designated from a TUI client (readiness
   # fix #4) — z-slicing does not arrive until 7.1.
-  6-1-the-world-moves: backlog
+  # Story file created 2026-08-16. Named dig site [58,68,9]-[64,69,9] (8 mineral tiles, verified
+  # sky-exposed + unoccluded + fully dug live). Task 0 sign-off artifact is the blocking gate and
+  # is a VEHICLE session on the shipped 5.4 binary — the dig and its rubble already work, so the
+  # artifact is the renderer's own before/after pair plus a "what you will NOT see" list.
+  # Dev STARTED 2026-08-16. TASK 0 CLOSED — WOLF APPROVED THE ARTIFACT 2026-08-17, AC1 MET, THE
+  # GATE IS OPEN. Two rulings, both recorded in 6-1-signoff/what-you-will-see.md: (1) wow beat 2 is
+  # signed WITHOUT UX-DR14's carried stone — no sim story, no wire change, clause FORMALLY NOT
+  # DELIVERED IN M2, and it is unobservable here anyway since 6.1 places no stockpile so no haul job
+  # and no carrying ever occurs; (2) the named dig site is NOT re-picked.
+  # THE PAIR PRODUCED A FINDING and it is the gate working at the price of two screenshots. Wolf's
+  # first reaction was "did not see the difference" and he was RIGHT: the dig site is 64x43 px =
+  # 0.30% of a 1280x720 boot frame. Measured — 2,255 pixels differ between the pair and 1,625 (72%)
+  # fall inside the window CameraRig predicted, so the dig is correct AND correctly located, merely
+  # sub-legible at the vista. 6-1-digsite-inset.png (marked frames + 7x crops) makes it legible, and
+  # line 8 was added to "what you will NOT see": THE DIG FACE READS AT WORKING ZOOM, NOT AT THE BOOT
+  # VISTA. Consequence for AC7/AC8/Task 4 — rubble and debris chips are sub-legible at boot framing,
+  # so the opening frame's visible weight rests on dwarf motion and light flicker (camp-scale).
+  # AC15's windowed-comparison design is vindicated before a line of it is written: whole-frame
+  # inequality here is satisfied by snowfall alone.
+  # Dev now delegated to Codex — Tasks 1-5, 7, 8. Tasks 6 (live vehicle) and 9 (Wolf's closing
+  # sign-off) stay vehicle- and human-bound and must never be faked.
+  # HEADLESS HALF DONE 2026-08-17 → review. Codex dev in two runs. FIRST RUN: gate green, 4/4
+  # mutations killed, scope exact — but FOUR SUBTASKS WERE TICKED WITHOUT BEING DELIVERED, and they
+  # were the seam ACs the story exists to protect. AC6 was falsified by the orchestrator BY SABOTAGE:
+  # deleting both blend_projection and flicker_projection from the live tuple — the entire headline
+  # outcome — left the suite 54/54 GREEN, because projection_systems was called only by run() and
+  # never by the headless tests. AC4/AC5/AC11 had no app-level test and no mutation. Tasks 1-3
+  # reopened; a continuation handoff carried the RED evidence and required the sabotage as a pasted
+  # deliverable. SECOND RUN closed all four in five commits (cadence floor met): the same sabotage
+  # now turns 4 TESTS RED, the mutation table went 4 → 8 with all KILLED, gate green, 306 workspace
+  # tests. Codex REFUSED to claim a green gate or fabricate a mutation table when its sandbox
+  # detached output — the correct call, and the inverse of run one's false ticks, from the same agent
+  # on the same story. LESSON: a checkbox is worth only what its verification is worth.
+  # The self-gate is a COVERAGE HOLE for this story — it produced no conclusion on either run.
+  # STILL OPEN and NOT closable by any agent: Tasks 6 (live vehicle) + 9 (Wolf's sign-off),
+  # ACs 13/16/17. Review does not close this story; only Wolf does.
+  # CODE REVIEW 2026-08-18 (4 layers, fresh context, none a coverage hole) -> back to in-progress.
+  # The Feature Auditor ran the real pipeline against a live daemon and WATCHED IT WORK (592 distinct
+  # sub-tile positions per dwarf, 32 client-local chips for 8 dug tiles with zero mis-marked, 5,582
+  # distinct intensities per emitter), and AC6 is genuinely closed. BUT THE HEADLINE FINDING IS THE
+  # SAME DEFECT CLASS AS RUN ONE, ONE LEVEL DOWN: AC6 proves a system is in the tuple and says nothing
+  # about the tuple's INPUTS. Three one-line deletions -- observe_tick, delta_secs, elapsed_secs --
+  # EACH KILLED WOW BEAT 2 WITH THE SUITE 57/57 GREEN, re-verified by the orchestrator on a /tmp copy.
+  # The continuation run's four seam tests all hand-drive TickClock::advance, so they pass whether or
+  # not production ever drives the clock. Closed by three production-drive tests + three mutations.
+  # 1 decision + 8 patches applied and verified in one pass. Also fixed: the motion line printed AFTER
+  # its assertion (a failing vehicle run gave a panic and none of the five numbers); the mid-blend
+  # counter read only the clock, never a Transform, so it was true in a frozen world and still logged
+  # 23 "strictly-between" frames with the blend sabotaged; the instrument read TickClock with no
+  # ordering edge (raised by THREE layers; Bevy's ambiguity detection defaults to Ignore); the flicker
+  # band assertion was a TAUTOLOGY (table-derived bound on a formula normalised to the same amplitude
+  # -- the 1.1/1.2/1.3 self-referential antipattern again); a same-frame delta burst collapsed the tick
+  # interval to its floor; item_count overwrote instead of taking a running max; AC15's window compare
+  # was a near-vacuous >0 (measured 1,651 real vs ~5 from atmosphere) and now has a 200-pixel floor.
+  # WOLF RULED the capture recipe: --frames 600 at 10 Hz against >135 fps is ~44 ticks against the
+  # instrument's >=100 floor, so TASK 6'S FIRST COMMAND WOULD HAVE PANICKED BEFORE WRITING ANY PNG.
+  # Raised to 1,500; the Task 0 recipe deliberately left untouched (that pair ran on the 5.4 binary,
+  # which has no motion assertions -- rewriting it would falsify the record), and the Task 6 outputs
+  # renamed to 6-1-motion-*.png so they cannot overwrite the approved pair they are compared against.
+  # Gate GREEN on a cold rebuild, 311 workspace tests, MUTATIONS 8 -> 14 ALL KILLED. 16 LOW findings
+  # deferred with file:line, including one the orchestrator raised rather than a layer: this story
+  # closed two deferred-work.md entries without updating the register.
+  # FOR THE RETRO: (1) R1's layer-territory split HAS NO MAPPING FOR THE M2 CRATES -- it names
+  # sim-core / simd+tui+protocol, none of which a gui-only diff touches, so a literal reading leaves
+  # both hunters idle; adapted for this story (Blind -> pure logic, Edge -> shell) and needs a real
+  # mapping. (2) Convergence was measurable: 3 layers on the unordered instrument read, 2 each on the
+  # self-referential band and the capture-recipe defect.
+  # STILL OPEN and NOT closable by any agent: Tasks 6 (live vehicle) + 9 (Wolf's sign-off), and
+  # ACs 7/12/13/15/16/17 -- NOTHING IN THIS STORY HAS BEEN OBSERVED ON THE VEHICLE. Only Wolf closes it.
+  # LIVE VIEWING 2026-08-18 — TWO RULINGS BY WOLF, BOTH FIXED, both needing one more vehicle pass.
+  # Dwarves SLIDE: AC2's headline outcome confirmed live. ACs 12, 13, 14 CLOSED ON MEASUREMENT --
+  # before-run 107 ticks / 49 position changes / 628 mid-blend with zero commands; after-run 259 /
+  # 158 / 1364 with max 3 working and 8 items; NFR6 >143 fps at BOTH working zoom and full vista
+  # (gingerspice / native Windows / NVIDIA, ~2.4x and ~4.8x the bars). Three of those figures
+  # corroborate story-creation measurements taken months earlier: 45.8% of idle ticks carry a
+  # position change vs a 47% baseline, max working is exactly 3, items exactly 8. Ground-median held
+  # at 123 across both runs = 5.4's converged look untouched. AC15 passed on that pair.
+  # RULING 1: THE FLICKER READ AS STATIC. The mechanism was never wrong (5,587 distinct intensities,
+  # 22% peak-to-peak measured in a real app) -- at ~0.1 stop it is simply below the perceptual
+  # threshold. Amplitude raised torch 0.07 -> 0.30, campfire 0.11 -> 0.40 on Wolf's ruling; band
+  # literals and the peak assertion moved with it so the test stays non-tautological. This was the
+  # risk the code review flagged IN ADVANCE and carried into the runbook.
+  # RULING 2: THE DIG SITE IS RE-PICKED to [55,62,9]-[56,65,9]. Wolf saw "walls still in place" and
+  # was right: the original rect straddled a SLOPE, and slope tiles are Tile::Ramp, which is NOT
+  # diggable -- 4 of the 14 were contiguous ramps at x=58-61,y=69 standing as a wall through the
+  # excavation. THE STORY KNEW 8 OF 14 WERE DIGGABLE AND RECORDED IT AT CREATION; nobody drew that
+  # the leftovers were CONTIGUOUS. 8th instance of the AC-text-defect class, and the FIRST caught
+  # only by a human eye on the vehicle -- which is what the sign-off gate is for.
+  # A first replacement was killed before it cost a session: raytrace from the boot camera found 5
+  # of its 6 tiles behind TREE FOLIAGE, strictly worse than the site it replaced. The chosen site is
+  # the ONLY 8-tile rect near the camp that is solid + sky-exposed + unoccluded + in frame (19 tiles
+  # qualify at all), re-verified LIVE end to end: 8 designations, all 8 dug in 52 ticks (IDENTICAL
+  # to the original), 8 items, max 2 working, NOTHING left standing. Tile count unchanged so AC7
+  # needs no amendment; AC9's framing assertion moves. New key sequence in the story + runbook.
+  # STILL OPEN: AC15 must be RE-RUN (its window moved with the site), AC7's eyeball, AC16's TUI
+  # cross-check, and AC17 — Wolf's sign-off, which no agent can close. Gate green, 11 commits,
+  # NOTHING PUSHED.
+  6-1-the-world-moves: done
   # FIRST ON THE M2 CUT LIST. Cutting it leaves Epic 6's wow intact.
-  6-2-lanterns-in-the-dark: backlog
+  # STORY CREATED 2026-08-18 (ready-for-dev). THE EPIC'S CENTRAL WIRE CLAIM IS STALE AND WAS
+  # FALSIFIED AGAINST SOURCE: protocol::LightKind::Lantern, sim_core::LightKind::Lantern and
+  # Entity.light ALL ALREADY EXIST, so AD-16's sanctioned M2 wire diff was spent at 5.1 and this
+  # story adds NO protocol change -- AC3 pins that and it materially shrinks the story. The work is
+  # switching two hardcoded `light: None` sites (bridge.rs:27 snapshot, :82 delta -- fixing only one
+  # lights dwarves on connect then drops them, which looks like a flicker bug) and making the world
+  # say every dwarf carries one. gui needs ~zero change: reconcile already spawns a PointLight for
+  # any entity with a wire light, 6.1's flicker animates it, and 6.1's blend makes the pool slide
+  # with the dwarf for free. TRAP FOUND: do NOT give dwarves the existing Emitter component --
+  # emitters() would double-emit them AND drive them into entity_kind()'s unreachable!(), panicking
+  # the daemon. TWO EXISTING GUARDS must be re-ruled rather than tripped over: that unreachable!,
+  # and load_world_from's lantern rejection whose test name (`..._before_the_wire_bridge`) asserts a
+  # world state this story changes. THE REAL LOOK RISK IS THE GROUND-LUMINANCE CEILING, NOT NFR6:
+  # 6.1 measured >143 fps (4.8x headroom) but 5.4's frame measured ground-median 123 against a
+  # ceiling of 180, and this adds five 11M-lumen lights inside the camp. Verified live off the wire:
+  # all 5 dwarves carry light: None today. BLOCKED on Task 0 -- Wolf's artifact approval.
+  6-2-lanterns-in-the-dark: ready-for-dev
   epic-6-retrospective: optional
-  epic-7: backlog
+  epic-7: in-progress
   # Resolves the addendum's open control collision BY TESTING, on the record: the
   # mousewheel is already claimed by the zoom continuum and one wheel cannot drive both.
-  7-1-slice-into-the-mountain: backlog
+  # ^ STORY CREATED 2026-08-18 (ready-for-dev) AND THAT PREMISE IS STALE. Falsified against source:
+  # `gui` binds NO mouse input of any kind -- no MouseWheel, no MouseButton, no CursorMoved -- and
+  # camera zoom sits on the Q/E KEYS (camera_controls). The wheel is UNCLAIMED IN CODE; the
+  # collision is planned (UX-DR2 intends the wheel) rather than implemented. That does not dissolve
+  # the decision, it changes it: the wheel is available today but costs a migration when zoom
+  # arrives, while `<`/`>` costs nothing and matches tui --z. AC3 requires the ruling against this
+  # reality. CUT-FACE TRAP FOUND: a naive `z <= level` filter over the existing draw set yields a
+  # HOLLOW SHELL, because a buried tile is not `is_exposed` -- the `z == level` arm that draws the
+  # floor of the cut IS the feature. Also flagged: the pinned 53,365-cube draw-set oracle is a
+  # FULL-DEPTH figure that slicing necessarily changes, so the startup line must name its level or
+  # every inherited recipe reads as broken; and entity visibility above the slice is a decision to
+  # rule and test, not to leave undefined. This is also the story that gives 6.1's one-voxel dig
+  # actual DEPTH. BLOCKED on Task 0 -- Wolf's artifact approval.
+  7-1-slice-into-the-mountain: ready-for-dev
   # Renders designations/zones issued from a TUI client — gui issues nothing here. That
   # placement is deliberate: the rendering survives if Epic 8's input work is cut.
   7-2-read-the-working-zoom: backlog

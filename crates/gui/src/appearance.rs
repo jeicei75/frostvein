@@ -6,6 +6,9 @@ pub struct LightProperties {
     pub color: Color,
     pub intensity: f32,
     pub range: f32,
+    /// Fraction of the base intensity available to presentation-only flicker.
+    pub flicker_amplitude: f32,
+    pub flicker_hz: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -47,7 +50,6 @@ pub fn night_lighting() -> NightLighting {
 }
 
 pub fn light_properties(kind: LightKind) -> LightProperties {
-    // NOTE: lights are static until story 6.1 adds the flicker column.
     match kind {
         // Intensities sized against the boot3 measurement: the white-clip radius scales as
         // sqrt(intensity), and 72M lm blew a ~9-tile pool to flat white where the artifact
@@ -56,17 +58,105 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
             color: Color::srgb_u8(255, 140, 62),
             intensity: 14_000_000.0,
             range: 20.0,
+            flicker_amplitude: 0.30,
+            flicker_hz: 1.7,
         },
         LightKind::Campfire => LightProperties {
             color: Color::srgb_u8(255, 173, 92),
             intensity: 32_000_000.0,
             range: 28.0,
+            flicker_amplitude: 0.40,
+            flicker_hz: 0.9,
         },
         LightKind::Lantern => LightProperties {
             color: Color::srgb_u8(255, 195, 110),
             intensity: 11_000_000.0,
             range: 16.0,
+            flicker_amplitude: 0.05,
+            flicker_hz: 1.3,
         },
+    }
+}
+
+/// Client-side light animation: deterministic from the delivered id and local elapsed time.
+pub fn flicker_scale(kind: LightKind, id: u32, seconds: f32) -> f32 {
+    let properties = light_properties(kind);
+    let phase = id as f32 * 1.618_034 + kind as u8 as f32 * 0.73;
+    let primary = (seconds * properties.flicker_hz * std::f32::consts::TAU + phase).sin();
+    let secondary =
+        (seconds * (properties.flicker_hz * 1.73) * std::f32::consts::TAU + phase * 0.37).sin()
+            * 0.3;
+    1.0 + properties.flicker_amplitude * (primary + secondary) / 1.3
+}
+
+/// Neutral crushed stone is intentionally independent of the removed wire tile material.
+pub fn debris_color() -> Color {
+    Color::srgb_u8(86, 91, 106)
+}
+
+/// A stone item is rubble left standing at a dug tile, not a replacement block.
+///
+/// Until 2026-08-20 the item branch inserted a mesh and material without touching the spawned
+/// `Transform`, so it inherited scale 1.0 — a cube the exact size of a terrain cube, in stone
+/// material, standing in the tile it was just dug out of. Two consequences, both found by eye on
+/// the vehicle and invisible to every instrument: a dug tile visually refilled, so a worked face
+/// read as untouched rock; and the debris chips (within +/-0.39 of the tile centre) sat inside
+/// the item's own +/-0.5 volume, so AC8's chips could never be seen where an item stood. The
+/// capture self-test passed throughout, because the pixels DID change.
+pub const STONE_ITEM_SCALE: f32 = 0.4;
+
+/// Rests the shrunken item on the tile floor rather than leaving it floating mid-voxel, which is
+/// where a centred sub-unit cube would otherwise sit. The chips are already low for this reason.
+pub const STONE_ITEM_DROP: f32 = -(0.5 - STONE_ITEM_SCALE / 2.0);
+
+#[cfg(test)]
+mod flicker_tests {
+    use super::*;
+
+    #[test]
+    fn flicker_is_bounded_distinct_and_deterministic() {
+        assert_eq!(light_properties(LightKind::Torch).flicker_amplitude, 0.30);
+        assert_eq!(
+            light_properties(LightKind::Campfire).flicker_amplitude,
+            0.40
+        );
+        // The band is asserted against HAND-WRITTEN literals, never against the table the
+        // function reads. `flicker_scale` is `1.0 + amplitude * (..) / 1.3` with the bracket
+        // normalised to +/-1.3, so a table-derived bound holds by construction for ANY
+        // amplitude and cannot go red — the self-referential-test shape this project has
+        // already been bitten by three times.
+        for (kind, low, high) in [
+            (LightKind::Torch, 0.70, 1.30),
+            (LightKind::Campfire, 0.60, 1.40),
+        ] {
+            for step in 0..1000 {
+                let scale = flicker_scale(kind, 6, step as f32 * 0.01);
+                assert!(
+                    (low..=high).contains(&scale),
+                    "{kind:?} left its named band at {step}: {scale}"
+                );
+            }
+        }
+        // The band must also be REACHED, or a flicker of zero amplitude would satisfy it.
+        let torch_peak = (0..1000)
+            .map(|step| flicker_scale(LightKind::Torch, 6, step as f32 * 0.01))
+            .fold(1.0f32, f32::max);
+        assert!(
+            torch_peak > 1.20,
+            "the torch must actually use its band, peaked at {torch_peak}"
+        );
+        assert_ne!(
+            flicker_scale(LightKind::Torch, 6, 1.0),
+            flicker_scale(LightKind::Torch, 7, 1.0)
+        );
+        assert_ne!(
+            flicker_scale(LightKind::Torch, 6, 1.0),
+            flicker_scale(LightKind::Campfire, 6, 1.0)
+        );
+        assert_eq!(
+            flicker_scale(LightKind::Torch, 6, 1.0),
+            flicker_scale(LightKind::Torch, 6, 1.0)
+        );
     }
 }
 

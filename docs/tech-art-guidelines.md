@@ -138,3 +138,12 @@ shell used the golden ratio for azimuth and height and all 300 stars landed on o
 the vehicle showed as dotted lines across the sky. The same rule covers snowfall: scattered
 disc positions, per-flake fall speeds and phase-preserving respawn, because a shared speed or a
 shared respawn height re-synchronizes the field into marching rows.
+
+## Motion, flicker, and work evidence
+
+Motion is presentation only: dynamic entities blend between the previous and current positions
+the wire delivered, clamped at the current position with no prediction or extrapolation. Torch
+and campfire point lights breathe inside their table-defined bands from a deterministic function
+of simulation id and client elapsed time; the emitter material remains static. When an `Empty`
+tile arrives, four deterministic, client-local stone chips sit at the position until a snapshot
+rebuild clears them. They make digging read as work without inventing simulation state.
