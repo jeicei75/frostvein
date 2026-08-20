@@ -131,6 +131,16 @@ fn dwarf(id: u32, pos: [i32; 3]) -> Entity {
     }
 }
 
+fn lantern_dwarf(id: u32, pos: [i32; 3]) -> Entity {
+    Entity {
+        id,
+        kind: EntityKind::Dwarf,
+        pos,
+        state: JobState::Idle,
+        light: Some(protocol::LightKind::Lantern),
+    }
+}
+
 fn projected_scene(app: &mut App) -> Vec<(u32, Option<[i32; 3]>, [i32; 3])> {
     let mut scene = app
         .world_mut()
@@ -194,6 +204,109 @@ fn later_production_reconciliation_does_not_clobber_a_blended_translation() {
         projected_translation(&mut app, id),
         midpoint,
         "reconciliation must leave translation to the blend after spawn"
+    );
+}
+
+#[test]
+fn a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table() {
+    let id = 77;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![lantern_dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    let (_, light) = app
+        .world_mut()
+        .query::<(&WorldProjected, &PointLight)>()
+        .iter(app.world())
+        .find(|(projected, _)| projected.0 == id)
+        .expect("a wire-declared lantern must project a point light");
+    let expected = gui::appearance::light_properties(protocol::LightKind::Lantern);
+    assert_eq!(
+        light.color.to_srgba().to_u8_array_no_alpha(),
+        expected.color.to_srgba().to_u8_array_no_alpha()
+    );
+    assert_eq!(light.range, expected.range);
+    assert!(
+        (0.95 * expected.intensity..=1.05 * expected.intensity).contains(&light.intensity),
+        "the lantern intensity must remain inside its independently named ±5% table band"
+    );
+}
+
+#[test]
+fn a_dwarf_lantern_stays_on_its_blended_projection_transform() {
+    let id = 78;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![lantern_dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    apply_delta(&mut app, delta(vec![], vec![lantern_dwarf(id, [2, 0, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(0.01);
+    app.update();
+
+    let (translation, has_light) = app
+        .world_mut()
+        .query::<(&WorldProjected, &Transform, Option<&PointLight>)>()
+        .iter(app.world())
+        .find_map(|(projected, transform, light)| {
+            (projected.0 == id).then_some((transform.translation, light.is_some()))
+        })
+        .expect("the dwarf remains projected");
+    assert!(has_light, "the blended dwarf owns its lantern point light");
+    assert_eq!(
+        translation,
+        projected_translation(&mut app, id),
+        "the lantern and rendered dwarf share one blended transform"
+    );
+    assert!(
+        translation.x > world_to_render([0, 0, 0]).x
+            && translation.x < world_to_render([2, 0, 0]).x,
+        "the lantern must follow the mid-blend dwarf position, not snap: {translation:?}"
+    );
+}
+
+#[test]
+fn an_unlit_dwarf_gets_no_point_light() {
+    let id = 79;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    let has_light = app
+        .world_mut()
+        .query::<(&WorldProjected, Option<&PointLight>)>()
+        .iter(app.world())
+        .find_map(|(projected, light)| (projected.0 == id).then_some(light.is_some()))
+        .expect("the dwarf remains projected");
+    assert!(
+        !has_light,
+        "point lights must be driven by wire light, not dwarf kind"
+    );
+
+    // The spawn frame is not enough. Reconciliation has a SECOND light-insertion arm for entities
+    // that already exist, and sabotaging only that arm left the whole suite green: the same
+    // dwarf-kind special-casing on a later frame was invisible. This is 6.1's defect class --
+    // reconcile doing something wrong on a frame the spawn-frame test never reaches.
+    app.update();
+    app.world_mut()
+        .run_system_once(reconcile_projection)
+        .expect("production reconciliation must run");
+    let has_light_later = app
+        .world_mut()
+        .query::<(&WorldProjected, Option<&PointLight>)>()
+        .iter(app.world())
+        .find_map(|(projected, light)| (projected.0 == id).then_some(light.is_some()))
+        .expect("the dwarf remains projected");
+    assert!(
+        !has_light_later,
+        "a later reconciliation pass must not light an unlit dwarf either"
     );
 }
 

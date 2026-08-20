@@ -19,12 +19,12 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
         entities: world
             .dwarves()
             .into_iter()
-            .map(|(id, pos, state)| protocol::Entity {
+            .map(|(id, pos, state, light)| protocol::Entity {
                 id: id.0,
                 kind: protocol::EntityKind::Dwarf,
                 pos: [pos.x, pos.y, pos.z],
                 state: job_state(state),
-                light: None,
+                light: Some(light_kind(light)),
             })
             .chain(world.emitters().into_iter().map(emitter_entity))
             .collect(),
@@ -74,12 +74,12 @@ pub fn delta(world: &mut sim_core::World, speed: protocol::Speed) -> protocol::D
         entities: world
             .dwarves()
             .into_iter()
-            .map(|(id, pos, state)| protocol::Entity {
+            .map(|(id, pos, state, light)| protocol::Entity {
                 id: id.0,
                 kind: protocol::EntityKind::Dwarf,
                 pos: [pos.x, pos.y, pos.z],
                 state: job_state(state),
-                light: None,
+                light: Some(light_kind(light)),
             })
             .chain(world.emitters().into_iter().map(emitter_entity))
             .collect(),
@@ -368,7 +368,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             dwarves
                 .iter()
-                .map(|(_, pos, _)| [pos.x, pos.y, pos.z])
+                .map(|(_, pos, _, _)| [pos.x, pos.y, pos.z])
                 .collect::<Vec<_>>()
         );
         assert!(
@@ -383,9 +383,68 @@ mod tests {
                 .collect::<Vec<_>>(),
             dwarves
                 .iter()
-                .map(|(_, _, state)| expected_job_state(*state))
+                .map(|(_, _, state, _)| expected_job_state(*state))
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn every_dwarf_carries_a_lantern_in_snapshot_and_delta_without_duplication() {
+        let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        let snapshot = snapshot(&world, protocol::Speed::Normal);
+        let delta = delta(&mut world, protocol::Speed::Normal);
+
+        for (name, entities) in [("snapshot", snapshot.entities), ("delta", delta.entities)] {
+            let dwarves: Vec<_> = entities
+                .iter()
+                .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+                .collect();
+            assert_eq!(dwarves.len(), 5, "{name} duplicated or lost a dwarf");
+            assert!(
+                dwarves
+                    .iter()
+                    .all(|entity| entity.light == Some(protocol::LightKind::Lantern)),
+                "every {name} dwarf must carry the lantern wire value"
+            );
+        }
+    }
+
+    #[test]
+    fn dwarf_lanterns_never_enter_the_static_emitter_path() {
+        let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+
+        assert_eq!(
+            world.emitters().len(),
+            5,
+            "the camp has only static emitters"
+        );
+        assert!(world.emitters().iter().all(|(_, _, light)| {
+            matches!(
+                light,
+                sim_core::LightKind::Torch | sim_core::LightKind::Campfire
+            )
+        }));
+
+        let snapshot = snapshot(&world, protocol::Speed::Normal);
+        assert_eq!(
+            snapshot.entities.len(),
+            10,
+            "dwarves must not be emitted twice"
+        );
+        assert!(snapshot.entities[..5].iter().all(|entity| {
+            entity.kind == protocol::EntityKind::Dwarf
+                && entity.light == Some(protocol::LightKind::Lantern)
+        }));
+    }
+
+    #[test]
+    #[should_panic(expected = "lanterns are not live emitters")]
+    fn static_lantern_emitters_remain_rejected_by_the_bridge_guard() {
+        super::emitter_entity((
+            sim_core::Id(99),
+            sim_core::Pos { x: 1, y: 2, z: 3 },
+            sim_core::LightKind::Lantern,
+        ));
     }
 
     #[test]
@@ -418,12 +477,12 @@ mod tests {
         assert!(
             snap.entities[..5]
                 .iter()
-                .all(|entity| entity.light.is_none())
+                .all(|entity| entity.light == Some(protocol::LightKind::Lantern))
         );
         assert!(
             update.entities[..5]
                 .iter()
-                .all(|entity| entity.light.is_none())
+                .all(|entity| entity.light == Some(protocol::LightKind::Lantern))
         );
     }
 
@@ -508,7 +567,7 @@ mod tests {
             world
                 .dwarves()
                 .iter()
-                .map(|(_, _, state)| expected_job_state(*state))
+                .map(|(_, _, state, _)| expected_job_state(*state))
                 .collect::<Vec<_>>()
         );
         assert!(update.designations.is_empty());

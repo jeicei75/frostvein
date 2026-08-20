@@ -125,7 +125,7 @@ fn all_dwarves_spawn_inside_the_camp_with_room_to_move() {
     let world = World::generate(42, Dims::DEFAULT);
     let camp = world.camp_origin();
 
-    for (_, pos, _) in world.dwarves() {
+    for (_, pos, _, _) in world.dwarves() {
         assert!((pos.x - camp.x).abs() <= RADIUS);
         assert!((pos.y - camp.y).abs() <= RADIUS);
         assert_eq!(pos.z, camp.z);
@@ -175,7 +175,11 @@ fn pines_use_both_tree_materials_and_leave_the_camp_clear() {
 #[test]
 fn spawn_positions_for_seed_42_are_pinned() {
     let world = World::generate(42, Dims::DEFAULT);
-    let positions: Vec<_> = world.dwarves().into_iter().map(|(_, pos, _)| pos).collect();
+    let positions: Vec<_> = world
+        .dwarves()
+        .into_iter()
+        .map(|(_, pos, _, _)| pos)
+        .collect();
     assert_eq!(
         positions,
         vec![
@@ -256,11 +260,15 @@ fn different_seed_produces_different_world() {
     );
 
     // ...and the spawn draw must be seeded too, not a constant pick.
-    let first_positions: Vec<Pos> = first.dwarves().into_iter().map(|(_, pos, _)| pos).collect();
+    let first_positions: Vec<Pos> = first
+        .dwarves()
+        .into_iter()
+        .map(|(_, pos, _, _)| pos)
+        .collect();
     let second_positions: Vec<Pos> = second
         .dwarves()
         .into_iter()
-        .map(|(_, pos, _)| pos)
+        .map(|(_, pos, _, _)| pos)
         .collect();
     assert_ne!(first_positions, second_positions);
 }
@@ -422,19 +430,19 @@ fn five_dwarves_on_walkable_surface() {
     // AC7 requires the ids come from the world's single monotonic allocator. Asserting
     // only distinctness would also accept random ids, so pin the exact sequence.
     assert_eq!(
-        dwarves.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+        dwarves.iter().map(|(id, _, _, _)| *id).collect::<Vec<_>>(),
         vec![Id(0), Id(1), Id(2), Id(3), Id(4)]
     );
     assert_eq!(
         dwarves
             .iter()
-            .map(|(_, pos, _)| *pos)
+            .map(|(_, pos, _, _)| *pos)
             .collect::<BTreeSet<_>>()
             .len(),
         5
     );
 
-    for (_, pos, _) in dwarves {
+    for (_, pos, _, _) in dwarves {
         assert_eq!(world.tile(pos), Some(Tile::Empty));
         assert!(matches!(
             world.tile(Pos {

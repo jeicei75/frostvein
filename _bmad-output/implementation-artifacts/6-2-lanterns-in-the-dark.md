@@ -1,10 +1,11 @@
 ---
 model: claude-opus-5[1m]  # policy default (Opus); recorded per the model policy so the ledger row is readable
+baseline_commit: 538e1f8
 ---
 
 # Story 6.2: Lanterns in the Dark
 
-Status: ready-for-dev
+Status: review
 
 <!-- FIRST ITEM ON THE M2 CUT LIST. If the story cap binds, this is what goes — Epic 6 keeps its
      wow because torches and the campfire already carry the warm/cold read. Do not treat that as
@@ -159,47 +160,47 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
         Wolf approved at 5.4 — name the ground-median ceiling as the measured bar and the lantern
         intensity as the knob.
 
-- [ ] **Task 1 — The lantern in the world** (AC: 2, 4, 5)
-  - [ ] Give every dwarf a lantern in `sim-core` and expose it to the bridge. **Do NOT attach the
+- [x] **Task 1 — The lantern in the world** (AC: 2, 4, 5)
+  - [x] Give every dwarf a lantern in `sim-core` and expose it to the bridge. **Do NOT attach the
         existing `Emitter` component** — see Dev Notes; it would double-emit the dwarf and drive it
         into the static-emitter path's `unreachable!`.
-  - [ ] Set `light` on the dwarf arm of **both** bridge paths (`crates/simd/src/bridge.rs:24-28`
+  - [x] Set `light` on the dwarf arm of **both** bridge paths (`crates/simd/src/bridge.rs:24-28`
         snapshot, `:79-83` delta). Both are currently `light: None`; changing one is the obvious
         half-fix and AC2 exists to catch it.
-  - [ ] Tests: every dwarf on a fresh snapshot and on a delta carries `Some(Lantern)`; the dwarf
+  - [x] Tests: every dwarf on a fresh snapshot and on a delta carries `Some(Lantern)`; the dwarf
         count on the wire is unchanged (no double-emission); a save round-trip preserves lantern
         state with no new `SaveState` field; a seeded scenario run is identical twice.
 
-- [ ] **Task 2 — Re-rule the two lantern guards** (AC: 6, 7)
-  - [ ] Decide and record: does a dwarf lantern reach `emitter_entity`? Add the test that proves it
+- [x] **Task 2 — Re-rule the two lantern guards** (AC: 6, 7)
+  - [x] Decide and record: does a dwarf lantern reach `emitter_entity`? Add the test that proves it
         does not (or remove the `unreachable!` with the reason).
-  - [ ] Decide and record: is a *static* lantern emitter in a save still bogus? If yes, rename
+  - [x] Decide and record: is a *static* lantern emitter in a save still bogus? If yes, rename
         `loading_rejects_lantern_emitters_before_the_wire_bridge` — its name asserts a world state
         this story changes. If no, delete guard and test together with the reason.
 
-- [ ] **Task 3 — The TUI ruling** (AC: 8)
-  - [ ] Confirm by reading `crates/tui/src/view.rs` that nothing renders `Entity.light`, and record
+- [x] **Task 3 — The TUI ruling** (AC: 8)
+  - [x] Confirm by reading `crates/tui/src/view.rs` that nothing renders `Entity.light`, and record
         the one-paragraph reasoning for "no TUI change" in the Dev Agent Record. No `tui` code
         change is expected; if one proves necessary, that is a story-spec defect — raise it.
 
-- [ ] **Task 4 — The moving light in `gui`** (AC: 9, 10, 11, 12)
-  - [ ] Verify (do not re-implement) that `reconcile` already spawns a `PointLight` and a
+- [x] **Task 4 — The moving light in `gui`** (AC: 9, 10, 11, 12)
+  - [x] Verify (do not re-implement) that `reconcile` already spawns a `PointLight` and a
         `ProjectedLight` for any entity carrying a light, and that 6.1's `flicker_lights` already
         animates it from the table. **The expected `gui` diff is close to zero** — if you find
         yourself special-casing dwarves, stop: AC10 forbids it.
-  - [ ] Confirm the light rides the blended transform (6.1's `blend_entities` owns translation for
+  - [x] Confirm the light rides the blended transform (6.1's `blend_entities` owns translation for
         every non-terrain `WorldProjected` entity, and the `PointLight` is on that same entity).
-  - [ ] Tests: a dwarf entity carrying `Some(Lantern)` gets a `PointLight` whose colour, intensity
+  - [x] Tests: a dwarf entity carrying `Some(Lantern)` gets a `PointLight` whose colour, intensity
         and range come from the table row; at a mid-blend clock the light entity's translation
         equals the dwarf's rendered translation (AC11); a dwarf with `light: None` gets no
         `PointLight` (the negative case that proves the light is wire-driven, not kind-driven).
 
-- [ ] **Task 5 — The instrument** (AC: 15, 16)
-  - [ ] Extend `CaptureState` (`crates/gui/src/capture.rs`) to accumulate lit-terrain counts at the
+- [x] **Task 5 — The instrument** (AC: 15, 16)
+  - [x] Extend `CaptureState` (`crates/gui/src/capture.rs`) to accumulate lit-terrain counts at the
         dwarves' successive positions, print one lantern line **before** any assertion (6.1's
         lesson: a failing run must still print its numbers), then assert non-zero and moved.
-  - [ ] Keep 6.1's motion line and 5.4's range checks exactly as they are.
-  - [ ] Unit-test the accumulator against a hand-built mirror sequence — a still world fails, a
+  - [x] Keep 6.1's motion line and 5.4's range checks exactly as they are.
+  - [x] Unit-test the accumulator against a hand-built mirror sequence — a still world fails, a
         moving one passes.
 
 - [ ] **Task 6 — The live vehicle session** (AC: 9, 13, 14, 15)
@@ -210,16 +211,16 @@ the NFR6 reading and the captures is headless-testable in any devpod under `Mini
   - [ ] Confirm by eye and state in the record: a warm pool travels with each dwarf and lights the
         terrain it passes; the camp does not read blown out against the 5.4 frame.
 
-- [ ] **Task 7 — Tech-art guidelines** (AC: 10 supporting)
-  - [ ] Add one short section to `docs/tech-art-guidelines.md`: a moving light is the same table
+- [x] **Task 7 — Tech-art guidelines** (AC: 10 supporting)
+  - [x] Add one short section to `docs/tech-art-guidelines.md`: a moving light is the same table
         lookup as a static one, and dwarves are lit by carrying a light on the wire rather than by
         being dwarves.
 
-- [ ] **Task 8 — Evidence and the gate** (AC: 18, 19)
-  - [ ] Write the sabotage table following 6.1's format; run `scripts/mutate.sh` **alone** and paste
+- [x] **Task 8 — Evidence and the gate** (AC: 18, 19)
+  - [x] Write the sabotage table following 6.1's format; run `scripts/mutate.sh` **alone** and paste
         the RED table. Run `cargo clean -p gui` **after** the mutation round (the stale-artifact trap
         has fired twice).
-  - [ ] `scripts/gate.sh` green; confirm `crates/protocol` is untouched.
+  - [x] `scripts/gate.sh` green; confirm `crates/protocol` is untouched.
 
 - [ ] **Task 9 — Wolf's closing sign-off** (AC: 17)
   - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
@@ -403,14 +404,183 @@ task; restate RED evidence in any continuation handoff.
 
 ### Agent Model Used
 
+`gpt-5.6-terra` (Codex/Völundr, reasoning effort high) — dev.
+`claude-opus-5[1m]` — orchestration, verification and the sabotage round.
+*(Exact ids per the model policy: a family nickname is what makes an old ledger row unreadable.)*
+
 ### Debug Log References
+
+- Task 1 RED, `cargo test --offline -p simd every_dwarf_carries_a_lantern_in_snapshot_and_delta_without_duplication`:
+  `every snapshot dwarf must carry the lantern wire value` at `crates/simd/src/bridge.rs:406`;
+  0 passed, 1 failed. The test independently expected `Some(protocol::LightKind::Lantern)` on each
+  of the exactly five dwarf entities in both outputs.
+- Task 2 guard sabotage RED, after temporarily replacing `entity_kind(Lantern)`'s guard with
+  `EntityKind::Dwarf`, `cargo test --offline -p simd static_lantern_emitters_remain_rejected_by_the_bridge_guard`:
+  `test did not panic as expected at crates/simd/src/bridge.rs:431:8`; 0 passed, 1 failed. The
+  `unreachable!` was restored immediately after the observed failure.
+- Task 4 projection sabotage RED, after temporarily changing the generic initial-spawn light
+  branch to `None`, `cargo test --offline -p gui --test headless
+  a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table` failed at
+  `crates/gui/tests/headless.rs:224`: `a wire-declared lantern must project a point light`; 0
+  passed, 1 failed. The generic reconciliation branch was restored immediately.
+- Task 5 RED, before implementation, `cargo test --offline -p gui
+  lantern_instrument_requires_a_lit_region_to_move` failed to compile with `E0433: cannot find
+  type LanternStats in this scope` at `crates/gui/src/capture.rs:372` and `:378`; the test named
+  the missing accumulator before it was added.
+- Task 5 review-fix RED, after adding the vanished-final-region case, `cargo test --offline -p gui
+  lantern_instrument_requires_a_lit_region_to_move` failed at `crates/gui/src/capture.rs:471`:
+  `assertion failed: std::panic::catch_unwind(|| vanished.assert_valid()).is_err()`; the old
+  accumulator incorrectly accepted a non-empty first region followed by an empty final region.
+- Task 8 mutation RED table (run alone; all KILLED on genuine assertions):
+
+  | Mutation | Result |
+  | --- | --- |
+  | snapshot dwarf arm drops lanterns | `bridge.rs:403` assertion; 0 passed, 1 failed |
+  | delta dwarf arm drops lanterns | `bridge.rs:403` assertion; 0 passed, 1 failed |
+  | static emitter bridge accepts lanterns | expected-panic test failed; 0 passed, 1 failed |
+  | saved static lantern emitters load | `main.rs:756` assertion; 0 passed, 1 failed |
+  | wire-declared lanterns no longer create lights | `headless.rs:224` assertion; 0 passed, 1 failed |
+  | lantern capture accepts an unmoved region | `catch_unwind(...).is_err()` assertion; 0 passed, 1 failed |
+  | lantern capture loses its lit-terrain count | `capture.rs:138` assertion; 0 passed, 1 failed |
+  | lantern capture accepts an empty final region | `catch_unwind(...).is_err()` assertion; 0 passed, 1 failed |
 
 ### Completion Notes List
 
+- Task 1: Added `sim_core::DWARF_LIGHT`, a uniform `LightKind::Lantern` value returned by the
+  widened `World::dwarves()` reader. It is not an ECS `Emitter` or saved per-dwarf state. Both
+  bridge dwarf arms now map that value to the existing protocol variant. `cargo test --offline -p
+  sim-core -p simd` passed (49 sim-core unit, 10 save/load, 30 scenario, 12 worldgen, 16 simd unit,
+  and 61 simd serve tests).
+- Task 2: Dwarf lanterns stay exclusively on the dwarf bridge arm; the static-emitter reader
+  contains only torches and the campfire, so the existing `emitter_entity` lantern guard remains
+  true. A malformed saved *static* lantern emitter remains invalid; renamed its test to
+  `loading_rejects_static_lantern_emitters_before_the_wire_bridge` to state that distinction.
+  `cargo test --offline -p simd` passed (18 unit and 61 serve tests).
+- Task 3: No `tui` change. `tui::view::render` selects cells only by `EntityKind`, job state,
+  position, and crowd/item contention; it never reads `Entity.light`. A lantern glyph would not
+  distinguish any dwarf because every dwarf carries one. `client-core::Mirror` retains the wire
+  entity (including its light field) unchanged for both clients, preserving parity.
+- Task 4: No `gui` production change. Existing generic reconciliation already creates a
+  `PointLight` and `ProjectedLight` for every wire `Some(light)`, and the shared schedule already
+  flickers it from the `LightKind` table. Headless tests now prove a lantern dwarf gets the
+  lantern table's colour/range/intensity band, an unlit dwarf gets no light, and the lantern lives
+  on the same mid-blended `WorldProjected` transform as the dwarf. `cargo test --offline -p gui`
+  passed (42 library, 24 headless integration, and 1 non-ignored capture test).
+- Task 5: Added the capture-only `LanternStats` accumulator. After the shared projection set, it
+  derives each lantern dwarf's lit terrain set from the same rendered `PointLight` transform and
+  terrain transforms, records only successive delivered dwarf positions, prints the lantern line
+  before either assertion, and requires non-zero lit terrain plus a changed first/last region.
+  The existing motion line and image range checks are unchanged. `cargo test --offline -p gui`
+  passed (43 library, 24 headless integration, and 1 non-ignored capture test).
+- Task 7: Added the short moving-lights guideline: wire-carried moving lights use the same
+  `LightKind` table lookup as static lights, and dwarves are never special-cased warm.
+- Task 8: `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/6-2-lanterns-in-the-dark.sh`
+  ran alone again after the review fix: all eight mutations were KILLED, then `cargo clean -p gui` ran afterwards as required.
+  The subsequent `scripts/gate.sh` was GREEN. `git diff --stat 6-1-the-world-moves...HEAD --
+  crates/protocol` is empty; there is no protocol, client-core, or tui change.
+- Self-review pass 1 (`codex review --base 6-1-the-world-moves`) raised two P2 findings in the
+  lantern instrument: an empty final region could falsely count as movement, and all terrain was
+  scanned on every capture frame. Fixed both: `assert_valid` now requires a non-empty final region,
+  with a RED regression test and mutation; `accumulate_motion` first compares the five delivered
+  lantern positions and only builds terrain regions after they change. A post-fix full gate passed.
+- Self-review pass 2 (`codex review --base 6-1-the-world-moves`) completed with no actionable
+  findings. Review stopped after two passes, below the three-pass cap.
+- Tasks 6 and 9 remain unchecked: this devpod cannot run the required gingerspice native Windows /
+  NVIDIA live session, and Wolf alone supplies the closing sign-off. Status is `review` for the
+  completed headless implementation and evidence.
+
+
+### Orchestrator verification of the Codex dev run (2026-08-18)
+
+Codex (`gpt-5.6-terra`, reasoning effort **high**, session `01a0150d-45ad-71e0-8627-2cd6dd87730f`)
+exited 0. **Exit 0 was not trusted.**
+
+**Verified GOOD, independently:**
+
+- **No auth failure.** All 8 log matches for `401|Missing bearer|Unauthorized` are the handoff
+  prompt's own text and `:401` source line numbers. No real 401.
+- **Scope holds exactly.** `git diff --stat 6-1-the-world-moves..HEAD` over `crates/protocol`,
+  `crates/client-core`, `crates/tui`, `Cargo.toml` and `Cargo.lock` is **empty** — AC3 and AC19
+  hold, and the story's central finding (the wire diff was already spent) is borne out: **this story
+  changed no wire type at all.**
+- **`scripts/gate.sh` GREEN** on my own run, and again after the mutation round with
+  `cargo clean -p gui` in between.
+- **Commit cadence MET — 9 commits for 8 dev tasks**, all authored `Völundr <jeicei75@gmail.com>`,
+  nothing pushed (`refs/remotes` has no `6-2` branch). This is the first story where the floor was
+  actually asked for in the handoff prompt rather than only in AGENTS.md, and it is the first story
+  that met it.
+- **Self-gate ran and CONCLUDED** — two passes, the first raising two P2 capture issues (both
+  fixed), the second returning nothing actionable, so it stopped at two of the three allowed. That
+  is a real result rather than 6.1's coverage hole, where the self-gate produced no conclusion on
+  either run.
+- **`gui` needed almost nothing, exactly as the story predicted.** The only `crates/gui/src` file
+  touched is `capture.rs` — the instrument. `project.rs` and `appearance.rs` are **untouched**, so
+  the moving light came free from 6.1's reconcile + blend, and AC10's "no dwarf special-casing"
+  holds structurally rather than by assertion.
+- **END TO END ON A LIVE DAEMON, which no test can fake.** Built `simd` from this branch, ran it,
+  and read the wire:
+
+  ```
+  SNAPSHOT path: ids 0-4 dwarf light=lantern   (5/5)   ids 5-9 campfire/torch unchanged
+  DELTA    path: ids 0-4 dwarf light=lantern   (5/5)   ids 5-9 campfire/torch unchanged
+  entity count still exactly 10 -- no double-emission through the Emitter trap
+  ```
+
+  Both bridge arms carry it, so the half-fix failure mode the story warned about did not occur.
+- **9/9 mutations KILLED** (8 from the dev run + 1 I added, below), run alone, tree verified clean
+  afterwards. The table includes **separate** mutations for the snapshot arm and the delta arm,
+  which is the right shape for AC2.
+
+**ONE GAP I FOUND BY SABOTAGE, and closed.** AC10 says dwarves must not be special-cased warm
+*anywhere* in `gui`. Reconciliation has **two** light-insertion arms — the spawn arm
+(`crates/gui/src/project.rs:368`) and the existing-entity arm (`:340`). Sabotaging each separately:
+
+```
+SPAWN arm lights every dwarf regardless of the wire   -> an_unlit_dwarf_gets_no_point_light RED  ✅
+EXISTING-ENTITY arm, same sabotage                    -> 68/68 GREEN                          ❌
+```
+
+The negative case was asserted only on the **spawn frame**. The identical defect on a later
+reconcile pass was invisible — **6.1's defect class exactly**, where reconcile misbehaved on frames
+the spawn-frame tests never reached. Closed by extending `an_unlit_dwarf_gets_no_point_light` to run
+a second `app.update()` plus a production `reconcile_projection` pass and re-assert, and by adding
+the mutation `reconciliation lights a dwarf the wire left unlit`, which now KILLS.
+
+**Recorded, not fixed:** the instrument identifies its subjects as
+`kind == Dwarf && light == Some(Lantern)` (`crates/gui/src/capture.rs:131`). That is measurement
+rather than rendering, so it does not violate AC10 — but it does hardcode the dwarf/lantern pairing
+in `gui`, and it is worth a review layer's opinion.
+
+**Still OPEN and not closable by any agent:** Task 6 (the live vehicle session) and Task 9 (Wolf's
+sign-off), and with them **AC9's look, AC13's NFR6 reading and AC14's re-measured range checks —
+including the ground-luminance ceiling, which is this story's real look risk and remains UNRULED**
+because the artifact was approved on the written-only fallback.
+
 ### File List
+
+- crates/sim-core/src/lib.rs
+- crates/sim-core/tests/save_load.rs
+- crates/sim-core/tests/scenario.rs
+- crates/sim-core/tests/worldgen.rs
+- crates/simd/src/bridge.rs
+- crates/gui/tests/headless.rs
+- crates/gui/src/capture.rs
+- docs/tech-art-guidelines.md
+- _bmad-output/implementation-artifacts/mutations/6-2-lanterns-in-the-dark.sh
+- _bmad-output/implementation-artifacts/6-2-lanterns-in-the-dark.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-08-18 | Orchestrator verification of the Codex dev run. Gate green on my own run, scope exact (**no `crates/protocol` change at all** — the story's stale-premise finding borne out), 9 commits all Völundr, nothing pushed, self-gate concluded in 2 of 3 passes. **Verified end to end on a live daemon: all 5 dwarves carry `lantern` on BOTH wire paths, entity count still 10, no double-emission.** `gui` needed only `capture.rs` — the moving light came free from 6.1. **One gap found by sabotage and closed:** AC10's negative case was asserted only on the spawn frame; the same dwarf-special-casing applied to reconciliation's existing-entity arm left 68/68 green. Test extended across a reconcile pass, mutation added, table now 9/9 KILLED. |
 | 2026-08-18 | Story created. **The epic's central wire claim was falsified against source: `protocol::LightKind::Lantern`, `sim_core::LightKind::Lantern` and `Entity.light` all already exist, so AD-16's sanctioned wire diff is already spent and this story adds no protocol change** — AC3 pins that. Verified live off the wire that all five dwarves carry `light: None` today. Found two existing lantern guards that this story must re-rule rather than trip over: `emitter_entity`'s `unreachable!` and `load_world_from`'s rejection with its now-misnamed test. Identified the `Emitter`-component trap (double-emission plus a daemon panic) and the two-site `light: None` half-fix. Flagged the ground-luminance ceiling — not NFR6 — as the story's real look risk. |
+| 2026-08-18 | Task 1 complete: every dwarf now carries the uniform, non-persisted lantern through both bridge paths; no protocol change. |
+| 2026-08-18 | Task 2 complete: re-ruled static lantern emitters as invalid while proving dwarf lanterns bypass that path. |
+| 2026-08-18 | Task 3 complete: recorded the no-TUI-change ruling. |
+| 2026-08-18 | Task 4 complete: verified the existing generic moving-light path and added its lantern guardrail tests. |
+| 2026-08-18 | Task 5 complete: added the moving-lantern capture accumulator and its still-versus-moving test. |
+| 2026-08-18 | Task 7 complete: documented the generic moving-light rule. |
+| 2026-08-18 | Task 8 complete: eight sabotage mutations killed after self-review fixes; post-mutation GUI clean and full gate green. Status set to review with the vehicle and Wolf sign-off tasks explicitly open. |
+| 2026-08-18 | Self-review pass 2 found no actionable findings; review stopped after two passes. |

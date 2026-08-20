@@ -147,3 +147,9 @@ and campfire point lights breathe inside their table-defined bands from a determ
 of simulation id and client elapsed time; the emitter material remains static. When an `Empty`
 tile arrives, four deterministic, client-local stone chips sit at the position until a snapshot
 rebuild clears them. They make digging read as work without inventing simulation state.
+
+## Moving lights
+
+A moving light uses the same `LightKind` appearance-table lookup as a static one. A dwarf is not
+special-cased warm: when its wire entity carries a light, reconciliation attaches that table-driven
+point light to the dwarf's blended projection, so the pool moves with the delivered entity.

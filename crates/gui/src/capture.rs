@@ -6,11 +6,11 @@ use std::{
 use bevy::{
     app::AppExit,
     ecs::message::MessageWriter,
-    prelude::{Commands, On, Query, Res, ResMut, Resource, Transform, Without},
+    prelude::{Commands, On, PointLight, Query, Res, ResMut, Resource, Transform, Without},
     render::render_resource::TextureFormat,
     render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
 };
-use protocol::JobState;
+use protocol::{EntityKind, JobState, LightKind};
 
 use crate::{
     ingest::MirrorResource,
@@ -26,6 +26,7 @@ pub struct CaptureState {
     requested: bool,
     expect_work: bool,
     motion: MotionStats,
+    lantern: LanternStats,
 }
 
 #[derive(Default, Debug)]
@@ -89,6 +90,67 @@ impl MotionStats {
             assert!(self.max_working >= 1, "capture observed no working dwarves");
             assert!(self.item_count >= 1, "capture observed no stone items");
         }
+    }
+}
+
+#[derive(Default, Debug)]
+struct LanternStats {
+    positions: BTreeSet<[i32; 3]>,
+    last_positions: BTreeMap<u32, [i32; 3]>,
+    first_region: Option<BTreeSet<[i32; 3]>>,
+    last_region: BTreeSet<[i32; 3]>,
+    lit_terrain_tiles: usize,
+}
+
+impl LanternStats {
+    /// Observe each lantern dwarf's delivered position and the terrain covered by its rendered
+    /// point-light range. Only a new delivered position advances the first/last comparison.
+    fn observe(&mut self, dwarves: impl Iterator<Item = (u32, [i32; 3], BTreeSet<[i32; 3]>)>) {
+        let observations = dwarves.collect::<Vec<_>>();
+        let positions = observations
+            .iter()
+            .map(|(id, position, _)| (*id, *position))
+            .collect::<BTreeMap<_, _>>();
+        if self.first_region.is_some() && positions == self.last_positions {
+            return;
+        }
+
+        let region = observations
+            .into_iter()
+            .flat_map(|(_, position, region)| {
+                self.positions.insert(position);
+                region
+            })
+            .collect::<BTreeSet<_>>();
+        self.lit_terrain_tiles += region.len();
+        self.first_region.get_or_insert_with(|| region.clone());
+        self.last_region = region;
+        self.last_positions = positions;
+    }
+
+    fn needs_observation(&self, positions: &BTreeMap<u32, [i32; 3]>) -> bool {
+        self.first_region.is_none() || positions != &self.last_positions
+    }
+
+    fn moved(&self) -> bool {
+        self.first_region
+            .as_ref()
+            .is_some_and(|first| *first != self.last_region)
+    }
+
+    fn assert_valid(&self) {
+        assert!(
+            self.lit_terrain_tiles > 0,
+            "capture observed no terrain lit by dwarf lanterns"
+        );
+        assert!(
+            !self.last_region.is_empty(),
+            "capture's final dwarf lantern observation lit no terrain"
+        );
+        assert!(
+            self.moved(),
+            "capture observed dwarf lantern light but its lit terrain region never moved"
+        );
     }
 }
 
@@ -171,6 +233,7 @@ impl CaptureState {
             requested: false,
             expect_work,
             motion: MotionStats::default(),
+            lantern: LanternStats::default(),
         }
     }
 }
@@ -178,7 +241,8 @@ impl CaptureState {
 pub fn accumulate_motion(
     mirror: Option<Res<MirrorResource>>,
     capture: Option<ResMut<CaptureState>>,
-    projected: Query<(&WorldProjected, &Transform), Without<TerrainTile>>,
+    projected: Query<(&WorldProjected, &Transform, Option<&PointLight>), Without<TerrainTile>>,
+    terrain: Query<(&TerrainTile, &Transform)>,
 ) {
     let (Some(mirror), Some(mut capture)) = (mirror, capture) else {
         return;
@@ -187,7 +251,7 @@ pub fn accumulate_motion(
     // delivered ticks is ACTUALLY DRAWN somewhere other than either endpoint. Reading the clock
     // instead would count a frozen world — `apply_delta` stores a previous entry for every
     // surviving entity, moving or not — and would pass with the blend deleted entirely.
-    let mid_blend = projected.iter().any(|(marker, transform)| {
+    let mid_blend = projected.iter().any(|(marker, transform, _)| {
         let Some(entity) = mirror.0.entities().find(|entity| entity.id == marker.0) else {
             return false;
         };
@@ -207,6 +271,37 @@ pub fn accumulate_motion(
         mirror.0.items().count(),
         mid_blend,
     );
+    let lanterns = projected
+        .iter()
+        .filter_map(|(marker, transform, light)| {
+            let entity = mirror.0.entities().find(|entity| entity.id == marker.0)?;
+            let light = light?;
+            (entity.kind == EntityKind::Dwarf && entity.light == Some(LightKind::Lantern))
+                .then_some((entity.id, entity.pos, transform.translation, light.range))
+        })
+        .collect::<Vec<_>>();
+    let positions = lanterns
+        .iter()
+        .map(|(id, position, _, _)| (*id, *position))
+        .collect::<BTreeMap<_, _>>();
+    if capture.lantern.needs_observation(&positions) {
+        let terrain = terrain
+            .iter()
+            .map(|(tile, transform)| (tile.0, transform.translation))
+            .collect::<Vec<_>>();
+        capture.lantern.observe(lanterns.into_iter().map(
+            |(id, position, light_translation, range)| {
+                let lit_region = terrain
+                    .iter()
+                    .filter(|(_, terrain_translation)| {
+                        light_translation.distance(*terrain_translation) <= range
+                    })
+                    .map(|(position, _)| *position)
+                    .collect();
+                (id, position, lit_region)
+            },
+        ));
+    }
 }
 
 /// Captures from the primary window after the real render loop has advanced N frames.
@@ -219,6 +314,12 @@ pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureS
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
         println!(
+            "lantern: dwarf positions observed={:?} lit terrain tiles at dwarf positions={} moved={}",
+            capture.lantern.positions,
+            capture.lantern.lit_terrain_tiles,
+            capture.lantern.moved(),
+        );
+        println!(
             "motion: ticks observed={} dwarf position changes={} mid-blend frames={} max working dwarves={} item count={}",
             capture.motion.ticks.len(),
             capture.motion.position_changes,
@@ -226,6 +327,7 @@ pub fn capture_after_frames(mut commands: Commands, mut capture: ResMut<CaptureS
             capture.motion.max_working,
             capture.motion.item_count
         );
+        capture.lantern.assert_valid();
         capture.motion.assert_valid(capture.expect_work);
         capture.requested = true;
         commands
@@ -363,5 +465,26 @@ mod tests {
             "the item count is a running maximum, not the last frame's reading"
         );
         items_then_gone.assert_valid(true);
+    }
+
+    #[test]
+    fn lantern_instrument_requires_a_lit_region_to_move() {
+        // Hand-built mirror observations: the dwarf wire position and the terrain tiles in its
+        // rendered pool are both literals, so this does not prove itself through projection code.
+        let mut still = LanternStats::default();
+        let region = BTreeSet::from([[1, 2, 3], [2, 2, 3]]);
+        still.observe([(7, [2, 3, 4], region.clone())].into_iter());
+        still.observe([(7, [2, 3, 4], region)].into_iter());
+        assert!(std::panic::catch_unwind(|| still.assert_valid()).is_err());
+
+        let mut moving = LanternStats::default();
+        moving.observe([(7, [2, 3, 4], BTreeSet::from([[1, 2, 3], [2, 2, 3]]))].into_iter());
+        moving.observe([(7, [3, 3, 4], BTreeSet::from([[2, 2, 3], [3, 2, 3]]))].into_iter());
+        moving.assert_valid();
+
+        let mut vanished = LanternStats::default();
+        vanished.observe([(7, [2, 3, 4], BTreeSet::from([[1, 2, 3], [2, 2, 3]]))].into_iter());
+        vanished.observe(std::iter::empty());
+        assert!(std::panic::catch_unwind(|| vanished.assert_valid()).is_err());
     }
 }

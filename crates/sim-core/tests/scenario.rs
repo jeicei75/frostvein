@@ -38,7 +38,7 @@ fn idle_dwarves_stay_standable_and_inside_the_camp() {
 
     for _ in 0..200 {
         world.step();
-        for (id, pos, _) in world.dwarves() {
+        for (id, pos, _, _) in world.dwarves() {
             assert_eq!(world.tile(pos), Some(Tile::Empty));
             assert!(matches!(
                 world.tile(Pos {
@@ -135,7 +135,7 @@ fn wander_directions_are_not_constant() {
 #[test]
 fn a_walled_in_dwarf_stays_idle() {
     let mut world = World::generate(42, Dims::DEFAULT);
-    let (id, home, _) = world.dwarves()[0];
+    let (id, home, _, _) = world.dwarves()[0];
     for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
         assert!(world.set_tile(
             Pos {
@@ -152,7 +152,7 @@ fn a_walled_in_dwarf_stays_idle() {
         let dwarf = world
             .dwarves()
             .into_iter()
-            .find(|(dwarf_id, _, _)| *dwarf_id == id)
+            .find(|(dwarf_id, _, _, _)| *dwarf_id == id)
             .expect("walled dwarf remains present");
         assert_eq!(dwarf.1, home);
         assert_eq!(dwarf.2, JobState::Idle);
@@ -592,8 +592,8 @@ fn cancelling_a_claimed_dig_releases_the_dwarf_without_touching_the_tile() {
         world
             .dwarves()
             .into_iter()
-            .find(|(id, _, _)| *id == holder)
-            .map(|(_, _, state)| state),
+            .find(|(id, _, _, _)| *id == holder)
+            .map(|(_, _, state, _)| state),
         Some(JobState::Idle)
     );
     assert_eq!(world.tile(target), Some(Tile::Solid(Material::Stone)));
@@ -641,7 +641,7 @@ fn designate_delay_claim_walk_work_and_dig_complete_headlessly() {
             let state = world
                 .dwarves()
                 .into_iter()
-                .find(|(id, _, _)| *id == holder)
+                .find(|(id, _, _, _)| *id == holder)
                 .expect("claim holder remains a dwarf")
                 .2;
             saw_walk |= state == JobState::Walk;
@@ -1299,7 +1299,7 @@ fn a_dwarf_that_travelled_to_a_distant_job_still_wanders_afterwards() {
     // alive to the wander rule.
     let mut world = World::generate(42, Dims::DEFAULT);
     let spawns = world.dwarves();
-    let (_, first_home, _) = spawns[0];
+    let (_, first_home, _, _) = spawns[0];
 
     // A solid tile far from spawn that ALSO has a standable face — a tile buried in rock has
     // no work position, so nobody would ever walk to it and the test would pass vacuously.
@@ -1367,7 +1367,7 @@ fn a_dwarf_that_travelled_to_a_distant_job_still_wanders_afterwards() {
     let mut moved: Vec<bool> = vec![false; before.len()];
     for _ in 0..200 {
         world.step();
-        for (index, (id, pos, _)) in world.dwarves().into_iter().enumerate() {
+        for (index, (id, pos, _, _)) in world.dwarves().into_iter().enumerate() {
             debug_assert_eq!(id, before[index].0, "dwarf order is stable");
             if pos != before[index].1 {
                 moved[index] = true;
@@ -1375,7 +1375,7 @@ fn a_dwarf_that_travelled_to_a_distant_job_still_wanders_afterwards() {
         }
     }
 
-    for (index, (id, pos, _)) in before.into_iter().enumerate() {
+    for (index, (id, pos, _, _)) in before.into_iter().enumerate() {
         assert!(
             moved[index],
             "dwarf {id:?} has not moved from {pos:?} in 200 ticks — it is stranded outside its \

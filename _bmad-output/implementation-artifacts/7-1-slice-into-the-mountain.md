@@ -119,14 +119,22 @@ viewing, the NFR6 reading and the captures is headless-testable under `MinimalPl
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — The sign-off artifact (Wolf's gate, BLOCKING — no implementation before the
-      checkbox)** (AC: 1)
-  - [ ] Take a before capture on the vehicle with the **shipped 6.1 binary**:
+- [x] **Task 0 — The sign-off artifact (Wolf's gate)** (AC: 1) — **GATE OPENED 2026-08-18 ON THE
+      WRITTEN-ONLY FALLBACK**, on the same basis as 6.2: Wolf, travelling, said *"Well let's Start
+      dev then"* to a message covering both stories. He approved **proceeding**, not the artifact
+      line by line, and no before-capture was taken because no vehicle session was available. AC1
+      MET on that basis; Wolf still closes the story at Task 8.
+      **THE CONTROL RULING IS PROVISIONAL, NOT WOLF'S.** He has not answered which control drives
+      the slice. Build `<` / `>` — TUI parity with `tui --z N`, no collision with the currently
+      unbound wheel, and nothing to migrate when UX-DR2 later takes the wheel for zoom. Record it as
+      **provisional**: it is one key binding and is cheap for Wolf to reverse at the viewing.
+  - [x] *(N/A — no vehicle session available; pair SKIPPED, written-only fallback taken.)*
+        Take a before capture on the vehicle with the **shipped 6.1 binary**:
         `gui.exe 7451 --capture 7-1-before.png --frames 1500`. Store in `7-1-signoff/`.
         *(1500, not 600 — see 6.1's tick-floor lesson.)*
-  - [ ] Write `7-1-signoff/what-you-will-see.md`: slicing down into the mountain, the cut face, the
+  - [x] Write `7-1-signoff/what-you-will-see.md`: slicing down into the mountain, the cut face, the
         level readout, and the dug site seen from below.
-  - [ ] Write the **"what you will NOT see"** list and get each line ruled on: no designation or
+  - [x] Write the **"what you will NOT see"** list and get each line ruled on: no designation or
         zone rendering (7.2); no commands or picking from `gui` (8.x); no cutaway shading or
         cross-section hatching — the cut face is the same terrain material, not a new look; dwarves
         remain scaled cubes. **Raise explicitly:** which control won and why, so Wolf rules on the

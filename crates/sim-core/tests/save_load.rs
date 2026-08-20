@@ -1,6 +1,6 @@
 use sim_core::{
-    DesignationKind, Dims, Job, JobId, JobKind, JobState, Material, Pos, Rect, SavedDwarf,
-    SimCommand, Tile, WORK_TICKS, World,
+    DesignationKind, Dims, Job, JobId, JobKind, JobState, LightKind, Material, Pos, Rect,
+    SavedDwarf, SimCommand, Tile, WORK_TICKS, World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -129,6 +129,26 @@ fn save_round_trip_preserves_emitters() {
 }
 
 #[test]
+fn save_round_trip_restores_the_uniform_dwarf_lantern_without_saved_lantern_state() {
+    let world = World::generate(42, Dims::DEFAULT);
+    let expected = world.dwarves();
+    let save = world.to_save();
+
+    assert!(
+        expected
+            .iter()
+            .all(|(_, _, _, light)| *light == LightKind::Lantern),
+        "the generated world gives every dwarf the uniform lantern"
+    );
+    assert_eq!(
+        save.dwarves.len(),
+        expected.len(),
+        "the existing saved dwarf records remain the complete saved dwarf state"
+    );
+    assert_eq!(World::from_save(save).dwarves(), expected);
+}
+
+#[test]
 fn save_round_trip_preserves_a_mid_haul_carry() {
     let mut save = World::generate(42, Dims::DEFAULT).to_save();
     let stone = Pos { x: 9, y: 8, z: 7 };
@@ -221,7 +241,7 @@ fn save_load_preserves_in_progress_work() {
     while !control
         .dwarves()
         .iter()
-        .any(|(_, _, state)| *state == JobState::Work)
+        .any(|(_, _, state, _)| *state == JobState::Work)
     {
         assert!(control.tick() < 100, "adjacent dig never reached work");
         control.step();
