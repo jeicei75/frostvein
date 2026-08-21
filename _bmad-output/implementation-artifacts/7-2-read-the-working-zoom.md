@@ -545,6 +545,19 @@ stockpiles O(zones²). Reconciliation now builds `BTreeMap`s of existing designa
 and computes channel/zone overlap from the already-built wanted-zone set; lookup is O(log n) rather
 than a repeated scan. The full headless projection suite (41 tests) and the post-fix gate passed.
 
+**Self-review pass 3 — 2026-08-21 (hard cap reached):** `codex review --base main` raised one
+actionable P2: the 1.02-wide, coplanar mark slabs overlapped their adjacent tiles and could produce
+depth-fighting, material-order seams. A production-ingest regression first went RED with:
+
+```text
+ordinary mark slabs need a gutter between adjacent tiles; got dig=1 channel=1
+```
+
+The ordinary slabs now use a 0.94 footprint scale (the 1.02-wide mesh leaves a 0.0412-unit gutter
+at every tile edge), and a co-located channel/zone keeps its raised inset at 0.6768. The focused
+test is green and commit `4897224` passed `scripts/gate.sh` with `GATE GREEN`. This was the third
+allowed self-review pass; no fourth review was run.
+
 ### Completion Notes List
 
 **Task 0 COMPLETE — AC1 MET. WOLF APPROVED THE ARTIFACT 2026-08-21 AND THE GATE IS OPEN.** Three
@@ -611,3 +624,4 @@ claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
 | 2026-08-21 | Tasks 1–5 complete and status moved to review. AC14 now drives snapshot/delta ingest through the shared projection schedule, checks counts from projected entities across a cut-filtered state change, and makes the real capture fail after marks disappear. RED compile and mirror-count sabotage evidence, the eight-row KILLED table, corrected 348-test baseline, and a green 357-pass/1-ignored gate are recorded. Tasks 6–7 and AC8/AC17/rendered AC9 remain open for the vehicle and Wolf. |
 | 2026-08-21 | Self-review pass 1 fixed three actionable findings: dig slab depth hiding, channel/zone z-fighting, and non-finite `--distance`. Each correction has a focused RED→green regression; the post-fix gate is green. |
 | 2026-08-21 | Self-review pass 2 fixed one P1: position indexes replace quadratic mark reconciliation for uncapped zone full-resends; gate green. |
+| 2026-08-21 | Self-review pass 3 (the hard cap) fixed adjacent coplanar mark-slab overlap with a 0.94 footprint scale; focused RED→green regression and gate green. No fourth pass run. |
