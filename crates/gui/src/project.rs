@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
@@ -438,25 +438,33 @@ pub fn reconcile(
         .filter(|designation| designation.pos[2] <= slice.level())
         .map(|designation| (designation.pos, designation.kind))
         .collect::<std::collections::BTreeMap<_, _>>();
+    let wanted_zones = mirror
+        .zones()
+        .iter()
+        .filter(|zone| zone.pos[2] <= slice.level())
+        .map(|zone| zone.pos)
+        .collect::<BTreeSet<_>>();
     let channel_zone_overlaps = wanted_designations
         .iter()
         .filter(|(_, kind)| **kind == DesignationKind::Channel)
-        .filter(|(position, _)| mirror.zones().iter().any(|zone| zone.pos == **position))
+        .filter(|(position, _)| wanted_zones.contains(*position))
         .map(|(position, _)| *position)
         .collect::<BTreeSet<_>>();
-    for (entity, mark, _) in designations.iter() {
-        if !wanted_designations.contains_key(&mark.0) {
+    let existing_designations = designations
+        .iter()
+        .map(|(entity, mark, kind)| (mark.0, (entity, kind.0)))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for (&position, &(entity, _)) in &existing_designations {
+        if !wanted_designations.contains_key(&position) {
             commands.entity(entity).despawn();
         }
     }
     for (&position, &kind) in &wanted_designations {
-        if let Some((entity, _, existing_kind)) =
-            designations.iter().find(|(_, mark, _)| mark.0 == position)
-        {
+        if let Some(&(entity, existing_kind)) = existing_designations.get(&position) {
             commands
                 .entity(entity)
                 .insert(designation_mark_transform(position, kind));
-            if existing_kind.0 != kind {
+            if existing_kind != kind {
                 commands
                     .entity(entity)
                     .insert(ProjectedDesignationKind(kind));
@@ -481,20 +489,18 @@ pub fn reconcile(
         }
     }
 
-    let wanted_zones = mirror
-        .zones()
+    let existing_zones = zones
         .iter()
-        .filter(|zone| zone.pos[2] <= slice.level())
-        .map(|zone| zone.pos)
-        .collect::<BTreeSet<_>>();
-    for (entity, mark) in zones.iter() {
-        if !wanted_zones.contains(&mark.0) {
+        .map(|(entity, mark)| (mark.0, entity))
+        .collect::<BTreeMap<_, _>>();
+    for (&position, &entity) in &existing_zones {
+        if !wanted_zones.contains(&position) {
             commands.entity(entity).despawn();
         }
     }
     for position in wanted_zones {
         let transform = zone_mark_transform(position, channel_zone_overlaps.contains(&position));
-        if let Some((entity, _)) = zones.iter().find(|(_, mark)| mark.0 == position) {
+        if let Some(&entity) = existing_zones.get(&position) {
             commands.entity(entity).insert(transform);
         } else {
             let mut entity = commands.spawn((ProjectedZone(position), transform));
