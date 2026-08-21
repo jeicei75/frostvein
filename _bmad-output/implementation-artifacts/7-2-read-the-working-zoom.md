@@ -509,10 +509,50 @@ PNG comparison remains vehicle-only; its real-surface visual evidence is still T
 side of the `> 0` range assertion is also covered by the completed `capture accepts zero marks`
 mutation below.
 
-**Mutation RED evidence — orchestrator-verified completed round, 2026-08-21:**
-`scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/7-2-read-the-working-zoom.sh`
-ran alone, then `cargo clean -p gui`; all eight compiling mutations were KILLED. The continuation
-did not rerun the already-complete table or change its script.
+**Mutation RED evidence — 2026-08-21. TEN rows, 10/10 KILLED, run and verified by the orchestrator
+AFTER the final refactor.** `scripts/mutate.sh` run alone, then `cargo clean -p gui`.
+
+**The table went stale twice during this story, and the second time is the finding.** The dev
+agent's own last commits (`5e682db` "Index projected marks by position", `4897224` "Separate
+adjacent mark slabs") moved the very lines two rows target, and the table was NOT re-run after them
+— the record above originally read "all eight compiling mutations were KILLED … the continuation
+did not rerun the already-complete table", which was true when it ran and false by the time it was
+written. Re-running it measured **`designation absence no longer despawns` and `kind changes do not
+restyle` both APPLY-FAILED**: `if !wanted_designations.contains_key(&mark.0)` had become
+`(&position)`, and `existing_kind.0 != kind` had become `existing_kind != kind`. Both retargeted,
+both now KILLED. This is the **third recorded instance of the stale-sabotage-literal class** (after
+6.1's torch flicker row and 6.2's lantern row) and the first where the mutation and the code that
+outdated it were written in the same session. **A sabotage table is only evidence as of its last
+run: re-run it after the last refactor, not after the last feature.**
+
+Earlier in the story the same two headline rows had to be repaired for a different reason: the first
+run's `designation projection is deleted` and `zone projection is deleted` swapped the mirror source
+for an empty slice, which orphaned the `.filter/.map/.collect` chain behind it, so **neither
+compiled and neither pinned anything** (commit `58be8f5`). A non-compiling sabotage is not a weaker
+result than a surviving one — both prove exactly nothing.
+
+**AC4/AC5 WERE MET ONLY VACUOUSLY, and this was found by measuring rather than by reading.** The
+colour test asserted `!terrain.contains(&rgb)` — mere inequality — for an AC that asks marks be
+*visually* distinguishable from undesignated terrain. Measured, `channel (126,154,190)` sat **16 RGB
+units** from `Material::Snow (136,150,178)` and 21 from `snow_cap`, and `zone (170,186,202)` sat
+**22** from `foliage_snow_color (156,170,196)` — which the test's terrain list did not even include.
+Two of the three marks were near-neighbours of the exact surfaces they are drawn on, and would have
+reached Wolf's live viewing labelled "distinguishable" by an assertion that could not fail for the
+property it claimed. This is the self-referential/vacuous-assertion class again (1.1, 1.2, 1.3, 6.1,
+6.2), and AC8's legibility bar is where it would have surfaced — on the vehicle, at the expensive
+end. Fixed at commit `2299218`: a **40-unit separation floor** against every terrain presentation
+(`foliage_snow_color` now included), with `channel` moved to `(86,120,214)` and `zone` to
+`(120,206,196)`. Both remain cold (`B >= R`), all three marks remain mutually distinct, and the new
+assertion was proven able to go RED by restoring the old value — it fired at 39 against
+`Material::Ice`. **The new values have never been seen rendered; they are cold and separated by
+measurement, and Wolf's eye at Task 6 remains the authority on whether they read.**
+
+**A ninth and tenth row were added by the orchestrator:** the position-indexing refactor split despawn-on-
+absence into two loops, one per mark kind, and only the designation half had a row. The zone half
+was probed by hand before the row was written — sabotaging it turns
+`draw_count_instrument_follows_projected_marks_from_live_ingest` RED, so it is genuinely covered
+rather than merely asserted to be. The tenth row covers AC4/AC5, which had **no mutation at all**
+until the colour defect above was found.
 
 | Mutation | Result | Assertion that went red |
 | --- | --- | --- |
@@ -524,6 +564,8 @@ did not rerun the already-complete table or change its script.
 | capture accepts zero marks | KILLED | `draw_count_instrument_rejects_an_empty_level_and_accepts_terrain`: `a terrain draw without marks must not claim a working-order capture` |
 | distance capture validation is disabled | KILLED | `capture_distance_requires_capture_and_reaches_the_camera_setup`: `assert!(…parse_args_from(["--distance", "30"]).is_err())` |
 | mark systems leave the shared projection schedule | KILLED | `snapshot_marks_project_through_the_live_ingest_schedule`: expected projected designation set `{[0, 0, 1]}`, got `{}` |
+| zone absence no longer despawns | KILLED | `draw_count_instrument_follows_projected_marks_from_live_ingest`: the stale zone survives the no-mark delta, so the instrument's projected zone count stays non-zero |
+| a mark colour drifts into the terrain palette | KILLED | `mark_colours_are_distinct_cold_literals`: `channel [136, 150, 178] sits 0 from terrain [136, 150, 178], inside the 40 floor` — the expected literal is moved with the colour so the separation floor is what catches it, not the literal check |
 
 **Gate — 2026-08-21:** `/workspace/projects/frostvein/scripts/gate.sh` was run after AC14 and
 reached `GATE GREEN`: format, clippy, 357 passing workspace tests with 1 ignored, all three
@@ -600,12 +642,33 @@ and validated `--distance`, with the gate-side AC14 test above; Task 5's eight-r
 killed. Tasks 6 and 7 remain open: no native-Windows GPU capture or Wolf closing sign-off was
 claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
 
+**ORCHESTRATOR VERIFICATION — 2026-08-21, independent of the dev agent's claims.**
+
+- **Gate GREEN on a cold rebuild** (`cargo clean -p gui` before the run), run by the orchestrator,
+  not reported by the dev agent. **359 workspace tests passing, 1 ignored** (that one is the
+  pre-existing real-surface PNG comparison; AC14's new test is NOT ignored and runs in the gate).
+  Baseline before this story was **348**, not the story's stated 328.
+- **AC3 verified by command**: `git diff --stat 8d85259..HEAD -- crates/protocol crates/simd
+  crates/sim-core crates/client-core crates/tui` is **empty**. No wire change.
+- **File List verified** against `git diff --name-only 8d85259..HEAD` — matches exactly, 11 files.
+- **Self-gate honoured its cap**: exactly three `codex review --base main` passes, five findings
+  (2 P1, 3 P2), and all five confirmed present in the tree rather than merely claimed — non-finite
+  `--distance` rejection (`ingest.rs:263`), position-indexed reconciliation (`existing_designations`
+  / `existing_zones`), dig-slab surface placement and channel/zone layering
+  (`designation_mark_transform`, `zone_mark_transform`), and the adjacent-slab gutter
+  (`MARK_FOOTPRINT_SCALE`). The third pass raised a real finding, which was fixed and reported
+  rather than answered with a fourth pass — the required behaviour.
+- **Run one committed nothing.** It implemented Tasks 1-3 and left the whole tree staged and
+  uncommitted when its window closed, so there was no recovery point at all. The orchestrator
+  verified the work green and committed it (`1196199`). This is precisely what the commit-cadence
+  floor exists to prevent; the continuation run held cadence properly across eight commits.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/7-2-read-the-working-zoom.md` (UPDATE) — story record
 - `_bmad-output/implementation-artifacts/7-2-signoff/what-you-will-see.md` (NEW) — approved Task 0 artifact
 - `_bmad-output/implementation-artifacts/metrics/7-2-read-the-working-zoom.md` (NEW) — metrics ledger
-- `_bmad-output/implementation-artifacts/mutations/7-2-read-the-working-zoom.sh` (NEW) — eight-row sabotage table
+- `_bmad-output/implementation-artifacts/mutations/7-2-read-the-working-zoom.sh` (NEW) — ten-row sabotage table
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (UPDATE) — story status
 - `crates/gui/src/appearance.rs` (UPDATE) — mark colour table
 - `crates/gui/src/capture.rs` (UPDATE) — projected draw statistics and capture assertions
@@ -625,3 +688,4 @@ claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
 | 2026-08-21 | Self-review pass 1 fixed three actionable findings: dig slab depth hiding, channel/zone z-fighting, and non-finite `--distance`. Each correction has a focused RED→green regression; the post-fix gate is green. |
 | 2026-08-21 | Self-review pass 2 fixed one P1: position indexes replace quadratic mark reconciliation for uncapped zone full-resends; gate green. |
 | 2026-08-21 | Self-review pass 3 (the hard cap) fixed adjacent coplanar mark-slab overlap with a 0.94 footprint scale; focused RED→green regression and gate green. No fourth pass run. |
+| 2026-08-21 | Tasks 1-5 complete, headless half done, Status -> review. Two Codex runs (`gpt-5.6-terra`/high); run one left everything uncommitted, run two held cadence over 8 commits and fixed all 5 self-gate findings within the 3-pass cap. Orchestrator-verified: gate GREEN cold, 359 tests (from 348), AC3 empty, File List exact, sabotage **10/10 KILLED**. Three defects found by the orchestrator, not the agent: two headline sabotage rows never compiled; two more went stale against the agent's own final refactor (3rd instance of that class); and **AC4/AC5 were met only vacuously** — channel sat 16 RGB units from snow and zone 22 from foliage_snow, behind an inequality check that could not fail. Marks retuned behind a 40-unit separation floor. Tasks 6/7 and ACs 8/17 and the rendered halves of AC9 remain OPEN. |

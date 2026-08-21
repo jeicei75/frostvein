@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-21  # 7.2 dev STARTED -- Task 0 sign-off artifact authored, blocked on Wolf's approval.
+last_updated: 2026-08-21  # 7.2 headless half DONE -> review (Tasks 1-5); vehicle half + Wolf's sign-off still owed.
                           # 2026-08-20 VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
                           # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
                           # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
@@ -414,6 +414,35 @@ development_status:
   # pinned to --z 9 hides the zone entirely. Pin --z 10. TUI key sequence lands 8/8, verbatim from 6.1.
   # Baseline 328 workspace tests green. Task 0 (Wolf's artifact) is the blocking gate; Tasks 6/7 are
   # vehicle- and human-bound. BLOCKED on Task 0.
+  # HEADLESS HALF DONE 2026-08-21 -> review. Two Codex runs (terra/high). RUN ONE COMMITTED NOTHING --
+  # Tasks 1-3 implemented and left entirely STAGED when its window closed, so a dead run had no recovery
+  # point at all; orchestrator verified green and committed it. Run two held cadence over 8 commits, ran
+  # exactly 3 self-gate passes and fixed all 5 findings (2 P1), the third pass's included -- reported, not
+  # answered with a fourth. Orchestrator-verified: gate GREEN cold, 359 tests (baseline 348, NOT the
+  # story's stated 328), AC3 empty over all five non-gui crates, File List exact, sabotage 10/10 KILLED.
+  # THREE DEFECTS FOUND BY THE ORCHESTRATOR, NONE BY THE AGENT. (1) The two HEADLINE sabotage rows --
+  # designation and zone projection deleted -- swapped the mirror source for an empty slice, orphaning the
+  # filter/map/collect chain, so NEITHER COMPILED and neither pinned anything. (2) STALE-SABOTAGE-LITERAL,
+  # 3rd INSTANCE and the first where the mutation and the code that outdated it were written in the SAME
+  # session: the agent's own last refactors moved the lines two rows target, the table was not re-run
+  # after them, and the record asserted "all eight KILLED ... did not rerun the already-complete table" --
+  # true when it ran, false when written. Re-running measured 2 APPLY-FAILED. A table is evidence only as
+  # of its last run: re-run after the last REFACTOR, not the last FEATURE. (3) AC4/AC5 WERE MET ONLY
+  # VACUOUSLY -- the colour test asserted mere inequality for an AC demanding VISUALLY distinguishable.
+  # Measured, channel sat 16 RGB units from Material::Snow and zone 22 from foliage_snow_color, which the
+  # terrain list did not even include; two of three marks were near-neighbours of the surfaces they are
+  # drawn on and would have reached the live viewing labelled distinguishable. Now a 40-unit separation
+  # floor, proven able to go RED. THE RETUNED COLOURS HAVE NEVER BEEN SEEN RENDERED.
+  # WOLF'S TASK 0 RULINGS 2026-08-21: marks are a FLOOR SLAB (channel and zone tiles have no cube, so a
+  # tinted replacement could express only dig); AC9's vista capture moves to FULL DEPTH because
+  # range_band_applies SKIPS the warm/ground assertions below the world top and BOTH prescribed captures
+  # pinned --z 10, so AC9's own recipe proved nothing; mark colours break with the TUI's amber on purpose.
+  # AC9's Verification text was left UNEDITED (dev-story may not touch that section) -- the artifact and
+  # Dev Agent Record carry the corrected recipe and Task 6's runbook must too.
+  # REPORTED NOT FIXED: the slice readout's em-dash has no glyph on the vehicle and draws as a box
+  # (slice.rs:59), visible in 7-1-slice.png and every capture since.
+  # STILL OPEN and NOT closable by any agent: Tasks 6 (live vehicle) + 7 (Wolf's sign-off), ACs 8 and 17
+  # and the rendered halves of AC9. NOTHING IN THIS STORY HAS BEEN OBSERVED ON THE VEHICLE.
   7-2-read-the-working-zoom: review
   epic-7-retrospective: optional
   epic-8: backlog
