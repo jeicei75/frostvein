@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-21  # 7.2 headless half DONE -> review (Tasks 1-5); vehicle half + Wolf's sign-off still owed.
+last_updated: 2026-08-21  # 7.2 code-reviewed (4 layers, no coverage holes) -> in-progress, 14 patches applied, 16/16 mutations killed; vehicle half + Wolf's sign-off still owed.
                           # 2026-08-20 VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
                           # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
                           # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
@@ -443,7 +443,34 @@ development_status:
   # (slice.rs:59), visible in 7-1-slice.png and every capture since.
   # STILL OPEN and NOT closable by any agent: Tasks 6 (live vehicle) + 7 (Wolf's sign-off), ACs 8 and 17
   # and the rendered halves of AC9. NOTHING IN THIS STORY HAS BEEN OBSERVED ON THE VEHICLE.
-  7-2-read-the-working-zoom: review
+  # CODE REVIEW 2026-08-21 (4 layers, fresh context, NONE a coverage hole) -> back to in-progress.
+  # 17 findings: 3 decision-needed (all ruled by Wolf, all patched), 11 patch, 4 defer, 0 dismissed.
+  # 14 patches applied in ONE verification pass; gate GREEN cold, 364 tests (was 359), sabotage
+  # table 16 rows 16/16 KILLED with zero APPLY-FAILED after being re-run post-refactor.
+  # THE REVIEW'S BIGGEST FINDING WAS INVISIBLE TO EVERY GREEN TEST: the prescribed working-zoom
+  # capture photographed an EMPTY SITE and exited 0. A dig slab sits at z+0.54, but the slice draws
+  # every solid tile AT the cut as a full cube spanning [z-0.5, z+0.5] regardless of exposure, so a
+  # dig with rock above it was sealed inside opaque geometry -- and the dwarves dig the REACHABLE
+  # tiles first, so the marks surviving a capture window are exactly the buried ones. Measured live:
+  # 25 of 79 visible at t+2, 9 at t+46, 2 at t+64, 0 of 50 from t+102 on, while the instrument
+  # correctly printed designations=50. AC13's counter could not catch it -- all 50 WERE projected.
+  # Wolf ruled: promote a buried dig onto the top face of the rock covering it.
+  # TWO SEAMS WERE SABOTAGE-PROVED INERT with the whole suite green, both by more than one layer:
+  # (1) --distance parsed, validated, then never reached the camera rig, while its only test was
+  # NAMED for reaching the camera setup and asserted parse_args_from alone; (2) AC10's restyle was
+  # pinned on a bookkeeping component, not the style -- deleting the update-path MeshMaterial3d
+  # insert left 106/106 green including the test whose name claims that coverage, and the mutation
+  # row sabotaged the same wrong branch. VACUITY RELOCATES: the colour-table vacuity fixed before
+  # review reappeared in the restyle assertion, the --distance seam and AC11's rebuild oracle.
+  # CROSS-CLIENT COLLISION nobody had a rule for: gui's DIG blue shipped BYTE-IDENTICAL to the TUI's
+  # CHANNEL blue, on the two windows Wolf reads side by side. Palette retuned; the colour test now
+  # carries a cross-client floor as well as a terrain floor.
+  # AC3 verified on the story's OWN range (8d85259..HEAD), empty over all five non-gui crates.
+  # STILL OPEN and NOT closable by any agent: Tasks 6 (live vehicle) + 7 (Wolf's sign-off), ACs 8
+  # and 17 and the rendered half of AC9. NOTHING IN THIS STORY HAS BEEN OBSERVED ON THE VEHICLE and
+  # the retuned colours have never been seen rendered. The sign-off artifact carries a dated
+  # amendment naming what changed since approval and exactly what to look at.
+  7-2-read-the-working-zoom: in-progress
   epic-7-retrospective: optional
   epic-8: backlog
   # M2's hardest input work and the main story-count driver, isolated on purpose.

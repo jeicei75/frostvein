@@ -91,6 +91,19 @@ entities are world-projected (created/despawned solely by reconciliation,
 keyed by sim id; delete-all-and-re-project must reproduce the scene) or
 client-local (sky, aurora, snowfall, overlay — never world state) (AD-14).
 
+**World-projected does not imply Id-keyed** (story 7.2 — amends AD-14's
+"keyed by sim id"). AD-14 names designations and zones as world-projected in
+the same sentence that says reconciliation is keyed by sim `Id`, and those two
+halves cannot both hold: the wire carries no id for a designation or a zone,
+only a position, and AD-8 full-resends both lists every tick. Marks are
+therefore reconciled by POSITION, with their own marker components rather than
+`WorldProjected(u32)` — that id space already mixes sim ids with synthetic
+`terrain_id(pos, dims)` values, and a position keyed into it would collide with
+terrain immediately. Everything else AD-14 asserts is unchanged and still binds
+marks: they are created and despawned solely by reconciliation, they are never
+`ClientLocal`, and delete-all-and-re-project must reproduce them. Recorded here
+rather than left to drift, on the AD-13/AD-6 precedent above.
+
 **Interpolation is presentation.** The projection may blend between the two
 mirrored ticks; it never extrapolates or predicts. A snapshot (connect or
 load) clears the previous tick — a rewind snaps, never animates (AD-15).

@@ -783,3 +783,29 @@ executed a single line of its production path.**
   same session — fixed while writing the vehicle runbooks rather than left to rot, since the runbook
   is handed to Wolf. The line now names the `at z 31` suffix and says to match the prefix.
   `_bmad-output/implementation-artifacts/6-1-signoff/task-6-vehicle-runbook.md` `[auditor/LOW]`
+
+## Deferred from: code review of 7-2-read-the-working-zoom (2026-08-21)
+
+- **Duplicate-position designations in one payload silently resolve last-write-wins.** The
+  `wanted_designations` `BTreeMap` collect drops the earlier entry with no log or assert. Not
+  currently reachable — no sim/wire path permits two designations at one position — so this rests
+  on an invariant enforced in `sim-core`. Blind Hunter proved the behaviour by execution: Dig then
+  Channel at `[1,1,1]` yields one mark, kind Channel, no crash, no orphan.
+  `crates/gui/src/project.rs:439-444` `[blind/LOW]`
+- **Marks re-insert `Transform` and `MeshMaterial3d` every reconcile tick regardless of change.**
+  Efficiency only; no `Changed<T>`/`Added<T>` filter exists anywhere in `gui` today, so nothing
+  observable breaks. But the adjacent `WorldProjected` light path gates its insert on
+  `existing.0 != light` (`project.rs:396-406`) and the new mark code does not follow that
+  established local pattern, while zones are uncapped and full-resent every tick. NOTE the tension
+  with the review's Patch 1: the unconditional insert is *why* a kind change restyles today, so
+  gating it and asserting the restyle must land together.
+  `crates/gui/src/project.rs:466-480, :505-518` `[blind/LOW]`
+- **Zone slabs hang in mid-air once the rock supporting them is dug out.** Not `gui`'s defect — the
+  sim keeps the zone when the tile below becomes empty. But the story's own recipe places the
+  stockpile inside the dig rect, so after ~60 ticks `[56,64,10]` and `[56,65,10]` have empty below
+  them (verified live against a real daemon) and two teal slabs float over the pit. Expect it to be
+  the first thing Wolf asks about at the viewing. `crates/sim-core` zone lifetime `[feature/LOW]`
+- **The "hollow shell" doc comment is attached to the wrong function.** The diff inserted the two
+  new mark getters between the comment and its original target, so the rationale for why
+  `terrain_tiles > 0` alone is insufficient now documents `pub fn designations()` instead of
+  `pub fn assert_valid()`. Cosmetic. `crates/gui/src/capture.rs:55-68` `[edge/LOW]`

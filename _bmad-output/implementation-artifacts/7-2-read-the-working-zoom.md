@@ -5,7 +5,7 @@ baseline_commit: 8d85259a42c48ec79a3aeb82ee17386610019e5a
 
 # Story 7.2: Read the Working Zoom
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -201,6 +201,76 @@ runs on the Windows side against `localhost:<port>`. Build recipe is in Verifica
   - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
         this box.**
 
+### Review Findings — code review 2026-08-21 (4 layers, all live, fresh context, no coverage holes)
+
+Layers: Blind Hunter (Sonnet, `project.rs`+`appearance.rs`), Edge Case Hunter (Sonnet,
+`ingest.rs`+`capture.rs`), Acceptance Auditor (Opus, whole diff), Feature Auditor (Opus, whole
+diff). R1's crate-level territory split does not map onto a gui-only story, so the two hunters were
+split by seam within `crates/gui` instead — same intent, disjoint scope. All four verified
+`cargo 1.97.1`, ran the suite and executed probes; **none was a coverage hole**. Every layer worked
+in its own `CARGO_TARGET_DIR`; the working tree was never mutated (verified clean after).
+
+Convergence measured: 2 of 17 findings raised independently by two layers
+(`--distance` inert = edge+auditor; `assert_valid` mark rigidity = edge+feature).
+
+Both traps seeded in advance came back CLEAN: AC3 is empty over the five non-gui crates on the
+story's own range `8d85259a..HEAD` (not vs `main`, not vs branch tip), and the 40-unit colour floor
+is genuine — tightest pair 48.2 (channel vs `Material::Ice`), complete terrain set including
+`foliage_snow_color`, demonstrably red at the pre-fix value of 16.1. The vacuity the earlier
+orchestrator pass found in the colour table has **relocated**, not vanished: it now sits in the
+restyle assertion, the `--distance` seam and the AC11 rebuild oracle (Patch 1, 2, 3 below).
+
+**Not proven by anything here:** ACs 8, 17 and the rendered half of AC9. No display exists on this
+devpod, so every appearance statement below is computed transforms, extents and colour values —
+never a rendered pixel. **The retuned colours have still never been seen rendered, and nothing in
+this story has been observed on the vehicle.**
+
+- [x] [Review][Patch] **RULED 2026-08-21 by Wolf: promote a buried dig's slab to the top face of the cut-level cube.** The floor-slab ruling stands and one capture level is kept; the artifact must gain a line saying a dig under rock is drawn on the surface above it, since the mark is then no longer strictly inside the marked tile's own volume. Original finding: **The prescribed working-zoom capture will show ZERO dig marks while printing `designations=50` and exiting 0** — A dig slab sits at Y = z+0.54 (`project.rs:527-530`), spanning [9.5024, 9.5776] for a z=9 dig. At `--z 10`, `is_visible_at_slice` (`project.rs:785-789`) draws *every* Solid/Ramp tile exactly at the cut as a full 1x1x1 cube spanning [9.5, 10.5] — regardless of exposure — so any dig with rock above it is entirely enclosed in an opaque cube. This is the steady state, not an edge case: dwarves dig the *reachable* tiles first, and reachable ~= open sky above ~= exactly the marks whose slab is not buried. Feature Auditor measured it live on the story's own recipe: visible-at-cut 25/79 at t+2, 9 at t+46, 2 at t+64, **0 of 50 from t+102 onward** (tile above, at the plateau: 43 solid, 7 ramp, 1 empty). AC13's counter cannot catch this — all 50 are correctly *projected*. And there is no `--z` that shows both marks: at `--z 9` the digs appear but zones (z=10) are filtered by `pos[2] <= slice.level()`, so `assert!(self.zones > 0)` (`capture.rs:81`) hard-panics. The story's "stable floor of ~50 marks survives any capture window" is true on the wire and false on screen. Wolf is being asked to rule AC8 on a frame with no designations in it. `crates/gui/src/project.rs:527-534`, `:785-790`, `crates/gui/src/capture.rs:80-81`
+- [x] [Review][Patch] **RULED 2026-08-21 by Wolf: retune both now, before the vehicle session.** Move dig off the TUI's channel blue AND re-separate dig from channel on an axis the cool light does not compress; keep the 40-unit floor and the cold-or-neutral constraint, and re-run the separation test. Original finding: **The mark palette: `gui`'s DIG blue is byte-identical to the TUI's CHANNEL blue, and dig vs channel are two blues separating on the axis the light compresses** — `appearance.rs:101` gives dig `(92,174,224)`; `crates/tui/src/palette.rs:110` gives **channel** `(92,174,224)`. Orchestrator-confirmed at source. The `// NOTE:` correctly records Wolf's ruling that gui breaks with the TUI's amber on purpose; what nobody noticed is that the substitute landed exactly on the TUI's channel blue, so on the two windows he runs side by side one RGB means two different orders. Separately: dig `(92,174,224)` vs channel `(86,120,214)` differ almost entirely in green (174 vs 120), and `MIN_MARK_SEPARATION = 40.0` is a raw sRGB floor asserted on *unlit* literals, while the shipped light is a desaturated cool directional `(150,190,180)` plus cool ambient that multiplies toward teal and compresses that exact axis. Both are cheap to retune now and expensive to discover at the vehicle session. `crates/gui/src/appearance.rs:99-104`
+- [x] [Review][Patch] **RULED 2026-08-21 by Wolf: give marks an independent oracle**, mirroring `expected_cut_face` — count what the mirror actually holds at or below the cut and assert projected == expected. Strictly stronger than `> 0` (it catches undercounting, which `> 0` cannot) and it stops a legitimately-empty view being indistinguishable from silent breakage. Original finding: **`DrawStats::assert_valid` now makes every no-mark capture in the project panic, including 7.1's own recipe** — `capture.rs:80-81` asserts `designations > 0` and `zones > 0` unconditionally. This is literally what AC13 demands, so it is not a defect; but 7.1's shipped recipe (`gui.exe 7451 --capture 7-1-slice.png --frames 1500 --z 9`) and any future no-designation regression capture now die with `capture projected no designations`. Raised independently by two layers: the Edge Case Hunter also notes marks have no independent oracle (contrast `expected_cut_face`, `capture.rs:125-139`) and no caller-controlled opt-out (contrast `MotionStats`' `expect_work` flag), so "marks legitimately absent from this view" and "mark rendering silently broke" produce the identical panic. Any opt-out must not re-open AC13's false-pass hole. `crates/gui/src/capture.rs:68-82`
+- [x] [Review][Patch] **AC10's restyle is pinned on a bookkeeping component, not on the style — and the sabotage row sabotages the same wrong branch** [crates/gui/src/project.rs:466-480] — The `ProjectedDesignationKind` swap is guarded by `if existing_kind != kind`; the `MeshMaterial3d` insert sits *outside* that guard. Production behaviour is therefore CORRECT (two layers verified the handle really does change dig->channel), but nothing asserts it: the only test, `a_designation_kind_change_restyles_the_existing_position_mark` (`headless.rs:317`), asserts `(pos, ProjectedDesignationKind)` only, and mutation row `kind changes do not restyle` mutates `if existing_kind != kind` -> `if false &&`, i.e. the component-only branch. Auditor confirmed by execution in a /tmp clone: deleting the update-path `MeshMaterial3d` insert leaves `cargo test -p gui` **fully green** (63+2+41) including the test whose name claims the coverage. Fix: assert the material *handle* changes, and retarget the mutation row.
+- [x] [Review][Patch] **`--distance` can be made completely inert with the whole suite green, and its test name claims otherwise** [crates/gui/src/ingest.rs:293-297] — `rig.distance = distance.0.clamp(4.0, 500.0)` is the flag's only effect. The test `capture_distance_requires_capture_and_reaches_the_camera_setup` (`ingest.rs:727`) asserts `parse_args_from` results only — nothing constructs an `App`, inserts `CaptureDistance`, runs `setup_camera` and reads `rig.distance`. Raised by two layers independently, each sabotage-proving it in its own /tmp clone: replacing the assignment with `let _ = distance;` leaves all 106 tests passing, exit 0. `gui.exe … --distance 30` would silently capture at `BOOT_DISTANCE = 90.0`. This is the exact defect class the codebase's own `the_z_flag_reaches_the_slice_resource_rather_than_merely_parsing` exists to prevent for `--z`. Fix: an analogous reaching test, plus a mutation row on the assignment (the existing row covers validation only).
+- [x] [Review][Patch] **AC11's rebuild oracle is blind to marks, so "reproduces the same scene, marks included" is untested** [crates/gui/tests/headless.rs:1222-1250] — the snapshot carries `Vec::new()` designations and zones; the despawn loop queries `&WorldProjected` and marks carry no such component; the `projected_scene` oracle (`headless.rs:180-194`) also keys on `&WorldProjected`. Auditor wrote the missing probe in a /tmp clone and it passes, so the AC's substance holds — the repo simply does not assert it, and there is no mutation row for the seam.
+- [x] [Review][Patch] **The structural partition test was never extended; the coverage half of the assertion is missing** [crates/gui/tests/headless.rs:1253] — `world_and_client_local_markers_are_a_structural_partition` is unchanged by this diff and still knows only `WorldProjected`. The new `marks_are_world_projected_never_client_local` (`headless.rs:395`) asserts disjointness only: its body is `if is_world || local.is_some() { … }`, so an entity carrying *neither* marker is skipped — exactly the case the coverage half exists to catch. Task 2's last subtask asked for both halves.
+- [x] [Review][Patch] **A dig and a stockpile in the same column produce byte-identical transforms — z-fighting on the recipe's own site** [crates/gui/src/project.rs:527-547] — `zone_mark_transform` handles the same-position channel/zone overlap but not the far more common dig-at-z / zone-at-z+1 pair, which is geometrically the same surface. Feature Auditor printed both from the real projection path: designation `[9,9,9]` and zone `[9,9,10]` both at `(9.000, 9.540, -9.000)`, scale `(0.940,0.940,0.940)`, same mesh, both opaque. Reachable from the sim (verified live), and the story's own recipe hits it — the stockpile columns `[56,64]`/`[56,65]` sit inside the dig rect `[50,58]-[57,69]`; 2 coincident slabs measured at t+2. The stockpile tiles would flicker between teal and blue exactly while Wolf judges AC5. The existing overlap branch is the fix template.
+- [x] [Review][Patch] **The approved sign-off artifact misdescribes where dig marks are drawn** [_bmad-output/implementation-artifacts/7-2-signoff/what-you-will-see.md] — §(d) promises "a thin slab resting on the floor of the marked tile's own volume … dropped to the tile floor the way `STONE_ITEM_DROP` drops an item". The implementation gives Dig a `+0.54` offset (top face); only Channel keeps `-0.46`. The change is recorded in the Dev Agent Record as a self-review P1 fix ("dig slabs were placed inside their solid rock tile") but the artifact was never amended — it has one commit, `f9f1aff`, and no `crates/gui` commit touches it. AC17's closing comparison is against a document that now misdescribes the most common mark kind. Fix as a dated amendment, not a silent rewrite.
+- [x] [Review][Patch] **Decision D1's owed AD-14 amendment was never recorded** [docs/] — D1 says this story "keys marks by position and **records the amendment owed to AD-14**, the way AD-13 explicitly amends parent AD-6 rather than drifting silently". The diff touches no `docs/`, no spine, no `deferred-work.md`; `rg -n "AD-14"` finds only pre-existing text. AD-14 still says reconciliation is keyed by sim `Id` while the shipped code keys marks by position — precisely the silent drift D1 was written to prevent.
+- [x] [Review][Patch] **The Verification block's vista capture still contradicts Wolf's Ruling 2** [_bmad-output/implementation-artifacts/7-2-read-the-working-zoom.md:385] — it still reads `--capture 7-2-marks-vista.png --frames 1500 --z 10`. Wolf ruled the vista must be taken at FULL DEPTH because `range_band_applies` (`capture.rs:630-637`) returns early and skips both the warm-pixel and ground-median asserts whenever the cut is below the world top — so a `--z 10` vista prints the numbers and asserts nothing, which is how AC9's own recipe proved nothing last time. The Dev Agent Record says Verification was left unedited deliberately and "Task 6's runbook will carry the corrected commands" — but that runbook does not exist yet, and Verification is the block an operator actually reads.
+- [x] [Review][Patch] **Two false claims in the Dev Agent Record** [_bmad-output/implementation-artifacts/7-2-read-the-working-zoom.md] — (a) "File List verified against `git diff --name-only 8d85259..HEAD` — matches exactly, 11 files": the range now yields **12**, the File List omits `_bmad-output/implementation-artifacts/metrics/.session-cursors.json` added by the final commit `ea8dc4c`. True when written, false when read — the same class the record itself flags for the sabotage table. (b) the Completion Notes say Task 5's "eight-row table is fully killed" against the ten-row table and a later, correct "TEN rows, 10/10 KILLED" entry.
+- [x] [Review][Patch] **Sabotage row 8 does not pin what its name claims, and the "no zones" panic branch is never proven reachable** [_bmad-output/implementation-artifacts/mutations/7-2-read-the-working-zoom.sh] — the row `mark systems leave the shared projection schedule` deletes `reconcile_projection,` from `projection_systems`, which removes *all* projection rather than the mark systems (marks live inside `reconcile`; there is no separate mark system), making it redundant with rows 1 and 2 rather than an independent check on 6.1's inert-seam class. Separately, `assert_valid` checks `designations > 0` before `zones > 0`, and every test that drives zones to 0 also drives designations to 0 — so the zones-specific panic has never fired in any test. (All ten guards do still match current source: auditor executed every block against a /tmp copy, 10/10 GUARD-OK, and the record `95c8a9c` post-dates the last `crates/gui` commit `2299218` — the stale-literal class is genuinely closed for this tree.)
+- [x] [Review][Patch] **The gutter comment states the opposite of what the code does** [crates/gui/src/project.rs:83-85] — the comment says the 1.02-wide mesh "still reaches the terrain edge after this transform scale is applied"; 1.02 x 0.94 = 0.9588, so it insets by ~2% per side, which is the *point* of the "Separate adjacent mark slabs" commit. Measured framing: at `--distance 30` one tile step spans 48.8 px of a 1280-wide frame, so the gutter is 2.01 px (0.65 px at the boot vista) — whether that reads as separation or as anti-aliasing noise is a human call for the viewing.
+- [x] [Review][Defer] **Duplicate-position designations in one payload silently resolve last-write-wins with no invariant assertion** [crates/gui/src/project.rs:439-444] — deferred, not currently reachable (no sim/wire path permits two designations at one position). Blind Hunter proved the collapsing behaviour by execution: Dig then Channel at `[1,1,1]` yields one mark, kind Channel, no crash and no orphan.
+- [x] [Review][Defer] **Marks re-insert `Transform` and `MeshMaterial3d` every reconcile tick regardless of change** [crates/gui/src/project.rs:466-480, :505-518] — deferred, efficiency only. No `Changed<T>`/`Added<T>` filter exists anywhere in `gui` today, so nothing observable breaks; but the adjacent `WorldProjected` light path (`project.rs:396-406`) explicitly gates its insert on `existing.0 != light`, and zones are uncapped and full-resent every tick. Note the tension with Patch 1: the unconditional insert is *why* restyling works today.
+- [x] [Review][Defer] **Zone slabs hang in mid-air once the rock supporting them is dug out** [sim behaviour, not `gui`] — deferred, not this crate's defect: the sim keeps the zone. But the recipe's own stockpile sits inside the dig rect, so after ~60 ticks `[56,64,10]` and `[56,65,10]` have empty below them (verified live) and two teal slabs float over the pit. Expect Wolf to ask about it at the viewing.
+- [x] [Review][Defer] **The "hollow shell" doc comment is now attached to the wrong function** [crates/gui/src/capture.rs:55-68] — deferred, cosmetic. The diff inserted the two new getters between the comment and its original target, so the rationale for why `terrain_tiles > 0` alone is insufficient now sits on `pub fn designations()` instead of `pub fn assert_valid()`.
+
+**ALL 14 PATCHES APPLIED 2026-08-21, in a single verification pass.**
+
+- **Gate GREEN on a cold rebuild** (`cargo clean -p gui` after the mutation round, then the full
+  gate): fmt, clippy `-D warnings`, **364 workspace tests passing / 1 ignored** — up from 359, the
+  ignored one still being the pre-existing real-surface PNG comparison. All three no-`sim-core`-edge
+  probes and the metrics ledger tests green.
+- **Sabotage table: 16 rows, 16/16 KILLED, zero APPLY-FAILED.** Six rows added and four retargeted;
+  the table was re-run AFTER the last refactor, not after the last feature, per the lesson this
+  story's own record recorded.
+- **Palette measured, not asserted:** terrain floor rises 48.2 -> **50.9**, dig<->channel 50.9 ->
+  **102.6**, and every mark now clears 40 from every TUI mark colour as well. Dig and channel
+  separate on RED, which the cool directional does not compress, rather than on green, which it does.
+
+**WHAT IS STILL NOT PROVEN, and no patch here changes it.** ACs 8, 17 and the rendered half of AC9
+remain open. Nothing in this story has been observed on the vehicle, and the retuned colours have
+still never been seen rendered. The buried-dig promotion in particular is a change to what the
+frame LOOKS LIKE, verified only as geometry — its whole justification is a measurement of what was
+invisible, and whether the fix reads as orders on a mountainside or as a blue sheet is Wolf's call
+at the viewing. The sign-off artifact carries an amendment listing exactly what to look at.
+
+**One consequence of the oracle ruling, stated plainly rather than buried.** `assert_valid` now
+asserts `projected == mirror` for marks, which is strictly stronger than the `> 0` it replaced and
+unbreaks every no-mark capture in the project, 7.1's shipped recipe included. AC13's literal "fails
+if either count is zero" is preserved by routing it through the existing caller-controlled
+`expect_work` flag: a capture that declares itself to be of a working site still fails on a frame
+whose marks the dwarves have eaten. A capture that never made that claim no longer panics.
+
 ## Dev Notes
 
 ### The epic's AC text is wrong on one point — verified against source
@@ -382,11 +452,19 @@ The capture, pinned to the level where **both** marks and zones are visible:
 
 ```bash
 gui.exe 7451 --capture 7-2-marks-working.png --frames 1500 --z 10 --distance 30
-gui.exe 7451 --capture 7-2-marks-vista.png   --frames 1500 --z 10
+# The VISTA IS TAKEN AT FULL DEPTH — no --z. Corrected at the 2026-08-21 code review, per Wolf's
+# Task 0 Ruling 2. `range_band_applies` returns early and SKIPS both the warm-pixel and
+# ground-median assertions whenever the cut is below the world top, so the `--z 10` vista this
+# block used to prescribe printed its numbers and asserted nothing — which is exactly how AC9's
+# own recipe proved nothing last time. The blown campfire reading at full depth is a known
+# carried-open item and MUST NOT be re-tuned to make this capture pass.
+gui.exe 7451 --capture 7-2-marks-vista.png   --frames 1500
 ```
 
 **Required non-zero observations.** Exit 0 is not a result.
-- `marks: z 10 designations=N zones=M` with **N ≥ 20** and **M ≥ 2**, printed before any assertion.
+- `marks: z 10 designations=N of E zones=M of F` with **N ≥ 20** and **M ≥ 2**, printed before any
+  assertion. The `of E` / `of F` are the MIRROR's counts — the instrument now asserts N == E and
+  M == F, so a projection that silently drops half its marks fails where the old `> 0` passed.
 - 6.1's motion line still reports ticks ≥ 100, position changes > 0, mid-blend frames > 0.
 - `capture range check:` still reports warm-lit pixels ≥ 3,000 and ground-median luminance inside
   `[70, 180]` **with marks on screen** — that is AC9.
@@ -638,7 +716,7 @@ any framing is impossible here regardless.
 
 **Tasks 1–5 COMPLETE.** Tasks 1–3 delivered the approved cold/neutral floor slabs, position-keyed
 projection and absence-is-deletion; Task 4 adds projected-entity capture counts, print-before-assert
-and validated `--distance`, with the gate-side AC14 test above; Task 5's eight-row table is fully
+and validated `--distance`, with the gate-side AC14 test above; Task 5's table is fully
 killed. Tasks 6 and 7 remain open: no native-Windows GPU capture or Wolf closing sign-off was
 claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
 
@@ -650,7 +728,11 @@ claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
   Baseline before this story was **348**, not the story's stated 328.
 - **AC3 verified by command**: `git diff --stat 8d85259..HEAD -- crates/protocol crates/simd
   crates/sim-core crates/client-core crates/tui` is **empty**. No wire change.
-- **File List verified** against `git diff --name-only 8d85259..HEAD` — matches exactly, 11 files.
+- **File List verified** against `git diff --name-only 8d85259..HEAD` — matched exactly at the
+  time of writing, 11 files. **CORRECTED at the 2026-08-21 code review: the range now yields 12.**
+  The final commit `ea8dc4c` added `_bmad-output/implementation-artifacts/metrics/.session-cursors.json`
+  after this line was written. True when it ran, false when it was read — the same class this
+  record flags for the sabotage table two bullets down, and it landed here in the same session.
 - **Self-gate honoured its cap**: exactly three `codex review --base main` passes, five findings
   (2 P1, 3 P2), and all five confirmed present in the tree rather than merely claimed — non-finite
   `--distance` rejection (`ingest.rs:263`), position-indexed reconciliation (`existing_designations`
@@ -684,7 +766,7 @@ claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
 | 2026-08-19 | Story created. The epic's "despawned by sim `Id`" AC was **falsified against source** — designations and zones have no id at any layer — and AC10 is written as keyed by position, with the AD-14 amendment recorded as owed. Verification recipe executed live during creation: the TUI key sequence lands 8/8 marks, a 2×2 stockpile drag yields 2 zone tiles, and an 8×12 dig rect yields 79 marks decaying to a stable 50 — so a naive 8-tile capture would photograph an empty site. |
 | 2026-08-21 | Dev started; `baseline_commit` `8d85259`. **Branching from `main`** — 7.1 merged (PR #28), which the story's own escape clause covers. Task 0 artifact written at `7-2-signoff/`, AC1 still unmet pending Wolf. Three stale premises found against source, all post-dating story creation: **AC9's band assertions are skipped below the world top** since the 2026-08-20 vehicle fix, so both `--z 10` captures in Verification prove nothing and a recipe fix is proposed for ruling; `STONE_ITEM_SCALE` dropped to 0.4; the mark-presentation decision is narrowed by channel/zone tiles having no cube to tint. |
 | 2026-08-21 | **Task 0 CLOSED — Wolf approved the artifact, AC1 MET, gate OPEN.** Three rulings: the mark presentation is the floor slab (a tinted replacement can express only dig, since channel and zone tiles have no cube); AC9's vista capture moves to full depth because the band assertions are skipped below the world top; mark colours break with the TUI's deliberately to protect UX-DR5. Tasks 1-5 delegated to Codex. |
-| 2026-08-21 | Tasks 1–5 complete and status moved to review. AC14 now drives snapshot/delta ingest through the shared projection schedule, checks counts from projected entities across a cut-filtered state change, and makes the real capture fail after marks disappear. RED compile and mirror-count sabotage evidence, the eight-row KILLED table, corrected 348-test baseline, and a green 357-pass/1-ignored gate are recorded. Tasks 6–7 and AC8/AC17/rendered AC9 remain open for the vehicle and Wolf. |
+| 2026-08-21 | Tasks 1–5 complete and status moved to review. AC14 now drives snapshot/delta ingest through the shared projection schedule, checks counts from projected entities across a cut-filtered state change, and makes the real capture fail after marks disappear. RED compile and mirror-count sabotage evidence, the ten-row KILLED table, corrected 348-test baseline, and a green 357-pass/1-ignored gate are recorded. Tasks 6–7 and AC8/AC17/rendered AC9 remain open for the vehicle and Wolf. |
 | 2026-08-21 | Self-review pass 1 fixed three actionable findings: dig slab depth hiding, channel/zone z-fighting, and non-finite `--distance`. Each correction has a focused RED→green regression; the post-fix gate is green. |
 | 2026-08-21 | Self-review pass 2 fixed one P1: position indexes replace quadratic mark reconciliation for uncapped zone full-resends; gate green. |
 | 2026-08-21 | Self-review pass 3 (the hard cap) fixed adjacent coplanar mark-slab overlap with a 0.94 footprint scale; focused RED→green regression and gate green. No fourth pass run. |

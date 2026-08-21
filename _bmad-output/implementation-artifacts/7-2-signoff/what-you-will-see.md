@@ -197,3 +197,62 @@ two commands** — cancel designation *and* remove stockpile; there is no cancel
 
 In the Bevy window, `,` steps the cut down and `.` steps it up, and `Q`/`E` zoom — still
 **provisional**, still unruled from 7.1.
+
+
+---
+
+## AMENDMENT — 2026-08-21, added at code review. Read this before the live viewing.
+
+The approved text above still describes the presentation as it was DESIGNED. Two things about
+where a dig slab actually sits changed after approval, and the closing sign-off (AC17) compares the
+built result against this document, so they are recorded here rather than left to be discovered at
+the viewing. **Neither changes a ruling** — both were made to keep Ruling 1 (the floor slab) and
+Ruling 2 (`--z 10 --distance 30` for the working zoom) working as intended.
+
+**1. A dig slab sits on its tile's TOP face, not on its floor.** §(d)'s recommendation says "a thin
+slab resting on the floor of the marked tile's own volume"; the bullet under it already says "on
+top of the rock for a dig", and that is what shipped — dig `+0.54`, channel and zone `-0.46`. Found
+during implementation: a dig tile is SOLID, so a slab on its floor is inside opaque rock. Channel
+and zone tiles are air and keep the floor placement exactly as described.
+
+**2. A dig with rock above it is drawn on the top face of the rock that covers it.** This one was
+found at code review, by measurement, and it is the difference between the working-zoom capture
+showing your dig orders and showing none of them.
+
+The slice draws every solid tile *at the cut* as a full cube, whether or not it is exposed. That
+cube spans the half-tile above and below its own level — so a dig slab one level beneath it was
+sealed inside opaque geometry. It is not a rare case: the dwarves dig the REACHABLE tiles first,
+and reachable means open sky above, so the marks that survive long enough to be photographed are
+exactly the buried ones. Measured on this story's own recipe, against a live daemon:
+
+| tick | marks on the wire | dig slabs actually visible |
+|---|---|---|
+| t+2 | 79 | 25 |
+| t+46 | 63 | 9 |
+| t+64 | 54 | 2 |
+| t+102 | 50 | **0** |
+| t+165 | 50 | **0** |
+
+The instrument printed `designations=50` and exited 0 throughout, correctly — all 50 *were*
+projected. You would have been asked to rule on AC8 ("can I tell a designation apart") using a
+frame with no designations in it.
+
+**What you will see instead:** a dig under rock is drawn as a slab on the surface above it, in dig
+blue. A dig with open sky above it is unchanged, on its own tile — it is already visible, and
+hoisting it would put the mark on rock it does not mark.
+
+**What to check at the viewing, because of this:** that the mark field reads as *orders on the
+mountainside* and not as a blue sheet laid over the terrain. This is the one change here that could
+plausibly be wrong in a way only your eye will catch.
+
+**3. The mark colours were retuned** (all three still cold-or-neutral, so Ruling 3 and UX-DR5 are
+untouched). Dig had shipped BYTE-IDENTICAL to the TUI's CHANNEL blue — Ruling 3 says the two
+clients break with each other deliberately, but landing exactly on a *different* order's colour in
+the other window was not deliberate. Dig and channel were also two blues separated almost entirely
+on the green axis, which the cool directional light compresses. They now separate on red and sit
+103 units apart unlit, against 51 before; every mark is now at least 40 from every terrain colour
+AND from every TUI mark colour.
+
+**These colours have never been seen rendered.** No devpod here can open a window. Everything
+above is computed geometry and colour arithmetic, and the whole point of your viewing is that it
+is not evidence.
