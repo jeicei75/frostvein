@@ -16,27 +16,31 @@ use bevy::{
     ecs::system::RunSystemOnce,
     input::ButtonInput,
     prelude::{
-        Assets, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, PointLight,
+        Assets, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, PointLight, Resource,
         StandardMaterial, Text, Transform,
     },
 };
+
+#[derive(Resource)]
+struct TestWireSender(std::sync::mpsc::SyncSender<anyhow::Result<WireMessage>>);
 use client_core::Mirror;
 use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, setup_atmosphere},
     capture::{CaptureState, accumulate_motion},
     ingest::{
-        MirrorResource, ProjectionSet, ProjectionWork, SliceReadout, projection_systems,
-        reconcile_projection,
+        IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, SliceReadout, WireMessage,
+        projection_systems, reconcile_projection,
     },
     project::{
-        ClientLocal, ProjectedItem, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
+        ClientLocal, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap, TerrainTile,
+        WorldProjected, setup_projection_assets,
     },
     slice::SliceLevel,
     transform::world_to_render,
 };
 use protocol::{
-    Delta, Dims, Entity, EntityKind, Item, JobState, Material, MessageType, Snapshot, Speed, Tile,
-    TileChange,
+    Delta, Designation, DesignationKind, Dims, Entity, EntityKind, Item, JobState, Material,
+    MessageType, Snapshot, Speed, Tile, TileChange, Zone,
 };
 
 fn headless_app(snapshot: Snapshot) -> App {
@@ -189,6 +193,255 @@ fn projected_scene(app: &mut App) -> Vec<(u32, Option<[i32; 3]>, [i32; 3])> {
         .collect::<Vec<_>>();
     scene.sort_unstable();
     scene
+}
+
+#[test]
+fn snapshot_marks_project_through_the_live_ingest_schedule() {
+    let dims = Dims { x: 2, y: 2, z: 3 };
+    let initial = snapshot_with_dims(dims, vec![Tile::Empty; 12], Vec::new());
+    let mut app = headless_app(initial.clone());
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    let mut marked = initial;
+    marked.designations = vec![Designation {
+        pos: [0, 0, 1],
+        kind: DesignationKind::Dig,
+    }];
+    marked.zones = vec![Zone { pos: [1, 0, 2] }];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(marked))))
+        .unwrap();
+
+    app.update();
+
+    let designations = app
+        .world_mut()
+        .query::<&ProjectedDesignation>()
+        .iter(app.world())
+        .map(|mark| mark.0)
+        .collect::<BTreeSet<_>>();
+    let zones = app
+        .world_mut()
+        .query::<&ProjectedZone>()
+        .iter(app.world())
+        .map(|mark| mark.0)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(designations, BTreeSet::from([[0, 0, 1]]));
+    assert_eq!(zones, BTreeSet::from([[1, 0, 2]]));
+}
+
+#[test]
+fn a_designation_kind_change_restyles_the_existing_position_mark() {
+    let dims = Dims { x: 2, y: 2, z: 2 };
+    let initial = snapshot_with_dims(dims, vec![Tile::Empty; 8], Vec::new());
+    let mut app = headless_app(initial.clone());
+    let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+    app.insert_resource(IngestReceiver::new(receiver));
+    let mut marked = initial;
+    marked.designations = vec![Designation {
+        pos: [1, 1, 1],
+        kind: DesignationKind::Dig,
+    }];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(marked))))
+        .unwrap();
+    app.update();
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: [1, 1, 1],
+                kind: DesignationKind::Channel,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+
+    let marks = app
+        .world_mut()
+        .query::<(
+            &ProjectedDesignation,
+            &gui::project::ProjectedDesignationKind,
+        )>()
+        .iter(app.world())
+        .map(|(mark, kind)| (mark.0, kind.0))
+        .collect::<Vec<_>>();
+    assert_eq!(marks, vec![([1, 1, 1], DesignationKind::Channel)]);
+}
+
+#[test]
+fn marks_follow_the_slice_control_at_and_below_the_cut() {
+    let dims = Dims { x: 2, y: 2, z: 3 };
+    let initial = snapshot_with_dims(dims, vec![Tile::Empty; 12], Vec::new());
+    let mut app = headless_app(initial.clone());
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    let mut marked = initial;
+    marked.designations = vec![
+        Designation {
+            pos: [0, 0, 1],
+            kind: DesignationKind::Dig,
+        },
+        Designation {
+            pos: [1, 0, 2],
+            kind: DesignationKind::Channel,
+        },
+    ];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(marked))))
+        .unwrap();
+    app.update();
+    press_once(&mut app, KeyCode::Comma);
+
+    let marks = app
+        .world_mut()
+        .query::<&ProjectedDesignation>()
+        .iter(app.world())
+        .map(|mark| mark.0)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(marks, BTreeSet::from([[0, 0, 1]]));
+}
+
+#[test]
+fn marks_are_world_projected_never_client_local() {
+    let dims = Dims { x: 2, y: 2, z: 2 };
+    let initial = snapshot_with_dims(dims, vec![Tile::Empty; 8], Vec::new());
+    let mut app = headless_app(initial.clone());
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    let mut marked = initial;
+    marked.designations = vec![Designation {
+        pos: [0, 0, 1],
+        kind: DesignationKind::Dig,
+    }];
+    marked.zones = vec![Zone { pos: [1, 0, 1] }];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(marked))))
+        .unwrap();
+    app.update();
+
+    let mut query = app.world_mut().query::<(
+        BevyEntity,
+        Option<&WorldProjected>,
+        Option<&ProjectedDesignation>,
+        Option<&ProjectedZone>,
+        Option<&ClientLocal>,
+    )>();
+    for (entity, world, designation, zone, local) in query.iter(app.world()) {
+        let is_world = world.is_some() || designation.is_some() || zone.is_some();
+        if is_world || local.is_some() {
+            assert_ne!(
+                is_world,
+                local.is_some(),
+                "{entity:?} crossed the projection partition"
+            );
+        }
+    }
+}
+
+#[test]
+fn cancellation_delta_despawns_a_missing_designation() {
+    let mut app = app_with_one_designation();
+    send_empty_designation_delta(&mut app, Vec::new());
+    assert_no_designations(&mut app);
+}
+
+#[test]
+fn consumption_delta_despawns_a_missing_designation_by_the_same_path() {
+    let mut app = app_with_one_designation();
+    send_empty_designation_delta(
+        &mut app,
+        vec![TileChange {
+            pos: [0, 0, 1],
+            tile: Tile::Empty,
+        }],
+    );
+    assert_no_designations(&mut app);
+}
+
+#[test]
+fn snapshot_then_delta_in_one_frame_leaves_no_stale_marks() {
+    let dims = Dims { x: 2, y: 2, z: 2 };
+    let initial = snapshot_with_dims(dims, vec![Tile::Empty; 8], Vec::new());
+    let mut app = headless_app(initial.clone());
+    let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+    app.insert_resource(IngestReceiver::new(receiver));
+    let mut marked = initial;
+    marked.designations = vec![Designation {
+        pos: [0, 0, 1],
+        kind: DesignationKind::Dig,
+    }];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(marked))))
+        .unwrap();
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+    assert_no_designations(&mut app);
+}
+
+fn app_with_one_designation() -> App {
+    let dims = Dims { x: 2, y: 2, z: 2 };
+    let initial = snapshot_with_dims(dims, vec![Tile::Solid(Material::Stone); 8], Vec::new());
+    let mut app = headless_app(initial.clone());
+    let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+    app.insert_resource(IngestReceiver::new(receiver));
+    let mut marked = initial;
+    marked.designations = vec![Designation {
+        pos: [0, 0, 1],
+        kind: DesignationKind::Dig,
+    }];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(marked))))
+        .unwrap();
+    app.world_mut().insert_resource(TestWireSender(sender));
+    app.update();
+    app
+}
+
+fn send_empty_designation_delta(app: &mut App, tiles: Vec<TileChange>) {
+    app.world_mut()
+        .resource::<TestWireSender>()
+        .0
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles,
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+}
+
+fn assert_no_designations(app: &mut App) {
+    assert_eq!(
+        app.world_mut()
+            .query::<&ProjectedDesignation>()
+            .iter(app.world())
+            .count(),
+        0,
+        "the replaced mirror list must remove its stale projection"
+    );
 }
 
 #[test]

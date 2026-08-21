@@ -1,5 +1,5 @@
 use bevy::prelude::Color;
-use protocol::{EntityKind, LightKind, Material};
+use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LightProperties {
@@ -92,6 +92,19 @@ pub fn flicker_scale(kind: LightKind, id: u32, seconds: f32) -> f32 {
 /// Neutral crushed stone is intentionally independent of the removed wire tile material.
 pub fn debris_color() -> Color {
     Color::srgb_u8(86, 91, 106)
+}
+
+// NOTE: these intentionally do not match the TUI. Dig amber would read as false firelight over
+// a large rock face, so gui keeps all work marks cold or neutral to preserve the warm-camp read.
+pub fn designation_color(kind: DesignationKind) -> Color {
+    match kind {
+        DesignationKind::Dig => Color::srgb_u8(92, 174, 224),
+        DesignationKind::Channel => Color::srgb_u8(126, 154, 190),
+    }
+}
+
+pub fn zone_color() -> Color {
+    Color::srgb_u8(170, 186, 202)
 }
 
 /// A stone item is rubble left standing at a dug tile, not a replacement block.
@@ -228,11 +241,11 @@ pub fn entity_appearance(kind: EntityKind) -> EntityAppearance {
 #[cfg(test)]
 mod tests {
     use bevy::color::ColorToPacked;
-    use protocol::{EntityKind, LightKind, Material};
+    use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
     use super::{
-        RIM_LEVELS, entity_appearance, foliage_snow_color, light_properties, material_color,
-        night_lighting, rim_dissolved_color, snow_cap_color,
+        RIM_LEVELS, designation_color, entity_appearance, foliage_snow_color, light_properties,
+        material_color, night_lighting, rim_dissolved_color, snow_cap_color, zone_color,
     };
 
     #[test]
@@ -329,6 +342,51 @@ mod tests {
             assert_eq!(actual.color.to_srgba().to_u8_array_no_alpha(), rgb);
             assert_eq!(actual.scale, scale);
         }
+    }
+
+    #[test]
+    fn mark_colours_are_distinct_cold_literals() {
+        let marks = [
+            (
+                "dig",
+                designation_color(DesignationKind::Dig),
+                [92, 174, 224],
+            ),
+            (
+                "channel",
+                designation_color(DesignationKind::Channel),
+                [126, 154, 190],
+            ),
+            ("zone", zone_color(), [170, 186, 202]),
+        ];
+        let terrain = [
+            Material::Stone,
+            Material::Soil,
+            Material::Ice,
+            Material::Snow,
+            Material::TreeTrunk,
+            Material::TreeFoliage,
+        ]
+        .map(|material| material_color(material).to_srgba().to_u8_array_no_alpha())
+        .into_iter()
+        .chain([
+            snow_cap_color().to_srgba().to_u8_array_no_alpha(),
+            super::debris_color().to_srgba().to_u8_array_no_alpha(),
+        ])
+        .collect::<Vec<_>>();
+
+        for (name, color, expected) in marks {
+            let rgb = color.to_srgba().to_u8_array_no_alpha();
+            assert_eq!(rgb, expected, "{name} must retain its named colour");
+            assert!(rgb[2] >= rgb[0], "{name} must remain cold or neutral");
+            assert!(
+                !terrain.contains(&rgb),
+                "{name} must not blend into an existing terrain presentation"
+            );
+        }
+        assert_ne!(marks[0].1, marks[1].1);
+        assert_ne!(marks[0].1, marks[2].1);
+        assert_ne!(marks[1].1, marks[2].1);
     }
 
     /// Re-derived at review-patch round 5 against the APPROVED ARTIFACT rather than against

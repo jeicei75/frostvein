@@ -15,7 +15,7 @@ use protocol::{EntityKind, JobState, LightKind, Tile};
 
 use crate::{
     ingest::MirrorResource,
-    project::{TerrainTile, WorldProjected},
+    project::{ProjectedDesignation, ProjectedZone, TerrainTile, WorldProjected},
     slice::SliceLevel,
     transform::world_to_render,
 };
@@ -29,6 +29,8 @@ struct DrawStats {
     /// Tiles the mirror says the cut face must contain. Read from the world, not from the draw
     /// set, so it is an independent oracle rather than a restatement of what was drawn.
     expected_cut_face: usize,
+    designations: usize,
+    zones: usize,
 }
 
 impl DrawStats {
@@ -37,12 +39,16 @@ impl DrawStats {
         terrain_tiles: usize,
         cut_face_tiles: usize,
         expected_cut_face: usize,
+        designations: usize,
+        zones: usize,
     ) -> Self {
         Self {
             level,
             terrain_tiles,
             cut_face_tiles,
             expected_cut_face,
+            designations,
+            zones,
         }
     }
 
@@ -63,6 +69,8 @@ impl DrawStats {
              {} were drawn — the cut face is the feature, and it is missing",
             self.level, self.expected_cut_face, self.cut_face_tiles
         );
+        assert!(self.designations > 0, "capture projected no designations");
+        assert!(self.zones > 0, "capture projected no zones");
     }
 }
 
@@ -427,6 +435,8 @@ pub fn capture_after_frames(
     slice: Res<SliceLevel>,
     mirror: Res<MirrorResource>,
     terrain: Query<&TerrainTile>,
+    designations: Query<&ProjectedDesignation>,
+    zones: Query<&ProjectedZone>,
 ) {
     if capture.requested {
         return;
@@ -443,12 +453,18 @@ pub fn capture_after_frames(
                 .filter(|tile| tile.0[2] == slice.level())
                 .count(),
             expected_cut_face(&mirror.0, slice.level()),
+            designations.iter().count(),
+            zones.iter().count(),
         );
         // Print the actual count before every assertion. A successful process with a blank cut is
         // not a capture result; this remains truthful when a requested level changes the draw set.
         println!(
             "slice: z {} projected {} terrain cubes ({} of {} cut-face tiles at z {})",
             draw.level, draw.terrain_tiles, draw.cut_face_tiles, draw.expected_cut_face, draw.level
+        );
+        println!(
+            "marks: z {} designations={} zones={}",
+            draw.level, draw.designations, draw.zones
         );
         println!(
             "lantern: dwarf positions observed={:?} lit terrain tiles at dwarf positions={} moved={}",
@@ -770,12 +786,16 @@ mod tests {
 
     #[test]
     fn draw_count_instrument_rejects_an_empty_level_and_accepts_terrain() {
-        let empty = DrawStats::new(4, 0, 0, 0);
+        let empty = DrawStats::new(4, 0, 0, 0, 0, 0);
         assert!(
             std::panic::catch_unwind(|| empty.assert_valid()).is_err(),
             "a capture must not claim success when its requested slice drew nothing"
         );
-        DrawStats::new(4, 12, 5, 5).assert_valid();
+        DrawStats::new(4, 12, 5, 5, 1, 1).assert_valid();
+        assert!(
+            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 0, 0).assert_valid()).is_err(),
+            "a terrain draw without marks must not claim a working-order capture"
+        );
     }
 
     #[test]
@@ -783,19 +803,19 @@ mod tests {
         // The defect the old instrument could not see: boundary tiles keep the global count high
         // while the cut face itself is missing. These are the measured 9x9x9 figures — 258 tiles
         // correct against 209 hollow, 81 cut-face tiles against 32.
-        let hollow = DrawStats::new(4, 209, 32, 81);
+        let hollow = DrawStats::new(4, 209, 32, 81, 1, 1);
         assert!(
             std::panic::catch_unwind(|| hollow.assert_valid()).is_err(),
             "a cut drawn with no floor is not a capture result, however many tiles it drew"
         );
-        DrawStats::new(4, 258, 81, 81).assert_valid();
+        DrawStats::new(4, 258, 81, 81, 1, 1).assert_valid();
     }
 
     #[test]
     fn a_level_with_no_solid_tiles_is_a_legitimate_empty_cut_face() {
         // Slicing into open sky above the mountain: the mirror says nothing is there, so drawing
         // nothing at the cut is correct and must not be read as a hollow shell.
-        DrawStats::new(30, 53_365, 0, 0).assert_valid();
+        DrawStats::new(30, 53_365, 0, 0, 1, 1).assert_valid();
     }
 
     #[test]

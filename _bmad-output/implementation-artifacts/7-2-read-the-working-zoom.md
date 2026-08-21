@@ -116,50 +116,50 @@ runs on the Windows side against `localhost:<port>`. Build recipe is in Verifica
         be approved alone — record the skipped capture and the reason, and leave the consequences
         open, not blessed.
 
-- [ ] **Task 1 — Appearance table for marks (AC: 4, 5, 9)**
-  - [ ] RED first: add a test asserting `designation_color(DesignationKind::Dig)`,
+- [x] **Task 1 — Appearance table for marks (AC: 4, 5, 9)**
+  - [x] RED first: add a test asserting `designation_color(DesignationKind::Dig)`,
         `designation_color(DesignationKind::Channel)` and `zone_color()` are three distinct
         hand-written literals, distinct from every `material_color(..)` value and from
         `snow_cap_color()`/`debris_color()`. It must fail to compile before the functions exist.
-  - [ ] Add those free functions to `crates/gui/src/appearance.rs`. **Do not** add variants to
+  - [x] Add those free functions to `crates/gui/src/appearance.rs`. **Do not** add variants to
         `Material` or `LightKind` — the sweep tests at `appearance.rs:223` and `:380` assert
         `B >= R` over every `Material` and `R > B` over every `LightKind`, and a mark colour
         smuggled into either enum will either trip them or be silently constrained by them.
-  - [ ] Keep the marks chromatically cold-or-neutral so UX-DR5's warm/cold read is untouched;
+  - [x] Keep the marks chromatically cold-or-neutral so UX-DR5's warm/cold read is untouched;
         state the chosen values and the reasoning in a `// NOTE:`.
-  - [ ] Add the material handles as new private fields on `ProjectionAssets`
+  - [x] Add the material handles as new private fields on `ProjectionAssets`
         (`crates/gui/src/project.rs:122`) and initialise them in `setup_projection_assets`.
         Do **not** add a `TerrainSlot` variant — that enum is a closed 8-variant array index.
 
-- [ ] **Task 2 — Project designations and zones (AC: 2, 10, 11, 12)**
-  - [ ] RED first: a headless test built through `headless_app(..)` that feeds a snapshot carrying
+- [x] **Task 2 — Project designations and zones (AC: 2, 10, 11, 12)**
+  - [x] RED first: a headless test built through `headless_app(..)` that feeds a snapshot carrying
         designations and zones and asserts the expected mark entities exist. It must fail before
         the projection exists.
-  - [ ] Add position-keyed marker components in `project.rs`, following the
+  - [x] Add position-keyed marker components in `project.rs`, following the
         `TerrainTile([i32;3])` / `SnowCap([i32;3])` precedent:
         `pub struct ProjectedDesignation([i32; 3])` and `pub struct ProjectedZone([i32; 3])`.
         **Do not reuse bare `WorldProjected(u32)`** — see Decision D2.
-  - [ ] Read `mirror.designations()` and `mirror.zones()` in `reconcile` and project each entry,
+  - [x] Read `mirror.designations()` and `mirror.zones()` in `reconcile` and project each entry,
         filtered by `pos[2] <= slice.level()` to match the entity/item/chip rule.
-  - [ ] Reconcile by position: despawn marks whose position is no longer in the mirror's list,
+  - [x] Reconcile by position: despawn marks whose position is no longer in the mirror's list,
         spawn marks that are missing, and **restyle a mark whose `kind` changed** — deferred-work
         entry #79 records that the existing reconcile silently fails to restyle on a kind change.
-  - [ ] Register nothing new outside `projection_systems` (`ingest.rs:153`). That function is the
+  - [x] Register nothing new outside `projection_systems` (`ingest.rs:153`). That function is the
         single shared registration point for the live app and the headless harness; a system added
         anywhere else is invisible to the suite. This is 6.1's inert-seam defect.
-  - [ ] Extend the structural partition test (`headless.rs:804`) so mark entities count as
+  - [x] Extend the structural partition test (`headless.rs:804`) so mark entities count as
         world-projected: assert the world-projected set (`WorldProjected` ∪ `ProjectedDesignation`
         ∪ `ProjectedZone`) and the `ClientLocal` set are disjoint and together cover every
         projected entity. Marks are mirror state and are never `ClientLocal` (AD-14, NFR5).
 
-- [ ] **Task 3 — Absence is deletion (AC: 6, 7)**
-  - [ ] RED first: a headless test applying a delta whose `designations` list omits a
+- [x] **Task 3 — Absence is deletion (AC: 6, 7)**
+  - [x] RED first: a headless test applying a delta whose `designations` list omits a
         previously-present mark, asserting the entity is despawned. Then a second test where the
         mark vanishes because the tile was dug, asserting the identical code path — no branch
         distinguishes cancel from consumption.
-  - [ ] Confirm no removal-specific code was added to `gui`: the mirror already replaces the whole
+  - [x] Confirm no removal-specific code was added to `gui`: the mirror already replaces the whole
         list per delta (`client-core/src/lib.rs:99-101`); `gui` reads the replaced list.
-  - [ ] Cover the snapshot-then-delta-in-one-frame ordering (deferred #74 records that this is
+  - [x] Cover the snapshot-then-delta-in-one-frame ordering (deferred #74 records that this is
         untested and is how stale projections survive).
 
 - [ ] **Task 4 — The observability instrument (AC: 13, 14)**

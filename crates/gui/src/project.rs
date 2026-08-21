@@ -6,13 +6,13 @@ use bevy::prelude::{
     With, Without,
 };
 use client_core::Mirror;
-use protocol::{Dims, EntityKind, Material, Tile};
+use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
 
 use crate::{
     appearance::{
-        RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, entity_appearance,
-        flicker_scale, foliage_snow_color, light_properties, material_color, rim_dissolved_color,
-        snow_cap_color,
+        RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, designation_color,
+        entity_appearance, flicker_scale, foliage_snow_color, light_properties, material_color,
+        rim_dissolved_color, snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
     slice::SliceLevel,
@@ -53,8 +53,32 @@ pub type TerrainQuery<'w, 's> = Query<
     Or<(With<TerrainTile>, With<SnowCap>)>,
 >;
 
+pub type DynamicProjectionQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        BevyEntity,
+        &'static WorldProjected,
+        Option<&'static ProjectedLight>,
+    ),
+    (
+        Without<TerrainTile>,
+        Without<ProjectedDesignation>,
+        Without<ProjectedZone>,
+    ),
+>;
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedItem(pub u32);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedDesignation(pub [i32; 3]);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedDesignationKind(pub DesignationKind);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedZone(pub [i32; 3]);
 
 /// The light kind delivered for a projected emitter. Reconciliation only changes this when the
 /// wire changes kind; presentation owns its animated intensity afterwards.
@@ -123,12 +147,16 @@ impl TerrainSlot {
 pub struct ProjectionAssets {
     cube: Handle<Mesh>,
     snow_cap_mesh: Handle<Mesh>,
+    mark_mesh: Handle<Mesh>,
     /// One handle per (surface, rim step); see `rim_level`.
     terrain: [[Handle<StandardMaterial>; RIM_LEVELS]; TERRAIN_SLOTS.len()],
     dwarf: Handle<StandardMaterial>,
     torch: Handle<StandardMaterial>,
     campfire: Handle<StandardMaterial>,
     debris: Handle<StandardMaterial>,
+    dig_mark: Handle<StandardMaterial>,
+    channel_mark: Handle<StandardMaterial>,
+    zone_mark: Handle<StandardMaterial>,
 }
 
 pub fn setup_projection_assets(
@@ -138,6 +166,7 @@ pub fn setup_projection_assets(
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
     let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
+    let mark_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
     let terrain = TERRAIN_SLOTS.map(|slot| {
         std::array::from_fn(|level| {
             materials.add(terrain_standard_material(rim_dissolved_color(
@@ -149,11 +178,19 @@ pub fn setup_projection_assets(
     commands.insert_resource(ProjectionAssets {
         cube,
         snow_cap_mesh,
+        mark_mesh,
         terrain,
         dwarf: materials.add(entity_standard_material(EntityKind::Dwarf)),
         torch: materials.add(entity_standard_material(EntityKind::Torch)),
         campfire: materials.add(entity_standard_material(EntityKind::Campfire)),
         debris: materials.add(terrain_standard_material(debris_color())),
+        dig_mark: materials.add(terrain_standard_material(designation_color(
+            DesignationKind::Dig,
+        ))),
+        channel_mark: materials.add(terrain_standard_material(designation_color(
+            DesignationKind::Channel,
+        ))),
+        zone_mark: materials.add(terrain_standard_material(zone_color())),
     });
 }
 
@@ -220,7 +257,9 @@ pub fn reconcile(
     slice: SliceLevel,
     rebuild_terrain: bool,
     dirty_tiles: &[[i32; 3]],
-    projected: &Query<(BevyEntity, &WorldProjected, Option<&ProjectedLight>), Without<TerrainTile>>,
+    projected: &DynamicProjectionQuery,
+    designations: &Query<(BevyEntity, &ProjectedDesignation, &ProjectedDesignationKind)>,
+    zones: &Query<(BevyEntity, &ProjectedZone)>,
     terrain: &TerrainQuery,
     chips: &DigChipQuery,
     assets: Option<&ProjectionAssets>,
@@ -392,12 +431,79 @@ pub fn reconcile(
             }
         }
     }
+
+    let wanted_designations = mirror
+        .designations()
+        .iter()
+        .filter(|designation| designation.pos[2] <= slice.level())
+        .map(|designation| (designation.pos, designation.kind))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for (entity, mark, _) in designations.iter() {
+        if !wanted_designations.contains_key(&mark.0) {
+            commands.entity(entity).despawn();
+        }
+    }
+    for (position, kind) in wanted_designations {
+        if let Some((entity, _, existing_kind)) =
+            designations.iter().find(|(_, mark, _)| mark.0 == position)
+        {
+            if existing_kind.0 != kind {
+                commands
+                    .entity(entity)
+                    .insert(ProjectedDesignationKind(kind));
+            }
+            if let Some(assets) = assets {
+                commands
+                    .entity(entity)
+                    .insert(MeshMaterial3d(assets.designation_material(kind)));
+            }
+        } else {
+            let mut entity = commands.spawn((
+                ProjectedDesignation(position),
+                ProjectedDesignationKind(kind),
+                mark_transform(position),
+            ));
+            if let Some(assets) = assets {
+                entity.insert((
+                    Mesh3d(assets.mark_mesh.clone()),
+                    MeshMaterial3d(assets.designation_material(kind)),
+                ));
+            }
+        }
+    }
+
+    let wanted_zones = mirror
+        .zones()
+        .iter()
+        .filter(|zone| zone.pos[2] <= slice.level())
+        .map(|zone| zone.pos)
+        .collect::<BTreeSet<_>>();
+    for (entity, mark) in zones.iter() {
+        if !wanted_zones.contains(&mark.0) {
+            commands.entity(entity).despawn();
+        }
+    }
+    for position in wanted_zones {
+        if zones.iter().all(|(_, mark)| mark.0 != position) {
+            let mut entity = commands.spawn((ProjectedZone(position), mark_transform(position)));
+            if let Some(assets) = assets {
+                entity.insert((
+                    Mesh3d(assets.mark_mesh.clone()),
+                    MeshMaterial3d(assets.zone_mark.clone()),
+                ));
+            }
+        }
+    }
 }
 
 /// Where a stone item is drawn: the tile centre, dropped onto the tile floor. Both the spawn and
 /// `blend_entities` call this so the two cannot drift apart.
 fn item_translation(position: [i32; 3]) -> Vec3 {
     world_to_render(position) + Vec3::new(0.0, STONE_ITEM_DROP, 0.0)
+}
+
+fn mark_transform(position: [i32; 3]) -> Transform {
+    Transform::from_translation(world_to_render(position) + Vec3::Y * -0.46)
 }
 
 fn chip_offsets() -> [Vec3; CHIPS_PER_TILE] {
@@ -583,6 +689,13 @@ impl ProjectionAssets {
             EntityKind::Dwarf => self.dwarf.clone(),
             EntityKind::Torch => self.torch.clone(),
             EntityKind::Campfire => self.campfire.clone(),
+        }
+    }
+
+    fn designation_material(&self, kind: DesignationKind) -> Handle<StandardMaterial> {
+        match kind {
+            DesignationKind::Dig => self.dig_mark.clone(),
+            DesignationKind::Channel => self.channel_mark.clone(),
         }
     }
 }

@@ -40,8 +40,10 @@ use crate::{
     camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{CaptureState, accumulate_motion, capture_after_frames},
     project::{
-        ClientLocal, DigChipQuery, ProjectionAssets, TerrainQuery, TerrainTile, WorldProjected,
-        blend_entities, flicker_lights, has_terrain_above, reconcile, setup_projection_assets,
+        ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
+        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery, TerrainTile,
+        WorldProjected, blend_entities, flicker_lights, has_terrain_above, reconcile,
+        setup_projection_assets,
     },
     slice::SliceLevel,
 };
@@ -50,7 +52,7 @@ const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const MESSAGE_QUEUE: usize = 16;
 
-enum WireMessage {
+pub enum WireMessage {
     Snapshot(Box<Snapshot>),
     Delta(Box<Delta>),
 }
@@ -59,7 +61,13 @@ enum WireMessage {
 pub struct MirrorResource(pub Mirror);
 
 #[derive(Resource)]
-struct IngestReceiver(Mutex<Receiver<anyhow::Result<WireMessage>>>);
+pub struct IngestReceiver(Mutex<Receiver<anyhow::Result<WireMessage>>>);
+
+impl IngestReceiver {
+    pub fn new(receiver: Receiver<anyhow::Result<WireMessage>>) -> Self {
+        Self(Mutex::new(receiver))
+    }
+}
 
 #[derive(Resource, Default)]
 pub struct ProjectionWork {
@@ -93,7 +101,7 @@ pub fn run() -> anyhow::Result<()> {
         })
         .insert_resource(MirrorResource(mirror))
         .insert_resource(slice)
-        .insert_resource(IngestReceiver(Mutex::new(receiver)))
+        .insert_resource(IngestReceiver::new(receiver))
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
@@ -121,6 +129,9 @@ pub fn run() -> anyhow::Result<()> {
                 fall_snow,
             ),
         );
+    if let Some(distance) = args.distance {
+        app.insert_resource(CaptureDistance(distance));
+    }
     projection_systems(&mut app);
     if let Some(capture) = args.capture {
         // Capture output must never contain the diagnostic overlay.
@@ -203,7 +214,11 @@ struct Args {
     frames: u32,
     expect_work: bool,
     slice_level: Option<i32>,
+    distance: Option<f32>,
 }
+
+#[derive(Resource)]
+struct CaptureDistance(f32);
 
 fn parse_args() -> anyhow::Result<Args> {
     parse_args_from(std::env::args_os().skip(1))
@@ -215,6 +230,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut frames = None;
     let mut expect_work = false;
     let mut slice_level = None;
+    let mut distance = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -238,6 +254,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                     .parse()
                     .context("invalid --z level")?,
             );
+        } else if arg == "--distance" {
+            let value = args.next().context("--distance requires a value")?;
+            distance = Some(
+                value
+                    .to_string_lossy()
+                    .parse()
+                    .context("invalid --distance")?,
+            );
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -251,17 +275,24 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if expect_work && capture.is_none() {
         bail!("--expect-work requires --capture");
     }
+    if distance.is_some() && capture.is_none() {
+        bail!("--distance requires --capture");
+    }
     Ok(Args {
         port,
         capture,
         frames: frames.unwrap_or(0),
         expect_work,
         slice_level,
+        distance,
     })
 }
 
-fn setup_camera(mut commands: Commands) {
-    let rig = CameraRig::new([64, 64, 9]);
+fn setup_camera(mut commands: Commands, distance: Option<Res<CaptureDistance>>) {
+    let mut rig = CameraRig::new([64, 64, 9]);
+    if let Some(distance) = distance {
+        rig.distance = distance.0.clamp(4.0, 500.0);
+    }
     let (fog_start, fog_end) = fog_falloff(rig.distance);
     commands.spawn((
         Camera3d::default(),
@@ -504,14 +535,13 @@ pub fn reconcile_projection(
     mirror: Res<MirrorResource>,
     slice: Res<SliceLevel>,
     mut work: ResMut<ProjectionWork>,
-    projected: Query<
-        (
-            bevy::prelude::Entity,
-            &WorldProjected,
-            Option<&crate::project::ProjectedLight>,
-        ),
-        Without<TerrainTile>,
-    >,
+    projected: DynamicProjectionQuery,
+    designations: Query<(
+        bevy::prelude::Entity,
+        &ProjectedDesignation,
+        &ProjectedDesignationKind,
+    )>,
+    zones: Query<(bevy::prelude::Entity, &ProjectedZone)>,
     terrain: TerrainQuery,
     chips: DigChipQuery,
     assets: Option<Res<ProjectionAssets>>,
@@ -527,6 +557,8 @@ pub fn reconcile_projection(
         rebuild,
         &changes,
         &projected,
+        &designations,
+        &zones,
         &terrain,
         &chips,
         assets.as_deref(),
@@ -687,6 +719,27 @@ mod tests {
         ])
         .expect("a capture level must parse");
         assert_eq!(args.slice_level, Some(9));
+    }
+
+    #[test]
+    fn capture_distance_requires_capture_and_reaches_the_camera_setup() {
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--distance"),
+                std::ffi::OsString::from("30")
+            ])
+            .is_err()
+        );
+        let args = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("12"),
+            std::ffi::OsString::from("--distance"),
+            std::ffi::OsString::from("30"),
+        ])
+        .expect("a capture distance must parse");
+        assert_eq!(args.distance, Some(30.0));
     }
 
     #[test]
