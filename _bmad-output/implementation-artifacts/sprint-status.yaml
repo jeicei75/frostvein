@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-08-16
+# last_updated: 2026-08-21
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -414,7 +414,7 @@ development_status:
   # pinned to --z 9 hides the zone entirely. Pin --z 10. TUI key sequence lands 8/8, verbatim from 6.1.
   # Baseline 328 workspace tests green. Task 0 (Wolf's artifact) is the blocking gate; Tasks 6/7 are
   # vehicle- and human-bound. BLOCKED on Task 0.
-  7-2-read-the-working-zoom: in-progress
+  7-2-read-the-working-zoom: review
   epic-7-retrospective: optional
   epic-8: backlog
   # M2's hardest input work and the main story-count driver, isolated on purpose.

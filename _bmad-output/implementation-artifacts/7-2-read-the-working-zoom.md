@@ -5,7 +5,7 @@ baseline_commit: 8d85259a42c48ec79a3aeb82ee17386610019e5a
 
 # Story 7.2: Read the Working Zoom
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -162,30 +162,30 @@ runs on the Windows side against `localhost:<port>`. Build recipe is in Verifica
   - [x] Cover the snapshot-then-delta-in-one-frame ordering (deferred #74 records that this is
         untested and is how stale projections survive).
 
-- [ ] **Task 4 — The observability instrument (AC: 13, 14)**
-  - [ ] Extend `DrawStats` in `crates/gui/src/capture.rs` with designation and zone counts taken
+- [x] **Task 4 — The observability instrument (AC: 13, 14)**
+  - [x] Extend `DrawStats` in `crates/gui/src/capture.rs` with designation and zone counts taken
         from the **projected entities**, not from mirror fields — 6.1's mid-blend counter read the
         clock instead of a `Transform` and was true in a frozen world.
-  - [ ] Print before asserting, in the established shape:
+  - [x] Print before asserting, in the established shape:
         `marks: z {level} designations={n} zones={m}`. Then assert both `> 0`.
-  - [ ] Add `--distance <f32>` to pin the camera distance for a capture, validated the same way
+  - [x] Add `--distance <f32>` to pin the camera distance for a capture, validated the same way
         `--z` is (`--distance requires --capture`). Justification: `BOOT_DISTANCE = 90.0` is the
         only distance a capture can currently take, and at that framing 6.1 measured its dig site
         at **0.30 % of a 1280x720 frame** and Wolf's first reaction was "did not see the
         difference". "At the working zoom" is unreproducible without pinning it, and rule (2) of
         the recipe discipline requires pinning what is world- or view-dependent.
-  - [ ] Test the instrument itself, driving the real binary's projection path: the counts must
+  - [x] Test the instrument itself, driving the real binary's projection path: the counts must
         change when the mirror's marks change, and a world with no marks must make the capture
         **fail**. A range check that cannot go red is not a range check.
 
-- [ ] **Task 5 — Sabotage table (AC: 15)**
-  - [ ] Write `_bmad-output/implementation-artifacts/mutations/7-2-read-the-working-zoom.sh` in the
+- [x] **Task 5 — Sabotage table (AC: 15)**
+  - [x] Write `_bmad-output/implementation-artifacts/mutations/7-2-read-the-working-zoom.sh` in the
         house format (`assert s.count(old) == 1` guard on every edit). Cover at minimum:
         designation projection deleted; zone projection deleted; the `pos[2] <= slice.level()`
         filter removed; the despawn-on-absence pass removed; the kind-change restyle removed; the
         instrument's `> 0` weakened to `>= 0`; `--distance` validation disabled with `if false &&`;
         the mark systems removed from the `projection_systems` tuple.
-  - [ ] Run `scripts/mutate.sh` **alone**, then `cargo clean -p gui` **after** the round (this trap
+  - [x] Run `scripts/mutate.sh` **alone**, then `cargo clean -p gui` **after** the round (this trap
         has now fired twice, at 3.1 and 6.1). Paste the table with the red assertion per row.
 
 - [ ] **Task 6 — The live vehicle session (AC: 8, 9, 17-evidence) — VEHICLE-BOUND**
@@ -403,7 +403,7 @@ Measured at story creation (seed default, `simd` 10 Hz, dims 128×128×32, 10 en
 | Marks remaining at t+120 onward | **50, stable** |
 | Items produced by that dig | 0 → 29, plateau |
 | Cancel from client 1 → both clients | designation gone on the next delta |
-| Baseline workspace tests before this story | **328 passing, exit 0** |
+| Baseline workspace tests before this story | **348 passing, exit 0** |
 
 Sabotage:
 
@@ -441,8 +441,8 @@ observable and neither strands the other. Do not split at the test/implementatio
 
 ### Agent Model Used
 
-`claude-opus-5[1m]` — orchestrator. Task 0 is documentation and a human gate, so it was not
-delegated; Tasks 1-5 are delegated to Codex once AC1 is met.
+`gpt-5.6-terra`, effort `high` — continuation dev agent for Task 4's AC14 seam and the final
+record. The earlier implementation and mutation-table work was already committed on this branch.
 
 ### Debug Log References
 
@@ -479,6 +479,57 @@ Defect found while reading the before capture, **reported not fixed** (not mappe
 this story): the slice readout's em-dash (`slice.rs:59`) has no glyph in the loaded font and renders
 as an empty box on the vehicle — visible as `Slice: z 9/31 ⍰ underground` in `7-1-slice.png`.
 
+**Task 4 / AC14 RED, then green — 2026-08-21:** the new gate-side integration test was written
+before the `draw_stats` production system existed. Its RED compile output began:
+
+```text
+error[E0432]: unresolved import `gui::capture::draw_stats`
+  --> crates/gui/tests/capture.rs:15:15
+   |
+15 |     capture::{draw_stats, warm_lit_pixels},
+   |               ^^^^^^^^^^ no `draw_stats` in `capture`
+```
+
+After implementation, the test feeds `WireMessage::Snapshot` and `WireMessage::Delta` into the
+shared `projection_systems` schedule under `MinimalPlugins`. It observes 1/1 then 2/2 projected
+designation/zone entities at a pinned cut while the mirror deliberately retains one extra mark of
+each kind above that cut. Replacing the production projected-entity queries with the mirror lists
+was then sabotaged and went RED on the independent filter assertion:
+
+```text
+assertion `left == right` failed: only the designation below the cut is projected
+  left: 2
+ right: 1
+```
+
+Finally, the test sends a no-mark delta and schedules the real `capture_after_frames` after
+`ProjectionSet`; it catches and checks its actual `capture projected no designations` panic before
+the screenshot path. This is gate-runnable and does not fake a render surface. The older ignored
+PNG comparison remains vehicle-only; its real-surface visual evidence is still Task 6. The gate
+side of the `> 0` range assertion is also covered by the completed `capture accepts zero marks`
+mutation below.
+
+**Mutation RED evidence — orchestrator-verified completed round, 2026-08-21:**
+`scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/7-2-read-the-working-zoom.sh`
+ran alone, then `cargo clean -p gui`; all eight compiling mutations were KILLED. The continuation
+did not rerun the already-complete table or change its script.
+
+| Mutation | Result | Assertion that went red |
+| --- | --- | --- |
+| designation projection is deleted | KILLED | `snapshot_marks_project_through_the_live_ingest_schedule`: expected designation set `{[0, 0, 1]}`, got `{}` |
+| zone projection is deleted | KILLED | `snapshot_marks_project_through_the_live_ingest_schedule`: expected zone set `{[1, 0, 2]}`, got `{}` |
+| mark slice filter is removed | KILLED | `marks_follow_the_slice_control_at_and_below_the_cut`: expected `{[0, 0, 1]}` but the above-cut mark remained |
+| designation absence no longer despawns | KILLED | `assert_no_designations`: `the replaced mirror list must remove its stale projection` (left 1, right 0) |
+| kind changes do not restyle | KILLED | `a_designation_kind_change_restyles_the_existing_position_mark`: expected `Channel` at `[1, 1, 1]`, got `Dig` |
+| capture accepts zero marks | KILLED | `draw_count_instrument_rejects_an_empty_level_and_accepts_terrain`: `a terrain draw without marks must not claim a working-order capture` |
+| distance capture validation is disabled | KILLED | `capture_distance_requires_capture_and_reaches_the_camera_setup`: `assert!(…parse_args_from(["--distance", "30"]).is_err())` |
+| mark systems leave the shared projection schedule | KILLED | `snapshot_marks_project_through_the_live_ingest_schedule`: expected projected designation set `{[0, 0, 1]}`, got `{}` |
+
+**Gate — 2026-08-21:** `/workspace/projects/frostvein/scripts/gate.sh` was run after AC14 and
+reached `GATE GREEN`: format, clippy, 357 passing workspace tests with 1 ignored, all three
+dependency-edge probes, and metrics-ledger tests passed. The corrected pre-story baseline was 348
+passing tests.
+
 ### Completion Notes List
 
 **Task 0 COMPLETE — AC1 MET. WOLF APPROVED THE ARTIFACT 2026-08-21 AND THE GATE IS OPEN.** Three
@@ -503,9 +554,8 @@ this story:
    dig amber `(232,176,72)` on up to 79 rock tiles would drop false firelight into the frame and
    compete with the 6.2 lanterns. The two clients will not agree on colour.
 
-**Task 0 as delivered.** `7-2-signoff/what-you-will-see.md` written with
-parts (a)-(d). AC1 remains **UNMET**: it is met only by Wolf's recorded approval, and the HALT
-subtask is deliberately left unchecked. No implementation commit may land before that.
+**Task 0 as delivered.** `7-2-signoff/what-you-will-see.md` written with parts (a)-(d). AC1 was
+unmet at the artifact's initial delivery; Wolf's recorded approval above subsequently made it MET.
 
 On part (a), stated plainly because this project has been bitten by ticked-but-undelivered boxes:
 **no new capture was taken.** The subtask asks for a before capture on the vehicle from the shipped
@@ -516,14 +566,25 @@ not the working zoom, because the shipped binary cannot be asked for any other d
 the justification for Task 4's `--distance`. This devpod cannot open a window, so a new capture at
 any framing is impossible here regardless.
 
+**Tasks 1–5 COMPLETE.** Tasks 1–3 delivered the approved cold/neutral floor slabs, position-keyed
+projection and absence-is-deletion; Task 4 adds projected-entity capture counts, print-before-assert
+and validated `--distance`, with the gate-side AC14 test above; Task 5's eight-row table is fully
+killed. Tasks 6 and 7 remain open: no native-Windows GPU capture or Wolf closing sign-off was
+claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
+
 ### File List
 
-- `_bmad-output/implementation-artifacts/7-2-signoff/what-you-will-see.md` (NEW) — Task 0 artifact
-- `_bmad-output/implementation-artifacts/7-2-read-the-working-zoom.md` (UPDATE) — baseline_commit,
-  Task 0 subtasks, Dev Agent Record, Change Log
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` (UPDATE) — story to `in-progress`
-
-No code files touched by Task 0.
+- `_bmad-output/implementation-artifacts/7-2-read-the-working-zoom.md` (UPDATE) — story record
+- `_bmad-output/implementation-artifacts/7-2-signoff/what-you-will-see.md` (NEW) — approved Task 0 artifact
+- `_bmad-output/implementation-artifacts/metrics/7-2-read-the-working-zoom.md` (NEW) — metrics ledger
+- `_bmad-output/implementation-artifacts/mutations/7-2-read-the-working-zoom.sh` (NEW) — eight-row sabotage table
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (UPDATE) — story status
+- `crates/gui/src/appearance.rs` (UPDATE) — mark colour table
+- `crates/gui/src/capture.rs` (UPDATE) — projected draw statistics and capture assertions
+- `crates/gui/src/ingest.rs` (UPDATE) — capture distance and shared projection registration
+- `crates/gui/src/project.rs` (UPDATE) — projected mark slabs and reconciliation
+- `crates/gui/tests/capture.rs` (UPDATE) — AC14 projection-driven capture test
+- `crates/gui/tests/headless.rs` (UPDATE) — mark projection/reconciliation coverage
 
 ## Change Log
 
@@ -532,3 +593,4 @@ No code files touched by Task 0.
 | 2026-08-19 | Story created. The epic's "despawned by sim `Id`" AC was **falsified against source** — designations and zones have no id at any layer — and AC10 is written as keyed by position, with the AD-14 amendment recorded as owed. Verification recipe executed live during creation: the TUI key sequence lands 8/8 marks, a 2×2 stockpile drag yields 2 zone tiles, and an 8×12 dig rect yields 79 marks decaying to a stable 50 — so a naive 8-tile capture would photograph an empty site. |
 | 2026-08-21 | Dev started; `baseline_commit` `8d85259`. **Branching from `main`** — 7.1 merged (PR #28), which the story's own escape clause covers. Task 0 artifact written at `7-2-signoff/`, AC1 still unmet pending Wolf. Three stale premises found against source, all post-dating story creation: **AC9's band assertions are skipped below the world top** since the 2026-08-20 vehicle fix, so both `--z 10` captures in Verification prove nothing and a recipe fix is proposed for ruling; `STONE_ITEM_SCALE` dropped to 0.4; the mark-presentation decision is narrowed by channel/zone tiles having no cube to tint. |
 | 2026-08-21 | **Task 0 CLOSED — Wolf approved the artifact, AC1 MET, gate OPEN.** Three rulings: the mark presentation is the floor slab (a tinted replacement can express only dig, since channel and zone tiles have no cube); AC9's vista capture moves to full depth because the band assertions are skipped below the world top; mark colours break with the TUI's deliberately to protect UX-DR5. Tasks 1-5 delegated to Codex. |
+| 2026-08-21 | Tasks 1–5 complete and status moved to review. AC14 now drives snapshot/delta ingest through the shared projection schedule, checks counts from projected entities across a cut-filtered state change, and makes the real capture fail after marks disappear. RED compile and mirror-count sabotage evidence, the eight-row KILLED table, corrected 348-test baseline, and a green 357-pass/1-ignored gate are recorded. Tasks 6–7 and AC8/AC17/rendered AC9 remain open for the vehicle and Wolf. |
