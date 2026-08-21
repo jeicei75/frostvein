@@ -43,7 +43,8 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-20  # VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
+last_updated: 2026-08-21  # 7.2 dev STARTED -- Task 0 sign-off artifact authored, blocked on Wolf's approval.
+                          # 2026-08-20 VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
                           # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
                           # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
                           # (1) 6.1 stone items spawned at scale 1.0 -- a terrain-sized block standing in the tile it
@@ -413,7 +414,7 @@ development_status:
   # pinned to --z 9 hides the zone entirely. Pin --z 10. TUI key sequence lands 8/8, verbatim from 6.1.
   # Baseline 328 workspace tests green. Task 0 (Wolf's artifact) is the blocking gate; Tasks 6/7 are
   # vehicle- and human-bound. BLOCKED on Task 0.
-  7-2-read-the-working-zoom: ready-for-dev
+  7-2-read-the-working-zoom: in-progress
   epic-7-retrospective: optional
   epic-8: backlog
   # M2's hardest input work and the main story-count driver, isolated on purpose.
