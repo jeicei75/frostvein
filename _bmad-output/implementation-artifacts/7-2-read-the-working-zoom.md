@@ -530,6 +530,15 @@ reached `GATE GREEN`: format, clippy, 357 passing workspace tests with 1 ignored
 dependency-edge probes, and metrics-ledger tests passed. The corrected pre-story baseline was 348
 passing tests.
 
+**Self-review pass 1 — 2026-08-21:** `codex review --base main` completed and raised three
+actionable findings. P1: dig slabs were placed inside their solid rock tile (`y=-0.46`) and so
+would be depth-hidden; fixed with a `y=+0.54` top-face transform, pinned by a production-ingest
+test that first went RED with `left: -0.46`, `right: 0.54`. P2: legal co-located channel and zone
+slabs z-fought; fixed by rendering the zone as a raised, inset centre over the channel rim, and the
+same test pins the overlap transform. P2: `--distance NaN` survived `clamp`; parsing now rejects all
+non-finite values, after `capture_distance_requires_capture_and_reaches_the_camera_setup` went RED
+with `a camera distance must be finite`. The post-fix commit passed `scripts/gate.sh` (`GATE GREEN`).
+
 ### Completion Notes List
 
 **Task 0 COMPLETE — AC1 MET. WOLF APPROVED THE ARTIFACT 2026-08-21 AND THE GATE IS OPEN.** Three
@@ -594,3 +603,4 @@ claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
 | 2026-08-21 | Dev started; `baseline_commit` `8d85259`. **Branching from `main`** — 7.1 merged (PR #28), which the story's own escape clause covers. Task 0 artifact written at `7-2-signoff/`, AC1 still unmet pending Wolf. Three stale premises found against source, all post-dating story creation: **AC9's band assertions are skipped below the world top** since the 2026-08-20 vehicle fix, so both `--z 10` captures in Verification prove nothing and a recipe fix is proposed for ruling; `STONE_ITEM_SCALE` dropped to 0.4; the mark-presentation decision is narrowed by channel/zone tiles having no cube to tint. |
 | 2026-08-21 | **Task 0 CLOSED — Wolf approved the artifact, AC1 MET, gate OPEN.** Three rulings: the mark presentation is the floor slab (a tinted replacement can express only dig, since channel and zone tiles have no cube); AC9's vista capture moves to full depth because the band assertions are skipped below the world top; mark colours break with the TUI's deliberately to protect UX-DR5. Tasks 1-5 delegated to Codex. |
 | 2026-08-21 | Tasks 1–5 complete and status moved to review. AC14 now drives snapshot/delta ingest through the shared projection schedule, checks counts from projected entities across a cut-filtered state change, and makes the real capture fail after marks disappear. RED compile and mirror-count sabotage evidence, the eight-row KILLED table, corrected 348-test baseline, and a green 357-pass/1-ignored gate are recorded. Tasks 6–7 and AC8/AC17/rendered AC9 remain open for the vehicle and Wolf. |
+| 2026-08-21 | Self-review pass 1 fixed three actionable findings: dig slab depth hiding, channel/zone z-fighting, and non-finite `--distance`. Each correction has a focused RED→green regression; the post-fix gate is green. |
