@@ -539,6 +539,12 @@ same test pins the overlap transform. P2: `--distance NaN` survived `clamp`; par
 non-finite values, after `capture_distance_requires_capture_and_reaches_the_camera_setup` went RED
 with `a camera distance must be finite`. The post-fix commit passed `scripts/gate.sh` (`GATE GREEN`).
 
+**Self-review pass 2 — 2026-08-21:** `codex review --base main` found one actionable P1: the
+uncapped, full-resend zone list was reconciled by a per-zone `iter().find`, making legal large
+stockpiles O(zones²). Reconciliation now builds `BTreeMap`s of existing designations and zones once,
+and computes channel/zone overlap from the already-built wanted-zone set; lookup is O(log n) rather
+than a repeated scan. The full headless projection suite (41 tests) and the post-fix gate passed.
+
 ### Completion Notes List
 
 **Task 0 COMPLETE — AC1 MET. WOLF APPROVED THE ARTIFACT 2026-08-21 AND THE GATE IS OPEN.** Three
@@ -604,3 +610,4 @@ claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
 | 2026-08-21 | **Task 0 CLOSED — Wolf approved the artifact, AC1 MET, gate OPEN.** Three rulings: the mark presentation is the floor slab (a tinted replacement can express only dig, since channel and zone tiles have no cube); AC9's vista capture moves to full depth because the band assertions are skipped below the world top; mark colours break with the TUI's deliberately to protect UX-DR5. Tasks 1-5 delegated to Codex. |
 | 2026-08-21 | Tasks 1–5 complete and status moved to review. AC14 now drives snapshot/delta ingest through the shared projection schedule, checks counts from projected entities across a cut-filtered state change, and makes the real capture fail after marks disappear. RED compile and mirror-count sabotage evidence, the eight-row KILLED table, corrected 348-test baseline, and a green 357-pass/1-ignored gate are recorded. Tasks 6–7 and AC8/AC17/rendered AC9 remain open for the vehicle and Wolf. |
 | 2026-08-21 | Self-review pass 1 fixed three actionable findings: dig slab depth hiding, channel/zone z-fighting, and non-finite `--distance`. Each correction has a focused RED→green regression; the post-fix gate is green. |
+| 2026-08-21 | Self-review pass 2 fixed one P1: position indexes replace quadratic mark reconciliation for uncapped zone full-resends; gate green. |
