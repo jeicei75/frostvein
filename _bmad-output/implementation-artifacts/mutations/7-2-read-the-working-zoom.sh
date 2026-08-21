@@ -45,17 +45,17 @@ PY
 mutation "designation absence no longer despawns" gui cancellation_delta_despawns_a_missing_designation <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        if !wanted_designations.contains_key(&mark.0) {\n'
+old = '        if !wanted_designations.contains_key(&position) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if false && !wanted_designations.contains_key(&mark.0) {\n'))
+p.write_text(s.replace(old, '        if false && !wanted_designations.contains_key(&position) {\n'))
 PY
 
 mutation "kind changes do not restyle" gui a_designation_kind_change_restyles_the_existing_position_mark <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '            if existing_kind.0 != kind {\n'
+old = '            if existing_kind != kind {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if false && existing_kind.0 != kind {\n'))
+p.write_text(s.replace(old, '            if false && existing_kind != kind {\n'))
 PY
 
 mutation "capture accepts zero marks" gui draw_count_instrument_rejects_an_empty_level_and_accepts_terrain <<'PY'
@@ -84,4 +84,28 @@ p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '                reconcile_projection,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
+PY
+
+mutation "zone absence no longer despawns" gui draw_count_instrument_follows_projected_marks_from_live_ingest <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+# The position-indexing refactor split despawn-on-absence into two loops, one per mark kind.
+# The designation loop has its own row above; without this one the zone half is unpinned.
+old = '        if !wanted_zones.contains(&position) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if false && !wanted_zones.contains(&position) {\n'))
+PY
+
+mutation "a mark colour drifts into the terrain palette" gui mark_colours_are_distinct_cold_literals <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+# Move channel onto Material::Snow AND move the expected literal with it, so the exact-literal
+# assertion still holds and the SEPARATION floor is the only thing left to catch it. Editing the
+# production colour alone would kill on the literal check and prove nothing about the floor.
+old = '        DesignationKind::Channel => Color::srgb_u8(86, 120, 214),\n'
+assert s.count(old) == 1
+s = s.replace(old, '        DesignationKind::Channel => Color::srgb_u8(136, 150, 178),\n')
+old_expected = '                [86, 120, 214],\n'
+assert s.count(old_expected) == 1
+p.write_text(s.replace(old_expected, '                [136, 150, 178],\n'))
 PY

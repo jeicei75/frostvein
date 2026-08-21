@@ -99,12 +99,12 @@ pub fn debris_color() -> Color {
 pub fn designation_color(kind: DesignationKind) -> Color {
     match kind {
         DesignationKind::Dig => Color::srgb_u8(92, 174, 224),
-        DesignationKind::Channel => Color::srgb_u8(126, 154, 190),
+        DesignationKind::Channel => Color::srgb_u8(86, 120, 214),
     }
 }
 
 pub fn zone_color() -> Color {
-    Color::srgb_u8(170, 186, 202)
+    Color::srgb_u8(120, 206, 196)
 }
 
 /// A stone item is rubble left standing at a dug tile, not a replacement block.
@@ -355,9 +355,9 @@ mod tests {
             (
                 "channel",
                 designation_color(DesignationKind::Channel),
-                [126, 154, 190],
+                [86, 120, 214],
             ),
-            ("zone", zone_color(), [170, 186, 202]),
+            ("zone", zone_color(), [120, 206, 196]),
         ];
         let terrain = [
             Material::Stone,
@@ -371,6 +371,7 @@ mod tests {
         .into_iter()
         .chain([
             snow_cap_color().to_srgba().to_u8_array_no_alpha(),
+            foliage_snow_color().to_srgba().to_u8_array_no_alpha(),
             super::debris_color().to_srgba().to_u8_array_no_alpha(),
         ])
         .collect::<Vec<_>>();
@@ -379,15 +380,46 @@ mod tests {
             let rgb = color.to_srgba().to_u8_array_no_alpha();
             assert_eq!(rgb, expected, "{name} must retain its named colour");
             assert!(rgb[2] >= rgb[0], "{name} must remain cold or neutral");
-            assert!(
-                !terrain.contains(&rgb),
-                "{name} must not blend into an existing terrain presentation"
-            );
+            for other in &terrain {
+                let separation = channel_distance(rgb, *other);
+                assert!(
+                    separation >= MIN_MARK_SEPARATION,
+                    "{name} {rgb:?} sits {separation:.0} from terrain {other:?}, inside the \
+                     {MIN_MARK_SEPARATION} floor — AC4/AC5 ask for VISUALLY distinguishable, and \
+                     mere inequality is satisfied by two shades of the same pale blue"
+                );
+            }
         }
-        assert_ne!(marks[0].1, marks[1].1);
-        assert_ne!(marks[0].1, marks[2].1);
-        assert_ne!(marks[1].1, marks[2].1);
+        for (i, (name, _, rgb)) in marks.iter().enumerate() {
+            for (other_name, _, other) in marks.iter().skip(i + 1) {
+                let separation = channel_distance(*rgb, *other);
+                assert!(
+                    separation >= MIN_MARK_SEPARATION,
+                    "{name} and {other_name} sit {separation:.0} apart, inside the \
+                     {MIN_MARK_SEPARATION} floor"
+                );
+            }
+        }
     }
+
+    /// Euclidean RGB separation. Crude next to a perceptual metric, and deliberately so — this
+    /// guards against a mark that is a near-neighbour of the terrain it is drawn on, which is a
+    /// gross failure a crude measure catches perfectly well.
+    fn channel_distance(a: [u8; 3], b: [u8; 3]) -> f32 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (f32::from(*x) - f32::from(*y)).powi(2))
+            .sum::<f32>()
+            .sqrt()
+    }
+
+    /// The floor exists because the first values chosen here passed a `!=` check while sitting
+    /// **16 units** from `Material::Snow` (channel) and **22** from `foliage_snow_color` (zone,
+    /// which the terrain list did not even include). Both would have reached Wolf's live viewing
+    /// as "distinguishable" on the strength of an assertion that could not fail for the property
+    /// it claimed. 40 separates every current mark from every terrain presentation with room to
+    /// spare; raise it if a mark is ever tuned toward the palette rather than away from it.
+    const MIN_MARK_SEPARATION: f32 = 40.0;
 
     /// Re-derived at review-patch round 5 against the APPROVED ARTIFACT rather than against
     /// an assumed ratio. Measuring the artifact shows the camp is only ~1.3x the field in
