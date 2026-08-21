@@ -31,9 +31,17 @@ pub struct DrawStats {
     expected_cut_face: usize,
     designations: usize,
     zones: usize,
+    /// What the MIRROR says must be projected at or below the cut. Read from the world, not from
+    /// the draw set, on the same principle as `expected_cut_face` above.
+    expected_designations: usize,
+    expected_zones: usize,
 }
 
 impl DrawStats {
+    // Six counts and a level, each a distinct measurement the instrument prints by name. Grouping
+    // them into a struct solely to satisfy this lint would put a second shape between the queries
+    // and the printed line, which is the shape this type already is. Same call as `reconcile`.
+    #[allow(clippy::too_many_arguments)]
     fn new(
         level: i32,
         terrain_tiles: usize,
@@ -41,6 +49,8 @@ impl DrawStats {
         expected_cut_face: usize,
         designations: usize,
         zones: usize,
+        expected_designations: usize,
+        expected_zones: usize,
     ) -> Self {
         Self {
             level,
@@ -49,6 +59,8 @@ impl DrawStats {
             expected_cut_face,
             designations,
             zones,
+            expected_designations,
+            expected_zones,
         }
     }
 
@@ -65,7 +77,7 @@ impl DrawStats {
         self.zones
     }
 
-    pub fn assert_valid(self) {
+    pub fn assert_valid(self, expect_work: bool) {
         assert!(
             self.terrain_tiles > 0,
             "capture drew no terrain cubes at requested z {}",
@@ -77,8 +89,40 @@ impl DrawStats {
              {} were drawn — the cut face is the feature, and it is missing",
             self.level, self.expected_cut_face, self.cut_face_tiles
         );
-        assert!(self.designations > 0, "capture projected no designations");
-        assert!(self.zones > 0, "capture projected no zones");
+        // RULED 2026-08-21 (Wolf): marks get an INDEPENDENT ORACLE, on the `expected_cut_face`
+        // precedent, rather than the bare `> 0` this shipped with. Two reasons. It is strictly
+        // stronger — `> 0` cannot see a projection that drops half its marks, and this can. And
+        // `> 0` could not tell "this view legitimately has no marks" from "mark rendering broke",
+        // so it turned every no-mark capture in the project into a panic, 7.1's own shipped recipe
+        // included.
+        assert_eq!(
+            self.designations, self.expected_designations,
+            "capture projected {} designations at or below z {} but the mirror holds {}",
+            self.designations, self.level, self.expected_designations
+        );
+        assert_eq!(
+            self.zones, self.expected_zones,
+            "capture projected {} zones at or below z {} but the mirror holds {}",
+            self.zones, self.level, self.expected_zones
+        );
+        if expect_work {
+            // AC13's "exit 0 is not a result", kept where it belongs. The oracle above proves the
+            // PROJECTION is faithful; it passes a world that has no marks left to project. That is
+            // the exact false pass this story was created around: the dwarves CONSUME designations,
+            // an 8-tile site is dug out in ~52 ticks against a ~110-tick capture window, and the
+            // naive recipe therefore photographs an empty site and exits 0. A capture that says it
+            // is of a working site must find work there.
+            assert!(
+                self.expected_designations > 0,
+                "capture of a working site found no designations at or below z {} in the mirror —                  the marks were consumed before the trigger frame, so this frame shows none of                  what it was taken to show",
+                self.level
+            );
+            assert!(
+                self.expected_zones > 0,
+                "capture of a working site found no zones at or below z {} in the mirror — a                  stockpile rect on non-standable ground is silently dropped, and a zone tile sits                  one level ABOVE the rock it rests on",
+                self.level
+            );
+        }
     }
 }
 
@@ -108,6 +152,16 @@ fn collect_draw_stats(
         expected_cut_face(mirror, level),
         designations.iter().count(),
         zones.iter().count(),
+        mirror
+            .designations()
+            .iter()
+            .filter(|designation| designation.pos[2] <= level)
+            .count(),
+        mirror
+            .zones()
+            .iter()
+            .filter(|zone| zone.pos[2] <= level)
+            .count(),
     )
 }
 
@@ -490,8 +544,12 @@ pub fn capture_after_frames(
             draw.level, draw.terrain_tiles, draw.cut_face_tiles, draw.expected_cut_face, draw.level
         );
         println!(
-            "marks: z {} designations={} zones={}",
-            draw.level, draw.designations, draw.zones
+            "marks: z {} designations={} of {} zones={} of {}",
+            draw.level,
+            draw.designations,
+            draw.expected_designations,
+            draw.zones,
+            draw.expected_zones
         );
         println!(
             "lantern: dwarf positions observed={:?} lit terrain tiles at dwarf positions={} moved={}",
@@ -511,7 +569,7 @@ pub fn capture_after_frames(
         // thresholds is exactly the run whose numbers are needed to diagnose it, and a panic
         // prints none of them. The draw check was briefly asserted up at its own print, which
         // silenced the lantern, motion and range numbers on precisely those failures.
-        draw.assert_valid();
+        draw.assert_valid(capture.expect_work);
         // A cut below the dwarves hides every lantern, so the lantern assertions would report a
         // defect when the operator merely asked for a lower slice. Ask the MIRROR whether any
         // dwarf is at or below the cut rather than trusting the observation: `observed()` is
@@ -813,16 +871,38 @@ mod tests {
 
     #[test]
     fn draw_count_instrument_rejects_an_empty_level_and_accepts_terrain() {
-        let empty = DrawStats::new(4, 0, 0, 0, 0, 0);
+        let empty = DrawStats::new(4, 0, 0, 0, 0, 0, 0, 0);
         assert!(
-            std::panic::catch_unwind(|| empty.assert_valid()).is_err(),
+            std::panic::catch_unwind(|| empty.assert_valid(true)).is_err(),
             "a capture must not claim success when its requested slice drew nothing"
         );
-        DrawStats::new(4, 12, 5, 5, 1, 1).assert_valid();
+        DrawStats::new(4, 12, 5, 5, 1, 1, 1, 1).assert_valid(true);
         assert!(
-            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 0, 0).assert_valid()).is_err(),
+            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0).assert_valid(true))
+                .is_err(),
             "a terrain draw without marks must not claim a working-order capture"
         );
+    }
+
+    /// What the oracle buys over the `> 0` it replaced, in both directions. `> 0` is blind to a
+    /// projection that drops SOME of its marks — the commonest shape of a partial regression —
+    /// and it cannot let a legitimately markless view through, which is why it turned 7.1's own
+    /// shipped recipe into a panic.
+    #[test]
+    fn mark_counts_are_checked_against_the_mirror_not_merely_against_zero() {
+        assert!(
+            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 3, 2, 6, 2).assert_valid(true))
+                .is_err(),
+            "half the designations going missing must fail, and `> 0` could not see it"
+        );
+        assert!(
+            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 2, 1, 2, 2).assert_valid(true))
+                .is_err(),
+            "a zone going missing must fail, and `> 0` could not see it"
+        );
+        // A capture that never claimed to be of a working site, over a view the mirror agrees is
+        // markless: correct, and the old instrument panicked on it.
+        DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0).assert_valid(false);
     }
 
     #[test]
@@ -830,19 +910,19 @@ mod tests {
         // The defect the old instrument could not see: boundary tiles keep the global count high
         // while the cut face itself is missing. These are the measured 9x9x9 figures — 258 tiles
         // correct against 209 hollow, 81 cut-face tiles against 32.
-        let hollow = DrawStats::new(4, 209, 32, 81, 1, 1);
+        let hollow = DrawStats::new(4, 209, 32, 81, 1, 1, 1, 1);
         assert!(
-            std::panic::catch_unwind(|| hollow.assert_valid()).is_err(),
+            std::panic::catch_unwind(|| hollow.assert_valid(true)).is_err(),
             "a cut drawn with no floor is not a capture result, however many tiles it drew"
         );
-        DrawStats::new(4, 258, 81, 81, 1, 1).assert_valid();
+        DrawStats::new(4, 258, 81, 81, 1, 1, 1, 1).assert_valid(true);
     }
 
     #[test]
     fn a_level_with_no_solid_tiles_is_a_legitimate_empty_cut_face() {
         // Slicing into open sky above the mountain: the mirror says nothing is there, so drawing
         // nothing at the cut is correct and must not be read as a hollow shell.
-        DrawStats::new(30, 53_365, 0, 0, 1, 1).assert_valid();
+        DrawStats::new(30, 53_365, 0, 0, 1, 1, 1, 1).assert_valid(true);
     }
 
     #[test]

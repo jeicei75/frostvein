@@ -80,8 +80,14 @@ pub struct ProjectedDesignationKind(pub DesignationKind);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedZone(pub [i32; 3]);
 
-/// Leaves a visible gutter between neighbouring mark slabs, whose mesh is deliberately 1.02 wide
-/// so it still reaches the terrain edge after this transform scale is applied.
+/// Leaves a visible gutter between neighbouring mark slabs. The mesh is 1.02 wide and this scale
+/// is applied on top of it, so a slab covers 1.02 x 0.94 = 0.9588 of its tile — inset ~2% per
+/// side, which is the gutter, not a reach to the tile edge.
+///
+/// NOTE: measured at the 2026-08-21 review, one tile step spans 48.8 px of a 1280-wide frame at
+/// `--distance 30`, so the gutter is ~2 px at the working zoom and ~0.65 px at the boot vista.
+/// Whether that reads as separate tiles or as anti-aliasing noise is a human call, and it is on
+/// the list for Wolf's live viewing.
 const MARK_FOOTPRINT_SCALE: f32 = 0.94;
 
 /// The light kind delivered for a projected emitter. Reconciliation only changes this when the
@@ -448,11 +454,22 @@ pub fn reconcile(
         .filter(|zone| zone.pos[2] <= slice.level())
         .map(|zone| zone.pos)
         .collect::<BTreeSet<_>>();
-    let channel_zone_overlaps = wanted_designations
+    // A zone slab and a designation slab can land on the SAME surface two ways, and both are
+    // reachable from the sim. (1) A channel and a stockpile may occupy the same standable air
+    // tile. (2) A stockpile at z sits on rock whose DIG mark is at z-1, and a dig slab resting on
+    // its own top face is that same surface — measured at the 2026-08-21 review, designation
+    // [9,9,9] and zone [9,9,10] both projected to (9.000, 9.540, -9.000) at identical scale with
+    // the same mesh, both opaque. The story's own recipe hits case (2): the stockpile columns sit
+    // inside the dig rect, so the stockpile tiles would z-fight against the digs beneath them
+    // exactly while AC5 ("is a stockpile tellable from a dig") is being judged.
+    let zone_mark_overlaps = wanted_zones
         .iter()
-        .filter(|(_, kind)| **kind == DesignationKind::Channel)
-        .filter(|(position, _)| wanted_zones.contains(*position))
-        .map(|(position, _)| *position)
+        .filter(|position| {
+            wanted_designations.get(*position) == Some(&DesignationKind::Channel)
+                || wanted_designations.get(&[position[0], position[1], position[2] - 1])
+                    == Some(&DesignationKind::Dig)
+        })
+        .copied()
         .collect::<BTreeSet<_>>();
     let existing_designations = designations
         .iter()
@@ -465,9 +482,12 @@ pub fn reconcile(
     }
     for (&position, &kind) in &wanted_designations {
         if let Some(&(entity, existing_kind)) = existing_designations.get(&position) {
-            commands
-                .entity(entity)
-                .insert(designation_mark_transform(position, kind));
+            commands.entity(entity).insert(designation_mark_transform(
+                mirror,
+                position,
+                kind,
+                slice.level(),
+            ));
             if existing_kind != kind {
                 commands
                     .entity(entity)
@@ -482,7 +502,7 @@ pub fn reconcile(
             let mut entity = commands.spawn((
                 ProjectedDesignation(position),
                 ProjectedDesignationKind(kind),
-                designation_mark_transform(position, kind),
+                designation_mark_transform(mirror, position, kind, slice.level()),
             ));
             if let Some(assets) = assets {
                 entity.insert((
@@ -503,7 +523,7 @@ pub fn reconcile(
         }
     }
     for position in wanted_zones {
-        let transform = zone_mark_transform(position, channel_zone_overlaps.contains(&position));
+        let transform = zone_mark_transform(position, zone_mark_overlaps.contains(&position));
         if let Some(&entity) = existing_zones.get(&position) {
             commands.entity(entity).insert(transform);
         } else {
@@ -524,21 +544,52 @@ fn item_translation(position: [i32; 3]) -> Vec3 {
     world_to_render(position) + Vec3::new(0.0, STONE_ITEM_DROP, 0.0)
 }
 
-fn designation_mark_transform(position: [i32; 3], kind: DesignationKind) -> Transform {
-    let vertical_offset = match kind {
-        DesignationKind::Dig => 0.54,
-        DesignationKind::Channel => -0.46,
-    };
-    slab_transform(position, vertical_offset)
+/// The z a DIG slab is drawn at. A dig marks the top face of its own tile, but
+/// `is_visible_at_slice` draws every solid or ramp tile AT the cut as a full cube regardless of
+/// exposure, and that cube spans `[z - 0.5, z + 0.5]` — so a dig with rock directly above it was
+/// sealed inside opaque geometry. This is the STEADY STATE, not an edge case: the dwarves dig the
+/// reachable tiles first, and reachable means open sky above, so the marks that survive a capture
+/// window are exactly the buried ones. Measured at the 2026-08-21 review on this story's own
+/// recipe: 25 of 79 visible at t+2, 9 at t+46, 2 at t+64, and 0 of 50 from t+120 onward — while
+/// the instrument correctly printed `designations=50`, because all 50 were projected.
+///
+/// RULED 2026-08-21 (Wolf): promote a buried dig to the top face of the rock covering it, so the
+/// order stays readable from the surface the boss is actually looking at.
+///
+/// NOTE: only the CONTIGUOUS drawn column directly above the dig is walked. A dig under a gap is
+/// left where it is — it is already visible through that gap, and hoisting it would put the mark
+/// on rock that is not the rock it marks.
+fn dig_mark_level(mirror: &Mirror, position: [i32; 3], level: i32) -> i32 {
+    let [x, y, z] = position;
+    let mut top = z;
+    while top < level && is_visible_at_slice(mirror, [x, y, top + 1], level) {
+        top += 1;
+    }
+    top
 }
 
-fn zone_mark_transform(position: [i32; 3], overlaps_channel: bool) -> Transform {
-    if !overlaps_channel {
+fn designation_mark_transform(
+    mirror: &Mirror,
+    position: [i32; 3],
+    kind: DesignationKind,
+    level: i32,
+) -> Transform {
+    match kind {
+        DesignationKind::Dig => {
+            let [x, y, _] = position;
+            slab_transform([x, y, dig_mark_level(mirror, position, level)], 0.54)
+        }
+        DesignationKind::Channel => slab_transform(position, -0.46),
+    }
+}
+
+fn zone_mark_transform(position: [i32; 3], overlaps_mark: bool) -> Transform {
+    if !overlaps_mark {
         return slab_transform(position, -0.46);
     }
-    // A channel and a stockpile may occupy the same standable air tile. Raise and inset the zone
-    // only for that combined mark so its neutral centre and the channel's cold rim both remain
-    // readable instead of z-fighting at one opaque surface.
+    // Raise and inset the zone only where another mark shares its surface — a channel in the same
+    // air tile, or a dig on the rock directly beneath it — so the zone's neutral centre and the
+    // other mark's cold rim both stay readable instead of z-fighting at one opaque surface.
     slab_transform(position, -0.36).with_scale(Vec3::new(
         MARK_FOOTPRINT_SCALE * 0.72,
         MARK_FOOTPRINT_SCALE,

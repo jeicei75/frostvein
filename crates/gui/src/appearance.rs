@@ -96,10 +96,21 @@ pub fn debris_color() -> Color {
 
 // NOTE: these intentionally do not match the TUI. Dig amber would read as false firelight over
 // a large rock face, so gui keeps all work marks cold or neutral to preserve the warm-camp read.
+//
+// RETUNED at the 2026-08-21 review, for two reasons the first values got wrong.
+// (1) COLLISION: dig was (92, 174, 224) — BYTE-IDENTICAL to the TUI's CHANNEL blue
+// (`crates/tui/src/palette.rs:110`). Breaking with the TUI is deliberate; landing exactly on a
+// DIFFERENT TUI order was not, and on the two windows Wolf runs side by side one RGB meant two
+// things. Every mark here is now >= 50 from every TUI mark colour as well as from terrain.
+// (2) AXIS: dig and channel were two blues separated almost entirely on GREEN (174 vs 120), and
+// the shipped directional is a desaturated cool (150, 190, 180) over cool ambient — it multiplies
+// toward teal and compresses exactly that axis, so the 40-unit floor was measured on unlit
+// literals that the renderer then pushes together. They now separate on RED (56 vs 150), which
+// this light does not compress, and sit 103 apart unlit against the old 51.
 pub fn designation_color(kind: DesignationKind) -> Color {
     match kind {
-        DesignationKind::Dig => Color::srgb_u8(92, 174, 224),
-        DesignationKind::Channel => Color::srgb_u8(86, 120, 214),
+        DesignationKind::Dig => Color::srgb_u8(56, 132, 250),
+        DesignationKind::Channel => Color::srgb_u8(150, 96, 230),
     }
 }
 
@@ -350,12 +361,12 @@ mod tests {
             (
                 "dig",
                 designation_color(DesignationKind::Dig),
-                [92, 174, 224],
+                [56, 132, 250],
             ),
             (
                 "channel",
                 designation_color(DesignationKind::Channel),
-                [86, 120, 214],
+                [150, 96, 230],
             ),
             ("zone", zone_color(), [120, 206, 196]),
         ];
@@ -397,6 +408,27 @@ mod tests {
                     separation >= MIN_MARK_SEPARATION,
                     "{name} and {other_name} sit {separation:.0} apart, inside the \
                      {MIN_MARK_SEPARATION} floor"
+                );
+            }
+        }
+        // Hand-copied from `crates/tui/src/palette.rs` — `gui` must never depend on `tui`, so
+        // these are literals carrying a pointer to their source rather than an import. Wolf runs
+        // both clients side by side, and dig shipped BYTE-IDENTICAL to the TUI's CHANNEL blue:
+        // one RGB meaning two different orders across two windows. Mere non-identity is not the
+        // guard, because two near-neighbour blues confuse just as well as one shared value.
+        let tui_marks = [
+            ("TUI dig", [232, 176, 72]),
+            ("TUI channel", [92, 174, 224]),
+            ("TUI zone", [88, 190, 118]),
+        ];
+        for (name, _, rgb) in marks {
+            for (tui_name, tui_rgb) in tui_marks {
+                let separation = channel_distance(rgb, tui_rgb);
+                assert!(
+                    separation >= MIN_MARK_SEPARATION,
+                    "gui's {name} {rgb:?} sits {separation:.0} from {tui_name} {tui_rgb:?}, \
+                     inside the {MIN_MARK_SEPARATION} floor — the two clients are read side by \
+                     side, so one colour must not name two different orders"
                 );
             }
         }

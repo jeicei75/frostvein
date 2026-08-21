@@ -16,8 +16,8 @@ use bevy::{
     ecs::system::RunSystemOnce,
     input::ButtonInput,
     prelude::{
-        Assets, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, PointLight, Resource,
-        StandardMaterial, Text, Transform,
+        Assets, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, Or, PointLight,
+        Resource, StandardMaterial, Text, Transform, With, Without,
     },
 };
 
@@ -195,6 +195,47 @@ fn projected_scene(app: &mut App) -> Vec<(u32, Option<[i32; 3]>, [i32; 3])> {
     scene
 }
 
+/// AD-14's rebuild invariant applied to MARKS. It needs its own oracle because marks deliberately
+/// do not carry `WorldProjected` (Decision D2 — that id space already mixes sim ids with synthetic
+/// terrain ids), so `projected_scene` above is structurally blind to them: reviewed 2026-08-21,
+/// AC11's test despawned `&WorldProjected` only and compared through an oracle keyed the same way,
+/// leaving the newest projected entity types unguarded by the very assertion meant to cover them.
+fn projected_marks(app: &mut App) -> Vec<([i32; 3], Option<&'static str>, [i32; 3])> {
+    let mut marks = app
+        .world_mut()
+        .query::<(
+            &ProjectedDesignation,
+            &gui::project::ProjectedDesignationKind,
+            &Transform,
+        )>()
+        .iter(app.world())
+        .map(|(mark, kind, transform)| {
+            (
+                mark.0,
+                Some(match kind.0 {
+                    DesignationKind::Dig => "dig",
+                    DesignationKind::Channel => "channel",
+                }),
+                gui::transform::render_to_world(transform.translation),
+            )
+        })
+        .collect::<Vec<_>>();
+    marks.extend(
+        app.world_mut()
+            .query::<(&ProjectedZone, &Transform)>()
+            .iter(app.world())
+            .map(|(zone, transform)| {
+                (
+                    zone.0,
+                    None,
+                    gui::transform::render_to_world(transform.translation),
+                )
+            }),
+    );
+    marks.sort_unstable();
+    marks
+}
+
 #[test]
 fn snapshot_marks_project_through_the_live_ingest_schedule() {
     let dims = Dims { x: 2, y: 2, z: 3 };
@@ -356,6 +397,156 @@ fn a_designation_kind_change_restyles_the_existing_position_mark() {
         .map(|(mark, kind)| (mark.0, kind.0))
         .collect::<Vec<_>>();
     assert_eq!(marks, vec![([1, 1, 1], DesignationKind::Channel)]);
+
+    // AC10 asks that a kind change RESTYLES the mark, and the bookkeeping component above is not
+    // the style. Reviewed 2026-08-21: deleting the update path's `MeshMaterial3d` insert left the
+    // whole suite green, this test included, because nothing looked at the material — a dig
+    // retuned to a channel would have kept dig blue forever with the sabotage table green too.
+    // The handle is compared against the assets table's own channel handle, so this cannot be
+    // satisfied by any material at all, only by the right one.
+    let handle = app
+        .world_mut()
+        .query::<(&ProjectedDesignation, &MeshMaterial3d<StandardMaterial>)>()
+        .iter(app.world())
+        .map(|(_, material)| material.0.clone())
+        .next()
+        .expect("the restyled mark must still carry a material");
+    let drawn = app
+        .world()
+        .resource::<Assets<StandardMaterial>>()
+        .get(&handle)
+        .expect("the mark's material handle must resolve")
+        .base_color;
+    assert_eq!(
+        drawn.to_srgba().to_u8_array_no_alpha(),
+        gui::appearance::designation_color(DesignationKind::Channel)
+            .to_srgba()
+            .to_u8_array_no_alpha(),
+        "the mark must be WEARING the channel colour after the kind change"
+    );
+    assert_ne!(
+        drawn.to_srgba().to_u8_array_no_alpha(),
+        gui::appearance::designation_color(DesignationKind::Dig)
+            .to_srgba()
+            .to_u8_array_no_alpha(),
+        "a restyled channel must not still be wearing dig blue"
+    );
+}
+
+/// The defect that made this story's own capture recipe photograph an empty site and exit 0.
+/// `is_visible_at_slice` draws every solid tile AT the cut as a full cube spanning `[z-0.5, z+0.5]`
+/// regardless of exposure, so a dig slab resting at `z+0.54` on the tile BELOW that cube was
+/// sealed inside opaque rock. Measured live at the 2026-08-21 review on the story's own recipe:
+/// 0 of 50 surviving marks visible from t+120 onward, while the instrument correctly printed
+/// `designations=50` — every one of them projected, none of them seeable.
+///
+/// RULED 2026-08-21 (Wolf): promote a buried dig to the top face of the rock covering it. The
+/// oracle here is hand-written geometry, not a re-read of `dig_mark_level`.
+#[test]
+fn a_dig_buried_under_the_cut_is_drawn_on_the_rock_that_covers_it() {
+    let dims = Dims { x: 2, y: 2, z: 3 };
+    let index = |x: usize, y: usize, z: usize| x + y * 2 + z * 4;
+    let mut tiles = vec![Tile::Empty; 12];
+    // Column [0,0]: rock at the cut covers the dig one level below it.
+    tiles[index(0, 0, 1)] = Tile::Solid(Material::Ice);
+    tiles[index(0, 0, 2)] = Tile::Solid(Material::Ice);
+    // Column [1,0]: open sky above the dig, so nothing hides it and it must NOT be moved.
+    tiles[index(1, 0, 1)] = Tile::Solid(Material::Ice);
+
+    let mut world = snapshot_with_dims(dims, tiles, Vec::new());
+    world.designations = vec![
+        Designation {
+            pos: [0, 0, 1],
+            kind: DesignationKind::Dig,
+        },
+        Designation {
+            pos: [1, 0, 1],
+            kind: DesignationKind::Dig,
+        },
+    ];
+    let mut app = headless_app(world);
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    drop(sender);
+    app.update();
+
+    let heights = app
+        .world_mut()
+        .query::<(&ProjectedDesignation, &Transform)>()
+        .iter(app.world())
+        .map(|(mark, transform)| (mark.0, transform.translation.y))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    // The cut cube in column [0,0] spans [1.5, 2.5]; a slab at 1.54 is inside it, one at 2.54 is
+    // on top of it. Both marks keep their own identity — only where they are DRAWN changes.
+    let buried = heights[&[0, 0, 1]];
+    assert!(
+        buried > 2.5,
+        "a dig under the cut-face cube must be drawn above that cube's top face, not at \
+         {buried} where the rock encloses it"
+    );
+    assert!((buried - 2.54).abs() < 1e-5, "buried dig sat at {buried}");
+
+    let open = heights[&[1, 0, 1]];
+    assert!(
+        (open - 1.54).abs() < 1e-5,
+        "a dig with open sky above it is already visible and must stay on its own tile, not be \
+         hoisted onto rock it does not mark; sat at {open}"
+    );
+}
+
+/// A stockpile sits on standable ground: solid at `z-1`, air at `z`. So a stockpile at z and a
+/// dig on the rock beneath it at `z-1` are marks on the SAME surface, and before this fix they
+/// projected to byte-identical translations and scales with the same opaque mesh — measured at the
+/// 2026-08-21 review as designation `[9,9,9]` and zone `[9,9,10]` both at `(9.000, 9.540, -9.000)`.
+/// The story's own recipe hits it: the stockpile columns sit inside the dig rect, so the tiles
+/// would z-fight exactly while AC5 ("is a stockpile tellable from a dig") is being judged.
+#[test]
+fn a_stockpile_over_a_dig_does_not_share_the_digs_surface() {
+    let dims = Dims { x: 2, y: 2, z: 3 };
+    let index = |x: usize, y: usize, z: usize| x + y * 2 + z * 4;
+    let mut tiles = vec![Tile::Empty; 12];
+    tiles[index(0, 0, 1)] = Tile::Solid(Material::Ice);
+
+    let mut world = snapshot_with_dims(dims, tiles, Vec::new());
+    world.designations = vec![Designation {
+        pos: [0, 0, 1],
+        kind: DesignationKind::Dig,
+    }];
+    world.zones = vec![Zone { pos: [0, 0, 2] }];
+    let mut app = headless_app(world);
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    drop(sender);
+    app.update();
+
+    let dig = app
+        .world_mut()
+        .query::<(&ProjectedDesignation, &Transform)>()
+        .iter(app.world())
+        .map(|(_, transform)| *transform)
+        .next()
+        .expect("the dig must project");
+    let zone = app
+        .world_mut()
+        .query::<(&ProjectedZone, &Transform)>()
+        .iter(app.world())
+        .map(|(_, transform)| *transform)
+        .next()
+        .expect("the zone must project");
+
+    assert_ne!(
+        dig.translation, zone.translation,
+        "a stockpile and the dig beneath it must not occupy one surface"
+    );
+    assert_ne!(
+        dig.scale, zone.scale,
+        "the zone over a dig must be inset so both marks stay readable"
+    );
+    assert!(
+        zone.translation.y > dig.translation.y,
+        "the stockpile is the upper tile, so its slab must sit above the dig's"
+    );
 }
 
 #[test]
@@ -1227,26 +1418,44 @@ fn despawning_world_projection_then_reconciling_recreates_the_same_scene() {
         state: JobState::Idle,
         light: None,
     };
-    let mut app = headless_app(snapshot(
-        vec![Tile::Solid(Material::Ice), Tile::Empty],
-        vec![dwarf],
-    ));
+    // AC11 says "marks included", so the snapshot must actually carry marks — reviewed
+    // 2026-08-21, this test used an empty designation and zone list, so every assertion in it was
+    // true of a scene with no marks in it at all.
+    let mut world = snapshot(vec![Tile::Solid(Material::Ice), Tile::Empty], vec![dwarf]);
+    world.designations = vec![Designation {
+        pos: [0, 0, 0],
+        kind: DesignationKind::Dig,
+    }];
+    world.zones = vec![Zone { pos: [1, 0, 0] }];
+    let mut app = headless_app(world);
     app.update();
     let expected = projected_scene(&mut app);
+    let expected_marks = projected_marks(&mut app);
+    assert!(
+        !expected_marks.is_empty(),
+        "the rebuild invariant is only tested if there are marks to rebuild"
+    );
     let projected = app
         .world_mut()
         .query::<(BevyEntity, &WorldProjected)>()
         .iter(app.world())
         .map(|(entity, _)| entity)
         .collect::<Vec<_>>();
-    for entity in projected {
+    let marks = app
+        .world_mut()
+        .query_filtered::<BevyEntity, Or<(With<ProjectedDesignation>, With<ProjectedZone>)>>()
+        .iter(app.world())
+        .collect::<Vec<_>>();
+    for entity in projected.into_iter().chain(marks) {
         app.world_mut().entity_mut(entity).despawn();
     }
     assert!(projected_scene(&mut app).is_empty());
+    assert!(projected_marks(&mut app).is_empty());
     app.world_mut().resource_mut::<ProjectionWork>().snapshot = true;
     app.update();
 
     assert_eq!(projected_scene(&mut app), expected);
+    assert_eq!(projected_marks(&mut app), expected_marks);
 }
 
 #[test]
@@ -1273,6 +1482,29 @@ fn world_and_client_local_markers_are_a_structural_partition() {
         local
             .iter(app.world())
             .all(|(_, projected)| projected.is_none())
+    );
+
+    // The COVERAGE half of the partition, which is the half that catches a NEW projected entity
+    // type carrying neither marker. Reviewed 2026-08-21: this test still knew only
+    // `WorldProjected`, and the disjointness test added alongside the marks skips any entity that
+    // carries neither — so between them, an unmarked projected entity passed both. Marks are the
+    // worked example: they are world-projected (AD-14, NFR5) and deliberately do NOT carry
+    // `WorldProjected` (Decision D2), so they must be named here explicitly.
+    let unclassified = app
+        .world_mut()
+        .query_filtered::<BevyEntity, (
+            With<Transform>,
+            Without<WorldProjected>,
+            Without<ClientLocal>,
+            Without<ProjectedDesignation>,
+            Without<ProjectedZone>,
+        )>()
+        .iter(app.world())
+        .count();
+    assert_eq!(
+        unclassified, 0,
+        "every transformed entity must be world-projected or client-local; an entity carrying \
+         neither marker is invisible to both halves of this partition"
     );
 }
 

@@ -649,7 +649,9 @@ mod tests {
         ingest_messages,
     };
     use crate::blend::TickClock;
+    use crate::camera::CameraRig;
     use crate::project::WorldProjected;
+    use bevy::ecs::system::RunSystemOnce;
 
     #[test]
     fn capture_forces_the_frame_time_overlay_off() {
@@ -724,7 +726,7 @@ mod tests {
     }
 
     #[test]
-    fn capture_distance_requires_capture_and_reaches_the_camera_setup() {
+    fn capture_distance_requires_capture_and_is_retained_for_pinning() {
         assert!(
             super::parse_args_from([
                 std::ffi::OsString::from("--distance"),
@@ -754,6 +756,42 @@ mod tests {
             .is_err(),
             "a camera distance must be finite"
         );
+    }
+
+    /// The half the parse test could not reach, and the reason its NAME was a lie. Reviewed
+    /// 2026-08-21: replacing `setup_camera`'s assignment with `let _ = distance;` left all 106
+    /// tests passing, so `--distance 30` would have parsed, validated, and then silently captured
+    /// at `BOOT_DISTANCE` — the flag exists precisely because a capture at the boot framing put
+    /// 6.1's dig site at 0.30 % of the frame and Wolf's reaction was "did not see the difference".
+    /// This runs the REAL `setup_camera` system and reads the distance back off the spawned rig.
+    #[test]
+    fn the_distance_flag_reaches_the_camera_rig_rather_than_merely_parsing() {
+        fn rig_distance(requested: Option<f32>) -> f32 {
+            let mut app = App::new();
+            if let Some(distance) = requested {
+                app.insert_resource(super::CaptureDistance(distance));
+            }
+            app.world_mut()
+                .run_system_once(super::setup_camera)
+                .expect("the camera setup must run");
+            app.world_mut()
+                .query::<&CameraRig>()
+                .iter(app.world())
+                .map(|rig| rig.distance)
+                .next()
+                .expect("the camera setup must spawn a rig")
+        }
+
+        // Independent oracle: the expected distances are written here, not read back from `Args`.
+        assert_eq!(rig_distance(Some(30.0)), 30.0);
+        assert_eq!(rig_distance(Some(4.5)), 4.5);
+        // No flag means the boot framing, unchanged. Written by hand rather than read back from
+        // `BOOT_DISTANCE`, on the same principle as the `--z` test above: an oracle that reads the
+        // constant it is checking cannot fail when the constant moves.
+        assert_eq!(rig_distance(None), 90.0);
+        // And the pin is clamped by the same rule the flag documents.
+        assert_eq!(rig_distance(Some(0.0)), 4.0);
+        assert_eq!(rig_distance(Some(9_000.0)), 500.0);
     }
 
     #[test]
