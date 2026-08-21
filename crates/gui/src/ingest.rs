@@ -256,12 +256,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             );
         } else if arg == "--distance" {
             let value = args.next().context("--distance requires a value")?;
-            distance = Some(
-                value
-                    .to_string_lossy()
-                    .parse()
-                    .context("invalid --distance")?,
-            );
+            let parsed: f32 = value
+                .to_string_lossy()
+                .parse()
+                .context("invalid --distance")?;
+            if !parsed.is_finite() {
+                bail!("--distance must be finite");
+            }
+            distance = Some(parsed);
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -740,6 +742,18 @@ mod tests {
         ])
         .expect("a capture distance must parse");
         assert_eq!(args.distance, Some(30.0));
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--capture"),
+                std::ffi::OsString::from("working.png"),
+                std::ffi::OsString::from("--frames"),
+                std::ffi::OsString::from("12"),
+                std::ffi::OsString::from("--distance"),
+                std::ffi::OsString::from("NaN"),
+            ])
+            .is_err(),
+            "a camera distance must be finite"
+        );
     }
 
     #[test]

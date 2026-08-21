@@ -438,15 +438,24 @@ pub fn reconcile(
         .filter(|designation| designation.pos[2] <= slice.level())
         .map(|designation| (designation.pos, designation.kind))
         .collect::<std::collections::BTreeMap<_, _>>();
+    let channel_zone_overlaps = wanted_designations
+        .iter()
+        .filter(|(_, kind)| **kind == DesignationKind::Channel)
+        .filter(|(position, _)| mirror.zones().iter().any(|zone| zone.pos == **position))
+        .map(|(position, _)| *position)
+        .collect::<BTreeSet<_>>();
     for (entity, mark, _) in designations.iter() {
         if !wanted_designations.contains_key(&mark.0) {
             commands.entity(entity).despawn();
         }
     }
-    for (position, kind) in wanted_designations {
+    for (&position, &kind) in &wanted_designations {
         if let Some((entity, _, existing_kind)) =
             designations.iter().find(|(_, mark, _)| mark.0 == position)
         {
+            commands
+                .entity(entity)
+                .insert(designation_mark_transform(position, kind));
             if existing_kind.0 != kind {
                 commands
                     .entity(entity)
@@ -461,7 +470,7 @@ pub fn reconcile(
             let mut entity = commands.spawn((
                 ProjectedDesignation(position),
                 ProjectedDesignationKind(kind),
-                mark_transform(position),
+                designation_mark_transform(position, kind),
             ));
             if let Some(assets) = assets {
                 entity.insert((
@@ -484,8 +493,11 @@ pub fn reconcile(
         }
     }
     for position in wanted_zones {
-        if zones.iter().all(|(_, mark)| mark.0 != position) {
-            let mut entity = commands.spawn((ProjectedZone(position), mark_transform(position)));
+        let transform = zone_mark_transform(position, channel_zone_overlaps.contains(&position));
+        if let Some((entity, _)) = zones.iter().find(|(_, mark)| mark.0 == position) {
+            commands.entity(entity).insert(transform);
+        } else {
+            let mut entity = commands.spawn((ProjectedZone(position), transform));
             if let Some(assets) = assets {
                 entity.insert((
                     Mesh3d(assets.mark_mesh.clone()),
@@ -502,8 +514,26 @@ fn item_translation(position: [i32; 3]) -> Vec3 {
     world_to_render(position) + Vec3::new(0.0, STONE_ITEM_DROP, 0.0)
 }
 
-fn mark_transform(position: [i32; 3]) -> Transform {
-    Transform::from_translation(world_to_render(position) + Vec3::Y * -0.46)
+fn designation_mark_transform(position: [i32; 3], kind: DesignationKind) -> Transform {
+    let vertical_offset = match kind {
+        DesignationKind::Dig => 0.54,
+        DesignationKind::Channel => -0.46,
+    };
+    slab_transform(position, vertical_offset)
+}
+
+fn zone_mark_transform(position: [i32; 3], overlaps_channel: bool) -> Transform {
+    if !overlaps_channel {
+        return slab_transform(position, -0.46);
+    }
+    // A channel and a stockpile may occupy the same standable air tile. Raise and inset the zone
+    // only for that combined mark so its neutral centre and the channel's cold rim both remain
+    // readable instead of z-fighting at one opaque surface.
+    slab_transform(position, -0.36).with_scale(Vec3::new(0.72, 1.0, 0.72))
+}
+
+fn slab_transform(position: [i32; 3], vertical_offset: f32) -> Transform {
+    Transform::from_translation(world_to_render(position) + Vec3::Y * vertical_offset)
 }
 
 fn chip_offsets() -> [Vec3; CHIPS_PER_TILE] {

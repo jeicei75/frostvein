@@ -231,6 +231,81 @@ fn snapshot_marks_project_through_the_live_ingest_schedule() {
 }
 
 #[test]
+fn mark_slabs_rest_on_their_ordered_surfaces_and_layer_a_channel_zone_overlap() {
+    let dims = Dims { x: 2, y: 1, z: 2 };
+    let initial = snapshot_with_dims(
+        dims,
+        vec![
+            Tile::Solid(Material::Stone),
+            Tile::Solid(Material::Stone),
+            Tile::Empty,
+            Tile::Empty,
+        ],
+        Vec::new(),
+    );
+    let mut app = headless_app(initial.clone());
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    let mut marked = initial;
+    marked.designations = vec![
+        Designation {
+            pos: [0, 0, 0],
+            kind: DesignationKind::Dig,
+        },
+        Designation {
+            pos: [1, 0, 1],
+            kind: DesignationKind::Channel,
+        },
+    ];
+    marked.zones = vec![Zone { pos: [1, 0, 1] }];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(marked))))
+        .unwrap();
+    app.update();
+
+    let mut designations = app
+        .world_mut()
+        .query::<(&ProjectedDesignation, &Transform)>();
+    let dig_y = designations
+        .iter(app.world())
+        .find_map(|(mark, transform)| (mark.0 == [0, 0, 0]).then_some(transform.translation.y))
+        .expect("the dig mark must project");
+    let channel_y = designations
+        .iter(app.world())
+        .find_map(|(mark, transform)| (mark.0 == [1, 0, 1]).then_some(transform.translation.y))
+        .expect("the channel mark must project");
+    let mut zones = app.world_mut().query::<(&ProjectedZone, &Transform)>();
+    let zone = zones
+        .iter(app.world())
+        .find_map(|(mark, transform)| (mark.0 == [1, 0, 1]).then_some(transform))
+        .expect("the zone mark must project");
+
+    assert!(
+        (dig_y - 0.54).abs() < 1e-6,
+        "a dig slab must sit on top of its solid rock; got {dig_y}"
+    );
+    assert!(
+        (channel_y - 0.54).abs() < 1e-6,
+        "a channel slab rests on its empty tile floor; got {channel_y}"
+    );
+    assert!(
+        (zone.translation.y - 0.64).abs() < 1e-6,
+        "an overlapping zone layers above its channel; got {}",
+        zone.translation.y
+    );
+    assert!(
+        (zone.scale.x - 0.72).abs() < 1e-6,
+        "the raised zone leaves the channel rim readable; got {}",
+        zone.scale.x
+    );
+    assert!(
+        (zone.scale.z - 0.72).abs() < 1e-6,
+        "the raised zone stays square; got {}",
+        zone.scale.z
+    );
+}
+
+#[test]
 fn a_designation_kind_change_restyles_the_existing_position_mark() {
     let dims = Dims { x: 2, y: 2, z: 2 };
     let initial = snapshot_with_dims(dims, vec![Tile::Empty; 8], Vec::new());
