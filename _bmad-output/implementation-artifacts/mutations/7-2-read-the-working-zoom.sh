@@ -3,17 +3,35 @@
 mutation "designation projection is deleted" gui snapshot_marks_project_through_the_live_ingest_schedule <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    let wanted_designations = mirror\n        .designations()\n'
+# Replace the whole derivation, not just its head: swapping the source for an empty slice
+# orphans the .filter/.map/.collect chain and the mutation fails to COMPILE, which proves
+# nothing. An empty map of the same type is the honest "this projection was deleted".
+old = '''    let wanted_designations = mirror
+        .designations()
+        .iter()
+        .filter(|designation| designation.pos[2] <= slice.level())
+        .map(|designation| (designation.pos, designation.kind))
+        .collect::<std::collections::BTreeMap<_, _>>();
+'''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    let wanted_designations: &[protocol::Designation] = &[];\n'))
+new = '    let wanted_designations = std::collections::BTreeMap::<[i32; 3], DesignationKind>::new();\n'
+p.write_text(s.replace(old, new))
 PY
 
 mutation "zone projection is deleted" gui snapshot_marks_project_through_the_live_ingest_schedule <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    let wanted_zones = mirror\n        .zones()\n'
+# Same correction as the designation row above: delete the whole derivation, not its head.
+old = '''    let wanted_zones = mirror
+        .zones()
+        .iter()
+        .filter(|zone| zone.pos[2] <= slice.level())
+        .map(|zone| zone.pos)
+        .collect::<BTreeSet<_>>();
+'''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    let wanted_zones: &[protocol::Zone] = &[];\n'))
+new = '    let wanted_zones = BTreeSet::<[i32; 3]>::new();\n'
+p.write_text(s.replace(old, new))
 PY
 
 mutation "mark slice filter is removed" gui marks_follow_the_slice_control_at_and_below_the_cut <<'PY'
