@@ -253,11 +253,11 @@ fn mark_slabs_rest_on_their_ordered_surfaces_and_layer_a_channel_zone_overlap() 
             kind: DesignationKind::Dig,
         },
         Designation {
-            pos: [1, 0, 1],
+            pos: [0, 0, 1],
             kind: DesignationKind::Channel,
         },
     ];
-    marked.zones = vec![Zone { pos: [1, 0, 1] }];
+    marked.zones = vec![Zone { pos: [0, 0, 1] }];
     sender
         .send(Ok(WireMessage::Snapshot(Box::new(marked))))
         .unwrap();
@@ -266,27 +266,29 @@ fn mark_slabs_rest_on_their_ordered_surfaces_and_layer_a_channel_zone_overlap() 
     let mut designations = app
         .world_mut()
         .query::<(&ProjectedDesignation, &Transform)>();
-    let dig_y = designations
+    let dig = designations
         .iter(app.world())
-        .find_map(|(mark, transform)| (mark.0 == [0, 0, 0]).then_some(transform.translation.y))
+        .find_map(|(mark, transform)| (mark.0 == [0, 0, 0]).then_some(*transform))
         .expect("the dig mark must project");
-    let channel_y = designations
+    let channel = designations
         .iter(app.world())
-        .find_map(|(mark, transform)| (mark.0 == [1, 0, 1]).then_some(transform.translation.y))
+        .find_map(|(mark, transform)| (mark.0 == [0, 0, 1]).then_some(*transform))
         .expect("the channel mark must project");
     let mut zones = app.world_mut().query::<(&ProjectedZone, &Transform)>();
     let zone = zones
         .iter(app.world())
-        .find_map(|(mark, transform)| (mark.0 == [1, 0, 1]).then_some(transform))
+        .find_map(|(mark, transform)| (mark.0 == [0, 0, 1]).then_some(*transform))
         .expect("the zone mark must project");
 
     assert!(
-        (dig_y - 0.54).abs() < 1e-6,
-        "a dig slab must sit on top of its solid rock; got {dig_y}"
+        (dig.translation.y - 0.54).abs() < 1e-6,
+        "a dig slab must sit on top of its solid rock; got {}",
+        dig.translation.y
     );
     assert!(
-        (channel_y - 0.54).abs() < 1e-6,
-        "a channel slab rests on its empty tile floor; got {channel_y}"
+        (channel.translation.y - 0.54).abs() < 1e-6,
+        "a channel slab rests on its empty tile floor; got {}",
+        channel.translation.y
     );
     assert!(
         (zone.translation.y - 0.64).abs() < 1e-6,
@@ -294,12 +296,18 @@ fn mark_slabs_rest_on_their_ordered_surfaces_and_layer_a_channel_zone_overlap() 
         zone.translation.y
     );
     assert!(
-        (zone.scale.x - 0.72).abs() < 1e-6,
+        (dig.scale.x - 0.94).abs() < 1e-6 && (channel.scale.x - 0.94).abs() < 1e-6,
+        "ordinary mark slabs need a gutter between adjacent tiles; got dig={} channel={}",
+        dig.scale.x,
+        channel.scale.x
+    );
+    assert!(
+        (zone.scale.x - 0.6768).abs() < 1e-6,
         "the raised zone leaves the channel rim readable; got {}",
         zone.scale.x
     );
     assert!(
-        (zone.scale.z - 0.72).abs() < 1e-6,
+        (zone.scale.z - 0.6768).abs() < 1e-6,
         "the raised zone stays square; got {}",
         zone.scale.z
     );

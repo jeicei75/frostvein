@@ -80,6 +80,10 @@ pub struct ProjectedDesignationKind(pub DesignationKind);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedZone(pub [i32; 3]);
 
+/// Leaves a visible gutter between neighbouring mark slabs, whose mesh is deliberately 1.02 wide
+/// so it still reaches the terrain edge after this transform scale is applied.
+const MARK_FOOTPRINT_SCALE: f32 = 0.94;
+
 /// The light kind delivered for a projected emitter. Reconciliation only changes this when the
 /// wire changes kind; presentation owns its animated intensity afterwards.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -535,11 +539,16 @@ fn zone_mark_transform(position: [i32; 3], overlaps_channel: bool) -> Transform 
     // A channel and a stockpile may occupy the same standable air tile. Raise and inset the zone
     // only for that combined mark so its neutral centre and the channel's cold rim both remain
     // readable instead of z-fighting at one opaque surface.
-    slab_transform(position, -0.36).with_scale(Vec3::new(0.72, 1.0, 0.72))
+    slab_transform(position, -0.36).with_scale(Vec3::new(
+        MARK_FOOTPRINT_SCALE * 0.72,
+        MARK_FOOTPRINT_SCALE,
+        MARK_FOOTPRINT_SCALE * 0.72,
+    ))
 }
 
 fn slab_transform(position: [i32; 3], vertical_offset: f32) -> Transform {
     Transform::from_translation(world_to_render(position) + Vec3::Y * vertical_offset)
+        .with_scale(Vec3::splat(MARK_FOOTPRINT_SCALE))
 }
 
 fn chip_offsets() -> [Vec3; CHIPS_PER_TILE] {
