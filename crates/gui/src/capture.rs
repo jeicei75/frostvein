@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-struct DrawStats {
+pub struct DrawStats {
     level: i32,
     terrain_tiles: usize,
     /// Tiles drawn exactly AT the cut, i.e. the floor of the cut.
@@ -57,7 +57,15 @@ impl DrawStats {
     /// comfortably positive and passes identically to a correct cut. Measured on a 9x9x9 block:
     /// 258 tiles correct against 209 hollow, both far above zero. The cut face is the feature, so
     /// the cut face is what the instrument has to count.
-    fn assert_valid(self) {
+    pub fn designations(&self) -> usize {
+        self.designations
+    }
+
+    pub fn zones(&self) -> usize {
+        self.zones
+    }
+
+    pub fn assert_valid(self) {
         assert!(
             self.terrain_tiles > 0,
             "capture drew no terrain cubes at requested z {}",
@@ -72,6 +80,35 @@ impl DrawStats {
         assert!(self.designations > 0, "capture projected no designations");
         assert!(self.zones > 0, "capture projected no zones");
     }
+}
+
+/// The capture's projection-derived draw counts. Kept as one production system so the headless
+/// instrument test drives the exact queries the capture uses, without requiring a render surface.
+pub fn draw_stats(
+    slice: Res<SliceLevel>,
+    mirror: Res<MirrorResource>,
+    terrain: Query<&TerrainTile>,
+    designations: Query<&ProjectedDesignation>,
+    zones: Query<&ProjectedZone>,
+) -> DrawStats {
+    collect_draw_stats(slice.level(), &mirror.0, &terrain, &designations, &zones)
+}
+
+fn collect_draw_stats(
+    level: i32,
+    mirror: &Mirror,
+    terrain: &Query<&TerrainTile>,
+    designations: &Query<&ProjectedDesignation>,
+    zones: &Query<&ProjectedZone>,
+) -> DrawStats {
+    DrawStats::new(
+        level,
+        terrain.iter().count(),
+        terrain.iter().filter(|tile| tile.0[2] == level).count(),
+        expected_cut_face(mirror, level),
+        designations.iter().count(),
+        zones.iter().count(),
+    )
 }
 
 /// Whether a missing lantern at this cut is a defect rather than an operator choice. Asks the
@@ -445,17 +482,7 @@ pub fn capture_after_frames(
     if capture.elapsed >= capture.frames {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
-        let draw = DrawStats::new(
-            slice.level(),
-            terrain.iter().count(),
-            terrain
-                .iter()
-                .filter(|tile| tile.0[2] == slice.level())
-                .count(),
-            expected_cut_face(&mirror.0, slice.level()),
-            designations.iter().count(),
-            zones.iter().count(),
-        );
+        let draw = collect_draw_stats(slice.level(), &mirror.0, &terrain, &designations, &zones);
         // Print the actual count before every assertion. A successful process with a blank cut is
         // not a capture result; this remains truthful when a requested level changes the draw set.
         println!(

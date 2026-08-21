@@ -1,8 +1,33 @@
 #![forbid(unsafe_code)]
 
-use std::{env, fs, path::Path};
+use std::{
+    env, fs,
+    panic::AssertUnwindSafe,
+    path::{Path, PathBuf},
+};
 
-use gui::{camera::CameraRig, capture::warm_lit_pixels};
+use bevy::{
+    MinimalPlugins,
+    app::{App, Update},
+    ecs::schedule::IntoScheduleConfigs,
+    ecs::system::RunSystemOnce,
+    input::ButtonInput,
+    prelude::{Assets, KeyCode, Mesh, StandardMaterial},
+};
+use client_core::Mirror;
+use gui::{
+    camera::CameraRig,
+    capture::{CaptureState, capture_after_frames, draw_stats, warm_lit_pixels},
+    ingest::{
+        IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, WireMessage,
+        projection_systems,
+    },
+    project::setup_projection_assets,
+    slice::SliceLevel,
+};
+use protocol::{
+    Delta, Designation, DesignationKind, Dims, MessageType, Snapshot, Speed, Tile, Zone,
+};
 
 /// Counts pixels differing from the image's dominant colour. Bevy's clear colour is a
 /// grey, not black, so "not pure black" would pass an empty scene; the dominant colour
@@ -120,4 +145,131 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
 fn warm_pixel_threshold_requires_red_to_exceed_blue_by_the_named_margin() {
     assert_eq!(warm_lit_pixels(&[[220, 120, 150, 255]]), 1);
     assert_eq!(warm_lit_pixels(&[[180, 120, 150, 255]]), 0);
+}
+
+#[test]
+fn draw_count_instrument_follows_projected_marks_from_live_ingest() {
+    let dims = Dims { x: 2, y: 2, z: 3 };
+    let initial = Snapshot {
+        msg_type: MessageType::Snapshot,
+        dims,
+        tiles: vec![Tile::Solid(protocol::Material::Stone); 12],
+        entities: Vec::new(),
+        designations: Vec::new(),
+        zones: Vec::new(),
+        items: Vec::new(),
+        speed: Speed::Normal,
+        tick: 0,
+    };
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<Assets<Mesh>>()
+        .init_resource::<Assets<StandardMaterial>>()
+        .insert_resource(MirrorResource(
+            Mirror::from_snapshot(initial.clone()).unwrap(),
+        ))
+        .insert_resource(ProjectionWork {
+            snapshot: true,
+            dirty_tiles: Default::default(),
+        })
+        .insert_resource(SliceLevel::pinned(dims, 1))
+        .add_systems(bevy::app::Startup, setup_projection_assets);
+    projection_systems(&mut app);
+    let (sender, receiver) = std::sync::mpsc::sync_channel(3);
+    app.insert_resource(IngestReceiver::new(receiver));
+
+    let mut first = initial;
+    first.designations = vec![
+        Designation {
+            pos: [0, 0, 1],
+            kind: DesignationKind::Dig,
+        },
+        Designation {
+            pos: [0, 0, 2],
+            kind: DesignationKind::Channel,
+        },
+    ];
+    first.zones = vec![Zone { pos: [1, 0, 1] }, Zone { pos: [1, 0, 2] }];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(first))))
+        .unwrap();
+    app.update();
+    let first = app.world_mut().run_system_once(draw_stats).unwrap();
+    assert_eq!(
+        first.designations(),
+        1,
+        "only the designation below the cut is projected"
+    );
+    assert_eq!(first.zones(), 1, "only the zone below the cut is projected");
+    first.assert_valid();
+
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![
+                Designation {
+                    pos: [0, 0, 1],
+                    kind: DesignationKind::Dig,
+                },
+                Designation {
+                    pos: [1, 1, 1],
+                    kind: DesignationKind::Channel,
+                },
+                Designation {
+                    pos: [0, 0, 2],
+                    kind: DesignationKind::Dig,
+                },
+            ],
+            zones: vec![
+                Zone { pos: [1, 0, 1] },
+                Zone { pos: [0, 1, 1] },
+                Zone { pos: [1, 0, 2] },
+            ],
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+    let changed = app.world_mut().run_system_once(draw_stats).unwrap();
+    assert_eq!(
+        changed.designations(),
+        2,
+        "projected designations must follow the delta"
+    );
+    assert_eq!(changed.zones(), 2, "projected zones must follow the delta");
+    changed.assert_valid();
+
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 2,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+    let empty = app.world_mut().run_system_once(draw_stats).unwrap();
+    assert_eq!(empty.designations(), 0);
+    assert_eq!(empty.zones(), 0);
+    app.insert_resource(CaptureState::new(PathBuf::from("unused.png"), 1, false))
+        .add_systems(Update, capture_after_frames.after(ProjectionSet));
+    let panic = std::panic::catch_unwind(AssertUnwindSafe(|| app.update()))
+        .expect_err("the capture must reject a projected scene whose marks vanished");
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .unwrap_or("non-string panic");
+    assert!(
+        message.contains("capture projected no designations"),
+        "the real capture assertion must reject missing projected designations: {message}"
+    );
 }
