@@ -789,21 +789,21 @@ fn the_level_readout_is_drawn_on_the_live_path_and_follows_the_cut() {
     // Independent oracle: the expected strings are written here, not read back from SliceLevel.
     assert_eq!(
         readout(&mut app),
-        vec!["Slice: z 2/2 — surface".to_string()],
+        vec!["Slice: z 2/2 - surface".to_string()],
         "the readout must exist at boot and name the level"
     );
 
     press_once(&mut app, KeyCode::Comma);
     assert_eq!(
         readout(&mut app),
-        vec!["Slice: z 1/2 — surface".to_string()],
+        vec!["Slice: z 1/2 - surface".to_string()],
         "z 1 has only empty sky above it, so it is not underground"
     );
 
     press_once(&mut app, KeyCode::Comma);
     assert_eq!(
         readout(&mut app),
-        vec!["Slice: z 0/2 — underground".to_string()],
+        vec!["Slice: z 0/2 - underground".to_string()],
         "z 0 is covered by the rock at z 1"
     );
 }

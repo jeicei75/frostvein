@@ -62,24 +62,23 @@ PY
 mutation "spawn consumes the worldgen stream again" sim-core spawn_positions_for_seed_42_are_pinned <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = "        world.spawn_dwarves(&heights, &mut spawn_rng);\n"
-assert old in s
-p.write_text(s.replace(old, "        world.spawn_dwarves(&heights, &mut rng);\n"))
+# Re-pointed 2026-08-22: `spawn_dwarves` took `&heights` when this was written and now takes
+# `camp_origin`. Intent unchanged -- reuse the worldgen stream (`rng`, still in scope) instead of
+# the dedicated spawn stream, which is exactly what the seed pin exists to catch.
+old = "        world.spawn_dwarves(camp_origin, &mut spawn_rng);\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "        world.spawn_dwarves(camp_origin, &mut rng);\n"))
 PY
 
 # --- Added by code review (2026-08-03). One per review patch: a patch whose test
 # --- survives its own sabotage is the exact failure 2.1's review shipped.
 
-mutation "frames instrument recomputes the camera per frame" tui streamed_frames_hold_the_camera_still_so_a_moving_dwarf_moves_on_screen <<'PY'
-import pathlib
-p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
-old = "        let framebuffer = render(&snapshot, &state, w, h);\n"
-assert old in s
-p.write_text(s.replace(
-    old,
-    "        let state = initial(&snapshot);\n"
-    "        let framebuffer = render(&snapshot, &state, w, h);\n"))
-PY
+# REMOVED 2026-08-22 -- obsolete, not repaired, and verified so by running it: the repaired row
+# SURVIVED. `view::initial` no longer reads entity positions; the camera is the world centre
+# (`dims.x / 2, dims.y / 2`), so recomputing it per frame is a NO-OP and the defect this row
+# described -- re-centring on entity 0 and pinning that dwarf to the middle of the screen --
+# structurally cannot happen. NOTE the comment in `tui/src/main.rs` above the frames loop still
+# warns about it and is now stale.
 
 # The discriminating case for tightening AC12's assertion: a Walk arm that changes the
 # GLYPH while keeping idle's colour. `assert_ne!` on the whole Cell passed this happily.
@@ -121,7 +120,9 @@ PY
 mutation "render drops the entity state and colours every dwarf idle" tui a_walking_dwarf_reaches_the_capture_wearing_the_walk_colour <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = "                entity_cell(entity.kind, entity.state);\n"
-assert old in s
-p.write_text(s.replace(old, "                entity_cell(entity.kind, protocol::JobState::Idle);\n"))
+# Re-pointed 2026-08-22: the dwarf draw moved into a crowd/carrier branch, so the trailing
+# semicolon this anchored on is gone.
+old = '                entity_cell(entity.kind, entity.state)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                entity_cell(entity.kind, protocol::JobState::Idle)\n'))
 PY

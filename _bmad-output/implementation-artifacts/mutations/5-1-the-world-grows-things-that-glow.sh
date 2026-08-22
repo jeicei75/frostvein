@@ -33,7 +33,9 @@ PY
 mutation "the emitter draw pass is deleted" tui growing_world_instrument_counts_change_with_trees_and_emitters <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = '''    for entity in &snapshot.entities {
+# Re-pointed 2026-08-22: 5.2 moved `tui` off `snapshot.*` onto the shared client-core mirror,
+# which rotted this anchor. The seam is unchanged.
+old = '''    for entity in mirror.entities() {
         match entity.kind {
             EntityKind::Dwarf => {}
             EntityKind::Torch | EntityKind::Campfire => {
@@ -74,7 +76,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                    home: pos,\n'))
 PY
 
-mutation "lantern saves reach the live world" simd loading_rejects_lantern_emitters_before_the_wire_bridge <<'PY'
+mutation "lantern saves reach the live world" simd loading_rejects_static_lantern_emitters_before_the_wire_bridge <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = '''            if *light == sim_core::LightKind::Lantern {

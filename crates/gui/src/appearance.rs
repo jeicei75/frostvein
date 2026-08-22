@@ -63,7 +63,17 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
         },
         LightKind::Campfire => LightProperties {
             color: Color::srgb_u8(255, 173, 92),
-            intensity: 32_000_000.0,
+            // RULED 2026-08-22 (Wolf), closing 6.2's carried-open "camp is too blown out".
+            // The blow-out was never in this number -- it is in the PEAK. Commit 04e6de5 raised
+            // the flicker amplitude 0.11 -> 0.40, taking the peak 35.5M -> 44.8M, 26% past the
+            // value 5.4 sized against the approved artifact, while this still frame never moved.
+            // Option (d) of four put to Wolf: drop the base so the PEAK lands back on 5.4's
+            // approved ceiling (25.0M x 1.40 = 35.0M) while 6.1's visible breathing survives
+            // intact. The camp rests 22% dimmer; the white-clip radius, which scales as
+            // sqrt(intensity), shrinks ~12%. Rejected: amplitude -> 0.25, which leaves the peak
+            // 12.6% high and the blown pool only 5.5% smaller -- it treats the still frame, which
+            // was never the complaint.
+            intensity: 25_000_000.0,
             range: 28.0,
             flicker_amplitude: 0.40,
             flicker_hz: 0.9,
@@ -114,8 +124,13 @@ pub fn designation_color(kind: DesignationKind) -> Color {
     }
 }
 
+/// RULED 2026-08-22 (Wolf): darker and colder. The pale teal that shipped was the tightest thing
+/// on the board -- 46 units from snow-capped foliage once the cool light is applied, against marks
+/// that otherwise had 75+ of room, and a pale slab on pale foliage is precisely the near-neighbour
+/// case the separation floor exists to prevent. This slate-teal drops luminance 187 -> 105 and
+/// takes the worst lit pair to 56.
 pub fn zone_color() -> Color {
-    Color::srgb_u8(120, 206, 196)
+    Color::srgb_u8(40, 120, 150)
 }
 
 /// A stone item is rubble left standing at a dug tile, not a replacement block.
@@ -263,7 +278,7 @@ mod tests {
     fn appearance_tables_pin_the_cold_boot_palette() {
         let lights = [
             (LightKind::Torch, [255, 140, 62], 14_000_000.0, 20.0),
-            (LightKind::Campfire, [255, 173, 92], 32_000_000.0, 28.0),
+            (LightKind::Campfire, [255, 173, 92], 25_000_000.0, 28.0),
             // Dropped from 11M/16 on 2026-08-20: five moving lanterns over five static
             // emitters read blown out on the vehicle, which no range check can see.
             (LightKind::Lantern, [255, 195, 110], 5_000_000.0, 14.0),
@@ -368,7 +383,7 @@ mod tests {
                 designation_color(DesignationKind::Channel),
                 [150, 96, 230],
             ),
-            ("zone", zone_color(), [120, 206, 196]),
+            ("zone", zone_color(), [40, 120, 150]),
         ];
         let terrain = [
             Material::Stone,
@@ -462,11 +477,31 @@ mod tests {
     #[test]
     fn campfire_keeps_local_contrast_over_the_midtone_cold_fill() {
         let camp_distance_squared = 36.0;
-        let warm_camp_lux = light_properties(LightKind::Campfire).intensity
-            / (4.0 * std::f32::consts::PI * camp_distance_squared);
+        let campfire = light_properties(LightKind::Campfire);
+        // THE PEAK, not the base. `flicker_lights` multiplies the base by `1 +/- amplitude`
+        // every frame, so the brightness a viewer actually sees -- and the brightness that blows
+        // a pool to white -- is the peak. Reading `.intensity` alone made this band structurally
+        // blind to the whole flicker term: 6.1 raised the amplitude 3.6x and pushed the peak 26%
+        // past what Wolf approved, and NOTHING here could go red. The only instrument that caught
+        // it was Wolf's eye at a vehicle session, two epics later. Fixed 2026-08-22.
+        let peak_intensity = campfire.intensity * (1.0 + campfire.flicker_amplitude);
+        let warm_camp_lux = peak_intensity / (4.0 * std::f32::consts::PI * camp_distance_squared);
         let lighting = night_lighting();
         let cold_fill = lighting.ambient_brightness + lighting.directional_illuminance;
         let ratio = warm_camp_lux / cold_fill;
+
+        // The band above is a broad sanity range and, on its own, STILL would not have caught
+        // 6.1's raise -- 44.8M sits at ratio 3.74, comfortably inside 6.0. What was missing is a
+        // pin to the value story 5.4 actually sized against the artifact Wolf approved: base
+        // 32.0M at the then-amplitude of 0.11, i.e. a 35.52M peak. Hand-written here rather than
+        // derived from the table, so it cannot drift with the thing it is guarding.
+        const APPROVED_PEAK: f32 = 35_520_000.0;
+        assert!(
+            peak_intensity <= APPROVED_PEAK,
+            "the campfire's flicker PEAK is {peak_intensity}, above the {APPROVED_PEAK} Wolf \
+             approved at 5.4 -- raising either the base or the amplitude past this is what blew \
+             the camp out at 6.2's sign-off, and neither shows up in the still frame"
+        );
 
         assert!(
             ratio >= 1.2,

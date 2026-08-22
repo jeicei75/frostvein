@@ -80,6 +80,14 @@ done
 
 run "metrics ledger tests" python3 -m unittest discover -s _bmad/scripts/tests
 
+# The sixth check is about EVIDENCE, not the product. A mutation table is evidence only as of its
+# last run, and nothing re-runs an old story's table — so later stories quietly refactor the code
+# earlier tables pin, the literal stops matching, and the row stops being evidence while the story
+# record still reads KILLED. Measured the first time anyone looked (2026-08-22): 29 of 326 rows
+# across 9 tables could not apply, one of them dead since Epic 6. This is static and builds
+# nothing, which is why it can sit in the gate; a real mutation run takes ~11 minutes per table.
+run "mutation tables still apply" python3 scripts/audit-mutations.py
+
 if [ "$fail" -ne 0 ]; then
   echo "GATE RED"
   exit 1
