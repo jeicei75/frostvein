@@ -34,32 +34,34 @@ PY
 mutation "loaded world schedule omits wander" sim-core save_load_then_tick_matches_never_saved <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = """            IdAllocator { next: next_id },
+# Re-pointed 2026-08-22: `assemble` gained designation and zone arguments, and the save
+# destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
+old = '''            zones.into_iter().collect(),
         );
         for dwarf in dwarves {
-"""
-assert old in s
-p.write_text(s.replace(old, """            IdAllocator { next: next_id },
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''            zones.into_iter().collect(),
         );
         world.schedule = Schedule::default();
         world.schedule.add_systems(advance_tick);
         for dwarf in dwarves {
-"""))
+'''))
 PY
 
 mutation "from_save regenerates terrain from the seed" sim-core save_load_then_tick_matches_never_saved <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = """            dwarves,
+# Re-pointed 2026-08-22: `assemble` gained designation and zone arguments, and the save
+# destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
+old = '''            emitters,
         } = save;
-        let mut world = assemble(
-"""
-assert old in s
-p.write_text(s.replace(old, """            dwarves,
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''            emitters,
         } = save;
         let tiles = World::generate(seed, dims).to_save().tiles;
-        let mut world = assemble(
-"""))
+'''))
 PY
 
 mutation "from_save resets the id allocator" sim-core loading_does_not_reuse_entity_ids <<'PY'
@@ -73,29 +75,28 @@ PY
 mutation "from_save marks every tile dirty" sim-core loading_starts_with_no_dirty_tiles <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = """            IdAllocator { next: next_id },
+# Re-pointed 2026-08-22: `assemble` gained designation and zone arguments, and the save
+# destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
+old = '''            zones.into_iter().collect(),
         );
         for dwarf in dwarves {
-"""
-assert old in s
-p.write_text(s.replace(old, """            IdAllocator { next: next_id },
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''            zones.into_iter().collect(),
         );
         {
             let mut terrain = world.ecs.resource_mut::<Terrain>();
-            for z in 0..dims.z {
-                for y in 0..dims.y {
-                    for x in 0..dims.x {
-                        terrain.dirty.insert(Pos {
-                            x: x as i32,
-                            y: y as i32,
-                            z: z as i32,
-                        });
+            let d = terrain.dims;
+            for z in 0..d.z as i32 {
+                for y in 0..d.y as i32 {
+                    for x in 0..d.x as i32 {
+                        terrain.dirty.insert(Pos { x, y, z });
                     }
                 }
             }
         }
         for dwarf in dwarves {
-"""))
+'''))
 PY
 
 mutation "to_save records tick zero" sim-core save_load_then_tick_matches_never_saved <<'PY'
@@ -109,8 +110,9 @@ PY
 mutation "to_save leaves dwarves in ECS order" sim-core save_orders_dwarves_by_id <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = "        dwarves.sort_by_key(|dwarf| dwarf.id);\n\n"
-assert old in s
+# Narrowed 2026-08-22: the trailing blank line this anchored on is gone.
+old = "        dwarves.sort_by_key(|dwarf| dwarf.id);\n"
+assert s.count(old) == 1
 p.write_text(s.replace(old, ""))
 PY
 
@@ -153,24 +155,25 @@ PY
 mutation "daemon save read limit is widened" simd oversized_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = "const MAX_SAVE_BYTES: u64 = 16 * 1024 * 1024;\n"
-assert old in s
-p.write_text(s.replace(old, "const MAX_SAVE_BYTES: u64 = 17 * 1024 * 1024;\n"))
+# Re-pointed 2026-08-22: the surrounding code grew (rect validation, haul jobs, a `path`
+# argument, a larger save ceiling) and this anchor rotted with it. The seam is unchanged.
+old = 'const MAX_SAVE_BYTES: u64 = 64 * 1024 * 1024;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'const MAX_SAVE_BYTES: u64 = 1024 * 1024 * 1024;\n'))
 PY
 
 mutation "failed load panics the daemon" simd undecodable_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = """        Err(error) => {
-            eprintln!("could not load {SAVE_PATH}: {error:#}");
+# Re-pointed 2026-08-22: the surrounding code grew (rect validation, haul jobs, a `path`
+# argument, a larger save ceiling) and this anchor rotted with it. The seam is unchanged.
+old = '''        Err(error) => {
+            eprintln!("could not load {path}: {error:#}");
             None
         }
-"""
-assert old in s
-p.write_text(s.replace(old, """        Err(error) => {
-            panic!("could not load {SAVE_PATH}: {error:#}")
-        }
-"""))
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        Err(error) => panic!("could not load {path}: {error:#}"),\n'))
 PY
 
 mutation "load skips tile-count validation" simd inconsistent_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
@@ -245,17 +248,31 @@ PY
 mutation "frames instrument ignores load snapshots" tui key_l_rewinds_captured_ticks_then_they_climb_from_the_saved_tick <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
-old = "            Ok(Ok(Msg::Snapshot(next))) => snapshot = *next,\n"
-assert old in s
-p.write_text(s.replace(old, "            Ok(Ok(Msg::Snapshot(_next))) => {}\n"))
+# Re-pointed 2026-08-22: 5.2 moved `tui` onto the shared client-core mirror, which rotted this
+# anchor. The seam itself is unchanged.
+old = '''            Ok(Ok(Msg::Snapshot(next))) => {
+                mirror
+                    .apply_snapshot(*next)
+                    .context("could not update client mirror")?;
+                state.speed = mirror.speed();
+            }
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Ok(Ok(Msg::Snapshot(_))) => {}\n'))
 PY
 
 mutation "frames instrument ignores deltas" tui load_capable_stub_climbs_monotonically_when_no_key_is_sent <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
-old = "            Ok(Ok(Msg::Delta(delta))) => apply(&mut snapshot, *delta),\n"
-assert old in s
-p.write_text(s.replace(old, "            Ok(Ok(Msg::Delta(_delta))) => {}\n"))
+# Re-pointed 2026-08-22: 5.2 moved `tui` onto the shared client-core mirror, which rotted this
+# anchor. The seam itself is unchanged.
+old = '''            Ok(Ok(Msg::Delta(delta))) => {
+                mirror.apply_delta(*delta);
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''            Ok(Ok(Msg::Delta(delta))) => {
+                let _ = delta;
+'''))
 PY
 
 mutation "save discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
@@ -304,7 +321,9 @@ PY
 mutation "the frames key path sends save as load" tui key_s_sends_save_and_leaves_the_streamed_ticks_climbing <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
-old = '"S" => KeyCode::Char(\'S\'),'
-assert old in s
-p.write_text(s.replace(old, '"S" => KeyCode::Char(\'L\'),'))
+# Re-pointed 2026-08-22: 5.2 moved `tui` onto the shared client-core mirror, which rotted this
+# anchor. The seam itself is unchanged.
+old = '        "S" => Some(KeyCode::Char(\'S\')),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        "S" => Some(KeyCode::Char(\'L\')),\n'))
 PY

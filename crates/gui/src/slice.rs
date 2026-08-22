@@ -56,7 +56,7 @@ impl SliceLevel {
 
     pub fn readout(self, covered: bool) -> String {
         format!(
-            "Slice: z {}/{} — {}",
+            "Slice: z {}/{} - {}",
             self.level,
             self.top,
             self.label(covered)
@@ -85,9 +85,31 @@ mod tests {
     #[test]
     fn the_readout_names_the_current_level_and_whether_it_is_surface_or_underground() {
         let mut slice = SliceLevel::at_world_top(Dims { x: 1, y: 1, z: 3 });
-        assert_eq!(slice.readout(false), "Slice: z 2/2 — surface");
+        assert_eq!(slice.readout(false), "Slice: z 2/2 - surface");
         slice.step(-1);
-        assert_eq!(slice.readout(true), "Slice: z 1/2 — underground");
+        assert_eq!(slice.readout(true), "Slice: z 1/2 - underground");
+    }
+
+    /// The readout is drawn in the shipped default font, which has no glyph for most non-ASCII
+    /// punctuation and silently renders a replacement BOX instead. This shipped: the separator was
+    /// an em-dash, and it has been a box in `7-1-slice.png` and every capture taken since --
+    /// reported at 7.2's creation, carried, and never fixed because nothing could fail on it.
+    /// A string test cannot see a missing glyph, but it can see the only input that causes one.
+    #[test]
+    fn the_readout_stays_inside_the_shipped_fonts_glyph_range() {
+        let mut slice = SliceLevel::at_world_top(Dims { x: 4, y: 4, z: 32 });
+        for _ in 0..33 {
+            for covered in [true, false] {
+                let readout = slice.readout(covered);
+                assert!(
+                    readout.is_ascii(),
+                    "the slice readout must stay ASCII or it draws boxes on the vehicle: \
+                     {readout:?} contains {:?}",
+                    readout.chars().find(|c| !c.is_ascii()).unwrap()
+                );
+            }
+            slice.step(-1);
+        }
     }
 
     #[test]

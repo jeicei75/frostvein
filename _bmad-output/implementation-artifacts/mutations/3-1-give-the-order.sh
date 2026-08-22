@@ -51,20 +51,24 @@ PY
 mutation "CancelDesignation also clears zones" sim-core each_eraser_leaves_the_other_mark_kind_untouched <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                for pos in positions() {
-                    designations.0.remove(&pos);
+# Re-pointed 2026-08-22: the cancel branch now collects `targets` first and scopes the
+# designation borrow, so the old anchor is gone. The seam is unchanged.
+old = '''                {
+                    let mut designations = self.ecs.resource_mut::<Designations>();
+                    for pos in &targets {
+                        designations.0.remove(pos);
+                    }
                 }
-            }
 '''
-new = '''                for pos in positions() {
-                    designations.0.remove(&pos);
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                {
+                    let mut designations = self.ecs.resource_mut::<Designations>();
+                    for pos in &targets {
+                        designations.0.remove(pos);
+                    }
                 }
-                drop(designations);
                 self.ecs.resource_mut::<Zones>().0.clear();
-            }
-'''
-assert old in s
-p.write_text(s.replace(old, new))
+'''))
 PY
 
 mutation "RemoveStockpile also clears designations" sim-core each_eraser_leaves_the_other_mark_kind_untouched <<'PY'
@@ -407,28 +411,25 @@ assert old in s
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "designation layer is covered by terrain" tui marker_layers_follow_terrain_zone_designation_entity_pending_cursor_order <<'PY'
+mutation "designation layer is covered by terrain" tui marker_layers_follow_terrain_zone_designation_item_entity_pending_cursor_order <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = '''    for designation in &snapshot.designations {
+# Re-pointed 2026-08-22: 5.2 moved `tui` off `snapshot.*` onto the shared client-core mirror,
+# which rotted this anchor. The seam is unchanged.
+old = '''    for designation in mirror.designations() {
         if let Some(index) = screen_index(designation.pos) {
             framebuffer.cells[index] = designation_cell(designation.kind);
         }
     }
 '''
-new = old + '''    for designation in &snapshot.designations {
+assert s.count(old) == 1
+new = old + '''    for designation in mirror.designations() {
         if let Some(index) = screen_index(designation.pos) {
-            let [x, y, z] = designation.pos;
-            framebuffer.cells[index] = tile_cell(snapshot.tiles[tile_index(
-                snapshot.dims,
-                x as u32,
-                y as u32,
-                z as u32,
-            )]);
+            framebuffer.cells[index] =
+                tile_cell(mirror.tile(designation.pos).unwrap_or(Tile::Empty));
         }
     }
 '''
-assert old in s
 p.write_text(s.replace(old, new))
 PY
 

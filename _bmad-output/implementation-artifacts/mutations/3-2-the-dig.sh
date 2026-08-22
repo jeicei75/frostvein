@@ -120,19 +120,22 @@ assert old in s
 p.write_text(s.replace(old, '            framebuffer.cells[index] = if false {\n'))
 PY
 
-mutation "items draw above entities" tui items_draw_only_on_the_viewed_level_and_under_dwarves <<'PY'
+mutation "items draw above entities" tui items_draw_only_on_the_viewed_level_and_a_shared_cell_draws_the_carrier <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-item = '''    for item in &snapshot.items {
+# Re-pointed 2026-08-22: 5.2 moved `tui` onto the client-core mirror and 3.3 added the item
+# count to this loop.
+item = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
             framebuffer.cells[index] = item_cell();
+            *item_counts.entry(index).or_insert(0_usize) += 1;
         }
     }
 
 '''
 anchor = '''    if let Some(anchor) = state.anchor {
 '''
-assert s.count(item) == 1 and anchor in s
+assert s.count(item) == 1 and s.count(anchor) == 1
 s = s.replace(item, '')
 s = s.replace(anchor, item + anchor)
 p.write_text(s)
@@ -215,20 +218,22 @@ PY
 mutation "create_jobs creates a duplicate job every tick" sim-core designated_tiles_become_one_job_each_only_when_the_schedule_runs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old_guard = '''        if jobs.targets.contains(&target) {
+# Re-pointed 2026-08-22, and it took two attempts to get honest. Attempt one sabotaged the
+# `by_id` guard -- that one is about job IDs, and it SURVIVED. Attempt two sabotaged the target
+# guard inside `Jobs::insert` and ALSO survived, because `create_jobs` carries its own guard and
+# never reaches the second one. BOTH must go, or `insert` simply refuses the duplicate and the
+# `debug_assert` fires -- which fails the test for the wrong reason and would have read as a kill.
+loop_guard = '''        if jobs.targets.contains(&target) {
             continue;
         }
 '''
-old_insert = '''        if self.by_id.contains_key(&job.id) || self.targets.contains(&job.target) {
-            return false;
-        }
+insert_guard = '''                if self.targets.contains(&job.target) {
+                    return false;
+                }
 '''
-new_insert = '''        if self.by_id.contains_key(&job.id) {
-            return false;
-        }
-'''
-assert old_guard in s and old_insert in s
-s = s.replace(old_guard, '').replace(old_insert, new_insert)
+assert s.count(loop_guard) == 1 and s.count(insert_guard) == 1
+s = s.replace(loop_guard, '')
+s = s.replace(insert_guard, '')
 p.write_text(s)
 PY
 
@@ -264,9 +269,10 @@ PY
 mutation "claim_jobs walks dwarves descending" sim-core claim_jobs_prefers_the_lowest_free_dwarf_id <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '    dwarves.sort_by_key(|(_, id, _, _)| **id);\n'
-assert old in s
-p.write_text(s.replace(old, '    dwarves.sort_by_key(|(_, id, _, _)| std::cmp::Reverse(**id));\n'))
+# Re-pointed 2026-08-22: the claim query tuple widened from four elements to five.
+old = '    dwarves.sort_by_key(|(_, id, _, _, _)| **id);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    dwarves.sort_by_key(|(_, id, _, _, _)| std::cmp::Reverse(**id));\n'))
 PY
 
 mutation "claim_jobs ignores reaction delay" sim-core claim_jobs_waits_for_the_reaction_delay <<'PY'
@@ -407,14 +413,17 @@ PY
 mutation "dig sets the wrong tile" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    Some(Tile::Solid(_)) => Some((job.target, Tile::Empty)),\n'
-new = '''                    Some(Tile::Solid(_)) => Some((Pos {
-                        x: job.target.x + 1,
-                        ..job.target
-                    }, Tile::Empty)),
+# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
+# and added a Haul arm, which rotted this anchor. The seam is unchanged.
+old = '''                JobKind::Dig => match terrain.tile(job.target) {
+                    Some(Tile::Solid(material)) => Some((
+                        job.target,
 '''
-assert old in s
-p.write_text(s.replace(old, new))
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                JobKind::Dig => match terrain.tile(job.target) {
+                    Some(Tile::Solid(material)) => Some((
+                        Pos { z: job.target.z + 1, ..job.target },
+'''))
 PY
 
 mutation "dig writes terrain without set_tile" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
@@ -440,27 +449,47 @@ PY
 mutation "channel writes Empty instead of Ramp" sim-core execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),\n'
-assert old in s
-p.write_text(s.replace(old, '                        Some(Tile::Solid(_)) => Some((below, Tile::Empty)),\n'))
+# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
+# and added a Haul arm, which rotted this anchor. The seam is unchanged.
+old = '''                        Some(Tile::Solid(material)) => Some((
+                            below,
+                            Tile::Ramp(material),
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                        Some(Tile::Solid(material)) => Some((
+                            below,
+                            Tile::Empty,
+'''))
 PY
 
 mutation "channel loses the material" sim-core execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),\n'
-assert old in s
-p.write_text(s.replace(old, '                        Some(Tile::Solid(_)) => Some((below, Tile::Ramp(Material::Stone))),\n'))
+# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
+# and added a Haul arm, which rotted this anchor. The seam is unchanged.
+old = '''                        Some(Tile::Solid(material)) => Some((
+                            below,
+                            Tile::Ramp(material),
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                        Some(Tile::Solid(material)) => Some((
+                            below,
+                            Tile::Ramp(Material::Stone),
+'''))
 PY
 
 mutation "stone is not spawned" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-        ecs.spawn((Item, item_id, job.target));
+# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
+# and added a Haul arm, which rotted this anchor. The seam is unchanged.
+old = '''        if yields_stone {
+            let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+            ecs.spawn((Item, item_id, job.target));
+        }
 '''
-assert old in s
-p.write_text(s.replace(old, ''))
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let _ = yields_stone;\n'))
 PY
 
 mutation "stone reuses an existing id" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
@@ -666,17 +695,19 @@ PY
 mutation "load accepts duplicate job targets" simd duplicate_job_target_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''            if !seen_job_targets.insert(job.target) {
-                bail!(
-                    "save reuses job target {},{},{}",
-                    job.target.x,
-                    job.target.y,
-                    job.target.z
-                );
-            }
+# Re-pointed 2026-08-22: the surrounding code grew (rect validation, haul jobs, a `path`
+# argument, a larger save ceiling) and this anchor rotted with it. The seam is unchanged.
+old = '''                    if !seen_job_targets.insert(job.target) {
+                        bail!(
+                            "save reuses job target {},{},{}",
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
 '''
-assert old in s
-p.write_text(s.replace(old, '            seen_job_targets.insert(job.target);\n'))
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    seen_job_targets.insert(job.target);\n'))
 PY
 
 mutation "load accepts job id at next_job_id" simd job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
@@ -699,16 +730,18 @@ PY
 mutation "stale channel job retries forever" sim-core execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''        let Some((changed_pos, tile)) = change else {
+# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
+# and added a Haul arm, which rotted this anchor. The seam is unchanged.
+old = '''        let Some((changed_pos, tile, yields_stone)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
             release_claim(ecs, entity);
             continue;
         };
 '''
-assert old in s
-p.write_text(s.replace(old, '''        let Some((changed_pos, tile)) = change else {
-            retry_claim(ecs, entity, job.id);
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''        let Some((changed_pos, tile, yields_stone)) = change else {
+            release_claim(ecs, entity);
             continue;
         };
 '''))
@@ -835,27 +868,25 @@ PY
 mutation "load accepts jobs beyond MAX_DESIGNATIONS" simd over_budget_job_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''        if save.jobs.len() > sim_core::MAX_DESIGNATIONS {
+# Re-pointed 2026-08-22: the surrounding code grew (rect validation, haul jobs, a `path`
+# argument, a larger save ceiling) and this anchor rotted with it. The seam is unchanged.
+old = '''        if tile_jobs > sim_core::MAX_DESIGNATIONS {
             bail!(
-                "save has {} jobs; limit is {}",
-                save.jobs.len(),
+                "save has {tile_jobs} jobs; limit is {}",
                 sim_core::MAX_DESIGNATIONS
             );
         }
 '''
-assert old in s
+assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
 mutation "load accepts a job without a designation" simd job_without_matching_designation_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''        for job in &save.jobs {
-            let (expected_designation, kind_name) = match job.kind {
-                sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
-                sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
-            };
-            if designation_kinds.get(&job.target) != Some(&expected_designation) {
+# Re-pointed 2026-08-22: the surrounding code grew (rect validation, haul jobs, a `path`
+# argument, a larger save ceiling) and this anchor rotted with it. The seam is unchanged.
+old = '''            if designation_kinds.get(&job.target) != Some(&expected_designation) {
                 bail!(
                     "save job {} has no matching {kind_name} designation at {},{},{}",
                     job.id.0,
@@ -864,39 +895,32 @@ old = '''        for job in &save.jobs {
                     job.target.z
                 );
             }
-        }
 '''
-assert old in s
-p.write_text(s.replace(old, ''))
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let _ = (&expected_designation, kind_name);\n'))
 PY
 
 mutation "load ignores a job designation kind mismatch" simd job_with_mismatched_designation_kind_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''            let (expected_designation, kind_name) = match job.kind {
-                sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
-                sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
-            };
-            if designation_kinds.get(&job.target) != Some(&expected_designation) {
-'''
-new = '''            let kind_name = match job.kind {
-                sim_core::JobKind::Dig => "dig",
-                sim_core::JobKind::Channel => "channel",
-            };
-            if !designation_kinds.contains_key(&job.target) {
-'''
-assert old in s
-p.write_text(s.replace(old, new))
+# Re-pointed 2026-08-22. The FIRST repair mapped Channel jobs onto a Dig designation and
+# SURVIVED -- nothing in the fixtures exercised that pairing. Weakening the equality to a mere
+# PRESENCE check is what 'ignores a kind mismatch' actually means.
+old = '            if designation_kinds.get(&job.target) != Some(&expected_designation) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if !designation_kinds.contains_key(&job.target) {\n'))
 PY
 
 mutation "terrain mutation leaves other dwarves' cached paths stale" sim-core save_load_recomputes_every_path_invalidated_by_another_dig <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
+# and added a Haul arm, which rotted this anchor. The seam is unchanged.
 old = '''        clear_paths(ecs);
-        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+        if yields_stone {
 '''
-assert old in s
-p.write_text(s.replace(old, '        let item_id = ecs.resource_mut::<IdAllocator>().allocate();\n'))
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if yields_stone {\n'))
 PY
 
 mutation "each claim search gets a fresh node budget" sim-core claim_jobs_bounds_aggregate_astar_expansions_per_tick <<'PY'
