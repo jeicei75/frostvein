@@ -1,8 +1,35 @@
 #![forbid(unsafe_code)]
 
-use std::{env, fs, path::Path};
+use std::{
+    env, fs,
+    panic::AssertUnwindSafe,
+    path::{Path, PathBuf},
+};
 
-use gui::{camera::CameraRig, capture::warm_lit_pixels};
+use bevy::{
+    MinimalPlugins,
+    app::{App, Update},
+    ecs::entity::Entity,
+    ecs::prelude::With,
+    ecs::schedule::IntoScheduleConfigs,
+    ecs::system::RunSystemOnce,
+    input::ButtonInput,
+    prelude::{Assets, KeyCode, Mesh, StandardMaterial},
+};
+use client_core::Mirror;
+use gui::{
+    camera::CameraRig,
+    capture::{CaptureState, capture_after_frames, draw_stats, warm_lit_pixels},
+    ingest::{
+        IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, WireMessage,
+        projection_systems,
+    },
+    project::{ProjectedDesignation, setup_projection_assets},
+    slice::SliceLevel,
+};
+use protocol::{
+    Delta, Designation, DesignationKind, Dims, MessageType, Snapshot, Speed, Tile, Zone,
+};
 
 /// Counts pixels differing from the image's dominant colour. Bevy's clear colour is a
 /// grey, not black, so "not pure black" would pass an empty scene; the dominant colour
@@ -120,4 +147,217 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
 fn warm_pixel_threshold_requires_red_to_exceed_blue_by_the_named_margin() {
     assert_eq!(warm_lit_pixels(&[[220, 120, 150, 255]]), 1);
     assert_eq!(warm_lit_pixels(&[[180, 120, 150, 255]]), 0);
+}
+
+#[test]
+fn draw_count_instrument_follows_projected_marks_from_live_ingest() {
+    let dims = Dims { x: 2, y: 2, z: 3 };
+    let initial = Snapshot {
+        msg_type: MessageType::Snapshot,
+        dims,
+        tiles: vec![Tile::Solid(protocol::Material::Stone); 12],
+        entities: Vec::new(),
+        designations: Vec::new(),
+        zones: Vec::new(),
+        items: Vec::new(),
+        speed: Speed::Normal,
+        tick: 0,
+    };
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<Assets<Mesh>>()
+        .init_resource::<Assets<StandardMaterial>>()
+        .insert_resource(MirrorResource(
+            Mirror::from_snapshot(initial.clone()).unwrap(),
+        ))
+        .insert_resource(ProjectionWork {
+            snapshot: true,
+            dirty_tiles: Default::default(),
+        })
+        .insert_resource(SliceLevel::pinned(dims, 1))
+        .add_systems(bevy::app::Startup, setup_projection_assets);
+    projection_systems(&mut app);
+    let (sender, receiver) = std::sync::mpsc::sync_channel(3);
+    app.insert_resource(IngestReceiver::new(receiver));
+
+    let mut first = initial;
+    first.designations = vec![
+        Designation {
+            pos: [0, 0, 1],
+            kind: DesignationKind::Dig,
+        },
+        Designation {
+            pos: [0, 0, 2],
+            kind: DesignationKind::Channel,
+        },
+    ];
+    first.zones = vec![Zone { pos: [1, 0, 1] }, Zone { pos: [1, 0, 2] }];
+    sender
+        .send(Ok(WireMessage::Snapshot(Box::new(first))))
+        .unwrap();
+    app.update();
+    let first = app.world_mut().run_system_once(draw_stats).unwrap();
+    assert_eq!(
+        first.designations(),
+        1,
+        "only the designation below the cut is projected"
+    );
+    assert_eq!(first.zones(), 1, "only the zone below the cut is projected");
+    first.assert_valid(true);
+
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![
+                Designation {
+                    pos: [0, 0, 1],
+                    kind: DesignationKind::Dig,
+                },
+                Designation {
+                    pos: [1, 1, 1],
+                    kind: DesignationKind::Channel,
+                },
+                Designation {
+                    pos: [0, 0, 2],
+                    kind: DesignationKind::Dig,
+                },
+            ],
+            zones: vec![
+                Zone { pos: [1, 0, 1] },
+                Zone { pos: [0, 1, 1] },
+                Zone { pos: [1, 0, 2] },
+            ],
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+    let changed = app.world_mut().run_system_once(draw_stats).unwrap();
+    assert_eq!(
+        changed.designations(),
+        2,
+        "projected designations must follow the delta"
+    );
+    assert_eq!(changed.zones(), 2, "projected zones must follow the delta");
+    changed.assert_valid(true);
+
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 2,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+    let empty = app.world_mut().run_system_once(draw_stats).unwrap();
+    assert_eq!(empty.designations(), 0);
+    assert_eq!(empty.zones(), 0);
+    // The marks are gone from the MIRROR as well as from the scene — the dwarves ate them, which
+    // is this story's measured false-pass trap: an 8-tile site is dug out in ~52 ticks against a
+    // ~110-tick capture window, so the naive recipe photographs an empty site and exits 0. A
+    // capture that declares itself to be of a working site must refuse that frame. `expect_work`
+    // is what declares it, and it is what the story's own recipes pass.
+    app.insert_resource(CaptureState::new(PathBuf::from("unused.png"), 1, true))
+        .add_systems(Update, capture_after_frames.after(ProjectionSet));
+    let panic = std::panic::catch_unwind(AssertUnwindSafe(|| app.update()))
+        .expect_err("the capture must reject a working-site frame whose marks are all gone");
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .unwrap_or("non-string panic");
+    assert!(
+        message.contains("capture of a working site found no designations"),
+        "the real capture assertion must reject a consumed-marks frame: {message}"
+    );
+}
+
+/// The other half of the instrument, and the half `> 0` could never reach: the mirror HOLDS marks
+/// and the scene does not draw them. Driven through the real ingest and projection systems, then
+/// through the real `capture_after_frames`, with the projected designations despawned behind the
+/// projection's back to stand in for a projection regression.
+#[test]
+fn the_capture_fails_when_the_mirror_holds_marks_the_scene_does_not_draw() {
+    let dims = Dims { x: 2, y: 2, z: 3 };
+    let mut initial = Snapshot {
+        msg_type: MessageType::Snapshot,
+        dims,
+        tiles: vec![Tile::Solid(protocol::Material::Stone); 12],
+        entities: Vec::new(),
+        designations: Vec::new(),
+        zones: Vec::new(),
+        items: Vec::new(),
+        speed: Speed::Normal,
+        tick: 0,
+    };
+    initial.designations = vec![Designation {
+        pos: [0, 0, 1],
+        kind: DesignationKind::Dig,
+    }];
+    initial.zones = vec![Zone { pos: [1, 0, 1] }];
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<Assets<Mesh>>()
+        .init_resource::<Assets<StandardMaterial>>()
+        .insert_resource(MirrorResource(
+            Mirror::from_snapshot(initial.clone()).unwrap(),
+        ))
+        .insert_resource(ProjectionWork {
+            snapshot: true,
+            dirty_tiles: Default::default(),
+        })
+        .insert_resource(SliceLevel::pinned(dims, 1))
+        .add_systems(bevy::app::Startup, setup_projection_assets);
+    projection_systems(&mut app);
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    drop(sender);
+    app.update();
+
+    let populated = app.world_mut().run_system_once(draw_stats).unwrap();
+    assert_eq!(populated.designations(), 1, "the mark must project first");
+    assert_eq!(populated.zones(), 1, "the zone must project first");
+
+    let doomed = app
+        .world_mut()
+        .query_filtered::<Entity, With<ProjectedDesignation>>()
+        .iter(app.world())
+        .collect::<Vec<_>>();
+    assert_eq!(doomed.len(), 1);
+    for entity in doomed {
+        app.world_mut().entity_mut(entity).despawn();
+    }
+
+    // `expect_work` is FALSE on purpose: this frame is not being rejected for having no work in
+    // it, it is being rejected because the scene disagrees with the world. The old `> 0` check
+    // could not tell those two apart, and that is the whole point of the oracle.
+    //
+    // The real `capture_after_frames` is run DIRECTLY rather than through `app.update()`, because
+    // reconciliation is self-healing: a full update would re-project the despawned mark from the
+    // mirror before the capture ever looked, and the staged regression would vanish. Worth
+    // recording — that self-healing is why a torn frame cannot survive to the next tick.
+    app.insert_resource(CaptureState::new(PathBuf::from("unused.png"), 1, false));
+    let panic = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        app.world_mut().run_system_once(capture_after_frames)
+    }))
+    .expect_err("a scene missing marks the mirror holds is not a capture result");
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .unwrap_or("non-string panic");
+    assert!(
+        message.contains("but the mirror holds 1"),
+        "the oracle must name the mirror's count, not merely that something was zero: {message}"
+    );
 }

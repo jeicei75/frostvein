@@ -1,5 +1,5 @@
 use bevy::prelude::Color;
-use protocol::{EntityKind, LightKind, Material};
+use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LightProperties {
@@ -92,6 +92,30 @@ pub fn flicker_scale(kind: LightKind, id: u32, seconds: f32) -> f32 {
 /// Neutral crushed stone is intentionally independent of the removed wire tile material.
 pub fn debris_color() -> Color {
     Color::srgb_u8(86, 91, 106)
+}
+
+// NOTE: these intentionally do not match the TUI. Dig amber would read as false firelight over
+// a large rock face, so gui keeps all work marks cold or neutral to preserve the warm-camp read.
+//
+// RETUNED at the 2026-08-21 review, for two reasons the first values got wrong.
+// (1) COLLISION: dig was (92, 174, 224) — BYTE-IDENTICAL to the TUI's CHANNEL blue
+// (`crates/tui/src/palette.rs:110`). Breaking with the TUI is deliberate; landing exactly on a
+// DIFFERENT TUI order was not, and on the two windows Wolf runs side by side one RGB meant two
+// things. Every mark here is now >= 50 from every TUI mark colour as well as from terrain.
+// (2) AXIS: dig and channel were two blues separated almost entirely on GREEN (174 vs 120), and
+// the shipped directional is a desaturated cool (150, 190, 180) over cool ambient — it multiplies
+// toward teal and compresses exactly that axis, so the 40-unit floor was measured on unlit
+// literals that the renderer then pushes together. They now separate on RED (56 vs 150), which
+// this light does not compress, and sit 103 apart unlit against the old 51.
+pub fn designation_color(kind: DesignationKind) -> Color {
+    match kind {
+        DesignationKind::Dig => Color::srgb_u8(56, 132, 250),
+        DesignationKind::Channel => Color::srgb_u8(150, 96, 230),
+    }
+}
+
+pub fn zone_color() -> Color {
+    Color::srgb_u8(120, 206, 196)
 }
 
 /// A stone item is rubble left standing at a dug tile, not a replacement block.
@@ -228,11 +252,11 @@ pub fn entity_appearance(kind: EntityKind) -> EntityAppearance {
 #[cfg(test)]
 mod tests {
     use bevy::color::ColorToPacked;
-    use protocol::{EntityKind, LightKind, Material};
+    use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
     use super::{
-        RIM_LEVELS, entity_appearance, foliage_snow_color, light_properties, material_color,
-        night_lighting, rim_dissolved_color, snow_cap_color,
+        RIM_LEVELS, designation_color, entity_appearance, foliage_snow_color, light_properties,
+        material_color, night_lighting, rim_dissolved_color, snow_cap_color, zone_color,
     };
 
     #[test]
@@ -330,6 +354,104 @@ mod tests {
             assert_eq!(actual.scale, scale);
         }
     }
+
+    #[test]
+    fn mark_colours_are_distinct_cold_literals() {
+        let marks = [
+            (
+                "dig",
+                designation_color(DesignationKind::Dig),
+                [56, 132, 250],
+            ),
+            (
+                "channel",
+                designation_color(DesignationKind::Channel),
+                [150, 96, 230],
+            ),
+            ("zone", zone_color(), [120, 206, 196]),
+        ];
+        let terrain = [
+            Material::Stone,
+            Material::Soil,
+            Material::Ice,
+            Material::Snow,
+            Material::TreeTrunk,
+            Material::TreeFoliage,
+        ]
+        .map(|material| material_color(material).to_srgba().to_u8_array_no_alpha())
+        .into_iter()
+        .chain([
+            snow_cap_color().to_srgba().to_u8_array_no_alpha(),
+            foliage_snow_color().to_srgba().to_u8_array_no_alpha(),
+            super::debris_color().to_srgba().to_u8_array_no_alpha(),
+        ])
+        .collect::<Vec<_>>();
+
+        for (name, color, expected) in marks {
+            let rgb = color.to_srgba().to_u8_array_no_alpha();
+            assert_eq!(rgb, expected, "{name} must retain its named colour");
+            assert!(rgb[2] >= rgb[0], "{name} must remain cold or neutral");
+            for other in &terrain {
+                let separation = channel_distance(rgb, *other);
+                assert!(
+                    separation >= MIN_MARK_SEPARATION,
+                    "{name} {rgb:?} sits {separation:.0} from terrain {other:?}, inside the \
+                     {MIN_MARK_SEPARATION} floor — AC4/AC5 ask for VISUALLY distinguishable, and \
+                     mere inequality is satisfied by two shades of the same pale blue"
+                );
+            }
+        }
+        for (i, (name, _, rgb)) in marks.iter().enumerate() {
+            for (other_name, _, other) in marks.iter().skip(i + 1) {
+                let separation = channel_distance(*rgb, *other);
+                assert!(
+                    separation >= MIN_MARK_SEPARATION,
+                    "{name} and {other_name} sit {separation:.0} apart, inside the \
+                     {MIN_MARK_SEPARATION} floor"
+                );
+            }
+        }
+        // Hand-copied from `crates/tui/src/palette.rs` — `gui` must never depend on `tui`, so
+        // these are literals carrying a pointer to their source rather than an import. Wolf runs
+        // both clients side by side, and dig shipped BYTE-IDENTICAL to the TUI's CHANNEL blue:
+        // one RGB meaning two different orders across two windows. Mere non-identity is not the
+        // guard, because two near-neighbour blues confuse just as well as one shared value.
+        let tui_marks = [
+            ("TUI dig", [232, 176, 72]),
+            ("TUI channel", [92, 174, 224]),
+            ("TUI zone", [88, 190, 118]),
+        ];
+        for (name, _, rgb) in marks {
+            for (tui_name, tui_rgb) in tui_marks {
+                let separation = channel_distance(rgb, tui_rgb);
+                assert!(
+                    separation >= MIN_MARK_SEPARATION,
+                    "gui's {name} {rgb:?} sits {separation:.0} from {tui_name} {tui_rgb:?}, \
+                     inside the {MIN_MARK_SEPARATION} floor — the two clients are read side by \
+                     side, so one colour must not name two different orders"
+                );
+            }
+        }
+    }
+
+    /// Euclidean RGB separation. Crude next to a perceptual metric, and deliberately so — this
+    /// guards against a mark that is a near-neighbour of the terrain it is drawn on, which is a
+    /// gross failure a crude measure catches perfectly well.
+    fn channel_distance(a: [u8; 3], b: [u8; 3]) -> f32 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (f32::from(*x) - f32::from(*y)).powi(2))
+            .sum::<f32>()
+            .sqrt()
+    }
+
+    /// The floor exists because the first values chosen here passed a `!=` check while sitting
+    /// **16 units** from `Material::Snow` (channel) and **22** from `foliage_snow_color` (zone,
+    /// which the terrain list did not even include). Both would have reached Wolf's live viewing
+    /// as "distinguishable" on the strength of an assertion that could not fail for the property
+    /// it claimed. 40 separates every current mark from every terrain presentation with room to
+    /// spare; raise it if a mark is ever tuned toward the palette rather than away from it.
+    const MIN_MARK_SEPARATION: f32 = 40.0;
 
     /// Re-derived at review-patch round 5 against the APPROVED ARTIFACT rather than against
     /// an assumed ratio. Measuring the artifact shows the camp is only ~1.3x the field in

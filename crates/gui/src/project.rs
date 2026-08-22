@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
@@ -6,13 +6,13 @@ use bevy::prelude::{
     With, Without,
 };
 use client_core::Mirror;
-use protocol::{Dims, EntityKind, Material, Tile};
+use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
 
 use crate::{
     appearance::{
-        RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, entity_appearance,
-        flicker_scale, foliage_snow_color, light_properties, material_color, rim_dissolved_color,
-        snow_cap_color,
+        RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, designation_color,
+        entity_appearance, flicker_scale, foliage_snow_color, light_properties, material_color,
+        rim_dissolved_color, snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
     slice::SliceLevel,
@@ -53,8 +53,42 @@ pub type TerrainQuery<'w, 's> = Query<
     Or<(With<TerrainTile>, With<SnowCap>)>,
 >;
 
+pub type DynamicProjectionQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        BevyEntity,
+        &'static WorldProjected,
+        Option<&'static ProjectedLight>,
+    ),
+    (
+        Without<TerrainTile>,
+        Without<ProjectedDesignation>,
+        Without<ProjectedZone>,
+    ),
+>;
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedItem(pub u32);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedDesignation(pub [i32; 3]);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedDesignationKind(pub DesignationKind);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedZone(pub [i32; 3]);
+
+/// Leaves a visible gutter between neighbouring mark slabs. The mesh is 1.02 wide and this scale
+/// is applied on top of it, so a slab covers 1.02 x 0.94 = 0.9588 of its tile — inset ~2% per
+/// side, which is the gutter, not a reach to the tile edge.
+///
+/// NOTE: measured at the 2026-08-21 review, one tile step spans 48.8 px of a 1280-wide frame at
+/// `--distance 30`, so the gutter is ~2 px at the working zoom and ~0.65 px at the boot vista.
+/// Whether that reads as separate tiles or as anti-aliasing noise is a human call, and it is on
+/// the list for Wolf's live viewing.
+const MARK_FOOTPRINT_SCALE: f32 = 0.94;
 
 /// The light kind delivered for a projected emitter. Reconciliation only changes this when the
 /// wire changes kind; presentation owns its animated intensity afterwards.
@@ -123,12 +157,16 @@ impl TerrainSlot {
 pub struct ProjectionAssets {
     cube: Handle<Mesh>,
     snow_cap_mesh: Handle<Mesh>,
+    mark_mesh: Handle<Mesh>,
     /// One handle per (surface, rim step); see `rim_level`.
     terrain: [[Handle<StandardMaterial>; RIM_LEVELS]; TERRAIN_SLOTS.len()],
     dwarf: Handle<StandardMaterial>,
     torch: Handle<StandardMaterial>,
     campfire: Handle<StandardMaterial>,
     debris: Handle<StandardMaterial>,
+    dig_mark: Handle<StandardMaterial>,
+    channel_mark: Handle<StandardMaterial>,
+    zone_mark: Handle<StandardMaterial>,
 }
 
 pub fn setup_projection_assets(
@@ -138,6 +176,7 @@ pub fn setup_projection_assets(
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
     let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
+    let mark_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
     let terrain = TERRAIN_SLOTS.map(|slot| {
         std::array::from_fn(|level| {
             materials.add(terrain_standard_material(rim_dissolved_color(
@@ -149,11 +188,19 @@ pub fn setup_projection_assets(
     commands.insert_resource(ProjectionAssets {
         cube,
         snow_cap_mesh,
+        mark_mesh,
         terrain,
         dwarf: materials.add(entity_standard_material(EntityKind::Dwarf)),
         torch: materials.add(entity_standard_material(EntityKind::Torch)),
         campfire: materials.add(entity_standard_material(EntityKind::Campfire)),
         debris: materials.add(terrain_standard_material(debris_color())),
+        dig_mark: materials.add(terrain_standard_material(designation_color(
+            DesignationKind::Dig,
+        ))),
+        channel_mark: materials.add(terrain_standard_material(designation_color(
+            DesignationKind::Channel,
+        ))),
+        zone_mark: materials.add(terrain_standard_material(zone_color())),
     });
 }
 
@@ -220,7 +267,9 @@ pub fn reconcile(
     slice: SliceLevel,
     rebuild_terrain: bool,
     dirty_tiles: &[[i32; 3]],
-    projected: &Query<(BevyEntity, &WorldProjected, Option<&ProjectedLight>), Without<TerrainTile>>,
+    projected: &DynamicProjectionQuery,
+    designations: &Query<(BevyEntity, &ProjectedDesignation, &ProjectedDesignationKind)>,
+    zones: &Query<(BevyEntity, &ProjectedZone)>,
     terrain: &TerrainQuery,
     chips: &DigChipQuery,
     assets: Option<&ProjectionAssets>,
@@ -392,12 +441,165 @@ pub fn reconcile(
             }
         }
     }
+
+    let wanted_designations = mirror
+        .designations()
+        .iter()
+        .filter(|designation| designation.pos[2] <= slice.level())
+        .map(|designation| (designation.pos, designation.kind))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let wanted_zones = mirror
+        .zones()
+        .iter()
+        .filter(|zone| zone.pos[2] <= slice.level())
+        .map(|zone| zone.pos)
+        .collect::<BTreeSet<_>>();
+    // A zone slab and a designation slab can land on the SAME surface two ways, and both are
+    // reachable from the sim. (1) A channel and a stockpile may occupy the same standable air
+    // tile. (2) A stockpile at z sits on rock whose DIG mark is at z-1, and a dig slab resting on
+    // its own top face is that same surface — measured at the 2026-08-21 review, designation
+    // [9,9,9] and zone [9,9,10] both projected to (9.000, 9.540, -9.000) at identical scale with
+    // the same mesh, both opaque. The story's own recipe hits case (2): the stockpile columns sit
+    // inside the dig rect, so the stockpile tiles would z-fight against the digs beneath them
+    // exactly while AC5 ("is a stockpile tellable from a dig") is being judged.
+    let zone_mark_overlaps = wanted_zones
+        .iter()
+        .filter(|position| {
+            wanted_designations.get(*position) == Some(&DesignationKind::Channel)
+                || wanted_designations.get(&[position[0], position[1], position[2] - 1])
+                    == Some(&DesignationKind::Dig)
+        })
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let existing_designations = designations
+        .iter()
+        .map(|(entity, mark, kind)| (mark.0, (entity, kind.0)))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for (&position, &(entity, _)) in &existing_designations {
+        if !wanted_designations.contains_key(&position) {
+            commands.entity(entity).despawn();
+        }
+    }
+    for (&position, &kind) in &wanted_designations {
+        if let Some(&(entity, existing_kind)) = existing_designations.get(&position) {
+            commands.entity(entity).insert(designation_mark_transform(
+                mirror,
+                position,
+                kind,
+                slice.level(),
+            ));
+            if existing_kind != kind {
+                commands
+                    .entity(entity)
+                    .insert(ProjectedDesignationKind(kind));
+            }
+            if let Some(assets) = assets {
+                commands
+                    .entity(entity)
+                    .insert(MeshMaterial3d(assets.designation_material(kind)));
+            }
+        } else {
+            let mut entity = commands.spawn((
+                ProjectedDesignation(position),
+                ProjectedDesignationKind(kind),
+                designation_mark_transform(mirror, position, kind, slice.level()),
+            ));
+            if let Some(assets) = assets {
+                entity.insert((
+                    Mesh3d(assets.mark_mesh.clone()),
+                    MeshMaterial3d(assets.designation_material(kind)),
+                ));
+            }
+        }
+    }
+
+    let existing_zones = zones
+        .iter()
+        .map(|(entity, mark)| (mark.0, entity))
+        .collect::<BTreeMap<_, _>>();
+    for (&position, &entity) in &existing_zones {
+        if !wanted_zones.contains(&position) {
+            commands.entity(entity).despawn();
+        }
+    }
+    for position in wanted_zones {
+        let transform = zone_mark_transform(position, zone_mark_overlaps.contains(&position));
+        if let Some(&entity) = existing_zones.get(&position) {
+            commands.entity(entity).insert(transform);
+        } else {
+            let mut entity = commands.spawn((ProjectedZone(position), transform));
+            if let Some(assets) = assets {
+                entity.insert((
+                    Mesh3d(assets.mark_mesh.clone()),
+                    MeshMaterial3d(assets.zone_mark.clone()),
+                ));
+            }
+        }
+    }
 }
 
 /// Where a stone item is drawn: the tile centre, dropped onto the tile floor. Both the spawn and
 /// `blend_entities` call this so the two cannot drift apart.
 fn item_translation(position: [i32; 3]) -> Vec3 {
     world_to_render(position) + Vec3::new(0.0, STONE_ITEM_DROP, 0.0)
+}
+
+/// The z a DIG slab is drawn at. A dig marks the top face of its own tile, but
+/// `is_visible_at_slice` draws every solid or ramp tile AT the cut as a full cube regardless of
+/// exposure, and that cube spans `[z - 0.5, z + 0.5]` — so a dig with rock directly above it was
+/// sealed inside opaque geometry. This is the STEADY STATE, not an edge case: the dwarves dig the
+/// reachable tiles first, and reachable means open sky above, so the marks that survive a capture
+/// window are exactly the buried ones. Measured at the 2026-08-21 review on this story's own
+/// recipe: 25 of 79 visible at t+2, 9 at t+46, 2 at t+64, and 0 of 50 from t+120 onward — while
+/// the instrument correctly printed `designations=50`, because all 50 were projected.
+///
+/// RULED 2026-08-21 (Wolf): promote a buried dig to the top face of the rock covering it, so the
+/// order stays readable from the surface the boss is actually looking at.
+///
+/// NOTE: only the CONTIGUOUS drawn column directly above the dig is walked. A dig under a gap is
+/// left where it is — it is already visible through that gap, and hoisting it would put the mark
+/// on rock that is not the rock it marks.
+fn dig_mark_level(mirror: &Mirror, position: [i32; 3], level: i32) -> i32 {
+    let [x, y, z] = position;
+    let mut top = z;
+    while top < level && is_visible_at_slice(mirror, [x, y, top + 1], level) {
+        top += 1;
+    }
+    top
+}
+
+fn designation_mark_transform(
+    mirror: &Mirror,
+    position: [i32; 3],
+    kind: DesignationKind,
+    level: i32,
+) -> Transform {
+    match kind {
+        DesignationKind::Dig => {
+            let [x, y, _] = position;
+            slab_transform([x, y, dig_mark_level(mirror, position, level)], 0.54)
+        }
+        DesignationKind::Channel => slab_transform(position, -0.46),
+    }
+}
+
+fn zone_mark_transform(position: [i32; 3], overlaps_mark: bool) -> Transform {
+    if !overlaps_mark {
+        return slab_transform(position, -0.46);
+    }
+    // Raise and inset the zone only where another mark shares its surface — a channel in the same
+    // air tile, or a dig on the rock directly beneath it — so the zone's neutral centre and the
+    // other mark's cold rim both stay readable instead of z-fighting at one opaque surface.
+    slab_transform(position, -0.36).with_scale(Vec3::new(
+        MARK_FOOTPRINT_SCALE * 0.72,
+        MARK_FOOTPRINT_SCALE,
+        MARK_FOOTPRINT_SCALE * 0.72,
+    ))
+}
+
+fn slab_transform(position: [i32; 3], vertical_offset: f32) -> Transform {
+    Transform::from_translation(world_to_render(position) + Vec3::Y * vertical_offset)
+        .with_scale(Vec3::splat(MARK_FOOTPRINT_SCALE))
 }
 
 fn chip_offsets() -> [Vec3; CHIPS_PER_TILE] {
@@ -583,6 +785,13 @@ impl ProjectionAssets {
             EntityKind::Dwarf => self.dwarf.clone(),
             EntityKind::Torch => self.torch.clone(),
             EntityKind::Campfire => self.campfire.clone(),
+        }
+    }
+
+    fn designation_material(&self, kind: DesignationKind) -> Handle<StandardMaterial> {
+        match kind {
+            DesignationKind::Dig => self.dig_mark.clone(),
+            DesignationKind::Channel => self.channel_mark.clone(),
         }
     }
 }
