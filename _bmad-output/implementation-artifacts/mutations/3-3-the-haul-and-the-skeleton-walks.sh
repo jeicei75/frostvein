@@ -346,21 +346,25 @@ PY
 mutation "stone counting and stone drawing use different filters" tui items_draw_only_on_the_viewed_level_and_a_shared_cell_draws_the_carrier <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = '''    for item in &snapshot.items {
+# Re-pointed 2026-08-22: 5.2 moved `tui` off `snapshot.*` onto the shared client-core mirror,
+# which rotted this anchor. The seam is unchanged.
+old = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
             framebuffer.cells[index] = item_cell();
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
     }
 '''
-assert old in s
-new = '''    for item in &snapshot.items {
+assert s.count(old) == 1
+new = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
             framebuffer.cells[index] = item_cell();
         }
     }
-    for item in &snapshot.items {
-        if let Some(index) = screen_index([item.pos[0], item.pos[1], state.z]) {
+    for item in mirror.items() {
+        let index =
+            usize::from(item.pos[0] as u16) + usize::from(item.pos[1] as u16) * usize::from(w);
+        if index < framebuffer.cells.len() {
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
     }

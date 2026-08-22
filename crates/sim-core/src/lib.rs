@@ -3375,6 +3375,56 @@ mod tests {
         }
     }
 
+    /// WANDER_RADIUS had NO guard at all. The test that pinned it was deleted at some point and
+    /// nothing replaced it, so widening the radius would have changed how the fortress behaves
+    /// with every suite still green. Found 2026-08-22 by the mutation-table audit: the row
+    /// "wander radius widens from three to six" named a test that no longer existed, and
+    /// `mutate.sh` reports a missing test as SURVIVED rather than as an error — so the hole read
+    /// as a weak test rather than as an absent one.
+    #[test]
+    fn dwarves_stay_standable_and_near_home() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        // Every dwarf's `home` is the CAMP ORIGIN, not its own spawn tile -- `spawn_dwarves`
+        // scatters them over the standable tiles around the camp and gives them all the same
+        // home. A dwarf spawned outside the radius is simply stuck: the move filter offers it no
+        // candidates, so it idles where it is. The invariant is therefore about MOVEMENT -- a
+        // dwarf never steps to a tile outside the radius -- not about where it starts.
+        let camp = world.camp_origin();
+        let spawned: Vec<Pos> = world
+            .dwarves()
+            .into_iter()
+            .map(|(_, pos, _, _)| pos)
+            .collect();
+
+        for _ in 0..200 {
+            world.step();
+            for ((_, pos, _, _), start) in world.dwarves().into_iter().zip(&spawned) {
+                assert!(
+                    pos == *start
+                        || ((pos.x - camp.x).abs() <= super::WANDER_RADIUS
+                            && (pos.y - camp.y).abs() <= super::WANDER_RADIUS),
+                    "dwarf moved from {start:?} to {pos:?}, outside WANDER_RADIUS {} of camp \
+                     {camp:?}",
+                    super::WANDER_RADIUS
+                );
+                assert_eq!(
+                    world.tile(pos),
+                    Some(Tile::Empty),
+                    "a dwarf must stand in an empty tile, not inside terrain"
+                );
+                let below = Pos {
+                    z: pos.z - 1,
+                    ..pos
+                };
+                assert!(
+                    matches!(world.tile(below), Some(Tile::Solid(_))),
+                    "a dwarf at {pos:?} must have solid ground beneath it, found {:?}",
+                    world.tile(below)
+                );
+            }
+        }
+    }
+
     #[test]
     fn wander_rest_is_ten_ticks() {
         let mut world = World::generate(42, Dims::DEFAULT);

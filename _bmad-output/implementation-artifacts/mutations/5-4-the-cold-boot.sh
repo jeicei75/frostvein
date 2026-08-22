@@ -3,7 +3,7 @@
 mutation "snow cap leaves bare top" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    matches!(\n        mirror.tile(position),\n        Some(Tile::Solid(material) | Tile::Ramp(material))\n            if material != Material::Ice && material != Material::TreeFoliage\n    ) && !matches!(\n'
+old = '    matches!(\n        mirror.tile(position),\n        Some(Tile::Solid(material) | Tile::Ramp(material))\n            if material != Material::Ice\n                && material != Material::TreeFoliage\n                && material != Material::Soil\n    ) && !matches!(\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    false && !matches!(\n'))
 PY
@@ -11,7 +11,7 @@ PY
 mutation "ice tops receive snow" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = 'if material != Material::Ice && material != Material::TreeFoliage'
+old = 'if material != Material::Ice\n                && material != Material::TreeFoliage'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'if true'))
 PY
@@ -19,9 +19,9 @@ PY
 mutation "foliage receives ground snow slabs" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = 'material != Material::Ice && material != Material::TreeFoliage'
+old = 'material != Material::TreeFoliage\n                && material != Material::Soil'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'material != Material::Ice'))
+p.write_text(s.replace(old, 'material != Material::Soil'))
 PY
 
 mutation "spruce skirt loses its taper" gui foliage_tapers_from_wide_mid_crown_to_narrow_tip_and_skirt <<'PY'
@@ -61,7 +61,7 @@ PY
 mutation "light budget collapses" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 32_000_000.0,\n'
+old = '            intensity: 25_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 5_000.0,\n'))
 PY
@@ -195,10 +195,10 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, new))
 PY
 
-mutation "emitters ignore wire light field" gui recorded_camp_snapshot_projects_exactly_five_warm_point_lights <<'PY'
+mutation "emitters ignore wire light field" gui a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                    if let Some(light) = mirror_entity.light {\n                        entity.insert(point_light(light));\n                    }\n'
+old = '                    if let Some(light) = mirror_entity.light {\n                        entity.insert((point_light(light), ProjectedLight(light)));\n                    }\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    let _ = mirror_entity.light;\n'))
 PY
@@ -254,7 +254,7 @@ PY
 mutation "campfire blows the camp to white" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 32_000_000.0,\n'
+old = '            intensity: 25_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 7_200_000_000.0,\n'))
 PY
@@ -323,3 +323,15 @@ old = 'const SNOWFLAKE_DISC_RADIUS: f32 = 48.0;'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'const SNOWFLAKE_DISC_RADIUS: f32 = 200.0;'))
 PY
+
+# Added 2026-08-22, closing 6.2's carried-open campfire item. The row exists because the defect it
+# describes ACTUALLY SHIPPED and no test could see it: 6.1 raised this amplitude 0.11 -> 0.40, the
+# peak went 26% past the approved ceiling, the still frame never moved, and the blow-out was found
+# by Wolf's eye two epics later.
+mutation "the campfire flicker peak climbs past the approved ceiling" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PYX'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '            flicker_amplitude: 0.40,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            flicker_amplitude: 0.60,\n'))
+PYX
