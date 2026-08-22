@@ -14,6 +14,11 @@ _bmad/custom/*
 .claude/
 .agents/
 
+# --- Python (uv resolves HERE now, not the forge; see pyproject.toml) ---
+/.venv
+__pycache__/
+*.pyc
+
 # --- Rust ---
 /target
 /frostvein.save

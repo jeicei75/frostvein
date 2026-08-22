@@ -189,13 +189,13 @@ runs on the Windows side against `localhost:<port>`. Build recipe is in Verifica
         has now fired twice, at 3.1 and 6.1). Paste the table with the red assertion per row.
 
 - [ ] **Task 6 — The live vehicle session (AC: 8, 9, 17-evidence) — VEHICLE-BOUND**
-  - [ ] Cross-compile and run per Verification. Execute the scripted TUI designation, then capture
+  - [x] Cross-compile and run per Verification. Execute the scripted TUI designation, then capture
         at the working zoom and at the boot vista.
-  - [ ] Paste the printed `marks:`, `motion:` and `capture range check:` lines. Confirm the
+  - [x] Paste the printed `marks:`, `motion:` and `capture range check:` lines. Confirm the
         warm-pixel floor and ground-median range still hold **with marks on screen** (AC9).
   - [ ] Confirm by eye and state in the record: dig, channel, zone, item, dwarf and terrain are
         each tellable at the working zoom; the eye still lands on the camp first.
-  - [ ] Name the capture outputs `7-2-marks-*.png` so they cannot overwrite the approved Task 0 pair.
+  - [x] Name the capture outputs `7-2-marks-*.png` so they cannot overwrite the approved Task 0 pair.
 
 - [ ] **Task 7 — Wolf's closing sign-off (AC: 17) — HUMAN-BOUND**
   - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
@@ -744,6 +744,63 @@ claimed here. Accordingly AC8, AC17 and the rendered halves of AC9 remain open.
   uncommitted when its window closed, so there was no recovery point at all. The orchestrator
   verified the work green and committed it (`1196199`). This is precisely what the commit-cadence
   floor exists to prevent; the continuation run held cadence properly across eight commits.
+
+### Task 6 — vehicle evidence, 2026-08-22 (gingerspice, RTX 4080, Vulkan)
+
+**Both captures taken. Every assertion the instruments can run has PASSED. The by-eye half of
+Task 6 and all of Task 7 remain OPEN — nothing below is a judgement, only a measurement.**
+
+**Vista, full depth (no `--z`), `--frames 1500`:**
+
+```
+projected 53365 terrain cubes at z 31
+slice: z 31 projected 53374 terrain cubes (17 of 17 cut-face tiles at z 31)
+marks: z 31 designations=124 of 124 zones=4 of 4
+motion: ticks observed=237 dwarf position changes=473 mid-blend frames=1132 max working dwarves=5 item count=33
+capture range check: warm-lit pixels=26727 ground-median-luminance=123
+```
+
+**AC9's headless half is MET, and for the first time it was actually ASSERTED rather than skipped** —
+that is what dropping `--z` bought (Ruling 2). Warm-lit 26727 against a floor of 3,000;
+ground-median **123**, which is the approved artifact's own figure to the digit. The campfire drop
+to 25M did not darken the field.
+
+**Working zoom, `--z 10 --distance 30`, `--frames 3000`:**
+
+```
+projected 37306 terrain cubes at z 10
+slice: z 10 projected 37315 terrain cubes (15834 of 15834 cut-face tiles at z 10)
+marks: z 10 designations=112 of 112 zones=4 of 4
+motion: ticks observed=238 dwarf position changes=495 mid-blend frames=2140 max working dwarves=5 item count=40
+capture range check: warm-lit pixels=74858 ground-median-luminance=231
+capture range check: the cut at z 10 is below the world top, where 5.4's band was measured on sky-lit snow — warm and ground assertions skipped
+```
+
+**THE MARK ORACLE MATCHED AT BOTH LEVELS** — `112 of 112` and `124 of 124` designations, `4 of 4`
+zones. The check the 2026-08-21 review added (projected == mirror, replacing a bare `> 0`) is
+working on the real vehicle.
+
+**Carried open for the by-eye pass, from the numbers above:**
+
+- **Ground median 231 at the working zoom.** The band is correctly SKIPPED there — 15,834 tiles of
+  lit cut-face floor is not the sky-lit snow 5.4 calibrated against — but 231 is near white, and the
+  three mark colours sit around luminance 120–150. At working zoom the marks are therefore DARKER
+  than the floor they sit on, the opposite polarity from the vista. Whether that reads as legible
+  or as washed out is exactly what AC8 asks and no instrument here can answer.
+- **AC9 passing does NOT close "is the camp blown out".** 6.2 established that this range check
+  passes on the very frame Wolf called too blown: it cannot see a local highlight. The campfire
+  ruling (d) still needs his eye on `7-2-marks-vista.png`.
+
+**RECIPE FINDING — `--frames` does not control tick count, and a fast GPU breaks the motion floor.**
+The first vista attempt failed on `capture observed only 58 delivered ticks` against a floor of 100.
+Ticks observed = frames ÷ framerate × 10, so on a 4080 a light scene rendered 1500 frames in ~5.8 s
+and saw 58 ticks; a heavier scene (124 marks, 3,344 lit tiles) ran ~63 fps, took 23.7 s and saw 237.
+**Same command, opposite outcomes, purely from scene complexity.** Use `--frames 3000` on this
+vehicle. Not a defect — but any recipe quoting `--frames 1500` is fragile on fast hardware.
+
+**Not a defect either:** the startup oracle printing `53365` while the capture's slice line prints
+`53374`. They are ~24 s apart and the dwarves dig between them; removing a cube exposes its
+neighbours. The startup figure matching AC13's shipped-seed 53365 exactly is the oracle working.
 
 ### File List
 

@@ -1,0 +1,44 @@
+# frostvein's Python surface.
+#
+# WHY THIS FILE EXISTS: without it, `uv run` from inside this repo walks up and resolves the FORGE's
+# environment at /workspace (Python 3.14, pyyaml + httpx). This repo is hosted in the Nidavellir
+# forge but owns its own process, and silently borrowing the forge's interpreter is exactly the kind
+# of coupling that rule exists to prevent. With this file, `uv run` resolves here.
+#
+# `requires-python` tracks the interpreter `scripts/gate.sh` actually invokes as bare `python3`
+# (3.13 on the devpods). Keep the two in step: if they diverge, gate-path code can pass under `uv`
+# and fail in the pre-commit hook, or the reverse.
+#
+# `.python-version` pins 3.13 and is NOT decoration. `requires-python = ">=3.13"` alone let uv pick
+# 3.14.5 while the gate ran 3.13.13 — measured when this file was first added — which is precisely
+# the divergence the paragraph above warns about, arriving immediately.
+
+[project]
+name = "frostvein"
+version = "0.1.0"
+description = "Tooling for the frostvein colony sim: the metrics ledger, the mutation-table audit"
+requires-python = ">=3.13"
+
+# EMPTY ON PURPOSE, AND IT MUST STAY THAT WAY FOR ANYTHING THE GATE RUNS.
+#
+# `scripts/gate.sh` calls `python3` directly, from a pre-commit hook, and its own comment records
+# why: "no pytest, no venv, so the pre-commit hook cannot break on a missing dev dependency". The
+# metrics ledger (`_bmad/scripts/session_tokens.py`), its unittest suite, and the mutation-table
+# audit (`scripts/audit-mutations.py`) are all stdlib-only for that reason. Adding a runtime
+# dependency here would not make the gate see it — it would just let a script start depending on
+# something the hook cannot provide.
+dependencies = []
+
+[project.optional-dependencies]
+# The story 5.4 sign-off artifact renderer is the ONLY non-stdlib Python in this repo, and it was
+# undeclared: as of 2026-08-22 neither the system interpreter nor the forge venv had PIL or numpy,
+# so `_bmad-output/implementation-artifacts/5-4-signoff/artifact_render.py` could not run anywhere.
+# Declared here rather than left broken. Install with `uv sync --extra signoff`.
+signoff = [
+  "pillow>=10.0",
+  "numpy>=1.26",
+]
+
+# Not an installable package — this is a Rust workspace that happens to carry Python tooling.
+[tool.uv]
+package = false
