@@ -5,7 +5,7 @@ baseline_commit: 8d85259a42c48ec79a3aeb82ee17386610019e5a
 
 # Story 7.2: Read the Working Zoom
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -188,18 +188,20 @@ runs on the Windows side against `localhost:<port>`. Build recipe is in Verifica
   - [x] Run `scripts/mutate.sh` **alone**, then `cargo clean -p gui` **after** the round (this trap
         has now fired twice, at 3.1 and 6.1). Paste the table with the red assertion per row.
 
-- [ ] **Task 6 — The live vehicle session (AC: 8, 9, 17-evidence) — VEHICLE-BOUND**
+- [x] **Task 6 — The live vehicle session (AC: 8, 9, 17-evidence) — VEHICLE-BOUND**
   - [x] Cross-compile and run per Verification. Execute the scripted TUI designation, then capture
         at the working zoom and at the boot vista.
   - [x] Paste the printed `marks:`, `motion:` and `capture range check:` lines. Confirm the
         warm-pixel floor and ground-median range still hold **with marks on screen** (AC9).
-  - [ ] Confirm by eye and state in the record: dig, channel, zone, item, dwarf and terrain are
+  - [x] Confirm by eye and state in the record: dig, channel, zone, item, dwarf and terrain are
         each tellable at the working zoom; the eye still lands on the camp first.
   - [x] Name the capture outputs `7-2-marks-*.png` so they cannot overwrite the approved Task 0 pair.
 
-- [ ] **Task 7 — Wolf's closing sign-off (AC: 17) — HUMAN-BOUND**
-  - [ ] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
-        this box.**
+- [x] **Task 7 — Wolf's closing sign-off (AC: 17) — HUMAN-BOUND**
+  - [x] Wolf views live against the approved artifact and signs off. **A dev agent cannot check
+        this box.** — **SIGNED OFF 2026-08-23 by Wolf**, live at the vehicle against the approved
+        artifact including its 2026-08-21 amendment. Checked on his explicit instruction, not by
+        agent judgement.
 
 ### Review Findings — code review 2026-08-21 (4 layers, all live, fresh context, no coverage holes)
 
@@ -802,6 +804,100 @@ vehicle. Not a defect — but any recipe quoting `--frames 1500` is fragile on f
 `53374`. They are ~24 s apart and the dwarves dig between them; removing a cube exposes its
 neighbours. The startup figure matching AC13's shipped-seed 53365 exactly is the oracle working.
 
+### Task 6 — the by-eye pass, 2026-08-23 (Wolf, live at the vehicle)
+
+**AC8 is MET.** Wolf ran the scripted recipe on the vehicle and watched it live, then ruled on the
+six questions parked on 2026-08-22 and raised a seventh of his own. His words, and — where he asked
+a question rather than gave a ruling — the answer verified against source rather than guessed.
+
+**AC8, the four-noun bar: MET.** Dwarves, terrain, designations and items are each tellable apart at
+the working zoom, and stockpile zones are tellable from all of them. Asked as the AC is written,
+answered without reservation: *"Yes — all four plus zones."*
+
+**Q1 — the working-zoom blow-out. DEFERRED to the gfx pass; ruling (d) is NOT revisited.** Ground
+median 231 on the cut floor with the three mark colours around luminance 120–150, so at the working
+zoom marks are DARKER than the floor they sit on — the opposite polarity from the vista. AC9's band
+is correctly skipped at that cut level, so no instrument catches it. Wolf's call on the same footing
+as Q5: the lighting is placeholder and will be re-done with real art. Carried open, not blessed.
+
+**Q2 — the dig field reads as a large contiguous blue sheet. THE PRESENTATION STANDS; it is
+honest.** The sheet is the buried digs no dwarf can get a foothold on, and it is truthful to show
+them. Wolf accepted the render and asked that the underlying behaviour be logged as a sim-side
+question for a later epic rather than chased here, which AC3 forbids anyway.
+
+**Q3 — why some marks persist and others vanish. NOT a rendering defect: this is sim truth, shown
+honestly for the first time.** Wolf observed live that the top-left blue field and the upper-left
+violet band stay (the violet floating, over orange stone items, after the ground under it was dug),
+while the bottom-right violet patch disappears and leaves teal tiles behind. Verified in source:
+
+- A designation is deleted the instant its job completes — `lib.rs:883` and `:898`, the *same* line
+  for "dug out" as for "cancelled", which is exactly what AC7 asserts. So every mark still on screen
+  is a job no dwarf has been able to do.
+- **Dig** (`work_positions`, `lib.rs:623-631`) needs a dwarf standing on a **standable tile at the
+  same z, orthogonally adjacent** to the target; standable = empty tile with `Solid`/`Ramp` directly
+  below (`lib.rs:499-505`). A dig buried in the rock mass has four solid neighbours and no standing
+  position exists, so it is never claimed. That is the blue field — and before this story it was
+  INVISIBLE (the review measured 0 of 50 drawn at t+102 while the wire correctly carried 50). The
+  buried-dig promotion is what put it on screen.
+- **Channel** (`lib.rs:632-638`) is stricter: the dwarf must stand **on the designated tile itself**.
+  A channel tile that is not standable — mid-air, or whose floor another dwarf dug away — can never
+  be worked. That is the floating violet band. The floating placement itself is already a logged
+  deferred finding (marks are position-keyed with no support check); the *permanence* is this rule.
+- **The bottom-right violet was standable**, so it was channelled, the designation was deleted, and
+  the stockpile zone tiles on that same surface stopped being covered — hence teal.
+- **The sim never abandons an impossible job**: it sets `retry_after = tick + RETRY_COOLDOWN` and
+  tries again forever (`lib.rs:423-428`). There is no abandon path.
+
+Noted for honesty: the recipe's 33×27 channel rect over largely non-standable tiles is a RECIPE
+artefact. A real session would never designate channels in mid-air, so the band is far larger and
+more permanent on this frame than play would ever produce.
+
+**Q4 — three marks, not two: YES.** *"3 marks yes .. well teal color is maybe a bit lame but it's ok
+until we get gfx."* AC4 and AC5 closed; the teal reservation folds into the gfx item.
+
+**Q5 — the camp at the VISTA is still too blown.** *"yes it is still too blown but we will adjust it
+later with gfx anyway."* Deferred to the gfx pass. Note this is a judgement the instrument cannot
+make: 6.2 established the range check passes on the very frame Wolf calls blown, because it cannot
+see a local highlight. AC9's headless half remains MET and asserted.
+
+**Q6 — the ~2 px gutter between adjacent mark slabs: closed.** *"probably ok at this stage because
+real gfx will change it anyway."* Individual tiles are countable in the mark fields.
+
+**Q7 — Wolf's own, raised at the viewing: does new falling snow settle on the ground?** It cannot —
+**there is no accumulation feature anywhere in the codebase.** Snowfall is 96 `ClientLocal`
+decorative flakes (`gui/src/atmosphere.rs`); `fall_snow` drops each one and, on reaching the camp
+surface, wraps it back up by `SNOWFLAKE_FALL_SPAN` to fall again. It never touches the mirror or the
+sim. The white *on* the ground is `snow_cap_color()` — the terrain's own static settled-snow caps, a
+material-table entry unrelated to the flakes. Wolf's read was right; the reason is "no such
+feature", not "hard to see".
+
+**Carried open by these rulings — neither is a 7.2 defect, and neither is blessed:**
+
+1. **Lighting / gfx pass.** The campfire blows out at both framings: near-white wash on the cut
+   floor at the working zoom (median 231, mark polarity inverted) and a still-too-blown camp at the
+   vista. Both deferred to real art per Wolf's 2026-08-22 rule that a look change needs a concrete
+   defect. The concrete numbers are recorded here so the gfx work inherits a target rather than a
+   vibe. AC9's band skipping below the world top is part of the same item: it is why nothing caught
+   the 231.
+2. **Sim-side, a later epic.** An unreachable designation is retried forever and renders identically
+   to a pending one, so a permanent wall of blue looks the same as work about to happen. Out of
+   scope here (AC3 forbids touching `sim-core`); raised rather than fixed.
+
+### AC17 — Wolf's closing sign-off, 2026-08-23
+
+**SIGNED OFF.** Wolf viewed the built result live on the vehicle against the approved Task 0
+artifact and its 2026-08-21 amendment, and signed off without reservation. UX-DR22 is satisfied at
+both ends: the opening approval is recorded at 2026-08-21 (AC1) and the closing viewing at
+2026-08-23 (AC17). **All 17 acceptance criteria are met.**
+
+Wolf's ruling on process: the story goes straight to `done` rather than back through code review.
+The 4-layer review ran 2026-08-21, all 14 patches were applied and verified, and **no file under
+`crates/` has changed since** — the remaining work was human-bound and changed only this record.
+Re-reviewing an unchanged diff would have cost a full review cycle for nothing.
+
+Not re-run today and not claimed: `scripts/gate.sh`. It was green on a cold rebuild at 364 tests
+passing / 1 ignored when the last code commit landed, and today's diff is markdown only.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/7-2-read-the-working-zoom.md` (UPDATE) — story record
@@ -827,4 +923,6 @@ neighbours. The startup figure matching AC13's shipped-seed 53365 exactly is the
 | 2026-08-21 | Self-review pass 1 fixed three actionable findings: dig slab depth hiding, channel/zone z-fighting, and non-finite `--distance`. Each correction has a focused RED→green regression; the post-fix gate is green. |
 | 2026-08-21 | Self-review pass 2 fixed one P1: position indexes replace quadratic mark reconciliation for uncapped zone full-resends; gate green. |
 | 2026-08-21 | Self-review pass 3 (the hard cap) fixed adjacent coplanar mark-slab overlap with a 0.94 footprint scale; focused RED→green regression and gate green. No fourth pass run. |
+| 2026-08-23 | **STORY DONE. Task 7 CLOSED — Wolf signed off on AC17**, live at the vehicle against the approved artifact and its amendment. All 17 ACs met. Wolf ruled the story goes straight to `done` rather than back through code review: the 2026-08-21 four-layer review stands, all 14 patches are applied, and no `crates/` file changed after it. Gate not re-run today and not claimed — green cold at 364 tests when the last code commit landed; today's diff is markdown only. |
+| 2026-08-23 | **Task 6 CLOSED — Wolf's by-eye pass, live at the vehicle. AC8 MET.** All four nouns plus zones tellable at the working zoom, stated without reservation. Six parked questions ruled and a seventh answered from source: the working-zoom blow-out and the still-blown vista camp are DEFERRED to the gfx pass (ruling (d) not revisited); the blue dig sheet STANDS as honest; the gutter is closed; three marks confirmed. Q3's persistence puzzle was traced to sim rules, not rendering — a designation dies with its job, dig needs an adjacent standable tile and channel needs to stand on the tile itself, and an impossible job retries forever with no abandon path, so the blue field is the work no dwarf can reach and the floating violet is work no dwarf can ever do. Falling snow provably cannot settle: no accumulation exists at any layer. Two items carried open, neither a 7.2 defect: the lighting/gfx pass (with the 231 median and the AC9 band-skip recorded as its target) and the sim-side question of impossible orders being indistinguishable from pending ones. NO CODE CHANGED. Task 7 and AC17 remain open. |
 | 2026-08-21 | Tasks 1-5 complete, headless half done, Status -> review. Two Codex runs (`gpt-5.6-terra`/high); run one left everything uncommitted, run two held cadence over 8 commits and fixed all 5 self-gate findings within the 3-pass cap. Orchestrator-verified: gate GREEN cold, 359 tests (from 348), AC3 empty, File List exact, sabotage **10/10 KILLED**. Three defects found by the orchestrator, not the agent: two headline sabotage rows never compiled; two more went stale against the agent's own final refactor (3rd instance of that class); and **AC4/AC5 were met only vacuously** — channel sat 16 RGB units from snow and zone 22 from foliage_snow, behind an inequality check that could not fail. Marks retuned behind a 40-unit separation floor. Tasks 6/7 and ACs 8/17 and the rendered halves of AC9 remain OPEN. |

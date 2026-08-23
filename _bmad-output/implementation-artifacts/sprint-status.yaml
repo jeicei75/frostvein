@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-08-21
+# last_updated: 2026-08-23
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-21  # 7.2 code-reviewed (4 layers, no coverage holes) -> in-progress, 14 patches applied, 16/16 mutations killed; vehicle half + Wolf's sign-off still owed.
+last_updated: 2026-08-23  # 7.2 DONE -- Wolf signed off AC17 live at the vehicle; all 17 ACs met. Straight to done, no second review: no crates/ file changed after the 2026-08-21 review. EPIC 7 CLOSED.
                           # 2026-08-20 VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
                           # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
                           # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
@@ -345,7 +345,7 @@ development_status:
   # Deferred: 3 LOW AC-text defects (AC11 tautologies, AC4/AC5 unfalsifiable-by-construction) + the
   # per-layer build isolation having no reaper (~92GB/review).
   epic-6-retrospective: optional
-  epic-7: in-progress
+  epic-7: done
   # Resolves the addendum's open control collision BY TESTING, on the record: the
   # mousewheel is already claimed by the zoom continuum and one wheel cannot drive both.
   # ^ STORY CREATED 2026-08-18 (ready-for-dev) AND THAT PREMISE IS STALE. Falsified against source:
@@ -470,7 +470,7 @@ development_status:
   # and 17 and the rendered half of AC9. NOTHING IN THIS STORY HAS BEEN OBSERVED ON THE VEHICLE and
   # the retuned colours have never been seen rendered. The sign-off artifact carries a dated
   # amendment naming what changed since approval and exactly what to look at.
-  7-2-read-the-working-zoom: in-progress
+  7-2-read-the-working-zoom: done
   epic-7-retrospective: optional
   epic-8: backlog
   # M2's hardest input work and the main story-count driver, isolated on purpose.

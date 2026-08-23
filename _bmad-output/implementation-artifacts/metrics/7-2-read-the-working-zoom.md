@@ -14,3 +14,26 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | dev | codex | gpt-5.6-terra | 71 | 165,757 | 0 | 7,366,912 | 23,848 | 7,556,517 | $1.37 | `rollout-2026-08-21T06-57-48-01a0231c-8d1c-7643-9fae-6e431f79c863.jsonl` | 2026-08-21 08:18 UTC · rates 2026-08-01 | 14 | 3pp |
 | dev | codex | gpt-5.6-terra | 206 | 648,995 | 0 | 22,047,488 | 56,844 | 22,753,327 | $4.14 | `rollout-2026-08-21T07-22-15-01a02332-eef9-71e2-a138-4ab56cab089c.jsonl` | 2026-08-21 08:18 UTC · rates 2026-08-01 | 35 | 10pp |
 | review | claude | claude-opus-5, claude-sonnet-5 | 527 | 1,054 | 1,732,335 | 62,428,769 | 443,068 | 64,605,226 | $46.60 | `99c8862c-82be-4305-ac42-be6318c71207.jsonl` | 2026-08-21 10:24 UTC · rates 2026-08-01 | 68 | — |
+| live-gate | claude | claude-opus-5, claude-sonnet-5 | 484 | 968 | 5,378,762 | 209,124,963 | 545,162 | 215,049,855 | $151.81 | `99c8862c-82be-4305-ac42-be6318c71207.jsonl` | 2026-08-23 09:35 UTC · rates 2026-08-01 | 1870 | — |
+| signoff | claude | claude-opus-5 | 86 | 172 | 334,247 | 8,068,770 | 85,508 | 8,488,697 | $8.26 | `d56b7c28-c33e-408a-98b6-916cf652e5b7.jsonl` | 2026-08-23 09:35 UTC · rates 2026-08-01 | 95 | — |
+
+## Reading these rows — two caveats recorded at close, 2026-08-23
+
+**The `live-gate` row is a MIXED window and must not be quoted as a clean vehicle-session figure.**
+It bills everything on transcript `99c8862c` after the `review` row's cursor (2026-08-21 10:24) —
+which is the 14-patch verification pass **and** the 2026-08-22 vehicle session, in one delta. There
+is no way to split them: that is precisely what open action item **T2 (`--mark` for phase
+boundaries)** exists to fix, and this row is the concrete instance proving it needed. Its 1870
+`minutes` is elapsed wall-clock spanning an overnight human gap, not 31 hours of work. Read the
+$151.81 as "review-patch + live-gate combined", and treat T4's clean `live-gate` phase as still
+owed.
+
+**The `signoff` row is honest and narrow.** 86 turns, $8.26, this session: the by-eye pass, seven
+rulings, the source investigation behind Q3 and Q7, and the record-keeping. No code was written and
+no Codex run happened, so there is deliberately **no `tool=codex` row for it** — a bare
+`--tool codex` would have taken the newest rollout in `/workspace/.codex/sessions` and billed a
+foreign run, the 2.4 trap.
+
+**Story total: $241.07** across create $28.89, Codex dev $5.51 (2 runs, 13pp of the weekly quota),
+review $46.60, review-patch + live-gate $151.81, sign-off $8.26. Well above Epic 3's $45.52/story,
+and the vehicle half is where it went.
