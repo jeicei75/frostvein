@@ -93,7 +93,28 @@ NFR4: Quality gate — every story lands with `cargo fmt --check`, `cargo clippy
 #### Milestone 2 (NFR5–NFR8)
 
 NFR5: **No drift.** Clients never invent world state; everything visible in any client is derivable from the wire (AD-1/AD-4 restated). One deliberate carve-out: pure atmosphere — sky, aurora, snowfall, flicker animation, dig-face cosmetic chips — is client-side by design and must never acquire sim meaning silently.
-NFR6: **Feels alive, Bevy bar (measured).** Sustained **60 fps at working zoom** and **≥30 fps at full vista**, full 128×128×32 world, all dwarves and all lights, on the WSLg devpod, read from the frame-time overlay. Client-agnostic ack bar: in any client, a player command's effect is visible in the issuing client within ~200 ms (one tick + one frame), met by the no-explicit-ack convention. NFR2 is TUI-specific and explicitly does **not** stretch to this client.
+NFR6: **Feels alive, Bevy bar (measured).** Sustained **60 fps at working zoom** and **≥30 fps at full vista**, full 128×128×32 world, all dwarves and all lights, **on the live vehicle — gingerspice, native-Windows `gui.exe`, NVIDIA Vulkan, `simd` in WSL over localhost** (~~on the WSLg devpod~~, corrected 2026-08-23, see the amendment below), read from the frame-time overlay.
+
+> **NFR6 VENUE AMENDED 2026-08-23 — Milestone 2 retrospective, Wolf's ruling (action item M2-4).**
+> **The numbers are unchanged and were met with headroom. The MACHINE is corrected.** Every NFR6
+> clause below originally read *"on the WSLg devpod"*, and story 5.3 falsified that premise by
+> measurement: **no devpod can open a window**, on any backend, stock or self-built, and both rungs
+> of the fallback ladder were walked to the end. WSL2 kernel 6.18 exposes no `/dev/dri`, so wgpu-hal
+> refuses the GL surface; the Vulkan rung required Mesa's Dozen built from source and then died on a
+> misreported `DeviceLost` with VRAM measured flat. The one remaining lever — forcing downlevel
+> limits in `gui` — was banned by 5.3's own AC9 and correctly not taken.
+>
+> **The bar is now set against the vehicle that exists:** `gui.exe` cross-compiled to native Windows
+> on **gingerspice** (NVIDIA Vulkan), with `simd` in WSL over localhost. Clients are protocol-only
+> TCP, so the crate graph is untouched.
+>
+> **Measured, all with headroom:** 146 fps at 5.3 (unlit envelope); **140–146 fps sustained at 5.4**
+> on the full lit and snowing world (2.3× the 60-fps bar); **>143 fps at 6.1 at BOTH working zoom
+> and full vista** (~2.4× and ~4.8×). **Stories 5.3, 5.4, 6.1, 6.2 and 7.1 were closed against this
+> vehicle and their story files record which machine each figure came from — their AC text is
+> annotated below rather than rewritten, because the ACs were met; only the venue named in the epic
+> was wrong.**
+ Client-agnostic ack bar: in any client, a player command's effect is visible in the issuing client within ~200 ms (one tick + one frame), met by the no-explicit-ack convention. NFR2 is TUI-specific and explicitly does **not** stretch to this client.
 NFR7: **Determinism unchanged.** FR27–FR29 land inside worldgen and sim state, so seed + command log ⇒ identical state must survive them; scenario tests cover trees and light emitters like any other world state.
 NFR8: **Gate grows sibling probes.** `scripts/gate.sh` gains the `gui` and `client-core` twins of the `tui` no-`sim-core`-edge probe, so the AD-1 edge stays guarded for the client that matters most.
 
@@ -131,7 +152,7 @@ From the Architecture Spine (AD-1…AD-12, conventions, stack, structural seed):
 - **M2 conventions:** kind → light properties (RGB, radius, flicker) is a **data table in `gui`**, sibling to `tui`'s color table, never hardcoded per draw site. `gui`'s CLI mirrors `tui`'s scripted determinism (`--capture <path>`, `--frames N`, `--z N`-style pinning) — every visual story's instrument is a command line, not a manual recipe. The NFR6 instrument is a frame-time overlay **read on screen, not felt**: `FrameTimeDiagnosticsPlugin` is a default built-in but the ready-made `FpsOverlayPlugin` needs the non-default `bevy_dev_tools` cargo feature — **the story says which**. **Exactly ONE coordinate transform pair** (`world_to_render` / `render_to_world`, sim z-up `[x,y,z]` ↔ Bevy Y-up) lives in `gui`; projection, picking, and capture all call it and a round-trip test pins it — no system does its own axis math. No unix-only code in `gui` or `client-core` (native Windows build deferred, not precluded). `bevy` and `bevy_ecs` move together on the same 0.x line, always — never two Bevy versions in one workspace.
 - **Parent updates owed** (recorded, not silent): AD-6's "`tui` depends on nothing else in the workspace" is amended by AD-13; the parent's dependency-graph enumeration is superseded; the Deferred entries "Raycast 3D view" and "Mouse/touch input — confined to `tui`" and the "Unreal client" mention are stale since the 2026-08-08 pivot; `#![forbid(unsafe_code)]` now applies to all **six** crates, with `thiserror` in `client-core` and `anyhow` in `gui`.
 - **Stack (M2 addition, verified 2026-08-09):** `bevy` 0.19.0 full engine, aligned with `sim-core`'s `bevy_ecs` 0.19.0 (same release train, lockfile confirmed); default features plus `bevy_dev_tools` if the ready-made FPS overlay is used; trim only on a measured problem. Frame diagnostics and the screenshot API are in default features — no third-party deps. **No other new dependencies at cold start:** meshes are built in code, no voxel crate, no asset pipeline. The closed-list rule stands — any addition needs one sentence of justification in its story.
-- **Sequencing facts the structure creates (epic-planning inputs):** `client-core` must exist before either client consumes it; and **the first `gui` story proves the envelope before anything builds on it** — a Bevy window rendering at speed on this box. `glxinfo` proved GL, but wgpu prefers Vulkan via WSLg's Dozen driver, which is younger and less conformant: **unproven until run, and non-negotiable.** Runtime topology is the WSL2 devpod with `gui` displaying via WSLg (D3D12 passthrough, RTX 4080 Laptop, Mesa 25.3.5).
+- **Sequencing facts the structure creates (epic-planning inputs):** `client-core` must exist before either client consumes it; and **the first `gui` story proves the envelope before anything builds on it** — a Bevy window rendering at speed on this box. `glxinfo` proved GL, but wgpu prefers Vulkan via WSLg's Dozen driver, which is younger and less conformant: **unproven until run, and non-negotiable.** ~~Runtime topology is the WSL2 devpod with `gui` displaying via WSLg (D3D12 passthrough, RTX 4080 Laptop, Mesa 25.3.5).~~ **CORRECTED 2026-08-23 (M2-4): `simd` runs in the WSL2 devpod; `gui` runs as a native-Windows binary on gingerspice over localhost.** The sequencing fact itself HELD and did its job — 5.3 proved the envelope before eight stories built on it, and the answer it returned was *not here*. The venue moved; the requirement did not.
 - **M2 story-count counter-metric: 10–14 stories.** Materially more means scope gets cut, not the plan extended. Cut order, decided in advance: **first FR29** (lanterns — torches and campfire still carry the warm/cold wow), **then FR35/FR36 shrink to camera + speed control**, with the TUI keeping designations until a later milestone. The `tui`-adopts-`client-core` story is explicitly not on this list.
 - **"As soon as possible" has teeth:** the first boot-frame wow — world, light, aurora, no input needed — lands in the milestone's **first third**. A plan that back-loads the visual payoff is wrong, cap or no cap.
 - **Parity rule, both halves:** Bevy first catches up to the TUI's features and reaches the look-and-feel bar; the TUI is not extended for Bevy-only work. But **any new sim functionality or bug fix that affects the TUI updates the TUI too** — no TUI regression ships during M2, and F10's trees and lights are rendered by both clients (TUI glyphs included).
@@ -714,6 +735,12 @@ So that the render path is proven to work here, at speed, before anything beauti
 **Given** the dev machine (WSL2 devpod, WSLg, RTX 4080 Laptop, Mesa 25.3.5),
 **When** `gui` launches,
 **Then** a window opens and renders continuously
+
+> **ANSWERED 2026-08-14, and the answer was NO — this AC did its job.** The window did not open on
+> the devpod on any backend. That finding is the story's deliverable, not a failure: it is why the
+> live vehicle is native Windows. The AC stands as written for the record; NFR6's venue amendment
+> above carries the consequence.
+
 **And** the story records **which wgpu backend actually initialised** — WSLg's Vulkan/Dozen path is younger and less conformant than the GL path `glxinfo` proved, and is unproven until run
 **And** if the envelope does not hold, that is this story's finding and it is reported, never worked around silently in production code.
 
@@ -777,9 +804,11 @@ So that I want to keep looking at it before I have issued a single command.
 **Given** the light appearance,
 **Then** kind → light properties (RGB, radius, flicker) is a data table in `gui` keyed by `LightKind`, sibling to `tui`'s color table, never hardcoded per draw site (AD-16, spine convention).
 
-**Given** the full 128×128×32 world with all dwarves and all lights on the WSLg devpod,
+**Given** the full 128×128×32 world with all dwarves and all lights on the live vehicle,
 **When** the frame-time overlay is read,
 **Then** it shows a sustained 60 fps at working zoom and ≥30 fps at full vista (NFR6).
+
+> **Met on the live vehicle (gingerspice / native-Windows `gui.exe` / NVIDIA Vulkan), not the WSLg devpod — see NFR6's venue amendment. The story file records the machine for its figure.**
 
 **Given** the tech-art guidelines deliverable,
 **Then** its procedural-era half — value discipline, sky-as-illuminant, and the material rules this story settles — is written down as those decisions are made, not reconstructed later (spine Deferred).
@@ -832,9 +861,11 @@ So that the beautiful still image becomes a running simulation in front of my ey
 **When** I watch for thirty seconds,
 **Then** something visibly moves — idle dwarves wander, work continues, light flickers — because M1's FR4 aliveness is now visible in 3D (FR34, UX-DR19).
 
-**Given** the full world with all dwarves moving and all lights animating on the WSLg devpod,
+**Given** the full world with all dwarves moving and all lights animating on the live vehicle,
 **When** the frame-time overlay is read,
 **Then** it still shows a sustained 60 fps at working zoom and ≥30 fps at full vista (NFR6).
+
+> **Met on the live vehicle (gingerspice / native-Windows `gui.exe` / NVIDIA Vulkan), not the WSLg devpod — see NFR6's venue amendment. The story file records the machine for its figure.**
 
 **Given** the observability instruments,
 **When** `gui --capture <path> --frames N` runs across a span of ticks, aimed at the named surface-visible dig site,
@@ -871,9 +902,11 @@ So that the dwarves are the warm thing moving through the cold, and the lighting
 **Then** a warm pool of light travels with them, lighting the terrain they pass — a moving light source, deliberately the lighting system's hardest case (FR29, FR32)
 **And** its appearance comes from the `gui` data table keyed by `LightKind`, never from the wire and never hardcoded per draw site (AD-16).
 
-**Given** all five dwarves carrying moving lights plus every static emitter on the WSLg devpod,
+**Given** all five dwarves carrying moving lights plus every static emitter on the live vehicle,
 **When** the frame-time overlay is read,
 **Then** NFR6 still holds — 60 fps at working zoom, ≥30 fps at full vista — and if it does not, that measurement is the story's finding and is reported (NFR6).
+
+> **Met on the live vehicle (gingerspice / native-Windows `gui.exe` / NVIDIA Vulkan), not the WSLg devpod — see NFR6's venue amendment. The story file records the machine for its figure.**
 
 **Given** the observability instrument,
 **When** `gui --capture <path> --frames N` runs across a span of ticks while a dwarf walks through dark terrain,
@@ -925,8 +958,10 @@ So that I can see and work the underground the dwarves are digging into.
 **When** `gui --capture <path> --frames N --z N` runs pinned to a level — the parity of `tui --z N`, and the same lesson from story 3.3's false failure,
 **Then** it range-checks a non-zero count of what it came to see at that level before any conclusion is drawn (AD-17 rung 3).
 
-**Given** the full world at any slice level on the WSLg devpod,
+**Given** the full world at any slice level on the live vehicle,
 **Then** NFR6 still holds — 60 fps at working zoom, ≥30 fps at full vista (NFR6).
+
+> **Met on the live vehicle (gingerspice / native-Windows `gui.exe` / NVIDIA Vulkan), not the WSLg devpod — see NFR6's venue amendment. The story file records the machine for its figure.**
 
 **Given** the sign-off gate,
 **Then** Wolf approved the artifact before implementation and has viewed the built result live against it (UX-DR22).
@@ -1010,8 +1045,13 @@ So that I can trust where my orders will land before I give any.
 **When** `gui --capture <path> --frames N --z N` runs with a scripted cursor position,
 **Then** the highlight is visible in the capture and the instrument range-checks that it found one, rather than reporting exit 0 (AD-17 rung 3).
 
-**Given** the full world with picking active on the WSLg devpod,
+**Given** the full world with picking active on the live vehicle (gingerspice / native-Windows `gui.exe` / NVIDIA Vulkan, `simd` in WSL over localhost),
 **Then** NFR6 still holds (NFR6).
+
+> **CORRECTED 2026-08-23 (M2-4) BEFORE THIS STORY WAS WRITTEN.** The original text named the WSLg
+> devpod — a premise falsified at 5.3. Caught at the M2 retrospective; had it survived into story
+> creation it would have been the **4th consecutive epic** shipping a false technical premise
+> (6.2's wire claim, 7.1's control collision, 7.2's sim-`Id` requirement were 3 for 3).
 
 ### Story 8.2: Designate with the Mouse
 

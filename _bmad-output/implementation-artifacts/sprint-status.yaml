@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-23  # 7.2 DONE -- Wolf signed off AC17 live at the vehicle; all 17 ACs met. Straight to done, no second review: no crates/ file changed after the 2026-08-21 review. EPIC 7 CLOSED.
+last_updated: 2026-08-23  # M2-TO-DATE RETROSPECTIVE HELD (Epics 5+6+7 in one, filed as epic-5-retro-2026-08-23.md). epic-5's stale in-progress key flipped to done; retros for 5, 6 and 7 all marked done against the one record. 12 action items opened, E4-P1 and T4 closed, E2 dropped as obsolete.
                           # 2026-08-20 VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
                           # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
                           # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
@@ -144,6 +144,10 @@ development_status:
   # obligation was already MET at 3.3; only the 3D ambition moved to Milestone 2. Do NOT read
   # this drop as FR23 going unmet. Full record: epics.md + sprint-change-proposal-2026-08-08.md
   4-1b-dwarves-in-depth: dropped
+  # DELIBERATELY SKIPPED, not forgotten (Wolf, confirmed 2026-08-23). Epic 4 was ditched once 4.1a
+  # proved the wow effect was not reachable in a TUI, and the retro was skipped with the epic. Its
+  # one orphaned action item, E4-P1, was closed on M2's evidence at the 2026-08-23 retrospective.
+  # Do NOT re-flag this as process drift.
   epic-4-retrospective: optional
 
   # ============================================================================
@@ -166,7 +170,9 @@ development_status:
   # (the dig is designated from a TUI client and watched in gui). 5.2 is on NO
   # cut list — AD-13 is load-bearing on it.
   # ============================================================================
-  epic-5: in-progress
+  # CLOSED 2026-08-23 at the M2 retrospective. All four stories were done; the epic key was
+  # never flipped and sat stale for a week -- the same `encoded != recorded` drift Epic 2 named.
+  epic-5: done
   # 5.1 carried the vista-mountain-silhouette decision (readiness fix #5), the last of the
   # spine's three decisions owed. ANSWERED 2026-08-09 (Wolf): YES — in-grid terrain IS shaped
   # for a skyline, tuned inside 5.1 to a headless-testable target (height span >=16 levels).
@@ -202,7 +208,11 @@ development_status:
   # placement, fog-vs-zoom, ice-hiding cap). 3 decisions ruled, 11 patches left as action
   # items for a fresh patch session, 5 defers. Back to in-progress.
   5-4-the-cold-boot: done
-  epic-5-retrospective: optional
+  # ONE M2-to-date retrospective covering Epics 5, 6 and 7 -- Wolf's scope ruling 2026-08-23,
+  # taken because the repeating defect classes only read as patterns across epics. Filed as
+  # Epic 5's record: epic-5-retro-2026-08-23.md. Epic 4's retro was DELIBERATELY SKIPPED when
+  # Epic 4 was ditched; nothing here relitigates it.
+  epic-5-retrospective: done
   epic-6: done
   # WOW BEAT 2 — the beat the PRD calls the magic; a client achieving only beat 1 has
   # FAILED the milestone. Sign-off gate applies. Also cannot be closed by a dev agent.
@@ -344,7 +354,8 @@ development_status:
   # AC13, AC14, AC17 and the rendered halves of AC9/AC15 STAY OPEN pending a gingerspice session.
   # Deferred: 3 LOW AC-text defects (AC11 tautologies, AC4/AC5 unfalsifiable-by-construction) + the
   # per-layer build isolation having no reaper (~92GB/review).
-  epic-6-retrospective: optional
+  # Covered by the M2-to-date retrospective filed as Epic 5's: epic-5-retro-2026-08-23.md
+  epic-6-retrospective: done
   epic-7: done
   # Resolves the addendum's open control collision BY TESTING, on the record: the
   # mousewheel is already claimed by the zoom continuum and one wheel cannot drive both.
@@ -471,7 +482,8 @@ development_status:
   # the retuned colours have never been seen rendered. The sign-off artifact carries a dated
   # amendment naming what changed since approval and exactly what to look at.
   7-2-read-the-working-zoom: done
-  epic-7-retrospective: optional
+  # Covered by the M2-to-date retrospective filed as Epic 5's: epic-5-retro-2026-08-23.md
+  epic-7-retrospective: done
   epic-8: backlog
   # M2's hardest input work and the main story-count driver, isolated on purpose.
   # IF PICKING PROVES EASY, 8.1 AND 8.2 COLLAPSE INTO ONE AND M2 LANDS AT 10.
@@ -488,7 +500,8 @@ action_items:
 
   - id: E4-P1
     epic: 4
-    status: open
+    status: done
+    closed: "2026-08-23 at the M2-to-date retrospective -- MET, and closed on evidence rather than by expiry. Its named venue (an Epic 4 retro) was DELIBERATELY SKIPPED when Epic 4 was ditched, so the item was orphaned by design, not neglect. BOTH substantive candidate fixes were applied anyway and M2 is the proof. (a) OUTCOME-NOT-MECHANISM REACHED THE REQUIREMENTS: FR31 reads 'the isometric orbitable diorama the Visual Target describes: one zoom continuum from working-close to valley-vista, camera always usable, never lost' -- an outcome pointing at reference images -- and FR33 states the rule outright: 'Mechanism per the addendum's open question -- chosen by testing in its story, not here.' Against FR24's 'The RAYCAST 3D view is its own story', the success criterion is satisfied. (b) THE CHEAP ARTEFACT BEFORE THE BUILD is UX-DR22's sign-off gate, near-verbatim; it ran on 5 of 8 M2 stories and FIRED REPEATEDLY -- 6.1's 0.30%-of-frame dig site (2,255 px differ, 1,625 inside the predicted window), 6.1's contiguous ramps standing as a wall (8th instance of the AC-text class and the FIRST ever caught only by a human eye at the vehicle), and 5.4's tree/landform ruling REVERSED the same day once Wolf saw the composed frame. THE CAVEAT THE RECORD MUST KEEP: the gate is only as honest as its artifact. 5.4's approved artifact drew snow-laden spruce sprites -- geometry NOBODY WAS TASKED TO BUILD -- so the AC19 comparison failed on trees by construction. That is the 4.1a class reappearing INSIDE the fix for the 4.1a class. Rule earned and recorded: a Task 0 artifact script must not substitute geometry the renderer is not tasked to produce."
     action: "Guard the NEW spec-defect subclass 4.1a exposed: an AC that is MEETABLE, IMPLEMENTED and NOT WHAT THE USER WANTED. Fix belongs at requirement + story authoring, NOT at review."
     note: "READ THIS BEFORE PROPOSING A REVIEW-SIDE FIX -- there isn't one. All four review layers audit 'does the code match the spec?' and 4.1a's code matched it faithfully; even the Feature Auditor, whose whole question is 'would the user get the outcome the story promises?', is defeated when the PROMISE is the wrong thing. The tracked spec-defect class so far is 'AC unmeetable as written' (2.3's AC9, 4.1a's AC3) -- caught by review, reliably, 4 instances in 7 stories. This is the other kind and it is far more expensive: a whole story, gate green, four layers clean, $28 of review, and the feature was not what Wolf asked for. ROOT CAUSE IS VISIBLE IN THE REQUIREMENT: FR24 read 'The RAYCAST 3D view is its own story' -- it named a MECHANISM, not an outcome, so nobody ever had to ask what Wolf wanted to SEE. That is the same failure the AC-authoring rule (adopted at 3.1, _bmad/custom/bmad-create-story.toml, check 2 = OUTCOME NOT MECHANISM) already guards against ONE LEVEL LOWER DOWN -- it governs ACs and never reaches FRs. Wolf's own words: 'I meant actually more like isometric 3d camera view but I didn't manage to clarify that.' CANDIDATE FIXES for the Epic 4 retro to rule on: (a) extend the outcome-not-mechanism check UP to requirement authoring in bmad-prd/bmad-create-epics-and-stories, not only to ACs; (b) for any story whose headline outcome is VISUAL or otherwise subjective, require a cheap human-checkable artefact BEFORE the full build -- a mock frame, a sketch, a one-paragraph 'here is what you will see' -- since the whole cost here was discovering the mismatch only after a complete implementation; (c) accept the class as uncatchable-by-agents and rely on earlier live checks. Worked example to cite: FR24 + story 4.1a, and Milestone 2's re-statement of FR24 as an outcome is the first test of whether the fix holds."
     success_criterion: "Milestone 2's replacement for FR24 states what the boss should SEE and FEEL and names no rendering technique; ruled on at the Epic 4 retrospective before any Bevy story is written"
@@ -724,12 +737,158 @@ action_items:
   - epic: 3
     action: "T4 -- adopt a `live-gate` ledger phase once T2 (--mark) lands, so the live run that makes a story done is billed to a row of its own"
     owner: "Amelia"
-    status: open
+    status: done
+    closed: "2026-08-23 at the M2 retrospective -- SHIPPED, and it shipped AHEAD OF ITS STATED BLOCKER. This row said it was blocked on T2 (--mark); T2 is still open and the phase exists anyway. Story 7.2's ledger carries a `live-gate` row (484 turns / $151.81 / 1,870 min elapsed) AND a separate `signoff` row (86 turns / $8.26 / 95 min). The live run that made the story done is now billed to rows of its own, which is exactly the success criterion. READ THE MINUTES AS ELAPSED, NOT EFFORT -- 1,870 min spans the human gap between the vehicle capture on 2026-08-22 and Wolf's by-eye pass on 2026-08-23. T2 remains open on its own merits."
     success_criterion: "--rollup stops reporting stories with no live-gate row, because the row exists"
     note: "RAISED BY THE FORGE, and judged rather than dismissed. forge-process 1.1.0 made build_rollup flag stories with no `live-gate` row; the forge asked whether that was noise for frostvein and said NOT to edit session_tokens.py locally (it is a FILE entry and must stay byte-identical). VERDICT: NOT NOISE. It is the second of the two branches its own message names -- the gate ran and its cost was never recorded. Every Epic 3 story had a live run (real simd+tui against a real daemon at 3.1 and 3.2, Wolf watching the full haul loop for 3.3 AC17) and none of it was billed to its own row. BLOCKED ON T2, and that is why this is a separate item: frostvein runs its live checks INSIDE the review session, so they cannot be split into a row until --mark exists. Until then the flag is a standing true statement rather than a false alarm, and the annotate-and-move-on escape in its own wording keeps it from becoming a warning that always fires and gets ignored. ONE LINE OF IT IS ASGARD-SPECIFIC and was fed back rather than changed: `it is among the most expensive rows in this epic` is not true here -- frostvein live checks are minutes inside a larger session. The RECORDING argument carries universally; the COST argument is theirs."
   - epic: 3
     action: "E2 -- story-creation for 4.1a must SETTLE two architecture questions rather than discover them: whether creature-flagged tiles need a wire change in `protocol`, and how the raycast view stays inside the tui-has-no-sim-core-edge gate probe"
     owner: "Winston + Amelia"
-    status: open
+    status: dropped
+    closed: "2026-08-23 at the M2 retrospective -- OBSOLETE, cannot be done. Epic 4 closed early on 2026-08-08; 4.1a's story was written and shipped before this item could apply to it, 4.1b was dropped and never written, and 3D-in-TUI is abandoned. Neither question has a story left to settle it. Recorded as dropped rather than done because it was never actually performed -- the distinction matters for follow-through honesty."
     success_criterion: "Both answered in the story's Key decisions, with the wire change landing in ONE commit if it is needed"
     note: "The 3.1 lesson, applied before the fact rather than after: 3.1 WAS a wire change and its own epic text did not say so, which meant protocol + the simd bridge + the pinned JSON literals + tui all had to move in one commit or the suite was red between them. Raycasting is pure client work and should fit AD-4 cleanly -- the client already receives entity positions and already owns the id->RGB table -- but `creature-flagged tiles ... sampled fine-step during DDA` is epic text that has never been traced against the actual wire shape. Trace it before writing ACs, per the CAN IT HAPPEN check"
+
+# Appended by the MILESTONE 2 TO DATE retrospective (2026-08-23) -- ONE retro across Epics 5, 6
+# and 7, Wolf's scope ruling. Full context: epic-5-retro-2026-08-23.md
+# HEADLINE NUMBERS, so no future reader has to re-derive them: 8 stories, 8/8 done, zero dropped;
+# both wow beats signed (5.4 on 2026-08-16, 6.1 on 2026-08-20); 8,931 turns / $1,070.07 total,
+# $133.76 per story, median $98.23. THE FIRST FULLY-COUNTED EPIC SET -- do NOT trend it against
+# Epic 3's $45.52, which T1's own result note forbids (every pre-2026-08-08 row is a partial count;
+# 5.1 measured subagents at 69.8% of its review session). ONE STORY IS 34% OF THE MILESTONE'S SPEND:
+# 5.4 at $359.85 / 2,415 turns, whose review-patch phase ALONE ($274.75) cost more than all of
+# Epic 6 ($179.48) and about as much as all of Epic 7 ($284.60).
+
+  - id: M2-1
+    epic: 5
+    action: "Make `run()`'s live App testable. Decide what of run() is assertable without DefaultPlugins, build it, and make 'the live system tuple is exercised by a test' a standing story requirement."
+    owner: "Amelia + Winston"
+    status: open
+    success_criterion: "A sabotage that deletes any system from run()'s registration tuple, or any production drive line feeding it, turns the suite RED. Proven by a mutation row before 8.1 is dev'd."
+    note: "WOLF'S RULING 2026-08-23, choosing the ROOT over catching the symptom a sixth time. THIS IS THE RETRO'S STRONGEST FINDING AND IT HAS A PAPER TRAIL. The cause was identified AT 5.4's REVIEW and filed [feature/MED] and DEFERRED: 'the live App built by run() has no test of any kind -- every headless test builds its own MinimalPlugins app, so nothing catches a system dropped from the registration tuples'. That MED defer then became the TOP-SEVERITY FINDING IN THE NEXT FOUR CONSECUTIVE STORIES. 6.1 run one: deleting BOTH blend_projection and flicker_projection from the live tuple -- the entire headline outcome -- left the suite 54/54 GREEN, because projection_systems was called only by run(). 6.1's review: AC6 proved the system is IN the tuple and said nothing about its INPUTS, so three one-line deletions (observe_tick, delta_secs, elapsed_secs) EACH KILLED WOW BEAT 2 with 57/57 green -- the four seam tests all hand-drove TickClock::advance. 6.2: accumulate_motion, the production code deriving the lit region, had ZERO test callers and had never executed once anywhere. 7.1: the ENTIRE on-screen readout (AC9's mechanism) and the --z pin could each be deleted or made inert, suite green. 7.2: --distance was parsed, validated, then never reached the camera rig, and its only test was NAMED for reaching the camera setup; AC10's restyle was pinned on a bookkeeping component rather than the style, and the mutation row sabotaged the same wrong branch. FIVE OF EIGHT STORIES. THE DEFECT RELOCATES ONE LEVEL DOWN EACH TIME IT IS CLOSED -- close it at the root. THE FIX HAS A WORKING PRECEDENT: 6.1's review closed it for that story with three production-drive tests plus three mutations; M2-1 generalises a fix that already worked. SEVERITY AT DEFER TIME IS A PREDICTION, and this one was wrong by four stories -- that is the meta-lesson."
+
+  - id: M2-2
+    epic: 5
+    action: "Encode the look-tuning rule AND preserve the measurement method. Record Wolf's 2026-08-22 rule (a look change needs a concrete defect, not a preference); document the measure-against-the-artifact technique; carry 7.2's measured numbers forward as the gfx pass's inherited targets."
+    owner: "Amelia"
+    status: open
+    success_criterion: "The rule is a persistent fact story-creation actually loads; the technique is written down with 5.4's numbers as the worked example; the gfx item inherits measured targets rather than a vibe."
+    note: "WOLF'S RULING 2026-08-23: KEEP THE METHOD, RETIRE THE SPEND. THE METHOD IS A GENUINE ASSET. 5.4 stopped re-deriving predictions from Bevy's shader model -- which mispredicted at round 2, forecasting snow at ~0.36 sRGB when the capture measured 0.09 -- and instead measured every target off the images already in hand, with a pure-Python PNG decoder written for the purpose (no numpy/PIL in the devpod). Result: ground median 21 -> 156 -> 144.6 -> 122.7 against the approved artifact's 123.3, i.e. 0.5% off, with the WHOLE DISTRIBUTION tracking (p90 187.3 vs 183.8), and the in-binary instrument and the offline decoder agreeing to 123 vs 123.4. D1's camp drift was solved OFFLINE TO FIVE DIGITS (0.22709 measured vs 0.227 modelled), locating the cause exactly -- BOOT_COMPOSITION_OFFSET carried a 28.6-unit component along the camera's right vector. D3 was FALSIFIED ON ARITHMETIC before a vehicle round was spent on it. THE SPEND IS WHAT IS RETIRED, not the technique: $274.75 across 8 patch rounds and 6 live viewings, converging PLACEHOLDER material to half a percent of target, after which Wolf ruled the practice out on 2026-08-22. THE GFX PASS INHERITS THESE MEASURED TARGETS: working-zoom ground median 231 on the cut floor with the three mark colours at luminance 120-150, so MARK POLARITY IS INVERTED there (marks darker than the floor, the opposite of the vista); the camp still reads blown at the vista; and AC9's band SKIPS its warm/ground assertions below the world top, which is precisely why no instrument caught the 231."
+
+  - id: M2-3
+    epic: 5
+    action: "Rewrite the LAYER TIME-BOX fact so SILENCE IS THE SOLE KILL CRITERION; demote the 45-minute per-layer ceiling to advisory with a far higher hard stop."
+    owner: "Amelia"
+    status: open
+    success_criterion: "The two rules no longer contradict each other; encoded in _bmad/custom/bmad-code-review.toml before Epic 8's first review."
+    note: "WOLF'S RULING 2026-08-23: SILENCE OVERRIDES THE CEILING, stated explicitly. THE CONTRADICTION HAS BEEN OPEN SINCE 5.1 AND WENT UNRULED THROUGH SEVEN MORE REVIEWS -- it was raised in P2's own result note and simply sat there. The evidence is one-sided: at 5.1 the Blind Hunter ran ~79 MINUTES, past the 45-minute ceiling, but was NEVER SILENT -- it was emitting named sweeps throughout (3,000 seeds of generation, 80 seeds through the live dig path, 60 seeds x 400 ticks) and it produced a real finding. The silence detector correctly left it alone; the hard ceiling would have killed a productive layer. Note this is the SECOND time a time-box rule has been encoded and been WRONG -- Epic 2's original 20-min wall-clock rule said `done` for the whole of Epic 3 while costing coverage on two of three stories. Standing lesson, third confirmation: `encoded` and `correct` are different claims and a follow-through table cannot tell them apart."
+
+  - id: M2-4
+    epic: 5
+    action: "REDEFINE THE NFR6 BAR against the real vehicle, and correct every AC that names the WSLg devpod, BEFORE Epic 8 story creation runs."
+    owner: "Winston + Amelia"
+    status: done
+    closed: "2026-08-23 -- DONE, and THE SCOPE WAS BIGGER THAN THIS ITEM ORIGINALLY SAID. I wrote it as 'every Epic 8 AC'; measured, it was NINE WSLg sites in epics.md and FOUR in ARCHITECTURE-SPINE.md -- NFR6's definition in BOTH files plus SIX story ACs (5.3, 5.4, 6.1, 6.2, 7.1, 8.1), FIVE OF THEM IN STORIES ALREADY MARKED done. THE PRD NEEDED NOTHING: prd.md has zero WSLg hits and defines NFR6 machine-agnostically as 'on the dev machine' with an [ASSUMPTION] that the number is set at architecture time, so the chain is SPINE SETS THE BAR -> EPICS RESTATES IT -> PRD DELEGATES. Wolf checked this and was right to ask. WHAT CHANGED: the bar's NUMBERS are untouched (60 fps working zoom, >=30 full vista -- they were met with headroom); only the MACHINE is corrected, to gingerspice / native-Windows gui.exe / NVIDIA Vulkan with simd in WSL over localhost. Clients are protocol-only TCP so the crate graph is unaffected. MEASURED FIGURES NOW CARRIED IN BOTH DOCUMENTS: 146 fps at 5.3 (unlit envelope), 140-146 sustained at 5.4 on the full lit and snowing world (2.3x the bar), >143 at 6.1 at BOTH working zoom and full vista (~2.4x and ~4.8x). METHOD, on Wolf's ruling: the five CLOSED stories' ACs are ANNOTATED, not rewritten -- their ACs were MET and their story files already record which machine each figure came from; only the venue named in the epic was wrong, and silently rewriting a closed story's AC is its own risk. 8.1 is corrected outright because it is not yet written. 5.3's envelope AC is annotated ANSWERED-NO: the window did not open on the devpod on any backend, and that finding IS the story's deliverable -- it is why the vehicle is native Windows. THE CATCH THIS REPRESENTS: had 8.1's WSLg clause survived into story creation it would have been the 4TH CONSECUTIVE EPIC shipping a false technical premise (6.2's wire claim, 7.1's control collision, 7.2's sim-Id requirement were 3 for 3; the project is 5 for 5). Caught at the retrospective instead."
+    success_criterion: "The bar names a machine that can actually run the client; no live AC names the WSLg devpod as its venue; settled before 8.1's story is written."
+    note: "WOLF'S RULING 2026-08-23: redefine now, fix all three stories. THIS QUESTION WAS EXPLICITLY OWED TO THIS RETRO SINCE 5.3 AND THEN SAT THROUGH FIVE MORE STORIES. 5.3 walked the whole fallback ladder and proved the envelope does NOT hold on gingerspice on any backend, stock or self-built: the GL rung dies because WSL2 kernel 6.18 exposes no /dev/dri, so Mesa EGL-X11 falls to software presentation whose configs report NATIVE_RENDERABLE=FALSE and wgpu-hal refuses a non-presentable surface below tier 2 -- no container or distro change can fix a missing kernel device node. The Vulkan rung needed Dozen BUILT FROM SOURCE, and then died with a misreported DeviceLost (nvidia-smi watched flat at ~2.7 GiB of 12). The remaining lever was forcing downlevel limits in gui to dodge a non-conformant driver, which AC9 bans -- so it was NOT taken, correctly. CONSEQUENCE: NFR6's bar is defined against a machine that cannot run a hardware wgpu client on any stock-or-buildable path. Every figure since carries a THIRD label. MEASURED FIGURES TO SET THE NEW BAR FROM, all gingerspice / native Windows / NVIDIA Vulkan 591.74: 146 fps at 5.3 (unlit grey boxes), 140-146 sustained at 5.4 on the full lit/snowing world (2.3x the 60-fps bar), and >143 at 6.1 at BOTH working zoom and full vista (~2.4x and ~4.8x). THE FALSIFIED EPIC 8 TEXT, caught at this retro: story 8.1's AC reads 'Given the full world with picking active on the WSLg devpod, Then NFR6 still holds' -- a premise measured false at 5.3. This would have been the FOURTH CONSECUTIVE EPIC whose technical premises were wrong (6.2's wire claim, 7.1's control collision, 7.2's sim-Id requirement were 3 for 3, and 5 for 5 across the project); it is caught here instead of at story creation."
+
+  - id: M2-5
+    epic: 5
+    action: "Give R1's territory split a real M2 mapping: Blind Hunter = PURE LOGIC (blend.rs, appearance.rs, project.rs predicates, client-core); Edge Case Hunter = THE SHELL (ingest.rs, capture.rs, main.rs, CLI, tests/). Both Opus auditors keep whole-diff scope. Carry the revert rule verbatim."
+    owner: "Amelia"
+    status: open
+    success_criterion: "Encoded in the LAYER TERRITORIES (R1) fact; Epic 8's first review runs it without improvisation."
+    note: "WOLF'S RULING 2026-08-23, formalising what 6.1 improvised and every story since reused. R1 AS ENCODED NAMES sim-core / simd+tui+protocol -- NONE OF WHICH A gui-ONLY DIFF TOUCHES -- so a literal reading leaves BOTH hunters idle, and every M2 story from 6.1 on invented its own split at launch. 6.1's record asked for exactly this ('give R1 a real M2 mapping at the Epic 5/6 retro'). The mapping preserves R1's original principle -- deterministic core vs I/O boundary -- expressed in M2's crates rather than M1's. REVERT RULE, VERBATIM AND STILL LIVE: revert R1 (keep R2) if a defect is later found whose site sat inside a hunter's EXCLUDED territory; control = mutation kill-rate against 1.3's baseline. NOT TRIGGERED in any M2 story. READ THE CONVERGENCE EVIDENCE HONESTLY: R1's justification was convergence and it has never reproduced at the rate that justified it -- 2-in-13 at 5.1, 1-in-8 at 3.2, against Epic 2's inferred 3-in-3. With territories disjoint, low convergence is the INTENDED outcome rather than evidence against the split, so this metric can no longer test the premise. Judge R1 on coverage and cost from here."
+
+  - id: M2-6
+    epic: 5
+    action: "Add a reaper to review teardown -- delete /tmp/review-<layer>/target in the same step that writes the triage."
+    owner: "Amelia"
+    status: open
+    success_criterion: "Disk after a review returns to its pre-review level; the ~92GB/review figure stops accumulating."
+    note: "WOLF'S RULING 2026-08-23. Flagged as a deferred item at 6.2's review and never actioned. P2's per-layer build isolation is the fix that made 4-of-4 layers complete on every single M2 review, so NOBODY WANTS TO REMOVE IT -- the cost is simply unbounded because nothing cleans up. A cold build per layer was already an accepted cost of P2; the leftover trees are not. Note `cargo clean` stays forbidden inside a layer -- this is teardown by the orchestrator, not a layer instruction."
+
+  - id: M2-7
+    epic: 5
+    action: "Kill the stale-binary trap BOTH ways: (1) a scripts/ entry that cross-compiles and re-copies gui.exe, plus a mandatory first line in vehicle-session-runbook.md; (2) stamp the build's git SHA into gui so it prints at startup and in every capture line."
+    owner: "Amelia"
+    status: open
+    success_criterion: "A stale binary cannot be used unnoticed -- the runbook prevents it, and the startup line detects it from the evidence itself."
+    note: "WOLF'S RULING 2026-08-23: BOTH, because prevention alone already failed. THE TRAP FIRED THREE TIMES IN 5.4 ALONE and it was expensive. Sighting 1 cost A WHOLE VEHICLE SESSION: the first live check of the gating light patch showed NO CHANGE AT ALL, because the cross-compiled gui.exe was built at 13:24 while the earliest patch commit landed at 13:58 -- the binary predated all 20 patch commits and the frame was byte-identical to the falsification run. Sighting 3 was caught only by CROSS-CHECKING THE INSTRUMENT: a capture printed ground-median-luminance=145 while the PNG itself measured 123 in the exact instrument window, and 145 was precisely boot4's value -- so the --capture run used the round-6 binary while the live viewing used the fresh one. Those printed numbers were disqualified from the record. ROOT CAUSE IS PROCESS, NOT CODE: the cross-compile is a MANUAL step in the vehicle recipe and NOTHING IN THE DELEGATED DEV FLOW TRIGGERS IT. Same family as the exit-0 rule -- an unchanged frame is not evidence about the code until the binary is known to contain it. THE NATIVE WINDOWS BUILD ALSO HAS NO FORMAL HOME: 5.3 recorded it as owed to correct-course or this retro; it exists today only as a reproducible command sequence and a 187 MB untracked gui.exe. This item gives it one."
+
+  - id: M2-8
+    epic: 5
+    action: "Make the DRY ANCHOR-CHECK a standing pre-run step for mutate.sh -- grep every `old =` string against the live tree before any run."
+    owner: "Amelia"
+    status: open
+    success_criterion: "Zero APPLY-FAILED rows discovered by a full run; stale anchors are caught in seconds instead of a 15-minute cycle."
+    note: "The technique already exists and already works -- it was invented at 5.4 round 6 and at round 7 it caught FIVE anchors staled by that round's own edits (taper, cap colour, crown colour, fog end, ambient brightness), all repaired before any run. It is not yet a rule, and the class hit again at 7.2. STALE-SABOTAGE-LITERAL, 3rd INSTANCE, and the first where the mutation and the code that outdated it were written IN THE SAME SESSION: the agent's own last refactors moved the lines two rows targeted, the table was not re-run after them, and the record asserted 'all eight KILLED' -- true when it ran, false when written. Re-running measured 2 APPLY-FAILED. THE RULE IN ONE LINE: a table is evidence only as of its last run -- RE-RUN AFTER THE LAST REFACTOR, NOT THE LAST FEATURE. Related, from 5.4 round 5: run 1 exposed two mutations whose anchors had gone stale against round-5 source (a cargo fmt reflow, a changed ClientLocal indentation count) and they REPORTED AS SURVIVORS WHILE PINNING NOTHING -- which is exactly the failure mode NO-COMPILE / APPLY-FAILED exists to surface."
+
+  - id: M2-9
+    epic: 5
+    action: "COMMIT BEFORE RUNNING MUTATIONS; never clear a mutation leftover with a tree-wide `git checkout`; capture the exit code BEFORE any pipe."
+    owner: "Amelia"
+    status: open
+    success_criterion: "No uncommitted work is destroyed by a mutation cleanup; no runner exit code is masked by a pipe."
+    note: "All three earned by real incidents, all in 5.4. (1) The orchestrator edited the mutation table WHILE mutate.sh was executing it -- bash reads scripts incrementally, so that run's results were VOID -- then ran `git checkout -- crates/` to clear the killed run's leftover sabotage and DESTROYED THE UNCOMMITTED D6 WORK WITH IT. Reapplied and committed, but the rule is cheap and the loss was not. (2) A mutate.sh run piped through `tail` reported TAIL'S EXIT 0 and masked the runner's 1; the APPLY-FAILED was caught by READING THE PRINTED TABLE, not by the status. Same family as the project's standing rule that exit 0 is not a result. (3) Also worth carrying: 5.4 round 5 burned 391 turns over 67 minutes with a substantial number of them POLLING a background mutate.sh run that takes ~15 minutes of wall clock -- the single biggest avoidable cost in that round. Fix is procedural: arm one blocking watcher and stop, or batch the mutation run with other waiting work."
+
+  - id: M2-10
+    epic: 5
+    action: "Self-gate findings MUST land in the Dev Agent Record, fixed or not. A finding that exists only in a handback message is lost at the session boundary."
+    owner: "Amelia"
+    status: open
+    success_criterion: "No self-gate finding reaches the story record only because an orchestrator transcribed it."
+    note: "Earned at 5.4: TWO self-gate P2s were surfaced in the round-4 handback and recorded by NOTHING -- Codex named them 'pre-existing-style' and left them unfixed, and they reached the record only because the orchestrator transcribed them in-tree. The characterisation was also wrong on one of them: the incremental foliage reprojection staleness was NOT pre-existing, it was introduced by that very patch cycle (round 3 widened foliage_scale's read radius to two tiles above without widening reconcile's +/-1 NEIGHBOURS invalidation radius). Same family as the Epic 1 runbook rule about restating RED evidence across a session boundary."
+
+  - id: M2-11
+    epic: 5
+    action: "Extend P6 one step: a verification recipe must be shown to produce non-zero evidence OF THE STORY'S OWN HEADLINE OUTCOME, not merely non-zero output."
+    owner: "Amelia"
+    status: open
+    success_criterion: "A recipe that cannot observe the story's headline defect fails story-creation, not review."
+    note: "P6 WORKED AND THE CLASS RELOCATED AGAIN -- the same shape as the AC-authoring guard relocating from AC to recipe at Epic 3. P6 fired well at 7.2: the recipe was EXECUTED LIVE AT CREATION and found the real trap, that designations are CONSUMED BY THE DWARVES, measuring the decay curve (79 marks, 68/59/51 at t+40/60/100, plateauing at 50 from t+120 as the rest become unreachable) and pinning --z 10 because zone tiles sit one level above the rock. AND THE RECIPE IT PRODUCED STILL COULD NOT SEE THE STORY'S OWN HEADLINE DEFECT. Two instances: 7.1's capture instrument was LEVEL-BLIND -- `terrain_tiles > 0` cannot see a hollow cut, measuring 209 vs 258 with 49 floor tiles missing -- on the ONE STORY whose named headline trap IS the hollow shell. 7.2's prescribed working-zoom capture PHOTOGRAPHED AN EMPTY SITE AND EXITED 0, because a dig slab sits at z+0.54 while the slice draws every solid tile at the cut as a full cube spanning [z-0.5, z+0.5] regardless of exposure, so buried digs were sealed inside opaque geometry -- and the dwarves dig the REACHABLE tiles first, so the marks surviving a capture window are exactly the buried ones. Measured live: 25 of 79 visible at t+2, 9 at t+46, 2 at t+64, 0 OF 50 FROM t+102 ON. AC13's counter could not catch it because ALL 50 GENUINELY WERE PROJECTED. THE GUARD CHECKS THAT THE RECIPE RUNS. NOTHING CHECKS THAT IT CAN SEE THE THING THE STORY EXISTS TO PROVE."
+
+  - id: M2-12
+    epic: 5
+    action: "DECIDE THE SELF-GATE'S FUTURE -- keep, replace, or drop `codex review --base main` as a pre-handback step. Its value is unmeasured after three epics."
+    owner: "Wolf + Amelia"
+    status: open
+    success_criterion: "A decision on the record, with the measure that justifies it. Stop paying for it silently."
+    note: "THE EVIDENCE IS NOW THREE EPICS DEEP AND IT IS NOT GOOD. Epic 1's item that created it closed with an honest caveat: at 2.2 it found NOTHING on a ~1200-line diff while four later layers found seven real defects, so 'the honest read is that ~15 min of wall-clock bought a clean bill of health that four later layers contradicted'. M2 is worse. 5.4, the milestone's most expensive story: ZERO USABLE PASSES across the entire patch cycle -- one launch per round, BOTH truncated by the sandbox command-parent timeout before findings. Under the three-pass cap that is permitted, but it means that patch cycle carries NO SELF-GATE EVIDENCE AT ALL. 6.1: recorded verbatim as 'the self-gate is a COVERAGE HOLE for this story -- it produced no conclusion on either run'. AGAINST THAT, THE HONEST OTHER SIDE: 7.2's run two ran exactly 3 self-gate passes and fixed all 5 findings including 2 P1s, and 5.4's round-4 pass produced one legitimate close-zoom visibility finding that was fixed in 2ea6ae3. So it is not worthless -- it is UNRELIABLE, and its cost is real and unrecorded. The decision needs a measure, not a vibe."
+
+# Appended later the same day (2026-08-23), from Wolf's two follow-ups after the retro's first
+# pass. He also CORRECTED A MISNAMING: his "M2-12" comment was about the VEHICLE LOOP, not the
+# self-gate. M2-12 (decide the self-gate's future) therefore stays OPEN and untouched.
+
+  - id: M2-13
+    epic: 5
+    action: "Split the gate into two tiers: pre-commit runs `scripts/gate.sh --fast` (~5s), pre-push runs the full gate (~67s). The fast tier must NAME what it skipped and print GATE GREEN (FAST), never GATE GREEN."
+    owner: "Amelia"
+    status: done
+    closed: "2026-08-23 -- IMPLEMENTED AND MEASURED IN SESSION. scripts/gate.sh takes --fast; .githooks/pre-commit calls it; a new .githooks/pre-push runs the full gate. WOLF'S WORDS THAT PROMPTED IT: 'it takes a long time to run and it's ran always before commits so it's also a bit clumsy but there is a good point of running it before' -- both halves right. MEASURED WARM, not estimated: crates/simd/tests/serve.rs is 61 tests and 58.9s = 88% OF THE WHOLE GATE; sim-core 102 tests in 4s; gui's 112 tests in 0.14s; client-core 7 tests in 0s; simd unit (--bins) 18 tests in 0.41s; fmt + clippy + three dependency probes + metrics tests + mutation audit ~1s combined; full gate 67s. CORRECTION TO MY OWN FIRST MEASUREMENT, recorded because it would mislead anyone re-deriving this: gui first read as 50s and that was BEVY COMPILING, not tests running. WHY serve.rs MOVES RATHER THAN SHRINKS: it is slow BY NATURE -- real daemon, real socket, real wall-clock (a tick-rate test asserts elapsed within [1200,4500] ms, a 350ms sleep, a 10s IO timeout, 10ms poll loops). Making it fast means making it fake. THE REASONING THAT DECIDED IT: 67s on every commit is clumsy enough to tempt --no-verify, and a gate that gets skipped protects nothing. THE HONESTY CLAUSE IS LOAD-BEARING: the fast tier prints GATE GREEN (FAST), names crates/simd/tests/serve.rs as skipped, and calls it a COVERAGE HOLE -- the same rule this project applies to a timed-out review layer. A fast-tier pass pasted into a story record must be impossible to mistake for the full gate."
+    success_criterion: "Pre-commit is ~5s; pre-push runs serve.rs; no fast-tier output can be mistaken for a full green."
+
+  - id: M2-14
+    epic: 5
+    action: "FULL RE-RUN OF EVERY MUTATION TABLE, once, to establish how many rows still KILL rather than merely apply."
+    owner: "Amelia"
+    status: done
+    closed: "2026-08-23 -- RUN COMPLETE, 15 tables, 324 rows: 311 KILLED, 9 SURVIVED, 4 NO-COMPILE, 0 APPLY-FAILED. THIRTEEN ROWS (4.0%) PROVE NOTHING TODAY. THE HEADLINE: scripts/audit-mutations.py PASSES, EXIT 0, RIGHT NOW -- it scores 0 of the 13, because it catches APPLY-FAILED (of which this run found zero, the 2026-08-22 audit having already repaired the 29 it found) and is blind to both live modes: SURVIVED (applies, compiles, suite does not notice) and NO-COMPILE (literal matches, resulting code does not build). Static `applies` and dynamic `kills` are now MEASURED as different questions rather than argued. THE SPLIT IS BY MILESTONE AND IT HAS A CAUSE: M1 tables (Epics 2-3) 189/201 = 94.0%; M2 tables (Epics 5-7) 122/123 = 99.2%. Twelve of thirteen dead rows are M1, and not because M1 was sloppier -- because M2 CHANGED THE CODE M1 PINNED. 5.2's TUI adoption (AD-13) rebuilt the client loop around client-core's Mirror, so 2-1's `client loop receives deltas but never applies them` now SURVIVES. `frames key path never writes its command` survives in BOTH 2-3 and 2-4 (same sabotage, duplicated) as the tui CLI moved under it. 2-1's `step() clears the dirty set` NO-COMPILEs on `no field dirty on type &mut World`. THE ONE M2 SURVIVOR IS BENIGN VESTIGE: 7-1's `capture accepts an empty requested slice` targets `self.terrain_tiles > 0`, the level-blind check the 7.1 review ALREADY replaced on Wolf's ruling. THE BEST FIND, and it is section 4.2's own pattern caught by measurement: 3-1's `to_save drops designations` AND `from_save discards designations` BOTH SURVIVE, sharing one test (save_load_then_tick_matches_never_saved, crates/sim-core/tests/save_load.rs:9). Its save point is a stepped CONDITION -- the first tick a dwarf holds a stone -- introduced with a comment saying it `moves with the sim instead of going quietly vacuous`. But a dwarf holds a stone only AFTER the dig completes, and a designation is deleted the instant its job completes (lib.rs:883,898), so designations() IS EMPTY AT THE SAVE POINT and save/load of designations is pinned by nothing. THE FIX DESIGNED TO PREVENT VACUITY IS WHAT CAUSED IT, in another dimension. Cheap repair: assert the designation set is non-empty at the save point. FULL TABLE AND EVERY NON-KILL ROW: epic-5-retro-2026-08-23.md section 12."
+    success_criterion: "A measured baseline: per-table KILLED / SURVIVED / NO-COMPILE / APPLY-FAILED across all 15 tables, and every non-KILL row named."
+    note: "WOLF'S RULING 2026-08-23, prompted by his own framing: 'nothing is more dangerous than a useless test suite so how can we improve it'. M2 IS THE EVIDENCE FOR THAT WORRY -- five of eight stories shipped a green suite while the headline feature was inert (see M2-1). THE GAP THIS CLOSES: the only instrument that measures suite VALUE is the mutation table, and scripts/audit-mutations.py -- added 2026-08-22, which found 29 of 326 rows across 9 tables could not apply, one dead since Epic 6, with 3-2-the-dig alone carrying 12 -- is a STATIC audit. Its own docstring says so. It proves a sabotage CAN BE INSERTED; it does NOT prove the suite KILLS it. A row can apply and still survive, and nothing re-runs an old table (~11 min each). So before today we knew our sabotages still FIT; we did not know they still BITE. METHOD: all 15 tables run SEQUENTIALLY -- mutate.sh is not concurrency-safe -- from a tree with crates/ clean, parsing the authoritative MUTATION RESULTS block rather than grepping the log (the first grep double-counted, because each verdict appears both inline and in the summary table). mutate.sh restores from a tar backup, NOT git checkout, so uncommitted work is safe -- which is the M2-9 rule already honoured by the tool. RESULTS: recorded in epic-5-retro-2026-08-23.md section 12 when the run completes."
+
+  - id: M2-15
+    epic: 5
+    action: "Fold the GUI-triggered vehicle run into Epic 8, riding on 8.2's command path: add tick-based capture timing (--capture-at-tick) and a scenario-driven session mode to gui."
+    owner: "Amelia + Winston"
+    status: open
+    success_criterion: "An Epic 8 vehicle session is one command plus Wolf's eye, with no fps arithmetic and no stopwatch race."
+    note: "WOLF'S IDEA AND HIS RULING 2026-08-23: 'could we trigger vehicle run from GUI?' -- yes, and Epic 8 is the right home. ALREADY DIAGNOSED ONCE, IN A COMMIT MESSAGE: ed6d6e3 (2026-08-22, Task 6's vehicle session) states it outright -- 'RECIPE FINDING: --frames does not control tick count. Ticks observed = frames / framerate * 10, so on a 4080 a light scene rendered 1500 frames in 5.8s and saw 58 ticks, failing the motion floor of 100, while a heavier scene saw 237 from the same command. Use --frames 3000 here.' That is a SHARPER statement of the defect than this item first made, with the conversion formula measured -- and it lived only in a commit message, so it produced a per-story workaround (bump the number) rather than a fix. THIRD SIGHTING of the pattern M2-16 names: diagnosed, written down somewhere unindexed, never an action item. THE SHARP EDGE IS A UNIT ERROR: the capture is specified in --frames, a RENDER-RATE quantity and the only timing control (crates/gui/src/ingest.rs:239), while every assertion it feeds is in TICKS (motion: ticks >= 100). The conversion factor is fps, which changes with machine, zoom and scene, so the arithmetic is redone by hand per story and HAS BEEN WRONG. 6.1: --frames 600 at 10 Hz against >135 fps is ~44 ticks against a >=100 floor, so TASK 6'S FIRST COMMAND WOULD HAVE PANICKED BEFORE WRITING ANY PNG -- caught by Wolf, by hand, not by any test. 7.2: --frames 1500 is ~110 ticks, ten ticks of margin. THE CHANNEL RACE: channels decay to ZERO by t+114 (measured 2026-08-22: 39 marks, 14 by +52, 0 by +114) against a ~110-tick capture window, so the runbook has to say 'start the capture within a few seconds of this line' -- a stopwatch race against a window the same width as the capture. WHY gui CAN DISSOLVE IT: gui already owns the TCP connection to simd, the tick counter (TickClock/observe_tick) and the capture path, so it can designate, wait N TICKS, and capture internally -- no fps dependence, no race, no external command sender, and no blind TUI key path (which silently placed 0 zone tiles on a world that already had the other rects). WHY EPIC 8 RATHER THAN BEFORE IT: 8.2 IS 'designate with the mouse' from gui, so the command-sending path arrives anyway; the driver becomes a by-product of planned work instead of new scope. THE LINE TO HOLD (AD-4 / ground rule 1): gui owns the MECHANISM (--capture-at-tick, a scenario file), the STORY owns the SCENARIO. Sending protocol commands is not game logic -- 8.2 does exactly that -- but rects and orderings baked into the binary would be scenario data living in a client. Ground rule 1's 'no config system before a third concrete use' is satisfied: five vehicle sessions are behind us (5.4, 6.1, 6.2, 7.1, 7.2) and three lie ahead."
+
+  - id: M2-16
+    epic: 5
+    action: "FIXED IN SESSION -- scripts/mutate.sh poisoned the build cache: restore_all used `tar -xf`, which restores ORIGINAL mtimes, so artifacts built during a run outlive the source restored after them and cargo never rebuilds."
+    owner: "Amelia"
+    status: done
+    closed: "2026-08-23 -- DIAGNOSED 2026-08-05 AND UNFIXED FOR THREE EPICS; re-derived from measurement while validating the new gate tier after M2-14's full re-run, then fixed with `tar -xmf` (--touch), which stamps extraction time as NOW so restored source always postdates the artifacts. MEASURED BOTH WAYS, not reasoned: with crates/ GIT-CLEAN, `cargo test -p simd` failed 1 of 18 -- loading_rejects_static_lantern_emitters_before_the_wire_bridge, panicking `lantern save reached the live world` -- and `touch`ing the sources rebuilt it to 18/18 on the same flags and the same binary name. Source mtimes read 2026-08-20 19:27 and 2026-08-22 11:33 against an artifact stamped 2026-08-23 12:51. Re-verified after the fix: a fresh table run leaves sources stamped at the current time, cargo recompiles, simd passes 18/18, crates/ clean. WHY IT MATTERS MORE THAN IT LOOKS: every story's sequence is RUN MUTATIONS, THEN RUN THE GATE. A poisoned cache makes that gate grade SABOTAGED CODE -- a false RED that reads exactly like a regression, or, if the trailing sabotage is one the suite does not catch, A FALSE GREEN. Strong candidate for the mechanism behind the `5 false failures in one session` already on record against this script. NOTE THE SHAPE: this is the evidence apparatus failing, not the feature -- the same class as 6.2's untested capture instrument and 7.1's level-blind oracle, this time in the tool the whole project's mutation evidence rests on. THE REAL FINDING IS THE DELAY, NOT THE BUG. The mechanism was already recorded, verbatim, in the project memory written at 2.3's review on 2026-08-05: 'mutate.sh restores source TIMESTAMPS too, so Cargo may reuse the mutated build even after the source is correct. That is also how a false GREEN can appear, not just a false RED.' The same note lists FIVE false failures in one session traced to it. It then sat unfixed through Epics 3, 5, 6 and 7 -- because it lived only in memory prose and WAS NEVER AN ACTION ITEM. This is the third instance of the meta-failure the Epic 2 retro named (its time-box rule was 'diagnosed exactly and written into no config file'), and the same shape as R1 and P6. `diagnosed` is a THIRD distinct claim alongside `encoded` and `correct`, and a follow-through table cannot see it either, because there is no row to mark. RULE EARNED: when a root cause is identified, open an item for it the same session or it does not exist. The concurrency hazard in the same memory note is UNCHANGED and still live -- run mutate.sh alone."
+    success_criterion: "After a mutation run, the next cargo build recompiles from restored source rather than reusing an artifact built from sabotage."
