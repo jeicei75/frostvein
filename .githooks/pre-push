@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Runs the FULL frostvein gate before every push (~67s).
+#
+# ENABLE (once per clone):  git config core.hooksPath .githooks
+#
+# This is the tier that runs crates/simd/tests/serve.rs — 61 integration tests against a
+# real daemon over a real socket, which the pre-commit hook defers for speed. Nothing here
+# is new coverage; it is the coverage the fast tier openly declares it skipped.
+#
+# `git push --no-verify` still bypasses it, deliberately and visibly.
+#
+# NOTE this repo's standing rule: push/PR only on Wolf's explicit yes. This hook does not
+# grant permission to push — it makes a push that DOES happen carry a full green gate.
+
+exec "$(git rev-parse --show-toplevel)/scripts/gate.sh"

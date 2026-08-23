@@ -13,11 +13,13 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::{
     MinimalPlugins,
     app::App,
+    dev_tools::fps_overlay::FpsOverlayConfig,
     ecs::system::RunSystemOnce,
     input::ButtonInput,
+    pbr::{DistanceFog, FogFalloff},
     prelude::{
-        Assets, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, Or, PointLight,
-        Resource, StandardMaterial, Text, Transform, With, Without,
+        Assets, DirectionalLight, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, Or,
+        PointLight, Resource, StandardMaterial, Text, Transform, With, Without,
     },
 };
 
@@ -25,11 +27,13 @@ use bevy::{
 struct TestWireSender(std::sync::mpsc::SyncSender<anyhow::Result<WireMessage>>);
 use client_core::Mirror;
 use gui::{
-    atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, setup_atmosphere},
+    atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, Snowflake, setup_atmosphere},
+    camera::CameraRig,
     capture::{CaptureState, accumulate_motion},
     ingest::{
-        IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, SliceReadout, WireMessage,
-        projection_systems, reconcile_projection,
+        CaptureDistance, IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork,
+        SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
+        reconcile_projection,
     },
     project::{
         ClientLocal, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap, TerrainTile,
@@ -1965,5 +1969,247 @@ fn accumulate_motion_reports_no_movement_for_a_dwarf_that_never_moves() {
     assert!(
         !capture.lantern_moved(),
         "a world whose dwarf never moves must not report a moved lit region"
+    );
+}
+
+// ===========================================================================================
+// M2-1 — the live `App` that `run()` builds, made reachable from the suite.
+//
+// THE DEFECT THIS CLOSES, in one line: while `run()`'s registration tuples lived inline, no test
+// could reach them, so deleting a system left the whole suite green. It was filed `[feature/MED]`
+// and DEFERRED at story 5.4's review — and then produced the TOP-SEVERITY finding in the next
+// four consecutive stories. 6.1 lost both projection systems with 54/54 green; 6.1's review found
+// three production drive lines each of which killed wow beat 2 with 57/57 green; 6.2's
+// `accumulate_motion` had zero test callers and had never executed anywhere; 7.1's whole on-screen
+// readout and its `--z` pin were each deletable; 7.2's `--distance` parsed, validated and never
+// reached the camera rig, with its only test NAMED for reaching the camera setup. Five of eight
+// stories. The Milestone 2 retrospective ruled it closed at the root (Wolf, 2026-08-23).
+//
+// These tests drive `client_systems` — the SAME function `run()` calls — so a system dropped from
+// either tuple fails here rather than shipping. Every assertion is an OBSERVABLE EFFECT, never
+// "is it registered": a registration assertion would be the vacuity this project keeps re-finding.
+// ===========================================================================================
+
+/// Mirrors `run()`'s app as closely as `MinimalPlugins` allows. The resources supplied by hand are
+/// exactly the ones `DefaultPlugins` and `FpsOverlayPlugin` provide in production; nothing else is
+/// added, so the systems under test see the world they really run in.
+fn live_app(
+    snapshot: Snapshot,
+) -> (
+    App,
+    std::sync::mpsc::SyncSender<anyhow::Result<WireMessage>>,
+) {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(8);
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<Assets<Mesh>>()
+        .init_resource::<Assets<StandardMaterial>>()
+        // The aurora curtain samples a procedurally built gradient image.
+        .init_resource::<Assets<bevy::image::Image>>()
+        // `FpsOverlayPlugin` inserts this in production; `toggle_overlay` needs it to exist.
+        .init_resource::<FpsOverlayConfig>()
+        .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
+        .insert_resource(ProjectionWork {
+            snapshot: true,
+            dirty_tiles: Default::default(),
+        })
+        .insert_resource(IngestReceiver::new(receiver));
+    client_systems(&mut app);
+    projection_systems(&mut app);
+    (app, sender)
+}
+
+fn one_tile_snapshot() -> Snapshot {
+    snapshot(vec![Tile::Solid(Material::Stone), Tile::Empty], vec![])
+}
+
+#[test]
+fn the_live_startup_scene_spawns_its_camera_lighting_and_atmosphere() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&CameraRig>()
+            .iter(app.world())
+            .count(),
+        1,
+        "setup_camera did not spawn the rig — the whole view depends on it"
+    );
+    assert_eq!(
+        app.world_mut()
+            .query::<&DirectionalLight>()
+            .iter(app.world())
+            .count(),
+        1,
+        "setup_night_lighting did not spawn the directional fill"
+    );
+    assert_eq!(
+        app.world_mut()
+            .query::<&Snowflake>()
+            .iter(app.world())
+            .count(),
+        SNOWFLAKE_COUNT,
+        "setup_atmosphere did not spawn the snowfall"
+    );
+    assert_eq!(
+        app.world_mut()
+            .query::<&Atmosphere>()
+            .iter(app.world())
+            .count(),
+        STAR_COUNT + SNOWFLAKE_COUNT + 1,
+        "setup_atmosphere did not spawn the full sky — stars, snow and the aurora curtain"
+    );
+}
+
+/// Story 7.2's review found `--distance` parsed, validated, and then never reaching the rig, while
+/// its only test was NAMED for reaching the camera setup and asserted `parse_args_from` alone.
+/// This drives the resource the flag writes, through the startup system that must read it.
+#[test]
+fn the_capture_distance_resource_reaches_the_camera_rig() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.insert_resource(CaptureDistance(30.0));
+    app.update();
+
+    let rig = app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .copied()
+        .expect("the rig exists");
+    assert_eq!(
+        rig.distance, 30.0,
+        "--distance did not reach the rig; the working-zoom capture would frame the boot vista"
+    );
+}
+
+/// AD-14/AD-15's partition is only honest if it is TOTAL. `classify_client_local` runs at
+/// PostStartup precisely so it sees the finished startup scene, plugin entities included.
+#[test]
+fn the_classification_pass_leaves_no_entity_outside_the_partition() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.update();
+
+    let unmarked = app
+        .world_mut()
+        .query_filtered::<BevyEntity, (Without<WorldProjected>, Without<ClientLocal>)>()
+        .iter(app.world())
+        .count();
+    assert_eq!(
+        unmarked, 0,
+        "{unmarked} entities carry neither partition marker; AD-14's rule is not total"
+    );
+}
+
+#[test]
+fn camera_controls_drive_the_rig() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.update();
+    let before = *app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("the rig exists");
+
+    press_once(&mut app, KeyCode::KeyE);
+
+    let after = *app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("the rig exists");
+    assert!(
+        after.distance != before.distance,
+        "E did not zoom: camera_controls is not driving the rig ({} unchanged)",
+        before.distance
+    );
+}
+
+/// The fog register has to follow the zoom continuum or the vista is a flat sky-coloured
+/// rectangle — story 5.4's review found exactly that before the coupling existed.
+#[test]
+fn fog_follows_the_camera_rig_every_frame() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.update();
+
+    let distance = 240.0_f32;
+    {
+        let mut rigs = app.world_mut().query::<&mut CameraRig>();
+        let mut rig = rigs
+            .iter_mut(app.world_mut())
+            .next()
+            .expect("the rig exists");
+        rig.distance = distance;
+    }
+    // Two frames: `update_fog_from_camera` shares an unordered tuple with `camera_controls`, so
+    // one frame could sample either side of the write.
+    app.update();
+    app.update();
+
+    let (start, end) = fog_falloff(distance);
+    let fog = app
+        .world_mut()
+        .query::<&DistanceFog>()
+        .iter(app.world())
+        .next()
+        .cloned()
+        .expect("the camera carries fog");
+    match fog.falloff {
+        FogFalloff::Linear {
+            start: got_start,
+            end: got_end,
+        } => {
+            assert_eq!(
+                (got_start, got_end),
+                (start, end),
+                "fog did not track the rig; update_fog_from_camera is not running"
+            );
+        }
+        other => panic!("fog falloff is no longer linear: {other:?}"),
+    }
+}
+
+#[test]
+fn snow_falls_every_frame() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.update();
+    let before: Vec<f32> = app
+        .world_mut()
+        .query_filtered::<&Transform, With<Snowflake>>()
+        .iter(app.world())
+        .map(|t| t.translation.y)
+        .collect();
+    assert!(!before.is_empty(), "no snowflakes to fall");
+
+    app.update();
+
+    let after: Vec<f32> = app
+        .world_mut()
+        .query_filtered::<&Transform, With<Snowflake>>()
+        .iter(app.world())
+        .map(|t| t.translation.y)
+        .collect();
+    assert!(
+        before.iter().zip(&after).any(|(b, a)| a < b),
+        "no flake descended; fall_snow is not running"
+    );
+}
+
+#[test]
+fn f3_toggles_the_diagnostic_overlay() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.update();
+    let before = app.world().resource::<FpsOverlayConfig>().enabled;
+
+    press_once(&mut app, KeyCode::F3);
+
+    assert_eq!(
+        app.world().resource::<FpsOverlayConfig>().enabled,
+        !before,
+        "F3 did not flip the overlay; toggle_overlay is not running"
     );
 }

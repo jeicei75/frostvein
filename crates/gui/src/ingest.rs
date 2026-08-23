@@ -106,46 +106,17 @@ pub fn run() -> anyhow::Result<()> {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
         })
-        .insert_resource(ClearColor(night_lighting().sky))
-        .add_systems(
-            Startup,
-            (
-                setup_camera,
-                setup_night_lighting,
-                setup_projection_assets,
-                setup_atmosphere,
-                log_adapter,
-            ),
-        )
-        // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
-        // still GUI-local, so classify the complete startup scene after all plugin setup.
-        .add_systems(bevy::app::PostStartup, classify_client_local)
-        .add_systems(
-            Update,
-            (
-                camera_controls,
-                update_fog_from_camera,
-                toggle_overlay,
-                fall_snow,
-            ),
-        );
+        .insert_resource(ClearColor(night_lighting().sky));
     if let Some(distance) = args.distance {
         app.insert_resource(CaptureDistance(distance));
     }
+    client_systems(&mut app);
     projection_systems(&mut app);
     if let Some(capture) = args.capture {
         // Capture output must never contain the diagnostic overlay.
         force_capture_overlay_off(&mut app);
         app.insert_resource(CaptureState::new(capture, args.frames, args.expect_work));
-        // The instrument reads what the projection chain just wrote, so it must run after it.
-        // Bevy's ambiguity detection defaults to `LogLevel::Ignore`, so an unordered read here
-        // would be resolved silently and sample the frame at an undefined point.
-        app.add_systems(
-            Update,
-            (accumulate_motion, capture_after_frames)
-                .chain()
-                .after(ProjectionSet),
-        );
+        capture_systems(&mut app);
     }
     app.run();
     Ok(())
@@ -184,6 +155,56 @@ pub fn projection_systems(app: &mut App) {
         .add_systems(Update, update_slice_readout.after(ProjectionSet));
 }
 
+/// Everything `run()` registers besides the projection chain: the startup scene, the
+/// client-local classification pass, and the per-frame input and atmosphere systems.
+///
+/// Extracted for exactly the reason `projection_systems` was, and it is the same defect one
+/// level further out. While these tuples lived inline in `run()` no test could reach them, so
+/// dropping any system from either left the whole suite green. That is not hypothetical: story
+/// 7.2's review found `--distance` parsed, validated, and then never reaching the camera rig,
+/// with its only test NAMED for reaching the camera setup; 7.1's review found the entire
+/// on-screen readout and the `--z` pin deletable the same way; 6.1 lost both projection systems
+/// with 54 of 54 tests green. Five of eight Milestone 2 stories carried an instance of this
+/// class, and the Milestone 2 retrospective ruled it closed at the root rather than caught a
+/// sixth time.
+pub fn client_systems(app: &mut App) {
+    app.add_systems(
+        Startup,
+        (
+            setup_camera,
+            setup_night_lighting,
+            setup_projection_assets,
+            setup_atmosphere,
+            log_adapter,
+        ),
+    )
+    // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
+    // still GUI-local, so classify the complete startup scene after all plugin setup.
+    .add_systems(bevy::app::PostStartup, classify_client_local)
+    .add_systems(
+        Update,
+        (
+            camera_controls,
+            update_fog_from_camera,
+            toggle_overlay,
+            fall_snow,
+        ),
+    );
+}
+
+/// The capture instrument's registration, including the ordering edge that keeps it reading the
+/// frame the projection chain just wrote. Bevy's ambiguity detection defaults to
+/// `LogLevel::Ignore`, so an unordered read here would be resolved silently and sample the frame
+/// at an undefined point — raised by three separate review layers at 6.1.
+pub fn capture_systems(app: &mut App) {
+    app.add_systems(
+        Update,
+        (accumulate_motion, capture_after_frames)
+            .chain()
+            .after(ProjectionSet),
+    );
+}
+
 /// The `--z` pin has to REACH the resource, not merely parse. Inside `run()` it was unreachable
 /// from any test, and a mutation that ignored the flag entirely stayed green.
 pub fn initial_slice(dims: Dims, requested: Option<i32>) -> SliceLevel {
@@ -218,7 +239,7 @@ struct Args {
 }
 
 #[derive(Resource)]
-struct CaptureDistance(f32);
+pub struct CaptureDistance(pub f32);
 
 fn parse_args() -> anyhow::Result<Args> {
     parse_args_from(std::env::args_os().skip(1))

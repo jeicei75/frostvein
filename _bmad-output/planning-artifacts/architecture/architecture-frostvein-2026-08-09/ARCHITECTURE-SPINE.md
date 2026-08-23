@@ -221,14 +221,19 @@ frostvein/
     gui/              # NEW: Bevy client — projection, picking, camera, capture instrument
 ```
 
-Runtime topology (M2, dev: WSL2 devpod; `gui` displays via WSLg — verified
-on the dev machine: D3D12 passthrough, RTX 4080 Laptop, Mesa 25.3.5):
+Runtime topology (M2). **CORRECTED 2026-08-23 (M2-4).** The original line below said `gui`
+displays via WSLg on the devpod; story 5.3 falsified that by measurement — see the NFR6
+amendment. `simd` still runs in the WSL2 devpod; **`gui` runs as a native-Windows binary on
+gingerspice**, reaching it over localhost. Clients are protocol-only TCP, so the crate graph is
+untouched by this.
+~~*Superseded:* dev: WSL2 devpod; `gui` displays via WSLg — verified on the dev machine: D3D12
+passthrough, RTX 4080 Laptop, Mesa 25.3.5.~~
 
 ```mermaid
 graph LR
   T[simd: tick loop] --> SC[sim-core World]
   TUI[tui] <-->|NDJSON / localhost TCP| T
-  GUI[gui / Bevy via WSLg] <-->|same protocol, same commands| T
+  GUI[gui / Bevy, native Windows] <-->|same protocol, same commands, localhost| T
   TUI --- CC1[client-core mirror]
   GUI --- CC2[client-core mirror]
   TEST[scenario + client-core tests] -->|no network, no GPU| SC
@@ -237,14 +242,40 @@ graph LR
 Sequencing facts this structure creates (epic-planning inputs, alongside the
 PRD's first-third-wow counter-metric and cut order): `client-core` exists
 before either client consumes it; and the first `gui` story proves the
-envelope before anything builds on it — a Bevy window renders at speed on
-this box (`glxinfo` proved GL; wgpu prefers Vulkan via WSLg's Dozen driver,
-confirmed younger/less conformant — unproven until run, non-negotiable).
+envelope before anything builds on it — a Bevy window renders at speed
+(`glxinfo` proved GL; wgpu prefers Vulkan via WSLg's Dozen driver, confirmed
+younger/less conformant — unproven until run, non-negotiable).
+**RESOLVED 2026-08-23 (M2-4): the envelope story ran and the answer was NO on this box.**
+5.3 walked the ladder to its end and the window opened only on the native-Windows vehicle.
+The sequencing fact held and did its job — the envelope was proven before eight stories
+built on it; it is the *venue* that moved, not the requirement.
 
 ## NFR6 — the measured bar (set here, as the PRD required)
 
+> **AMENDED 2026-08-23 at the Milestone 2 retrospective (Wolf's ruling, action item M2-4).**
+> The bar's NUMBERS are unchanged and were met with headroom. **Its MACHINE is corrected:**
+> the original text below named the WSLg devpod, and that premise was falsified by measurement
+> at story 5.3 — **no devpod can open a window**, on any backend, with stock or self-built
+> drivers, and both rungs of the epic's fallback ladder were walked to the end. WSL2 kernel 6.18
+> exposes no `/dev/dri`, so Mesa's EGL-X11 path reports `NATIVE_RENDERABLE=FALSE` and wgpu-hal
+> refuses a surface below tier 2; the Vulkan rung needed Mesa's Dozen built from source and then
+> died on a misreported `DeviceLost` with VRAM measured flat. The remaining lever was forcing
+> downlevel limits in `gui` to dodge a non-conformant driver, which story 5.3's own AC9 banned —
+> so it was correctly NOT taken.
+>
+> **The bar is now defined against the vehicle that exists:** `gui.exe` cross-compiled to native
+> Windows on **gingerspice** (NVIDIA Vulkan), with `simd` in WSL over localhost — the M2 crate
+> graph unchanged, since clients are protocol-only TCP by design.
+>
+> **Measured against it, all with headroom:** 146 fps at 5.3 (unlit envelope); **140–146 fps
+> sustained at 5.4** on the full lit and snowing world (2.3× the 60-fps bar); **>143 fps at 6.1
+> at BOTH working zoom and full vista** (~2.4× and ~4.8×).
+>
+> ~~*Superseded text, kept so the change is legible:* on the WSLg devpod.~~
+
 Sustained **60 fps at working zoom** and **≥30 fps at full vista**, full
-128×128×32 world, all dwarves and all lights, on the WSLg devpod, read from
+128×128×32 world, all dwarves and all lights, **on the live vehicle — gingerspice,
+native-Windows `gui.exe`, NVIDIA Vulkan, `simd` in WSL over localhost** — read from
 the frame-time overlay.
 
 Client-agnostic restatement of NFR2's ack bar (the change proposal asked for
