@@ -48,8 +48,58 @@ fn save_load_then_tick_matches_never_saved() {
         ));
         assert!(world.set_tile(designation_pos, Tile::Solid(Material::Stone)));
     }
+    // A SECOND dig that no dwarf can ever reach, so the designation set is never empty at the
+    // save point. Without it this test is VACUOUS for designations, and the two sabotages
+    // `to_save drops designations` and `from_save discards designations` both SURVIVED the
+    // 2026-08-23 full mutation re-run because of it.
+    //
+    // The cause is worth stating, because it is the *fix* for vacuity that caused it: the save
+    // point below is a stepped CONDITION — the first tick a dwarf is holding a stone — chosen so
+    // it "moves with the sim instead of going quietly vacuous". But a dwarf can only hold a stone
+    // AFTER the dig completed, and a designation is deleted the instant its job completes
+    // (`lib.rs:883,898`, the same line for "dug out" as for "cancelled"). So at the save point the
+    // designation set had emptied itself and the round trip asserted nothing about designations.
+    //
+    // A dig buried in the rock mass is unreachable by construction: `work_positions` requires a
+    // dwarf on a STANDABLE tile at the same z, orthogonally adjacent, and standable means empty
+    // with solid below. Wall the four orthogonal neighbours in and no standing position exists,
+    // so the job is queued and retried forever and the designation never dies. That is the same
+    // mechanism the 7.2 vehicle session saw live as a permanent field of blue marks.
+    let dy = if worker.y + 5 < saved.dims().y as i32 {
+        1
+    } else {
+        -1
+    };
+    let buried_pos = Pos {
+        y: worker.y + dy * 5,
+        ..worker
+    };
+    for world in [&mut saved, &mut control] {
+        assert!(world.set_tile(buried_pos, Tile::Solid(Material::Stone)));
+        for (nx, ny) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            // An out-of-bounds neighbour is not standable either, so a rejected write is fine.
+            let _ = world.set_tile(
+                Pos {
+                    x: buried_pos.x + nx,
+                    y: buried_pos.y + ny,
+                    ..buried_pos
+                },
+                Tile::Solid(Material::Stone),
+            );
+        }
+    }
+
     saved.drain_dirty();
     control.drain_dirty();
+    let buried_designation = SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: Rect {
+            min: buried_pos,
+            max: buried_pos,
+        },
+    };
+    saved.apply_command(buried_designation);
+    control.apply_command(buried_designation);
     let designation = SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: Rect {
@@ -97,6 +147,15 @@ fn save_load_then_tick_matches_never_saved() {
             .find(|job| job.id == held)
             .map(|job| job.kind),
         Some(JobKind::Haul { item: carrier.1 })
+    );
+    // THE GUARD. If this ever fails, the save point has drifted past the last surviving
+    // designation and the round-trip assertions below stop covering designations at all — which
+    // is exactly how this test went vacuous before. Assert the state the coverage depends on
+    // rather than trusting that it holds.
+    assert!(
+        !saved.designations().is_empty(),
+        "no designation survives to the save point, so the round trip below cannot cover \
+         designation save/load — see the buried dig above"
     );
     assert!(saved.set_tile(MUTATED_POS, Tile::Empty));
     assert!(control.set_tile(MUTATED_POS, Tile::Empty));
