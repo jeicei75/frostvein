@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the frostvein gate before every commit.
+# Runs the FAST tier of the frostvein gate before every commit (~5s).
 #
 # ENABLE (once per clone):  git config core.hooksPath .githooks
 #
@@ -7,5 +7,13 @@
 # activated by that config line. `git commit --no-verify` still bypasses it —
 # the point is to make green the default and skipping it a deliberate, visible
 # act, not to make it impossible.
+#
+# WHY FAST HERE (2026-08-23, Wolf's ruling at the M2 retrospective): the full gate is
+# ~67s and 88% of that is one daemon integration suite. 67s on every commit is clumsy
+# enough to tempt `--no-verify`, and a gate that gets skipped protects nothing. The
+# fast tier keeps fmt, clippy, the dependency-edge probes, the metrics tests, the
+# mutation-table audit and every test EXCEPT crates/simd/tests/serve.rs.
+#
+# serve.rs runs at push instead — see .githooks/pre-push. It is not weakened, only moved.
 
-exec "$(git rev-parse --show-toplevel)/scripts/gate.sh"
+exec "$(git rev-parse --show-toplevel)/scripts/gate.sh" --fast

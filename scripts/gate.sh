@@ -1,12 +1,32 @@
 #!/usr/bin/env bash
-# The frostvein quality gate. Every story runs this before "done"; the pre-commit
-# hook runs it on every commit (see .githooks/pre-commit).
+# The frostvein quality gate. Every story runs this in full before "done"; the pre-commit
+# hook runs the FAST tier on every commit and the pre-push hook runs the full gate
+# (see .githooks/pre-commit and .githooks/pre-push).
 #
 # WHY THIS EXISTS: before it, "the gate is green" was whatever an agent reported.
 # Story 1.1's dev record claimed a `simd` smoke assertion that did not exist. A
 # script that exits non-zero makes green a fact rather than a claim.
 #
-# USAGE:  scripts/gate.sh
+# USAGE:  scripts/gate.sh          full gate. What a story runs before "done", and what
+#                                 the pre-push hook runs. ~67s warm.
+#         scripts/gate.sh --fast  everything except the daemon integration suite. What the
+#                                 pre-commit hook runs. ~5s warm.
+#
+# WHY TWO TIERS (2026-08-23, Wolf's ruling at the M2 retrospective): the gate was 67s on
+# EVERY commit and that is clumsy enough to tempt --no-verify, which is the one outcome
+# that makes the gate worthless. Measured that day: `simd/tests/serve.rs` is 61 tests and
+# 58.9s -- 88% OF THE WHOLE GATE. Everything else together is ~5s (sim-core 102 tests in 4s;
+# gui's 112 tests in 0.14s; fmt, clippy, the three dependency probes, the metrics tests and
+# the mutation audit ~1s combined). serve.rs is slow BY NATURE, not by sloppiness: it spawns
+# a real daemon, talks to it over a real socket, and waits on real wall-clock (a tick-rate
+# test asserts elapsed within [1200, 4500] ms). Making it fast would mean making it fake.
+# So it moves to the push boundary rather than being weakened.
+#
+# THE FAST TIER NAMES WHAT IT SKIPPED, AND SAYS "GATE GREEN (FAST)" RATHER THAN "GATE GREEN".
+# That is deliberate and load-bearing: this project's standing rule is that a check which did
+# not run is a COVERAGE HOLE, never a clean result -- the same reason a timed-out review layer
+# is reported as a hole. A fast-tier pass pasted into a story record must be impossible to
+# mistake for the full gate.
 #
 # The first four checks are the ones docs/technical-preferences.md and every story's
 # Verification block name. The `cargo tree` probe guards AC1's architectural rule
@@ -23,6 +43,14 @@
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
+
+FAST=0
+for arg in "$@"; do
+  case "$arg" in
+    --fast) FAST=1 ;;
+    *) echo "unknown argument: $arg (expected --fast or nothing)" >&2; exit 2 ;;
+  esac
+done
 
 # mise installs the toolchain outside a non-interactive shell's PATH.
 [ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
@@ -57,7 +85,14 @@ run() {
 echo "frostvein gate"
 run "cargo fmt --check" cargo fmt --check
 run "cargo clippy -D warnings" cargo clippy --all-targets -- -D warnings
-run "cargo test" cargo test
+if [ "$FAST" -eq 1 ]; then
+  # Everything except the daemon integration suite. simd's own unit tests still run
+  # (--bins, 18 tests in 0.41s); only crates/simd/tests/serve.rs is deferred to push.
+  run "cargo test (fast set)" cargo test --workspace --exclude simd
+  run "cargo test -p simd --bins" cargo test -p simd --bins
+else
+  run "cargo test" cargo test
+fi
 
 # Inverted: a MATCH is the failure. Clients depend on protocol/client-core only.
 for crate in tui client-core gui; do
@@ -91,5 +126,13 @@ run "mutation tables still apply" python3 scripts/audit-mutations.py
 if [ "$fail" -ne 0 ]; then
   echo "GATE RED"
   exit 1
+fi
+
+if [ "$FAST" -eq 1 ]; then
+  echo "GATE GREEN (FAST) -- NOT the full gate."
+  echo "  SKIPPED: crates/simd/tests/serve.rs (61 daemon integration tests, ~59s)."
+  echo "  This is a COVERAGE HOLE, not a clean result. Run scripts/gate.sh with no"
+  echo "  arguments before pushing, and before calling any story done."
+  exit 0
 fi
 echo "GATE GREEN"
