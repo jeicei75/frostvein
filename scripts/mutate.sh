@@ -32,8 +32,19 @@ BACKUP=$(mktemp -d)
 trap 'restore_all; rm -rf "$BACKUP"' EXIT
 
 # Snapshot every tracked source file once, so any mutation can be undone.
+#
+# `-m` ON THE RESTORE IS LOAD-BEARING, not tidiness (found 2026-08-23, M2-14's full re-run).
+# Plain `tar -xf` restores each file's ORIGINAL mtime. Every artifact built during the run is
+# therefore NEWER than the source restored after it, so cargo judges the artifact fresh and
+# DOES NOT REBUILD -- leaving the LAST mutation's sabotaged binary sitting in target/ after the
+# run has finished and the source is correctly back. The next `cargo test` then silently grades
+# sabotaged code: a false RED that reads exactly like a regression, or -- if that sabotage was
+# one the suite does not catch -- a false GREEN on a gate. Measured: after a full 15-table run,
+# `cargo test -p simd` failed 1 of 18 with crates/ git-clean; `touch`ing the sources rebuilt and
+# it passed 18/18, same flags, same binary name. `-m` (--touch) stamps extraction time as NOW,
+# so the restored source always postdates the artifacts and cargo always rebuilds.
 backup_all() { tar -cf "$BACKUP/tree.tar" $(git ls-files 'crates/*'); }
-restore_all() { [ -f "$BACKUP/tree.tar" ] && tar -xf "$BACKUP/tree.tar"; }
+restore_all() { [ -f "$BACKUP/tree.tar" ] && tar -xmf "$BACKUP/tree.tar"; }
 
 # Initialized empty, not merely declared: under `set -u`, `${#NAMES[@]}` on a declared-but-unset
 # array is an unbound-variable error, and this script does not `set -e`, so the empty-table guard
