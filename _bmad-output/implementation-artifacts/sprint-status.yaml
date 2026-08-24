@@ -717,9 +717,12 @@ action_items:
   - epic: 3
     action: "T2 -- add `--mark` to session_tokens.py for phase boundaries, so a phase recorded mid-session bills only its own window"
     owner: "Amelia"
-    status: open
+    status: done
     success_criterion: "A phase recorded mid-session bills only its own delta window"
     note: "Its absence has now cost an honest number on THREE rows across TWO epics: 2.1's review (mixed session), 3.2's create (opens at session start, so it includes an unrelated forge-process branch push and PR #13), and 3.2's review (opens at session start, so it bills story selection, the Codex handoff, independent verification, the quota_pp tooling AND the four-layer review to `review`). Each was handled by writing a caveat instead of a number, deliberately -- a hand-adjusted figure is less trustworthy than a stated caveat -- but three caveats is the signal that the tool, not the discipline, is what is missing"
+    closed: "2026-08-24 -- shipped as forge-process 1.2.0 (dbc2fe6, PR #14) and pulled here; check reports in sync. Full record: t2-mark-forge-handover.md"
+    success_criterion_met: "NOT the criterion above -- the delta cursor already met it. Real defect: the cursor only advanced when a row was written. See the record."
+    followthrough: "METRIC RULE hand-merged into the three adapted workflow TEMPLATEs and acked, so the flag is invoked, not just available. Epic 8 records under it."
   - epic: 3
     action: "T3 -- deterministic opening camera z (e.g. the level with the most standable ground) plus an explicit --z flag for captures. PREREQUISITE TO STORY 4.1a, not deferred work"
     owner: "Amelia"

@@ -3,10 +3,10 @@
 # can tell 'upstream moved' apart from 'we changed it locally'. A TEMPLATE that
 # was kept (not re-installed) keeps its EARLIER hash, so a pending notice survives.
 # `ack <project-root> <path>` re-stamps one TEMPLATE after you MERGE it by hand.
-VERSION=1.1.0
-SRC 3ee801c50b60ecb7b347f16fe0d3aa24115d656e3e2ff3dd70ca3874e1327d58 _bmad/scripts/session_tokens.py
-SRC 974384942d1097c24f6e121cd350aab78bc11f4145cbcd1673bc22a9912228bc _bmad/scripts/tests/test_session_tokens.py
-SRC c23017d023d0a5365a7bd4c03649f320d569ee3d76e52ebf525be7192044595d _bmad/custom/bmad-create-story.toml
-SRC 0fd81386fe22d87eabafb3c3eb65b65654174c85e77137da7952d969646f6e67 _bmad/custom/bmad-dev-story.toml
-SRC bd5f442e8825456216cc3d47754dd555667ca7293c0a98ec424746102c7863af _bmad/custom/bmad-code-review.toml
+VERSION=1.2.0
+SRC f1f9e2ac08afda9285c12d4d3d73171a60e98e29c6ccad2bd5638014fe37f1b9 _bmad/scripts/session_tokens.py
+SRC 3b1ae4ff31515dd20aafa915941c02796b4ad724094aa72024367b55c6881c9e _bmad/scripts/tests/test_session_tokens.py
+SRC 10a0c7ddddd83ac8d1df67d484c6039ebeb27dd56d7e331b5d40f439cb4cc4c0 _bmad/custom/bmad-create-story.toml
+SRC 26d178cf19ca1da6160dc0dbdb86661317878617a2c34dcc400920d9d339cf00 _bmad/custom/bmad-dev-story.toml
+SRC ffbe82291b64e555635e914e6081f5237389daf8dc8884166aa8951aa65dec17 _bmad/custom/bmad-code-review.toml
 SRC 275f037bda0d0616f1742ca5e725963b65b98be4ee30a174cf274fcef0dadb6b scripts/codex-handoff.sh
