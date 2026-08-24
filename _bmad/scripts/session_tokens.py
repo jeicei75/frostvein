@@ -36,6 +36,18 @@ already recorded for each transcript, and a new row bills only what is new since
 the last record. The first record on a fresh transcript bills the whole thing; a
 fresh Codex rollout (one per `codex exec`) likewise bills its whole dev run.
 
+The cursor only advances when a row is written, so a window not bookended by two rows
+is swept into whichever row is taken next — the leading window before a session's first
+record, and the gap between one phase ending and the next beginning. ``--mark`` closes
+that: it advances the cursor to now WITHOUT writing a row, printing the window it
+discards. Mark when a phase ends and the next row should not inherit the gap. Either
+tool takes a mark — a Codex rollout exactly as a Claude transcript does.
+
+**MARK VS ROW — the rule.** If the window belongs to a phase, take a ROW for that phase;
+only if it belongs to no phase at all, ``--mark`` it. A mark used where a row was owed
+converts a visible over-attribution into an INVISIBLE under-attribution: the tokens leave
+every ledger at once, and unlike a fat row nothing is left to notice.
+
 Phase conventions (compose the columns to get the retro's required lines):
   * ``--tool codex  --phase dev``          → the `codex-dev` line (real Codex cost)
   * ``--tool claude --phase create``       → story authoring
@@ -48,6 +60,7 @@ Usage:
     python3 session_tokens.py --tool codex                           # print newest Codex run's cost
     python3 session_tokens.py --story ep-03-us-02 --phase review-patch          # record (delta) row
     python3 session_tokens.py --tool codex --story ep-03-us-02 --phase dev      # record Codex dev row
+    python3 session_tokens.py --mark                                 # close a phase boundary, no row
 """
 
 from __future__ import annotations
@@ -56,6 +69,7 @@ import argparse
 import glob
 import json
 import os
+import sys
 from datetime import datetime, timezone
 
 
@@ -555,20 +569,88 @@ def _cursor_path() -> str:
     )
 
 
+class CursorFileError(RuntimeError):
+    """The cursor file is present but cannot be trusted.
+
+    Never swallowed into ``{}``. A damaged file read as "no cursors at all" makes the very
+    next run bill each transcript's whole history to whatever phase happens to record, and
+    then REWRITE the file from that one run — every other transcript's cursor gone. It
+    exits 0 and says nothing, and no later "cursor reset" warning fires either, because
+    ``prev`` is None rather than stale. Absent is fine; unreadable is a hard error."""
+
+
 def _load_cursors() -> dict:
     try:
         with open(_cursor_path(), encoding="utf-8") as fh:
-            return json.load(fh)
-    except (FileNotFoundError, json.JSONDecodeError):
+            cursors = json.load(fh)
+    except FileNotFoundError:
         return {}
+    except (json.JSONDecodeError, OSError) as exc:
+        raise CursorFileError(
+            f"{_cursor_path()} exists but could not be read ({exc}). Refusing to treat it as "
+            "empty — that would rewrite every cursor from this one run. Repair or move it."
+        ) from exc
+    if not isinstance(cursors, dict):
+        raise CursorFileError(f"{_cursor_path()} is not a JSON object of transcript-id -> cursor.")
+    for tid, entry in cursors.items():
+        # A malformed entry must be a NAMED error here, not a TypeError/AttributeError
+        # traceback out of _is_v1_cursor three call frames later.
+        if not isinstance(entry, dict):
+            raise CursorFileError(f"{_cursor_path()}: cursor for {tid} is not an object.")
+        if "schema" in entry:
+            try:
+                int(entry["schema"])
+            except (TypeError, ValueError):
+                raise CursorFileError(
+                    f"{_cursor_path()}: cursor for {tid} has a non-numeric schema "
+                    f"({entry['schema']!r})."
+                ) from None
+    return cursors
 
 
 def _save_cursors(cursors: dict) -> None:
     path = _cursor_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
+    # Write-then-rename, in the same directory so os.replace is atomic. A run interrupted
+    # mid-write would otherwise leave a truncated file, which _load_cursors now refuses to
+    # read — turning a crash into a hard stop instead of a silent total loss.
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(cursors, fh, indent=2, sort_keys=True)
         fh.write("\n")
+    os.replace(tmp, path)
+
+
+def cursor_from(cumulative: dict, *, primary_only: bool, marked_at: str | None = None) -> dict:
+    """The v2 cursor payload for a session summary.
+
+    Both the recording path and ``--mark`` write cursors through here, deliberately: a
+    mark that stamped a PARTIAL cursor would make every later row on that transcript
+    wrong while looking precise — worse than the gap it was closing.
+
+    ``primary_only`` says WHICH cumulative this is. ``schema: 2`` alone cannot tell a
+    fan-out-inclusive cursor from one written under ``--no-nested``, which measures a
+    single transcript without the work it spawned; both stamp the same schema. ``--mark``
+    refuses a primary-only cursor for the same reason it refuses ``--no-nested`` itself.
+
+    ``marked_at`` is wall-clock, and only a mark sets it. ``last_ts`` is the last TURN, so
+    a span measured from it bills every idle minute between the mark and the next phase to
+    that next phase — 5 minutes of work read as 244 in the case that found this. A ROW
+    clears it back to None: the row has moved the boundary itself, and a stale mark left
+    behind would keep anchoring spans that start well before it."""
+    return {b: int(cumulative[b]) for b in _CURSOR_BUCKETS} | {
+        "schema": _CURSOR_SCHEMA,
+        "by_model": {m: dict(t) for m, t in (cumulative.get("by_model") or {}).items()},
+        # So the NEXT row's window starts where this one stopped, for time and quota alike.
+        "last_ts": cumulative.get("last_ts"),
+        "quota_last": cumulative.get("quota_last"),
+        "primary_only": bool(primary_only),
+        "marked_at": marked_at,
+    }
+
+
+def _is_v1_cursor(prev: dict | None) -> bool:
+    return prev is not None and int(prev.get("schema", 1)) < _CURSOR_SCHEMA
 
 
 def delta_since_cursor(cumulative: dict, prev: dict | None) -> tuple[dict, bool]:
@@ -605,7 +687,9 @@ def delta_since_cursor(cumulative: dict, prev: dict | None) -> tuple[dict, bool]
         cumulative["models"],
         totals,
         by_model,
-        span=(prev.get("last_ts"), cumulative.get("last_ts")),
+        # A mark moved the boundary to wall-clock NOW; billing from the last TURN instead
+        # would hand the whole idle gap to this row. Absent -> last_ts, so old cursors work.
+        span=(prev.get("marked_at") or prev.get("last_ts"), cumulative.get("last_ts")),
         quota=(q_from, cumulative.get("quota_last")),
         counted_transcripts=int(cumulative.get("counted_transcripts", 1) or 1),
     )
@@ -1022,13 +1106,25 @@ def main() -> int:
     ap.add_argument("--tool", choices=["claude", "codex"], default="claude")
     ap.add_argument("--transcript", help="explicit transcript path (default: newest for the tool)")
     ap.add_argument("--story", help="story key, e.g. ep-03-us-02-... (enables ledger recording)")
-    ap.add_argument("--phase", default="", help="create | dev | review | review-patch | live-gate | retro")
+    # default None, not "": --mark tests `is not None`, so a wrapper passing an unset
+    # --phase "" gets the refusal instead of a silent mark.
+    ap.add_argument("--phase", help="create | dev | review | review-patch | live-gate | retro")
     ap.add_argument(
         "--no-nested",
         action="store_true",
         help="measure ONE transcript in isolation: skip Claude subagent transcripts and "
         "nested Codex rollouts. Off by default — the honest number for a phase includes the "
         "work it spawned; the isolated number is the special case.",
+    )
+    ap.add_argument(
+        "--mark",
+        action="store_true",
+        help="close a phase boundary: advance this transcript's cursor to NOW without "
+        "writing a ledger row. The window since the last record is printed, then discarded "
+        "— use it ONLY when the window belongs to no phase at all; if it belongs to a phase, "
+        "record a ROW for that phase instead (a mark where a row was owed hides the spend "
+        "rather than over-attributing it visibly). Works for either --tool: a Codex rollout "
+        "takes a mark exactly as a Claude transcript does.",
     )
     ap.add_argument(
         "--metrics-file",
@@ -1040,6 +1136,49 @@ def main() -> int:
         help="build a per-story/per-phase cost rollup for EPIC (e.g. ep-05) and write <EPIC>-rollup.md",
     )
     args = ap.parse_args()
+
+    # A mark writes a cursor and NOTHING else, so every way it could write a wrong cursor
+    # has to be a hard error: with no row emitted, there is nothing to make the damage
+    # visible later. Every refusal names the way through rather than just saying no, and
+    # every one goes to STDERR — a wrapper capturing stdout for the breakdown would
+    # otherwise show an empty error alongside rc 2. --rollup is checked FIRST because it is
+    # the flag that would be dropped whole; a caller passing two rejected flags should hear
+    # about that one, not only about the second.
+    if args.mark:
+        if args.rollup:
+            # --rollup returns before the mark branch is ever reached, so without this the
+            # mark would be silently DROPPED and the caller would believe a boundary was set.
+            print(
+                "session_tokens: --mark and --rollup do different jobs — run them separately.",
+                file=sys.stderr,
+            )
+            return 2
+        if args.no_nested:
+            print(
+                "session_tokens: --mark cannot take --no-nested. The cursor stores the "
+                "fan-out-inclusive cumulative; stamping a primary-only one would inflate "
+                "every later delta on this transcript by the whole fan-out.",
+                file=sys.stderr,
+            )
+            return 2
+        # `is not None`, not truthiness: `--phase ""` from a wrapper with an unset variable
+        # is a mistake, and a silent mark is the worst possible answer to it.
+        if args.story is not None or args.phase is not None:
+            print(
+                "session_tokens: --mark writes no ledger row. Drop --story/--phase to mark a "
+                "boundary, or drop --mark to record one.",
+                file=sys.stderr,
+            )
+            return 2
+        if args.metrics_file is not None:
+            # The fourth row-writing flag. Accepting it silently would tell the caller a
+            # ledger path was honoured when no ledger was touched at all.
+            print(
+                "session_tokens: --mark writes no ledger row, so --metrics-file has nowhere "
+                "to write. Drop it to mark a boundary, or drop --mark to record a row.",
+                file=sys.stderr,
+            )
+            return 2
 
     if args.rollup:
         metrics_dir = os.path.join(_forge_root(), "_bmad-output", "implementation-artifacts", "metrics")
@@ -1082,15 +1221,80 @@ def main() -> int:
     elif args.no_nested:
         print("  (--no-nested: this transcript in isolation; any fan-out it spawned is NOT counted)")
 
+    # Loaded once for whichever write path runs, so an unreadable cursor file is one named
+    # refusal rather than two — and NOT loaded at all for a print-only run, which must keep
+    # working even when the file is damaged.
+    if args.mark or (args.story and args.phase):
+        try:
+            cursors = _load_cursors()
+        except CursorFileError as exc:
+            print(f"session_tokens: {exc}", file=sys.stderr)
+            return 2
+
+    if args.mark:
+        prev = cursors.get(transcript_id)
+        if _is_v1_cursor(prev) and n_nested:
+            # The v1->v2 rebase exists to bill the primary-chain delta into a ROW while
+            # saying out loud what it skipped. A mark writes no row, so marking here would
+            # discard the whole fan-out backlog with nothing to name it. Record a real row
+            # first — that path rebases and reports — then mark.
+            # Guarded on n_nested, not on the schema alone: with no fan-out on this
+            # transcript there IS no backlog to lose (s == primary_only), so a v1 cursor is
+            # already complete, and refusing would force exactly the row --mark exists to
+            # avoid. 72% of live cursors are v1, so this is the common path, not the corner.
+            print(
+                f"session_tokens: {transcript_id} still carries a pre-fan-out (v1) cursor. "
+                "Marking it would discard its entire fan-out backlog with no row to name "
+                "what went missing. Record a real row first (that path rebases and says "
+                "what it skipped), then mark.",
+                file=sys.stderr,
+            )
+            return 2
+        if prev is not None and prev.get("primary_only"):
+            # Same defect as --no-nested on this run, one step removed: the BASELINE was
+            # measured without the fan-out, so the window computed against it carries every
+            # fan-out token the transcript ever spent — discarded here, invisibly.
+            print(
+                f"session_tokens: {transcript_id}'s cursor was written with --no-nested, so "
+                "it measures that transcript WITHOUT the work it spawned. Marking from it "
+                "would discard a window computed against the wrong baseline. Record a real "
+                "row first (that re-stamps a fan-out-inclusive cursor), then mark.",
+                file=sys.stderr,
+            )
+            return 2
+        discarded, reset = delta_since_cursor(s, prev)
+        if reset:
+            print("  (cursor looked stale — the whole cumulative is being discarded)")
+        if prev is not None and "primary_only" not in prev:
+            # Cursors written before the flag existed cannot say which they are. Read as
+            # complete — refusing would block every one of them behind a row — but say so,
+            # because if one WAS written under --no-nested this window is understated.
+            print(
+                "  (cursor predates the primary_only flag — read as fan-out-inclusive; if it "
+                "was written with --no-nested, the discarded window below is understated)"
+            )
+        # Print what is being thrown away BEFORE the cursor moves. A silent mark erases the
+        # window from every ledger at once and this is the only place it is ever accounted
+        # for — so a failure in the printer must not follow a window that is already gone.
+        _print_summary("Discarded  (unattributed window — no ledger row)", discarded)
+        cursors[transcript_id] = cursor_from(
+            s, primary_only=False, marked_at=datetime.now(timezone.utc).isoformat()
+        )
+        _save_cursors(cursors)
+        print(
+            f"  marked boundary → cursor advanced for {transcript_id}; the next row on this "
+            "transcript bills only work done from here on."
+        )
+        return 0
+
     if not (args.story and args.phase):
         if args.story or args.phase:
             print("  (pass BOTH --story and --phase to record a ledger row)")
         return 0
 
-    cursors = _load_cursors()
     prev = cursors.get(transcript_id)
     rebased = 0
-    if prev is not None and int(prev.get("schema", 1)) < _CURSOR_SCHEMA and not args.no_nested:
+    if _is_v1_cursor(prev) and not args.no_nested:
         # A pre-fix cursor measured the PRIMARY transcript only — the main Claude chain, or
         # the primary Codex rollout. Diffing it against a now-fan-out-inclusive cumulative
         # would dump every subagent and nested-rollout token that transcript ever spent into
@@ -1115,13 +1319,9 @@ def main() -> int:
         _forge_root(), "_bmad-output", "implementation-artifacts", "metrics", f"{args.story}.md"
     )
     append_ledger(metrics_file, args.story, args.phase, args.tool, delta, transcript_id)
-    cursors[transcript_id] = {b: int(s[b]) for b in _CURSOR_BUCKETS} | {
-        "schema": _CURSOR_SCHEMA,
-        "by_model": {m: dict(t) for m, t in (s.get("by_model") or {}).items()},
-        # So the NEXT row's window starts where this one stopped, for time and quota alike.
-        "last_ts": s.get("last_ts"),
-        "quota_last": s.get("quota_last"),
-    }
+    # `primary_only=args.no_nested`: under --no-nested `s` IS the primary-only cumulative.
+    # marked_at defaults to None, which CLEARS any mark — this row has moved the boundary.
+    cursors[transcript_id] = cursor_from(s, primary_only=args.no_nested)
     _save_cursors(cursors)
     print(
         f"  recorded delta → {os.path.relpath(metrics_file, _forge_root())} "

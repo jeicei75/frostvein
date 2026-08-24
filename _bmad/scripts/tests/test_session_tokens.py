@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -109,6 +110,420 @@ class DeltaCursorTests(unittest.TestCase):
         delta, reset = st.delta_since_cursor(cumulative, stale)
         self.assertTrue(reset)
         self.assertEqual(delta["total"], cumulative["total"])  # fall back to full cumulative
+
+
+    # --- `--mark`: close a phase boundary without writing a ledger row -------------
+    #
+    # The delta cursor only ever advanced when a row was written, so any window NOT
+    # bookended by two rows was swept into the next row that happened to be taken —
+    # the leading window before a session's first record, and the gap between one
+    # phase ending and the next beginning. That mixed a 14-patch verification pass
+    # and a separate vehicle session into one $151.81 row in frostvein's 7-2 ledger.
+    # (frostvein action item T2, handed to the forge because this script is
+    # forge-owned and must stay byte-identical downstream.)
+
+    @staticmethod
+    def _turn(model, inp, cw, cr, out, ts):
+        return json.dumps(
+            {
+                "timestamp": ts,
+                "message": {
+                    "model": model,
+                    "usage": {
+                        "input_tokens": inp,
+                        "cache_creation_input_tokens": cw,
+                        "cache_read_input_tokens": cr,
+                        "output_tokens": out,
+                    },
+                },
+            }
+        )
+
+    @contextlib.contextmanager
+    def _forge(self):
+        """A throwaway forge root + Claude transcript dir, so main() drives the real
+        cursor file and the real ledger writer without touching either for real."""
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as proj:
+            with unittest.mock.patch.object(st, "_forge_root", return_value=root), \
+                 unittest.mock.patch.object(st, "_claude_project_dir", return_value=proj):
+                yield Path(root), Path(proj) / "sess-abc.jsonl"
+
+    def _main(self, *argv):
+        # Both streams: the refusals print to stderr (a wrapper capturing stdout for the
+        # breakdown would otherwise see an empty error next to rc 2), and `self.err` keeps
+        # them separable for the test that asserts exactly that.
+        out, err = io.StringIO(), io.StringIO()
+        with unittest.mock.patch.object(sys, "argv", ["session_tokens.py", *argv]):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = st.main()
+        self.out, self.err = out.getvalue(), err.getvalue()
+        return rc, self.out + self.err
+
+    @staticmethod
+    def _fan_out(transcript, *lines):
+        """A Task-tool subagent transcript beside the main one. Without this every fixture
+        is a single file where `s == primary_only`, and the whole class of fan-out bugs
+        --mark exists to avoid is unobservable — a cursor stamped from the primary chain
+        alone passes a suite built only from single-file transcripts."""
+        d = transcript.parent / transcript.name[: -len(".jsonl")] / "subagents"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "agent-1.jsonl").write_text("".join(line + "\n" for line in lines))
+
+    def _cursors(self, root):
+        with unittest.mock.patch.object(st, "_forge_root", return_value=str(root)):
+            return st._load_cursors()
+
+    def test_mark_then_record_bills_only_the_post_mark_window(self):
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            rc, out = self._main("--mark")
+            self.assertEqual(rc, 0, out)
+            # The discarded window is named out loud — a mark that vanished silently
+            # would erase the tokens from all accounting with nothing to show for it.
+            self.assertIn("Discarded", out)
+            self.assertIn("unattributed", out)
+
+            with transcript.open("a") as fh:
+                fh.write(self._turn("claude-opus-4-8", 5, 50, 700, 15, "2026-08-24T10:00:00Z") + "\n")
+            rc, out = self._main("--story", "ep-99-us-01-demo", "--phase", "dev")
+            self.assertEqual(rc, 0, out)
+
+            ledger = (root / "_bmad-output" / "implementation-artifacts" / "metrics"
+                      / "ep-99-us-01-demo.md").read_text()
+        rows = [r for r in ledger.splitlines() if r.startswith("| dev |")]
+        self.assertEqual(len(rows), 1, ledger)
+        # Only the post-mark turn is billed: 1 turn, not 2, and the pre-mark tokens
+        # (1,000 cache_read) appear in no row anywhere in the ledger.
+        # Explicitly, cell by cell. `assertNotIn("1,000")` looked like the guard here and
+        # was not one: a build that billed both turns writes 1,700, which contains neither
+        # "1,000" nor "1000", so both assertions passed on the broken code.
+        cells = [c.strip() for c in rows[0].strip("|").split("|")]
+        self.assertEqual(cells[:8], ["dev", "claude", "claude-opus-4-8", "1", "5", "50", "700", "15"])
+
+    def test_mark_writes_a_cursor_identical_in_shape_to_a_recorded_one(self):
+        """Trap 1: a partial cursor makes every LATER row on the transcript wrong,
+        which is worse than the gap being fixed because it looks precise."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self.assertEqual(self._main("--mark")[0], 0)
+            marked = self._cursors(root)["sess-abc.jsonl"]
+
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self.assertEqual(self._main("--story", "s", "--phase", "dev")[0], 0)
+            recorded = self._cursors(root)["sess-abc.jsonl"]
+
+        # `marked_at` is the one field that must NOT match: only a mark sets it, and a row
+        # clears it. Everything else is compared, which is the trap-1 property.
+        self.assertEqual({k: v for k, v in marked.items() if k != "marked_at"},
+                         {k: v for k, v in recorded.items() if k != "marked_at"},
+                         "a mark must write the same cursor a row writes")
+        self.assertIsNotNone(marked["marked_at"], "a mark must stamp wall-clock now")
+        self.assertIsNotNone(st._parse_ts(marked["marked_at"]).tzinfo, "must be tz-aware UTC")
+        self.assertIsNone(recorded["marked_at"], "a row must CLEAR any mark it supersedes")
+        self.assertIs(marked["primary_only"], False)
+        self.assertIs(recorded["primary_only"], False)
+        for bucket in st._CURSOR_BUCKETS:
+            self.assertIn(bucket, marked)
+        self.assertEqual(marked["schema"], st._CURSOR_SCHEMA)
+        self.assertEqual(marked["by_model"], {"claude-opus-4-8":
+                                              {"input": 10, "cache_creation": 100,
+                                               "cache_read": 1000, "output": 20}})
+        self.assertEqual(marked["last_ts"], "2026-08-24T09:00:00Z")
+        self.assertIn("quota_last", marked)
+
+    def test_mark_refuses_no_nested(self):
+        """Trap 2: the cursor stores the fan-out-inclusive cumulative. A mark that
+        stamped a primary-only one would inflate every later delta by the whole
+        fan-out — and with no row written, nothing would show that it had."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            rc, out = self._main("--mark", "--no-nested")
+            self.assertEqual(rc, 2)
+            self.assertIn("--no-nested", out)
+            self.assertEqual(self._cursors(root), {}, "a refused mark must not write a cursor")
+
+    def test_mark_refuses_to_also_record_a_row(self):
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            rc, out = self._main("--mark", "--story", "s", "--phase", "dev")
+            self.assertEqual(rc, 2)
+            self.assertEqual(self._cursors(root), {})
+
+    def test_mark_refuses_to_also_build_a_rollup(self):
+        """--rollup returns long before the mark branch, so an unguarded combination
+        would silently DROP the mark while exiting 0 — the caller would believe a
+        boundary had been set when none was."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            rc, out = self._main("--mark", "--rollup", "ep-99")
+            self.assertEqual(rc, 2, out)
+            self.assertEqual(self._cursors(root), {})
+
+    def test_mark_refuses_a_v1_cursor(self):
+        """Trap 3: the v1->v2 rebase path exists to bill the primary-chain delta into a
+        ROW while naming what it skipped. A mark writes no row, so marking a v1 cursor
+        would discard the entire fan-out backlog with nothing to name it. Refuse, and
+        say that recording a row first is the way through."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            # There has to BE a backlog for the refusal to be protecting anything — see
+            # test_mark_accepts_a_v1_cursor_when_there_is_no_fan_out_to_lose.
+            self._fan_out(transcript, self._turn("claude-opus-4-8", 1, 2, 3, 4, "2026-08-24T09:05:00Z"))
+            v1 = {"turns": 1, "input": 1, "cache_creation": 1, "cache_read": 1, "output": 1}
+            with unittest.mock.patch.object(st, "_forge_root", return_value=str(root)):
+                st._save_cursors({"sess-abc.jsonl": dict(v1)})
+            rc, out = self._main("--mark")
+            self.assertEqual(rc, 2)
+            self.assertIn("v1", out)
+            self.assertEqual(self._cursors(root)["sess-abc.jsonl"], v1, "cursor left untouched")
+
+    # --- what the fixtures above could not see -----------------------------------
+
+    @staticmethod
+    def _seed(root, cursor):
+        with unittest.mock.patch.object(st, "_forge_root", return_value=str(root)):
+            st._save_cursors({"sess-abc.jsonl": cursor})
+
+    def test_mark_stamps_a_fan_out_inclusive_cursor(self):
+        """The cursor must hold main + subagents. Every fixture above is a single file,
+        where `s == primary_only` and `cursor_from(primary_only)` passes unnoticed."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self._fan_out(
+                transcript, self._turn("claude-opus-4-8", 1, 2, 3, 4, "2026-08-24T09:05:00Z")
+            )
+            rc, out = self._main("--mark")
+            self.assertEqual(rc, 0, out)
+            self.assertIn("subagent transcript", out, "the fan-out must be named in the summary")
+            cursor = self._cursors(root)["sess-abc.jsonl"]
+        self.assertEqual(
+            {k: cursor[k] for k in st._CURSOR_BUCKETS},
+            {"turns": 2, "input": 11, "cache_creation": 102, "cache_read": 1003, "output": 24},
+            "a primary-only cursor here inflates every later delta by the whole fan-out",
+        )
+
+    def test_mark_against_an_existing_cursor_discards_only_the_new_window(self):
+        """The discarded figures are the ONLY record of the window. A mark that reported
+        the whole cumulative — or reported nothing — would be indistinguishable here."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self.assertEqual(self._main("--story", "ep-99-us-01-demo", "--phase", "create")[0], 0)
+            with transcript.open("a") as fh:
+                fh.write(self._turn("claude-opus-4-8", 5, 50, 700, 15, "2026-08-24T10:00:00Z") + "\n")
+            rc, out = self._main("--mark")
+        self.assertEqual(rc, 0, out)
+        discarded = out.split("Discarded", 1)[1]
+        self.assertIn("(1 turns,", discarded)
+        self.assertRegex(discarded, r"input \(fresh\)\s+5\b")
+        self.assertRegex(discarded, r"cache creation\s+50\b")
+        self.assertRegex(discarded, r"cache read\s+700\b")
+        self.assertRegex(discarded, r"output\s+15\b")
+
+    def test_mark_accepts_a_v1_cursor_when_there_is_no_fan_out_to_lose(self):
+        """The v1 refusal guards a fan-out backlog. With no `subagents/` dir there is none
+        — the cursor is already complete — and refusing would force exactly the row --mark
+        exists to avoid, on 72% of the live cursors."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self._seed(root, {"turns": 1, "input": 1, "cache_creation": 1,
+                              "cache_read": 1, "output": 1})
+            rc, out = self._main("--mark")
+            self.assertEqual(rc, 0, out)
+            cursor = self._cursors(root)["sess-abc.jsonl"]
+        self.assertEqual(cursor["schema"], st._CURSOR_SCHEMA, "the mark rebases it to v2")
+        self.assertRegex(out.split("Discarded", 1)[1], r"cache read\s+999\b")
+
+    def test_mark_refuses_a_primary_only_cursor(self):
+        """`schema: 2` does not mean "fan-out-inclusive" on its own — a row recorded with
+        --no-nested stamps one too. Marking from that baseline discards a window computed
+        against the wrong cumulative, silently."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self._fan_out(
+                transcript, self._turn("claude-opus-4-8", 1, 2, 3, 4, "2026-08-24T09:05:00Z")
+            )
+            rc, _ = self._main("--no-nested", "--story", "ep-99-us-01-demo", "--phase", "create")
+            self.assertEqual(rc, 0)
+            recorded = self._cursors(root)["sess-abc.jsonl"]
+            self.assertIs(recorded["primary_only"], True, "the flag records which cumulative")
+            rc, out = self._main("--mark")
+            self.assertEqual(rc, 2, out)
+            self.assertIn("--no-nested", out)
+            self.assertEqual(self._cursors(root)["sess-abc.jsonl"], recorded, "left untouched")
+
+    def test_a_cursor_predating_the_flag_marks_with_the_assumption_named(self):
+        """Absent is UNKNOWN, not "complete". Read as complete — refusing would block every
+        pre-patch v2 cursor behind a row — but never silently."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self._seed(root, {"turns": 1, "input": 1, "cache_creation": 1, "cache_read": 1,
+                              "output": 1, "schema": 2, "by_model": {}, "last_ts": None,
+                              "quota_last": None})
+            rc, out = self._main("--mark")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("predates the primary_only flag", out)
+
+    def test_marked_at_anchors_the_next_row_and_a_row_then_clears_it(self):
+        """`last_ts` is the last TURN, so a span measured from it bills the idle gap between
+        the mark and the next phase to that next phase. And the clearing half is the easy
+        one to miss: a stale mark would keep anchoring spans long after a row moved on."""
+        ledger = None
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            with unittest.mock.patch.object(st, "datetime", _ClockAt0930):
+                self.assertEqual(self._main("--mark")[0], 0)
+            self.assertIsNotNone(
+                st._parse_ts(self._cursors(root)["sess-abc.jsonl"]["marked_at"]).tzinfo,
+                "marked_at must be timezone-aware UTC, per the file's own rule",
+            )
+            with transcript.open("a") as fh:
+                fh.write(self._turn("claude-opus-4-8", 5, 50, 700, 15, "2026-08-24T10:00:00Z") + "\n")
+            self.assertEqual(self._main("--story", "ep-99-us-01-demo", "--phase", "dev")[0], 0)
+            self.assertIsNone(self._cursors(root)["sess-abc.jsonl"]["marked_at"],
+                              "the row supersedes the mark and must clear it")
+            with transcript.open("a") as fh:
+                fh.write(self._turn("claude-opus-4-8", 5, 50, 700, 15, "2026-08-24T11:00:00Z") + "\n")
+            self.assertEqual(self._main("--story", "ep-99-us-01-demo", "--phase", "review")[0], 0)
+            ledger = str(root / "_bmad-output" / "implementation-artifacts" / "metrics"
+                         / "ep-99-us-01-demo.md")
+            rows = st.parse_ledger_rows(ledger)
+        self.assertEqual([r["phase"] for r in rows], ["dev", "review"])
+        # 09:30 (the mark) -> 10:00, not 09:00 (the last turn) -> 10:00.
+        self.assertEqual(rows[0]["minutes"], 30.0)
+        # 10:00 -> 11:00. A mark left uncleared would anchor this at 09:30 and read 90.
+        self.assertEqual(rows[1]["minutes"], 60.0)
+
+    def test_unreadable_cursor_file_is_a_hard_error_not_an_empty_dict(self):
+        """Swallowing it into `{}` makes one run bill every transcript's whole history and
+        then rewrite the file from that run alone — a total loss that exits 0."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            path = root / "_bmad-output" / "implementation-artifacts" / "metrics" / ".session-cursors.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('{"sess-abc.jsonl": {"turns": 1,')
+            rc, out = self._main("--mark")
+            self.assertEqual(rc, 2, out)
+            self.assertIn("could not be read", out)
+            self.assertEqual(path.read_text(), '{"sess-abc.jsonl": {"turns": 1,',
+                             "a refused run must not rewrite the file it could not read")
+
+    def test_malformed_cursor_entry_is_named_not_a_traceback(self):
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            path = root / "_bmad-output" / "implementation-artifacts" / "metrics" / ".session-cursors.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            for bad in ('{"sess-abc.jsonl": 7}', '{"sess-abc.jsonl": {"schema": "two"}}'):
+                path.write_text(bad)
+                rc, out = self._main("--mark")
+                self.assertEqual(rc, 2, out)
+                self.assertIn("sess-abc.jsonl", out)
+                self.assertNotIn("Traceback", out)
+
+    def test_a_failed_save_leaves_the_existing_cursors_intact(self):
+        """Write-then-rename. A whole-file rewrite truncates before it writes, so a crash
+        mid-save leaves a file that _load_cursors now refuses — turning one bad run into a
+        hard stop for every transcript."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self._seed(root, {"turns": 1, "input": 1, "cache_creation": 1, "cache_read": 1,
+                              "output": 1, "schema": 2, "primary_only": False, "by_model": {},
+                              "last_ts": None, "quota_last": None, "marked_at": None})
+            path = root / "_bmad-output" / "implementation-artifacts" / "metrics" / ".session-cursors.json"
+            before = path.read_text()
+            with unittest.mock.patch.object(st.json, "dump", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    self._main("--mark")
+            self.assertEqual(path.read_text(), before)
+
+    def test_mark_refuses_an_empty_story_or_phase(self):
+        """A wrapper with an unset variable passes `--phase ""`. Truthiness let that slip
+        through as a silent mark — the one outcome that leaves nothing to notice."""
+        for argv in (("--mark", "--phase", ""), ("--mark", "--story", ""),
+                     ("--mark", "--story", "", "--phase", "")):
+            with self._forge() as (root, transcript):
+                transcript.write_text(
+                    self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+                )
+                rc, out = self._main(*argv)
+                self.assertEqual(rc, 2, f"{argv}: {out}")
+                self.assertEqual(self._cursors(root), {}, argv)
+
+    def test_mark_refuses_a_metrics_file(self):
+        """The fourth row-writing flag; the other three are hard refusals. Accepting it
+        says a ledger path was honoured when no ledger was touched."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            rc, out = self._main("--mark", "--metrics-file", str(root / "led.md"))
+            self.assertEqual(rc, 2, out)
+            self.assertIn("--metrics-file", out)
+            self.assertEqual(self._cursors(root), {})
+
+    def test_refusals_go_to_stderr(self):
+        """A wrapper capturing stdout for the breakdown otherwise shows an empty error
+        beside rc 2."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            self.assertEqual(self._main("--mark", "--no-nested")[0], 2)
+        self.assertEqual(self.out, "", "nothing on stdout")
+        self.assertIn("--no-nested", self.err)
+
+    def test_rollup_refusal_is_reported_before_the_others(self):
+        """--rollup is the flag that would be DROPPED whole; a caller passing two rejected
+        flags should hear about that one, not only about the second."""
+        with self._forge() as (root, transcript):
+            transcript.write_text(
+                self._turn("claude-opus-4-8", 10, 100, 1000, 20, "2026-08-24T09:00:00Z") + "\n"
+            )
+            rc, out = self._main("--mark", "--rollup", "ep-99", "--no-nested")
+            self.assertEqual(rc, 2, out)
+            self.assertIn("--rollup", out)
+            self.assertNotIn("--no-nested", out)
+
+
+class _ClockAt0930(datetime):
+    """A frozen wall clock for the `marked_at` axis — the mark's own timestamp is the one
+    figure in this file that does not come from a transcript."""
+
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 8, 24, 9, 30, tzinfo=timezone.utc)
 
 
 class PricingTests(unittest.TestCase):
