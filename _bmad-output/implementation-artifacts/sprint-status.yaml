@@ -43,7 +43,21 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-25  # STORY 8.1 HEADLESS HALF -> REVIEW. Mutation round caught --cursor inert at run(); fixed, 6/6 KILLED, gate green, 382 tests. Task 6/AC12 vehicle-bound and open. PRIOR: STORY 8.1 CREATED, epic-8 opened. Picking approach ruled by Wolf: the ray comes from the rendering camera (Camera::viewport_to_world), not from a second hand-rolled projection. All four of 8.1's epic premises re-verified against source and all four hold; render_to_world exists but had zero production callers until now. PRIOR:  # M2-TO-DATE RETROSPECTIVE HELD (Epics 5+6+7 in one, filed as epic-5-retro-2026-08-23.md). epic-5's stale in-progress key flipped to done; retros for 5, 6 and 7 all marked done against the one record. 12 action items opened, E4-P1 and T4 closed, E2 dropped as obsolete.
+last_updated: 2026-08-25  # STORY 8.1 CODE-REVIEWED -> in-progress. 4 layers + 1 narrowed re-run, NO coverage
+                          # holes. 5 decisions ruled by Wolf, 12 patches LEFT AS ACTION ITEMS for a FRESH SESSION
+                          # (patch-in-a-fresh-session rule held deliberately, not by omission). Convergence 4-in-22,
+                          # the first favourable R1 data point; R1 STILL has no M2-crate mapping and was hand-adapted
+                          # for the SECOND story running -- owed a ruling at the Epic 8 retro. Blind Hunter timed out
+                          # at ~18min, was SALVAGED not killed bare, and its partial carried the run's one scare: an
+                          # oracle disagreeing with first_visible_hit on 24/36000 rays. Its one permitted re-run
+                          # SETTLED it -- all 24 are ORACLE artifacts (fixed 0.005 sampling step vs corner grazes
+                          # 0.000065-0.0018 wide). The DDA is PROVEN correct, not assumed. CORRECTION TO THE RECORD:
+                          # the --capture path CANNOT run in any devpod (bevy_winit, no DISPLAY) -- so AC10 and AC11's
+                          # instrument has NEVER EXECUTED IN ANY PROCESS ANYWHERE, and joins AC12 as vehicle-bound.
+                          # AC5 is NOT met: the hover slab is invisible on every tile with a drawn tile above it
+                          # (cliff faces, corridor walls, shaft sides) AND near the campfire -- both DEFERRED by Wolf
+                          # awaiting final gfx, but 8.2 designates by pointing at exactly those faces, so it lands
+                          # BEFORE 8.2 ships. PRIOR: STORY 8.1 HEADLESS HALF -> REVIEW. Mutation round caught --cursor inert at run(); fixed, 6/6 KILLED, gate green, 382 tests. Task 6/AC12 vehicle-bound and open. PRIOR: STORY 8.1 CREATED, epic-8 opened. Picking approach ruled by Wolf: the ray comes from the rendering camera (Camera::viewport_to_world), not from a second hand-rolled projection. All four of 8.1's epic premises re-verified against source and all four hold; render_to_world exists but had zero production callers until now. PRIOR:  # M2-TO-DATE RETROSPECTIVE HELD (Epics 5+6+7 in one, filed as epic-5-retro-2026-08-23.md). epic-5's stale in-progress key flipped to done; retros for 5, 6 and 7 all marked done against the one record. 12 action items opened, E4-P1 and T4 closed, E2 dropped as obsolete.
                           # 2026-08-20 VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
                           # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
                           # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
@@ -508,7 +522,7 @@ development_status:
   # STILL OPEN and NOT closable by any agent: Task 6 / AC12. NOTHING HAS BEEN OBSERVED ON THE
   # VEHICLE; NFR6-with-picking is unmeasured and no fps figure was fabricated. Rebuild gui.exe and
   # record its build time + source commit first -- the stale-binary trap fired three times in 5.4.
-  8-1-point-at-the-world: review
+  8-1-point-at-the-world: in-progress
   8-2-designate-with-the-mouse: backlog
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.

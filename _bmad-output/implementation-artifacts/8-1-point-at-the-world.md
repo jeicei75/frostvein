@@ -5,7 +5,7 @@ baseline_commit: 32e693317f08f3319f52596637fba30c4488f26d
 
 # Story 8.1: Point at the World
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -145,6 +145,104 @@ change at all. **M2-7 is still open** — there is no build script and no SHA st
   - [ ] Paste both figures labelled `gingerspice / native Windows / NVIDIA`. A failed reading is the finding and gets reported, not worked around.
 - [x] **Task 7 — The gate (AC: 1)**
   - [x] `cargo clean -p gui`, then `scripts/gate.sh` full tier. Paste the tail. A `GATE GREEN (FAST)` line is a coverage hole, not a pass.
+
+### Review Findings — code review 2026-08-25 (4 layers + 1 narrowed re-run, no coverage holes)
+
+Four layers, all live: every layer verified `cargo --version` and executed code rather than reading
+it. **Territory note:** R1's split names `sim-core` / `simd`+`tui`+`protocol`, none of which this
+gui-only diff touches. Adapted as at 6.1 — Blind Hunter took the pick path (`pick.rs`, `project.rs`,
+`ingest.rs`), Edge Case Hunter the instrument and render seam (`capture.rs`, `appearance.rs`,
+`tests/headless.rs`); both Opus auditors kept whole-diff scope. **R1 still has no mapping for the M2
+crates — this is the second story to hand-adapt it. It is owed a ruling at the Epic 8 retro.**
+
+**Convergence (R1's control measure): 4 findings raised independently by 2+ layers** — the
+unreachable test pitch (feature+acceptance), AC11's formatter-only test (feature+acceptance), the
+vacuous near-white guard (edge+acceptance), and AC2's hand-rolled axis math (feature+acceptance).
+That is 4-in-22, against Epic 3's best story of 1-in-8.
+
+**Blind Hunter timed out** at ~18 min and was salvaged per the time-box rule rather than killed
+bare. Its partial report carried one HIGH-unconfirmed: an independent oracle disagreeing with a
+hand-transcribed `first_visible_hit` on 24/36,000 rays at 128x128x32. Its one permitted narrowed
+re-run **settled it: all 24 are oracle artifacts.** The oracle sampled the ray at a fixed 0.005-unit
+step; the disputed intersections were corner grazes 0.000065-0.0018 units wide, 3x-77x narrower than
+its step. A corrected exact boundary-walk tracer confirmed the DDA skipped no nearer hit, and the
+probe's own recomputed-boundary variant ruled out float drift. **The shipped `first_visible_hit` is
+correct.** The core algorithm is proven, not assumed.
+
+**What running it proved, and what it did not.** The gate is green on a cold rebuild (run
+independently by the Acceptance Auditor, full tier, exit 0). The pick resolves correctly at every
+reachable camera pose an auditor could construct. But **the `--capture` path cannot run in any
+devpod** — measured twice, `bevy_winit` fails with `neither WAYLAND_DISPLAY nor WAYLAND_SOCKET nor
+DISPLAY is set`. My own layer briefs said otherwise and were wrong; both Opus auditors caught the
+error rather than inheriting it. Consequence, stated plainly: **AC10 and AC11's instrument has never
+executed in any process anywhere** — not in a test, not in a devpod. AC10, AC11 and AC12 are all
+vehicle-bound, and AC5 is only half-closed (the colour arithmetic is proven; the rendered frame is
+not). Nothing in this story has been observed rendering a pixel.
+
+**Decisions — all five ruled by Wolf, 2026-08-25** (rulings recorded inline):
+
+- [x] [Review][Decision→Defer] **The hover highlight is invisible on every tile with a drawn tile above it** — **RULED: defer to 8.2, ship as-is. Reason: waiting on final gfx; a look change needs a concrete defect and the art pass is owed first (art-gates rule, 2026-08-22).** — `sync_hover_highlight` places the slab at `world_to_render(pos) + Y*0.55` unconditionally, but the cube above tile *z* spans render y `z+0.5..z+1.5`, so the 0.08-thick slab at `z+0.51..z+0.59` is wholly enclosed. The Feature Auditor measured it on a real cliff at production-legal pitches: picks correct, highlight buried, only the top row visible. This is the story's only user-visible half, and 8.2 designates by pointing at exactly these vertical faces. The file already solves this for dig marks — `dig_mark_level` (`project.rs:597-604`) hoists a mark to the top of the contiguous drawn column — but **hoisting is wrong here**: the picked tile is by construction visible, and moving its marker up the column would highlight a different tile than the one under the cursor, defeating the story's promise. Options: draw the slab on the *hit face* (the DDA already knows which axis it crossed), an outline/wireframe box around the whole cell, or a cell-sized slightly-inflated cube. This is a look change, and UX-DR22 does not gate 8.1. `crates/gui/src/project.rs:227,230` `[feature/HIGH]`
+- [ ] [Review][Decision→Patch] **The instrument's oracle is mis-calibrated across the zoom range it must cover** — **RULED: option 1. Replace the fixed 32 px with the tile's own projected half-extent, `0.5 * viewport_height / (2*d*tan(fov/2))` (= `651.9/d` px at 1080p). PLUS: when more than one candidate falls inside the window, print a warning naming all of them rather than silently asserting against the nearest — a screen-space oracle stays depth-blind by construction at the vista, and that residual must be visible, not silent.** — `expected_pick` accepts any tile whose *centre* projects within a fixed **32 px** of the cursor. With `BOOT_VERTICAL_FOV = PI/4` at 1080p, 32 px is `0.0246 * distance` world units: at the near clamp (4.0) that is 0.098 units, ~10% of a tile's half-width, so a cursor anywhere off tile-centre yields `expected = None` against a correct `Some` and the `assert_eq!` fires — a **false failure**, and because it precedes `Screenshot::primary_window()` (`capture.rs:620`) it produces **no PNG** to adjudicate it. At the far clamp (500.0) 32 px is 12.3 units, admitting ~24 tiles at mixed depths, where `min_by` on screen distance is depth-blind. It is honest only in a band around `d ~ 20-60`. Every test dodges this by placing the cursor exactly at `project_world_point(target)`. Options: scale the tolerance with distance, assert only within a declared band and say so, or replace the oracle. `crates/gui/src/capture.rs:626-641` `[orchestrator+edge/HIGH]`
+- [ ] [Review][Decision→Patch] **A capture that picks nothing passes and exits 0** — **RULED: option 1. A scripted cursor that picks nothing exits non-zero. CONSEQUENCE ACCEPTED: the instrument can no longer script AC6's sky case; that case stays covered by `picking_nothing_leaves_no_hover_for_sky_hidden_tiles_and_outside_the_window` in the headless suite. No `--expect-no-pick` flag — YAGNI, no use case exists.** — when `picked` and `expected` are both `None` the assertion succeeds and the run prints `no tile picked`. Two distinct routes reach it: a legitimate cursor over sky, and a *failure* to resolve the camera or primary window, which collapses both the oracle (`capture.rs:555-559`) and the live pick (`pick.rs:24-31`) to `None` independently. AC10 says the instrument "reports the mismatch rather than exiting 0"; a `None == None` pass is not evidence of the story's headline outcome. Needs intent: should a scripted cursor aimed at terrain that picks nothing be a non-zero exit? `crates/gui/src/capture.rs:554-567` `[edge+acceptance/MED]`
+- [ ] [Review][Decision→Patch] **The `--cursor` inert-seam fix stops one hop short** — **RULED: option 1. Restructure `run()` into a testable builder so the wiring call sites are reachable by a test.** — `insert_capture_resources` is tested, but *the call to it from `run()` is not*. The Feature Auditor ran the deletion: removing `ingest.rs:112` leaves `cargo test --offline --workspace` fully green, so `--cursor` and 7.2's `--distance` would both parse, validate and vanish. Mutation row 6 targets the extracted body, not the call site. The same holds by construction for `client_systems`/`projection_systems`/`capture_systems` at `:113-119`, because the headless harness calls those registration functions itself. `run()` needs a socket and a window, so its body is uncovered entirely. A real fix means restructuring `run()` into a testable builder; the alternative is to accept the hole and record it. This is the story's own round-1 finding relocated exactly one level out — the pattern this project has now hit at 7.2, at 8.1 round 1, and here. `crates/gui/src/ingest.rs:112` `[feature/MED]`
+- [ ] [Review][Decision→Patch] **Pick geometry and render geometry disagree for tree foliage** — **RULED: option 1. Exclude `Material::TreeFoliage` from the pick.** — the DDA tests every visible cell as a full unit cube, but `terrain_transform` scales the drawn cube by `foliage_scale`, which is **0.62 / 0.78 / 0.95** for `Material::TreeFoliage` (`project.rs:701-725`), deliberately, so crowns read as sparse branches. `worldgen.rs:204-224` really generates those tiles. At 0.62 the drawn crown covers 38% of its cell's face, so **~62% of a foliage cell picks the foliage the player is plainly seeing through** — and the foliage occludes the march, so a tile visible through the gap can never be picked. AC2 guarantees the *ray* comes from the rendering camera; nothing guarantees the *geometry* it tests matches what was drawn. Options: exclude `TreeFoliage` from the pick, test against the scaled bound, or accept and document. `crates/gui/src/pick.rs:98-102` `[orchestrator/MED]`
+
+**Patches** (unambiguous):
+
+- [ ] [Review][Patch] The 27-case AC3/AC7 matrix runs at a camera pose the rig cannot hold — `pitch: -0.55` puts the camera below the world looking up, while `orbit()` clamps to `MIN_PITCH 0.15 .. MAX_PITCH ~1.421`. AC3's "any pitch" therefore has zero coverage in the legal range; the Acceptance Auditor re-ran all 27 at pitch 0.15/0.45/1.4208 out-of-repo and got 0 failures, so this is a coverage hole rather than a live defect. `crates/gui/tests/headless.rs:2201` `[feature+acceptance/MED]`
+- [ ] [Review][Patch] The near-white guard cannot fail for the property it names — `assert!(hover.iter().any(|c| *c < 240))` passes for `[255,255,239]` and for pure red. The docstring 20 lines below it in the same file names this exact defect class. `crates/gui/src/appearance.rs:467-470` `[edge+acceptance/MED]`
+- [ ] [Review][Patch] AC2's "only axis conversion is `render_to_world`" is violated by hand-rolled bounds — `min`/`max`/`diagonal` encode the y/z swap and the z negation by hand rather than calling `world_to_render`. Correct today; duplicated knowledge that no test or mutation row would catch drifting, and the two test worlds are near-cubic so an x/y transposition may not show. `crates/gui/src/pick.rs:54-57` `[feature+acceptance/MED]`
+- [ ] [Review][Patch] The boundary nudge is dead code and its comment claims a guard that does not exist — `distance + f32::EPSILON` is bit-identical to `distance` for every entry distance this code sees (proven by execution: `ulp_diff=0` at 2, 4, 10, 41, 90, 100, 183.8, 500; camera distance clamps to `4.0..=500.0`). `EPSILON` is one ULP at magnitude 1.0, not at these magnitudes. Harmless — the box-face entry already floors into the correct cell — but the comment asserts a protection that is not there. Same function as the patch above. `crates/gui/src/pick.rs:64-67` `[blind+orchestrator/LOW]`
+- [ ] [Review][Patch] AC4's occlusion clause has no test — every picking scene is one isolated tile in a 3x3x1 world or one column in a 9x9x4 world, so no case has two slice-visible tiles along one ray where the nearer must win. "Stop at the first visible hit" is load-bearing and unpinned. `crates/gui/tests/headless.rs` `[feature/MED]`
+- [ ] [Review][Patch] `pick.rs` carries no unit tests of its own and the DDA is never exercised at the documented 128x128x32 scale — all coverage is indirect through the ECS at 9x9x4. The re-run's tracer is the natural oracle for such a test. `crates/gui/src/pick.rs` `[blind/MED]`
+- [ ] [Review][Patch] The sabotage table does not cover every seam AC as AC13 requires — six rows match Task 5's stated minimum exactly, but nothing removes `ClientLocal` from the highlight spawn (AC9's only structural clause) and nothing perturbs `hover_highlight_color()` (AC5's separation floor). All 7 anchors across the 6 existing rows verified live, count=1 each; no dead rows. `_bmad-output/implementation-artifacts/mutations/8-1-point-at-the-world.sh` `[acceptance/MED]`
+- [ ] [Review][Patch] The Orchestrator-verification claim "touches zero files outside `crates/gui`" is inaccurate as written — five paths under `_bmad-output/` are in the range. The intended claim, no *code* outside `crates/gui`, is true and was confirmed. `_bmad-output/implementation-artifacts/8-1-point-at-the-world.md` `[acceptance/LOW]`
+
+**Deferred** (in `deferred-work.md`, per the cap-the-LOW-tail rule):
+
+- [x] [Review][Defer] `project_world_point` hardcodes `BOOT_ASPECT_RATIO` 16:9 while the pick uses the live viewport aspect `[camera.rs:30, capture.rs:635]` — deferred, pre-existing
+- [x] [Review][Defer] `mirror.tile(world).is_some()` is redundant against `is_visible_at_slice` `[pick.rs:100]` — deferred, cosmetic
+- [x] [Review][Defer] AC8's pin landed in `tests/headless.rs`, not by extending `transform.rs`'s round-trip as the structure table specified — substance met, location not `[transform.rs unmodified]` — deferred
+- [x] [Review][Defer] AC13's "RED output is pasted" is discharged by a reference table, not pasted output `[story record]` — deferred, evidence real and checkable
+- [x] [Review][Defer] AC3 is unmeetable as written and AC7 silently drops its pitch clause `[story ACs]` — deferred to the Epic 8 retro, spec-defect class
+- [x] [Review][Defer] Task 1 ("no other module gains screen or axis math") contradicts Task 4/D8 (the instrument's independent forward projection) `[story tasks]` — deferred, spec-defect class
+- [x] [Review][Defer] `min_by` tie-break depends on undocumented ECS iteration order `[capture.rs:638]` — deferred, structurally unreachable in tests
+- [x] [Review][Defer] AC6's "cursor outside the window" asserts Bevy's own bounds check; `viewport_to_world`'s `Err` branch has no test `[pick.rs:35]` — deferred
+- [x] [Review][Defer] The highlight trails the pick by one rendered frame by construction `[project.rs:214-240]` — deferred, not observable at 60 fps
+- [x] [Review][Defer] **The hover slab is not visible near the campfire** — observed by Wolf, 2026-08-25. Almost certainly downstream of the campfire's already-open blown-emitter item (`04e6de5` raised its amplitude 0.11→0.40, peaking 44.8M, 40% above what 5.4 was sized against), not a new hover defect. Deferred, waiting on final gfx `[appearance.rs campfire amplitude]`
+
+**Dismissed as noise (3):** the Edge Case Hunter's claim that AC8's mutual-inverse test "does not exist anywhere in `headless.rs`" (it does — `a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile` at `headless.rs:2069`; the layer grepped for the word "inverse"); the orchestrator's own suspicion that the hover slab z-fights the snow cap at 0.01 separation (refuted — Bevy's reverse-z f32 resolves ~1e-5 units at distance 90, two orders clear); and the Blind Hunter's HIGH-unconfirmed DDA divergence (resolved by the re-run as 24/24 oracle artifacts).
+
+
+### Vehicle build stamp — recorded 2026-08-25 18:30 UTC
+
+Captured at the review's end so Task 6 does not have to reconstruct it. **Verified fresh, not
+assumed**: the first build produced a `gui.exe` already 216 minutes old (mtime 14:26 against a
+wall clock of 18:03) — the stale-binary trap's fourth appearance. `touch crates/gui/src/pick.rs`
+followed by a rebuild moved the mtime to 18:30:24, twelve seconds after the touch, which is what
+proves the toolchain actually relinked rather than no-opping.
+
+```
+gui.exe built : 2026-08-25 18:30:24 UTC   (188,632,195 bytes)
+source commit : 5b69754  Record 8.1 orchestration ledger row  (2026-08-25T09:36:09Z)
+tree state    : no uncommitted changes under crates/ — binary matches HEAD's source exactly
+patches       : NONE of the review's 12 patches applied
+target        : x86_64-pc-windows-gnu, release
+linker        : x86_64-w64-mingw32-gcc
+```
+
+Byte size was identical before and after the rebuild, which independently confirms the stale
+binary was content-correct and only its timestamp was misleading.
+
+**READ BEFORE JUDGING AN INSTRUMENT FAILURE IN THIS SESSION.** This binary predates all 12 review
+patches, so AC10/AC11 will exercise the **known-defective oracle**. The 32 px window is
+`0.0246 x distance` world units, so at working zoom it covers only ~10-25% of a tile's half-width:
+a cursor off dead-centre yields `expected=None` against a correct `Some`, the assertion trips, and
+because it fires before `Screenshot::primary_window()` **no PNG is written**. A line reading
+`picked=[x,y,z] expected=None` is the oracle's blind spot, NOT a picking defect; two DIFFERENT
+tiles is a real disagreement worth chasing. Put the scripted cursor at a tile centre if you want it
+to pass. At full vista the failure inverts — 32 px admits ~24 tiles at mixed depths. **AC12's fps
+measurement is unaffected and is valid on this binary.**
 
 ## Dev Notes
 
