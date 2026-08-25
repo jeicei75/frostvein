@@ -124,11 +124,11 @@ change at all. **M2-7 is still open** — there is no build script and no SHA st
   - [x] Tag it `ClientLocal` **at spawn** — `classify_client_local` runs at `PostStartup` (`ingest.rs:183`) and will not see an entity spawned later in `Update`.
   - [x] Colour it from `appearance.rs`, beside the mark colours — never a literal at the draw site.
   - [x] Test the colour separation against hand-written literals, following `mark_colours_are_distinct_cold_literals`.
-- [ ] **Task 3 — Headless tests (AC: 7, 8)**
-  - [ ] Extend `crates/gui/tests/headless.rs` with a camera-bearing harness (skeleton in D3).
-  - [ ] Assert known pose + known cursor → expected tile across at least: three orbit yaws, three distances spanning the 4.0..=500.0 clamp, and three slice levels including one underground.
-  - [ ] Assert the three nothing-picked cases from AC6 separately — sky, slice-hidden, cursor outside the viewport.
-  - [ ] Add the mutual-inverse test of AC8. Mind the units: `project_world_point` returns **normalized** coords (0..1, y down, `camera.rs:76`) while `viewport_to_world` takes **viewport pixels** — multiply by the physical size you pinned in D3. **If it fails, suspect `BOOT_ASPECT_RATIO` before suspecting the pick** (D6) — and report it, do not paper over it.
+- [x] **Task 3 — Headless tests (AC: 7, 8)**
+  - [x] Extend `crates/gui/tests/headless.rs` with a camera-bearing harness (skeleton in D3).
+  - [x] Assert known pose + known cursor → expected tile across at least: three orbit yaws, three distances spanning the 4.0..=500.0 clamp, and three slice levels including one underground.
+  - [x] Assert the three nothing-picked cases from AC6 separately — sky, slice-hidden, cursor outside the viewport.
+  - [x] Add the mutual-inverse test of AC8. Mind the units: `project_world_point` returns **normalized** coords (0..1, y down, `camera.rs:76`) while `viewport_to_world` takes **viewport pixels** — multiply by the physical size you pinned in D3. **If it fails, suspect `BOOT_ASPECT_RATIO` before suspecting the pick** (D6) — and report it, do not paper over it.
 - [ ] **Task 4 — The instrument (AC: 10, 11)**
   - [ ] Add `--cursor <x>,<y>` to `parse_args_from` (`ingest.rs:248`). Validate it requires `--capture`, matching the existing `--distance` shape (`ingest.rs:301-303`).
   - [ ] **A typo'd flag is silently swallowed as the TCP port** (`ingest.rs:288-290`) and fails as an invalid port. Reject an unparseable `--cursor` value explicitly.
@@ -406,11 +406,14 @@ GPT-5 Codex
 - Task 1 GREEN: the same command passed after the camera-backed DDA path was registered in `client_systems` for `PostUpdate` after transform propagation.
 - Task 2 RED: `cargo test --offline -p gui the_live_pick_spawns_a_client_local_highlight_and_despawns_it_without_a_pick` failed with `error[E0432]: unresolved import gui::project::HoverHighlight` at `crates/gui/tests/headless.rs:43:22` before the highlight entity and synchronizer existed.
 - Task 2 GREEN: the live schedule-driven spawn/despawn test and `appearance::tests::hover_highlight_colour_is_a_distinct_cold_literal` both pass. The former writes/removes the real window cursor and calls `app.update()`; it never inserts a pick resource.
+- Task 3 RED (re-derived after the task's new coverage was added): temporary `return None` at the first-visible-hit seam made `camera_picking_covers_orbits_zoom_limits_and_sliced_levels` fail: `assertion left == right failed: yaw=-2.1, distance=4, slice=0 must pick literal target [4, 4, 0]; left: None; right: Some([4, 4, 0])`. The production return was restored immediately.
+- Task 3 GREEN: `cargo test --offline -p gui pick` passed all four picking tests. The 27-case matrix covers yaws -2.1/0.0/1.2, distances 4.0/30.0/500.0, and slices 0/1/3. The mutual-inverse cursor uses independent `CameraRig::project_world_point` multiplied by the pinned 1920×1080 viewport; it passed, so D6 raised no `BOOT_ASPECT_RATIO` finding.
 
 ### Completion Notes List
 
 - Task 1: added the sole screen-ray-to-tile path. It intersects the render-space world bounds, marches integer voxel cells only for at most the world diagonal, filters with the shared slice predicate, and converts the selected cell centre through `render_to_world`.
 - Task 2: added one client-local hover slab with explicit spawn-time `ClientLocal`, a cyan appearance-table colour, and deterministic despawn when no tile is picked.
+- Task 3: added the hand-built `MinimalPlugins` camera/window harness. It asserts visible picks across the full matrix and independently verifies sky, slice-hidden, and outside-window no-pick states also draw no hover.
 
 ### File List
 
@@ -428,3 +431,4 @@ GPT-5 Codex
 | 2026-08-25 | Story created. Picking approach ruled by Wolf: ray from the rendering camera via `Camera::viewport_to_world`. All four epic premises re-verified against source; `render_to_world` confirmed present but test-only today, and its truncation semantics recorded as D2. |
 | 2026-08-25 | Implemented Task 1's camera ray, bounded DDA pick path, and its schedule-driven RED→GREEN test. |
 | 2026-08-25 | Implemented Task 2's client-local hover highlight, colour separation pin, and live schedule-driven despawn test. |
+| 2026-08-25 | Implemented Task 3's camera-bearing headless matrix, no-pick assertions, and independent projection inverse pin. |

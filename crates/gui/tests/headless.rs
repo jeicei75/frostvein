@@ -2157,6 +2157,133 @@ fn the_live_pick_spawns_a_client_local_highlight_and_despawns_it_without_a_pick(
     );
 }
 
+fn picked_at(snapshot: Snapshot, rig: CameraRig, level: i32, cursor: Vec2) -> Option<[i32; 3]> {
+    let mut app = live_app(snapshot).0;
+    install_pick_camera(&mut app, rig, cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(level);
+    app.update();
+    let picked = app.world().resource::<PickedTile>().0;
+    if picked.is_none() {
+        assert_eq!(
+            app.world_mut()
+                .query::<&HoverHighlight>()
+                .iter(app.world())
+                .count(),
+            0,
+            "a no-pick frame must not leave a stale hover highlight"
+        );
+    }
+    picked
+}
+
+fn solid_column_snapshot() -> Snapshot {
+    let dims = Dims { x: 9, y: 9, z: 4 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    for z in 0..dims.z as usize {
+        tiles[4 + 4 * dims.x as usize + z * dims.x as usize * dims.y as usize] =
+            Tile::Solid(Material::Stone);
+    }
+    snapshot_with_dims(dims, tiles, vec![])
+}
+
+#[test]
+fn camera_picking_covers_orbits_zoom_limits_and_sliced_levels() {
+    let yaws = [-2.1, 0.0, 1.2];
+    let distances = [4.0, 30.0, 500.0];
+    let levels = [0, 1, 3];
+    for yaw in yaws {
+        for distance in distances {
+            for level in levels {
+                let target = [4, 4, level];
+                let rig = CameraRig {
+                    focus: target,
+                    yaw,
+                    pitch: -0.55,
+                    distance,
+                };
+                let cursor = rig
+                    .project_world_point(target)
+                    .expect("every test target must project through the independent camera rig")
+                    * PICK_VIEWPORT.as_vec2();
+                assert_eq!(
+                    picked_at(solid_column_snapshot(), rig, level, cursor),
+                    Some(target),
+                    "yaw={yaw}, distance={distance}, slice={level} must pick literal target {target:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn picking_nothing_leaves_no_hover_for_sky_hidden_tiles_and_outside_the_window() {
+    let rig = CameraRig::new([1, 1, 0]);
+    let sky = picked_at(
+        snapshot_with_dims(
+            Dims { x: 3, y: 3, z: 1 },
+            vec![
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Solid(Material::Stone),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            vec![],
+        ),
+        rig,
+        0,
+        Vec2::ZERO,
+    );
+    assert_eq!(sky, None, "the top-left sky contains no terrain tile");
+
+    let hidden_target = [1, 1, 1];
+    let hidden_rig = CameraRig::new(hidden_target);
+    let hidden_cursor = hidden_rig
+        .project_world_point(hidden_target)
+        .expect("the hidden tile would be in the camera frustum")
+        * PICK_VIEWPORT.as_vec2();
+    let hidden = picked_at(
+        snapshot_with_dims(
+            Dims { x: 3, y: 3, z: 2 },
+            vec![
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Solid(Material::Stone),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            vec![],
+        ),
+        hidden_rig,
+        0,
+        hidden_cursor,
+    );
+    assert_eq!(hidden, None, "the slice must reject a tile above its cut");
+
+    let outside = picked_at(solid_column_snapshot(), rig, 0, Vec2::new(-1.0, -1.0));
+    assert_eq!(
+        outside, None,
+        "a cursor outside the viewport must not pick a default tile"
+    );
+}
+
 #[test]
 fn the_live_startup_scene_spawns_its_camera_lighting_and_atmosphere() {
     let (mut app, _sender) = live_app(one_tile_snapshot());
