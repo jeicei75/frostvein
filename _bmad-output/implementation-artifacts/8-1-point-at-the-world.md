@@ -135,10 +135,10 @@ change at all. **M2-7 is still open** — there is no build script and no SHA st
   - [x] Print `pick: cursor=(x,y) picked=[x,y,z] expected=[x,y,z]` and assert equality; the expected tile comes from the independent forward projection, not from the pick.
   - [x] Test the instrument itself: two different scripted cursors produce two different picks, and the no-pick case prints its own distinct line.
 - [ ] **Task 5 — Sabotage table (AC: 13)**
-  - [ ] Write `_bmad-output/implementation-artifacts/mutations/8-1-point-at-the-world.sh` in the house format — `assert s.count(old) == 1` guard on every edit.
+  - [x] Write `_bmad-output/implementation-artifacts/mutations/8-1-point-at-the-world.sh` in the house format — `assert s.count(old) == 1` guard on every edit.
   - [ ] Minimum rows: the pick system deleted from `client_systems`' tuple; the slice-visibility filter removed from the march; `render_to_world` replaced by raw truncation of the hit point; the nothing-picked branch replaced by a fallback to `[0,0,0]`; the highlight's despawn-on-no-pick removed; `--cursor` parsed but never reaching the pick.
   - [ ] **Commit before running** (M2-9). Run `scripts/mutate.sh` **alone** — it is not concurrency-safe. Capture the exit code before any pipe.
-  - [ ] **Dry anchor-check first** (M2-8): grep every `old =` string against the live tree before the run.
+  - [x] **Dry anchor-check first** (M2-8): grep every `old =` string against the live tree before the run.
 - [ ] **Task 6 — VEHICLE-BOUND: NFR6 with picking live (AC: 12)**
   - [ ] **Rebuild and re-copy `gui.exe` first**, and record the build time and the commit it was built from.
   - [ ] Read sustained fps at working zoom and at full vista from the F3 overlay, with the cursor moving over the world.
@@ -410,6 +410,8 @@ GPT-5 Codex
 - Task 3 GREEN: `cargo test --offline -p gui pick` passed all four picking tests. The 27-case matrix covers yaws -2.1/0.0/1.2, distances 4.0/30.0/500.0, and slices 0/1/3. The mutual-inverse cursor uses independent `CameraRig::project_world_point` multiplied by the pinned 1920×1080 viewport; it passed, so D6 raised no `BOOT_ASPECT_RATIO` finding.
 - Task 4 RED: before parser implementation, `cargo test --offline -p gui capture_cursor_requires_capture_and_rejects_an_invalid_coordinate` failed with `error[E0609]: no field cursor on type ingest::Args` at `ingest.rs:802:25`.
 - Task 4 GREEN: parser test passes for a valid capture cursor, no-capture rejection, and explicit malformed-coordinate rejection. `the_scripted_capture_cursor_reaches_the_live_pick_system` drives the real cursor resource through `client_systems` and observes literal `[1, 1, 0]`; `capture_pick_line_changes_with_the_cursor_and_names_no_pick` pins both required line forms.
+- Task 5: wrote and committed the six required guarded mutation rows. Dry anchor checks each returned one live match. The runner twice reported KILLED RED assertions for the registration, slice-filter, and render-axis rows before this environment's command-output channel cut off mid-run; the source restoration completed, but no final table or exit code was returned. Task 5 remains open: do not infer KILLED for the remaining rows.
+- Task 7: ran `cargo clean -p gui` then started `scripts/gate.sh`; observed `cargo fmt --check ok`, `cargo clippy -D warnings ok`, and entry into `cargo test`, but the environment returned before the full-gate tail. Task 7 remains open; no full green is claimed.
 
 ### Completion Notes List
 
@@ -417,6 +419,7 @@ GPT-5 Codex
 - Task 2: added one client-local hover slab with explicit spawn-time `ClientLocal`, a cyan appearance-table colour, and deterministic despawn when no tile is picked.
 - Task 3: added the hand-built `MinimalPlugins` camera/window harness. It asserts visible picks across the full matrix and independently verifies sky, slice-hidden, and outside-window no-pick states also draw no hover.
 - Task 4: added the capture-only `--cursor` parser and resource writer, plus independent-forward-projection expected-tile reporting and equality assertion at capture time. No TCP ownership or wire shape changed.
+- Task 5 partial: added the committed six-row mutation table and verified its live anchors. The all-rows result is still required because the sandbox command output did not yield its final status.
 
 ### File List
 
@@ -426,6 +429,7 @@ GPT-5 Codex
 - `crates/gui/src/project.rs` (updated)
 - `crates/gui/src/appearance.rs` (updated)
 - `crates/gui/src/capture.rs` (updated)
+- `_bmad-output/implementation-artifacts/mutations/8-1-point-at-the-world.sh` (new)
 - `crates/gui/tests/headless.rs` (updated)
 
 ## Change Log
@@ -437,3 +441,4 @@ GPT-5 Codex
 | 2026-08-25 | Implemented Task 2's client-local hover highlight, colour separation pin, and live schedule-driven despawn test. |
 | 2026-08-25 | Implemented Task 3's camera-bearing headless matrix, no-pick assertions, and independent projection inverse pin. |
 | 2026-08-25 | Implemented Task 4's scripted capture cursor, pick instrument line, and parser/instrument tests. |
+| 2026-08-25 | Added Task 5's guarded six-row mutation table; final mutation and full-gate observations remain open after the sandbox output channel terminated before either final status. |
