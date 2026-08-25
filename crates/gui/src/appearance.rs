@@ -133,6 +133,12 @@ pub fn zone_color() -> Color {
     Color::srgb_u8(40, 120, 150)
 }
 
+/// The hover is not an order. Keep it cyan so it remains distinct from every designation mark
+/// and well away from the near-white stars and emitter faces.
+pub fn hover_highlight_color() -> Color {
+    Color::srgb_u8(80, 220, 210)
+}
+
 /// A stone item is rubble left standing at a dug tile, not a replacement block.
 ///
 /// Until 2026-08-20 the item branch inserted a mesh and material without touching the spawned
@@ -270,8 +276,9 @@ mod tests {
     use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
     use super::{
-        RIM_LEVELS, designation_color, entity_appearance, foliage_snow_color, light_properties,
-        material_color, night_lighting, rim_dissolved_color, snow_cap_color, zone_color,
+        RIM_LEVELS, designation_color, entity_appearance, foliage_snow_color,
+        hover_highlight_color, light_properties, material_color, night_lighting,
+        rim_dissolved_color, snow_cap_color, zone_color,
     };
 
     #[test]
@@ -446,6 +453,26 @@ mod tests {
                      side, so one colour must not name two different orders"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn hover_highlight_colour_is_a_distinct_cold_literal() {
+        let hover = hover_highlight_color().to_srgba().to_u8_array_no_alpha();
+        assert_eq!(hover, [80, 220, 210]);
+        assert!(
+            hover[2] >= hover[0],
+            "the hover must remain cold or neutral"
+        );
+        assert!(
+            hover.iter().any(|channel| *channel < 240),
+            "the hover must remain clear of the near-white reserved for stars and emitter faces"
+        );
+        for mark in [[56, 132, 250], [150, 96, 230], [40, 120, 150]] {
+            assert!(
+                channel_distance(hover, mark) >= MIN_MARK_SEPARATION,
+                "hover {hover:?} sits too close to mark {mark:?}"
+            );
         }
     }
 

@@ -44,7 +44,7 @@ use crate::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
         ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery, TerrainTile,
         WorldProjected, blend_entities, flicker_lights, has_terrain_above, reconcile,
-        setup_projection_assets,
+        setup_projection_assets, sync_hover_highlight,
     },
     slice::SliceLevel,
 };
@@ -192,7 +192,13 @@ pub fn client_systems(app: &mut App) {
             fall_snow,
         ),
     )
-    .add_systems(PostUpdate, update_pick.after(TransformSystems::Propagate));
+    .add_systems(
+        PostUpdate,
+        (
+            update_pick.after(TransformSystems::Propagate),
+            sync_hover_highlight.after(update_pick),
+        ),
+    );
 }
 
 /// The capture instrument's registration, including the ordering edge that keeps it reading the

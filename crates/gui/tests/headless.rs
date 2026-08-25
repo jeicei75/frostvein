@@ -40,8 +40,8 @@ use gui::{
     },
     pick::PickedTile,
     project::{
-        ClientLocal, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap, TerrainTile,
-        WorldProjected, setup_projection_assets,
+        ClientLocal, HoverHighlight, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap,
+        TerrainTile, WorldProjected, setup_projection_assets,
     },
     slice::SliceLevel,
     transform::world_to_render,
@@ -2097,6 +2097,63 @@ fn a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile() {
         app.world().resource::<PickedTile>().0,
         Some([1, 1, 0]),
         "the live client schedule must pick the visible tile under its projected cursor"
+    );
+}
+
+#[test]
+fn the_live_pick_spawns_a_client_local_highlight_and_despawns_it_without_a_pick() {
+    let target = [1, 1, 0];
+    let rig = CameraRig::new(target);
+    let cursor = rig
+        .project_world_point(target)
+        .expect("the visible target must have a forward projection")
+        * PICK_VIEWPORT.as_vec2();
+    let mut app = live_app(snapshot_with_dims(
+        Dims { x: 3, y: 3, z: 1 },
+        vec![
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Solid(Material::Stone),
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+        ],
+        vec![],
+    ))
+    .0;
+    install_pick_camera(&mut app, rig, cursor);
+
+    app.update();
+
+    let highlights = app
+        .world_mut()
+        .query::<(&HoverHighlight, &ClientLocal, Option<&WorldProjected>)>()
+        .iter(app.world())
+        .collect::<Vec<_>>();
+    assert_eq!(highlights.len(), 1, "a picked tile must gain one highlight");
+    assert_eq!(highlights[0].0.0, [1, 1, 0]);
+    assert!(
+        highlights[0].2.is_none(),
+        "a hover highlight is never simulation-projected"
+    );
+
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(None);
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&HoverHighlight>()
+            .iter(app.world())
+            .count(),
+        0,
+        "removing the cursor must remove the stale hover highlight"
     );
 }
 
