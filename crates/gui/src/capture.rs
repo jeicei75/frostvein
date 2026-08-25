@@ -6,7 +6,10 @@ use std::{
 use bevy::{
     app::AppExit,
     ecs::message::MessageWriter,
-    prelude::{Commands, On, PointLight, Query, Res, ResMut, Resource, Transform, Without},
+    prelude::{
+        Camera3d, Commands, On, PointLight, Query, Res, ResMut, Resource, Transform, Vec2, Window,
+        With, Without,
+    },
     render::render_resource::TextureFormat,
     render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
 };
@@ -14,11 +17,15 @@ use client_core::Mirror;
 use protocol::{EntityKind, JobState, LightKind, Tile};
 
 use crate::{
+    camera::CameraRig,
     ingest::MirrorResource,
+    ingest::ScriptedCursor,
+    pick::PickedTile,
     project::{ProjectedDesignation, ProjectedZone, TerrainTile, WorldProjected},
     slice::SliceLevel,
     transform::world_to_render,
 };
+use bevy::window::PrimaryWindow;
 
 #[derive(Debug, Clone, Copy)]
 pub struct DrawStats {
@@ -520,6 +527,9 @@ pub fn accumulate_motion(
 }
 
 /// Captures from the primary window after the real render loop has advanced N frames.
+// The capture instrument is one production system so its frame observations retain a single
+// ordering edge. Grouping unrelated ECS queries merely to satisfy this lint would hide that.
+#[allow(clippy::too_many_arguments)]
 pub fn capture_after_frames(
     mut commands: Commands,
     mut capture: ResMut<CaptureState>,
@@ -528,6 +538,10 @@ pub fn capture_after_frames(
     terrain: Query<&TerrainTile>,
     designations: Query<&ProjectedDesignation>,
     zones: Query<&ProjectedZone>,
+    picked: Option<Res<PickedTile>>,
+    cursor: Option<Res<ScriptedCursor>>,
+    cameras: Query<&CameraRig, With<Camera3d>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
 ) {
     if capture.requested {
         return;
@@ -537,6 +551,21 @@ pub fn capture_after_frames(
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
         let draw = collect_draw_stats(slice.level(), &mirror.0, &terrain, &designations, &zones);
+        if let Some(cursor) = cursor {
+            let expected = cameras.single().ok().and_then(|rig| {
+                windows
+                    .single()
+                    .ok()
+                    .and_then(|window| expected_pick(cursor.0, *rig, window, &terrain))
+            });
+            let picked = picked.and_then(|picked| picked.0);
+            println!("{}", pick_capture_line(cursor.0, picked, expected));
+            assert_eq!(
+                picked, expected,
+                "capture cursor ({}, {}) picked {:?} but independent projection expected {:?}",
+                cursor.0.x, cursor.0.y, picked, expected
+            );
+        }
         // Print the actual count before every assertion. A successful process with a blank cut is
         // not a capture result; this remains truthful when a requested level changes the draw set.
         println!(
@@ -591,6 +620,74 @@ pub fn capture_after_frames(
             .spawn(Screenshot::primary_window())
             .observe(save_then_validate(capture.path.clone(), *slice))
             .observe(exit_after_capture);
+    }
+}
+
+fn expected_pick(
+    cursor: Vec2,
+    rig: CameraRig,
+    window: &Window,
+    terrain: &Query<&TerrainTile>,
+) -> Option<[i32; 3]> {
+    terrain
+        .iter()
+        .filter_map(|tile| {
+            let screen = rig.project_world_point(tile.0)? * window.resolution.size();
+            let distance_squared = screen.distance_squared(cursor);
+            (distance_squared <= 32.0_f32.powi(2)).then_some((distance_squared, tile.0))
+        })
+        .min_by(|(left, _), (right, _)| left.total_cmp(right))
+        .map(|(_, tile)| tile)
+}
+
+/// Formats the capture's cursor observation before its equality assertion can abort the process.
+pub fn pick_capture_line(
+    cursor: Vec2,
+    picked: Option<[i32; 3]>,
+    expected: Option<[i32; 3]>,
+) -> String {
+    match (picked, expected) {
+        (Some(picked), Some(expected)) => format!(
+            "pick: cursor=({},{}) picked={} expected={}",
+            cursor.x,
+            cursor.y,
+            tile_text(picked),
+            tile_text(expected)
+        ),
+        (None, None) => format!("pick: cursor=({},{}) no tile picked", cursor.x, cursor.y),
+        (picked, expected) => format!(
+            "pick: cursor=({},{}) picked={picked:?} expected={expected:?}",
+            cursor.x, cursor.y
+        ),
+    }
+}
+
+fn tile_text([x, y, z]: [i32; 3]) -> String {
+    format!("[{x},{y},{z}]")
+}
+
+#[cfg(test)]
+mod pick_tests {
+    use bevy::prelude::Vec2;
+
+    use super::pick_capture_line;
+
+    #[test]
+    fn capture_pick_line_changes_with_the_cursor_and_names_no_pick() {
+        let first = pick_capture_line(Vec2::new(100.0, 200.0), Some([1, 2, 3]), Some([1, 2, 3]));
+        let second = pick_capture_line(Vec2::new(300.0, 200.0), Some([4, 2, 3]), Some([4, 2, 3]));
+        assert_ne!(
+            first, second,
+            "different scripted cursors must report different picks"
+        );
+        assert_eq!(
+            first,
+            "pick: cursor=(100,200) picked=[1,2,3] expected=[1,2,3]"
+        );
+        assert_eq!(
+            pick_capture_line(Vec2::new(0.0, 0.0), None, None),
+            "pick: cursor=(0,0) no tile picked"
+        );
     }
 }
 

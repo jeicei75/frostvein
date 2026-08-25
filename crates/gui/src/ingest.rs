@@ -26,9 +26,10 @@ use bevy::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
         DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
         Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform,
-        TransformSystems, With, Without, px,
+        TransformSystems, Vec2, Window, With, Without, px,
     },
     render::renderer::RenderAdapterInfo,
+    window::PrimaryWindow,
 };
 use client_core::Mirror;
 use protocol::{Delta, Dims, Snapshot};
@@ -110,6 +111,9 @@ pub fn run() -> anyhow::Result<()> {
         .insert_resource(ClearColor(night_lighting().sky));
     if let Some(distance) = args.distance {
         app.insert_resource(CaptureDistance(distance));
+    }
+    if let Some(cursor) = args.cursor {
+        app.insert_resource(ScriptedCursor(cursor));
     }
     client_systems(&mut app);
     projection_systems(&mut app);
@@ -195,7 +199,8 @@ pub fn client_systems(app: &mut App) {
     .add_systems(
         PostUpdate,
         (
-            update_pick.after(TransformSystems::Propagate),
+            apply_scripted_cursor.after(TransformSystems::Propagate),
+            update_pick.after(apply_scripted_cursor),
             sync_hover_highlight.after(update_pick),
         ),
     );
@@ -245,10 +250,15 @@ struct Args {
     expect_work: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
+    cursor: Option<Vec2>,
 }
 
 #[derive(Resource)]
 pub struct CaptureDistance(pub f32);
+
+/// A capture-only viewport position written before the camera pick runs.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct ScriptedCursor(pub Vec2);
 
 fn parse_args() -> anyhow::Result<Args> {
     parse_args_from(std::env::args_os().skip(1))
@@ -261,6 +271,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut expect_work = false;
     let mut slice_level = None;
     let mut distance = None;
+    let mut cursor = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -294,6 +305,9 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                 bail!("--distance must be finite");
             }
             distance = Some(parsed);
+        } else if arg == "--cursor" {
+            let value = args.next().context("--cursor requires x,y")?;
+            cursor = Some(parse_cursor(value)?);
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -310,6 +324,9 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if distance.is_some() && capture.is_none() {
         bail!("--distance requires --capture");
     }
+    if cursor.is_some() && capture.is_none() {
+        bail!("--cursor requires --capture");
+    }
     Ok(Args {
         port,
         capture,
@@ -317,7 +334,33 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         expect_work,
         slice_level,
         distance,
+        cursor,
     })
+}
+
+fn parse_cursor(value: OsString) -> anyhow::Result<Vec2> {
+    let value = value.to_string_lossy();
+    let Some((x, y)) = value.split_once(',') else {
+        bail!("invalid --cursor; expected x,y");
+    };
+    if y.contains(',') {
+        bail!("invalid --cursor; expected x,y");
+    }
+    let x: f32 = x.parse().context("invalid --cursor x")?;
+    let y: f32 = y.parse().context("invalid --cursor y")?;
+    if !x.is_finite() || !y.is_finite() {
+        bail!("invalid --cursor; coordinates must be finite");
+    }
+    Ok(Vec2::new(x, y))
+}
+
+fn apply_scripted_cursor(
+    cursor: Option<Res<ScriptedCursor>>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+) {
+    if let (Some(cursor), Ok(mut window)) = (cursor, windows.single_mut()) {
+        window.set_cursor_position(Some(cursor.0));
+    }
 }
 
 fn setup_camera(mut commands: Commands, distance: Option<Res<CaptureDistance>>) {
@@ -786,6 +829,44 @@ mod tests {
             .is_err(),
             "a camera distance must be finite"
         );
+    }
+
+    #[test]
+    fn capture_cursor_requires_capture_and_rejects_an_invalid_coordinate() {
+        let args = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("1"),
+            std::ffi::OsString::from("--cursor"),
+            std::ffi::OsString::from("960,540"),
+        ])
+        .expect("a capture cursor must parse");
+        assert_eq!(args.cursor, Some(bevy::prelude::Vec2::new(960.0, 540.0)));
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--cursor"),
+                std::ffi::OsString::from("960,540"),
+            ])
+            .is_err(),
+            "a scripted cursor without a capture has no valid instrument to drive"
+        );
+        let invalid = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("1"),
+            std::ffi::OsString::from("--cursor"),
+            std::ffi::OsString::from("not-a-coordinate"),
+        ]);
+        assert!(
+            invalid.is_err(),
+            "a malformed --cursor must not fall through to the port parser"
+        );
+        let Err(error) = invalid else {
+            unreachable!("the malformed cursor was asserted above to be rejected");
+        };
+        assert!(error.to_string().contains("invalid --cursor"));
     }
 
     /// The half the parse test could not reach, and the reason its NAME was a lie. Reviewed

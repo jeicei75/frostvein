@@ -35,7 +35,7 @@ use gui::{
     capture::{CaptureState, accumulate_motion},
     ingest::{
         CaptureDistance, IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork,
-        SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
+        ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
         reconcile_projection,
     },
     pick::PickedTile,
@@ -2281,6 +2281,47 @@ fn picking_nothing_leaves_no_hover_for_sky_hidden_tiles_and_outside_the_window()
     assert_eq!(
         outside, None,
         "a cursor outside the viewport must not pick a default tile"
+    );
+}
+
+#[test]
+fn the_scripted_capture_cursor_reaches_the_live_pick_system() {
+    let target = [1, 1, 0];
+    let rig = CameraRig::new(target);
+    let cursor = rig
+        .project_world_point(target)
+        .expect("the target must have an independent forward projection")
+        * PICK_VIEWPORT.as_vec2();
+    let mut app = live_app(snapshot_with_dims(
+        Dims { x: 3, y: 3, z: 1 },
+        vec![
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Solid(Material::Stone),
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+        ],
+        vec![],
+    ))
+    .0;
+    install_pick_camera(&mut app, rig, Vec2::ZERO);
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(None);
+    app.insert_resource(ScriptedCursor(cursor));
+
+    app.update();
+
+    assert_eq!(
+        app.world().resource::<PickedTile>().0,
+        Some([1, 1, 0]),
+        "the parsed capture cursor must be written before the shared pick system runs"
     );
 }
 

@@ -129,11 +129,11 @@ change at all. **M2-7 is still open** — there is no build script and no SHA st
   - [x] Assert known pose + known cursor → expected tile across at least: three orbit yaws, three distances spanning the 4.0..=500.0 clamp, and three slice levels including one underground.
   - [x] Assert the three nothing-picked cases from AC6 separately — sky, slice-hidden, cursor outside the viewport.
   - [x] Add the mutual-inverse test of AC8. Mind the units: `project_world_point` returns **normalized** coords (0..1, y down, `camera.rs:76`) while `viewport_to_world` takes **viewport pixels** — multiply by the physical size you pinned in D3. **If it fails, suspect `BOOT_ASPECT_RATIO` before suspecting the pick** (D6) — and report it, do not paper over it.
-- [ ] **Task 4 — The instrument (AC: 10, 11)**
-  - [ ] Add `--cursor <x>,<y>` to `parse_args_from` (`ingest.rs:248`). Validate it requires `--capture`, matching the existing `--distance` shape (`ingest.rs:301-303`).
-  - [ ] **A typo'd flag is silently swallowed as the TCP port** (`ingest.rs:288-290`) and fails as an invalid port. Reject an unparseable `--cursor` value explicitly.
-  - [ ] Print `pick: cursor=(x,y) picked=[x,y,z] expected=[x,y,z]` and assert equality; the expected tile comes from the independent forward projection, not from the pick.
-  - [ ] Test the instrument itself: two different scripted cursors produce two different picks, and the no-pick case prints its own distinct line.
+- [x] **Task 4 — The instrument (AC: 10, 11)**
+  - [x] Add `--cursor <x>,<y>` to `parse_args_from` (`ingest.rs:248`). Validate it requires `--capture`, matching the existing `--distance` shape (`ingest.rs:301-303`).
+  - [x] **A typo'd flag is silently swallowed as the TCP port** (`ingest.rs:288-290`) and fails as an invalid port. Reject an unparseable `--cursor` value explicitly.
+  - [x] Print `pick: cursor=(x,y) picked=[x,y,z] expected=[x,y,z]` and assert equality; the expected tile comes from the independent forward projection, not from the pick.
+  - [x] Test the instrument itself: two different scripted cursors produce two different picks, and the no-pick case prints its own distinct line.
 - [ ] **Task 5 — Sabotage table (AC: 13)**
   - [ ] Write `_bmad-output/implementation-artifacts/mutations/8-1-point-at-the-world.sh` in the house format — `assert s.count(old) == 1` guard on every edit.
   - [ ] Minimum rows: the pick system deleted from `client_systems`' tuple; the slice-visibility filter removed from the march; `render_to_world` replaced by raw truncation of the hit point; the nothing-picked branch replaced by a fallback to `[0,0,0]`; the highlight's despawn-on-no-pick removed; `--cursor` parsed but never reaching the pick.
@@ -408,12 +408,15 @@ GPT-5 Codex
 - Task 2 GREEN: the live schedule-driven spawn/despawn test and `appearance::tests::hover_highlight_colour_is_a_distinct_cold_literal` both pass. The former writes/removes the real window cursor and calls `app.update()`; it never inserts a pick resource.
 - Task 3 RED (re-derived after the task's new coverage was added): temporary `return None` at the first-visible-hit seam made `camera_picking_covers_orbits_zoom_limits_and_sliced_levels` fail: `assertion left == right failed: yaw=-2.1, distance=4, slice=0 must pick literal target [4, 4, 0]; left: None; right: Some([4, 4, 0])`. The production return was restored immediately.
 - Task 3 GREEN: `cargo test --offline -p gui pick` passed all four picking tests. The 27-case matrix covers yaws -2.1/0.0/1.2, distances 4.0/30.0/500.0, and slices 0/1/3. The mutual-inverse cursor uses independent `CameraRig::project_world_point` multiplied by the pinned 1920×1080 viewport; it passed, so D6 raised no `BOOT_ASPECT_RATIO` finding.
+- Task 4 RED: before parser implementation, `cargo test --offline -p gui capture_cursor_requires_capture_and_rejects_an_invalid_coordinate` failed with `error[E0609]: no field cursor on type ingest::Args` at `ingest.rs:802:25`.
+- Task 4 GREEN: parser test passes for a valid capture cursor, no-capture rejection, and explicit malformed-coordinate rejection. `the_scripted_capture_cursor_reaches_the_live_pick_system` drives the real cursor resource through `client_systems` and observes literal `[1, 1, 0]`; `capture_pick_line_changes_with_the_cursor_and_names_no_pick` pins both required line forms.
 
 ### Completion Notes List
 
 - Task 1: added the sole screen-ray-to-tile path. It intersects the render-space world bounds, marches integer voxel cells only for at most the world diagonal, filters with the shared slice predicate, and converts the selected cell centre through `render_to_world`.
 - Task 2: added one client-local hover slab with explicit spawn-time `ClientLocal`, a cyan appearance-table colour, and deterministic despawn when no tile is picked.
 - Task 3: added the hand-built `MinimalPlugins` camera/window harness. It asserts visible picks across the full matrix and independently verifies sky, slice-hidden, and outside-window no-pick states also draw no hover.
+- Task 4: added the capture-only `--cursor` parser and resource writer, plus independent-forward-projection expected-tile reporting and equality assertion at capture time. No TCP ownership or wire shape changed.
 
 ### File List
 
@@ -422,6 +425,7 @@ GPT-5 Codex
 - `crates/gui/src/ingest.rs` (updated)
 - `crates/gui/src/project.rs` (updated)
 - `crates/gui/src/appearance.rs` (updated)
+- `crates/gui/src/capture.rs` (updated)
 - `crates/gui/tests/headless.rs` (updated)
 
 ## Change Log
@@ -432,3 +436,4 @@ GPT-5 Codex
 | 2026-08-25 | Implemented Task 1's camera ray, bounded DDA pick path, and its schedule-driven RED→GREEN test. |
 | 2026-08-25 | Implemented Task 2's client-local hover highlight, colour separation pin, and live schedule-driven despawn test. |
 | 2026-08-25 | Implemented Task 3's camera-bearing headless matrix, no-pick assertions, and independent projection inverse pin. |
+| 2026-08-25 | Implemented Task 4's scripted capture cursor, pick instrument line, and parser/instrument tests. |
