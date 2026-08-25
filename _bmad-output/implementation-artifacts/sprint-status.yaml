@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-08-23
+# last_updated: 2026-08-25
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-23  # M2-TO-DATE RETROSPECTIVE HELD (Epics 5+6+7 in one, filed as epic-5-retro-2026-08-23.md). epic-5's stale in-progress key flipped to done; retros for 5, 6 and 7 all marked done against the one record. 12 action items opened, E4-P1 and T4 closed, E2 dropped as obsolete.
+last_updated: 2026-08-25  # STORY 8.1 CREATED, epic-8 opened. Picking approach ruled by Wolf: the ray comes from the rendering camera (Camera::viewport_to_world), not from a second hand-rolled projection. All four of 8.1's epic premises re-verified against source and all four hold; render_to_world exists but had zero production callers until now. PRIOR:  # M2-TO-DATE RETROSPECTIVE HELD (Epics 5+6+7 in one, filed as epic-5-retro-2026-08-23.md). epic-5's stale in-progress key flipped to done; retros for 5, 6 and 7 all marked done against the one record. 12 action items opened, E4-P1 and T4 closed, E2 dropped as obsolete.
                           # 2026-08-20 VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
                           # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
                           # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
@@ -484,10 +484,10 @@ development_status:
   7-2-read-the-working-zoom: done
   # Covered by the M2-to-date retrospective filed as Epic 5's: epic-5-retro-2026-08-23.md
   epic-7-retrospective: done
-  epic-8: backlog
+  epic-8: in-progress
   # M2's hardest input work and the main story-count driver, isolated on purpose.
   # IF PICKING PROVES EASY, 8.1 AND 8.2 COLLAPSE INTO ONE AND M2 LANDS AT 10.
-  8-1-point-at-the-world: backlog
+  8-1-point-at-the-world: ready-for-dev
   8-2-designate-with-the-mouse: backlog
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.
