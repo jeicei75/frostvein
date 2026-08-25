@@ -14,7 +14,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use bevy::{
-    app::{App, AppExit, Startup, Update},
+    app::{App, AppExit, PostUpdate, Startup, Update},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::change_detection::DetectChanges,
@@ -25,8 +25,8 @@ use bevy::{
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
         DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
-        Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform, With,
-        Without, px,
+        Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform,
+        TransformSystems, With, Without, px,
     },
     render::renderer::RenderAdapterInfo,
 };
@@ -39,6 +39,7 @@ use crate::{
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{CaptureState, accumulate_motion, capture_after_frames},
+    pick::{PickedTile, update_pick},
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
         ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery, TerrainTile,
@@ -168,6 +169,7 @@ pub fn projection_systems(app: &mut App) {
 /// class, and the Milestone 2 retrospective ruled it closed at the root rather than caught a
 /// sixth time.
 pub fn client_systems(app: &mut App) {
+    app.init_resource::<PickedTile>();
     app.add_systems(
         Startup,
         (
@@ -189,7 +191,8 @@ pub fn client_systems(app: &mut App) {
             toggle_overlay,
             fall_snow,
         ),
-    );
+    )
+    .add_systems(PostUpdate, update_pick.after(TransformSystems::Propagate));
 }
 
 /// The capture instrument's registration, including the ordering edge that keeps it reading the

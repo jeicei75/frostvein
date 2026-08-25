@@ -13,14 +13,17 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::{
     MinimalPlugins,
     app::App,
+    camera::{CameraProjection, RenderTargetInfo},
     dev_tools::fps_overlay::FpsOverlayConfig,
     ecs::system::RunSystemOnce,
     input::ButtonInput,
     pbr::{DistanceFog, FogFalloff},
     prelude::{
-        Assets, DirectionalLight, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, Or,
-        PointLight, Resource, StandardMaterial, Text, Transform, With, Without,
+        Assets, Camera, DirectionalLight, Entity as BevyEntity, GlobalTransform, KeyCode, Mesh,
+        Mesh3d, MeshMaterial3d, Or, PointLight, Resource, StandardMaterial, Text, Transform, UVec2,
+        Vec2, Window, With, Without,
     },
+    window::{PrimaryWindow, WindowResolution},
 };
 
 #[derive(Resource)]
@@ -35,6 +38,7 @@ use gui::{
         SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
         reconcile_projection,
     },
+    pick::PickedTile,
     project::{
         ClientLocal, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap, TerrainTile,
         WorldProjected, setup_projection_assets,
@@ -2022,6 +2026,78 @@ fn live_app(
 
 fn one_tile_snapshot() -> Snapshot {
     snapshot(vec![Tile::Solid(Material::Stone), Tile::Empty], vec![])
+}
+
+const PICK_VIEWPORT: UVec2 = UVec2::new(1920, 1080);
+
+fn install_pick_camera(app: &mut App, rig: CameraRig, cursor: Vec2) {
+    // Run Startup first: `live_app` deliberately drives the same registration point as `run()`.
+    app.update();
+
+    let camera_entity = app
+        .world_mut()
+        .query_filtered::<BevyEntity, With<CameraRig>>()
+        .single(app.world())
+        .expect("live startup must spawn exactly one camera rig");
+    let mut camera = Camera::default();
+    camera.computed.target_info = Some(RenderTargetInfo {
+        physical_size: PICK_VIEWPORT,
+        scale_factor: 1.0,
+    });
+    let mut projection = bevy::prelude::PerspectiveProjection {
+        fov: gui::camera::BOOT_VERTICAL_FOV,
+        ..Default::default()
+    };
+    projection.update(PICK_VIEWPORT.x as f32, PICK_VIEWPORT.y as f32);
+    camera.computed.clip_from_view = projection.get_clip_from_view();
+    let transform = rig.transform();
+    app.world_mut().entity_mut(camera_entity).insert((
+        camera,
+        transform,
+        GlobalTransform::from(transform),
+        rig,
+    ));
+
+    let mut window = Window {
+        resolution: WindowResolution::new(PICK_VIEWPORT.x, PICK_VIEWPORT.y),
+        ..Default::default()
+    };
+    window.set_cursor_position(Some(cursor));
+    app.world_mut().spawn((window, PrimaryWindow));
+}
+
+#[test]
+fn a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile() {
+    let target = [1, 1, 0];
+    let rig = CameraRig::new(target);
+    let normalized = rig
+        .project_world_point(target)
+        .expect("the tile under the camera focus must project into the viewport");
+    let mut app = live_app(snapshot_with_dims(
+        Dims { x: 3, y: 3, z: 1 },
+        vec![
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Solid(Material::Stone),
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+        ],
+        vec![],
+    ))
+    .0;
+    install_pick_camera(&mut app, rig, normalized * PICK_VIEWPORT.as_vec2());
+
+    app.update();
+
+    assert_eq!(
+        app.world().resource::<PickedTile>().0,
+        Some([1, 1, 0]),
+        "the live client schedule must pick the visible tile under its projected cursor"
+    );
 }
 
 #[test]

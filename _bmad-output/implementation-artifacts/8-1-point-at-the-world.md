@@ -5,7 +5,7 @@ baseline_commit: 32e693317f08f3319f52596637fba30c4488f26d
 
 # Story 8.1: Point at the World
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -111,14 +111,14 @@ change at all. **M2-7 is still open** — there is no build script and no SHA st
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — The pick path (AC: 2, 3, 4, 6)**
-  - [ ] New `crates/gui/src/pick.rs`. One public entry point; no other module gains screen or axis math.
-  - [ ] Query `(&Camera, &GlobalTransform)` and the primary `Window`; take `cursor_position()`.
-  - [ ] `camera.viewport_to_world(global_transform, cursor)` → `Ray3d` in render space. On `Err`, pick nothing.
-  - [ ] DDA-march the ray through **integer render-space cells**, testing each against the mirror via the slice-visibility rule. Stop at the first visible hit.
-  - [ ] Convert the hit **cell centre** — a voxel-aligned `Vec3` — through `transform::render_to_world`. Never the raw hit point (see D2).
-  - [ ] Bound the march so a ray into empty sky terminates: cap at the world's diagonal extent, not at an arbitrary step count.
-  - [ ] Store the result in a client-local resource holding `Option<[i32; 3]>`.
+- [x] **Task 1 — The pick path (AC: 2, 3, 4, 6)**
+  - [x] New `crates/gui/src/pick.rs`. One public entry point; no other module gains screen or axis math.
+  - [x] Query `(&Camera, &GlobalTransform)` and the primary `Window`; take `cursor_position()`.
+  - [x] `camera.viewport_to_world(global_transform, cursor)` → `Ray3d` in render space. On `Err`, pick nothing.
+  - [x] DDA-march the ray through **integer render-space cells**, testing each against the mirror via the slice-visibility rule. Stop at the first visible hit.
+  - [x] Convert the hit **cell centre** — a voxel-aligned `Vec3` — through `transform::render_to_world`. Never the raw hit point (see D2).
+  - [x] Bound the march so a ray into empty sky terminates: cap at the world's diagonal extent, not at an arbitrary step count.
+  - [x] Store the result in a client-local resource holding `Option<[i32; 3]>`.
 - [ ] **Task 2 — The highlight (AC: 5, 9)**
   - [ ] Spawn/despawn a single highlight entity following the picked tile; despawn when nothing is picked.
   - [ ] Tag it `ClientLocal` **at spawn** — `classify_client_local` runs at `PostStartup` (`ingest.rs:183`) and will not see an entity spawned later in `Update`.
@@ -398,14 +398,28 @@ exists only in a handback message is lost at the session boundary.
 
 ### Agent Model Used
 
+GPT-5 Codex
+
 ### Debug Log References
+
+- Task 1 RED: `cargo test --offline -p gui a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile` failed before production existed: `error[E0432]: unresolved import gui::pick` at `crates/gui/tests/headless.rs:40:5`. The test writes a real primary-window cursor, calls `app.update()`, and asserts the observed `PickedTile`; its expected tile is the literal `[1, 1, 0]`.
+- Task 1 GREEN: the same command passed after the camera-backed DDA path was registered in `client_systems` for `PostUpdate` after transform propagation.
 
 ### Completion Notes List
 
+- Task 1: added the sole screen-ray-to-tile path. It intersects the render-space world bounds, marches integer voxel cells only for at most the world diagonal, filters with the shared slice predicate, and converts the selected cell centre through `render_to_world`.
+
 ### File List
+
+- `crates/gui/src/pick.rs` (new)
+- `crates/gui/src/lib.rs` (updated)
+- `crates/gui/src/ingest.rs` (updated)
+- `crates/gui/src/project.rs` (updated)
+- `crates/gui/tests/headless.rs` (updated)
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-08-25 | Story created. Picking approach ruled by Wolf: ray from the rendering camera via `Camera::viewport_to_world`. All four epic premises re-verified against source; `render_to_world` confirmed present but test-only today, and its truncation semantics recorded as D2. |
+| 2026-08-25 | Implemented Task 1's camera ray, bounded DDA pick path, and its schedule-driven RED→GREEN test. |

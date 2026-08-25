@@ -833,7 +833,7 @@ pub fn has_terrain_above(mirror: &Mirror, level: i32) -> bool {
     false
 }
 
-fn is_visible_at_slice(mirror: &Mirror, position: [i32; 3], level: i32) -> bool {
+pub(crate) fn is_visible_at_slice(mirror: &Mirror, position: [i32; 3], level: i32) -> bool {
     position[2] <= level
         && (is_exposed(mirror, position)
             || (position[2] == level
