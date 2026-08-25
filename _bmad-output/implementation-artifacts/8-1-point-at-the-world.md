@@ -5,7 +5,7 @@ baseline_commit: 32e693317f08f3319f52596637fba30c4488f26d
 
 # Story 8.1: Point at the World
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -134,17 +134,17 @@ change at all. **M2-7 is still open** — there is no build script and no SHA st
   - [x] **A typo'd flag is silently swallowed as the TCP port** (`ingest.rs:288-290`) and fails as an invalid port. Reject an unparseable `--cursor` value explicitly.
   - [x] Print `pick: cursor=(x,y) picked=[x,y,z] expected=[x,y,z]` and assert equality; the expected tile comes from the independent forward projection, not from the pick.
   - [x] Test the instrument itself: two different scripted cursors produce two different picks, and the no-pick case prints its own distinct line.
-- [ ] **Task 5 — Sabotage table (AC: 13)**
+- [x] **Task 5 — Sabotage table (AC: 13)**
   - [x] Write `_bmad-output/implementation-artifacts/mutations/8-1-point-at-the-world.sh` in the house format — `assert s.count(old) == 1` guard on every edit.
-  - [ ] Minimum rows: the pick system deleted from `client_systems`' tuple; the slice-visibility filter removed from the march; `render_to_world` replaced by raw truncation of the hit point; the nothing-picked branch replaced by a fallback to `[0,0,0]`; the highlight's despawn-on-no-pick removed; `--cursor` parsed but never reaching the pick.
-  - [ ] **Commit before running** (M2-9). Run `scripts/mutate.sh` **alone** — it is not concurrency-safe. Capture the exit code before any pipe.
+  - [x] Minimum rows: the pick system deleted from `client_systems`' tuple; the slice-visibility filter removed from the march; `render_to_world` replaced by raw truncation of the hit point; the nothing-picked branch replaced by a fallback to `[0,0,0]`; the highlight's despawn-on-no-pick removed; `--cursor` parsed but never reaching the pick.
+  - [x] **Commit before running** (M2-9). Run `scripts/mutate.sh` **alone** — it is not concurrency-safe. Capture the exit code before any pipe.
   - [x] **Dry anchor-check first** (M2-8): grep every `old =` string against the live tree before the run.
 - [ ] **Task 6 — VEHICLE-BOUND: NFR6 with picking live (AC: 12)**
   - [ ] **Rebuild and re-copy `gui.exe` first**, and record the build time and the commit it was built from.
   - [ ] Read sustained fps at working zoom and at full vista from the F3 overlay, with the cursor moving over the world.
   - [ ] Paste both figures labelled `gingerspice / native Windows / NVIDIA`. A failed reading is the finding and gets reported, not worked around.
-- [ ] **Task 7 — The gate (AC: 1)**
-  - [ ] `cargo clean -p gui`, then `scripts/gate.sh` full tier. Paste the tail. A `GATE GREEN (FAST)` line is a coverage hole, not a pass.
+- [x] **Task 7 — The gate (AC: 1)**
+  - [x] `cargo clean -p gui`, then `scripts/gate.sh` full tier. Paste the tail. A `GATE GREEN (FAST)` line is a coverage hole, not a pass.
 
 ## Dev Notes
 
@@ -398,7 +398,8 @@ exists only in a handback message is lost at the session boundary.
 
 ### Agent Model Used
 
-GPT-5 Codex
+Dev (delegated): Codex `gpt-5.6-terra`, reasoning effort high — banner verified at launch, session `01a03826-4a1e-7470-9dad-3b363ffbbee9`.
+Orchestration + independent verification: Claude `claude-opus-5[1m]`.
 
 ### Debug Log References
 
@@ -412,6 +413,124 @@ GPT-5 Codex
 - Task 4 GREEN: parser test passes for a valid capture cursor, no-capture rejection, and explicit malformed-coordinate rejection. `the_scripted_capture_cursor_reaches_the_live_pick_system` drives the real cursor resource through `client_systems` and observes literal `[1, 1, 0]`; `capture_pick_line_changes_with_the_cursor_and_names_no_pick` pins both required line forms.
 - Task 5: wrote and committed the six required guarded mutation rows. Dry anchor checks each returned one live match. The runner twice reported KILLED RED assertions for the registration, slice-filter, and render-axis rows before this environment's command-output channel cut off mid-run; the source restoration completed, but no final table or exit code was returned. Task 5 remains open: do not infer KILLED for the remaining rows.
 - Task 7: ran `cargo clean -p gui` then started `scripts/gate.sh`; observed `cargo fmt --check ok`, `cargo clippy -D warnings ok`, and entry into `cargo test`, but the environment returned before the full-gate tail. Task 7 remains open; no full green is claimed.
+
+### Orchestrator verification (independent, 2026-08-25)
+
+Codex's own run left Task 5 and Task 7 open and claimed neither — its sandbox cut the command
+output before the mutation table and the gate tail returned. **It refused to claim a green gate
+it had not seen**, which is the correct call and the inverse of 6.1's false ticks. Both were
+re-run here from scratch, and exit 0 was not trusted anywhere.
+
+**Auth/quota scan** — clean. Every `401`/`quota` hit in the run log is prompt or story text, not
+an error. Banner confirmed `gpt-5.6-terra` / effort `high`; no silent drift to luna/medium.
+
+**Git state** — branch `8-1-point-at-the-world`, tree clean, six Codex commits
+(`2e87d41`, `107f8c4`, `156c943`, `feb3dd8`, `ce5cb72`, `5bc3923`) plus one orchestrator fix
+commit (`6023249`). All authored `Völundr <jeicei75@gmail.com>`. **The commit-cadence floor was
+met for the first time without a follow-up** — one commit per completed task, no squash.
+
+**Scope (AC9, guardrails)** — `git diff` over the story's own range touches **zero files outside
+`crates/gui`**. No `sim-core`, `protocol`, `simd`, `tui` or `client-core` change; no `write_all`,
+no `TcpStream`, no command type added. `run()`'s stream ownership is untouched. Nothing on the
+wire, verified structurally rather than asserted.
+
+**MUTATION ROUND 1 — 5/6 KILLED, ONE SURVIVED.** The survivor is the finding of this story, and
+it is the inert-seam class the story's own Task 4 warned about, one level down:
+
+> `cursor parses but never reaches the pick` — **SURVIVED**
+
+Replacing `run()`'s `app.insert_resource(ScriptedCursor(cursor))` with `let _ = cursor;` left the
+**entire suite green**. `the_scripted_capture_cursor_reaches_the_live_pick_system` inserts
+`ScriptedCursor` **by hand**, so it pinned the resource→pick half and said nothing about whether
+production ever writes that resource. `--cursor` would have parsed, validated, and then been
+silently dropped — the capture would have picked whatever the real cursor pointed at, or nothing,
+while the instrument printed a well-formed line. **This is exactly the lie `--distance` told at
+7.2**, and exactly what M2-11 names: a test named for a seam it does not cross.
+
+Fixed in `6023249` by the same remedy 7.2 used — make the real production path executable from a
+test. `run()`'s capture-resource wiring is extracted into `insert_capture_resources`, and
+`the_cursor_flag_reaches_a_live_resource_rather_than_merely_parsing` runs it on a **real parsed
+`Args`** with hand-written expected coordinates. The mutation row was retargeted at that test.
+
+**MUTATION ROUND 2 — 6/6 KILLED, exit 0, zero APPLY-FAILED.** Dry anchor-check run first (M2-8):
+all seven `old =` strings matched exactly once against the live tree.
+
+| # | Row | Result | Assertion that went RED |
+| --- | --- | --- | --- |
+| 1 | pick system leaves the shared client schedule | KILLED | `headless.rs:2096` — *the live client schedule must pick the visible tile under its projected cursor* |
+| 2 | slice visibility is removed from the march | KILLED | `headless.rs:2278` — *the slice must reject a tile above its cut* |
+| 3 | render-to-world replaced by raw render axes | KILLED | `headless.rs:2096` — *the live client schedule must pick the visible tile under its projected cursor* |
+| 4 | no-pick falls back to the origin | KILLED | `headless.rs:2241` — *the top-left sky contains no terrain tile* |
+| 5 | hover survives when no tile is picked | KILLED | `headless.rs:2150` — *removing the cursor must remove the stale hover highlight* |
+| 6 | cursor parses but never reaches the pick | KILLED | `ingest.rs:905` — *a parsed --cursor must reach the resource the pick system reads* |
+
+**THE GATE (AC1) — GREEN, full tier, cold rebuild (`cargo clean -p gui` first), run twice: once
+before the fix and once after.** Not `--fast`. 382 workspace tests pass.
+
+```
+frostvein gate
+  cargo fmt --check           ok
+  cargo clippy -D warnings    ok
+  cargo test                  ok
+  tui has no sim-core edge                ok
+  client-core has no sim-core edge        ok
+  gui has no sim-core edge                ok
+  metrics ledger tests        ok
+  mutation tables still apply ok
+GATE GREEN
+```
+
+**`cargo clean -p gui` after the mutation round (M2-16 question):** run as the story instructed,
+but **it was not observed to be needed**. `mutate.sh` restored the tree cleanly both rounds
+(`git status` clean, exit 0 on round 2) and the M2-16 `tar -xmf` fix appears to hold. This is not
+a controlled result — skipping the clean was never tried — so the answer is "no evidence it is
+still needed", not "confirmed redundant".
+
+**Code checks against the story's rulings, read rather than assumed:**
+
+- **D2 (the trap most likely to ship a half-wrong feature) — honoured.** `first_visible_hit`
+  marches integer cells and converts `cell.as_vec3()`, a voxel-aligned centre, through
+  `render_to_world`. The raw ray-hit point never reaches it, so the truncate-vs-floor half-voxel
+  error does not arise. Mutation row 3 pins it.
+- **D4 — the pick is registered in `client_systems` and nowhere else.** The shared registration
+  point the live app and headless harness both drive.
+- **D5 — `PostUpdate`, `.after(TransformSystems::Propagate)`,** with an explicit
+  `apply_scripted_cursor → update_pick → sync_hover_highlight` chain, so there is no ambiguous
+  ordering edge (the defect three layers raised at 6.1).
+- **D7 — no registration assertions.** Every picking test writes a real cursor onto a real
+  `Window` and calls `app.update()`; none inserts `PickedTile` directly.
+- **D8 — no self-referential oracle.** Expected tiles are hand-written literals (`[1,1,0]`,
+  `[4,4,level]`); cursors come from `CameraRig::project_world_point`, the independent forward
+  projection, which is also what makes AC8 mutually inverse.
+- **D6 raised no finding.** The 27-case matrix passes on a viewport pinned to 1920×1080, so
+  `BOOT_ASPECT_RATIO` and the real camera agree. No evidence here that
+  `project_render_point` is wrong on non-16:9 windows — that remains untested, not disproved.
+- **AC7 coverage, named rather than merely passing:** yaws `-2.1 / 0.0 / 1.2`, distances
+  `4.0 / 30.0 / 500.0` (both clamp ends), slice levels `0 / 1 / 3`, over a solid column — 27
+  combinations, each asserting a literal target. AC6's three no-pick cases are asserted
+  separately, and each also asserts no stale highlight survives.
+- **`is_visible_at_slice` was widened to `pub(crate)`, not copied.** One hide predicate still.
+
+**One finding for review, not fixed here — the instrument's oracle is a screen-space nearest
+match, not a ray.** `expected_pick` (`capture.rs`) chooses the terrain tile whose forward
+projection lands nearest the cursor within 32 px. It ignores depth, so where two tiles both
+project near the cursor the oracle can prefer the one *further from the camera* while the pick
+correctly returns the nearer. On the vehicle's full vista that disagreement is plausible. It
+fails **loud** (an assert, per AC10) rather than silently passing, so it cannot manufacture false
+evidence in the 7.2 direction — but a spurious mismatch on Task 6 would be an instrument defect,
+not a pick defect, and the record should say so before someone chases the wrong bug.
+
+**A second, smaller note:** AC8's mutual-inverse pin landed in `crates/gui/tests/headless.rs`
+rather than extending the round-trip pin in `crates/gui/src/transform.rs`, which is what the
+story's Project Structure table specified. The AC's substance is met — projection and pick are
+proven mutually inverse — but `transform.rs` is untouched, so anyone auditing by file list will
+not find it where the story said to look.
+
+**STILL OPEN AND NOT CLOSABLE BY ANY AGENT: Task 6 / AC12.** Nothing in this story has been
+observed on the vehicle. NFR6 with picking live must be measured on gingerspice
+(native-Windows `gui.exe`, NVIDIA Vulkan, `simd` in WSL over localhost), **after a mandatory
+`gui.exe` rebuild whose build time and source commit are recorded** — the stale-binary trap fired
+three times in 5.4 alone. No fps figure has been fabricated and Task 6 is left unticked.
 
 ### Completion Notes List
 
@@ -431,6 +550,9 @@ GPT-5 Codex
 - `crates/gui/src/capture.rs` (updated)
 - `_bmad-output/implementation-artifacts/mutations/8-1-point-at-the-world.sh` (new)
 - `crates/gui/tests/headless.rs` (updated)
+- `_bmad-output/implementation-artifacts/8-1-point-at-the-world.md` (updated — story record)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (updated — status transitions)
+- `_bmad-output/implementation-artifacts/metrics/8-1-point-at-the-world.md` (updated — dev ledger row)
 
 ## Change Log
 
@@ -442,3 +564,5 @@ GPT-5 Codex
 | 2026-08-25 | Implemented Task 3's camera-bearing headless matrix, no-pick assertions, and independent projection inverse pin. |
 | 2026-08-25 | Implemented Task 4's scripted capture cursor, pick instrument line, and parser/instrument tests. |
 | 2026-08-25 | Added Task 5's guarded six-row mutation table; final mutation and full-gate observations remain open after the sandbox output channel terminated before either final status. |
+| 2026-08-25 | Orchestrator verification. Mutation round 1 caught row 6 SURVIVING: `--cursor` parsed, validated and then silently dropped by `run()`, with the whole suite green — the 7.2 `--distance` inert-seam class recurring. Fixed by extracting `insert_capture_resources` so the real wiring is executable from a test, and retargeting the row. Round 2: 6/6 KILLED, zero APPLY-FAILED. |
+| 2026-08-25 | Full gate re-run independently on a cold rebuild — GREEN, 382 workspace tests. Tasks 5 and 7 closed on observed evidence. Task 6 / AC12 left OPEN and vehicle-bound; no fps figure fabricated. Status → review. |
