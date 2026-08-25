@@ -109,12 +109,7 @@ pub fn run() -> anyhow::Result<()> {
             dirty_tiles: BTreeSet::new(),
         })
         .insert_resource(ClearColor(night_lighting().sky));
-    if let Some(distance) = args.distance {
-        app.insert_resource(CaptureDistance(distance));
-    }
-    if let Some(cursor) = args.cursor {
-        app.insert_resource(ScriptedCursor(cursor));
-    }
+    insert_capture_resources(&mut app, &args);
     client_systems(&mut app);
     projection_systems(&mut app);
     if let Some(capture) = args.capture {
@@ -360,6 +355,22 @@ fn apply_scripted_cursor(
 ) {
     if let (Some(cursor), Ok(mut window)) = (cursor, windows.single_mut()) {
         window.set_cursor_position(Some(cursor.0));
+    }
+}
+
+/// Writes the capture-only flags onto the app.
+///
+/// Extracted from `run()` so the seam from a parsed `Args` to the live resources is reachable by a
+/// test: `run()` itself needs a socket and a window, so nothing could execute this wiring. Story
+/// 8.1's mutation row proved the gap real -- replacing the cursor insert with `let _ = cursor;`
+/// left the whole suite green, because the only test wrote `ScriptedCursor` by hand. That is the
+/// same lie `--distance` told at 7.2: parsed, validated, and then silently dropped.
+fn insert_capture_resources(app: &mut App, args: &Args) {
+    if let Some(distance) = args.distance {
+        app.insert_resource(CaptureDistance(distance));
+    }
+    if let Some(cursor) = args.cursor {
+        app.insert_resource(ScriptedCursor(cursor));
     }
 }
 
@@ -867,6 +878,60 @@ mod tests {
             unreachable!("the malformed cursor was asserted above to be rejected");
         };
         assert!(error.to_string().contains("invalid --cursor"));
+    }
+
+    /// The other half of `--cursor`, and the half story 8.1's mutation table caught SURVIVING.
+    /// The scripted-cursor test above writes `ScriptedCursor` by hand, so it pins the resource ->
+    /// pick seam and says nothing about whether `run()` ever writes that resource: replacing the
+    /// insert with `let _ = cursor;` left the whole suite green. This runs the REAL wiring on a
+    /// REAL parsed `Args`, which is the only way the flag's own path is observed.
+    #[test]
+    fn the_cursor_flag_reaches_a_live_resource_rather_than_merely_parsing() {
+        fn scripted(args: &[&str]) -> Option<bevy::prelude::Vec2> {
+            let parsed = super::parse_args_from(
+                args.iter()
+                    .map(std::ffi::OsString::from)
+                    .collect::<Vec<_>>(),
+            )
+            .expect("the arguments under test must parse");
+            let mut app = App::new();
+            super::insert_capture_resources(&mut app, &parsed);
+            app.world()
+                .get_resource::<super::ScriptedCursor>()
+                .map(|cursor| cursor.0)
+        }
+
+        // Independent oracle: the expected coordinates are written here, not read back from `Args`.
+        assert_eq!(
+            scripted(&[
+                "--capture",
+                "working.png",
+                "--frames",
+                "1",
+                "--cursor",
+                "960,540"
+            ]),
+            Some(bevy::prelude::Vec2::new(960.0, 540.0)),
+            "a parsed --cursor must reach the resource the pick system reads"
+        );
+        assert_eq!(
+            scripted(&[
+                "--capture",
+                "working.png",
+                "--frames",
+                "1",
+                "--cursor",
+                "12,34"
+            ]),
+            Some(bevy::prelude::Vec2::new(12.0, 34.0)),
+            "the resource must carry the coordinate given, not a fixed one"
+        );
+        // No flag means no resource at all, so the live cursor is left alone.
+        assert_eq!(
+            scripted(&["--capture", "working.png", "--frames", "1"]),
+            None,
+            "without --cursor nothing may overwrite the real cursor position"
+        );
     }
 
     /// The half the parse test could not reach, and the reason its NAME was a lie. Reviewed

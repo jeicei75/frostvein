@@ -55,7 +55,7 @@ fn terrain_standard_material'''
 p.write_text(s.replace(old, new))
 PY
 
-mutation "cursor parses but never reaches the pick" gui the_scripted_capture_cursor_reaches_the_live_pick_system <<'PY'
+mutation "cursor parses but never reaches the pick" gui the_cursor_flag_reaches_a_live_resource_rather_than_merely_parsing <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '        app.insert_resource(ScriptedCursor(cursor));\n'
