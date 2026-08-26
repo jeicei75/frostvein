@@ -12,8 +12,44 @@ use crate::{
 };
 
 /// The client-local tile currently under the cursor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Face {
+    Top,
+    Bottom,
+    East,
+    West,
+    North,
+    South,
+}
+
+impl Face {
+    pub fn normal(self) -> Vec3 {
+        match self {
+            Self::Top => Vec3::Y,
+            Self::Bottom => -Vec3::Y,
+            Self::East => Vec3::X,
+            Self::West => -Vec3::X,
+            Self::North => Vec3::Z,
+            Self::South => -Vec3::Z,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PickedCell {
+    pub tile: [i32; 3],
+    pub face: Face,
+}
+
+/// The client-local cell currently under the cursor, plus the face its ray entered.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PickedTile(pub Option<[i32; 3]>);
+pub struct PickedTile(pub Option<PickedCell>);
+
+impl PickedTile {
+    pub fn tile(&self) -> Option<[i32; 3]> {
+        self.0.map(|cell| cell.tile)
+    }
+}
 
 /// Resolves the primary window's cursor through the rendering camera into the visible terrain.
 pub fn update_pick(
@@ -51,7 +87,7 @@ fn first_visible_hit(
     direction: Vec3,
     mirror: &client_core::Mirror,
     level: i32,
-) -> Option<[i32; 3]> {
+) -> Option<PickedCell> {
     let dims = mirror.dims();
     // AC2: `world_to_render` is the ONLY axis conversion. The two opposite world corners are
     // projected through it and the cell half-extent added afterwards, so a change to the y/z
@@ -104,6 +140,9 @@ fn first_visible_hit(
         ray_step_distance(direction.z),
     );
 
+    // A ray starting inside the world enters its first cell without crossing an axis. Preserve
+    // the historic top slab for that case rather than inventing a direction-dependent face.
+    let mut face = Face::Top;
     while distance <= end {
         let centre = cell.as_vec3();
         let world = render_to_world(centre);
@@ -111,20 +150,27 @@ fn first_visible_hit(
             && is_visible_at_slice(mirror, world, level)
             && !is_tree_foliage(mirror, world)
         {
-            return Some(world);
+            return Some(PickedCell { tile: world, face });
         }
         if next.x <= next.y && next.x <= next.z {
             distance = next.x;
             next.x += delta.x;
             cell.x += step.x;
+            face = if step.x >= 0 { Face::West } else { Face::East };
         } else if next.y <= next.z {
             distance = next.y;
             next.y += delta.y;
             cell.y += step.y;
+            face = if step.y >= 0 { Face::Bottom } else { Face::Top };
         } else {
             distance = next.z;
             next.z += delta.z;
             cell.z += step.z;
+            face = if step.z >= 0 {
+                Face::South
+            } else {
+                Face::North
+            };
         }
     }
     None
@@ -321,7 +367,7 @@ mod tests {
             let yaw = -2.1 + index as f32 * 0.27;
             let (pitch, distance) = poses[index % poses.len()];
             let (origin, direction) = ray_at(target, yaw, pitch, distance);
-            let marched = first_visible_hit(origin, direction, &mirror, TOP);
+            let marched = first_visible_hit(origin, direction, &mirror, TOP).map(|hit| hit.tile);
             let traced = nearest_visible_cell(&mirror, origin, direction, TOP);
             assert_eq!(
                 marched, traced,
@@ -345,7 +391,7 @@ mod tests {
         // Hand-written: pillar 3 stands at x 20, y 40, solid through z 0..=2.
         let above = world_to_render([20, 40, TOP]) + Vec3::Y * 10.0;
         assert_eq!(
-            first_visible_hit(above, -Vec3::Y, &mirror, TOP),
+            first_visible_hit(above, -Vec3::Y, &mirror, TOP).map(|hit| hit.tile),
             Some([20, 40, 2]),
             "the march must stop at the pillar's top tile, not run through it to the one below"
         );
@@ -357,7 +403,7 @@ mod tests {
         let [x, y] = FOLIAGE_PILLAR;
         let above = world_to_render([x, y, TOP]) + Vec3::Y * 10.0;
         assert_eq!(
-            first_visible_hit(above, -Vec3::Y, &mirror, TOP),
+            first_visible_hit(above, -Vec3::Y, &mirror, TOP).map(|hit| hit.tile),
             Some([x, y, 3]),
             "foliage is drawn at 0.62-0.95 of its cell, so it is not pickable geometry and must \
              not occlude the stone the player can plainly see through it"
