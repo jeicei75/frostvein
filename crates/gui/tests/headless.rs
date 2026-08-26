@@ -281,6 +281,44 @@ fn snapshot_marks_project_through_the_live_ingest_schedule() {
     assert_eq!(zones, BTreeSet::from([[1, 0, 2]]));
 }
 
+/// AC12: a delivered designation must be visible at the end of the FIRST frame that ingests it.
+/// A second update here would hide an extra-frame projection latency behind reconciliation.
+#[test]
+fn designation_delta_projects_in_the_same_update_that_ingests_it() {
+    let dims = Dims { x: 2, y: 2, z: 2 };
+    let initial = snapshot_with_dims(dims, vec![Tile::Solid(Material::Stone); 8], Vec::new());
+    let mut app = headless_app(initial);
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: [1, 0, 1],
+                kind: DesignationKind::Dig,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&ProjectedDesignation>()
+            .iter(app.world())
+            .map(|mark| mark.0)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([[1, 0, 1]]),
+        "the designation delta must project in its first ingested frame"
+    );
+}
+
 #[test]
 fn mark_slabs_rest_on_their_ordered_surfaces_and_layer_a_channel_zone_overlap() {
     let dims = Dims { x: 2, y: 1, z: 2 };
@@ -2472,6 +2510,88 @@ fn mouse_drag_uses_the_anchor_level_and_clears_its_anchor_on_release() {
             },
         }],
         "a cross-height drag is one inclusive rectangle on the literal anchor level"
+    );
+}
+
+/// AC11: this is the complete client round trip below the world top: a real mouse drag enters
+/// the shared input schedule, the daemon's designation delta comes back, and the mark projects
+/// at the pinned underground level rather than on the surface.
+#[test]
+fn mouse_designation_on_a_sliced_underground_level_round_trips_to_a_projected_mark() {
+    let anchor = [1, 1, 1];
+    let rig = CameraRig::new(anchor);
+    let cursor = rig
+        .project_world_point(anchor)
+        .expect("the underground anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![]));
+    install_pick_camera(&mut app, rig, cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(anchor[2]);
+    app.update();
+
+    press_once(&mut app, KeyCode::Digit1);
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Left);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+
+    assert_eq!(
+        app.world()
+            .resource::<PendingCommands>()
+            .commands()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: protocol::Rect {
+                min: anchor,
+                max: anchor,
+            },
+        }],
+        "the underground drag must send its literal picked level, not the world top"
+    );
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: anchor,
+                kind: DesignationKind::Dig,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&ProjectedDesignation>()
+            .iter(app.world())
+            .map(|mark| mark.0)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([anchor]),
+        "the returned designation must project on the pinned underground slice"
     );
 }
 
