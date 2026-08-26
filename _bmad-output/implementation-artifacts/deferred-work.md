@@ -809,3 +809,76 @@ executed a single line of its production path.**
   new mark getters between the comment and its original target, so the rationale for why
   `terrain_tiles > 0` alone is insufficient now documents `pub fn designations()` instead of
   `pub fn assert_valid()`. Cosmetic. `crates/gui/src/capture.rs:55-68` `[edge/LOW]`
+
+## Deferred from: code review of 8-1-point-at-the-world (2026-08-25)
+
+- **`project_world_point` hardcodes `BOOT_ASPECT_RATIO` 16:9 while the pick derives aspect from the
+  live viewport.** `project_render_point` divides by the literal `16.0/9.0` (`camera.rs:30,86`),
+  while `Camera::viewport_to_world` uses the real render target. The AC8 round-trip cannot detect
+  the mismatch because `PICK_VIEWPORT` is pinned to 1920x1080 — exactly 16:9 — so both sides agree
+  by construction. Mostly pre-existing (the constant also drives `atmosphere.rs:222`), but 8.1 is
+  what makes it load-bearing: the capture oracle multiplies a 16:9-derived normalized coordinate by
+  the *actual* `window.resolution.size()` (`capture.rs:635`), so a non-16:9 vehicle window
+  desynchronises oracle from pick. **Check the window is 16:9 before believing a Task 6 mismatch.**
+  `crates/gui/src/camera.rs:30`, `crates/gui/src/capture.rs:635` `[edge+feature/MED]`
+- **`mirror.tile(world).is_some() &&` is redundant.** `is_visible_at_slice` already requires
+  `Some(Tile::Solid(_) | Tile::Ramp(_))` on both of its returning branches, so no path can reach
+  `true` with the tile absent. Harmless dead redundancy. `crates/gui/src/pick.rs:100` `[blind/LOW]`
+- **AC8's mutual-inverse pin landed in the wrong file.** The story's Project Structure table
+  specified extending `transform.rs`'s round-trip pin; `git diff main...HEAD -- crates/gui/src/transform.rs`
+  is empty. The property IS genuinely proven — `a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile`
+  (`headless.rs:2069`) takes its cursor from the independent forward projection and asserts the pick
+  returns the literal tile — so substance is met and only discoverability is lost. Recorded because
+  the structure table now points at a file that does not contain the pin. `[acceptance/LOW]`
+- **AC13's "the RED output is pasted" is discharged by a reference table.** The round-2 table gives
+  `file:line — assertion message` per row rather than pasted RED output; only Task 3's Debug Log
+  entry pastes a verbatim block. Every cited location was verified to resolve to the named
+  assertion, so the evidence is real and checkable — it is simply not the form the AC asks for.
+  `[acceptance/LOW]`
+- **AC3 is unmeetable as written, and AC7 silently drops its pitch clause.** AC3 quantifies over
+  "any orbit yaw, any pitch, any distance in 4.0..=500.0, and any slice level" — an unbounded
+  universal with no finite obligation. AC7, the checkable proxy, enumerates orbit angles, distances
+  and slice levels and does **not** mention pitch; Task 3 likewise. So AC3's pitch clause had no
+  owner, which is precisely how the unreachable-pitch coverage hole opened. This is the project's
+  recurring spec-defect class — "AC unmeetable as written" — at instance five-plus. Belongs to the
+  Epic 8 retro, not to a patch. `[acceptance/LOW]`
+- **Task 1 contradicts Task 4/D8.** Task 1: "One public entry point; no other module gains screen or
+  axis math." Task 4 + D8: the instrument's expected tile "comes from the independent forward
+  projection". `expected_pick` (`capture.rs:626-640`) is exactly screen math in another module, in
+  production code. The dev followed the later instruction, which was the right call; the story asked
+  for both. Spec-defect class. `[acceptance/LOW]`
+- **`min_by` tie-break depends on undocumented ECS iteration order.** If two visible tiles ever
+  project to exactly equal screen distance from the cursor, `Iterator::min_by` returns first-of-ties
+  and the winner is decided by `Query<&TerrainTile>` archetype order, which nothing pins. No test
+  constructs the tie (every test cursor sits at zero distance from its target).
+  `crates/gui/src/capture.rs:638` `[edge/LOW]`
+- **AC6's "cursor outside the window" asserts Bevy's own bounds check, not this story's code.**
+  `Window::physical_cursor_position` already returns `None` for any out-of-bounds coordinate, so
+  `cursor_position()` is `None` before `pick.rs` is reached. Separately, the pick's own
+  `viewport_to_world(...).ok()` error branch has no test at all.
+  `crates/gui/src/pick.rs:35` `[feature/LOW]`
+- **The highlight trails the pick by one rendered frame, by construction.** `sync_hover_highlight`
+  runs after `TransformSystems::Propagate`, so the `Transform` it inserts is not propagated to
+  `GlobalTransform` until the next frame's `PostUpdate`, and a newly spawned highlight has default
+  `ViewVisibility` on its spawn frame. Not observable at 60 fps, but worth knowing before anyone
+  chases a "one tile behind" report from the vehicle.
+  `crates/gui/src/project.rs:214-240` `[feature/LOW]`
+- **The hover highlight is invisible on every tile with a drawn tile above it.** DEFERRED TO 8.2 by
+  Wolf, 2026-08-25 — reason: waiting on final gfx, and the standing art rule (2026-08-22) is that a
+  look change needs a concrete defect and the art pass is owed first. The defect is concrete and
+  measured: `sync_hover_highlight` places the slab at `world_to_render(pos) + Y*0.55`, the cube above
+  tile *z* spans render y `z+0.5..z+1.5`, so the 0.08-thick slab at `z+0.51..z+0.59` is wholly
+  enclosed on every cliff face, corridor wall and shaft side. Measured live at production-legal
+  pitches: picks correct, highlight buried, only the top row visible. `dig_mark_level`
+  (`project.rs:597-604`) solves this for dig marks by hoisting to the top of the contiguous drawn
+  column, but **hoisting is the wrong fix here** — the picked tile is by construction visible, so
+  moving its marker up the column would highlight a different tile than the one under the cursor.
+  Candidate fixes when the art lands: slab on the hit face (the DDA already knows which axis it
+  crossed), an outline box around the cell, or a slightly-inflated cell-sized cube. **8.2 designates
+  by pointing at exactly these vertical faces, so this lands before 8.2 ships, not after.**
+  `crates/gui/src/project.rs:227,230` `[feature/HIGH]`
+- **The hover slab is not visible near the campfire.** Observed by Wolf at the 8.1 review, 2026-08-25.
+  Almost certainly downstream of the campfire's already-open blown-emitter item rather than a new
+  hover defect: `04e6de5` raised the campfire amplitude 0.11→0.40, peaking at 44.8M, ~40% above the
+  value 5.4 was sized against, and a cyan slab at `(80,220,210)` will not survive that exposure.
+  Recorded against that open item; no look-tuning now, per the art rule. `[wolf/MED]`

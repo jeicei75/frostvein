@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, Or, PointLight, Query, ResMut, Resource, StandardMaterial, Transform, Vec3,
-    With, Without,
+    MeshMaterial3d, Or, PointLight, Query, Res, ResMut, Resource, StandardMaterial, Transform,
+    Vec3, With, Without,
 };
 use client_core::Mirror;
 use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
@@ -11,8 +11,8 @@ use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
 use crate::{
     appearance::{
         RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, designation_color,
-        entity_appearance, flicker_scale, foliage_snow_color, light_properties, material_color,
-        rim_dissolved_color, snow_cap_color, zone_color,
+        entity_appearance, flicker_scale, foliage_snow_color, hover_highlight_color,
+        light_properties, material_color, rim_dissolved_color, snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
     slice::SliceLevel,
@@ -79,6 +79,10 @@ pub struct ProjectedDesignationKind(pub DesignationKind);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedZone(pub [i32; 3]);
+
+/// The client-local slab drawn under the tile currently under the cursor.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HoverHighlight(pub [i32; 3]);
 
 /// Leaves a visible gutter between neighbouring mark slabs. The mesh is 1.02 wide and this scale
 /// is applied on top of it, so a slab covers 1.02 x 0.94 = 0.9588 of its tile — inset ~2% per
@@ -167,6 +171,7 @@ pub struct ProjectionAssets {
     dig_mark: Handle<StandardMaterial>,
     channel_mark: Handle<StandardMaterial>,
     zone_mark: Handle<StandardMaterial>,
+    hover_highlight: Handle<StandardMaterial>,
 }
 
 pub fn setup_projection_assets(
@@ -201,7 +206,37 @@ pub fn setup_projection_assets(
             DesignationKind::Channel,
         ))),
         zone_mark: materials.add(terrain_standard_material(zone_color())),
+        hover_highlight: materials.add(terrain_standard_material(hover_highlight_color())),
     });
+}
+
+/// Keeps one presentation-only hover slab in lockstep with the latest camera pick.
+pub fn sync_hover_highlight(
+    mut commands: Commands,
+    picked: Res<crate::pick::PickedTile>,
+    assets: Option<Res<ProjectionAssets>>,
+    highlights: Query<(BevyEntity, &HoverHighlight)>,
+) {
+    if let Some(position) = picked.0 {
+        if let Some((entity, _)) = highlights.iter().next() {
+            commands.entity(entity).insert((
+                HoverHighlight(position),
+                Transform::from_translation(world_to_render(position) + Vec3::Y * 0.55),
+            ));
+        } else if let Some(assets) = assets {
+            commands.spawn((
+                HoverHighlight(position),
+                Transform::from_translation(world_to_render(position) + Vec3::Y * 0.55),
+                Mesh3d(assets.mark_mesh.clone()),
+                MeshMaterial3d(assets.hover_highlight.clone()),
+                ClientLocal,
+            ));
+        }
+    } else {
+        for (entity, _) in highlights.iter() {
+            commands.entity(entity).despawn();
+        }
+    }
 }
 
 fn terrain_standard_material(base_color: bevy::prelude::Color) -> StandardMaterial {
@@ -739,6 +774,21 @@ pub fn has_snow_laden_crown(mirror: &Mirror, position: [i32; 3]) -> bool {
         )
 }
 
+/// Foliage is DRAWN at 0.62-0.95 of its cell (`foliage_scale`) so a crown reads as sparse
+/// branches rather than a block. The pick marches full unit cells, so treating foliage as
+/// pickable would claim the ~62% of the cell face the player is plainly seeing through, and
+/// would occlude whatever is behind it. The pick excludes it so pick geometry and drawn
+/// geometry agree.
+pub(crate) fn is_tree_foliage(mirror: &Mirror, position: [i32; 3]) -> bool {
+    // NOTE: matched directly rather than through `terrain_material_at`, whose exact expression
+    // is story 5.4's sabotage anchor for the snow-cap swap. Sharing it made that row ambiguous
+    // and it stopped applying — a row that cannot apply pins nothing.
+    matches!(
+        mirror.tile(position),
+        Some(Tile::Solid(Material::TreeFoliage) | Tile::Ramp(Material::TreeFoliage))
+    )
+}
+
 /// The material actually present, distinguishing air from the `terrain_material` fallback.
 fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> {
     match mirror.tile(position) {
@@ -833,7 +883,7 @@ pub fn has_terrain_above(mirror: &Mirror, level: i32) -> bool {
     false
 }
 
-fn is_visible_at_slice(mirror: &Mirror, position: [i32; 3], level: i32) -> bool {
+pub(crate) fn is_visible_at_slice(mirror: &Mirror, position: [i32; 3], level: i32) -> bool {
     position[2] <= level
         && (is_exposed(mirror, position)
             || (position[2] == level

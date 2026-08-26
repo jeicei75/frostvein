@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-08-23
+# last_updated: 2026-08-25
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,44 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-23  # M2-TO-DATE RETROSPECTIVE HELD (Epics 5+6+7 in one, filed as epic-5-retro-2026-08-23.md). epic-5's stale in-progress key flipped to done; retros for 5, 6 and 7 all marked done against the one record. 12 action items opened, E4-P1 and T4 closed, E2 dropped as obsolete.
+last_updated: 2026-08-26  # STORY 8.1 -> REVIEW, ALL TASKS CLOSED. TASK 6 / AC12 MET ON THE VEHICLE:
+                          # >140 fps sustained at BOTH working zoom and full vista (gingerspice / native
+                          # Windows / NVIDIA, F3 overlay), against NFR6 floors of 60 and 30 -- 2.3x and 4.7x
+                          # margin. Read on a FRESH rebuild from the patched tree, source commit 3f50178 (the
+                          # last commit touching crates/; everything after it is _bmad-output/ only). Picking
+                          # casts ONE RAY PER FRAME bounded by the world diagonal, so its cost does not scale
+                          # with tile count -- the margin is what the mechanism predicts, not luck. NOT
+                          # STAMPED: the wall-clock build time was not captured, which is M2-7 (no build
+                          # script, no SHA in gui) biting a FOURTH time -- it should be read as load-bearing
+                          # at the Epic 8 retro, not housekeeping. AC5's RENDERED half remains unmet and
+                          # DEFERRED to 8.2 by Wolf (hover slab buried under any drawn tile above it); its
+                          # colour arithmetic is proven, its pixels are not. PRIOR: REVIEW-PATCH ROUND 1 COMPLETE -- all 12 patches applied in one commit
+                          # (3f50178), one full-tier gate at the end, GATE GREEN cold, 389 tests (was 382).
+                          # Mutation round 3: 9/9 KILLED, zero APPLY-FAILED, three new rows (AC9's ClientLocal
+                          # tag, AC5's separation floor, the wiring call site). Row 2's anchor went STALE inside
+                          # the round -- the foliage patch reformatted the condition it matched -- and the dry
+                          # check caught it at 0 matches BEFORE the run. Separately, `is_tree_foliage` as first
+                          # written duplicated story 5.4's sabotage anchor and broke a row in ANOTHER story's
+                          # table; the gate's mutation audit caught it and the helper was rewritten. The inert
+                          # seam moved out one level and SHRANK but did not vanish: `run()`'s own three lines
+                          # (plugins, configure_client_app, app.run()) still need a socket and a window. STILL
+                          # OPEN: Task 6 / AC12, vehicle-bound; gui.exe MUST be rebuilt (the 08-25 build stamp
+                          # predates every patch). AC10/AC11 have still never executed in any process anywhere.
+                          # PRIOR: STORY 8.1 CODE-REVIEWED -> in-progress. 4 layers + 1 narrowed re-run, NO coverage
+                          # holes. 5 decisions ruled by Wolf, 12 patches LEFT AS ACTION ITEMS for a FRESH SESSION
+                          # (patch-in-a-fresh-session rule held deliberately, not by omission). Convergence 4-in-22,
+                          # the first favourable R1 data point; R1 STILL has no M2-crate mapping and was hand-adapted
+                          # for the SECOND story running -- owed a ruling at the Epic 8 retro. Blind Hunter timed out
+                          # at ~18min, was SALVAGED not killed bare, and its partial carried the run's one scare: an
+                          # oracle disagreeing with first_visible_hit on 24/36000 rays. Its one permitted re-run
+                          # SETTLED it -- all 24 are ORACLE artifacts (fixed 0.005 sampling step vs corner grazes
+                          # 0.000065-0.0018 wide). The DDA is PROVEN correct, not assumed. CORRECTION TO THE RECORD:
+                          # the --capture path CANNOT run in any devpod (bevy_winit, no DISPLAY) -- so AC10 and AC11's
+                          # instrument has NEVER EXECUTED IN ANY PROCESS ANYWHERE, and joins AC12 as vehicle-bound.
+                          # AC5 is NOT met: the hover slab is invisible on every tile with a drawn tile above it
+                          # (cliff faces, corridor walls, shaft sides) AND near the campfire -- both DEFERRED by Wolf
+                          # awaiting final gfx, but 8.2 designates by pointing at exactly those faces, so it lands
+                          # BEFORE 8.2 ships. PRIOR: STORY 8.1 HEADLESS HALF -> REVIEW. Mutation round caught --cursor inert at run(); fixed, 6/6 KILLED, gate green, 382 tests. Task 6/AC12 vehicle-bound and open. PRIOR: STORY 8.1 CREATED, epic-8 opened. Picking approach ruled by Wolf: the ray comes from the rendering camera (Camera::viewport_to_world), not from a second hand-rolled projection. All four of 8.1's epic premises re-verified against source and all four hold; render_to_world exists but had zero production callers until now. PRIOR:  # M2-TO-DATE RETROSPECTIVE HELD (Epics 5+6+7 in one, filed as epic-5-retro-2026-08-23.md). epic-5's stale in-progress key flipped to done; retros for 5, 6 and 7 all marked done against the one record. 12 action items opened, E4-P1 and T4 closed, E2 dropped as obsolete.
                           # 2026-08-20 VEHICLE SESSION -- 6.1, 6.2 and 7.1 all watched running on gingerspice and SIGNED OFF by
                           # Wolf ("i think we are done with these stories"). Epic 6 CLOSED. Wow beat 2 is signed.
                           # THREE defects found by eye that the whole suite was green on, all fixed and sabotaged:
@@ -484,10 +521,31 @@ development_status:
   7-2-read-the-working-zoom: done
   # Covered by the M2-to-date retrospective filed as Epic 5's: epic-5-retro-2026-08-23.md
   epic-7-retrospective: done
-  epic-8: backlog
+  epic-8: in-progress
   # M2's hardest input work and the main story-count driver, isolated on purpose.
   # IF PICKING PROVES EASY, 8.1 AND 8.2 COLLAPSE INTO ONE AND M2 LANDS AT 10.
-  8-1-point-at-the-world: backlog
+  # HEADLESS HALF DONE 2026-08-25 -> review. Codex dev in one run, six commits, CADENCE FLOOR MET
+  # WITHOUT A FOLLOW-UP for the first time -- one commit per task, no squash. Codex left Task 5 and
+  # Task 7 unticked and refused to claim a gate its sandbox never showed it: the correct call.
+  # ORCHESTRATOR MUTATION ROUND 1 CAUGHT THE STORY'S FINDING -- 5/6 KILLED, one SURVIVED. `--cursor`
+  # parsed, validated, then SILENTLY DROPPED by run(): replacing the ScriptedCursor insert with a
+  # discard left the WHOLE SUITE GREEN, because the only test wrote the resource by hand and so
+  # pinned the resource->pick half and never the flag's own path. This is the 7.2 `--distance` lie
+  # recurring verbatim, and M2-11's "named for a seam it does not cross". Fixed by the same remedy:
+  # extract run()'s wiring into insert_capture_resources so a test can execute it on a real parsed
+  # Args. ROUND 2: 6/6 KILLED, zero APPLY-FAILED. Gate GREEN full tier on a cold rebuild, 382 tests.
+  # Scope verified structurally: ZERO files changed outside crates/gui, so AC9's client-local claim
+  # is proved rather than asserted. D2/D4/D5/D7/D8 all honoured on reading; D6 raised no finding.
+  # TWO ITEMS LEFT FOR REVIEW, both recorded in the Dev Agent Record: (1) the instrument's oracle is
+  # a screen-space nearest-within-32px match, not a ray -- depth-blind, so it can disagree with a
+  # correct pick at the vista; it fails LOUD, so it cannot manufacture 7.2-style false evidence, but
+  # a Task 6 mismatch may be the instrument's defect, not the pick's. (2) AC8's mutual-inverse pin
+  # landed in tests/headless.rs, not by extending transform.rs's round-trip pin as the story's
+  # structure table specified -- substance met, location not.
+  # STILL OPEN and NOT closable by any agent: Task 6 / AC12. NOTHING HAS BEEN OBSERVED ON THE
+  # VEHICLE; NFR6-with-picking is unmeasured and no fps figure was fabricated. Rebuild gui.exe and
+  # record its build time + source commit first -- the stale-binary trap fired three times in 5.4.
+  8-1-point-at-the-world: review
   8-2-designate-with-the-mouse: backlog
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.

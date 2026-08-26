@@ -13,14 +13,17 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::{
     MinimalPlugins,
     app::App,
+    camera::{CameraProjection, RenderTargetInfo},
     dev_tools::fps_overlay::FpsOverlayConfig,
     ecs::system::RunSystemOnce,
     input::ButtonInput,
     pbr::{DistanceFog, FogFalloff},
     prelude::{
-        Assets, DirectionalLight, Entity as BevyEntity, KeyCode, Mesh, Mesh3d, MeshMaterial3d, Or,
-        PointLight, Resource, StandardMaterial, Text, Transform, With, Without,
+        Assets, Camera, DirectionalLight, Entity as BevyEntity, GlobalTransform, KeyCode, Mesh,
+        Mesh3d, MeshMaterial3d, Or, PointLight, Resource, StandardMaterial, Text, Transform, UVec2,
+        Vec2, Window, With, Without,
     },
+    window::{PrimaryWindow, WindowResolution},
 };
 
 #[derive(Resource)]
@@ -32,12 +35,13 @@ use gui::{
     capture::{CaptureState, accumulate_motion},
     ingest::{
         CaptureDistance, IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork,
-        SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
+        ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
         reconcile_projection,
     },
+    pick::PickedTile,
     project::{
-        ClientLocal, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap, TerrainTile,
-        WorldProjected, setup_projection_assets,
+        ClientLocal, HoverHighlight, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap,
+        TerrainTile, WorldProjected, setup_projection_assets,
     },
     slice::SliceLevel,
     transform::world_to_render,
@@ -2022,6 +2026,356 @@ fn live_app(
 
 fn one_tile_snapshot() -> Snapshot {
     snapshot(vec![Tile::Solid(Material::Stone), Tile::Empty], vec![])
+}
+
+const PICK_VIEWPORT: UVec2 = UVec2::new(1920, 1080);
+
+fn install_pick_camera(app: &mut App, rig: CameraRig, cursor: Vec2) {
+    // Run Startup first: `live_app` deliberately drives the same registration point as `run()`.
+    app.update();
+
+    let camera_entity = app
+        .world_mut()
+        .query_filtered::<BevyEntity, With<CameraRig>>()
+        .single(app.world())
+        .expect("live startup must spawn exactly one camera rig");
+    let mut camera = Camera::default();
+    camera.computed.target_info = Some(RenderTargetInfo {
+        physical_size: PICK_VIEWPORT,
+        scale_factor: 1.0,
+    });
+    let mut projection = bevy::prelude::PerspectiveProjection {
+        fov: gui::camera::BOOT_VERTICAL_FOV,
+        ..Default::default()
+    };
+    projection.update(PICK_VIEWPORT.x as f32, PICK_VIEWPORT.y as f32);
+    camera.computed.clip_from_view = projection.get_clip_from_view();
+    let transform = rig.transform();
+    app.world_mut().entity_mut(camera_entity).insert((
+        camera,
+        transform,
+        GlobalTransform::from(transform),
+        rig,
+    ));
+
+    let mut window = Window {
+        resolution: WindowResolution::new(PICK_VIEWPORT.x, PICK_VIEWPORT.y),
+        ..Default::default()
+    };
+    window.set_cursor_position(Some(cursor));
+    app.world_mut().spawn((window, PrimaryWindow));
+}
+
+#[test]
+fn a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile() {
+    let target = [1, 1, 0];
+    let rig = CameraRig::new(target);
+    let normalized = rig
+        .project_world_point(target)
+        .expect("the tile under the camera focus must project into the viewport");
+    let mut app = live_app(snapshot_with_dims(
+        Dims { x: 3, y: 3, z: 1 },
+        vec![
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Solid(Material::Stone),
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+        ],
+        vec![],
+    ))
+    .0;
+    install_pick_camera(&mut app, rig, normalized * PICK_VIEWPORT.as_vec2());
+
+    app.update();
+
+    assert_eq!(
+        app.world().resource::<PickedTile>().0,
+        Some([1, 1, 0]),
+        "the live client schedule must pick the visible tile under its projected cursor"
+    );
+}
+
+#[test]
+fn the_live_pick_spawns_a_client_local_highlight_and_despawns_it_without_a_pick() {
+    let target = [1, 1, 0];
+    let rig = CameraRig::new(target);
+    let cursor = rig
+        .project_world_point(target)
+        .expect("the visible target must have a forward projection")
+        * PICK_VIEWPORT.as_vec2();
+    let mut app = live_app(snapshot_with_dims(
+        Dims { x: 3, y: 3, z: 1 },
+        vec![
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Solid(Material::Stone),
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+        ],
+        vec![],
+    ))
+    .0;
+    install_pick_camera(&mut app, rig, cursor);
+
+    app.update();
+
+    let highlights = app
+        .world_mut()
+        .query::<(&HoverHighlight, &ClientLocal, Option<&WorldProjected>)>()
+        .iter(app.world())
+        .collect::<Vec<_>>();
+    assert_eq!(highlights.len(), 1, "a picked tile must gain one highlight");
+    assert_eq!(highlights[0].0.0, [1, 1, 0]);
+    assert!(
+        highlights[0].2.is_none(),
+        "a hover highlight is never simulation-projected"
+    );
+
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(None);
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&HoverHighlight>()
+            .iter(app.world())
+            .count(),
+        0,
+        "removing the cursor must remove the stale hover highlight"
+    );
+}
+
+fn picked_at(snapshot: Snapshot, rig: CameraRig, level: i32, cursor: Vec2) -> Option<[i32; 3]> {
+    let mut app = live_app(snapshot).0;
+    install_pick_camera(&mut app, rig, cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(level);
+    app.update();
+    let picked = app.world().resource::<PickedTile>().0;
+    if picked.is_none() {
+        assert_eq!(
+            app.world_mut()
+                .query::<&HoverHighlight>()
+                .iter(app.world())
+                .count(),
+            0,
+            "a no-pick frame must not leave a stale hover highlight"
+        );
+    }
+    picked
+}
+
+fn solid_column_snapshot() -> Snapshot {
+    let dims = Dims { x: 9, y: 9, z: 4 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    for z in 0..dims.z as usize {
+        tiles[4 + 4 * dims.x as usize + z * dims.x as usize * dims.y as usize] =
+            Tile::Solid(Material::Stone);
+    }
+    snapshot_with_dims(dims, tiles, vec![])
+}
+
+#[test]
+fn camera_picking_covers_orbits_zoom_limits_and_sliced_levels() {
+    let yaws = [-2.1, 0.0, 1.2];
+    let distances = [4.0, 30.0, 500.0];
+    let levels = [0, 1, 3];
+    // AC3 says "any pitch", and these are the only pitches there are: `orbit()` clamps to
+    // MIN_PITCH 0.15 ..= MAX_PITCH (FRAC_PI_2 - 0.15). The matrix used to run at -0.55, which
+    // puts the camera BELOW the world looking up — a pose the rig cannot hold, so the clause
+    // had zero coverage inside the reachable range. Both clamp ends and the boot pitch now run.
+    let pitches = [0.15, 0.45, std::f32::consts::FRAC_PI_2 - 0.15];
+    for yaw in yaws {
+        for pitch in pitches {
+            for distance in distances {
+                for level in levels {
+                    let target = [4, 4, level];
+                    let rig = CameraRig {
+                        focus: target,
+                        yaw,
+                        pitch,
+                        distance,
+                    };
+                    let cursor = rig.project_world_point(target).expect(
+                        "every test target must project through the independent camera rig",
+                    ) * PICK_VIEWPORT.as_vec2();
+                    assert_eq!(
+                        picked_at(solid_column_snapshot(), rig, level, cursor),
+                        Some(target),
+                        "yaw={yaw}, pitch={pitch}, distance={distance}, slice={level} must pick \
+                         literal target {target:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// AC4's occlusion clause: two slice-visible tiles on one ray, and the NEARER must win.
+///
+/// Every other picking scene is one isolated tile or one solid column, where "stop at the first
+/// visible hit" cannot be told apart from "return any visible hit". The control half is what
+/// makes this a test of ordering rather than of reachability: with the near tile removed, the
+/// same camera and the same cursor must reach the far one.
+#[test]
+fn the_nearer_of_two_tiles_on_one_ray_is_the_one_picked() {
+    fn tower(near: bool) -> Snapshot {
+        let dims = Dims { x: 9, y: 9, z: 4 };
+        let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+        let index = |[x, y, z]: [i32; 3]| {
+            (x as u32 + y as u32 * dims.x + z as u32 * dims.x * dims.y) as usize
+        };
+        tiles[index([4, 4, 0])] = Tile::Solid(Material::Stone);
+        if near {
+            tiles[index([4, 4, 3])] = Tile::Solid(Material::Stone);
+        }
+        snapshot_with_dims(dims, tiles, vec![])
+    }
+
+    // Near-vertical, so one ray passes through both tiles' cells.
+    let rig = CameraRig {
+        focus: [4, 4, 3],
+        yaw: 0.7,
+        pitch: std::f32::consts::FRAC_PI_2 - 0.15,
+        distance: 30.0,
+    };
+    let cursor = rig
+        .project_world_point([4, 4, 3])
+        .expect("the upper tile must project into the viewport")
+        * PICK_VIEWPORT.as_vec2();
+
+    assert_eq!(
+        picked_at(tower(true), rig, 3, cursor),
+        Some([4, 4, 3]),
+        "the nearer of two tiles on one ray must occlude the farther one"
+    );
+    assert_eq!(
+        picked_at(tower(false), rig, 3, cursor),
+        Some([4, 4, 0]),
+        "control: the same ray must REACH the far tile, so the answer above is ordering and \
+         not reachability"
+    );
+}
+
+#[test]
+fn picking_nothing_leaves_no_hover_for_sky_hidden_tiles_and_outside_the_window() {
+    let rig = CameraRig::new([1, 1, 0]);
+    let sky = picked_at(
+        snapshot_with_dims(
+            Dims { x: 3, y: 3, z: 1 },
+            vec![
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Solid(Material::Stone),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            vec![],
+        ),
+        rig,
+        0,
+        Vec2::ZERO,
+    );
+    assert_eq!(sky, None, "the top-left sky contains no terrain tile");
+
+    let hidden_target = [1, 1, 1];
+    let hidden_rig = CameraRig::new(hidden_target);
+    let hidden_cursor = hidden_rig
+        .project_world_point(hidden_target)
+        .expect("the hidden tile would be in the camera frustum")
+        * PICK_VIEWPORT.as_vec2();
+    let hidden = picked_at(
+        snapshot_with_dims(
+            Dims { x: 3, y: 3, z: 2 },
+            vec![
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Solid(Material::Stone),
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            vec![],
+        ),
+        hidden_rig,
+        0,
+        hidden_cursor,
+    );
+    assert_eq!(hidden, None, "the slice must reject a tile above its cut");
+
+    let outside = picked_at(solid_column_snapshot(), rig, 0, Vec2::new(-1.0, -1.0));
+    assert_eq!(
+        outside, None,
+        "a cursor outside the viewport must not pick a default tile"
+    );
+}
+
+#[test]
+fn the_scripted_capture_cursor_reaches_the_live_pick_system() {
+    let target = [1, 1, 0];
+    let rig = CameraRig::new(target);
+    let cursor = rig
+        .project_world_point(target)
+        .expect("the target must have an independent forward projection")
+        * PICK_VIEWPORT.as_vec2();
+    let mut app = live_app(snapshot_with_dims(
+        Dims { x: 3, y: 3, z: 1 },
+        vec![
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Solid(Material::Stone),
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+            Tile::Empty,
+        ],
+        vec![],
+    ))
+    .0;
+    install_pick_camera(&mut app, rig, Vec2::ZERO);
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(None);
+    app.insert_resource(ScriptedCursor(cursor));
+
+    app.update();
+
+    assert_eq!(
+        app.world().resource::<PickedTile>().0,
+        Some([1, 1, 0]),
+        "the parsed capture cursor must be written before the shared pick system runs"
+    );
 }
 
 #[test]

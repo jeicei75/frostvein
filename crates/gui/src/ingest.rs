@@ -14,7 +14,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use bevy::{
-    app::{App, AppExit, Startup, Update},
+    app::{App, AppExit, PostUpdate, Startup, Update},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::change_detection::DetectChanges,
@@ -25,10 +25,11 @@ use bevy::{
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
         DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
-        Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform, With,
-        Without, px,
+        Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform,
+        TransformSystems, Vec2, Window, With, Without, px,
     },
     render::renderer::RenderAdapterInfo,
+    window::PrimaryWindow,
 };
 use client_core::Mirror;
 use protocol::{Delta, Dims, Snapshot};
@@ -39,11 +40,12 @@ use crate::{
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{CaptureState, accumulate_motion, capture_after_frames},
+    pick::{PickedTile, update_pick},
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
         ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery, TerrainTile,
         WorldProjected, blend_entities, flicker_lights, has_terrain_above, reconcile,
-        setup_projection_assets,
+        setup_projection_assets, sync_hover_highlight,
     },
     slice::SliceLevel,
 };
@@ -77,8 +79,24 @@ pub struct ProjectionWork {
 
 pub fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
-    let address = format!("127.0.0.1:{}", args.port);
-    let stream = TcpStream::connect(("127.0.0.1", args.port))
+    let (mirror, receiver) = connect_to_daemon(args.port)?;
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins)
+        .add_plugins(FrameTimeDiagnosticsPlugin::default())
+        .add_plugins(FpsOverlayPlugin {
+            config: overlay_config_off(),
+        });
+    configure_client_app(&mut app, mirror, receiver, args);
+    app.run();
+    Ok(())
+}
+
+/// Opens the daemon socket, reads the opening snapshot, and leaves a reader thread feeding the
+/// returned channel. The only part of `run()` that is I/O and therefore the only part a test
+/// cannot reach.
+fn connect_to_daemon(port: u16) -> anyhow::Result<(Mirror, Receiver<anyhow::Result<WireMessage>>)> {
+    let address = format!("127.0.0.1:{port}");
+    let stream = TcpStream::connect(("127.0.0.1", port))
         .with_context(|| format!("could not connect to {address}"))?;
     stream
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
@@ -91,15 +109,27 @@ pub fn run() -> anyhow::Result<()> {
         .name("server-read".to_string())
         .spawn(move || read_messages(reader, sender))
         .context("could not spawn server reader thread")?;
+    Ok((mirror, receiver))
+}
 
+/// Everything `run()` does to the App once its plugins are in: the world resources, the parsed
+/// flags, the two registration points, and the capture branch.
+///
+/// It is a separate function because a CALL is a seam too. `insert_capture_resources` was
+/// extracted at this story's round 1 for exactly this reason and tested directly — and the
+/// review then showed that deleting the *call to it* from `run()` still left the whole suite
+/// green, so `--cursor` and 7.2's `--distance` would both parse, validate and vanish. The
+/// defect had moved one level out, not closed. `run()` needs a socket and a window and can
+/// never be entered by a test; this can, so the wiring below is executable rather than merely
+/// readable. What remains uncovered is the three lines of `run()` itself.
+fn configure_client_app(
+    app: &mut App,
+    mirror: Mirror,
+    receiver: Receiver<anyhow::Result<WireMessage>>,
+    args: Args,
+) {
     let slice = initial_slice(mirror.dims(), args.slice_level);
-    let mut app = App::new();
-    app.add_plugins(DefaultPlugins)
-        .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        .add_plugins(FpsOverlayPlugin {
-            config: overlay_config_off(),
-        })
-        .insert_resource(MirrorResource(mirror))
+    app.insert_resource(MirrorResource(mirror))
         .insert_resource(slice)
         .insert_resource(IngestReceiver::new(receiver))
         .insert_resource(ProjectionWork {
@@ -107,19 +137,15 @@ pub fn run() -> anyhow::Result<()> {
             dirty_tiles: BTreeSet::new(),
         })
         .insert_resource(ClearColor(night_lighting().sky));
-    if let Some(distance) = args.distance {
-        app.insert_resource(CaptureDistance(distance));
-    }
-    client_systems(&mut app);
-    projection_systems(&mut app);
+    insert_capture_resources(app, &args);
+    client_systems(app);
+    projection_systems(app);
     if let Some(capture) = args.capture {
         // Capture output must never contain the diagnostic overlay.
-        force_capture_overlay_off(&mut app);
+        force_capture_overlay_off(app);
         app.insert_resource(CaptureState::new(capture, args.frames, args.expect_work));
-        capture_systems(&mut app);
+        capture_systems(app);
     }
-    app.run();
-    Ok(())
 }
 
 /// The whole wire-to-presentation chain, so anything that reads its output can be ordered
@@ -168,6 +194,7 @@ pub fn projection_systems(app: &mut App) {
 /// class, and the Milestone 2 retrospective ruled it closed at the root rather than caught a
 /// sixth time.
 pub fn client_systems(app: &mut App) {
+    app.init_resource::<PickedTile>();
     app.add_systems(
         Startup,
         (
@@ -188,6 +215,14 @@ pub fn client_systems(app: &mut App) {
             update_fog_from_camera,
             toggle_overlay,
             fall_snow,
+        ),
+    )
+    .add_systems(
+        PostUpdate,
+        (
+            apply_scripted_cursor.after(TransformSystems::Propagate),
+            update_pick.after(apply_scripted_cursor),
+            sync_hover_highlight.after(update_pick),
         ),
     );
 }
@@ -236,10 +271,15 @@ struct Args {
     expect_work: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
+    cursor: Option<Vec2>,
 }
 
 #[derive(Resource)]
 pub struct CaptureDistance(pub f32);
+
+/// A capture-only viewport position written before the camera pick runs.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct ScriptedCursor(pub Vec2);
 
 fn parse_args() -> anyhow::Result<Args> {
     parse_args_from(std::env::args_os().skip(1))
@@ -252,6 +292,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut expect_work = false;
     let mut slice_level = None;
     let mut distance = None;
+    let mut cursor = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -285,6 +326,9 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                 bail!("--distance must be finite");
             }
             distance = Some(parsed);
+        } else if arg == "--cursor" {
+            let value = args.next().context("--cursor requires x,y")?;
+            cursor = Some(parse_cursor(value)?);
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -301,6 +345,9 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if distance.is_some() && capture.is_none() {
         bail!("--distance requires --capture");
     }
+    if cursor.is_some() && capture.is_none() {
+        bail!("--cursor requires --capture");
+    }
     Ok(Args {
         port,
         capture,
@@ -308,7 +355,49 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         expect_work,
         slice_level,
         distance,
+        cursor,
     })
+}
+
+fn parse_cursor(value: OsString) -> anyhow::Result<Vec2> {
+    let value = value.to_string_lossy();
+    let Some((x, y)) = value.split_once(',') else {
+        bail!("invalid --cursor; expected x,y");
+    };
+    if y.contains(',') {
+        bail!("invalid --cursor; expected x,y");
+    }
+    let x: f32 = x.parse().context("invalid --cursor x")?;
+    let y: f32 = y.parse().context("invalid --cursor y")?;
+    if !x.is_finite() || !y.is_finite() {
+        bail!("invalid --cursor; coordinates must be finite");
+    }
+    Ok(Vec2::new(x, y))
+}
+
+fn apply_scripted_cursor(
+    cursor: Option<Res<ScriptedCursor>>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+) {
+    if let (Some(cursor), Ok(mut window)) = (cursor, windows.single_mut()) {
+        window.set_cursor_position(Some(cursor.0));
+    }
+}
+
+/// Writes the capture-only flags onto the app.
+///
+/// Extracted from `run()` so the seam from a parsed `Args` to the live resources is reachable by a
+/// test: `run()` itself needs a socket and a window, so nothing could execute this wiring. Story
+/// 8.1's mutation row proved the gap real -- replacing the cursor insert with `let _ = cursor;`
+/// left the whole suite green, because the only test wrote `ScriptedCursor` by hand. That is the
+/// same lie `--distance` told at 7.2: parsed, validated, and then silently dropped.
+fn insert_capture_resources(app: &mut App, args: &Args) {
+    if let Some(distance) = args.distance {
+        app.insert_resource(CaptureDistance(distance));
+    }
+    if let Some(cursor) = args.cursor {
+        app.insert_resource(ScriptedCursor(cursor));
+    }
 }
 
 fn setup_camera(mut commands: Commands, distance: Option<Res<CaptureDistance>>) {
@@ -695,6 +784,108 @@ mod tests {
         );
     }
 
+    /// Builds the client app through the SAME function `run()` calls, on a real parsed `Args`.
+    ///
+    /// `--frames 60` on purpose: `capture_after_frames` fires on the frame its count reaches, and
+    /// this harness renders nothing for it to assert about.
+    fn configured_app(args: &[&str]) -> (App, mpsc::SyncSender<anyhow::Result<WireMessage>>) {
+        let parsed = super::parse_args_from(
+            args.iter()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>(),
+        )
+        .expect("the arguments under test must parse");
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        let (sender, receiver) = mpsc::sync_channel(2);
+        let mut app = App::new();
+        app.add_plugins(bevy::MinimalPlugins)
+            .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
+            .init_resource::<bevy::asset::Assets<bevy::prelude::Mesh>>()
+            .init_resource::<bevy::asset::Assets<bevy::prelude::StandardMaterial>>()
+            .init_resource::<bevy::asset::Assets<bevy::image::Image>>()
+            .init_resource::<FpsOverlayConfig>();
+        super::configure_client_app(&mut app, mirror, receiver, parsed);
+        (app, sender)
+    }
+
+    /// The wiring CALLS, not just the functions they call.
+    ///
+    /// Round 1 of this story's review extracted `insert_capture_resources` so the resource write
+    /// was testable — and the review then deleted the *call to it* from `run()` and watched the
+    /// whole suite stay green. Same for `client_systems` and `projection_systems`, which the
+    /// headless harness invoked itself. Every expectation below is hand-written here.
+    #[test]
+    fn the_production_wiring_runs_every_call_run_makes_after_its_plugins() {
+        let (mut app, _sender) = configured_app(&[
+            "--capture",
+            "working.png",
+            "--frames",
+            "60",
+            "--cursor",
+            "960,540",
+        ]);
+
+        assert_eq!(
+            app.world()
+                .get_resource::<super::ScriptedCursor>()
+                .map(|cursor| cursor.0),
+            Some(bevy::prelude::Vec2::new(960.0, 540.0)),
+            "the parsed --cursor must reach the pick's resource through the call run() makes"
+        );
+        assert!(
+            app.world()
+                .get_resource::<crate::capture::CaptureState>()
+                .is_some(),
+            "the capture branch must run for a --capture argument"
+        );
+
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .query::<&CameraRig>()
+                .iter(app.world())
+                .count(),
+            1,
+            "client_systems must be registered from the production path — its startup scene is \
+             the whole view"
+        );
+        assert_eq!(
+            app.world()
+                .get_resource::<crate::slice::SliceLevel>()
+                .map(|slice| slice.level()),
+            Some(0),
+            "the world resources must reach the app through the same call"
+        );
+        // `projection_systems` owns the on-screen level readout's startup spawn — 7.1's review
+        // found that whole readout deletable with the suite green, so it is observed here rather
+        // than asserted to be registered.
+        assert_eq!(
+            app.world_mut()
+                .query::<&bevy::prelude::Text>()
+                .iter(app.world())
+                .map(|text| text.0.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                app.world()
+                    .resource::<crate::slice::SliceLevel>()
+                    .readout(false)
+            ],
+            "projection_systems must be registered from the production path too"
+        );
+    }
+
     #[test]
     fn capture_requires_a_positive_frame_count() {
         assert!(
@@ -776,6 +967,98 @@ mod tests {
             ])
             .is_err(),
             "a camera distance must be finite"
+        );
+    }
+
+    #[test]
+    fn capture_cursor_requires_capture_and_rejects_an_invalid_coordinate() {
+        let args = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("1"),
+            std::ffi::OsString::from("--cursor"),
+            std::ffi::OsString::from("960,540"),
+        ])
+        .expect("a capture cursor must parse");
+        assert_eq!(args.cursor, Some(bevy::prelude::Vec2::new(960.0, 540.0)));
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--cursor"),
+                std::ffi::OsString::from("960,540"),
+            ])
+            .is_err(),
+            "a scripted cursor without a capture has no valid instrument to drive"
+        );
+        let invalid = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("1"),
+            std::ffi::OsString::from("--cursor"),
+            std::ffi::OsString::from("not-a-coordinate"),
+        ]);
+        assert!(
+            invalid.is_err(),
+            "a malformed --cursor must not fall through to the port parser"
+        );
+        let Err(error) = invalid else {
+            unreachable!("the malformed cursor was asserted above to be rejected");
+        };
+        assert!(error.to_string().contains("invalid --cursor"));
+    }
+
+    /// The other half of `--cursor`, and the half story 8.1's mutation table caught SURVIVING.
+    /// The scripted-cursor test above writes `ScriptedCursor` by hand, so it pins the resource ->
+    /// pick seam and says nothing about whether `run()` ever writes that resource: replacing the
+    /// insert with `let _ = cursor;` left the whole suite green. This runs the REAL wiring on a
+    /// REAL parsed `Args`, which is the only way the flag's own path is observed.
+    #[test]
+    fn the_cursor_flag_reaches_a_live_resource_rather_than_merely_parsing() {
+        fn scripted(args: &[&str]) -> Option<bevy::prelude::Vec2> {
+            let parsed = super::parse_args_from(
+                args.iter()
+                    .map(std::ffi::OsString::from)
+                    .collect::<Vec<_>>(),
+            )
+            .expect("the arguments under test must parse");
+            let mut app = App::new();
+            super::insert_capture_resources(&mut app, &parsed);
+            app.world()
+                .get_resource::<super::ScriptedCursor>()
+                .map(|cursor| cursor.0)
+        }
+
+        // Independent oracle: the expected coordinates are written here, not read back from `Args`.
+        assert_eq!(
+            scripted(&[
+                "--capture",
+                "working.png",
+                "--frames",
+                "1",
+                "--cursor",
+                "960,540"
+            ]),
+            Some(bevy::prelude::Vec2::new(960.0, 540.0)),
+            "a parsed --cursor must reach the resource the pick system reads"
+        );
+        assert_eq!(
+            scripted(&[
+                "--capture",
+                "working.png",
+                "--frames",
+                "1",
+                "--cursor",
+                "12,34"
+            ]),
+            Some(bevy::prelude::Vec2::new(12.0, 34.0)),
+            "the resource must carry the coordinate given, not a fixed one"
+        );
+        // No flag means no resource at all, so the live cursor is left alone.
+        assert_eq!(
+            scripted(&["--capture", "working.png", "--frames", "1"]),
+            None,
+            "without --cursor nothing may overwrite the real cursor position"
         );
     }
 
