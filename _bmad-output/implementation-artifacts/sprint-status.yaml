@@ -43,7 +43,19 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-25  # STORY 8.1 CODE-REVIEWED -> in-progress. 4 layers + 1 narrowed re-run, NO coverage
+last_updated: 2026-08-26  # STORY 8.1 REVIEW-PATCH ROUND 1 COMPLETE -- all 12 patches applied in one commit
+                          # (3f50178), one full-tier gate at the end, GATE GREEN cold, 389 tests (was 382).
+                          # Mutation round 3: 9/9 KILLED, zero APPLY-FAILED, three new rows (AC9's ClientLocal
+                          # tag, AC5's separation floor, the wiring call site). Row 2's anchor went STALE inside
+                          # the round -- the foliage patch reformatted the condition it matched -- and the dry
+                          # check caught it at 0 matches BEFORE the run. Separately, `is_tree_foliage` as first
+                          # written duplicated story 5.4's sabotage anchor and broke a row in ANOTHER story's
+                          # table; the gate's mutation audit caught it and the helper was rewritten. The inert
+                          # seam moved out one level and SHRANK but did not vanish: `run()`'s own three lines
+                          # (plugins, configure_client_app, app.run()) still need a socket and a window. STILL
+                          # OPEN: Task 6 / AC12, vehicle-bound; gui.exe MUST be rebuilt (the 08-25 build stamp
+                          # predates every patch). AC10/AC11 have still never executed in any process anywhere.
+                          # PRIOR: STORY 8.1 CODE-REVIEWED -> in-progress. 4 layers + 1 narrowed re-run, NO coverage
                           # holes. 5 decisions ruled by Wolf, 12 patches LEFT AS ACTION ITEMS for a FRESH SESSION
                           # (patch-in-a-fresh-session rule held deliberately, not by omission). Convergence 4-in-22,
                           # the first favourable R1 data point; R1 STILL has no M2-crate mapping and was hand-adapted
