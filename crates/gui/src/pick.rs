@@ -182,8 +182,10 @@ fn entry_face(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3, entry: f32) -
         && origin.z > min.z
         && origin.z < max.z
     {
-        // NOTE: a ray starting inside the world enters no face; retain the historic top slab.
-        return Face::Top;
+        // A ray starting inside the world crosses no boundary, so there is no entry face to
+        // compute. Label it the face the viewer is looking at head-on, which is what the DDA
+        // would report had it marched in from outside.
+        return facing_face(direction);
     }
     for (origin, direction, low, high, positive, negative) in [
         (origin.x, direction.x, min.x, max.x, Face::West, Face::East),
@@ -205,6 +207,30 @@ fn entry_face(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3, entry: f32) -
         }
     }
     Face::Top
+}
+
+/// The face a ray of this direction presents to the viewer: the one whose outward normal most
+/// opposes travel. Deliberately the same mapping the DDA uses per step, so a cell hit from inside
+/// the world is labelled exactly as the same cell hit from outside it.
+fn facing_face(direction: Vec3) -> Face {
+    let magnitude = direction.abs();
+    if magnitude.x >= magnitude.y && magnitude.x >= magnitude.z {
+        if direction.x >= 0.0 {
+            Face::West
+        } else {
+            Face::East
+        }
+    } else if magnitude.y >= magnitude.z {
+        if direction.y >= 0.0 {
+            Face::Bottom
+        } else {
+            Face::Top
+        }
+    } else if direction.z >= 0.0 {
+        Face::South
+    } else {
+        Face::North
+    }
 }
 
 fn ray_box_interval(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3) -> Option<(f32, f32)> {
@@ -332,6 +358,93 @@ mod tests {
         (0..24i32)
             .map(|i| [5 + i * 5, 7 + (i * 11) % 120, 1 + (i * 3) % 8])
             .collect()
+    }
+
+    /// INDEPENDENT ORACLE for the FACE, and deliberately not a restatement of the mapping the
+    /// production code uses. The invariant a hit face must satisfy is geometric: you can only see
+    /// the side of a cube that faces you, so the face's outward normal must OPPOSE the ray. That
+    /// holds however the six labels are assigned, which is exactly what makes it able to catch a
+    /// swapped pair — inverting `West`/`East` (or `Top`/`Bottom`) sends the normal the other way
+    /// and every one of these dot products flips sign.
+    ///
+    /// This is the check the change shipped without: the per-step `face` assignments inside the
+    /// DDA loop produce the face for essentially every real pick, and both could be inverted with
+    /// the whole suite green. An inverted face offsets the hover slab INTO the neighbouring cube,
+    /// which is 8.1's buried-highlight defect this story exists to fix.
+    #[test]
+    fn a_marched_hit_face_always_opposes_the_ray_that_found_it() {
+        let mirror = pillars();
+        // The first pillar, tall enough to be struck side-on and from above.
+        let target = [5, 7, 1];
+        let centre = world_to_render(target);
+        let approaches = [
+            (
+                "from -x",
+                Vec3::new(centre.x - 40.0, centre.y, centre.z),
+                Vec3::X,
+            ),
+            (
+                "from +x",
+                Vec3::new(centre.x + 40.0, centre.y, centre.z),
+                -Vec3::X,
+            ),
+            (
+                "from -z",
+                Vec3::new(centre.x, centre.y, centre.z - 40.0),
+                Vec3::Z,
+            ),
+            (
+                "from +z",
+                Vec3::new(centre.x, centre.y, centre.z + 40.0),
+                -Vec3::Z,
+            ),
+            (
+                "from above",
+                Vec3::new(centre.x, centre.y + 40.0, centre.z),
+                -Vec3::Y,
+            ),
+        ];
+        for (label, origin, direction) in approaches {
+            let hit = first_visible_hit(origin, direction, &mirror, TOP)
+                .unwrap_or_else(|| panic!("the ray {label} must strike the pillar"));
+            assert_eq!(hit.tile, target, "the ray {label} struck the wrong cell");
+            assert!(
+                hit.face.normal().dot(direction) < 0.0,
+                "the ray {label} hit {:?}, whose normal {:?} points ALONG the ray {:?} — that \
+                 face is turned away from the viewer and its slab lands inside the neighbouring \
+                 cube",
+                hit.face,
+                hit.face.normal(),
+                direction
+            );
+        }
+    }
+
+    /// A camera embedded in or touching solid rock is reachable in normal play: the camera has no
+    /// terrain collision, the zoom clamp bottoms out at 4 units, and designating by mouse is a
+    /// close-range interaction against tunnel and shaft walls. The ray then crosses no world
+    /// boundary, so there is no entry face to compute, and the historic fallback answered `Top`
+    /// regardless of where the ray was pointing.
+    #[test]
+    fn a_ray_starting_inside_solid_rock_reports_the_face_it_looks_at_not_the_top() {
+        let mirror = pillars();
+        let target = [5, 7, 1];
+        let origin = world_to_render(target);
+        for direction in [Vec3::X, -Vec3::X, Vec3::Z, -Vec3::Z] {
+            let hit = first_visible_hit(origin, direction, &mirror, TOP)
+                .expect("a ray inside a solid cell hits that cell immediately");
+            assert_eq!(hit.tile, target);
+            assert_ne!(
+                hit.face,
+                Face::Top,
+                "a ray travelling {direction:?} from inside the rock reported the TOP face; the \
+                 slab is then laid flat on the cell roof instead of on the wall being looked at"
+            );
+            assert!(
+                hit.face.normal().dot(direction) < 0.0,
+                "the face must still oppose the ray, whatever the ray is doing inside the rock"
+            );
+        }
     }
 
     /// INDEPENDENT ORACLE. It answers the same question by a different method: instead of

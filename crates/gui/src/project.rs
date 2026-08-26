@@ -15,7 +15,7 @@ use crate::{
         light_properties, material_color, rim_dissolved_color, snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
-    designate::DragAnchor,
+    designate::{DesignateMode, DragAnchor, DragMode},
     pick::PickedTile,
     slice::SliceLevel,
     transform::world_to_render,
@@ -257,6 +257,7 @@ pub fn sync_hover_highlight(
 pub fn sync_drag_preview(
     mut commands: Commands,
     anchor: Res<DragAnchor>,
+    drag_mode: Res<DragMode>,
     picked: Res<PickedTile>,
     mirror: Res<crate::ingest::MirrorResource>,
     slice: Res<SliceLevel>,
@@ -284,14 +285,47 @@ pub fn sync_drag_preview(
     for x in rect.min[0]..=rect.max[0] {
         for y in rect.min[1]..=rect.max[1] {
             let tile = [x, y, anchor[2]];
+            let (transform, material) = preview_appearance(
+                drag_mode.0.unwrap_or(DesignateMode::None),
+                &mirror.0,
+                tile,
+                slice.level(),
+                &assets,
+            );
             commands.spawn((
                 DragPreview(tile),
-                slab_transform([x, y, dig_mark_level(&mirror.0, tile, slice.level())], 0.54),
+                transform,
                 Mesh3d(assets.mark_mesh.clone()),
-                MeshMaterial3d(assets.hover_highlight.clone()),
+                MeshMaterial3d(material),
                 ClientLocal,
             ));
         }
+    }
+}
+
+/// Where a pending drag tile will sit, and what it will look like, IN THE MODE THAT WILL COMMIT.
+/// Task 4 requires the preview to sit where the committed marks will sit, so each arm mirrors the
+/// matching arm of `designation_mark_transform` / `zone_mark_transform` rather than assuming dig.
+/// Clear commits nothing, so it keeps the neutral hover material at the dig height.
+fn preview_appearance(
+    mode: DesignateMode,
+    mirror: &Mirror,
+    tile: [i32; 3],
+    level: i32,
+    assets: &ProjectionAssets,
+) -> (Transform, Handle<StandardMaterial>) {
+    let [x, y, _] = tile;
+    match mode {
+        DesignateMode::Dig => (
+            slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
+            assets.dig_mark.clone(),
+        ),
+        DesignateMode::Channel => (slab_transform(tile, -0.46), assets.channel_mark.clone()),
+        DesignateMode::Stockpile => (slab_transform(tile, -0.46), assets.zone_mark.clone()),
+        DesignateMode::None | DesignateMode::Clear => (
+            slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
+            assets.hover_highlight.clone(),
+        ),
     }
 }
 

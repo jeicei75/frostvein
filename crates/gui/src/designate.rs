@@ -23,6 +23,12 @@ pub enum DesignateMode {
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DragAnchor(pub Option<[i32; 3]>);
 
+/// The mode the in-flight drag was started in. A drag commits in the mode it began in, so a mode
+/// key pressed mid-drag takes effect on the NEXT drag rather than silently changing what the
+/// release will issue.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DragMode(pub Option<DesignateMode>);
+
 #[derive(bevy::prelude::Component)]
 pub struct DesignateHint;
 
@@ -60,12 +66,15 @@ pub fn setup_designate_hint(mut commands: Commands) {
 pub fn update_designate_hint(
     mode: Res<DesignateMode>,
     anchor: Res<DragAnchor>,
+    drag_mode: Res<DragMode>,
     mut hints: bevy::prelude::Query<&mut Text, bevy::prelude::With<DesignateHint>>,
 ) {
-    if !mode.is_changed() && !anchor.is_changed() {
+    if !mode.is_changed() && !anchor.is_changed() && !drag_mode.is_changed() {
         return;
     }
-    let text = designation_hint(*mode, anchor.0.is_some());
+    // While a drag is live the bar names the mode that will actually commit, not the mode key
+    // last pressed — those differ the moment a mode key is pressed mid-drag.
+    let text = designation_hint(drag_mode.0.unwrap_or(*mode), anchor.0.is_some());
     for mut hint in &mut hints {
         *hint = Text::new(text);
     }
@@ -78,6 +87,7 @@ pub fn designation_input(
     picked: Res<PickedTile>,
     mut mode: ResMut<DesignateMode>,
     mut anchor: ResMut<DragAnchor>,
+    mut drag_mode: ResMut<DragMode>,
     mut pending: ResMut<PendingCommands>,
 ) {
     if keys.just_pressed(KeyCode::Digit1) {
@@ -94,6 +104,7 @@ pub fn designation_input(
     if abort {
         if anchor.0.is_some() {
             anchor.0 = None;
+            drag_mode.0 = None;
         } else if keys.just_pressed(KeyCode::Escape) {
             *mode = DesignateMode::None;
         }
@@ -102,6 +113,7 @@ pub fn designation_input(
 
     if mouse.just_pressed(MouseButton::Left) && *mode != DesignateMode::None {
         anchor.0 = picked.tile();
+        drag_mode.0 = anchor.0.map(|_| *mode);
     }
 
     if mouse.just_released(MouseButton::Left) {
@@ -116,12 +128,13 @@ pub fn designation_input(
                 (release_tile[0], release_tile[1]),
                 anchor_tile[2],
             );
-            for command in commands_for(*mode, rect) {
+            for command in commands_for(drag_mode.0.unwrap_or(*mode), rect) {
                 pending.push(command);
             }
         }
         // A missed release must never leave a stale anchor for the next drag.
         anchor.0 = None;
+        drag_mode.0 = None;
     }
 }
 
@@ -146,18 +159,7 @@ fn commands_for(mode: DesignateMode, rect: Rect) -> Vec<Command> {
 
 #[cfg(test)]
 mod tests {
-    use bevy::{
-        app::App,
-        ecs::system::RunSystemOnce,
-        input::{ButtonInput, mouse::MouseButton},
-        prelude::KeyCode,
-    };
-
-    use super::{DesignateMode, DragAnchor, commands_for, designation_hint, designation_input};
-    use crate::{
-        command::PendingCommands,
-        pick::{Face, PickedCell, PickedTile},
-    };
+    use super::{DesignateMode, commands_for, designation_hint};
     use protocol::{Command, DesignationKind, Rect};
 
     #[test]
@@ -172,6 +174,32 @@ mod tests {
                 Command::CancelDesignation { rect },
                 Command::RemoveStockpile { rect }
             ]
+        );
+    }
+
+    #[test]
+    fn channel_and_stockpile_map_to_their_own_distinct_commands() {
+        let rect = Rect {
+            min: [1, 2, 3],
+            max: [4, 5, 3],
+        };
+        // Channel is NOT dig, and a stockpile is not a designation at all. Both arms could be
+        // rewritten to emit dig, or nothing, with the whole suite green before this.
+        assert_eq!(
+            commands_for(DesignateMode::Channel, rect),
+            vec![Command::Designate {
+                kind: DesignationKind::Channel,
+                rect
+            }]
+        );
+        assert_eq!(
+            commands_for(DesignateMode::Stockpile, rect),
+            vec![Command::PlaceStockpile { rect }]
+        );
+        assert_ne!(
+            commands_for(DesignateMode::Channel, rect),
+            commands_for(DesignateMode::Dig, rect),
+            "channel and dig must not collapse to the same wire command"
         );
     }
 
@@ -205,34 +233,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn abort_wins_over_a_same_frame_release_and_sends_nothing() {
-        let mut app = App::new();
-        app.init_resource::<ButtonInput<KeyCode>>()
-            .init_resource::<ButtonInput<MouseButton>>()
-            .init_resource::<PendingCommands>()
-            .insert_resource(DesignateMode::Dig)
-            .insert_resource(DragAnchor(Some([2, 3, 4])))
-            .insert_resource(PickedTile(Some(PickedCell {
-                tile: [5, 6, 4],
-                face: Face::Top,
-            })));
-        {
-            let mut mouse = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
-            mouse.press(MouseButton::Left);
-            mouse.clear();
-            mouse.release(MouseButton::Left);
-            mouse.press(MouseButton::Right);
-        }
-
-        app.world_mut().run_system_once(designation_input).unwrap();
-
-        assert_eq!(app.world().resource::<DragAnchor>().0, None);
-        assert!(
-            app.world().resource::<PendingCommands>().is_empty(),
-            "right-click abort must take precedence over a concurrent left release"
-        );
-    }
+    // NOTE: the abort paths used to be pinned HERE, by `run_system_once(designation_input)`
+    // with `DragAnchor` and `PickedTile` inserted by hand. That is the shape D6 forbids and the
+    // shape that hid 8.1's `--cursor` defect through a whole mutation round: it starts downstream
+    // of the production drive line, so it cannot see a drag that never anchors. AC14 asks for the
+    // abort paths driven through the shared registration point, and they now are — see
+    // `tests/headless.rs`, `right_button_*`, `escape_during_*` and `escape_with_no_drag_*`.
 
     #[test]
     fn designation_input_uses_the_shared_rect_helper_not_local_normalization() {
