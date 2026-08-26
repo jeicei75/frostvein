@@ -15,6 +15,8 @@ use crate::{
         light_properties, material_color, rim_dissolved_color, snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
+    designate::DragAnchor,
+    pick::PickedTile,
     slice::SliceLevel,
     transform::world_to_render,
 };
@@ -83,6 +85,10 @@ pub struct ProjectedZone(pub [i32; 3]);
 /// The client-local slab drawn under the tile currently under the cursor.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HoverHighlight(pub [i32; 3]);
+
+/// Client-only slabs shown while a designation drag is held.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DragPreview(pub [i32; 3]);
 
 /// Leaves a visible gutter between neighbouring mark slabs. The mesh is 1.02 wide and this scale
 /// is applied on top of it, so a slab covers 1.02 x 0.94 = 0.9588 of its tile — inset ~2% per
@@ -217,16 +223,20 @@ pub fn sync_hover_highlight(
     assets: Option<Res<ProjectionAssets>>,
     highlights: Query<(BevyEntity, &HoverHighlight)>,
 ) {
-    if let Some(position) = picked.0 {
+    if let Some(cell) = picked.0 {
+        let position = cell.tile;
+        let normal = cell.face.normal();
         if let Some((entity, _)) = highlights.iter().next() {
             commands.entity(entity).insert((
                 HoverHighlight(position),
-                Transform::from_translation(world_to_render(position) + Vec3::Y * 0.55),
+                Transform::from_translation(world_to_render(position) + normal * 0.55)
+                    .with_rotation(bevy::prelude::Quat::from_rotation_arc(Vec3::Y, normal)),
             ));
         } else if let Some(assets) = assets {
             commands.spawn((
                 HoverHighlight(position),
-                Transform::from_translation(world_to_render(position) + Vec3::Y * 0.55),
+                Transform::from_translation(world_to_render(position) + normal * 0.55)
+                    .with_rotation(bevy::prelude::Quat::from_rotation_arc(Vec3::Y, normal)),
                 Mesh3d(assets.mark_mesh.clone()),
                 MeshMaterial3d(assets.hover_highlight.clone()),
                 ClientLocal,
@@ -235,6 +245,38 @@ pub fn sync_hover_highlight(
     } else {
         for (entity, _) in highlights.iter() {
             commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// Rebuilds the deliberately small preview set from the same single-z rect helper used on wire.
+pub fn sync_drag_preview(
+    mut commands: Commands,
+    anchor: Res<DragAnchor>,
+    picked: Res<PickedTile>,
+    mirror: Res<crate::ingest::MirrorResource>,
+    slice: Res<SliceLevel>,
+    assets: Option<Res<ProjectionAssets>>,
+    previews: Query<BevyEntity, With<DragPreview>>,
+) {
+    for entity in &previews {
+        commands.entity(entity).despawn();
+    }
+    let (Some(anchor), Some(release), Some(assets)) = (anchor.0, picked.tile(), assets) else {
+        return;
+    };
+    let rect =
+        client_core::rect_on_level((anchor[0], anchor[1]), (release[0], release[1]), anchor[2]);
+    for x in rect.min[0]..=rect.max[0] {
+        for y in rect.min[1]..=rect.max[1] {
+            let tile = [x, y, anchor[2]];
+            commands.spawn((
+                DragPreview(tile),
+                slab_transform([x, y, dig_mark_level(&mirror.0, tile, slice.level())], 0.54),
+                Mesh3d(assets.mark_mesh.clone()),
+                MeshMaterial3d(assets.hover_highlight.clone()),
+                ClientLocal,
+            ));
         }
     }
 }
