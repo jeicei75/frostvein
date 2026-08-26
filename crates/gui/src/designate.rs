@@ -146,7 +146,18 @@ fn commands_for(mode: DesignateMode, rect: Rect) -> Vec<Command> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DesignateMode, commands_for, designation_hint};
+    use bevy::{
+        app::App,
+        ecs::system::RunSystemOnce,
+        input::{ButtonInput, mouse::MouseButton},
+        prelude::KeyCode,
+    };
+
+    use super::{DesignateMode, DragAnchor, commands_for, designation_hint, designation_input};
+    use crate::{
+        command::PendingCommands,
+        pick::{Face, PickedCell, PickedTile},
+    };
     use protocol::{Command, DesignationKind, Rect};
 
     #[test]
@@ -191,6 +202,51 @@ mod tests {
                 kind: DesignationKind::Dig,
                 rect
             }]
+        );
+    }
+
+    #[test]
+    fn abort_wins_over_a_same_frame_release_and_sends_nothing() {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<ButtonInput<MouseButton>>()
+            .init_resource::<PendingCommands>()
+            .insert_resource(DesignateMode::Dig)
+            .insert_resource(DragAnchor(Some([2, 3, 4])))
+            .insert_resource(PickedTile(Some(PickedCell {
+                tile: [5, 6, 4],
+                face: Face::Top,
+            })));
+        {
+            let mut mouse = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+            mouse.press(MouseButton::Left);
+            mouse.clear();
+            mouse.release(MouseButton::Left);
+            mouse.press(MouseButton::Right);
+        }
+
+        app.world_mut().run_system_once(designation_input).unwrap();
+
+        assert_eq!(app.world().resource::<DragAnchor>().0, None);
+        assert!(
+            app.world().resource::<PendingCommands>().is_empty(),
+            "right-click abort must take precedence over a concurrent left release"
+        );
+    }
+
+    #[test]
+    fn designation_input_uses_the_shared_rect_helper_not_local_normalization() {
+        let production = include_str!("designate.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the production module precedes its tests");
+        assert!(
+            production.contains(&["client_core::rect", "_on_level("].concat()),
+            "AC3 requires the shared rect helper at the wire boundary"
+        );
+        assert!(
+            !production.contains("anchor_tile[0].min("),
+            "AC3 forbids a second local corner normalization in gui"
         );
     }
 }

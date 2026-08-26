@@ -204,6 +204,12 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
         "two frames must not substitute for tick 10"
     );
 
+    app.update();
+    assert!(
+        !app.world().resource::<CaptureState>().requested(),
+        "a third frame at tick 9 must not substitute for tick 10"
+    );
+
     app.world_mut()
         .resource_mut::<MirrorResource>()
         .0
