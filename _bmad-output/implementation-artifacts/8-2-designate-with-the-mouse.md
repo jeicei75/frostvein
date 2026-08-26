@@ -5,7 +5,7 @@ baseline_commit: cca118a3a6fc9c0fe1676f454f3556ed9c424eab
 
 # Story 8.2: Designate with the Mouse
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -264,6 +264,54 @@ This is the **fifth** occurrence; say so in the record.
 - [x] **Task 8 — The gate (AC: 1)**
   - [x] `cargo clean -p gui`, then `scripts/gate.sh` full tier. Paste the tail. A
         `GATE GREEN (FAST)` line is a coverage hole, not a pass.
+
+### Review Findings
+
+Code review 2026-08-26 — four layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor,
+Feature Auditor), fresh context, **no coverage hole: all four ran `cargo` and reported**.
+Baseline `cca118a`, which is also `main`'s tip — this story is NOT stacked.
+Gate re-run green independently: fmt ok, clippy `-D warnings` ok, `cargo test` 403/0/1-ignored,
+three `cargo tree` probes show no `sim-core` edge.
+
+**The headline: the feature is genuinely wired.** All 15 hops trace to real live callers and the
+daemon end was proved with the real binaries (a dig rect landed as 16 designations, read back over
+an independent connection). This story does NOT carry the inert-seam defect that beat 7.2 and 8.1.
+What it carries instead is that same defect displaced one level out — into the instruments meant to
+detect it, and into the tests meant to pin it.
+
+- [x] [Review][Defer] Blocking socket write runs inside the Bevy `Update` schedule — `send_commands` does a blocking `write_all` under a 30 s write timeout (`SNAPSHOT_READ_TIMEOUT` reused), registered at `ingest.rs:260`. A back-pressured daemon freezes the render loop for up to 30 s. **RESOLVED 2026-08-26 (Wolf): accepted as-is** — the daemon is localhost, so back-pressure long enough to matter is not a real shape today, and a writer thread is exactly the speculative machinery YAGNI forbids. REOPEN TRIGGER: if `simd` ever runs off-box, or the client is ever pointed at a non-loopback daemon, this becomes live and needs the background writer. [crates/gui/src/command.rs:37]
+- [x] [Review][Patch] `audit-mutations.py` cannot see 7 mutation rows, and one has already rotted — the script only audits literals bound to a named variable, so rows passing literals inline to `s.replace(...)` are skipped entirely. `2-1-…:20` searches for a `tui` arm refactored long ago; it writes the file back byte-identical, the test passes, and the runner reports SURVIVED — printing "the test is not pinning what it claims" when the truth is the sabotage is broken. The script exits 0 and prints an all-clear. **RESOLVED 2026-08-26 (Wolf): patch now**, out-of-scope notwithstanding — a broken observability instrument is the standing exception. [scripts/audit-mutations.py]
+- [x] [Review][Patch] Drag preview shares the hover material and the dig offset for every mode — previews cyan then commits blue; a channel previews at `0.54` but commits at `-0.46`. Task 4 says "the preview sits where the committed marks will sit". **RESOLVED 2026-08-26 (Wolf): fix now** — preview takes the committing mode's own offset AND material, so it sits and reads as what it will become. This is a look change made on a concrete Task 4 defect, not tuning; it still wants your eye at the vehicle session. [crates/gui/src/project.rs:290]
+- [x] [Review][Patch] Mode key can be switched mid-drag; release uses the *current* mode, not the one the drag began in. **RESOLVED 2026-08-26 (Wolf): lock the mode at anchor time** — the drag commits in the mode it began in. [crates/gui/src/designate.rs:89]
+- [x] [Review][Patch] `--at-tick` exhaustion writes `AppExit::error()` but the process exits 0 — `app.run()`'s return is discarded and `main` returns `Ok(())`. Confirmed: `bevy_winit-0.19.0` has no `process::exit`, and `#[must_use]` is on `App`/`AppExit`'s methods but not the `AppExit` enum, so clippy stays green. Violates AC16's "exits non-zero". [crates/gui/src/ingest.rs:95]
+- [x] [Review][Patch] A `--drag` capture that designates nothing prints a pass and exits 0 — AC15's non-zero range check is gated behind `--expect-work`, which the story's own recipe omits and which *cannot* be used for a dig-only drag because it also asserts `expected_zones > 0`. The 7.2 empty-site false pass, reproduced. [crates/gui/src/capture.rs:122]
+- [x] [Review][Patch] The DDA march's hit face is entirely unpinned — inverting the X and Y face assignments leaves 149/149 green. That inversion buries the highlight in the neighbouring cube, which is exactly 8.1's deferred defect this story exists to fix. [crates/gui/src/pick.rs:151]
+- [x] [Review][Patch] The slab's rotation onto the face normal is untested — deleting `.with_rotation(...)` from both call sites leaves 149/149 green; the one geometry test asserts `translation` only and never reads rotation. Without it the slab on a cliff face is an edge-on wafer. [crates/gui/src/project.rs:233]
+- [x] [Review][Patch] Channel, stockpile and clear are unreachable by any test — collapsing `Digit2/3/4` to Dig is green; making Channel emit Dig and Stockpile emit nothing is green. Three of the four modes in the story title have no coverage on any path. [crates/gui/src/designate.rs:85]
+- [x] [Review][Patch] `entry_face` returns `Face::Top` unconditionally when the camera sits inside solid geometry — reachable in normal play (camera has no terrain collision, min zoom 4.0, and designation is a close-zoom interaction). Confirmed by an executed standalone reproducer. Consequence is a wrong-oriented hover slab, i.e. AC13. [crates/gui/src/pick.rs:177]
+- [x] [Review][Patch] A write error silently clears the entire pending queue — `pending.0.clear(); return;` behind nothing but an `eprintln`. A designation the boss dragged vanishes with no on-screen trace, and a transient stall is not distinguished from a dead peer. [crates/gui/src/command.rs:59]
+- [x] [Review][Patch] The scripted drag fires on frames 1–3 unconditionally, with no retry and no success check — each stage advances whether or not `update_pick` resolved a tile, at the coldest moment in the app's life. 8.1's `--cursor` rewrote every frame and self-healed; this has three shots. Stacked on the range-check gap, a `--drag` capture can be wholly inert and still exit 0 with a PNG on disk. [crates/gui/src/ingest.rs:501]
+- [x] [Review][Patch] `--cursor` is silently ignored when `--drag` is present, yet the capture still asserts the pick against it — a guaranteed spurious failure with a misleading message, where every other bad flag combination in this parser `bail!`s. [crates/gui/src/ingest.rs:496]
+- [x] [Review][Patch] `Esc` is dead to every test — removing it from the abort condition leaves 149/149 green. Neither AC7's abort-during-drag nor AC8's leave-the-mode is asserted; the one abort test presses `MouseButton::Right` only, so mutation row 5's KILLED verdict rests entirely on the right-button half. [crates/gui/src/designate.rs:93]
+- [x] [Review][Patch] The hint bar never updates and nothing notices — neutering `update_designate_hint` or dropping it from its registration tuple is green. AC9's load-bearing clause ("names the active mode") has no test; the bar would read the no-mode string forever. [crates/gui/src/designate.rs:43]
+- [x] [Review][Patch] AC10 is asserted for dig only — no round trip for channel, none for stockpile (`ProjectedZone` is never checked after a client-issued command), and none for a client-issued cancel. `rg 'CancelDesignation|RemoveStockpile|PlaceStockpile' crates/gui/tests/` returns nothing. [crates/gui/tests/headless.rs:2520]
+- [x] [Review][Patch] The abort test bypasses the shared registration point — `run_system_once(designation_input)` with hand-inserted `DragAnchor(Some(..))` *and* `PickedTile(Some(..))`. That is the D6-forbidden shape, and exactly what hid 8.1's `--cursor` bug through a whole mutation round. AC14 requires the abort paths driven through the shared point. [crates/gui/src/designate.rs:209]
+- [x] [Review][Patch] Add sabotage rows for the seams this round left uncovered — the 9 rows match Task 6's stated minimum and stop there; the demonstrated holes are the march face, the slab rotation, the three non-dig modes, `Esc`, and the hint bar. AC20 asks for every seam AC. The identical critique was raised and patched at 8.1. [_bmad-output/implementation-artifacts/mutations/8-2-designate-with-the-mouse.sh]
+- [x] [Review][Patch] `--at-tick` silently disables the motion instrument — the guard drops `position_changes > 0` and `mid_blend_frames > 0`, two live-client health checks unrelated to tick count, on precisely the new path the vehicle recipe will use. Nothing in the story asks for this. [crates/gui/src/capture.rs:676]
+- [x] [Review][Patch] `command.rs` has no test for any failure path — zero references anywhere to `MAX_PENDING_COMMANDS`, the queue-full string, the send-failure string, or lock poisoning. Only the happy path is exercised, in a file this story created. [crates/gui/src/command.rs:65]
+- [x] [Review][Defer] Paired `Clear` commands can split at the 256 bound — deferred, low reachability (needs 256 queued designations); `CancelDesignation` could send while `RemoveStockpile` is dropped. [crates/gui/src/command.rs:18]
+- [x] [Review][Defer] `--at-tick 0` boundary is untested — deferred, plausible-but-untested; `target_tick == start_tick` should fire on the first frame. [crates/gui/tests/capture.rs:933]
+- [x] [Review][Defer] Test-harness writers set no write timeout, unlike production — deferred, test-only; a harness bug would hang the process instead of failing fast. [crates/gui/src/command.rs:84]
+- [x] [Review][Defer] `SNAPSHOT_READ_TIMEOUT` now names both the read and write timeout — deferred, cosmetic; the value is right, the name covers two unrelated things. [crates/gui/src/ingest.rs:57]
+- [x] [Review][Defer] `.codex/` is untracked and not git-ignored — deferred, will attach itself to the next `git add -A`. [.gitignore]
+- [x] [Review][Defer] M2-7's build stamp is missing for the fifth time — deferred, no automation exists in `scripts/`; `rg 'GIT_SHA|vergen' crates/gui/src/` returns nothing. [scripts/]
+
+**Two absences, recorded as coverage holes rather than clean passes**, per the story's own record:
+`codex review --base main` NEVER RAN (killed twice, quota-blocked once), and no vehicle session has
+happened. **AC13's rendered half, AC15/16 end-to-end, AC18 and AC19 remain OPEN and unobserved** —
+none of them is inferred green from the 403 passing tests. Findings on the march face and the slab
+rotation raise the stakes: the live session is currently the only thing standing between a wrong
+face or a missing rotation and a shipped defect.
 
 ## Dev Notes
 

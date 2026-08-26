@@ -882,3 +882,37 @@ executed a single line of its production path.**
   hover defect: `04e6de5` raised the campfire amplitude 0.11→0.40, peaking at 44.8M, ~40% above the
   value 5.4 was sized against, and a cyan slab at `(80,220,210)` will not survive that exposure.
   Recorded against that open item; no look-tuning now, per the art rule. `[wolf/MED]`
+
+## Deferred from: code review of 8-2-designate-with-the-mouse (2026-08-26)
+
+- **Paired `Clear` commands can split at the 256-command bound** [crates/gui/src/command.rs:18] —
+  `PendingCommands::push` is called in a loop across the bound check, so a Clear designation can
+  send `CancelDesignation` while `RemoveStockpile` is dropped, leaving the daemon with an
+  inconsistent designate/stockpile pair. Deferred: reaching the bound needs 256 queued
+  designations. Fix shape is a single atomic `push_all(Vec<Command>)`.
+- **`--at-tick 0` boundary untested** [crates/gui/tests/capture.rs:933] — `target_tick ==
+  start_tick` means the first `capture_after_frames` call satisfies the tick test trivially.
+  Tested value is 3; 0 is a distinct literal boundary. Deferred: plausible-but-untested only.
+- **Test-harness writers set no write timeout, unlike production** [crates/gui/src/command.rs:84] —
+  production sets one in `connect_to_daemon`; no test harness does, so a harness bug (e.g. a wrong
+  `read_line` count) hangs the test process indefinitely instead of failing fast. Deferred:
+  test-only, no production consequence.
+- **`SNAPSHOT_READ_TIMEOUT` names two unrelated things** [crates/gui/src/ingest.rs:57] — 8.2 reuses
+  it as the command *write* timeout. The 30 s value is right for both; the name is now misleading.
+  Deferred: cosmetic. (Note: if the blocking-write decision changes the write timeout, this stops
+  being cosmetic and should be split then.)
+- **`.codex/` is untracked and not git-ignored** [.gitignore] — `git check-ignore .codex/` reports
+  NOT IGNORED. Harmless today because it is untracked, but it will attach itself to the next
+  `git add -A`. One line in `.gitignore`.
+- **M2-7's build stamp is missing for the FIFTH time** [scripts/] — `rg 'GIT_SHA|git_sha|vergen'
+  crates/gui/src/` returns nothing and `scripts/` holds no build-stamp automation. Recurring
+  because it is re-noted per story and never automated. The stale-binary trap it guards has fired
+  five times. Deferred here only because it is a process/tooling item, not part of this diff — but
+  it is now the longest-running open item in M2.
+- **Blocking socket write inside the Bevy `Update` schedule** [crates/gui/src/command.rs:37] —
+  `send_commands` blocks on `write_all` under a 30 s write timeout, in the frame loop; an executed
+  reproducer confirms a back-pressured peer stalls it for the full timeout. **ACCEPTED, not
+  unnoticed** (Wolf, 2026-08-26): the daemon is localhost, so the stall shape is not real today,
+  and a background writer thread is speculative machinery YAGNI forbids. REOPEN TRIGGER: `simd`
+  running off-box, or the client pointed at any non-loopback daemon. If that happens this is a
+  render-loop freeze, not a latency nit.

@@ -43,7 +43,8 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-26  # STORY 8.1 DONE -- MERGED, PR #34 (f9df762). M2 at 9/11. Picking works: ray from
+last_updated: 2026-08-26  # STORY 8.2 CREATED -> ready-for-dev (see its block below).
+                          # STORY 8.1 DONE -- MERGED, PR #34 (f9df762). M2 at 9/11. Picking works: ray from
                           # the rendering camera, 389 tests, 9/9 mutations, gate green cold four times over
                           # (twice by agent, once by Wolf, once by the pre-push hook). AC12 met with margin.
                           # THREE THINGS THIS STORY LEAVES BEHIND, none of them blocking but all of them owed:
@@ -559,7 +560,76 @@ development_status:
   # VEHICLE; NFR6-with-picking is unmeasured and no fps figure was fabricated. Rebuild gui.exe and
   # record its build time + source commit first -- the stale-binary trap fired three times in 5.4.
   8-1-point-at-the-world: done
-  8-2-designate-with-the-mouse: backlog
+  8-2-designate-with-the-mouse: in-progress
+  # CODE REVIEW 2026-08-26 (4 layers, fresh context, NONE a coverage hole) -> back to in-progress.
+  # First four-layer full house with per-layer CARGO_TARGET_DIR isolation: nothing starved, no
+  # layer killed on silence. 26 findings; 4 decisions ruled by Wolf, 19 patched, 6 deferred, 1
+  # dismissed. THE VERDICT THAT MATTERS: the feature is GENUINELY WIRED -- all 15 hops trace to
+  # real live callers and the daemon end was proved with the real binaries (a dig rect landed as
+  # 16 designations, read back over an independent connection). The D2 inert-seam curse that beat
+  # 7.2 and 8.1 is BROKEN here. What replaced it is the same defect displaced ONE LEVEL OUT:
+  # (a) INTO THE INSTRUMENTS -- `--at-tick` exhaustion wrote AppExit::error() but `app.run()`'s
+  #     return was discarded, so a run that captured NOTHING exited 0 (AppExit is not #[must_use],
+  #     so clippy -D warnings stayed green); and a `--drag` that designated nothing evaluated
+  #     `0 == 0` and passed, because AC15's non-zero check sat behind `--expect-work`, which the
+  #     story's own recipe omits and which a dig-only drag CANNOT pass (it also demands zones > 0).
+  # (b) INTO THE TESTS -- the DDA march face, the slab rotation, three of the four modes in the
+  #     story title, both Esc paths, the hint bar and the drag preview were each sabotage-provable
+  #     GREEN. Only Digit1 was ever pressed by any test.
+  # Mutation table 9 rows -> 27. ALL 27 KILLED, NO SURVIVOR (19 new/re-pointed + 8 original
+  # re-verified, since the patches touched files the originals anchor into). Tests 149 -> 165,
+  # workspace gate GREEN on a full run.
+  # TOOLING: scripts/audit-mutations.py was BLIND to 7 rows -- it only inspected literals bound to
+  # a NAME, so rows passing text inline to s.replace() were skipped entirely, not even counted as
+  # unguarded. One had already rotted (2-1's tui delta arm, dead since that match arm became a
+  # block) and the script printed a clean all-clear over it. Now fixed and cumulative (3-1 swaps
+  # through a temporary sentinel and must not be called broken). The fix immediately caught 6-1's
+  # and 7-2's rows, which THIS session's capture.rs edits had just broken -- they would have
+  # shipped rotten. 351 -> 369 rows, all applying.
+  # STILL OWED, UNCHANGED BY REVIEW -- none of it closable by an agent:
+  # (1) TASK 7 / AC19, AC13's rendered half, AC15/16 end-to-end and AC18 are VEHICLE-BOUND and
+  #     remain OPEN AND UNOBSERVED. No fps figure fabricated. The march-face and rotation findings
+  #     RAISE the stakes: the live session is the only thing between a wrong face and a shipped
+  #     defect, and neither could ever have been caught in a devpod.
+  # (2) M2-7's build stamp missing for the FIFTH time -- still no automation in scripts/.
+  # (3) `codex review --base main` NEVER RAN. An ABSENCE, not a clean pass; weighed and recorded.
+  # ACCEPTED RISK (Wolf): send_commands blocks the Bevy Update schedule on a 30 s write timeout.
+  # Daemon is localhost so the stall shape is not real today; REOPEN if simd ever runs off-box.
+  # DEV DONE 2026-08-26 except the vehicle half. 14 commits, all Völundr, no squash. Full gate
+  # GREEN on a cold rebuild (orchestrator-run). Sabotage table 9 rows, 9 KILLED, NO SURVIVOR --
+  # rows 1/2/7 attack the send seam directly, which is the D2 inert-seam shape that beat 7.2 and
+  # 8.1 twice. gui's write half is now open: CommandSink + bounded PendingCommands, rects only
+  # via client_core::rect_on_level, protocol/simd/client-core never opened.
+  # THREE THINGS OWED, none closable by an agent:
+  # (1) TASK 7 / AC19 -- NOTHING OBSERVED ON THE VEHICLE. No devpod can open a window; the four
+  #     hand-drags, the cliff-face highlight and both fps readings need gingerspice. No fps
+  #     figure was fabricated. AC13's rendered half rides on the same session.
+  # (2) M2-7's build stamp missing for the FIFTH time -- still no automation in scripts/.
+  # (3) `codex review --base main` NEVER RAN: killed twice by the harness, quota-blocked once.
+  #     An ABSENCE, not a clean pass -- weigh it in review.
+  # DELEGATION WENT BADLY: 4 Codex sessions, 3 ended involuntarily (2 harness kills at ~3 min,
+  # cause never identified; 1 usage-limit at 291k tokens). Orchestrator hand-recovered each.
+  # QUOTA EXHAUSTED 0%->100% ON THIS ONE STORY. 4 dev rows = 98pp ($6.37 benchmark; dollars
+  # cannot see it). CODEX IS UNAVAILABLE TO 8.3 UNTIL THE WEEKLY WINDOW RESETS. 12pp bought
+  # NOTHING (the two killed sessions). The self-gate never ran, so the 3-pass cap was never
+  # approached -- it all went on dev turns. Pool is account-wide: nidavellir's court brain is
+  # starved too. This is 3.2 repeating, to exhaustion rather than to a third.
+  # Story created 2026-08-26. FOUR DECISIONS RULED BY WOLF AT CREATION, so the dev pass inherits
+  # them rather than re-opening them: press-drag-release (the epic left the pattern to "testing in
+  # this story", which no devpod can do); mode keys are DIGITS 1/2/3/4 because the TUI's `d`
+  # collides with camera yaw-right; 8.1's buried hover slab is fixed by moving it to the HIT FACE
+  # (the DDA already knows the crossed axis); and M2-15's `--capture-at-tick` ships HERE, because
+  # the ack AC needs tick-anchored evidence and `--frames` is a render-rate quantity.
+  # PREMISE CHECK CHANGED THE SCOPE: the epic's "simd validates the incoming rect and logs-and-drops"
+  # is ALREADY BUILT AND TESTED (`rect_is_valid` main.rs:714, applied :677, pinned by serve.rs:1322
+  # over both the inverted-corner and two-z cases). The story inherits it and forbids opening
+  # crates/simd/ -- only the client half is owed.
+  # THE ONE STRUCTURAL CHANGE: `gui` is receive-only today (the TcpStream is eaten by BufReader at
+  # ingest.rs:104), so this story opens the write half. That is the seam this project has now got
+  # wrong three times running -- 7.2's --distance, 8.1's --cursor, and 8.1's untested call site --
+  # which is why AC5 requires a test that starts at a mouse press and ends at BYTES ON A SOCKET.
+  # Baseline cca118a, gate green at creation. Nine sabotage rows named. Split line at Task 5 if it
+  # overruns; every --capture AC is vehicle-bound, since no devpod can open a window.
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.
   8-3-master-of-time-and-the-skeleton-walks-in-3d: backlog
