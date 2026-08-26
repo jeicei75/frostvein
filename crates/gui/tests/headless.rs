@@ -34,7 +34,7 @@ use gui::{
     camera::CameraRig,
     capture::{CaptureState, accumulate_motion},
     command::PendingCommands,
-    designate::DragAnchor,
+    designate::{DesignateHint, DesignateMode, DragAnchor, DragMode, designation_hint},
     ingest::{
         CaptureDistance, IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork,
         ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
@@ -42,8 +42,9 @@ use gui::{
     },
     pick::{Face, PickedCell, PickedTile},
     project::{
-        ClientLocal, HoverHighlight, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap,
-        TerrainTile, WorldProjected, setup_projection_assets, sync_hover_highlight,
+        ClientLocal, DragPreview, HoverHighlight, ProjectedDesignation, ProjectedItem,
+        ProjectedZone, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
+        sync_hover_highlight,
     },
     slice::SliceLevel,
     transform::world_to_render,
@@ -2211,17 +2212,28 @@ fn a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side() {
         .unwrap();
     app.world_mut().flush();
 
-    let translation = app
+    let transform = *app
         .world_mut()
         .query::<(&HoverHighlight, &Transform)>()
         .single(app.world())
         .unwrap()
-        .1
-        .translation;
+        .1;
     assert_eq!(
-        translation,
+        transform.translation,
         world_to_render(tile) + bevy::prelude::Vec3::X * 0.55,
         "a side hit must hoist the thin mesh beyond that side, not onto the old top face"
+    );
+    // The offset alone is not the feature. `mark_mesh` is a THIN SLAB whose flat face is normal
+    // to its local Y; hoisted beside a wall without being turned, it is a horizontal wafer seen
+    // edge-on, which is invisible from exactly the viewpoint AC13 is about. This assertion reads
+    // the rotation, which nothing did — deleting `with_rotation` from both call sites left the
+    // whole suite green.
+    let turned = transform.rotation * bevy::prelude::Vec3::Y;
+    let normal = Face::East.normal();
+    assert!(
+        turned.distance(normal) < 1e-5,
+        "the slab's thin axis must be turned onto the face normal {normal:?}, but it points \
+         {turned:?} — the slab is lying flat against a vertical wall"
     );
 }
 
@@ -2782,5 +2794,344 @@ fn f3_toggles_the_diagnostic_overlay() {
         app.world().resource::<FpsOverlayConfig>().enabled,
         !before,
         "F3 did not flip the overlay; toggle_overlay is not running"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Designation interaction, driven THROUGH the shared registration point.
+//
+// Round 1 of this story's review found that three of the four modes named in the story title,
+// both `Esc` transitions, the hint bar and the drag preview could each be broken or deleted with
+// the whole suite green. Every test below therefore presses real keys and real mouse buttons on a
+// `live_app` and reads the wire commands the client actually queued.
+// ---------------------------------------------------------------------------------------------
+
+/// A 3x3x3 world with one solid tile, the camera aimed at it, sliced to its level.
+fn designation_app(
+    anchor: [i32; 3],
+) -> (
+    App,
+    std::sync::mpsc::SyncSender<anyhow::Result<WireMessage>>,
+) {
+    let rig = CameraRig::new(anchor);
+    let cursor = rig
+        .project_world_point(anchor)
+        .expect("the anchor tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![]));
+    install_pick_camera(&mut app, rig, cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(anchor[2]);
+    app.update();
+    (app, sender)
+}
+
+fn set_mouse(app: &mut App, act: impl FnOnce(&mut ButtonInput<MouseButton>)) {
+    act(&mut app.world_mut().resource_mut::<ButtonInput<MouseButton>>());
+}
+
+/// MinimalPlugins does not run InputPlugin's transition clearing between frames.
+fn clear_mouse(app: &mut App) {
+    set_mouse(app, |mouse| mouse.clear());
+}
+
+fn queued(app: &App) -> Vec<protocol::Command> {
+    app.world()
+        .resource::<PendingCommands>()
+        .commands()
+        .iter()
+        .copied()
+        .collect()
+}
+
+/// Presses the mode key, then presses and releases the left button on the same tile.
+fn drag_one_tile(app: &mut App, mode_key: KeyCode) {
+    press_once(app, mode_key);
+    set_mouse(app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(app);
+    set_mouse(app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(app);
+}
+
+/// AC2, AC8 and AC10: each of the four mode keys issues ITS OWN wire command. Collapsing the
+/// digit arms, or making channel emit dig, or making stockpile emit nothing, all left the suite
+/// green — only `Digit1` was ever pressed anywhere.
+#[test]
+fn each_mode_key_sends_its_own_distinct_wire_command() {
+    let anchor = [1, 1, 1];
+    let rect = protocol::Rect {
+        min: anchor,
+        max: anchor,
+    };
+    let expected: [(KeyCode, Vec<protocol::Command>); 4] = [
+        (
+            KeyCode::Digit1,
+            vec![protocol::Command::Designate {
+                kind: DesignationKind::Dig,
+                rect,
+            }],
+        ),
+        (
+            KeyCode::Digit2,
+            vec![protocol::Command::Designate {
+                kind: DesignationKind::Channel,
+                rect,
+            }],
+        ),
+        (
+            KeyCode::Digit3,
+            vec![protocol::Command::PlaceStockpile { rect }],
+        ),
+        (
+            KeyCode::Digit4,
+            vec![
+                protocol::Command::CancelDesignation { rect },
+                protocol::Command::RemoveStockpile { rect },
+            ],
+        ),
+    ];
+    for (key, want) in expected {
+        let (mut app, _sender) = designation_app(anchor);
+        drag_one_tile(&mut app, key);
+        assert_eq!(
+            queued(&app),
+            want,
+            "mode key {key:?} must issue its own command, not another mode's"
+        );
+    }
+}
+
+/// AC7, AC14: the right-button abort, driven through the shared registration point rather than
+/// by `run_system_once` with a hand-inserted anchor.
+#[test]
+fn right_button_during_a_drag_abandons_it_and_sends_nothing() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    assert!(app.world().resource::<DragAnchor>().0.is_some());
+    clear_mouse(&mut app);
+
+    set_mouse(&mut app, |mouse| {
+        mouse.press(MouseButton::Right);
+        mouse.release(MouseButton::Left);
+    });
+    app.update();
+    clear_mouse(&mut app);
+
+    assert_eq!(app.world().resource::<DragAnchor>().0, None);
+    assert!(
+        queued(&app).is_empty(),
+        "an aborted drag must put nothing on the wire"
+    );
+}
+
+/// AC7's `Esc` half. `Esc` appeared ONLY in production source before this: removing it from the
+/// abort condition left every test green.
+#[test]
+fn escape_during_a_drag_abandons_it_and_sends_nothing() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    assert!(app.world().resource::<DragAnchor>().0.is_some());
+    clear_mouse(&mut app);
+
+    press_once(&mut app, KeyCode::Escape);
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    assert_eq!(app.world().resource::<DragAnchor>().0, None);
+    assert!(queued(&app).is_empty(), "Esc must abandon the drag");
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::Dig,
+        "Esc during a drag abandons the DRAG; it does not also leave the mode"
+    );
+}
+
+/// AC8's second clause: `Esc` with no drag in progress leaves the mode. That `else if` branch was
+/// reached by no test at all.
+#[test]
+fn escape_with_no_drag_leaves_the_mode() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    press_once(&mut app, KeyCode::Digit2);
+    app.update();
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::Channel
+    );
+
+    press_once(&mut app, KeyCode::Escape);
+    app.update();
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::None,
+        "Esc outside a drag must leave the mode"
+    );
+}
+
+/// Wolf's ruling at review: a drag commits in the mode it BEGAN in, so a mode key pressed
+/// mid-drag takes effect on the next drag rather than silently changing what the release issues.
+#[test]
+fn a_drag_commits_in_the_mode_it_began_in() {
+    let anchor = [1, 1, 1];
+    let (mut app, _sender) = designation_app(anchor);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    // Switch to channel WHILE the button is still held.
+    press_once(&mut app, KeyCode::Digit2);
+    app.update();
+    clear_mouse(&mut app);
+
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    assert_eq!(
+        queued(&app),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: protocol::Rect {
+                min: anchor,
+                max: anchor
+            },
+        }],
+        "the drag began in dig and must commit as dig, whatever was pressed mid-drag"
+    );
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::Channel,
+        "the mode key still takes effect — for the NEXT drag"
+    );
+    assert_eq!(app.world().resource::<DragMode>().0, None);
+}
+
+/// AC6's no-pick clause. `PickedTile(None)` appeared nowhere in the suite.
+#[test]
+fn a_release_over_nothing_commits_nothing_and_leaves_no_anchor() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    assert!(app.world().resource::<DragAnchor>().0.is_some());
+    clear_mouse(&mut app);
+
+    // Point at the sky: the cursor leaves the terrain entirely before the release.
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .unwrap()
+        .set_cursor_position(Some(Vec2::new(2.0, 2.0)));
+    app.update();
+    assert_eq!(
+        app.world().resource::<PickedTile>().tile(),
+        None,
+        "the corner of the viewport must not pick a tile in this world"
+    );
+    clear_mouse(&mut app);
+
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    assert!(
+        queued(&app).is_empty(),
+        "a release over nothing must commit nothing"
+    );
+    assert_eq!(
+        app.world().resource::<DragAnchor>().0,
+        None,
+        "a missed release must never leave a stale anchor for the next drag"
+    );
+}
+
+/// AC7's preview clause and Task 4. `DragPreview` was referenced only by production code, so the
+/// whole preview system could be unregistered with the suite green.
+#[test]
+fn the_drag_preview_appears_while_dragging_and_disappears_on_release() {
+    let anchor = [1, 1, 1];
+    let (mut app, _sender) = designation_app(anchor);
+    assert_eq!(
+        app.world_mut()
+            .query::<&DragPreview>()
+            .iter(app.world())
+            .count(),
+        0,
+        "nothing is previewed before a drag starts"
+    );
+
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    let previewed = app
+        .world_mut()
+        .query::<&DragPreview>()
+        .iter(app.world())
+        .map(|preview| preview.0)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        previewed,
+        vec![anchor],
+        "the held drag must preview exactly the tile it covers"
+    );
+
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    assert_eq!(
+        app.world_mut()
+            .query::<&DragPreview>()
+            .iter(app.world())
+            .count(),
+        0,
+        "the preview must disappear when the drag commits"
+    );
+}
+
+/// AC9's load-bearing clause: the bar NAMES THE ACTIVE MODE. Neutering `update_designate_hint`
+/// left the suite green and the bar reading its no-mode string forever.
+#[test]
+fn the_hint_bar_names_the_mode_that_will_commit() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    let read_hint = |app: &mut App| -> String {
+        app.world_mut()
+            .query_filtered::<&Text, With<DesignateHint>>()
+            .single(app.world())
+            .expect("the hint bar must exist")
+            .0
+            .clone()
+    };
+    assert_eq!(
+        read_hint(&mut app),
+        designation_hint(DesignateMode::None, false)
+    );
+
+    press_once(&mut app, KeyCode::Digit3);
+    app.update();
+    assert_eq!(
+        read_hint(&mut app),
+        designation_hint(DesignateMode::Stockpile, false),
+        "the bar must name the mode the operator just selected"
+    );
+
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    assert_eq!(
+        read_hint(&mut app),
+        designation_hint(DesignateMode::Stockpile, true),
+        "the bar must switch to its dragging text while a drag is live"
     );
 }
