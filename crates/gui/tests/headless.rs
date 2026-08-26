@@ -40,10 +40,10 @@ use gui::{
         ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
         reconcile_projection,
     },
-    pick::PickedTile,
+    pick::{Face, PickedCell, PickedTile},
     project::{
         ClientLocal, HoverHighlight, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap,
-        TerrainTile, WorldProjected, setup_projection_assets,
+        TerrainTile, WorldProjected, setup_projection_assets, sync_hover_highlight,
     },
     slice::SliceLevel,
     transform::world_to_render,
@@ -2156,6 +2156,34 @@ fn the_live_pick_spawns_a_client_local_highlight_and_despawns_it_without_a_pick(
             .count(),
         0,
         "removing the cursor must remove the stale hover highlight"
+    );
+}
+
+#[test]
+fn a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side() {
+    let mut app = headless_app(one_tile_snapshot());
+    app.update();
+    let tile = [3, 4, 5];
+    app.insert_resource(PickedTile(Some(PickedCell {
+        tile,
+        face: Face::East,
+    })));
+    app.world_mut()
+        .run_system_once(sync_hover_highlight)
+        .unwrap();
+    app.world_mut().flush();
+
+    let translation = app
+        .world_mut()
+        .query::<(&HoverHighlight, &Transform)>()
+        .single(app.world())
+        .unwrap()
+        .1
+        .translation;
+    assert_eq!(
+        translation,
+        world_to_render(tile) + bevy::prelude::Vec3::X * 0.55,
+        "a side hit must hoist the thin mesh beyond that side, not onto the old top face"
     );
 }
 
