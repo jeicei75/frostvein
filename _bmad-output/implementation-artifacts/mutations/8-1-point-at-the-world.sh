@@ -3,7 +3,7 @@
 mutation "pick system leaves the shared client schedule" gui a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            update_pick.after(apply_scripted_cursor),\n'
+old = '            update_pick.after(apply_scripted_input),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY

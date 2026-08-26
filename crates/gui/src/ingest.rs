@@ -20,7 +20,7 @@ use bevy::{
     ecs::change_detection::DetectChanges,
     ecs::message::MessageWriter,
     ecs::schedule::IntoScheduleConfigs,
-    input::ButtonInput,
+    input::{ButtonInput, mouse::MouseButton},
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
@@ -57,6 +57,7 @@ use crate::{
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const MESSAGE_QUEUE: usize = 16;
+const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
 
 pub enum WireMessage {
     Snapshot(Box<Snapshot>),
@@ -142,6 +143,7 @@ fn configure_client_app(
     args: Args,
 ) {
     let slice = initial_slice(mirror.dims(), args.slice_level);
+    let capture_start_tick = mirror.tick();
     app.insert_resource(MirrorResource(mirror))
         .insert_resource(slice)
         .insert_resource(IngestReceiver::new(receiver))
@@ -157,7 +159,17 @@ fn configure_client_app(
     if let Some(capture) = args.capture {
         // Capture output must never contain the diagnostic overlay.
         force_capture_overlay_off(app);
-        app.insert_resource(CaptureState::new(capture, args.frames, args.expect_work));
+        let capture = match args.at_tick {
+            Some(ticks_after_start) => CaptureState::at_tick(
+                capture,
+                args.frames,
+                capture_start_tick,
+                ticks_after_start,
+                args.expect_work,
+            ),
+            None => CaptureState::new(capture, args.frames, args.expect_work),
+        };
+        app.insert_resource(capture);
         capture_systems(app);
     }
 }
@@ -239,8 +251,8 @@ pub fn client_systems(app: &mut App) {
     .add_systems(
         PostUpdate,
         (
-            apply_scripted_cursor.after(TransformSystems::Propagate),
-            update_pick.after(apply_scripted_cursor),
+            apply_scripted_input.after(TransformSystems::Propagate),
+            update_pick.after(apply_scripted_input),
             sync_hover_highlight.after(update_pick),
             designation_input.after(update_pick),
             sync_drag_preview.after(designation_input),
@@ -295,6 +307,8 @@ struct Args {
     slice_level: Option<i32>,
     distance: Option<f32>,
     cursor: Option<Vec2>,
+    at_tick: Option<u64>,
+    drag: Option<ScriptedDragSpec>,
 }
 
 #[derive(Resource)]
@@ -303,6 +317,29 @@ pub struct CaptureDistance(pub f32);
 /// A capture-only viewport position written before the camera pick runs.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct ScriptedCursor(pub Vec2);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ScriptedDragSpec {
+    mode: DesignateMode,
+    start: Vec2,
+    end: Vec2,
+}
+
+/// A capture-only press-drag-release sequence. It writes the same input resources a window does;
+/// it never constructs a rectangle, so the human and scripted paths share the mode machine.
+#[derive(Resource, Debug, Clone, Copy, PartialEq)]
+pub struct ScriptedDrag {
+    spec: ScriptedDragSpec,
+    stage: ScriptedDragStage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScriptedDragStage {
+    Press,
+    Hold,
+    Release,
+    Done,
+}
 
 fn parse_args() -> anyhow::Result<Args> {
     parse_args_from(std::env::args_os().skip(1))
@@ -316,6 +353,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut slice_level = None;
     let mut distance = None;
     let mut cursor = None;
+    let mut at_tick = None;
+    let mut drag = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -352,12 +391,23 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         } else if arg == "--cursor" {
             let value = args.next().context("--cursor requires x,y")?;
             cursor = Some(parse_cursor(value)?);
+        } else if arg == "--at-tick" {
+            let value = args.next().context("--at-tick requires a tick count")?;
+            at_tick = Some(
+                value
+                    .to_string_lossy()
+                    .parse()
+                    .context("invalid --at-tick count")?,
+            );
+        } else if arg == "--drag" {
+            let value = args.next().context("--drag requires mode,x0,y0,x1,y1")?;
+            drag = Some(parse_drag(value)?);
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
     }
-    if capture.is_some() && frames.is_none() {
-        bail!("--capture requires --frames N");
+    if capture.is_some() && frames.is_none() && at_tick.is_none() {
+        bail!("--capture requires --frames N or --at-tick N");
     }
     if capture.is_some() && frames == Some(0) {
         bail!("--capture --frames must be positive");
@@ -371,14 +421,22 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if cursor.is_some() && capture.is_none() {
         bail!("--cursor requires --capture");
     }
+    if at_tick.is_some() && capture.is_none() {
+        bail!("--at-tick requires --capture");
+    }
+    if drag.is_some() && capture.is_none() {
+        bail!("--drag requires --capture");
+    }
     Ok(Args {
         port,
         capture,
-        frames: frames.unwrap_or(0),
+        frames: frames.unwrap_or(DEFAULT_AT_TICK_FRAME_BUDGET),
         expect_work,
         slice_level,
         distance,
         cursor,
+        at_tick,
+        drag,
     })
 }
 
@@ -398,12 +456,79 @@ fn parse_cursor(value: OsString) -> anyhow::Result<Vec2> {
     Ok(Vec2::new(x, y))
 }
 
-fn apply_scripted_cursor(
+fn parse_drag(value: OsString) -> anyhow::Result<ScriptedDragSpec> {
+    let value = value.to_string_lossy();
+    let parts = value.split(',').collect::<Vec<_>>();
+    let [mode, x0, y0, x1, y1] = parts.as_slice() else {
+        bail!("invalid --drag; expected mode,x0,y0,x1,y1");
+    };
+    let mode = match *mode {
+        "dig" => DesignateMode::Dig,
+        "channel" => DesignateMode::Channel,
+        "stockpile" => DesignateMode::Stockpile,
+        "clear" => DesignateMode::Clear,
+        _ => bail!("invalid --drag mode; expected dig,channel,stockpile,clear"),
+    };
+    let parse_coordinate = |name: &str, value: &str| -> anyhow::Result<f32> {
+        let value: f32 = value
+            .parse()
+            .with_context(|| format!("invalid --drag {name}"))?;
+        if !value.is_finite() {
+            bail!("invalid --drag {name}; coordinates must be finite");
+        }
+        Ok(value)
+    };
+    Ok(ScriptedDragSpec {
+        mode,
+        start: Vec2::new(parse_coordinate("x0", x0)?, parse_coordinate("y0", y0)?),
+        end: Vec2::new(parse_coordinate("x1", x1)?, parse_coordinate("y1", y1)?),
+    })
+}
+
+fn apply_scripted_input(
     cursor: Option<Res<ScriptedCursor>>,
+    drag: Option<ResMut<ScriptedDrag>>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) {
-    if let (Some(cursor), Ok(mut window)) = (cursor, windows.single_mut()) {
+    let Ok(mut window) = windows.single_mut() else {
+        return;
+    };
+    if let Some(mut drag) = drag {
+        match drag.stage {
+            ScriptedDragStage::Press => {
+                window.set_cursor_position(Some(drag.spec.start));
+                keys.press(mode_key(drag.spec.mode));
+                mouse.press(MouseButton::Left);
+                drag.stage = ScriptedDragStage::Hold;
+            }
+            ScriptedDragStage::Hold => {
+                window.set_cursor_position(Some(drag.spec.end));
+                keys.release(mode_key(drag.spec.mode));
+                keys.clear();
+                mouse.clear();
+                drag.stage = ScriptedDragStage::Release;
+            }
+            ScriptedDragStage::Release => {
+                window.set_cursor_position(Some(drag.spec.end));
+                mouse.release(MouseButton::Left);
+                drag.stage = ScriptedDragStage::Done;
+            }
+            ScriptedDragStage::Done => {}
+        }
+    } else if let Some(cursor) = cursor {
         window.set_cursor_position(Some(cursor.0));
+    }
+}
+
+fn mode_key(mode: DesignateMode) -> KeyCode {
+    match mode {
+        DesignateMode::Dig => KeyCode::Digit1,
+        DesignateMode::Channel => KeyCode::Digit2,
+        DesignateMode::Stockpile => KeyCode::Digit3,
+        DesignateMode::Clear => KeyCode::Digit4,
+        DesignateMode::None => unreachable!("a scripted drag always names an active mode"),
     }
 }
 
@@ -420,6 +545,12 @@ fn insert_capture_resources(app: &mut App, args: &Args) {
     }
     if let Some(cursor) = args.cursor {
         app.insert_resource(ScriptedCursor(cursor));
+    }
+    if let Some(spec) = args.drag {
+        app.insert_resource(ScriptedDrag {
+            spec,
+            stage: ScriptedDragStage::Press,
+        });
     }
 }
 

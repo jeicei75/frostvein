@@ -204,7 +204,9 @@ pub struct CaptureState {
     path: PathBuf,
     frames: u32,
     elapsed: u32,
+    at_tick: Option<(u64, u64)>,
     requested: bool,
+    failed: bool,
     expect_work: bool,
     motion: MotionStats,
     lantern: LanternStats,
@@ -431,11 +433,33 @@ impl CaptureState {
             path,
             frames,
             elapsed: 0,
+            at_tick: None,
             requested: false,
+            failed: false,
             expect_work,
             motion: MotionStats::default(),
             lantern: LanternStats::default(),
         }
+    }
+
+    pub fn at_tick(
+        path: PathBuf,
+        frames: u32,
+        start_tick: u64,
+        ticks_after_start: u64,
+        expect_work: bool,
+    ) -> Self {
+        let mut capture = Self::new(path, frames, expect_work);
+        capture.at_tick = Some((start_tick, ticks_after_start));
+        capture
+    }
+
+    pub fn requested(&self) -> bool {
+        self.requested
+    }
+
+    pub fn failed(&self) -> bool {
+        self.failed
     }
 
     /// Read path for the headless test that drives `accumulate_motion` through the production
@@ -542,12 +566,34 @@ pub fn capture_after_frames(
     cursor: Option<Res<ScriptedCursor>>,
     cameras: Query<&CameraRig, With<Camera3d>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    mut exit: MessageWriter<AppExit>,
 ) {
-    if capture.requested {
+    if capture.requested || capture.failed {
         return;
     }
     capture.elapsed += 1;
-    if capture.elapsed >= capture.frames {
+    let capture_due = match capture.at_tick {
+        Some((start_tick, ticks_after_start)) => {
+            let target_tick = start_tick.saturating_add(ticks_after_start);
+            if mirror.0.tick() >= target_tick {
+                true
+            } else if capture.elapsed >= capture.frames {
+                eprintln!(
+                    "capture --at-tick {ticks_after_start} did not reach tick {target_tick} \
+                     within {} frames; reached tick {}",
+                    capture.frames,
+                    mirror.0.tick()
+                );
+                capture.failed = true;
+                exit.write(AppExit::error());
+                false
+            } else {
+                false
+            }
+        }
+        None => capture.elapsed >= capture.frames,
+    };
+    if capture_due {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
         let draw = collect_draw_stats(slice.level(), &mirror.0, &terrain, &designations, &zones);
@@ -627,7 +673,9 @@ pub fn capture_after_frames(
                 slice.level()
             );
         }
-        capture.motion.assert_valid(capture.expect_work);
+        if capture.at_tick.is_none() {
+            capture.motion.assert_valid(capture.expect_work);
+        }
         capture.requested = true;
         commands
             .spawn(Screenshot::primary_window())
