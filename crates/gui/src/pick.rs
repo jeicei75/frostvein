@@ -140,9 +140,7 @@ fn first_visible_hit(
         ray_step_distance(direction.z),
     );
 
-    // A ray starting inside the world enters its first cell without crossing an axis. Preserve
-    // the historic top slab for that case rather than inventing a direction-dependent face.
-    let mut face = Face::Top;
+    let mut face = entry_face(origin, direction, min, max, entry);
     while distance <= end {
         let centre = cell.as_vec3();
         let world = render_to_world(centre);
@@ -174,6 +172,39 @@ fn first_visible_hit(
         }
     }
     None
+}
+
+fn entry_face(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3, entry: f32) -> Face {
+    if origin.x > min.x
+        && origin.x < max.x
+        && origin.y > min.y
+        && origin.y < max.y
+        && origin.z > min.z
+        && origin.z < max.z
+    {
+        // NOTE: a ray starting inside the world enters no face; retain the historic top slab.
+        return Face::Top;
+    }
+    for (origin, direction, low, high, positive, negative) in [
+        (origin.x, direction.x, min.x, max.x, Face::West, Face::East),
+        (origin.y, direction.y, min.y, max.y, Face::Bottom, Face::Top),
+        (
+            origin.z,
+            direction.z,
+            min.z,
+            max.z,
+            Face::South,
+            Face::North,
+        ),
+    ] {
+        if direction.abs() >= f32::EPSILON {
+            let boundary = if direction > 0.0 { low } else { high };
+            if ((boundary - origin) / direction - entry).abs() <= 1e-5 {
+                return if direction > 0.0 { positive } else { negative };
+            }
+        }
+    }
+    Face::Top
 }
 
 fn ray_box_interval(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3) -> Option<(f32, f32)> {
@@ -220,7 +251,7 @@ mod tests {
     use client_core::Mirror;
     use protocol::{Dims, Material, MessageType, Snapshot, Speed, Tile};
 
-    use super::first_visible_hit;
+    use super::{Face, first_visible_hit};
     use crate::camera::CameraRig;
     use crate::project::is_visible_at_slice;
     use crate::transform::world_to_render;
@@ -274,6 +305,26 @@ mod tests {
     }
 
     const FOLIAGE_PILLAR: [i32; 2] = [100, 100];
+
+    #[test]
+    fn a_world_boundary_hit_keeps_its_entry_face() {
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(Material::Stone)],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        assert_eq!(
+            first_visible_hit(Vec3::new(-2.0, 0.0, 0.0), Vec3::X, &mirror, 0).map(|hit| hit.face),
+            Some(Face::West),
+        );
+    }
 
     /// The pillar tops, hand-derived from `pillars`' own construction rule rather than read back
     /// out of the mirror, so a mirror that lost a pillar cannot quietly shrink the test.

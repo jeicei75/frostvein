@@ -90,6 +90,9 @@ pub struct HoverHighlight(pub [i32; 3]);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DragPreview(pub [i32; 3]);
 
+#[derive(Resource, Default)]
+pub struct DragPreviewRect(Option<protocol::Rect>);
+
 /// Leaves a visible gutter between neighbouring mark slabs. The mesh is 1.02 wide and this scale
 /// is applied on top of it, so a slab covers 1.02 x 0.94 = 0.9588 of its tile — inset ~2% per
 /// side, which is the gutter, not a reach to the tile edge.
@@ -250,6 +253,7 @@ pub fn sync_hover_highlight(
 }
 
 /// Rebuilds the deliberately small preview set from the same single-z rect helper used on wire.
+#[allow(clippy::too_many_arguments)]
 pub fn sync_drag_preview(
     mut commands: Commands,
     anchor: Res<DragAnchor>,
@@ -258,15 +262,25 @@ pub fn sync_drag_preview(
     slice: Res<SliceLevel>,
     assets: Option<Res<ProjectionAssets>>,
     previews: Query<BevyEntity, With<DragPreview>>,
+    mut preview_rect: ResMut<DragPreviewRect>,
 ) {
-    for entity in &previews {
-        commands.entity(entity).despawn();
-    }
     let (Some(anchor), Some(release), Some(assets)) = (anchor.0, picked.tile(), assets) else {
+        if preview_rect.0.take().is_some() {
+            for entity in &previews {
+                commands.entity(entity).despawn();
+            }
+        }
         return;
     };
     let rect =
         client_core::rect_on_level((anchor[0], anchor[1]), (release[0], release[1]), anchor[2]);
+    if preview_rect.0 == Some(rect) {
+        return;
+    }
+    for entity in &previews {
+        commands.entity(entity).despawn();
+    }
+    preview_rect.0 = Some(rect);
     for x in rect.min[0]..=rect.max[0] {
         for y in rect.min[1]..=rect.max[1] {
             let tile = [x, y, anchor[2]];

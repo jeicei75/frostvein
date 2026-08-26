@@ -221,6 +221,7 @@ pub fn projection_systems(app: &mut App) {
 /// sixth time.
 pub fn client_systems(app: &mut App) {
     app.init_resource::<PickedTile>()
+        .init_resource::<crate::project::DragPreviewRect>()
         .init_resource::<crate::command::PendingCommands>()
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
@@ -1136,18 +1137,24 @@ mod tests {
         // `projection_systems` owns the on-screen level readout's startup spawn — 7.1's review
         // found that whole readout deletable with the suite green, so it is observed here rather
         // than asserted to be registered.
+        // NOTE: compared as a set — query iteration order follows archetype order, which a new
+        // client-local resource reshuffles; the claim is which readouts exist, not their order.
+        let mut spawned = app
+            .world_mut()
+            .query::<&bevy::prelude::Text>()
+            .iter(app.world())
+            .map(|text| text.0.clone())
+            .collect::<Vec<_>>();
+        spawned.sort();
+        let mut expected = vec![
+            app.world()
+                .resource::<crate::slice::SliceLevel>()
+                .readout(false),
+            "1 dig  2 channel  3 stockpile  4 clear".to_string(),
+        ];
+        expected.sort();
         assert_eq!(
-            app.world_mut()
-                .query::<&bevy::prelude::Text>()
-                .iter(app.world())
-                .map(|text| text.0.clone())
-                .collect::<Vec<_>>(),
-            vec![
-                app.world()
-                    .resource::<crate::slice::SliceLevel>()
-                    .readout(false),
-                "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            ],
+            spawned, expected,
             "projection_systems must be registered from the production path too"
         );
     }
