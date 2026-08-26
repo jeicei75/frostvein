@@ -101,14 +101,14 @@ pub fn designation_input(
     }
 
     if mouse.just_pressed(MouseButton::Left) && *mode != DesignateMode::None {
-        anchor.0 = picked.0;
+        anchor.0 = picked.tile();
     }
 
     if mouse.just_released(MouseButton::Left) {
         let Some(anchor_tile) = anchor.0 else {
             return;
         };
-        if let Some(release_tile) = picked.0 {
+        if let Some(release_tile) = picked.tile() {
             // NOTE: drags up a cliff designate on the anchor's level; the shared rect contract
             // is single-z and deliberately discards the release tile's z.
             let rect = client_core::rect_on_level(

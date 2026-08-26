@@ -49,7 +49,7 @@ use crate::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
         ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery, TerrainTile,
         WorldProjected, blend_entities, flicker_lights, has_terrain_above, reconcile,
-        setup_projection_assets, sync_hover_highlight,
+        setup_projection_assets, sync_drag_preview, sync_hover_highlight,
     },
     slice::SliceLevel,
 };
@@ -243,6 +243,7 @@ pub fn client_systems(app: &mut App) {
             update_pick.after(apply_scripted_cursor),
             sync_hover_highlight.after(update_pick),
             designation_input.after(update_pick),
+            sync_drag_preview.after(designation_input),
             send_commands.after(designation_input),
             update_designate_hint.after(designation_input),
         ),
@@ -766,11 +767,19 @@ fn read_messages(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, mpsc};
+    use std::{
+        io::{BufRead, BufReader},
+        sync::{Mutex, mpsc},
+        time::Duration,
+    };
 
     use bevy::{
         app::{App, Update},
+        camera::{CameraProjection, RenderTargetInfo},
         dev_tools::fps_overlay::FpsOverlayConfig,
+        input::{ButtonInput, mouse::MouseButton},
+        prelude::{Camera, Camera3d, GlobalTransform, KeyCode, UVec2, Window, With},
+        window::{PrimaryWindow, WindowResolution},
     };
     use client_core::Mirror;
     use protocol::{Delta, Dims, MessageType, Snapshot, Speed, Tile, TileChange};
@@ -810,7 +819,13 @@ mod tests {
     ///
     /// `--frames 60` on purpose: `capture_after_frames` fires on the frame its count reaches, and
     /// this harness renders nothing for it to assert about.
-    fn configured_app(args: &[&str]) -> (App, mpsc::SyncSender<anyhow::Result<WireMessage>>) {
+    fn configured_app(
+        args: &[&str],
+    ) -> (
+        App,
+        mpsc::SyncSender<anyhow::Result<WireMessage>>,
+        std::net::TcpStream,
+    ) {
         let parsed = super::parse_args_from(
             args.iter()
                 .map(std::ffi::OsString::from)
@@ -832,7 +847,10 @@ mod tests {
         let (sender, receiver) = mpsc::sync_channel(2);
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let writer = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
-        let _server = listener.accept().unwrap();
+        let (server, _) = listener.accept().unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
         let mut app = App::new();
         app.add_plugins(bevy::MinimalPlugins)
             .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
@@ -841,7 +859,7 @@ mod tests {
             .init_resource::<bevy::asset::Assets<bevy::image::Image>>()
             .init_resource::<FpsOverlayConfig>();
         super::configure_client_app(&mut app, mirror, receiver, writer, parsed);
-        (app, sender)
+        (app, sender, server)
     }
 
     /// The wiring CALLS, not just the functions they call.
@@ -852,7 +870,7 @@ mod tests {
     /// headless harness invoked itself. Every expectation below is hand-written here.
     #[test]
     fn the_production_wiring_runs_every_call_run_makes_after_its_plugins() {
-        let (mut app, _sender) = configured_app(&[
+        let (mut app, _sender, _server) = configured_app(&[
             "--capture",
             "working.png",
             "--frames",
@@ -909,6 +927,75 @@ mod tests {
                 "1 dig  2 channel  3 stockpile  4 clear".to_string(),
             ],
             "projection_systems must be registered from the production path too"
+        );
+    }
+
+    #[test]
+    fn configured_app_sends_a_real_mouse_drags_command_to_the_daemon_socket() {
+        let (mut app, _sender, server) = configured_app(&[]);
+        let viewport = UVec2::new(1920, 1080);
+        let rig = CameraRig::new([0, 0, 0]);
+        let cursor = rig
+            .project_world_point([0, 0, 0])
+            .expect("the literal visible tile must project")
+            * viewport.as_vec2();
+
+        app.update();
+        let camera_entity = app
+            .world_mut()
+            .query_filtered::<bevy::prelude::Entity, With<CameraRig>>()
+            .single(app.world())
+            .unwrap();
+        let mut camera = Camera::default();
+        camera.computed.target_info = Some(RenderTargetInfo {
+            physical_size: viewport,
+            scale_factor: 1.0,
+        });
+        let mut projection = bevy::prelude::PerspectiveProjection::default();
+        projection.update(viewport.x as f32, viewport.y as f32);
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        let transform = rig.transform();
+        app.world_mut().entity_mut(camera_entity).insert((
+            Camera3d::default(),
+            camera,
+            transform,
+            GlobalTransform::from(transform),
+            rig,
+        ));
+        let mut window = Window {
+            resolution: WindowResolution::new(viewport.x, viewport.y),
+            ..Default::default()
+        };
+        window.set_cursor_position(Some(cursor));
+        app.world_mut().spawn((window, PrimaryWindow));
+        app.update();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Digit1);
+        app.update();
+        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+        keys.release(KeyCode::Digit1);
+        keys.clear();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .clear();
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .release(MouseButton::Left);
+        app.update();
+
+        let mut line = String::new();
+        BufReader::new(server).read_line(&mut line).unwrap();
+        assert_eq!(
+            line,
+            "{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[0,0,0],\"max\":[0,0,0]}}\n",
+            "the production configuration must carry the mouse path all the way to daemon bytes"
         );
     }
 

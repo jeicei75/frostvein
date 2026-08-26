@@ -558,7 +558,7 @@ pub fn capture_after_frames(
                     .ok()
                     .and_then(|window| expected_pick(cursor.0, *rig, window, &terrain))
             });
-            let picked = picked.and_then(|picked| picked.0);
+            let picked = picked.and_then(|picked| picked.tile());
             println!("{}", pick_capture_line(cursor.0, picked, expected));
             assert_eq!(
                 picked, expected,

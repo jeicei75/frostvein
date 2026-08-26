@@ -2096,7 +2096,7 @@ fn a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile() {
     app.update();
 
     assert_eq!(
-        app.world().resource::<PickedTile>().0,
+        app.world().resource::<PickedTile>().tile(),
         Some([1, 1, 0]),
         "the live client schedule must pick the visible tile under its projected cursor"
     );
@@ -2164,7 +2164,7 @@ fn picked_at(snapshot: Snapshot, rig: CameraRig, level: i32, cursor: Vec2) -> Op
     install_pick_camera(&mut app, rig, cursor);
     app.world_mut().resource_mut::<SliceLevel>().set(level);
     app.update();
-    let picked = app.world().resource::<PickedTile>().0;
+    let picked = app.world().resource::<PickedTile>().tile();
     if picked.is_none() {
         assert_eq!(
             app.world_mut()
@@ -2374,7 +2374,7 @@ fn the_scripted_capture_cursor_reaches_the_live_pick_system() {
     app.update();
 
     assert_eq!(
-        app.world().resource::<PickedTile>().0,
+        app.world().resource::<PickedTile>().tile(),
         Some([1, 1, 0]),
         "the parsed capture cursor must be written before the shared pick system runs"
     );
