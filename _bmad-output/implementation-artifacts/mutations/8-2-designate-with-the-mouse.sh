@@ -83,7 +83,7 @@ import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 old = '            if mirror.0.tick() >= target_tick {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if capture.elapsed >= ticks_after_start {\n'))
+p.write_text(s.replace(old, '            if u64::from(capture.elapsed) >= ticks_after_start {\n'))
 PY
 
 mutation "hover slab returns to the unconditional top-face offset" gui a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side <<'PY'
@@ -93,4 +93,3 @@ old = 'normal * 0.55'
 assert s.count(old) == 2
 p.write_text(s.replace(old, 'Vec3::Y * 0.55'))
 PY
-
