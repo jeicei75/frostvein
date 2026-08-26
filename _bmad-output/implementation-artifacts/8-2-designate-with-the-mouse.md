@@ -5,7 +5,7 @@ baseline_commit: cca118a3a6fc9c0fe1676f454f3556ed9c424eab
 
 # Story 8.2: Designate with the Mouse
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -184,7 +184,7 @@ This is the **fifth** occurrence; say so in the record.
   - [x] An ASCII-only test over every `(mode, dragging)` pair, following
         `the_readout_stays_inside_the_shipped_fonts_glyph_range` (`slice.rs:99`).
 
-- [ ] **Task 3 — The rect and the commands (AC: 3, 4, 10, 11, 12)**
+- [x] **Task 3 — The rect and the commands (AC: 3, 4, 10, 11, 12)**
   - [x] Build every rect with `client_core::rect_on_level(anchor.xy, release.xy, anchor.z)`.
         The anchor's z is the level; the release tile's z is discarded. Add a `// NOTE:` naming
         that limitation — a drag up a cliff designates on the anchor's level, which is the
@@ -193,11 +193,11 @@ This is the **fifth** occurrence; say so in the record.
         `PlaceStockpile`, Clear → the two-command pair above.
   - [x] Nothing here consults tile contents, reachability or job rules. `gui` holds no game
         logic (AD-4); the sim decides what a rect means.
-  - [ ] AC12's test: ingest a delta carrying the designation, run **one** `app.update()`, assert
+  - [x] AC12's test: ingest a delta carrying the designation, run **one** `app.update()`, assert
         the `ProjectedDesignation` entity exists. Two updates passing is not the assertion.
-  - [ ] AC11's test runs the whole path at a slice level below the world top.
+  - [x] AC11's test runs the whole path at a slice level below the world top.
 
-- [ ] **Task 4 — The hit-face highlight and the drag preview (AC: 13)**
+- [x] **Task 4 — The hit-face highlight and the drag preview (AC: 13)**
   - [x] `first_visible_hit` returns the crossed axis with the cell. Widen `PickedTile` to
         `Option<PickedCell { tile: [i32; 3], face: Face }>` and add
         `PickedTile::tile() -> Option<[i32; 3]>` so 8.1's existing call sites and tests change by
@@ -215,39 +215,39 @@ This is the **fifth** occurrence; say so in the record.
         and on abort. Hoist them with `dig_mark_level` (`project.rs:597`) so the preview sits
         where the committed marks will sit.
 
-- [ ] **Task 5 — The instruments (AC: 15, 16, 17)**
-  - [ ] `--at-tick N` in `parse_args_from` (`ingest.rs:288`) and `--drag <mode>,<x0>,<y0>,<x1>,<y1>`.
+- [x] **Task 5 — The instruments (AC: 15, 16, 17)**
+  - [x] `--at-tick N` in `parse_args_from` (`ingest.rs:288`) and `--drag <mode>,<x0>,<y0>,<x1>,<y1>`.
         Both require `--capture`, matching the `--distance`/`--cursor` shape (`ingest.rs:344-350`).
         **A typo'd flag is silently swallowed as the TCP port** (`ingest.rs:332-333`) — reject an
         unparseable value explicitly, as `parse_cursor` does.
-  - [ ] `--drag` writes the real cursor and the real `ButtonInput<MouseButton>` across
+  - [x] `--drag` writes the real cursor and the real `ButtonInput<MouseButton>` across
         successive frames so the scripted run enters the **same** mode machine a human does.
         A flag that builds a rect directly proves nothing about this story's headline outcome
         (M2-11, and 7.2's `--distance`).
-  - [ ] `--at-tick` records the mirror tick at connect and fires when `tick >= start + N`. If
+  - [x] `--at-tick` records the mirror tick at connect and fires when `tick >= start + N`. If
         the frame budget is exhausted first, print what tick was reached and exit non-zero.
-  - [ ] Range-check: the existing `marks:` line already prints `designations=A of B zones=C of D`
+  - [x] Range-check: the existing `marks:` line already prints `designations=A of B zones=C of D`
         (`capture.rs:589`). Assert the expected count is **non-zero** before comparing —
         7.2 photographed an empty site and exited 0 because both sides agreed on zero.
-  - [ ] Both instruments get their own tests, driven through `capture_after_frames` under
+  - [x] Both instruments get their own tests, driven through `capture_after_frames` under
         `MinimalPlugins` as `crates/gui/tests/capture.rs` already does.
-  - [ ] `--frames` stays; `--at-tick` is the tick-anchored alternative, not a replacement.
+  - [x] `--frames` stays; `--at-tick` is the tick-anchored alternative, not a replacement.
         **Do not bake any rect into the binary** — the scenario is the caller's (M2-15).
 
-- [ ] **Task 6 — Sabotage table (AC: 20)**
-  - [ ] `_bmad-output/implementation-artifacts/mutations/8-2-designate-with-the-mouse.sh` in the
+- [x] **Task 6 — Sabotage table (AC: 20)**
+  - [x] `_bmad-output/implementation-artifacts/mutations/8-2-designate-with-the-mouse.sh` in the
         house format — `assert s.count(old) == 1` guard on every edit.
-  - [ ] Minimum rows: `send_commands` dropped from its registration tuple; the built command
+  - [x] Minimum rows: `send_commands` dropped from its registration tuple; the built command
         discarded instead of queued; `rect_on_level` replaced by a hand-rolled `min`/`max`;
         the anchor's z replaced by the release tile's z; the `Esc`/right-button abort still
         sending; clear mode sending only one of its two commands; `--drag` parsed but never
         reaching the mouse state; `--at-tick` firing on the frame count instead of the tick;
         the highlight's face offset replaced by the old unconditional `+Y*0.55`.
-  - [ ] **Commit before running** (M2-9). Run `scripts/mutate.sh` **alone** — it is not
+  - [x] **Commit before running** (M2-9). Run `scripts/mutate.sh` **alone** — it is not
         concurrency-safe. Capture the exit code before any pipe.
-  - [ ] **Dry anchor-check first** (M2-8), and again after `cargo fmt` — formatting moves
+  - [x] **Dry anchor-check first** (M2-8), and again after `cargo fmt` — formatting moves
         anchors, and 8.1's row 2 went stale mid-round exactly this way.
-  - [ ] Widening `PickedTile` reformats `pick.rs` and `project.rs`. Re-run
+  - [x] Widening `PickedTile` reformats `pick.rs` and `project.rs`. Re-run
         `python3 scripts/audit-mutations.py` and repair **8.1's** table if a row stops applying
         — at 8.1 a helper broke a row in *5.4's* table, in a file that story never opened.
 
@@ -261,8 +261,8 @@ This is the **fifth** occurrence; say so in the record.
   - [ ] Write `8-2-signoff/task-7-vehicle-runbook.md` from the worked example at
         `7-2-signoff/task-6-vehicle-runbook.md` — the commands that actually ran, corrected.
 
-- [ ] **Task 8 — The gate (AC: 1)**
-  - [ ] `cargo clean -p gui`, then `scripts/gate.sh` full tier. Paste the tail. A
+- [x] **Task 8 — The gate (AC: 1)**
+  - [x] `cargo clean -p gui`, then `scripts/gate.sh` full tier. Paste the tail. A
         `GATE GREEN (FAST)` line is a coverage hole, not a pass.
 
 ## Dev Notes
@@ -530,7 +530,20 @@ only in a handback message is lost at the session boundary.
 
 ### Agent Model Used
 
-Codex (GPT-5)
+Codex `gpt-5.6-terra`, reasoning effort high, across **three** delegated sessions (banner
+verified each launch; no model/effort drift). Orchestration, independent gate runs, the mutation
+round and this record: Claude Opus 5 `claude-opus-5[1m]`.
+
+**SPLIT OF HANDS — the review must know this.** Sessions 1-3 (Codex) wrote all production code
+and all tests. The ORCHESTRATOR (Claude), not Codex, did the following, because Codex ran out of
+quota before it could: completed the interrupted commit of the AC11/AC12 tests; ran `cargo fmt`
+on unformatted work; repaired 8.1's stale mutation anchor; committed Codex's uncommitted
+entry-face work; **changed one order-dependent assertion** in
+`the_production_wiring_runs_every_call_run_makes_after_its_plugins` from an ordered `Vec` to a
+sorted comparison; and executed the mutation round and every gate. So the reviewer is reviewing
+one small assertion change authored by the same model that reviews it. That is a narrower
+conflict than authorship of the feature, but it is real and is named here rather than left to be
+discovered.
 
 ### Debug Log References
 
@@ -543,26 +556,103 @@ Codex (GPT-5)
 - RED (Task 4 face sabotage): replacing the picked normal with `Vec3::Y` produced
   `left: Vec3(3.0, 5.55, -4.0)`, `right: Vec3(3.55, 5.0, -4.0)`.
 
+**MUTATION ROUND (AC20) — run by the orchestrator 2026-08-26, `scripts/mutate.sh` ALONE, exit
+code captured before any pipe. `MUTATE EXIT: 0`. 9 rows, 9 KILLED, NO SURVIVOR.** Dry
+anchor-check ran before the round and again after `cargo fmt` (351 rows, every literal matching).
+`crates/` verified clean afterwards — every sabotage restored. Per-row RED, with the assertion
+that went red:
+
+| # | Row | Test that went RED |
+| --- | --- | --- |
+| 1 | command writer dropped from the live input schedule | `configured_app_sends_a_real_mouse_drags_command_to_the_daemon_socket` |
+| 2 | built designation command discarded instead of queued | `configured_app_sends_a_real_mouse_drags_command_to_the_daemon_socket` (panic at `ingest.rs:1223`) |
+| 3 | shared rect helper replaced by local min/max | `designation_input_uses_the_shared_rect_helper_not_local_normalization` |
+| 4 | release height replaces the anchor level | `mouse_drag_uses_the_anchor_level_and_clears_its_anchor_on_release` — *"a cross-height drag is one inclusive rectangle on the literal anchor level"* |
+| 5 | abort no longer wins over a concurrent release | `abort_wins_over_a_same_frame_release_and_sends_nothing` |
+| 6 | clear mode omits stockpile removal | `clear_issues_both_existing_commands_in_tui_order` |
+| 7 | parsed drag never reaches the scripted mouse state | `parsed_capture_drags_send_their_own_rectangles_to_the_daemon_socket` |
+| 8 | at-tick capture fires on frame count | `at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget` |
+| 9 | hover slab returns to the unconditional top-face offset | `a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side` |
+
+**No survivor this round.** 8.1's round 1 caught its own headline seam surviving with the suite
+green, and this story's D2 names three past inert seams, so a survivor was the expected outcome
+and its absence is worth stating plainly rather than glossing: rows 1, 2 and 7 are precisely the
+inert-seam shape, and all three went red.
+
+**`cargo clean -p gui` before the final gate:** kept per the story's instruction. It has been
+mandated since 7.1/7.2 for cache poisoning, M2-16 fixed the root cause, and — as at 8.1 — there
+was **no evidence it was needed**. It was still not tried without.
+
+
 ### Completion Notes List
 
-- Tasks 1–3 provide the committed upstream drag slice: concrete timeout-bound TCP writer,
-  digits/mode/hint UI, anchor-level rect construction, and an end-to-end real mouse to real
-  loopback-byte test. Clear maps to both existing protocol commands in TUI order.
-- Task 4 is partially complete: face-aware pick data, face-normal hover transform and client-local
-  drag preview are committed and headlessly pinned. AC11 and AC12's dedicated projection tests
-  remain unchecked, so Task 4 itself remains open honestly.
-- Repaired the two stale 8.1 mutation anchors caused by the widened pick and preview code; the
-  audit reported all 342 existing rows applicable.
-- Tasks 5–6 are not started. Task 7 is vehicle-bound and owed to a live gingerspice session; no
-  window, capture, or FPS observation was attempted in this devpod. Task 8 and `codex review`
-  are deferred until the story is complete.
-- `cargo clean -p gui` completed (removed 3,625 files / 14.7 GiB). Three attempts to run the
-  full gate reached `cargo test` after fmt and clippy succeeded, but this execution environment
-  terminates foreground commands at 30 seconds before the daemon integration suite returns. No
-  full-gate result is claimed. The per-commit fast gate and focused GUI tests were green.
-- `codex review --base main` was launched once (session `01a03e72-26bb-74c3-9110-903c84111f12`),
-  but the same 30-second runner limit ended it during repository inspection before it emitted a
-  findings report. No review finding is claimed or silently dropped.
+**Delivered: the whole story except the vehicle-bound Task 7.** A mouse drag in the Bevy client
+now changes the sim. 14 commits, every one authored `Völundr <jeicei75@gmail.com>`, no squash.
+
+- **Tasks 1-3 — the upstream slice.** `gui` was receive-only; `connect_to_daemon` now clones the
+  write handle before `BufReader` consumes the stream (the TUI's shape), feeding a concrete
+  `CommandSink(Mutex<TcpStream>)` and a bounded `PendingCommands` queue. No trait, no
+  `Box<dyn Write>` — the production type is the tested type. Anchor-level rects come from
+  `client_core::rect_on_level`; clear sends `CancelDesignation` **and** `RemoveStockpile` in TUI
+  order. `crates/protocol/`, `crates/simd/` and `crates/client-core/` were never opened, so AC2's
+  structural claim about the diff holds.
+- **AC5's seam is real, and this is the AC that mattered most.** D2 records three past inert
+  seams — 7.2's `--distance`, 8.1's `--cursor` twice, one of which survived a whole mutation round
+  with the suite green. `configured_app_sends_a_real_mouse_drags_command_to_the_daemon_socket`
+  enters through the production `configure_client_app` on real parsed `Args`, drives real
+  `ButtonInput`, and asserts the bytes read off a real loopback socket. Mutation rows 1, 2 and 7
+  attack exactly that seam and all three were KILLED.
+- **Task 4 — the hit-face highlight**, 8.1's HIGH deferral, ruled by Wolf. The DDA now returns the
+  crossed axis; `PickedTile` widened to `PickedCell { tile, face }` with `PickedTile::tile()` so
+  8.1's call sites changed by one method call. 8.1's picking behaviour is unchanged in substance.
+  A late refinement computes the true entry face for a ray starting OUTSIDE the world box rather
+  than defaulting to Top; rays starting inside still default to Top with a `// NOTE:`, as the task
+  specified. **That refinement was Codex's last uncommitted work and it carries no separate
+  record from Codex — flagging it for the review's attention.**
+- **Task 5 — instruments, both tested.** `--at-tick N` fires on the mirror's tick and exits
+  non-zero when the frame budget runs out first; `--drag` writes the real cursor and real
+  `ButtonInput<MouseButton>` across frames, so a scripted run enters the same mode machine a human
+  does. The non-zero mark range-check (7.2's empty-site false pass) is in force.
+- **Task 6 — 9 rows, 9 KILLED, no survivor.** Full per-row evidence in Debug Log References.
+- **Task 8 — full gate green on a cold rebuild**, run by the orchestrator, `cargo clean -p gui`
+  first. Tail pasted below.
+
+```
+frostvein gate
+  cargo fmt --check           ok
+  cargo clippy -D warnings    ok
+  cargo test                  ok
+  tui has no sim-core edge                ok
+  client-core has no sim-core edge        ok
+  gui has no sim-core edge                ok
+  metrics ledger tests        ok
+  mutation tables still apply ok
+GATE GREEN
+```
+
+**OWED, and not closable by any agent here:**
+
+- **Task 7 / AC19 — NOTHING HAS BEEN OBSERVED ON THE VEHICLE.** No devpod can open a window
+  (`bevy_winit`: neither `WAYLAND_DISPLAY` nor `WAYLAND_SOCKET` nor `DISPLAY`). The four hand
+  drags on surface and slice, the cliff-face highlight check, and the sustained-fps readings at
+  both zooms are owed to a live gingerspice session. **No fps figure was fabricated.** AC13's
+  rendered half and AC19 are both unmet until that session runs.
+- **M2-7's build stamp is missing for the FIFTH time.** `scripts/` still holds no build-stamp
+  automation and `rg 'GIT_SHA|git_sha|build_sha|vergen' crates/gui/src/` still returns nothing.
+  The story asked that the fifth occurrence be said out loud; this is it.
+- **`codex review --base main` NEVER RAN for this story.** Three attempts, three distinct
+  failures: session 1's died to the 30-second foreground-command limit during repository
+  inspection; session 2 was killed by the harness before reaching it; session 3 hit the Codex
+  usage limit (`try again at 7:00 PM`). **No self-gate finding exists — this is an absence, not a
+  clean pass**, and the review should weigh it accordingly. The three-pass cap was never
+  approached, so no quota was spent on it.
+
+**Session history, because it explains the commit shape.** Session 1 (23 min) built Tasks 1-4 and
+stopped at the 30-second command limit, correctly refusing to claim a gate it could not run.
+Sessions 2 and 3 were killed by the harness at ~3 minutes each for reasons never identified — no
+auth failure, no OOM, RAM free. Session 4 hit the usage limit mid-fix. The orchestrator recovered
+each interruption by hand (see the split-of-hands note under Agent Model Used); nothing was lost,
+but three of the four sessions ended involuntarily.
 
 ### File List
 
@@ -574,8 +664,10 @@ Codex (GPT-5)
 - crates/gui/src/project.rs
 - crates/gui/src/capture.rs
 - crates/gui/tests/headless.rs
-- _bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh
+- crates/gui/tests/capture.rs
+- _bmad-output/implementation-artifacts/mutations/8-2-designate-with-the-mouse.sh (new)
 - _bmad-output/implementation-artifacts/mutations/8-1-point-at-the-world.sh
+- _bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh
 - _bmad-output/implementation-artifacts/8-2-designate-with-the-mouse.md
 
 ## Change Log
@@ -584,3 +676,5 @@ Codex (GPT-5)
 | --- | --- |
 | 2026-08-26 | Story created. Four decisions ruled by Wolf at creation: press-drag-release, digit mode keys, hit-face highlight, `--capture-at-tick` in scope. Epic premises re-verified: the command set and `rect_on_level` hold; `simd`'s rect validation is already built and tested, so the epic's second AC2 clause is inherited rather than owed. |
 | 2026-08-26 | Implemented and committed Tasks 1–3 and the completed portions of Task 4; remaining instrument, mutation, vehicle, and final-gate work stays in-progress. |
+| 2026-08-26 | Tasks 3-6 and 8 completed across three further delegated sessions. `--drag` and `--at-tick` instruments built and tested; 9-row sabotage table run ALONE, **9/9 KILLED, no survivor**; full gate GREEN on a cold rebuild. Status → review. |
+| 2026-08-26 | Owed and stated rather than glossed: Task 7/AC19 unobserved (no devpod can open a window), M2-7's build stamp missing for the **fifth** time, and `codex review --base main` **never ran** (killed twice, quota-blocked once). |
