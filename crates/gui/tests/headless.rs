@@ -16,7 +16,7 @@ use bevy::{
     camera::{CameraProjection, RenderTargetInfo},
     dev_tools::fps_overlay::FpsOverlayConfig,
     ecs::system::RunSystemOnce,
-    input::ButtonInput,
+    input::{ButtonInput, mouse::MouseButton},
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         Assets, Camera, DirectionalLight, Entity as BevyEntity, GlobalTransform, KeyCode, Mesh,
@@ -33,6 +33,8 @@ use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, Snowflake, setup_atmosphere},
     camera::CameraRig,
     capture::{CaptureState, accumulate_motion},
+    command::PendingCommands,
+    designate::DragAnchor,
     ingest::{
         CaptureDistance, IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork,
         ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
@@ -2375,6 +2377,73 @@ fn the_scripted_capture_cursor_reaches_the_live_pick_system() {
         app.world().resource::<PickedTile>().0,
         Some([1, 1, 0]),
         "the parsed capture cursor must be written before the shared pick system runs"
+    );
+}
+
+#[test]
+fn mouse_drag_uses_the_anchor_level_and_clears_its_anchor_on_release() {
+    let anchor = [1, 1, 1];
+    let release = [2, 1, 0];
+    let rig = CameraRig::new(anchor);
+    let anchor_cursor = rig
+        .project_world_point(anchor)
+        .expect("the literal anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let release_cursor = rig
+        .project_world_point(release)
+        .expect("the literal release tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 2 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    tiles[index(release)] = Tile::Solid(Material::Stone);
+    let mut app = live_app(snapshot_with_dims(dims, tiles, vec![])).0;
+    install_pick_camera(&mut app, rig, anchor_cursor);
+    app.update();
+
+    press_once(&mut app, KeyCode::Digit1);
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.update();
+    assert_eq!(app.world().resource::<DragAnchor>().0, Some(anchor));
+    // MinimalPlugins does not run InputPlugin's transition clearing between frames.
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .unwrap()
+        .set_cursor_position(Some(release_cursor));
+    {
+        let mut mouse = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+        mouse.release(MouseButton::Left);
+    }
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+
+    assert_eq!(app.world().resource::<DragAnchor>().0, None);
+    assert_eq!(
+        app.world()
+            .resource::<PendingCommands>()
+            .commands()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: protocol::Rect {
+                min: [1, 1, 1],
+                max: [2, 1, 1]
+            },
+        }],
+        "a cross-height drag is one inclusive rectangle on the literal anchor level"
     );
 }
 

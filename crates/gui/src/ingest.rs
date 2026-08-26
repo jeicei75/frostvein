@@ -40,6 +40,10 @@ use crate::{
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{CaptureState, accumulate_motion, capture_after_frames},
+    command::send_commands,
+    designate::{
+        DesignateMode, DragAnchor, designation_input, setup_designate_hint, update_designate_hint,
+    },
     pick::{PickedTile, update_pick},
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
@@ -142,7 +146,6 @@ fn configure_client_app(
         .insert_resource(slice)
         .insert_resource(IngestReceiver::new(receiver))
         .insert_resource(crate::command::CommandSink(Mutex::new(writer)))
-        .init_resource::<crate::command::PendingCommands>()
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
@@ -205,7 +208,11 @@ pub fn projection_systems(app: &mut App) {
 /// class, and the Milestone 2 retrospective ruled it closed at the root rather than caught a
 /// sixth time.
 pub fn client_systems(app: &mut App) {
-    app.init_resource::<PickedTile>();
+    app.init_resource::<PickedTile>()
+        .init_resource::<crate::command::PendingCommands>()
+        .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
+        .init_resource::<DesignateMode>()
+        .init_resource::<DragAnchor>();
     app.add_systems(
         Startup,
         (
@@ -213,6 +220,7 @@ pub fn client_systems(app: &mut App) {
             setup_night_lighting,
             setup_projection_assets,
             setup_atmosphere,
+            setup_designate_hint,
             log_adapter,
         ),
     )
@@ -234,6 +242,9 @@ pub fn client_systems(app: &mut App) {
             apply_scripted_cursor.after(TransformSystems::Propagate),
             update_pick.after(apply_scripted_cursor),
             sync_hover_highlight.after(update_pick),
+            designation_input.after(update_pick),
+            send_commands.after(designation_input),
+            update_designate_hint.after(designation_input),
         ),
     );
 }
@@ -894,7 +905,8 @@ mod tests {
             vec![
                 app.world()
                     .resource::<crate::slice::SliceLevel>()
-                    .readout(false)
+                    .readout(false),
+                "1 dig  2 channel  3 stockpile  4 clear".to_string(),
             ],
             "projection_systems must be registered from the production path too"
         );

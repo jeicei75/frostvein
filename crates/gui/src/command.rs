@@ -26,6 +26,10 @@ impl PendingCommands {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    pub fn commands(&self) -> &VecDeque<Command> {
+        &self.0
+    }
 }
 
 /// Sends all commands built by the input systems. Errors deliberately drain the failed queue:
