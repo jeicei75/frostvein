@@ -43,7 +43,20 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-26  # STORY 8.1 -> REVIEW, ALL TASKS CLOSED. TASK 6 / AC12 MET ON THE VEHICLE:
+last_updated: 2026-08-26  # STORY 8.1 DONE -- MERGED, PR #34 (f9df762). M2 at 9/11. Picking works: ray from
+                          # the rendering camera, 389 tests, 9/9 mutations, gate green cold four times over
+                          # (twice by agent, once by Wolf, once by the pre-push hook). AC12 met with margin.
+                          # THREE THINGS THIS STORY LEAVES BEHIND, none of them blocking but all of them owed:
+                          # (1) AC5's RENDERED half is unmet -- the hover slab is buried under any drawn tile
+                          # above it -- DEFERRED to 8.2 by Wolf awaiting final gfx. 8.2 designates by pointing
+                          # at exactly those vertical faces, so it MUST be solved there and cannot slip again.
+                          # (2) M2-7 (no build script, no SHA stamp in gui) bit a FOURTH time -- the vehicle
+                          # build wall-clock was not captured. Owed a ruling at the Epic 8 retro as
+                          # load-bearing, not housekeeping. (3) R1's territory split STILL has no mapping for
+                          # the M2 crates and was hand-adapted for the SECOND story running -- also owed a
+                          # ruling at the Epic 8 retro. PROCESS NOTE CONFIRMED THIS STORY: a patch round is
+                          # NOT re-reviewed (5.4/6.x/7.1/7.2 all went patch -> live-gate -> sign-off). Review
+                          # once, patch in one verified pass, close. PRIOR: 8.1 -> REVIEW, ALL TASKS CLOSED. TASK 6 / AC12 MET ON THE VEHICLE:
                           # >140 fps sustained at BOTH working zoom and full vista (gingerspice / native
                           # Windows / NVIDIA, F3 overlay), against NFR6 floors of 60 and 30 -- 2.3x and 4.7x
                           # margin. Read on a FRESH rebuild from the patched tree, source commit 3f50178 (the
@@ -545,7 +558,7 @@ development_status:
   # STILL OPEN and NOT closable by any agent: Task 6 / AC12. NOTHING HAS BEEN OBSERVED ON THE
   # VEHICLE; NFR6-with-picking is unmeasured and no fps figure was fabricated. Rebuild gui.exe and
   # record its build time + source commit first -- the stale-binary trap fired three times in 5.4.
-  8-1-point-at-the-world: review
+  8-1-point-at-the-world: done
   8-2-designate-with-the-mouse: backlog
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.

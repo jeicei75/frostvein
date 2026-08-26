@@ -5,7 +5,7 @@ baseline_commit: 32e693317f08f3319f52596637fba30c4488f26d
 
 # Story 8.1: Point at the World
 
-Status: review
+Status: done
 
 ## Story
 
@@ -810,5 +810,6 @@ was recorded, so it should not be quoted as a benchmark.
 | 2026-08-25 | Orchestrator verification. Mutation round 1 caught row 6 SURVIVING: `--cursor` parsed, validated and then silently dropped by `run()`, with the whole suite green — the 7.2 `--distance` inert-seam class recurring. Fixed by extracting `insert_capture_resources` so the real wiring is executable from a test, and retargeting the row. Round 2: 6/6 KILLED, zero APPLY-FAILED. |
 | 2026-08-25 | Full gate re-run independently on a cold rebuild — GREEN, 382 workspace tests. Tasks 5 and 7 closed on observed evidence. Task 6 / AC12 left OPEN and vehicle-bound; no fps figure fabricated. Status → review. |
 | 2026-08-25 | Code review — 4 layers plus one narrowed re-run, no coverage holes. Five decisions ruled by Wolf, 12 patches left for a fresh session. |
+| 2026-08-26 | **MERGED — PR #34** (`f9df762`). Story 8.1 DONE. |
 | 2026-08-26 | Task 6 / AC12 CLOSED on the vehicle: >140 fps sustained at BOTH working zoom and full vista (`gingerspice / native Windows / NVIDIA`), read from the F3 overlay on a fresh rebuild from the patched tree, source commit `3f50178`. Both NFR6 clauses met with margin. Build wall-clock time not captured — M2-7's missing build stamp, fourth occurrence. Status → review. |
 | 2026-08-26 | Review-patch round 1: all 12 patches applied in one commit (`3f50178`). Oracle window scaled to the tile's own projected half-extent with an ambiguity warning; a no-pick capture exits non-zero; `run()` split so every wiring call it makes after its plugins is testable; foliage excluded from the pick. Matrix gains pitch as a fourth axis (81 cases), AC4 occlusion and the DDA at 128x128x32 gain tests, the near-white guard now fails for the property it names, world bounds go through `world_to_render`, the dead boundary nudge is gone. Three sabotage rows added; row 2 retargeted after its anchor went stale. Mutation round 3: 9/9 KILLED, zero APPLY-FAILED. Full-tier gate GREEN on a cold rebuild, 389 tests. Task 6 / AC12 still OPEN and vehicle-bound. |
