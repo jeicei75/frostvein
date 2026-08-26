@@ -79,8 +79,24 @@ pub struct ProjectionWork {
 
 pub fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
-    let address = format!("127.0.0.1:{}", args.port);
-    let stream = TcpStream::connect(("127.0.0.1", args.port))
+    let (mirror, receiver) = connect_to_daemon(args.port)?;
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins)
+        .add_plugins(FrameTimeDiagnosticsPlugin::default())
+        .add_plugins(FpsOverlayPlugin {
+            config: overlay_config_off(),
+        });
+    configure_client_app(&mut app, mirror, receiver, args);
+    app.run();
+    Ok(())
+}
+
+/// Opens the daemon socket, reads the opening snapshot, and leaves a reader thread feeding the
+/// returned channel. The only part of `run()` that is I/O and therefore the only part a test
+/// cannot reach.
+fn connect_to_daemon(port: u16) -> anyhow::Result<(Mirror, Receiver<anyhow::Result<WireMessage>>)> {
+    let address = format!("127.0.0.1:{port}");
+    let stream = TcpStream::connect(("127.0.0.1", port))
         .with_context(|| format!("could not connect to {address}"))?;
     stream
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
@@ -93,15 +109,27 @@ pub fn run() -> anyhow::Result<()> {
         .name("server-read".to_string())
         .spawn(move || read_messages(reader, sender))
         .context("could not spawn server reader thread")?;
+    Ok((mirror, receiver))
+}
 
+/// Everything `run()` does to the App once its plugins are in: the world resources, the parsed
+/// flags, the two registration points, and the capture branch.
+///
+/// It is a separate function because a CALL is a seam too. `insert_capture_resources` was
+/// extracted at this story's round 1 for exactly this reason and tested directly — and the
+/// review then showed that deleting the *call to it* from `run()` still left the whole suite
+/// green, so `--cursor` and 7.2's `--distance` would both parse, validate and vanish. The
+/// defect had moved one level out, not closed. `run()` needs a socket and a window and can
+/// never be entered by a test; this can, so the wiring below is executable rather than merely
+/// readable. What remains uncovered is the three lines of `run()` itself.
+fn configure_client_app(
+    app: &mut App,
+    mirror: Mirror,
+    receiver: Receiver<anyhow::Result<WireMessage>>,
+    args: Args,
+) {
     let slice = initial_slice(mirror.dims(), args.slice_level);
-    let mut app = App::new();
-    app.add_plugins(DefaultPlugins)
-        .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        .add_plugins(FpsOverlayPlugin {
-            config: overlay_config_off(),
-        })
-        .insert_resource(MirrorResource(mirror))
+    app.insert_resource(MirrorResource(mirror))
         .insert_resource(slice)
         .insert_resource(IngestReceiver::new(receiver))
         .insert_resource(ProjectionWork {
@@ -109,17 +137,15 @@ pub fn run() -> anyhow::Result<()> {
             dirty_tiles: BTreeSet::new(),
         })
         .insert_resource(ClearColor(night_lighting().sky));
-    insert_capture_resources(&mut app, &args);
-    client_systems(&mut app);
-    projection_systems(&mut app);
+    insert_capture_resources(app, &args);
+    client_systems(app);
+    projection_systems(app);
     if let Some(capture) = args.capture {
         // Capture output must never contain the diagnostic overlay.
-        force_capture_overlay_off(&mut app);
+        force_capture_overlay_off(app);
         app.insert_resource(CaptureState::new(capture, args.frames, args.expect_work));
-        capture_systems(&mut app);
+        capture_systems(app);
     }
-    app.run();
-    Ok(())
 }
 
 /// The whole wire-to-presentation chain, so anything that reads its output can be ordered
@@ -755,6 +781,108 @@ mod tests {
                 .resource::<FpsOverlayConfig>()
                 .frame_time_graph_config
                 .enabled
+        );
+    }
+
+    /// Builds the client app through the SAME function `run()` calls, on a real parsed `Args`.
+    ///
+    /// `--frames 60` on purpose: `capture_after_frames` fires on the frame its count reaches, and
+    /// this harness renders nothing for it to assert about.
+    fn configured_app(args: &[&str]) -> (App, mpsc::SyncSender<anyhow::Result<WireMessage>>) {
+        let parsed = super::parse_args_from(
+            args.iter()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>(),
+        )
+        .expect("the arguments under test must parse");
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        let (sender, receiver) = mpsc::sync_channel(2);
+        let mut app = App::new();
+        app.add_plugins(bevy::MinimalPlugins)
+            .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
+            .init_resource::<bevy::asset::Assets<bevy::prelude::Mesh>>()
+            .init_resource::<bevy::asset::Assets<bevy::prelude::StandardMaterial>>()
+            .init_resource::<bevy::asset::Assets<bevy::image::Image>>()
+            .init_resource::<FpsOverlayConfig>();
+        super::configure_client_app(&mut app, mirror, receiver, parsed);
+        (app, sender)
+    }
+
+    /// The wiring CALLS, not just the functions they call.
+    ///
+    /// Round 1 of this story's review extracted `insert_capture_resources` so the resource write
+    /// was testable — and the review then deleted the *call to it* from `run()` and watched the
+    /// whole suite stay green. Same for `client_systems` and `projection_systems`, which the
+    /// headless harness invoked itself. Every expectation below is hand-written here.
+    #[test]
+    fn the_production_wiring_runs_every_call_run_makes_after_its_plugins() {
+        let (mut app, _sender) = configured_app(&[
+            "--capture",
+            "working.png",
+            "--frames",
+            "60",
+            "--cursor",
+            "960,540",
+        ]);
+
+        assert_eq!(
+            app.world()
+                .get_resource::<super::ScriptedCursor>()
+                .map(|cursor| cursor.0),
+            Some(bevy::prelude::Vec2::new(960.0, 540.0)),
+            "the parsed --cursor must reach the pick's resource through the call run() makes"
+        );
+        assert!(
+            app.world()
+                .get_resource::<crate::capture::CaptureState>()
+                .is_some(),
+            "the capture branch must run for a --capture argument"
+        );
+
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .query::<&CameraRig>()
+                .iter(app.world())
+                .count(),
+            1,
+            "client_systems must be registered from the production path — its startup scene is \
+             the whole view"
+        );
+        assert_eq!(
+            app.world()
+                .get_resource::<crate::slice::SliceLevel>()
+                .map(|slice| slice.level()),
+            Some(0),
+            "the world resources must reach the app through the same call"
+        );
+        // `projection_systems` owns the on-screen level readout's startup spawn — 7.1's review
+        // found that whole readout deletable with the suite green, so it is observed here rather
+        // than asserted to be registered.
+        assert_eq!(
+            app.world_mut()
+                .query::<&bevy::prelude::Text>()
+                .iter(app.world())
+                .map(|text| text.0.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                app.world()
+                    .resource::<crate::slice::SliceLevel>()
+                    .readout(false)
+            ],
+            "projection_systems must be registered from the production path too"
         );
     }
 

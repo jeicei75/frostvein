@@ -459,21 +459,36 @@ mod tests {
     #[test]
     fn hover_highlight_colour_is_a_distinct_cold_literal() {
         let hover = hover_highlight_color().to_srgba().to_u8_array_no_alpha();
-        assert_eq!(hover, [80, 220, 210]);
         assert!(
             hover[2] >= hover[0],
             "the hover must remain cold or neutral"
         );
-        assert!(
-            hover.iter().any(|channel| *channel < 240),
-            "the hover must remain clear of the near-white reserved for stars and emitter faces"
-        );
+        // The guard this replaces was `hover.iter().any(|channel| *channel < 240)`, which holds
+        // for [255, 255, 239] and for pure red alike — it could not fail for the property it
+        // named, the defect class the MIN_MARK_SEPARATION docstring below already records. What
+        // "clear of the near-white" actually means is separation from the bright presentations
+        // themselves, measured the same way every other separation in this file is.
+        for (name, bright) in [
+            ("the night sky's stars", [173, 196, 220]),
+            ("a lit emitter face", [255, 195, 110]),
+            ("white", [255, 255, 255]),
+        ] {
+            let separation = channel_distance(hover, bright);
+            assert!(
+                separation >= MIN_MARK_SEPARATION,
+                "hover {hover:?} sits {separation:.0} from {name} {bright:?}, inside the \
+                 {MIN_MARK_SEPARATION} floor — the hover must stay clear of the near-white"
+            );
+        }
         for mark in [[56, 132, 250], [150, 96, 230], [40, 120, 150]] {
             assert!(
                 channel_distance(hover, mark) >= MIN_MARK_SEPARATION,
                 "hover {hover:?} sits too close to mark {mark:?}"
             );
         }
+        // The literal pin comes LAST so a colour perturbed toward a mark or toward the
+        // near-white trips the property it violates, and names it, before this fires.
+        assert_eq!(hover, [80, 220, 210]);
     }
 
     /// Euclidean RGB separation. Crude next to a perceptual metric, and deliberately so — this

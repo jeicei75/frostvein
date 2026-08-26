@@ -2191,28 +2191,81 @@ fn camera_picking_covers_orbits_zoom_limits_and_sliced_levels() {
     let yaws = [-2.1, 0.0, 1.2];
     let distances = [4.0, 30.0, 500.0];
     let levels = [0, 1, 3];
+    // AC3 says "any pitch", and these are the only pitches there are: `orbit()` clamps to
+    // MIN_PITCH 0.15 ..= MAX_PITCH (FRAC_PI_2 - 0.15). The matrix used to run at -0.55, which
+    // puts the camera BELOW the world looking up — a pose the rig cannot hold, so the clause
+    // had zero coverage inside the reachable range. Both clamp ends and the boot pitch now run.
+    let pitches = [0.15, 0.45, std::f32::consts::FRAC_PI_2 - 0.15];
     for yaw in yaws {
-        for distance in distances {
-            for level in levels {
-                let target = [4, 4, level];
-                let rig = CameraRig {
-                    focus: target,
-                    yaw,
-                    pitch: -0.55,
-                    distance,
-                };
-                let cursor = rig
-                    .project_world_point(target)
-                    .expect("every test target must project through the independent camera rig")
-                    * PICK_VIEWPORT.as_vec2();
-                assert_eq!(
-                    picked_at(solid_column_snapshot(), rig, level, cursor),
-                    Some(target),
-                    "yaw={yaw}, distance={distance}, slice={level} must pick literal target {target:?}"
-                );
+        for pitch in pitches {
+            for distance in distances {
+                for level in levels {
+                    let target = [4, 4, level];
+                    let rig = CameraRig {
+                        focus: target,
+                        yaw,
+                        pitch,
+                        distance,
+                    };
+                    let cursor = rig.project_world_point(target).expect(
+                        "every test target must project through the independent camera rig",
+                    ) * PICK_VIEWPORT.as_vec2();
+                    assert_eq!(
+                        picked_at(solid_column_snapshot(), rig, level, cursor),
+                        Some(target),
+                        "yaw={yaw}, pitch={pitch}, distance={distance}, slice={level} must pick \
+                         literal target {target:?}"
+                    );
+                }
             }
         }
     }
+}
+
+/// AC4's occlusion clause: two slice-visible tiles on one ray, and the NEARER must win.
+///
+/// Every other picking scene is one isolated tile or one solid column, where "stop at the first
+/// visible hit" cannot be told apart from "return any visible hit". The control half is what
+/// makes this a test of ordering rather than of reachability: with the near tile removed, the
+/// same camera and the same cursor must reach the far one.
+#[test]
+fn the_nearer_of_two_tiles_on_one_ray_is_the_one_picked() {
+    fn tower(near: bool) -> Snapshot {
+        let dims = Dims { x: 9, y: 9, z: 4 };
+        let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+        let index = |[x, y, z]: [i32; 3]| {
+            (x as u32 + y as u32 * dims.x + z as u32 * dims.x * dims.y) as usize
+        };
+        tiles[index([4, 4, 0])] = Tile::Solid(Material::Stone);
+        if near {
+            tiles[index([4, 4, 3])] = Tile::Solid(Material::Stone);
+        }
+        snapshot_with_dims(dims, tiles, vec![])
+    }
+
+    // Near-vertical, so one ray passes through both tiles' cells.
+    let rig = CameraRig {
+        focus: [4, 4, 3],
+        yaw: 0.7,
+        pitch: std::f32::consts::FRAC_PI_2 - 0.15,
+        distance: 30.0,
+    };
+    let cursor = rig
+        .project_world_point([4, 4, 3])
+        .expect("the upper tile must project into the viewport")
+        * PICK_VIEWPORT.as_vec2();
+
+    assert_eq!(
+        picked_at(tower(true), rig, 3, cursor),
+        Some([4, 4, 3]),
+        "the nearer of two tiles on one ray must occlude the farther one"
+    );
+    assert_eq!(
+        picked_at(tower(false), rig, 3, cursor),
+        Some([4, 4, 0]),
+        "control: the same ray must REACH the far tile, so the answer above is ordering and \
+         not reachability"
+    );
 }
 
 #[test]

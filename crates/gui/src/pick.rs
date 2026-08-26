@@ -5,8 +5,10 @@ use bevy::{
 };
 
 use crate::{
-    ingest::MirrorResource, project::is_visible_at_slice, slice::SliceLevel,
-    transform::render_to_world,
+    ingest::MirrorResource,
+    project::{is_tree_foliage, is_visible_at_slice},
+    slice::SliceLevel,
+    transform::{render_to_world, world_to_render},
 };
 
 /// The client-local tile currently under the cursor.
@@ -51,19 +53,27 @@ fn first_visible_hit(
     level: i32,
 ) -> Option<[i32; 3]> {
     let dims = mirror.dims();
-    let min = Vec3::new(-0.5, -0.5, -(dims.y as f32) + 0.5);
-    let max = Vec3::new(dims.x as f32 - 0.5, dims.z as f32 - 0.5, 0.5);
+    // AC2: `world_to_render` is the ONLY axis conversion. The two opposite world corners are
+    // projected through it and the cell half-extent added afterwards, so a change to the y/z
+    // swap or the z negation cannot leave a second, hand-rolled copy of the same knowledge here.
+    let near_corner = world_to_render([0, 0, 0]);
+    let far_corner = world_to_render([dims.x as i32 - 1, dims.y as i32 - 1, dims.z as i32 - 1]);
+    let min = near_corner.min(far_corner) - Vec3::splat(0.5);
+    let max = near_corner.max(far_corner) + Vec3::splat(0.5);
     let (entry, exit) = ray_box_interval(origin, direction, min, max)?;
-    let diagonal = Vec3::new(dims.x as f32, dims.z as f32, dims.y as f32).length();
+    let diagonal = (max - min).length();
     let mut distance = entry.max(0.0);
     let end = (distance + diagonal).min(exit);
     if distance > end {
         return None;
     }
 
-    // Move the entry point one representable step into the box so a ray landing exactly on a
-    // voxel boundary starts in the cell it enters rather than the one it just missed.
-    let point = origin + direction * (distance + f32::EPSILON);
+    // NOTE: no boundary nudge. `f32::EPSILON` is one ULP at magnitude 1.0 and vanishes at the
+    // entry distances the camera's 4.0..=500.0 clamp produces (`distance + EPSILON` was measured
+    // bit-identical to `distance` at 2, 4, 10, 41, 90, 100, 183.8 and 500), so the nudge that
+    // stood here was dead code claiming a protection it did not provide. The box-face entry
+    // point already floors into the cell the ray enters.
+    let point = origin + direction * distance;
     let mut cell = (point + Vec3::splat(0.5)).floor().as_ivec3();
     let step = direction.signum().as_ivec3();
     let next_boundary = Vec3::new(
@@ -97,7 +107,10 @@ fn first_visible_hit(
     while distance <= end {
         let centre = cell.as_vec3();
         let world = render_to_world(centre);
-        if mirror.tile(world).is_some() && is_visible_at_slice(mirror, world, level) {
+        if mirror.tile(world).is_some()
+            && is_visible_at_slice(mirror, world, level)
+            && !is_tree_foliage(mirror, world)
+        {
             return Some(world);
         }
         if next.x <= next.y && next.x <= next.z {
@@ -152,5 +165,202 @@ fn ray_step_distance(direction: f32) -> f32 {
         f32::INFINITY
     } else {
         direction.abs().recip()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::prelude::Vec3;
+    use client_core::Mirror;
+    use protocol::{Dims, Material, MessageType, Snapshot, Speed, Tile};
+
+    use super::first_visible_hit;
+    use crate::camera::CameraRig;
+    use crate::project::is_visible_at_slice;
+    use crate::transform::world_to_render;
+
+    /// The scale the story documents and the vehicle actually runs. Every coverage this module
+    /// had before this test was indirect, through the ECS, at 9x9x4 — a world small enough that
+    /// a march which terminated early, drifted a cell, or exhausted its diagonal bound would
+    /// still land on the right answer by luck.
+    const DIMS: Dims = Dims {
+        x: 128,
+        y: 128,
+        z: 32,
+    };
+    const TOP: i32 = DIMS.z as i32 - 1;
+
+    /// Twenty-four stone pillars scattered across the full footprint, one of them crowned with
+    /// two tiles of foliage. Sparse on purpose: the ray still marches hundreds of cells before
+    /// it reaches anything, which is the property 9x9x4 cannot test, while the oracle below
+    /// stays cheap enough to run inside the gate.
+    fn pillars() -> Mirror {
+        let mut tiles = vec![Tile::Empty; (DIMS.x * DIMS.y * DIMS.z) as usize];
+        let index = |[x, y, z]: [i32; 3]| {
+            (x as u32 + y as u32 * DIMS.x + z as u32 * DIMS.x * DIMS.y) as usize
+        };
+        for i in 0..24i32 {
+            let [x, y] = [5 + i * 5, 7 + (i * 11) % 120];
+            for z in 0..=(1 + (i * 3) % 8) {
+                tiles[index([x, y, z])] = Tile::Solid(Material::Stone);
+            }
+        }
+        // The crowned pillar: stone to z 3, foliage at z 4 and z 5.
+        for z in 0..=3 {
+            tiles[index([FOLIAGE_PILLAR[0], FOLIAGE_PILLAR[1], z])] = Tile::Solid(Material::Stone);
+        }
+        for z in 4..=5 {
+            tiles[index([FOLIAGE_PILLAR[0], FOLIAGE_PILLAR[1], z])] =
+                Tile::Solid(Material::TreeFoliage);
+        }
+        Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: DIMS,
+            tiles,
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap()
+    }
+
+    const FOLIAGE_PILLAR: [i32; 2] = [100, 100];
+
+    /// The pillar tops, hand-derived from `pillars`' own construction rule rather than read back
+    /// out of the mirror, so a mirror that lost a pillar cannot quietly shrink the test.
+    fn pillar_tops() -> Vec<[i32; 3]> {
+        (0..24i32)
+            .map(|i| [5 + i * 5, 7 + (i * 11) % 120, 1 + (i * 3) % 8])
+            .collect()
+    }
+
+    /// INDEPENDENT ORACLE. It answers the same question by a different method: instead of
+    /// walking cells in order, it tests EVERY cell in the world against the ray and keeps the
+    /// nearest visible hit. Slow by construction and correct by construction — the two
+    /// properties the DDA trades away for speed, and therefore the two this pins.
+    fn nearest_visible_cell(
+        mirror: &Mirror,
+        origin: Vec3,
+        direction: Vec3,
+        level: i32,
+    ) -> Option<[i32; 3]> {
+        let mut best: Option<(f32, [i32; 3])> = None;
+        for z in 0..DIMS.z as i32 {
+            for y in 0..DIMS.y as i32 {
+                for x in 0..DIMS.x as i32 {
+                    let position = [x, y, z];
+                    if !matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_)))
+                        || !is_visible_at_slice(mirror, position, level)
+                        || matches!(
+                            mirror.tile(position),
+                            Some(Tile::Solid(Material::TreeFoliage))
+                        )
+                    {
+                        continue;
+                    }
+                    let Some(entry) =
+                        cell_entry_distance(origin, direction, world_to_render(position))
+                    else {
+                        continue;
+                    };
+                    if best.is_none_or(|(nearest, _)| entry < nearest) {
+                        best = Some((entry, position));
+                    }
+                }
+            }
+        }
+        best.map(|(_, position)| position)
+    }
+
+    /// Where the ray first enters one unit cell, or `None` if it misses it entirely.
+    fn cell_entry_distance(origin: Vec3, direction: Vec3, centre: Vec3) -> Option<f32> {
+        let mut entry = f32::NEG_INFINITY;
+        let mut exit = f32::INFINITY;
+        for axis in 0..3 {
+            let (start, along) = (origin[axis], direction[axis]);
+            let (low, high) = (centre[axis] - 0.5, centre[axis] + 0.5);
+            if along == 0.0 {
+                if start < low || start > high {
+                    return None;
+                }
+            } else {
+                let (first, second) = ((low - start) / along, (high - start) / along);
+                entry = entry.max(first.min(second));
+                exit = exit.min(first.max(second));
+            }
+        }
+        (entry <= exit && exit >= 0.0).then_some(entry.max(0.0))
+    }
+
+    /// A ray from a real camera pose through a chosen cell's centre.
+    fn ray_at(target: [i32; 3], yaw: f32, pitch: f32, distance: f32) -> (Vec3, Vec3) {
+        let rig = CameraRig {
+            focus: target,
+            yaw,
+            pitch,
+            distance,
+        };
+        let origin = rig.transform().translation;
+        (origin, (world_to_render(target) - origin).normalize())
+    }
+
+    #[test]
+    fn the_march_agrees_with_an_independent_tracer_across_a_full_scale_world() {
+        let mirror = pillars();
+        let poses = [
+            (0.15f32, 4.0f32),
+            (0.45, 30.0),
+            (0.45, 90.0),
+            (1.4207963, 500.0),
+        ];
+        let mut hits = 0;
+        for (index, target) in pillar_tops().into_iter().enumerate() {
+            let yaw = -2.1 + index as f32 * 0.27;
+            let (pitch, distance) = poses[index % poses.len()];
+            let (origin, direction) = ray_at(target, yaw, pitch, distance);
+            let marched = first_visible_hit(origin, direction, &mirror, TOP);
+            let traced = nearest_visible_cell(&mirror, origin, direction, TOP);
+            assert_eq!(
+                marched, traced,
+                "the march and the independent tracer must agree at target {target:?}, \
+                 yaw={yaw}, pitch={pitch}, distance={distance}"
+            );
+            if marched.is_some() {
+                hits += 1;
+            }
+        }
+        assert_eq!(
+            hits, 24,
+            "every pillar top aimed at must actually be hit — an all-None run would make the \
+             agreement above vacuous"
+        );
+    }
+
+    #[test]
+    fn a_ray_straight_down_a_full_scale_world_stops_at_the_first_pillar_it_meets() {
+        let mirror = pillars();
+        // Hand-written: pillar 3 stands at x 20, y 40, solid through z 0..=2.
+        let above = world_to_render([20, 40, TOP]) + Vec3::Y * 10.0;
+        assert_eq!(
+            first_visible_hit(above, -Vec3::Y, &mirror, TOP),
+            Some([20, 40, 2]),
+            "the march must stop at the pillar's top tile, not run through it to the one below"
+        );
+    }
+
+    #[test]
+    fn foliage_is_never_picked_and_never_hides_the_trunk_beneath_it() {
+        let mirror = pillars();
+        let [x, y] = FOLIAGE_PILLAR;
+        let above = world_to_render([x, y, TOP]) + Vec3::Y * 10.0;
+        assert_eq!(
+            first_visible_hit(above, -Vec3::Y, &mirror, TOP),
+            Some([x, y, 3]),
+            "foliage is drawn at 0.62-0.95 of its cell, so it is not pickable geometry and must \
+             not occlude the stone the player can plainly see through it"
+        );
     }
 }

@@ -17,7 +17,7 @@ use client_core::Mirror;
 use protocol::{EntityKind, JobState, LightKind, Tile};
 
 use crate::{
-    camera::CameraRig,
+    camera::{BOOT_VERTICAL_FOV, CameraRig},
     ingest::MirrorResource,
     ingest::ScriptedCursor,
     pick::PickedTile,
@@ -565,6 +565,19 @@ pub fn capture_after_frames(
                 "capture cursor ({}, {}) picked {:?} but independent projection expected {:?}",
                 cursor.0.x, cursor.0.y, picked, expected
             );
+            // `None == None` passed and exited 0, which AC10 does not permit: a legitimate
+            // cursor over sky and a FAILURE to resolve the camera or the primary window reach
+            // that branch by independent routes, and the second collapses the oracle and the
+            // live pick to `None` together. A scripted cursor is aimed at terrain by whoever
+            // scripted it, so picking nothing is the instrument reporting a defect.
+            assert!(
+                picked.is_some(),
+                "capture cursor ({}, {}) picked no tile — a scripted cursor must be aimed at \
+                 terrain, and a camera or primary window that failed to resolve reaches this \
+                 same branch",
+                cursor.0.x,
+                cursor.0.y
+            );
         }
         // Print the actual count before every assertion. A successful process with a blank cut is
         // not a capture result; this remains truthful when a requested level changes the draw set.
@@ -629,15 +642,56 @@ fn expected_pick(
     window: &Window,
     terrain: &Query<&TerrainTile>,
 ) -> Option<[i32; 3]> {
-    terrain
+    let viewport = window.resolution.size();
+    let mut candidates = terrain
         .iter()
         .filter_map(|tile| {
-            let screen = rig.project_world_point(tile.0)? * window.resolution.size();
+            let (normalized, depth) = rig.project_world_point_with_depth(tile.0)?;
+            let screen = normalized * viewport;
             let distance_squared = screen.distance_squared(cursor);
-            (distance_squared <= 32.0_f32.powi(2)).then_some((distance_squared, tile.0))
+            let half_extent = tile_half_extent_px(depth, viewport.y);
+            (distance_squared <= half_extent * half_extent).then_some((distance_squared, tile.0))
         })
-        .min_by(|(left, _), (right, _)| left.total_cmp(right))
-        .map(|(_, tile)| tile)
+        .collect::<Vec<_>>();
+    candidates.sort_by(|(left, _), (right, _)| left.total_cmp(right));
+    if candidates.len() > 1 {
+        // A screen-space oracle is depth-blind BY CONSTRUCTION: where several tiles project
+        // inside one tile's apparent footprint, `min_by` on screen distance can prefer the one
+        // further from the camera while the pick correctly returns the nearer. Scaling the
+        // window shrinks that residual; it does not remove it. It is printed rather than
+        // silently resolved so a disagreement is read as the instrument's limit, not the pick's.
+        println!("{}", pick_ambiguity_line(cursor, &candidates));
+    }
+    candidates.first().map(|(_, tile)| *tile)
+}
+
+/// Half a tile's apparent size in pixels at `depth`, from the same vertical FOV the camera
+/// renders with: `0.5 * height / (2 * depth * tan(fov/2))`, i.e. `651.9 / depth` at 1080p.
+///
+/// The fixed 32 px this replaces was honest only in a band around depth 20-60. At the near
+/// clamp (4.0) it was 0.098 world units — a tenth of a tile's half-width — so a cursor anywhere
+/// off dead-centre made the oracle answer `None` against a correct `Some` and the assertion
+/// below fired BEFORE `Screenshot::primary_window()`, producing a false failure with no PNG to
+/// adjudicate it. At the far clamp (500.0) it was 12.3 units, admitting roughly 24 tiles.
+fn tile_half_extent_px(depth: f32, viewport_height: f32) -> f32 {
+    0.5 * viewport_height / (2.0 * depth * (BOOT_VERTICAL_FOV * 0.5).tan())
+}
+
+/// Names every tile inside the oracle's window when more than one is, nearest screen-distance
+/// first, so the residual depth-blindness is visible in the log rather than silent.
+fn pick_ambiguity_line(cursor: Vec2, candidates: &[(f32, [i32; 3])]) -> String {
+    let tiles = candidates
+        .iter()
+        .map(|(_, tile)| tile_text(*tile))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "pick: WARNING cursor=({},{}) {} tiles inside the oracle's window, screen-nearest first: {tiles} — \
+the oracle is depth-blind and asserts against the first",
+        cursor.x,
+        cursor.y,
+        candidates.len()
+    )
 }
 
 /// Formats the capture's cursor observation before its equality assertion can abort the process.
@@ -670,7 +724,7 @@ fn tile_text([x, y, z]: [i32; 3]) -> String {
 mod pick_tests {
     use bevy::prelude::Vec2;
 
-    use super::pick_capture_line;
+    use super::{pick_ambiguity_line, pick_capture_line, tile_half_extent_px};
 
     #[test]
     fn capture_pick_line_changes_with_the_cursor_and_names_no_pick() {
@@ -687,6 +741,46 @@ mod pick_tests {
         assert_eq!(
             pick_capture_line(Vec2::new(0.0, 0.0), None, None),
             "pick: cursor=(0,0) no tile picked"
+        );
+    }
+
+    /// The oracle's window must be a tile's own apparent size, not a constant. Expected values
+    /// are hand-computed from the lens equation (`0.5 * 1080 / (2 * d * tan(pi/8))` = `651.87/d`)
+    /// rather than read back out of the function under test.
+    #[test]
+    fn the_oracle_window_is_the_tiles_own_half_extent_at_that_depth() {
+        for (depth, expected) in [
+            (4.0, 162.967),
+            (30.0, 21.729),
+            (90.0, 7.243),
+            (500.0, 1.304),
+        ] {
+            let measured = tile_half_extent_px(depth, 1080.0);
+            assert!(
+                (measured - expected).abs() < 0.01,
+                "at depth {depth} the window must be {expected} px, measured {measured}"
+            );
+        }
+        // The property the fixed 32 px got wrong at BOTH clamps, stated directly: it was five
+        // times too narrow at the near clamp and twenty-four times too wide at the far one.
+        assert!(tile_half_extent_px(4.0, 1080.0) > 32.0);
+        assert!(tile_half_extent_px(500.0, 1080.0) < 32.0);
+    }
+
+    #[test]
+    fn an_ambiguous_window_names_every_tile_in_it() {
+        let line = pick_ambiguity_line(
+            Vec2::new(960.0, 540.0),
+            &[(4.0, [1, 2, 3]), (9.0, [4, 5, 6])],
+        );
+        assert!(
+            line.contains("[1,2,3]") && line.contains("[4,5,6]"),
+            "an ambiguous window must name every candidate, not just the one asserted against: \
+             {line}"
+        );
+        assert!(
+            line.starts_with("pick: WARNING cursor=(960,540) 2 tiles"),
+            "{line}"
         );
     }
 }

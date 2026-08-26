@@ -74,6 +74,16 @@ impl CameraRig {
 
     /// Projects a render-space point to normalized screen coordinates at this rig's camera.
     pub fn project_render_point(&self, point: Vec3) -> Option<Vec2> {
+        self.project_render_point_with_depth(point)
+            .map(|(screen, _)| screen)
+    }
+
+    /// The projection above, plus the point's distance along the view axis.
+    ///
+    /// The depth is what lets a screen-space consumer size a tolerance in pixels: a tile's
+    /// apparent half-extent shrinks as `1/depth`, so a fixed pixel window is honest at exactly
+    /// one distance. The capture instrument's oracle needs it for that reason and no other.
+    pub fn project_render_point_with_depth(&self, point: Vec3) -> Option<(Vec2, f32)> {
         let camera = self.transform();
         let offset = point - camera.translation;
         let depth = offset.dot(camera.forward().as_vec3());
@@ -81,16 +91,24 @@ impl CameraRig {
             return None;
         }
         let half_vertical = (BOOT_VERTICAL_FOV * 0.5).tan();
-        Some(Vec2::new(
-            0.5 + offset.dot(camera.right().as_vec3())
-                / (2.0 * depth * half_vertical * BOOT_ASPECT_RATIO),
-            0.5 - offset.dot(*camera.up()) / (2.0 * depth * half_vertical),
+        Some((
+            Vec2::new(
+                0.5 + offset.dot(camera.right().as_vec3())
+                    / (2.0 * depth * half_vertical * BOOT_ASPECT_RATIO),
+                0.5 - offset.dot(*camera.up()) / (2.0 * depth * half_vertical),
+            ),
+            depth,
         ))
     }
 
     /// Projects a simulation-world point to normalized screen coordinates.
     pub fn project_world_point(&self, point: [i32; 3]) -> Option<Vec2> {
         self.project_render_point(world_to_render(point))
+    }
+
+    /// Projects a simulation-world point to normalized screen coordinates and its view depth.
+    pub fn project_world_point_with_depth(&self, point: [i32; 3]) -> Option<(Vec2, f32)> {
+        self.project_render_point_with_depth(world_to_render(point))
     }
 }
 

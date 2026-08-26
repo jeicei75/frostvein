@@ -774,6 +774,21 @@ pub fn has_snow_laden_crown(mirror: &Mirror, position: [i32; 3]) -> bool {
         )
 }
 
+/// Foliage is DRAWN at 0.62-0.95 of its cell (`foliage_scale`) so a crown reads as sparse
+/// branches rather than a block. The pick marches full unit cells, so treating foliage as
+/// pickable would claim the ~62% of the cell face the player is plainly seeing through, and
+/// would occlude whatever is behind it. The pick excludes it so pick geometry and drawn
+/// geometry agree.
+pub(crate) fn is_tree_foliage(mirror: &Mirror, position: [i32; 3]) -> bool {
+    // NOTE: matched directly rather than through `terrain_material_at`, whose exact expression
+    // is story 5.4's sabotage anchor for the snow-cap swap. Sharing it made that row ambiguous
+    // and it stopped applying — a row that cannot apply pins nothing.
+    matches!(
+        mirror.tile(position),
+        Some(Tile::Solid(Material::TreeFoliage) | Tile::Ramp(Material::TreeFoliage))
+    )
+}
+
 /// The material actually present, distinguishing air from the `terrain_material` fallback.
 fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> {
     match mirror.tile(position) {
