@@ -647,6 +647,16 @@ GATE GREEN
   clean pass**, and the review should weigh it accordingly. The three-pass cap was never
   approached, so no quota was spent on it.
 
+**THIS STORY CONSUMED THE ENTIRE WEEKLY CODEX QUOTA: 0% → 100%.** Four dev rows,
+98pp total (32 + 6 + 6 + 54), $6.37 by the dollar benchmark — and the dollars are the column that
+cannot see what happened. **Codex is now unavailable to the next story until the 7-day window
+resets**, exactly the 3.2 failure repeating, and this time to exhaustion rather than to a third.
+Two facts the retrospective should hold onto: **12pp bought nothing at all** (the two
+harness-killed sessions, ~3 minutes each, no usable output), and **the self-gate never ran**, so
+the three-pass cap was never even approached — the quota went entirely on dev turns and their
+nested rollouts. The quota is also account-wide and shared with nidavellir's court brain, so this
+starves more than frostvein.
+
 **Session history, because it explains the commit shape.** Session 1 (23 min) built Tasks 1-4 and
 stopped at the 30-second command limit, correctly refusing to claim a gate it could not run.
 Sessions 2 and 3 were killed by the harness at ~3 minutes each for reasons never identified — no
