@@ -957,24 +957,37 @@ mod tests {
         mpsc::SyncSender<anyhow::Result<WireMessage>>,
         std::net::TcpStream,
     ) {
+        configured_app_with_snapshot(
+            args,
+            Snapshot {
+                msg_type: MessageType::Snapshot,
+                dims: Dims { x: 2, y: 1, z: 1 },
+                tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Normal,
+                tick: 0,
+            },
+        )
+    }
+
+    fn configured_app_with_snapshot(
+        args: &[&str],
+        snapshot: Snapshot,
+    ) -> (
+        App,
+        mpsc::SyncSender<anyhow::Result<WireMessage>>,
+        std::net::TcpStream,
+    ) {
         let parsed = super::parse_args_from(
             args.iter()
                 .map(std::ffi::OsString::from)
                 .collect::<Vec<_>>(),
         )
         .expect("the arguments under test must parse");
-        let mirror = Mirror::from_snapshot(Snapshot {
-            msg_type: MessageType::Snapshot,
-            dims: Dims { x: 2, y: 1, z: 1 },
-            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
-            entities: Vec::new(),
-            designations: Vec::new(),
-            zones: Vec::new(),
-            items: Vec::new(),
-            speed: Speed::Normal,
-            tick: 0,
-        })
-        .unwrap();
+        let mirror = Mirror::from_snapshot(snapshot).unwrap();
         let (sender, receiver) = mpsc::sync_channel(2);
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let writer = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
@@ -991,6 +1004,84 @@ mod tests {
             .init_resource::<FpsOverlayConfig>();
         super::configure_client_app(&mut app, mirror, receiver, writer, parsed);
         (app, sender, server)
+    }
+
+    fn scripted_drag_line(start: [i32; 3], end: [i32; 3]) -> String {
+        let viewport = UVec2::new(1920, 1080);
+        let rig = CameraRig::new([0, 0, 0]);
+        let start_cursor = rig
+            .project_world_point(start)
+            .expect("the literal start tile must project")
+            * viewport.as_vec2();
+        let end_cursor = rig
+            .project_world_point(end)
+            .expect("the literal end tile must project")
+            * viewport.as_vec2();
+        let drag = format!(
+            "dig,{},{},{},{}",
+            start_cursor.x, start_cursor.y, end_cursor.x, end_cursor.y
+        );
+        let snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 3, y: 2, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone); 6],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let (mut app, _sender, server) = configured_app_with_snapshot(
+            &[
+                "--capture",
+                "working.png",
+                "--frames",
+                "60",
+                "--drag",
+                &drag,
+            ],
+            snapshot,
+        );
+
+        app.update();
+        let camera_entity = app
+            .world_mut()
+            .query_filtered::<bevy::prelude::Entity, With<CameraRig>>()
+            .single(app.world())
+            .unwrap();
+        let mut camera = Camera::default();
+        camera.computed.target_info = Some(RenderTargetInfo {
+            physical_size: viewport,
+            scale_factor: 1.0,
+        });
+        let mut projection = bevy::prelude::PerspectiveProjection::default();
+        projection.update(viewport.x as f32, viewport.y as f32);
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        let transform = rig.transform();
+        app.world_mut().entity_mut(camera_entity).insert((
+            Camera3d::default(),
+            camera,
+            transform,
+            GlobalTransform::from(transform),
+            rig,
+        ));
+        app.world_mut().spawn((
+            Window {
+                resolution: WindowResolution::new(viewport.x, viewport.y),
+                ..Default::default()
+            },
+            PrimaryWindow,
+        ));
+
+        // Press, move while held, then release: these are the three production scripted stages.
+        app.update();
+        app.update();
+        app.update();
+
+        let mut line = String::new();
+        BufReader::new(server).read_line(&mut line).unwrap();
+        line
     }
 
     /// The wiring CALLS, not just the functions they call.
@@ -1127,6 +1218,27 @@ mod tests {
             line,
             "{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[0,0,0],\"max\":[0,0,0]}}\n",
             "the production configuration must carry the mouse path all the way to daemon bytes"
+        );
+    }
+
+    #[test]
+    fn parsed_capture_drags_send_their_own_rectangles_to_the_daemon_socket() {
+        let first = scripted_drag_line([0, 0, 0], [1, 0, 0]);
+        let second = scripted_drag_line([1, 0, 0], [2, 1, 0]);
+
+        assert_eq!(
+            first,
+            "{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[0,0,0],\"max\":[1,0,0]}}\n",
+            "the first parsed --drag must send its literal anchor-level rectangle"
+        );
+        assert_eq!(
+            second,
+            "{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[1,0,0],\"max\":[2,1,0]}}\n",
+            "the second parsed --drag must send its literal anchor-level rectangle"
+        );
+        assert_ne!(
+            first, second,
+            "different parsed --drag values must not collapse to the same wire rectangle"
         );
     }
 
