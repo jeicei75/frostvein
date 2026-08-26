@@ -42,7 +42,8 @@ use crate::{
     capture::{CaptureState, accumulate_motion, capture_after_frames},
     command::send_commands,
     designate::{
-        DesignateMode, DragAnchor, designation_input, setup_designate_hint, update_designate_hint,
+        DesignateMode, DragAnchor, DragMode, designation_input, setup_designate_hint,
+        update_designate_hint,
     },
     pick::{PickedTile, update_pick},
     project::{
@@ -92,7 +93,13 @@ pub fn run() -> anyhow::Result<()> {
             config: overlay_config_off(),
         });
     configure_client_app(&mut app, mirror, receiver, writer, args);
-    app.run();
+    // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
+    // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
+    // AC16 requires a run that never reaches its tick to exit NON-ZERO; the flag was already set
+    // (`capture.rs`, `AppExit::error()`) and only the consumer was missing.
+    if let AppExit::Error(code) = app.run() {
+        std::process::exit(code.get().into());
+    }
     Ok(())
 }
 
@@ -225,6 +232,7 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<crate::command::PendingCommands>()
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
+        .init_resource::<DragMode>()
         .init_resource::<DragAnchor>();
     app.add_systems(
         Startup,
@@ -428,6 +436,15 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if drag.is_some() && capture.is_none() {
         bail!("--drag requires --capture");
     }
+    if drag.is_some() && cursor.is_some() {
+        // `apply_scripted_input` takes the drag branch OR the cursor branch, never both, so a
+        // `--cursor` passed alongside `--drag` is parsed, validated, inserted and then never
+        // written to the window — while `capture_after_frames` still asserts the live pick
+        // against it. That combination cannot succeed; every other bad pairing here bails, and
+        // silently ignoring one of two flags the operator typed is the trap this parser exists
+        // to close.
+        bail!("--cursor and --drag are mutually exclusive; a scripted drag moves the cursor");
+    }
     Ok(Args {
         port,
         capture,
@@ -489,6 +506,7 @@ fn parse_drag(value: OsString) -> anyhow::Result<ScriptedDragSpec> {
 fn apply_scripted_input(
     cursor: Option<Res<ScriptedCursor>>,
     drag: Option<ResMut<ScriptedDrag>>,
+    picked: Res<PickedTile>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
@@ -497,12 +515,20 @@ fn apply_scripted_input(
         return;
     };
     if let Some(mut drag) = drag {
+        // The previous frame's pick answers "is the pick machinery live yet?" — camera, primary
+        // window and viewport all resolved. On a cold first frame it is `None`, and pressing then
+        // anchors on nothing: the drag is lost and NOTHING reports it. 8.1's `--cursor` rewrote
+        // the cursor every frame and self-healed; three unconditional shots at the coldest moment
+        // in the app's life do not. So the press and the release WAIT rather than fire blind.
+        let pick_is_live = picked.tile().is_some();
         match drag.stage {
             ScriptedDragStage::Press => {
                 window.set_cursor_position(Some(drag.spec.start));
-                keys.press(mode_key(drag.spec.mode));
-                mouse.press(MouseButton::Left);
-                drag.stage = ScriptedDragStage::Hold;
+                if pick_is_live {
+                    keys.press(mode_key(drag.spec.mode));
+                    mouse.press(MouseButton::Left);
+                    drag.stage = ScriptedDragStage::Hold;
+                }
             }
             ScriptedDragStage::Hold => {
                 window.set_cursor_position(Some(drag.spec.end));
@@ -513,13 +539,27 @@ fn apply_scripted_input(
             }
             ScriptedDragStage::Release => {
                 window.set_cursor_position(Some(drag.spec.end));
-                mouse.release(MouseButton::Left);
-                drag.stage = ScriptedDragStage::Done;
+                if pick_is_live {
+                    mouse.release(MouseButton::Left);
+                    drag.stage = ScriptedDragStage::Done;
+                }
             }
             ScriptedDragStage::Done => {}
         }
     } else if let Some(cursor) = cursor {
         window.set_cursor_position(Some(cursor.0));
+    }
+}
+
+impl ScriptedDrag {
+    pub fn mode(&self) -> DesignateMode {
+        self.spec.mode
+    }
+
+    /// Whether the scripted drag ran to completion. A drag still mid-stage at capture time never
+    /// released, so the capture it is about to authorise shows no designation it created.
+    pub fn completed(&self) -> bool {
+        matches!(self.stage, ScriptedDragStage::Done)
     }
 }
 
@@ -1075,10 +1115,19 @@ mod tests {
             PrimaryWindow,
         ));
 
-        // Press, move while held, then release: these are the three production scripted stages.
-        app.update();
-        app.update();
-        app.update();
+        // Press, move while held, then release. The press now WAITS for the first live pick
+        // instead of firing on frame 1 regardless, so the stage count is no longer fixed — drive
+        // until the drag reports completion, which also fails loudly if it never does.
+        for _ in 0..8 {
+            app.update();
+            if app.world().resource::<super::ScriptedDrag>().completed() {
+                break;
+            }
+        }
+        assert!(
+            app.world().resource::<super::ScriptedDrag>().completed(),
+            "scripted drag never reached its release stage"
+        );
 
         let mut line = String::new();
         BufReader::new(server).read_line(&mut line).unwrap();
@@ -1330,6 +1379,128 @@ mod tests {
             ])
             .is_err(),
             "a camera distance must be finite"
+        );
+    }
+
+    /// The scripted drag used to advance Press -> Hold -> Release on the first three `Update`s
+    /// UNCONDITIONALLY, whether or not the pick had resolved. On a cold first frame — camera
+    /// `computed.target_info` not yet written, no primary window resolved yet, `viewport_to_world`
+    /// failing — the press anchored on `None`, no command was ever built, and NOTHING reported it.
+    /// 8.1's `--cursor` rewrote the cursor every frame and self-healed; three unconditional shots
+    /// at the coldest moment in the app's life do not.
+    #[test]
+    fn a_scripted_drag_waits_for_a_live_pick_instead_of_pressing_into_the_dark() {
+        use bevy::prelude::Vec2;
+
+        use crate::{
+            designate::DesignateMode,
+            pick::{Face, PickedCell, PickedTile},
+        };
+
+        let spec = super::ScriptedDragSpec {
+            mode: DesignateMode::Dig,
+            start: Vec2::new(100.0, 100.0),
+            end: Vec2::new(200.0, 200.0),
+        };
+        let mut app = bevy::app::App::new();
+        app.add_plugins(bevy::MinimalPlugins)
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<ButtonInput<MouseButton>>()
+            .init_resource::<PickedTile>()
+            .insert_resource(super::ScriptedDrag {
+                spec,
+                stage: super::ScriptedDragStage::Press,
+            });
+        app.world_mut().spawn((Window::default(), PrimaryWindow));
+
+        // No pick has ever resolved: the drag must hold at Press however many frames pass.
+        for _ in 0..5 {
+            app.world_mut()
+                .run_system_once(super::apply_scripted_input)
+                .unwrap();
+        }
+        assert!(
+            matches!(
+                app.world().resource::<super::ScriptedDrag>().stage,
+                super::ScriptedDragStage::Press
+            ),
+            "the drag pressed before any pick resolved; it would anchor on nothing and vanish"
+        );
+        assert!(
+            !app.world()
+                .resource::<ButtonInput<MouseButton>>()
+                .pressed(MouseButton::Left),
+            "no button may be pressed while the pick machinery is still cold"
+        );
+
+        // The moment a pick is live, the drag proceeds.
+        app.world_mut().insert_resource(PickedTile(Some(PickedCell {
+            tile: [1, 1, 1],
+            face: Face::Top,
+        })));
+        app.world_mut()
+            .run_system_once(super::apply_scripted_input)
+            .unwrap();
+        assert!(
+            matches!(
+                app.world().resource::<super::ScriptedDrag>().stage,
+                super::ScriptedDragStage::Hold
+            ),
+            "with a live pick the drag must advance rather than stalling forever"
+        );
+    }
+
+    /// `apply_scripted_input` takes the drag branch OR the cursor branch, never both, so a
+    /// `--cursor` alongside `--drag` was parsed, validated, inserted and then never written to
+    /// the window — while the capture still asserted the live pick against it. A guaranteed
+    /// spurious failure, in a parser where every other bad pairing bails.
+    #[test]
+    fn a_scripted_cursor_and_a_scripted_drag_are_mutually_exclusive() {
+        let both = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("30"),
+            std::ffi::OsString::from("--cursor"),
+            std::ffi::OsString::from("960,540"),
+            std::ffi::OsString::from("--drag"),
+            std::ffi::OsString::from("dig,10,10,20,20"),
+        ]);
+        assert!(
+            both.is_err(),
+            "a scripted drag moves the cursor itself; accepting both silently ignores one flag \
+             the operator typed"
+        );
+        let Err(error) = both else {
+            unreachable!("asserted above to be rejected");
+        };
+        assert!(
+            error.to_string().contains("mutually exclusive"),
+            "the rejection must say WHY, not merely fail: {error}"
+        );
+    }
+
+    /// AC16 requires a run that never reaches its tick to exit NON-ZERO. `App::run()` RETURNS the
+    /// status and `AppExit` is not `#[must_use]`, so `app.run();` compiled clean under
+    /// `-D warnings` while throwing every capture failure away.
+    ///
+    /// Asserted against the source because `run()` needs a socket AND a window: no test in this
+    /// environment can execute it, and a process exit code is not observable from inside the
+    /// process that would set it. This is the same include_str! shape `designate.rs` uses for the
+    /// rect helper — weaker than an execution, and far stronger than the nothing that was here.
+    #[test]
+    fn run_consumes_the_runners_exit_status_rather_than_discarding_it() {
+        let source = include_str!("ingest.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the production module precedes its tests");
+        assert!(
+            !source.contains("    app.run();\n"),
+            "`app.run();` discards the AppExit, so a failed capture exits 0"
+        );
+        assert!(
+            source.contains("if let AppExit::Error(code) = app.run()"),
+            "run() must inspect the runner's exit status and propagate a non-zero code"
         );
     }
 

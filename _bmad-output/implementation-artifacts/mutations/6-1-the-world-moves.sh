@@ -30,9 +30,11 @@ PY
 mutation "motion capture requires too many ticks" gui capture::tests::motion_instrument_rejects_stillness_and_accepts_the_required_observation <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
-old = 'self.ticks.len() >= 100'
+# 8.2 split the delivered-tick floor into `assert_tick_floor` so an --at-tick capture can
+# scale it; the constant moved to the call site and the row follows it.
+old = 'self.assert_tick_floor(100)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'self.ticks.len() >= 101'))
+p.write_text(s.replace(old, 'self.assert_tick_floor(101)'))
 PY
 
 mutation "snapshot rewind no longer snaps" gui snapshot_rewind_snaps_at_a_mid_blend_clock <<'PY'
