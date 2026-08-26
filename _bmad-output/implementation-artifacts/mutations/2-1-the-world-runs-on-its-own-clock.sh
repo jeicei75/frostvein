@@ -20,9 +20,17 @@ PY
 mutation "client loop receives deltas but never applies them" tui the_client_loop_renders_a_frame_per_streamed_delta <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
-p.write_text(s.replace(
-    "            Ok(Ok(Msg::Delta(delta))) => apply(&mut snapshot, *delta),\n",
-    "            Ok(Ok(Msg::Delta(delta))) => drop(delta),\n"))
+# ROTTED and undetected until 2026-08-26: the arm this named became a multi-line block long ago,
+# so `replace` matched nothing, wrote the file back byte-identical, and the row reported SURVIVED
+# -- "your test is weak" when the truth was "your sabotage is broken". Re-pointed, and given the
+# count guard the house format requires so it can never rot silently again.
+old = '''                Ok(Ok(Msg::Delta(delta))) => {
+                    mirror.apply_delta(*delta);
+                    state.speed = mirror.speed();
+                    needs_redraw = true;
+                }'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, old.replace('mirror.apply_delta(*delta);', 'drop(delta);')))
 PY
 
 mutation "step() clears the dirty set (per-tick instead of per-drain)" sim-core stepping_does_not_clear_the_dirty_set <<'PY'

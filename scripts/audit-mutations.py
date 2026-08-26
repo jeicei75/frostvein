@@ -49,6 +49,19 @@ LITERAL = re.compile(
     re.S | re.M,
 )
 
+# FOURTH ROT SHAPE, and the one that hid inside this very script. `LITERAL` only sees a literal
+# BOUND TO A NAME. A row that passes its search text straight into `s.replace("...", "...")`
+# binds nothing, so `LITERAL.findall` returned empty and the row was skipped ENTIRELY -- never
+# checked, and not even counted among the unguarded. Measured 2026-08-26: 7 rows were invisible
+# this way and one of them, `2-1`'s "client loop receives deltas but never applies them", had
+# already rotted when its `tui` match arm was refactored. It writes the file back byte-identical,
+# the test passes, the runner reports SURVIVED -- and this script printed a clean all-clear over
+# the top of it. An inline anchor can never carry a count guard, so every one found here is
+# checked as unguarded.
+INLINE_ANCHOR = re.compile(
+    r"s\.replace\(\s*('''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\s*,\s*('''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")",
+    re.S,
+)
 
 def rows(table_text):
     """Split a table into (name, block) pairs. A block runs to the next `mutation` line."""
@@ -137,6 +150,30 @@ def audit():
                         ))
                         break
                     unguarded.append((table.name, name, var))
+            else:
+                # Anchors passed straight to `s.replace(...)` without ever being named. Reached
+                # only when the named pass found nothing to break on.
+                # Applied CUMULATIVELY, in source order. A row may legitimately chain replaces
+                # where a later anchor is TEXT AN EARLIER ONE INTRODUCED -- 3-1 swaps two match
+                # arms through a temporary `SimCommand::SWAP` sentinel that appears nowhere in
+                # pristine source. Checking each anchor against the untouched file called that a
+                # broken row; carrying the intermediate text forward does not.
+                staged = source
+                for search, replacement in INLINE_ANCHOR.findall(block):
+                    try:
+                        search = ast.literal_eval(search)
+                        replacement = ast.literal_eval(replacement)
+                    except (ValueError, SyntaxError):
+                        break  # a computed literal; the rest of the chain is unverifiable
+                    if staged.count(search) == 0:
+                        broken.append((
+                            table.name, name,
+                            f"inline s.replace() anchor matches nothing in {target} "
+                            f"and cannot carry a guard",
+                        ))
+                        break
+                    staged = staged.replace(search, replacement)
+                    unguarded.append((table.name, name, "inline s.replace() anchor"))
 
     if orphaned:
         print(f"  {len(orphaned)} of {total} mutation rows NAME A TEST THAT NO LONGER EXISTS:")
