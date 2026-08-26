@@ -560,6 +560,9 @@ Codex (GPT-5)
   full gate reached `cargo test` after fmt and clippy succeeded, but this execution environment
   terminates foreground commands at 30 seconds before the daemon integration suite returns. No
   full-gate result is claimed. The per-commit fast gate and focused GUI tests were green.
+- `codex review --base main` was launched once (session `01a03e72-26bb-74c3-9110-903c84111f12`),
+  but the same 30-second runner limit ended it during repository inspection before it emitted a
+  findings report. No review finding is claimed or silently dropped.
 
 ### File List
 
