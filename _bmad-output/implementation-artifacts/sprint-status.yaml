@@ -43,7 +43,18 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-26  # STORY 8.1 REVIEW-PATCH ROUND 1 COMPLETE -- all 12 patches applied in one commit
+last_updated: 2026-08-26  # STORY 8.1 -> REVIEW, ALL TASKS CLOSED. TASK 6 / AC12 MET ON THE VEHICLE:
+                          # >140 fps sustained at BOTH working zoom and full vista (gingerspice / native
+                          # Windows / NVIDIA, F3 overlay), against NFR6 floors of 60 and 30 -- 2.3x and 4.7x
+                          # margin. Read on a FRESH rebuild from the patched tree, source commit 3f50178 (the
+                          # last commit touching crates/; everything after it is _bmad-output/ only). Picking
+                          # casts ONE RAY PER FRAME bounded by the world diagonal, so its cost does not scale
+                          # with tile count -- the margin is what the mechanism predicts, not luck. NOT
+                          # STAMPED: the wall-clock build time was not captured, which is M2-7 (no build
+                          # script, no SHA in gui) biting a FOURTH time -- it should be read as load-bearing
+                          # at the Epic 8 retro, not housekeeping. AC5's RENDERED half remains unmet and
+                          # DEFERRED to 8.2 by Wolf (hover slab buried under any drawn tile above it); its
+                          # colour arithmetic is proven, its pixels are not. PRIOR: REVIEW-PATCH ROUND 1 COMPLETE -- all 12 patches applied in one commit
                           # (3f50178), one full-tier gate at the end, GATE GREEN cold, 389 tests (was 382).
                           # Mutation round 3: 9/9 KILLED, zero APPLY-FAILED, three new rows (AC9's ClientLocal
                           # tag, AC5's separation floor, the wiring call site). Row 2's anchor went STALE inside
@@ -534,7 +545,7 @@ development_status:
   # STILL OPEN and NOT closable by any agent: Task 6 / AC12. NOTHING HAS BEEN OBSERVED ON THE
   # VEHICLE; NFR6-with-picking is unmeasured and no fps figure was fabricated. Rebuild gui.exe and
   # record its build time + source commit first -- the stale-binary trap fired three times in 5.4.
-  8-1-point-at-the-world: in-progress
+  8-1-point-at-the-world: review
   8-2-designate-with-the-mouse: backlog
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.

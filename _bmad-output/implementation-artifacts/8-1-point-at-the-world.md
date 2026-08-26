@@ -5,7 +5,7 @@ baseline_commit: 32e693317f08f3319f52596637fba30c4488f26d
 
 # Story 8.1: Point at the World
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -139,10 +139,10 @@ change at all. **M2-7 is still open** — there is no build script and no SHA st
   - [x] Minimum rows: the pick system deleted from `client_systems`' tuple; the slice-visibility filter removed from the march; `render_to_world` replaced by raw truncation of the hit point; the nothing-picked branch replaced by a fallback to `[0,0,0]`; the highlight's despawn-on-no-pick removed; `--cursor` parsed but never reaching the pick.
   - [x] **Commit before running** (M2-9). Run `scripts/mutate.sh` **alone** — it is not concurrency-safe. Capture the exit code before any pipe.
   - [x] **Dry anchor-check first** (M2-8): grep every `old =` string against the live tree before the run.
-- [ ] **Task 6 — VEHICLE-BOUND: NFR6 with picking live (AC: 12)**
-  - [ ] **Rebuild and re-copy `gui.exe` first**, and record the build time and the commit it was built from.
-  - [ ] Read sustained fps at working zoom and at full vista from the F3 overlay, with the cursor moving over the world.
-  - [ ] Paste both figures labelled `gingerspice / native Windows / NVIDIA`. A failed reading is the finding and gets reported, not worked around.
+- [x] **Task 6 — VEHICLE-BOUND: NFR6 with picking live (AC: 12)**
+  - [x] **Rebuild and re-copy `gui.exe` first**, and record the build time and the commit it was built from. *(Rebuilt from the patched tree. Source commit recorded; wall-clock build time NOT captured — see the measurement note below.)*
+  - [x] Read sustained fps at working zoom and at full vista from the F3 overlay, with the cursor moving over the world.
+  - [x] Paste both figures labelled `gingerspice / native Windows / NVIDIA`. A failed reading is the finding and gets reported, not worked around.
 - [x] **Task 7 — The gate (AC: 1)**
   - [x] `cargo clean -p gui`, then `scripts/gate.sh` full tier. Paste the tail. A `GATE GREEN (FAST)` line is a coverage hole, not a pass.
 
@@ -234,7 +234,12 @@ linker        : x86_64-w64-mingw32-gcc
 Byte size was identical before and after the rebuild, which independently confirms the stale
 binary was content-correct and only its timestamp was misleading.
 
-**READ BEFORE JUDGING AN INSTRUMENT FAILURE IN THIS SESSION.** This binary predates all 12 review
+**SUPERSEDED 2026-08-26 — this stamp describes a binary that was never used for AC12.** Task 6 ran
+on a fresh rebuild from the patched tree instead; see *Vehicle measurement* below. The warning that
+follows described the PRE-patch oracle and no longer applies: the 32 px window it warns about is
+gone. Kept because it is the record of what was true on 08-25.
+
+**(Historic, 2026-08-25.)** This binary predates all 12 review
 patches, so AC10/AC11 will exercise the **known-defective oracle**. The 32 px window is
 `0.0246 x distance` world units, so at working zoom it covers only ~10-25% of a tile's half-width:
 a cursor off dead-centre yields `expected=None` against a correct `Some`, the assertion trips, and
@@ -626,7 +631,10 @@ story's Project Structure table specified. The AC's substance is met — project
 proven mutually inverse — but `transform.rs` is untouched, so anyone auditing by file list will
 not find it where the story said to look.
 
-**STILL OPEN AND NOT CLOSABLE BY ANY AGENT: Task 6 / AC12.** Nothing in this story has been
+**CLOSED 2026-08-26 — see *Vehicle measurement* below: both NFR6 clauses met at >140 fps on a
+fresh post-patch rebuild.** What follows is what was true when this section was written.
+
+**~~STILL OPEN AND NOT CLOSABLE BY ANY AGENT: Task 6 / AC12.~~** Nothing in this story had been
 observed on the vehicle. NFR6 with picking live must be measured on gingerspice
 (native-Windows `gui.exe`, NVIDIA Vulkan, `simd` in WSL over localhost), **after a mandatory
 `gui.exe` rebuild whose build time and source commit are recorded** — the stale-binary trap fired
@@ -727,6 +735,40 @@ turn and the named test observed failing.
 - The hover highlight is still buried under any drawn tile above it. That was ruled **defer to
   8.2** and is untouched here.
 
+### Vehicle measurement — Task 6 / AC12, 2026-08-26
+
+**AC12 IS MET, both clauses, with margin.** Read by Wolf from the F3 frame-time overlay with the
+cursor moving over the world:
+
+```
+gingerspice / native Windows / NVIDIA
+  working zoom   >140 fps sustained   (NFR6 floor: 60)   PASS
+  full vista     >140 fps sustained   (NFR6 floor: 30)   PASS
+```
+
+**The binary.** A fresh rebuild from the patched tree — NOT the 08-25 binary the build stamp above
+describes. Source commit **`3f50178`** ("Apply the review's twelve patches to the picking path"),
+which is the last commit touching `crates/`: `git diff 3f50178..a77144e -- crates/` is empty, so
+every commit on this branch after it changes only `_bmad-output/`, and the gui source in the
+measured binary is identical whichever of the three was checked out.
+
+**What is NOT stamped, said plainly: the wall-clock build time was not captured.** The story asked
+for it and the stale-binary trap is why. What stands in for it here is the source-commit
+identification above plus the fact that the rebuild was deliberate and post-patch — weaker
+evidence than an mtime, and worth naming rather than glossing. **This is M2-7 biting a fourth
+time**: there is still no build script and no SHA stamp in `gui`, so nothing makes this automatic
+and every vehicle session re-litigates it by hand. M2-7 should be read as load-bearing at the
+Epic 8 retro, not as housekeeping.
+
+**Reading the margin honestly.** >140 fps is 2.3x the working-zoom floor and 4.7x the vista floor,
+so picking costs nothing measurable — which is what the mechanism predicts: `update_pick` casts
+**one ray per frame** and the march is bounded by the world diagonal, so its cost does not scale
+with the tile count. The patches do not change that: the foliage exclusion adds one `mirror.tile`
+lookup per marched cell, the bounds and nudge changes are the same arithmetic, and everything else
+this round touched is capture-only or startup-only. Note the figure is a floor, not a ceiling
+reading — ">140" is what the overlay showed, not a measured maximum, and no vsync/frame-cap state
+was recorded, so it should not be quoted as a benchmark.
+
 ### Completion Notes List
 
 - Task 1: added the sole screen-ray-to-tile path. It intersects the render-space world bounds, marches integer voxel cells only for at most the world diagonal, filters with the shared slice predicate, and converts the selected cell centre through `render_to_world`.
@@ -734,6 +776,11 @@ turn and the named test observed failing.
 - Task 3: added the hand-built `MinimalPlugins` camera/window harness. It asserts visible picks across the full matrix and independently verifies sky, slice-hidden, and outside-window no-pick states also draw no hover.
 - Task 4: added the capture-only `--cursor` parser and resource writer, plus independent-forward-projection expected-tile reporting and equality assertion at capture time. No TCP ownership or wire shape changed.
 - Task 5 partial: added the committed six-row mutation table and verified its live anchors. The all-rows result is still required because the sandbox command output did not yield its final status.
+- Task 5 closed by the orchestrator: mutation round 2 gave 6/6 KILLED; round 3, after the review patches, gave 9/9 across the widened table.
+- Task 7 closed by the orchestrator: full-tier gate green on a cold rebuild, twice before the patches and once after (389 tests).
+- Task 6 / AC12 closed on the vehicle 2026-08-26: >140 fps sustained at both working zoom and full vista on a fresh rebuild from the patched tree (`3f50178`), against NFR6 floors of 60 and 30. Picking casts one ray per frame, so its cost does not scale with the world — the margin is what the mechanism predicts.
+- Review-patch round 1 applied all 12 patches from the 2026-08-25 review in one commit, with one full-tier gate at the end. Every patch verified RED before it was believed.
+- **All 13 ACs are now met except AC5's rendered half, which Wolf ruled DEFERRED to 8.2** (the hover slab is buried under any drawn tile above it; a look change waits on final gfx). AC5's colour arithmetic is proven; its pixels are not.
 
 ### File List
 
@@ -763,4 +810,5 @@ turn and the named test observed failing.
 | 2026-08-25 | Orchestrator verification. Mutation round 1 caught row 6 SURVIVING: `--cursor` parsed, validated and then silently dropped by `run()`, with the whole suite green — the 7.2 `--distance` inert-seam class recurring. Fixed by extracting `insert_capture_resources` so the real wiring is executable from a test, and retargeting the row. Round 2: 6/6 KILLED, zero APPLY-FAILED. |
 | 2026-08-25 | Full gate re-run independently on a cold rebuild — GREEN, 382 workspace tests. Tasks 5 and 7 closed on observed evidence. Task 6 / AC12 left OPEN and vehicle-bound; no fps figure fabricated. Status → review. |
 | 2026-08-25 | Code review — 4 layers plus one narrowed re-run, no coverage holes. Five decisions ruled by Wolf, 12 patches left for a fresh session. |
+| 2026-08-26 | Task 6 / AC12 CLOSED on the vehicle: >140 fps sustained at BOTH working zoom and full vista (`gingerspice / native Windows / NVIDIA`), read from the F3 overlay on a fresh rebuild from the patched tree, source commit `3f50178`. Both NFR6 clauses met with margin. Build wall-clock time not captured — M2-7's missing build stamp, fourth occurrence. Status → review. |
 | 2026-08-26 | Review-patch round 1: all 12 patches applied in one commit (`3f50178`). Oracle window scaled to the tile's own projected half-extent with an ambiguity warning; a no-pick capture exits non-zero; `run()` split so every wiring call it makes after its plugins is testable; foliage excluded from the pick. Matrix gains pitch as a fourth axis (81 cases), AC4 occlusion and the DDA at 128x128x32 gain tests, the near-white guard now fails for the property it names, world bounds go through `world_to_render`, the dead boundary nudge is gone. Three sabotage rows added; row 2 retargeted after its anchor went stale. Mutation round 3: 9/9 KILLED, zero APPLY-FAILED. Full-tier gate GREEN on a cold rebuild, 389 tests. Task 6 / AC12 still OPEN and vehicle-bound. |
