@@ -79,14 +79,14 @@ pub struct ProjectionWork {
 
 pub fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
-    let (mirror, receiver) = connect_to_daemon(args.port)?;
+    let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(FpsOverlayPlugin {
             config: overlay_config_off(),
         });
-    configure_client_app(&mut app, mirror, receiver, args);
+    configure_client_app(&mut app, mirror, receiver, writer, args);
     app.run();
     Ok(())
 }
@@ -94,13 +94,21 @@ pub fn run() -> anyhow::Result<()> {
 /// Opens the daemon socket, reads the opening snapshot, and leaves a reader thread feeding the
 /// returned channel. The only part of `run()` that is I/O and therefore the only part a test
 /// cannot reach.
-fn connect_to_daemon(port: u16) -> anyhow::Result<(Mirror, Receiver<anyhow::Result<WireMessage>>)> {
+fn connect_to_daemon(
+    port: u16,
+) -> anyhow::Result<(Mirror, Receiver<anyhow::Result<WireMessage>>, TcpStream)> {
     let address = format!("127.0.0.1:{port}");
     let stream = TcpStream::connect(("127.0.0.1", port))
         .with_context(|| format!("could not connect to {address}"))?;
     stream
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
         .context("could not set snapshot read timeout")?;
+    let writer = stream
+        .try_clone()
+        .context("could not clone command writer")?;
+    writer
+        .set_write_timeout(Some(SNAPSHOT_READ_TIMEOUT))
+        .context("could not set command write timeout")?;
     let mut reader = BufReader::new(stream);
     let mirror = Mirror::from_snapshot(read_snapshot(&mut reader)?)
         .context("could not build client mirror")?;
@@ -109,7 +117,7 @@ fn connect_to_daemon(port: u16) -> anyhow::Result<(Mirror, Receiver<anyhow::Resu
         .name("server-read".to_string())
         .spawn(move || read_messages(reader, sender))
         .context("could not spawn server reader thread")?;
-    Ok((mirror, receiver))
+    Ok((mirror, receiver, writer))
 }
 
 /// Everything `run()` does to the App once its plugins are in: the world resources, the parsed
@@ -126,12 +134,15 @@ fn configure_client_app(
     app: &mut App,
     mirror: Mirror,
     receiver: Receiver<anyhow::Result<WireMessage>>,
+    writer: TcpStream,
     args: Args,
 ) {
     let slice = initial_slice(mirror.dims(), args.slice_level);
     app.insert_resource(MirrorResource(mirror))
         .insert_resource(slice)
         .insert_resource(IngestReceiver::new(receiver))
+        .insert_resource(crate::command::CommandSink(Mutex::new(writer)))
+        .init_resource::<crate::command::PendingCommands>()
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
@@ -808,6 +819,9 @@ mod tests {
         })
         .unwrap();
         let (sender, receiver) = mpsc::sync_channel(2);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let writer = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let _server = listener.accept().unwrap();
         let mut app = App::new();
         app.add_plugins(bevy::MinimalPlugins)
             .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
@@ -815,7 +829,7 @@ mod tests {
             .init_resource::<bevy::asset::Assets<bevy::prelude::StandardMaterial>>()
             .init_resource::<bevy::asset::Assets<bevy::image::Image>>()
             .init_resource::<FpsOverlayConfig>();
-        super::configure_client_app(&mut app, mirror, receiver, parsed);
+        super::configure_client_app(&mut app, mirror, receiver, writer, parsed);
         (app, sender)
     }
 
