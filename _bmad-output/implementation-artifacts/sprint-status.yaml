@@ -43,7 +43,33 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-27  # 8.2 TASK 7 RUNBOOK WRITTEN AHEAD OF THE SESSION --
+last_updated: 2026-08-27  # VEHICLE SESSION STARTED -- AND IT FOUND TWO MODES THAT HAD NEVER WORKED.
+                          # Wolf drove it by hand and reported "fragile and confusing... sometimes it
+                          # loses dragged tile color... channelling, what should it do". That was FOUR
+                          # defects. The big one: CHANNEL AND STOCKPILE DESIGNATION WERE COMPLETELY
+                          # INERT. Picking only ever resolves a Solid/Ramp cell; sim-core filters both
+                          # commands on standability and DROPS THE REST IN SILENCE -- no error, no ack,
+                          # no log. Proven against the real binary: channel at the picked cell -> 0
+                          # designations, same rect one cell up -> 9. AC10 was FALSE for two of its
+                          # three clauses and AC19's four hand drags were never possible. Clear was
+                          # half-working. Plus: the preview erased itself on any frame whose ray missed
+                          # terrain while the drag stayed live (that is the "loses colour"), and channel
+                          # marks never got 7.2's buried-mark fix so they sat sealed inside rock.
+                          # THE HOLE UNDERNEATH: no test ever asked the daemon whether it KEPT anything;
+                          # every gui test asserts what the CLIENT QUEUES, and the capture instruments
+                          # are blind the same way (a discarded rect reads `0 of 0` and passes). The
+                          # review's "genuinely wired, 15 hops to real callers" was true about the
+                          # client's hops and structurally blind to the sim's filters.
+                          # RULED (Wolf): target = the neighbour across the face the ray entered, giving
+                          # AC13's Face a second BEHAVIOURAL consumer. FIXED 8ccb569: client-core gained
+                          # is_standable, the preview shows only cells the sim will keep, and
+                          # simd/tests/serve.rs now runs the round trip with the REAL DAEMON AS JUDGE.
+                          # Suite 165 -> 175, mutation table 27 -> 33, round 2 = 6/6 KILLED no survivor,
+                          # full gate GREEN. Three round-1 rows re-pointed first, all caught by the
+                          # audit BEFORE the run. gui.exe MUST BE REBUILT -- the 05:13:38Z binary has
+                          # two dead modes in it. STILL OWED ON THE VEHICLE: AC19, AC13's rendered half,
+                          # AC15/16 end to end, AC18.
+                          # PRIOR: 8.2 TASK 7 RUNBOOK WRITTEN AHEAD OF THE SESSION --
                           # 8-2-signoff/task-7-vehicle-runbook.md, sourced from aca07be rather than
                           # carried forward from 7.2's, because --drag and --at-tick did not exist then
                           # and three of its flag rules came only from the 08-26 review. It closes AC13's
