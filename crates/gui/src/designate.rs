@@ -8,10 +8,14 @@ use bevy::{
 };
 use protocol::{Command, DesignationKind, Rect};
 
+use client_core::Mirror;
+
 use crate::{
     command::PendingCommands,
+    ingest::MirrorResource,
     pick::{PickedCell, PickedTile},
     project::ClientLocal,
+    slice::SliceLevel,
     transform::render_to_world,
 };
 
@@ -91,10 +95,13 @@ pub fn update_designate_hint(
 }
 
 /// Handles mode keys and the real press-drag-release interaction after the current frame's pick.
+#[allow(clippy::too_many_arguments)]
 pub fn designation_input(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     picked: Res<PickedTile>,
+    mirror: Res<MirrorResource>,
+    slice: Res<SliceLevel>,
     mut mode: ResMut<DesignateMode>,
     mut anchor: ResMut<DragAnchor>,
     mut drag_mode: ResMut<DragMode>,
@@ -132,18 +139,21 @@ pub fn designation_input(
         };
         if let Some(release_cell) = picked.0 {
             let mode = drag_mode.0.unwrap_or(*mode);
-            // NOTE: drags up a cliff designate on the anchor's level; the shared rect contract
-            // is single-z and deliberately discards the release tile's z.
-            let rect = |target: fn(PickedCell, DesignateMode) -> [i32; 3]| {
-                let anchor_tile = target(anchor_cell, mode);
-                let release_tile = target(release_cell, mode);
-                client_core::rect_on_level(
-                    (anchor_tile[0], anchor_tile[1]),
-                    (release_tile[0], release_tile[1]),
-                    anchor_tile[2],
-                )
-            };
-            for command in commands_for(mode, rect(designation_target), rect(picked_cell_target)) {
+            let mirror = &mirror.0;
+            // Dig keeps AC4's single-z rect at the anchor's level: cutting one level into a slope
+            // is what dig is for, and the shared helper deliberately discards the release z.
+            let picked_rect = client_core::rect_on_level(
+                (anchor_cell.tile[0], anchor_cell.tile[1]),
+                (release_cell.tile[0], release_cell.tile[1]),
+                anchor_cell.tile[2],
+            );
+            let surface = client_core::rects_for_cells(&client_core::surface_targets(
+                mirror,
+                slice.level(),
+                designation_target(mirror, anchor_cell, mode),
+                designation_target(mirror, release_cell, mode),
+            ));
+            for command in commands_for(mode, picked_rect, &surface) {
                 pending.push(command);
             }
         }
@@ -169,7 +179,7 @@ pub fn designation_input(
 /// into a ramp"; a cliff face targets the cell you are looking into, which is standable exactly
 /// when it borders a ledge. The face was already computed for AC13's highlight, so this gives it
 /// a second consumer and makes it behavioural rather than decorative.
-pub fn designation_target(cell: PickedCell, mode: DesignateMode) -> [i32; 3] {
+pub fn designation_target(mirror: &Mirror, cell: PickedCell, mode: DesignateMode) -> [i32; 3] {
     match mode {
         // Clear is here because it must REACH the standable cell to remove a channel or a
         // stockpile. Its other half — the dig at the cell the ray hit — is covered by the second
@@ -178,32 +188,51 @@ pub fn designation_target(cell: PickedCell, mode: DesignateMode) -> [i32; 3] {
             // `render_to_world` is the single axis conversion, per AC2 — the face normal is a
             // render-space unit vector and must not be re-derived by hand here.
             let [dx, dy, dz] = render_to_world(cell.face.normal());
-            [cell.tile[0] + dx, cell.tile[1] + dy, cell.tile[2] + dz]
+            let neighbour = [cell.tile[0] + dx, cell.tile[1] + dy, cell.tile[2] + dz];
+            if client_core::is_standable(mirror, neighbour) {
+                return neighbour;
+            }
+            // MEASURED 2026-08-27 on the real world: the face neighbour is standable for 100% of
+            // TOP-face hits and only 8.5-11.8% of side-face hits, because on flat ground the cell
+            // beside a block is another block. Pointing at the front edge of a surface block
+            // rather than its top therefore designated nothing — Wolf's "dragging might skip 2
+            // first blocks". RULED 2026-08-27 (Wolf): fall back to the cell directly above the
+            // block, which is standable for 100% of surface blocks, while keeping the face
+            // neighbour where it IS standable so pointing at a wall still targets the ledge it
+            // borders.
+            let above = [cell.tile[0], cell.tile[1], cell.tile[2] + 1];
+            if client_core::is_standable(mirror, above) {
+                return above;
+            }
+            // Neither is standable. Return the face neighbour so the caller sees the mode's own
+            // answer; the preview filter and the sim both drop it, visibly and consistently.
+            neighbour
         }
         DesignateMode::Dig | DesignateMode::None => cell.tile,
     }
 }
 
-/// The cell the ray hit, ignoring the mode. Clear needs BOTH this and `designation_target`:
-/// digs live here, while channels and stockpiles live one cell across the entered face.
-fn picked_cell_target(cell: PickedCell, _mode: DesignateMode) -> [i32; 3] {
-    cell.tile
-}
-
-/// `rect` is the mode's own target rect; `picked_rect` is the rect at the cells the ray hit.
-/// They differ only for the standable-target modes, and only clear needs both.
-fn commands_for(mode: DesignateMode, rect: Rect, picked_rect: Rect) -> Vec<Command> {
+/// `picked_rect` is AC4's single-z rect at the cells the ray hit — dig's whole answer, and the
+/// half of clear that removes digs. `surface` is the followed ground, one rect per merged run —
+/// what channel and stockpile designate, and the half of clear that removes them.
+fn commands_for(mode: DesignateMode, picked_rect: Rect, surface: &[Rect]) -> Vec<Command> {
     match mode {
         DesignateMode::None => Vec::new(),
         DesignateMode::Dig => vec![Command::Designate {
             kind: DesignationKind::Dig,
-            rect,
+            rect: picked_rect,
         }],
-        DesignateMode::Channel => vec![Command::Designate {
-            kind: DesignationKind::Channel,
-            rect,
-        }],
-        DesignateMode::Stockpile => vec![Command::PlaceStockpile { rect }],
+        DesignateMode::Channel => surface
+            .iter()
+            .map(|rect| Command::Designate {
+                kind: DesignationKind::Channel,
+                rect: *rect,
+            })
+            .collect(),
+        DesignateMode::Stockpile => surface
+            .iter()
+            .map(|rect| Command::PlaceStockpile { rect: *rect })
+            .collect(),
         // Clear means "remove what is under the cursor", and after the targeting fix that is two
         // different cells: a dig sits at the cell the ray hit, while a channel or a stockpile
         // sits one cell across the entered face. Clearing only one of them leaves the other
@@ -212,11 +241,14 @@ fn commands_for(mode: DesignateMode, rect: Rect, picked_rect: Rect) -> Vec<Comma
         // NOTE: three commands per clear rather than two, which brings the 256-command bound
         // fractionally closer. That bound's split-pair hazard is already an open deferred item
         // and is not made materially worse by one more command.
-        DesignateMode::Clear => vec![
-            Command::CancelDesignation { rect: picked_rect },
-            Command::CancelDesignation { rect },
-            Command::RemoveStockpile { rect },
-        ],
+        DesignateMode::Clear => std::iter::once(Command::CancelDesignation { rect: picked_rect })
+            .chain(surface.iter().flat_map(|rect| {
+                [
+                    Command::CancelDesignation { rect: *rect },
+                    Command::RemoveStockpile { rect: *rect },
+                ]
+            }))
+            .collect(),
     }
 }
 
@@ -226,11 +258,11 @@ mod tests {
 
     use super::{DesignateMode, commands_for, designation_hint};
 
-    /// Every mode but clear sends one rect; clear is the only caller that needs both, so the
-    /// single-rect modes pass the same rect twice and the distinction stays visible at the
-    /// call sites that actually care.
+    /// Dig and clear read the picked rect; channel and stockpile read the followed surface. The
+    /// helper passes the same rect as both so a single-rect expectation stays readable, and the
+    /// call sites that care about the distinction spell it out.
     fn commands_at(mode: DesignateMode, rect: Rect) -> Vec<Command> {
-        commands_for(mode, rect, rect)
+        commands_for(mode, rect, &[rect])
     }
 
     #[test]
@@ -247,7 +279,7 @@ mod tests {
             max: [4, 5, 4],
         };
         assert_eq!(
-            commands_for(DesignateMode::Clear, standable_rect, picked_rect),
+            commands_for(DesignateMode::Clear, picked_rect, &[standable_rect]),
             vec![
                 Command::CancelDesignation { rect: picked_rect },
                 Command::CancelDesignation {

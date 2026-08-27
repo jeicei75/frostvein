@@ -408,6 +408,76 @@ fn the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells() {
     );
 }
 
+/// The coverage claim, judged by the daemon rather than asserted by the client.
+///
+/// MEASURED 2026-08-27: with AC4's single-z rect, a 6x6 stockpile drag on natural terrain kept a
+/// MEDIAN 19.4% of its footprint — because standable cells exist only where the surface IS the
+/// anchor's height, and a fixed z crosses a hillside in a thin band. That is Wolf's "stockpiling
+/// does pretty much nothing usually". Following the ground instead must land the WHOLE footprint,
+/// and must land NOTHING ELSE: a bounding box would also cover cells the drag never chose, and
+/// the sim would silently keep any cave floor among them — zoned underground, out of sight, the
+/// same silent-wrong-cell class this round exists to close.
+#[test]
+fn a_surface_following_drag_lands_its_whole_footprint_and_nothing_else() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let mirror =
+        client_core::Mirror::from_snapshot(snapshot).expect("the snapshot must build a mirror");
+    let dims = mirror.dims();
+    let top = dims.z as i32 - 1;
+
+    // A 6x6 footprint over rolling ground, chosen for genuine height variation so the single-z
+    // rule would demonstrably lose most of it.
+    let (corner, cells) = (0..dims.y as i32 - 6)
+        .flat_map(|y| (0..dims.x as i32 - 6).map(move |x| [x, y, top]))
+        .find_map(|corner| {
+            let far = [corner[0] + 5, corner[1] + 5, corner[2]];
+            let cells = client_core::surface_targets(&mirror, top, corner, far);
+            let heights: std::collections::BTreeSet<i32> =
+                cells.iter().map(|cell| cell[2]).collect();
+            (cells.len() == 36 && heights.len() >= 3).then_some((corner, cells))
+        })
+        .expect("the world must hold a 6x6 patch of rolling standable ground");
+
+    let flat_z = cells[0][2];
+    let single_z_would_keep = cells.iter().filter(|cell| cell[2] == flat_z).count();
+    assert!(
+        single_z_would_keep < cells.len(),
+        "this patch must actually be sloped, or the test proves nothing"
+    );
+
+    let rects = client_core::rects_for_cells(&cells);
+    assert!(
+        rects.len() < cells.len(),
+        "runs of same-height neighbours must merge; {} cells became {} rects",
+        cells.len(),
+        rects.len()
+    );
+    for rect in &rects {
+        let line = format!(
+            "{{\"type\":\"place_stockpile\",\"rect\":{{\"min\":{:?},\"max\":{:?}}}}}\n",
+            rect.min, rect.max
+        );
+        send_literal(&mut writer, line.as_bytes());
+    }
+
+    let mut expected: Vec<protocol::Zone> = cells
+        .iter()
+        .map(|cell| protocol::Zone { pos: *cell })
+        .collect();
+    expected.sort_by_key(|zone| zone.pos);
+    let observed = read_delta_with_marks(&mut reader, &[], &expected);
+    assert_eq!(
+        observed.zones.len(),
+        36,
+        "following the ground must land the whole 6x6 footprint; the single-z rect would have \
+         kept only {single_z_would_keep} of 36 here, at corner {corner:?}"
+    );
+}
+
 #[test]
 fn save_then_load_rewinds_every_client() {
     let daemon = Daemon::spawn();

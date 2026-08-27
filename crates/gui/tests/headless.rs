@@ -3299,6 +3299,142 @@ fn a_buried_channel_mark_climbs_onto_the_rock_covering_it() {
     );
 }
 
+/// MEASURED on the real world: the face neighbour is standable for 100% of TOP-face hits and only
+/// 8.5-11.8% of SIDE-face hits, because on flat ground the cell beside a block is another block.
+/// Pointing at the front edge of a surface block instead of its top therefore designated nothing —
+/// Wolf's "dragging might skip 2 first blocks". The fallback keeps the ledge case and fixes the
+/// flat-ground case.
+#[test]
+fn a_side_face_hit_on_flat_ground_falls_back_to_the_cell_above() {
+    let dims = Dims { x: 4, y: 4, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    // Flat ground: every column solid at z 1, open above.
+    for y in 0..dims.y as i32 {
+        for x in 0..dims.x as i32 {
+            tiles[index([x, y, 1])] = Tile::Solid(Material::Stone);
+        }
+    }
+    let mirror = client_core::Mirror::from_snapshot(snapshot_with_dims(dims, tiles, vec![]))
+        .expect("the flat world must build a mirror");
+
+    let picked = [1, 1, 1];
+    let east = [2, 1, 1];
+    assert!(
+        !client_core::is_standable(&mirror, east),
+        "on flat ground the cell beside a block is another block — this is the 8.5% case"
+    );
+    assert_eq!(
+        gui::designate::designation_target(
+            &mirror,
+            gui::pick::PickedCell {
+                tile: picked,
+                face: gui::pick::Face::East
+            },
+            DesignateMode::Channel
+        ),
+        [1, 1, 2],
+        "a side-face hit whose neighbour is solid must fall back to the cell above the block"
+    );
+    // The ledge case Wolf's ruling exists for is NOT sacrificed: where the face neighbour IS
+    // standable, it still wins over the cell above.
+    let mut ledged = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    ledged[index([1, 1, 1])] = Tile::Solid(Material::Stone);
+    ledged[index([1, 1, 2])] = Tile::Solid(Material::Stone);
+    ledged[index([2, 1, 0])] = Tile::Solid(Material::Stone);
+    let mirror = client_core::Mirror::from_snapshot(snapshot_with_dims(dims, ledged, vec![]))
+        .expect("the ledge world must build a mirror");
+    assert_eq!(
+        gui::designate::designation_target(
+            &mirror,
+            gui::pick::PickedCell {
+                tile: picked,
+                face: gui::pick::Face::East
+            },
+            DesignateMode::Channel
+        ),
+        [2, 1, 1],
+        "pointing at a wall that borders a ledge must still target that ledge"
+    );
+}
+
+/// AC4's single-z rect kept a median 19.4% of a 6x6 stockpile footprint on natural ground. RULED
+/// 2026-08-27 (Wolf): the standable modes follow the surface instead. Dig keeps single-z, where
+/// cutting one level into a slope is the point.
+#[test]
+fn a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level() {
+    let anchor = [1, 1, 1];
+    let release = [2, 1, 0];
+    let rig = CameraRig::new(anchor);
+    let anchor_cursor = rig
+        .project_world_point(anchor)
+        .expect("the literal anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let release_cursor = rig
+        .project_world_point(release)
+        .expect("the literal release tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    tiles[index(release)] = Tile::Solid(Material::Stone);
+
+    let drag = |key: KeyCode| {
+        let mut app = live_app(snapshot_with_dims(dims, tiles.clone(), vec![])).0;
+        install_pick_camera(&mut app, rig, anchor_cursor);
+        app.world_mut().resource_mut::<SliceLevel>().set(2);
+        app.update();
+        press_once(&mut app, key);
+        set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+        app.update();
+        clear_mouse(&mut app);
+        app.world_mut()
+            .query_filtered::<&mut Window, With<PrimaryWindow>>()
+            .single_mut(app.world_mut())
+            .expect("the pick harness owns one primary window")
+            .set_cursor_position(Some(release_cursor));
+        set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+        app.update();
+        clear_mouse(&mut app);
+        queued(&app)
+    };
+
+    assert_eq!(
+        drag(KeyCode::Digit2),
+        vec![
+            protocol::Command::Designate {
+                kind: DesignationKind::Channel,
+                rect: protocol::Rect {
+                    min: [1, 1, 2],
+                    max: [1, 1, 2]
+                },
+            },
+            protocol::Command::Designate {
+                kind: DesignationKind::Channel,
+                rect: protocol::Rect {
+                    min: [2, 1, 1],
+                    max: [2, 1, 1]
+                },
+            },
+        ],
+        "a channel drag across a step must reach the ground at BOTH heights, not flatten to one"
+    );
+    assert_eq!(
+        drag(KeyCode::Digit1),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: protocol::Rect {
+                min: [1, 1, 1],
+                max: [2, 1, 1]
+            },
+        }],
+        "dig is unchanged: one single-z rect at the anchor's level"
+    );
+}
+
 /// AC9's load-bearing clause: the bar NAMES THE ACTIVE MODE. Neutering `update_designate_hint`
 /// left the suite green and the bar reading its no-mode string forever.
 #[test]

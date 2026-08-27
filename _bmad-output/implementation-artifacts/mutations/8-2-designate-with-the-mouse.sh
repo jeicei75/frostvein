@@ -19,25 +19,25 @@ PY
 mutation "shared rect helper is replaced by local min max normalization" gui designation_input_uses_the_shared_rect_helper_not_local_normalization <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '''                client_core::rect_on_level(
-                    (anchor_tile[0], anchor_tile[1]),
-                    (release_tile[0], release_tile[1]),
-                    anchor_tile[2],
-                )
+old = '''            let picked_rect = client_core::rect_on_level(
+                (anchor_cell.tile[0], anchor_cell.tile[1]),
+                (release_cell.tile[0], release_cell.tile[1]),
+                anchor_cell.tile[2],
+            );
 '''
 assert s.count(old) == 1
-new = '''                Rect {
-                    min: [
-                        anchor_tile[0].min(release_tile[0]),
-                        anchor_tile[1].min(release_tile[1]),
-                        anchor_tile[2],
-                    ],
-                    max: [
-                        anchor_tile[0].max(release_tile[0]),
-                        anchor_tile[1].max(release_tile[1]),
-                        anchor_tile[2],
-                    ],
-                }
+new = '''            let picked_rect = Rect {
+                min: [
+                    anchor_cell.tile[0].min(release_cell.tile[0]),
+                    anchor_cell.tile[1].min(release_cell.tile[1]),
+                    anchor_cell.tile[2],
+                ],
+                max: [
+                    anchor_cell.tile[0].max(release_cell.tile[0]),
+                    anchor_cell.tile[1].max(release_cell.tile[1]),
+                    anchor_cell.tile[2],
+                ],
+            };
 '''
 p.write_text(s.replace(old, new))
 PY
@@ -45,9 +45,9 @@ PY
 mutation "release height replaces the anchor level" gui mouse_drag_uses_the_anchor_level_and_clears_its_anchor_on_release <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '                anchor_tile[2],\n'
+old = '                anchor_cell.tile[2],\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                release_tile[2],\n'))
+p.write_text(s.replace(old, '                release_cell.tile[2],\n'))
 PY
 
 mutation "abort no longer wins over a concurrent release" gui right_button_during_a_drag_abandons_it_and_sends_nothing <<'PY'
@@ -139,10 +139,12 @@ PY
 mutation "channel designates a dig" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = """        DesignateMode::Channel => vec![Command::Designate {
-            kind: DesignationKind::Channel,
-            rect,
-        }],"""
+# `DesignationKind::Channel` also appears in the Clear arm's neighbourhood, so the anchor takes
+# the Channel arm's map closure whole.
+old = """            .map(|rect| Command::Designate {
+                kind: DesignationKind::Channel,
+                rect: *rect,
+            })"""
 assert s.count(old) == 1
 p.write_text(s.replace(old, old.replace('DesignationKind::Channel', 'DesignationKind::Dig')))
 PY
@@ -150,9 +152,12 @@ PY
 mutation "stockpile placement issues nothing" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '        DesignateMode::Stockpile => vec![Command::PlaceStockpile { rect }],\n'
+old = '''        DesignateMode::Stockpile => surface
+            .iter()
+            .map(|rect| Command::PlaceStockpile { rect: *rect })
+            .collect(),'''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        DesignateMode::Stockpile => Vec::new(),\n'))
+p.write_text(s.replace(old, '        DesignateMode::Stockpile => Vec::new(),'))
 PY
 
 mutation "a mode key pressed mid-drag changes what the release commits" gui a_drag_commits_in_the_mode_it_began_in <<'PY'
@@ -175,14 +180,14 @@ PY
 mutation "the drag preview is never cleaned up" gui the_drag_preview_appears_while_dragging_and_disappears_on_release <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = """        if preview_rect.0.take().is_some() {
+old = """        if preview_cells_cache.0.take().is_some() {
             for entity in &previews {
                 commands.entity(entity).despawn();
             }
         }
         return;"""
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        preview_rect.0.take();\n        return;'))
+p.write_text(s.replace(old, '        preview_cells_cache.0.take();\n        return;'))
 PY
 
 # THE INSTRUMENTS. These are the rows that would have caught this round's HIGH findings: an
@@ -242,7 +247,7 @@ PY
 mutation "clear mode omits stockpile removal" gui clear_reaches_both_the_picked_cell_and_the_standable_one <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '            Command::RemoveStockpile { rect },\n'
+old = '                    Command::RemoveStockpile { rect: *rect },\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
@@ -294,11 +299,9 @@ PY
 mutation "clear stops reaching the cell the ray hit" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-# The test's expectation carries the same line at a deeper indent, so the anchor takes the
-# production arm's TWO lines together -- a bare single line matches twice and cannot apply.
-old = '            Command::CancelDesignation { rect: picked_rect },\n            Command::CancelDesignation { rect },\n'
+old = 'std::iter::once(Command::CancelDesignation { rect: picked_rect })'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Command::CancelDesignation { rect },\n'))
+p.write_text(s.replace(old, 'std::iter::empty::<Command>()'))
 PY
 
 mutation "the daemon is assumed to keep a designation anywhere" simd the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells <<'PY'
@@ -334,9 +337,9 @@ PY
 mutation "the preview promises marks the sim will discard" gui the_preview_covers_only_the_cells_the_sim_will_keep <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '            if !sim_will_keep(&mirror.0, tile, mode) {\n'
+old = '                .filter(|tile| sim_will_keep(mirror, *tile, mode))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if false {\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 mutation "a buried channel mark stays sealed inside the rock above it" gui a_buried_channel_mark_climbs_onto_the_rock_covering_it <<'PY'
@@ -349,4 +352,90 @@ old = """    if top == z {
     }"""
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let _ = (top, x, y, z);\n    slab_transform(position, -0.46)'))
+PY
+
+# ---------------------------------------------------------------------------
+# ROUND 3, 2026-08-27. Wolf drove the fixed build and it was STILL wrong, in
+# two ways that only measurement settled: the face rule landed 8.5-11.8% of
+# side-face hits, and AC4's single-z rect kept a median 19.4% of a 6x6
+# stockpile footprint on natural ground.
+# ---------------------------------------------------------------------------
+
+mutation "a side-face hit stops falling back to the cell above" gui a_side_face_hit_on_flat_ground_falls_back_to_the_cell_above <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
+old = """            let above = [cell.tile[0], cell.tile[1], cell.tile[2] + 1];
+            if client_core::is_standable(mirror, above) {
+                return above;
+            }"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "the fallback wins over a standable ledge" gui a_side_face_hit_on_flat_ground_falls_back_to_the_cell_above <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
+old = """            if client_core::is_standable(mirror, neighbour) {
+                return neighbour;
+            }"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "the standable modes flatten back to the anchor level" gui a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level <<'PY'
+import pathlib
+p = pathlib.Path('crates/client-core/src/lib.rs'); s = p.read_text()
+old = '            if let Some(cell) = standable_in_column(mirror, x, y, a[2], level) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if let Some(cell) = Some([x, y, a[2]]) {\n'))
+PY
+
+mutation "dig follows the surface instead of cutting one level" gui a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
+old = """        DesignateMode::Dig => vec![Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: picked_rect,
+        }],"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, """        DesignateMode::Dig => surface
+            .iter()
+            .map(|rect| Command::Designate {
+                kind: DesignationKind::Dig,
+                rect: *rect,
+            })
+            .collect(),"""))
+PY
+
+mutation "the column scan stops one short of the cut surface" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
+import pathlib
+p = pathlib.Path('crates/client-core/src/lib.rs'); s = p.read_text()
+old = '    (0..=level + 1)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    (0..=level)\n'))
+PY
+
+mutation "the followed surface is sent as one bounding box" simd a_surface_following_drag_lands_its_whole_footprint_and_nothing_else <<'PY'
+import pathlib
+p = pathlib.Path('crates/client-core/src/lib.rs'); s = p.read_text()
+old = """            Some(last)
+                if last.max[1] == cell[1]
+                    && last.max[2] == cell[2]
+                    && last.max[0] + 1 == cell[0] =>
+            {
+                last.max[0] = cell[0];
+            }"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, """            Some(last) => {
+                last.min = [last.min[0].min(cell[0]), last.min[1].min(cell[1]), last.min[2].min(cell[2])];
+                last.max = [last.max[0].max(cell[0]), last.max[1].max(cell[1]), last.max[2].max(cell[2])];
+            }"""))
+PY
+
+mutation "the preview stops following the ground with the send path" gui a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        DesignateMode::Channel | DesignateMode::Stockpile => client_core::surface_targets(\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        DesignateMode::Stockpile => client_core::surface_targets(\n'))
 PY

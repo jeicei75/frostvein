@@ -91,7 +91,10 @@ pub struct HoverHighlight(pub [i32; 3]);
 pub struct DragPreview(pub [i32; 3]);
 
 #[derive(Resource, Default)]
-pub struct DragPreviewRect(Option<protocol::Rect>);
+/// The cells the preview currently covers, cached so an unchanged drag does not respawn its
+/// slabs every frame. Cells rather than a rect since the standable modes follow the ground and
+/// their footprint is no longer a single-z box.
+pub struct DragPreviewCells(Option<Vec<[i32; 3]>>);
 
 /// Leaves a visible gutter between neighbouring mark slabs. The mesh is 1.02 wide and this scale
 /// is applied on top of it, so a slab covers 1.02 x 0.94 = 0.9588 of its tile — inset ~2% per
@@ -263,10 +266,10 @@ pub fn sync_drag_preview(
     slice: Res<SliceLevel>,
     assets: Option<Res<ProjectionAssets>>,
     previews: Query<BevyEntity, With<DragPreview>>,
-    mut preview_rect: ResMut<DragPreviewRect>,
+    mut preview_cells_cache: ResMut<DragPreviewCells>,
 ) {
     let (Some(anchor), Some(assets)) = (anchor.0, assets) else {
-        if preview_rect.0.take().is_some() {
+        if preview_cells_cache.0.take().is_some() {
             for entity in &previews {
                 commands.entity(entity).despawn();
             }
@@ -281,52 +284,60 @@ pub fn sync_drag_preview(
         return;
     };
     let mode = drag_mode.0.unwrap_or(DesignateMode::None);
-    let anchor_tile = preview_target(anchor, mode);
-    let release_tile = preview_target(release, mode);
-    let rect = client_core::rect_on_level(
-        (anchor_tile[0], anchor_tile[1]),
-        (release_tile[0], release_tile[1]),
-        anchor_tile[2],
-    );
-    if preview_rect.0 == Some(rect) {
+    // The preview is built from THE SAME functions the release path sends, so what is on screen
+    // is what goes on the wire — the property that was missing when two inert modes previewed a
+    // full rect and designated nothing.
+    let cells = preview_cells(&mirror.0, slice.level(), anchor, release, mode);
+    if preview_cells_cache.0.as_deref() == Some(cells.as_slice()) {
         return;
     }
     for entity in &previews {
         commands.entity(entity).despawn();
     }
-    preview_rect.0 = Some(rect);
-    for x in rect.min[0]..=rect.max[0] {
-        for y in rect.min[1]..=rect.max[1] {
-            let tile = [x, y, rect.min[2]];
-            // Preview ONLY what the sim will keep. Channel and stockpile are filtered on
-            // standability and everything else is dropped without a word, so an unfiltered
-            // preview promises marks that will never appear — which is precisely how two inert
-            // modes looked "fragile and confusing" rather than broken.
-            if !sim_will_keep(&mirror.0, tile, mode) {
-                continue;
-            }
-            let (transform, material) =
-                preview_appearance(mode, &mirror.0, tile, slice.level(), &assets);
-            commands.spawn((
-                DragPreview(tile),
-                transform,
-                Mesh3d(assets.mark_mesh.clone()),
-                MeshMaterial3d(material),
-                ClientLocal,
-            ));
-        }
+    for tile in &cells {
+        let (transform, material) =
+            preview_appearance(mode, &mirror.0, *tile, slice.level(), &assets);
+        commands.spawn((
+            DragPreview(*tile),
+            transform,
+            Mesh3d(assets.mark_mesh.clone()),
+            MeshMaterial3d(material),
+            ClientLocal,
+        ));
     }
+    preview_cells_cache.0 = Some(cells);
 }
 
-/// Which cell the PREVIEW covers. Every mode but clear previews the cell it will designate.
+/// Exactly the cells the release will designate, for the mode that will commit.
 ///
-/// Clear's wire target is the standable neighbour, so it can reach a channel or a stockpile, but
-/// it also cancels the dig at the cell the ray hit. Previewing the cell under the cursor is the
-/// honest picture of "this is what I am about to clear".
-fn preview_target(cell: PickedCell, mode: DesignateMode) -> [i32; 3] {
+/// Dig and clear keep AC4's single-z rect at the cells the ray hit; channel and stockpile follow
+/// the ground. Both branches then drop whatever the sim would refuse, so the preview never
+/// promises a mark that cannot appear.
+fn preview_cells(
+    mirror: &Mirror,
+    level: i32,
+    anchor: PickedCell,
+    release: PickedCell,
+    mode: DesignateMode,
+) -> Vec<[i32; 3]> {
     match mode {
-        DesignateMode::Clear => cell.tile,
-        _ => designation_target(cell, mode),
+        DesignateMode::Channel | DesignateMode::Stockpile => client_core::surface_targets(
+            mirror,
+            level,
+            designation_target(mirror, anchor, mode),
+            designation_target(mirror, release, mode),
+        ),
+        _ => {
+            let rect = client_core::rect_on_level(
+                (anchor.tile[0], anchor.tile[1]),
+                (release.tile[0], release.tile[1]),
+                anchor.tile[2],
+            );
+            (rect.min[1]..=rect.max[1])
+                .flat_map(|y| (rect.min[0]..=rect.max[0]).map(move |x| [x, y, rect.min[2]]))
+                .filter(|tile| sim_will_keep(mirror, *tile, mode))
+                .collect()
+        }
     }
 }
 

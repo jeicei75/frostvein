@@ -228,7 +228,7 @@ pub fn projection_systems(app: &mut App) {
 /// sixth time.
 pub fn client_systems(app: &mut App) {
     app.init_resource::<PickedTile>()
-        .init_resource::<crate::project::DragPreviewRect>()
+        .init_resource::<crate::project::DragPreviewCells>()
         .init_resource::<crate::command::PendingCommands>()
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
