@@ -960,6 +960,40 @@ backstop; five consecutive runs green, then a full gate green. Worth noting agai
 record: that action item named `--frames` in `gui`, and the identical mistake was sitting
 unnoticed in the daemon's test harness the whole time.
 
+## RESUME HERE — 2026-08-28
+
+**Session paused 2026-08-27 by Wolf.** Tree clean, full gate GREEN, **16 commits on
+`8-2-designate-with-the-mouse`, none pushed, no PR.** Status stays `in-progress`.
+
+**Binaries are current — do not rebuild blind, check the stamps:**
+
+| Binary | Built | From |
+| --- | --- | --- |
+| `target/x86_64-pc-windows-gnu/release/gui.exe` | 2026-08-27T16:54:53Z | `8ee683c`, the last commit touching `gui`/`client-core`/`protocol` |
+| `target/debug/tui` | 2026-08-27T17:25:42Z | `5880e51` |
+| `target/debug/simd` | 2026-08-27T15:41:19Z | unchanged since; `5880e51` touched only its *tests* |
+
+**Copy `gui.exe` Windows-side and check the copy's mtime** — the stale-binary trap has fired five
+times and the copy is the file that has been stale every time.
+
+**The only work left is the readout pass** — `8-2-signoff/task-7-vehicle-runbook.md`, the card at
+the top. It asks no visual judgement. Owed:
+
+- [ ] Four `marks:` lines, one per mode. **Two reads per drag pair**: a dig sits at the cell the
+      ray hit, a channel or stockpile ONE LEVEL UP, so no single `--z` shows all four. Write the
+      footprint down BEFORE reading; a count with no expectation is not a check.
+- [ ] Two fps readings, `F3`, working zoom and full vista. **A failed reading is the result.**
+
+Dig was already confirmed by Wolf on 2026-08-27 — he counted it and checked the form — and the
+orientation question is closed as observed. Channel, stockpile and clear plus the two fps numbers
+are the remainder. When they land: AC18, AC19's takes-effect half and NFR6 close on evidence, and
+**8.2 goes to `done` with AC13's rendered half and AC19's reads-clearly half filed against the gfx
+pass**, which is where Wolf ruled them.
+
+**Do not** re-open the look questions, re-tune a colour, or claim an AC on "better".
+
+---
+
 **gui.exe MUST BE REBUILT before the session resumes.** The 05:13:38Z binary predates all of this
 and has two dead modes in it.
 
