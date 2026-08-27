@@ -800,6 +800,59 @@ Three rows in the round-1 table were re-pointed on the way — two anchors the f
 one renamed test — all three caught by `audit-mutations.py` **before** the run, which is the guard
 `17b4e94` built doing its job.
 
+**ROUND 3 — the fixed build was driven and was STILL wrong, in two ways only measurement settled.**
+Wolf: "still not there... dragging might skip 2 first blocks... stockpiling does pretty much
+nothing usually". Both real, both quantified against the generated world rather than argued:
+
+- **The face-neighbour rule lands 100% of TOP-face hits and 8.5% / 11.0% / 9.6% / 11.8% of
+  East / West / North / South hits** (16,367 surface blocks sampled). On flat ground the cell
+  beside a block is another block. Pointing at a block's *front edge* rather than its top
+  designated nothing — that is "skip 2 first blocks". **The 2026-08-27 ruling did not survive
+  contact**, and the measurement is the reason, not taste. **RE-RULED (Wolf): fall back to the
+  cell directly above the block**, standable for 100% of surface blocks, while keeping the face
+  neighbour where it *is* standable so a wall bordering a ledge still targets that ledge.
+- **AC4's single-z rect keeps a MEDIAN 19.4% of a 6x6 stockpile footprint and 14.0% of a 10x10**;
+  60% of 6x6 drags keep under a quarter. Standable cells exist only where the surface *is* the
+  anchor's height, and a fixed z crosses a hillside in a thin band. **That is "stockpiling does
+  pretty much nothing usually", and it had been true since the AC was written — a spec defect,
+  not a code defect.** **RULED (Wolf): the standable modes follow the ground**, one cell per
+  column, chosen nearest the height the drag began at so a ledge drag stays on its ledge.
+  **Dig keeps the single-z rect** — cutting one level into a slope is what dig is for
+  (dig keeps 88.9% / 58.3% / 51.0% at 3x3 / 6x6 / 10x10, which is the intended shape).
+
+**Said plainly because it matters more than the fixes: part of what Wolf saw was the preview
+finally telling the truth.** Before the round-2 fix it drew the full rect and the sim discarded
+most of it in silence. The cells "missing" from his drags had always been thrown away. The fix
+did not create that loss; it made it visible, and what it revealed was AC3/AC4 being wrong for
+two of the four modes.
+
+**AC3 and AC4 are AMENDED for the standable modes only** — they still hold verbatim for dig. The
+followed surface is sent as **exact merged runs, never a bounding box**: a box would also cover
+cells the drag never chose and the sim would silently keep any cave floor among them, which is
+the same silent-wrong-cell class as the inert modes. `surface_targets` and `rects_for_cells` live
+in `client-core` so the daemon's own test proves the coverage claim with the real binary as judge,
+and so the preview is built from the very functions the release path sends.
+
+**Sabotage round 3 — 7 rows, 7 KILLED, no survivor.** Eight round-1/2 rows had to be re-pointed
+first, all eight caught by `audit-mutations.py` before the run. Table 33 → 40 rows, suite 175 →
+180.
+
+| # | Sabotage | Test that went red |
+| --- | --- | --- |
+| 16 | a side-face hit stops falling back to the cell above | `a_side_face_hit_on_flat_ground_falls_back_to_the_cell_above` |
+| 17 | the fallback wins over a standable ledge | `a_side_face_hit_on_flat_ground_falls_back_to_the_cell_above` |
+| 18 | the standable modes flatten back to the anchor level | `a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level` |
+| 19 | dig follows the surface instead of cutting one level | `a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level` |
+| 20 | the column scan stops one short of the cut surface | `each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts` |
+| 21 | the followed surface is sent as one bounding box | `a_surface_following_drag_lands_its_whole_footprint_and_nothing_else` |
+| 22 | the preview stops following the ground with the send path | `a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level` |
+
+**WHAT CHANNELLING IS FOR**, asked twice and answered from the spec rather than the code: **FR9 —
+dig is same-level, channel is dig DOWN, leaving a ramp.** It is the down-staircase. Stand on a
+floor, channel it, and the block beneath becomes a walkable ramp so dwarves can descend; FR2 gives
+the terrain rolling height specifically "to exercise climb pathfinding and channel digging". On a
+flat floor, which is where it is actually used, the single-z rect was always right for it.
+
 **gui.exe MUST BE REBUILT before the session resumes.** The 05:13:38Z binary predates all of this
 and has two dead modes in it.
 
