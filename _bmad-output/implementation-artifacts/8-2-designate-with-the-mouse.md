@@ -742,6 +742,67 @@ cost something and the first time the cost was caught before it entered the reco
 The binary is confirmed current: mtime 2026-08-27T05:13:38Z is later than `fb61f3f`, the tree is
 clean, so every 2026-08-26 review patch is in it.
 
+**WHAT THE HANDS FOUND, 2026-08-27 — two of the four modes had never worked at all.**
+
+Wolf drove it on the vehicle and reported it as "a bit fragile and confusing... sometimes it loses
+dragged tile color... sometimes not colorize it at all... channelling, what should it do". Four
+defects behind that, none of them look-tuning, none visible to any instrument:
+
+1. **Channel and stockpile were COMPLETELY INERT.** Picking only ever resolves a `Solid` or `Ramp`
+   cell (`is_visible_at_slice`), and `sim-core` filters both of those commands on standability —
+   `Tile::Empty` with support beneath — dropping the remainder in **silence**: no error, no ack,
+   no log. The client sent well-formed commands the daemon accepted and discarded. **Proven
+   against the real binary, not inferred:** a channel rect at the picked cell yields 0
+   designations, the same rect one cell up yields 9; stockpile behaves identically. **AC10 was
+   false for two of its three clauses**, and AC19's four hand drags were never possible.
+2. **Clear was half-working** — it removed digs, which do live at the picked cell, and could never
+   reach a channel or a stockpile, which live one cell across the entered face.
+3. **The preview died on any frame whose ray missed terrain** (`project.rs`, `sync_drag_preview`)
+   while the drag stayed live and still committed on release. That is "loses dragged tile color",
+   and it means dragging blind rather than merely a flicker.
+4. **Channel marks never got 7.2's buried-mark fix.** Dig climbs onto the top face of covering
+   rock via `dig_mark_level`; channel was an unconditional `slab_transform(position, -0.46)` at
+   both the committed mark and the preview, so it sat sealed inside anything drawn above it —
+   7.2's measured "0 of 50 marks visible while the count read 50", reproduced for channel.
+
+**The hole underneath all four: no test ever asked the daemon whether it KEPT anything.** Every
+`gui` test asserts what the client queues. The review's "the feature is genuinely wired, all 15
+hops reach real live callers" was true about the client's hops and structurally blind to the sim's
+filters — and the instruments are blind the same way, because `marks: designations=D of X`
+compares projected entities to mirror entities, so a rect the sim discarded reads `0 of 0` and a
+slab spawned inside rock is projected and counted like any other. **Every §6 capture could have
+gone green while showing nothing.** This is the inert-seam defect displaced one level further out
+again: wiring → instruments → the sim's own acceptance.
+
+**RULED 2026-08-27 (Wolf): the target is the neighbour across the face the ray entered.** A top
+face channels the air directly above; a cliff face targets the cell you are looking into, which is
+standable exactly when it borders a ledge. The face was already computed for AC13's highlight and
+is now behavioural rather than decorative. Dig is unchanged.
+
+**Fixed and pinned** (`8ccb569`): `client-core` gained `is_standable`, the client previews only
+cells the sim will keep, and `crates/simd/tests/serve.rs` now runs the round trip with
+`client_core::is_standable` as the oracle and the **real daemon as the judge** — so the rule the
+client uses and the rule the sim enforces are pinned against each other rather than free to drift
+apart again. Suite 165 → 175; mutation table 27 → 33 rows.
+
+**Sabotage round 2 — 6 rows, 6 KILLED, no survivor.**
+
+| # | Sabotage | Test that went red |
+| --- | --- | --- |
+| 10 | channel and stockpile revert to the picked solid cell | `each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts` |
+| 11 | clear stops reaching the cell the ray hit | `each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts` |
+| 12 | standability drops its support check | `the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells` |
+| 13 | a missed ray erases the live preview | `the_drag_preview_survives_a_frame_whose_ray_misses_terrain` |
+| 14 | preview promises marks the sim discards | `the_preview_covers_only_the_cells_the_sim_will_keep` |
+| 15 | buried channel mark stays sealed in the rock | `a_buried_channel_mark_climbs_onto_the_rock_covering_it` |
+
+Three rows in the round-1 table were re-pointed on the way — two anchors the fix reformatted and
+one renamed test — all three caught by `audit-mutations.py` **before** the run, which is the guard
+`17b4e94` built doing its job.
+
+**gui.exe MUST BE REBUILT before the session resumes.** The 05:13:38Z binary predates all of this
+and has two dead modes in it.
+
 **Owed by the rest of this session:** AC19's four hand drags on surface and slice, AC13's rendered
 half on a cliff face / corridor wall / shaft side, AC15 and AC16 end to end, AC18's `tui`
 cross-check, and the two fps readings. None observed yet.
