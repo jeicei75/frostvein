@@ -15,8 +15,8 @@ use crate::{
         light_properties, material_color, rim_dissolved_color, snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
-    designate::{DesignateMode, DragAnchor, DragMode},
-    pick::PickedTile,
+    designate::{DesignateMode, DragAnchor, DragMode, designation_target},
+    pick::{PickedCell, PickedTile},
     slice::SliceLevel,
     transform::world_to_render,
 };
@@ -265,7 +265,7 @@ pub fn sync_drag_preview(
     previews: Query<BevyEntity, With<DragPreview>>,
     mut preview_rect: ResMut<DragPreviewRect>,
 ) {
-    let (Some(anchor), Some(release), Some(assets)) = (anchor.0, picked.tile(), assets) else {
+    let (Some(anchor), Some(assets)) = (anchor.0, assets) else {
         if preview_rect.0.take().is_some() {
             for entity in &previews {
                 commands.entity(entity).despawn();
@@ -273,8 +273,21 @@ pub fn sync_drag_preview(
         }
         return;
     };
-    let rect =
-        client_core::rect_on_level((anchor[0], anchor[1]), (release[0], release[1]), anchor[2]);
+    // A drag stays live across frames whose ray misses terrain — cursor over sky, over a gap,
+    // past the world edge. Despawning the whole preview on those frames left the boss dragging
+    // BLIND while the drag went on committing on release; keep the last rect standing and let the
+    // next frame that hits something update it.
+    let Some(release) = picked.0 else {
+        return;
+    };
+    let mode = drag_mode.0.unwrap_or(DesignateMode::None);
+    let anchor_tile = preview_target(anchor, mode);
+    let release_tile = preview_target(release, mode);
+    let rect = client_core::rect_on_level(
+        (anchor_tile[0], anchor_tile[1]),
+        (release_tile[0], release_tile[1]),
+        anchor_tile[2],
+    );
     if preview_rect.0 == Some(rect) {
         return;
     }
@@ -284,14 +297,16 @@ pub fn sync_drag_preview(
     preview_rect.0 = Some(rect);
     for x in rect.min[0]..=rect.max[0] {
         for y in rect.min[1]..=rect.max[1] {
-            let tile = [x, y, anchor[2]];
-            let (transform, material) = preview_appearance(
-                drag_mode.0.unwrap_or(DesignateMode::None),
-                &mirror.0,
-                tile,
-                slice.level(),
-                &assets,
-            );
+            let tile = [x, y, rect.min[2]];
+            // Preview ONLY what the sim will keep. Channel and stockpile are filtered on
+            // standability and everything else is dropped without a word, so an unfiltered
+            // preview promises marks that will never appear — which is precisely how two inert
+            // modes looked "fragile and confusing" rather than broken.
+            if !sim_will_keep(&mirror.0, tile, mode) {
+                continue;
+            }
+            let (transform, material) =
+                preview_appearance(mode, &mirror.0, tile, slice.level(), &assets);
             commands.spawn((
                 DragPreview(tile),
                 transform,
@@ -300,6 +315,33 @@ pub fn sync_drag_preview(
                 ClientLocal,
             ));
         }
+    }
+}
+
+/// Which cell the PREVIEW covers. Every mode but clear previews the cell it will designate.
+///
+/// Clear's wire target is the standable neighbour, so it can reach a channel or a stockpile, but
+/// it also cancels the dig at the cell the ray hit. Previewing the cell under the cursor is the
+/// honest picture of "this is what I am about to clear".
+fn preview_target(cell: PickedCell, mode: DesignateMode) -> [i32; 3] {
+    match mode {
+        DesignateMode::Clear => cell.tile,
+        _ => designation_target(cell, mode),
+    }
+}
+
+/// Whether the sim would KEEP a designation of this mode at this cell.
+///
+/// Mirrors the two filters in `sim-core`'s command handling: dig keeps `Tile::Solid`, channel and
+/// stockpile keep standable cells, and both drop the remainder in silence.
+fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
+    match mode {
+        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_))),
+        DesignateMode::Channel | DesignateMode::Stockpile => {
+            client_core::is_standable(mirror, tile)
+        }
+        // Clear removes rather than designates; there is nothing for the sim to filter.
+        DesignateMode::Clear | DesignateMode::None => true,
     }
 }
 
@@ -320,7 +362,10 @@ fn preview_appearance(
             slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
             assets.dig_mark.clone(),
         ),
-        DesignateMode::Channel => (slab_transform(tile, -0.46), assets.channel_mark.clone()),
+        DesignateMode::Channel => (
+            channel_slab(mirror, tile, level),
+            assets.channel_mark.clone(),
+        ),
         DesignateMode::Stockpile => (slab_transform(tile, -0.46), assets.zone_mark.clone()),
         DesignateMode::None | DesignateMode::Clear => (
             slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
@@ -704,7 +749,22 @@ fn designation_mark_transform(
             let [x, y, _] = position;
             slab_transform([x, y, dig_mark_level(mirror, position, level)], 0.54)
         }
-        DesignationKind::Channel => slab_transform(position, -0.46),
+        DesignationKind::Channel => channel_slab(mirror, position, level),
+    }
+}
+
+/// A channel mark sits at the BOTTOM of its air cell — the top face of the rock it will turn into
+/// a ramp. That is right until something is drawn above it, and then the slab is sealed inside
+/// opaque geometry, exactly as buried digs were before 7.2 fixed them. The instruments cannot see
+/// it: a slab inside rock is projected and counted like any other, and 7.2 measured 0 of 50 marks
+/// visible while the count correctly read 50. Dig got that fix; channel never did. This is it.
+fn channel_slab(mirror: &Mirror, position: [i32; 3], level: i32) -> Transform {
+    let [x, y, z] = position;
+    let top = dig_mark_level(mirror, position, level);
+    if top == z {
+        slab_transform(position, -0.46)
+    } else {
+        slab_transform([x, y, top], 0.54)
     }
 }
 

@@ -185,6 +185,28 @@ impl Mirror {
     }
 }
 
+/// Whether the sim will KEEP a designation at `pos`, for the two commands it filters on
+/// standability: `Designate { kind: Channel }` and `PlaceStockpile`.
+///
+/// The sim keeps only standable positions and **drops the rest without a word** — no error, no
+/// ack, no diagnostic. Measured 2026-08-27 against the real daemon: a channel rect at a solid
+/// cell yields 0 designations, the same rect one level up yields 9; a stockpile rect behaves
+/// identically. A client that cannot answer this question has no way to tell "the sim refused
+/// every tile" from "the feature is broken", which is exactly how every channel and every
+/// stockpile the Bevy client had ever issued stayed inert through a full code review.
+///
+/// NOTE: this deliberately restates `sim-core`'s `Terrain::is_standable`. Clients must not depend
+/// on `sim-core` (the gate probes for that edge), so the rule is duplicated here on purpose and
+/// pinned against the real daemon by `crates/simd/tests/designation_targets.rs` — if the sim's
+/// rule ever moves, that test goes red rather than this silently disagreeing.
+pub fn is_standable(mirror: &Mirror, pos: [i32; 3]) -> bool {
+    matches!(mirror.tile(pos), Some(Tile::Empty))
+        && matches!(
+            mirror.tile([pos[0], pos[1], pos[2] - 1]),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+}
+
 pub fn rect_on_level(a: (i32, i32), b: (i32, i32), z: i32) -> Rect {
     Rect {
         min: [a.0.min(b.0), a.1.min(b.1), z],

@@ -269,6 +269,145 @@ fn read_delta_with_marks(
     panic!("daemon never emitted expected marks; observed {observed:?}");
 }
 
+/// AC10 END TO END, and the coverage hole that let two dead modes survive a full code review.
+///
+/// Every `gui` test asserts what the CLIENT queues. Not one of them ever asked the daemon whether
+/// it KEPT anything — and that is exactly where channel and stockpile were being thrown away.
+/// Picking can only ever resolve a SOLID cell, `sim-core` filters both of those commands on
+/// standability, and the remainder is dropped in silence: no error, no ack, no log. So the client
+/// sent well-formed commands that the daemon accepted and discarded, and every layer above was
+/// green. Measured 2026-08-27 against this binary: a channel rect at a solid cell yields 0
+/// designations, the same rect one cell up yields 9.
+///
+/// The oracle here is `client_core::is_standable` — the predicate the CLIENT uses to choose a
+/// cell — judged by the real daemon. If either rule ever moves, this goes red instead of the two
+/// silently disagreeing again.
+#[test]
+fn the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let mirror =
+        client_core::Mirror::from_snapshot(snapshot).expect("the snapshot must build a mirror");
+    let dims = mirror.dims();
+
+    // A solid cell with a standable cell directly above it: what a top-face pick resolves, and
+    // the neighbour the client now targets for channel and stockpile.
+    let (solid, standable) = (0..dims.z as i32)
+        .flat_map(|z| {
+            (0..dims.y as i32).flat_map(move |y| (0..dims.x as i32).map(move |x| [x, y, z]))
+        })
+        .find_map(|cell| {
+            let above = [cell[0], cell[1], cell[2] + 1];
+            (matches!(mirror.tile(cell), Some(protocol::Tile::Solid(_)))
+                && client_core::is_standable(&mirror, above))
+            .then_some((cell, above))
+        })
+        .expect("the generated world must hold a solid cell with standable air above it");
+    assert!(
+        !client_core::is_standable(&mirror, solid),
+        "the cell the ray hits must NOT be standable — that is the whole defect"
+    );
+
+    let rect = |cell: [i32; 3]| format!("{{\"min\":{cell:?},\"max\":{cell:?}}}");
+    let designation = |cell: [i32; 3], kind| protocol::Designation { pos: cell, kind };
+
+    // A channel at the cell the ray hit, followed by a dig at the SAME cell. The dig is a
+    // positive control: commands on one connection are ordered, so when the dig's mark arrives
+    // the channel has certainly been processed. Without it, "no channel mark" is indistinguishable
+    // from "the daemon has not read the command yet" — and would pass on an empty first delta.
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{}}}\n",
+            rect(solid)
+        )
+        .as_bytes(),
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{}}}\n",
+            rect(solid)
+        )
+        .as_bytes(),
+    );
+    let applied = read_delta_with_marks(
+        &mut reader,
+        &[designation(solid, protocol::DesignationKind::Dig)],
+        &[],
+    );
+    assert!(
+        !applied
+            .designations
+            .iter()
+            .any(|mark| mark.kind == protocol::DesignationKind::Channel),
+        "a channel at the picked (solid) cell must be dropped; the daemon kept {:?}",
+        applied.designations
+    );
+
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"cancel_designation\",\"rect\":{}}}\n",
+            rect(solid)
+        )
+        .as_bytes(),
+    );
+    let _ = read_delta_with_marks(&mut reader, &[], &[]);
+
+    // The same rect one cell across the entered face IS kept.
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{}}}\n",
+            rect(standable)
+        )
+        .as_bytes(),
+    );
+    let _ = read_delta_with_marks(
+        &mut reader,
+        &[designation(standable, protocol::DesignationKind::Channel)],
+        &[],
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"cancel_designation\",\"rect\":{}}}\n",
+            rect(standable)
+        )
+        .as_bytes(),
+    );
+    let _ = read_delta_with_marks(&mut reader, &[], &[]);
+
+    // Stockpiles run through the same filter. Send the rejected one FIRST so the accepted one
+    // that follows proves both were processed.
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"place_stockpile\",\"rect\":{}}}\n",
+            rect(solid)
+        )
+        .as_bytes(),
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"place_stockpile\",\"rect\":{}}}\n",
+            rect(standable)
+        )
+        .as_bytes(),
+    );
+    let zoned = read_delta_with_marks(&mut reader, &[], &[protocol::Zone { pos: standable }]);
+    assert!(
+        !zoned.zones.iter().any(|zone| zone.pos == solid),
+        "a stockpile at the picked (solid) cell must be dropped; the daemon kept {:?}",
+        zoned.zones
+    );
+}
+
 #[test]
 fn save_then_load_rewinds_every_client() {
     let daemon = Daemon::spawn();

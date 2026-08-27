@@ -2486,7 +2486,10 @@ fn mouse_drag_uses_the_anchor_level_and_clears_its_anchor_on_release() {
         .resource_mut::<ButtonInput<MouseButton>>()
         .press(MouseButton::Left);
     app.update();
-    assert_eq!(app.world().resource::<DragAnchor>().0, Some(anchor));
+    assert_eq!(
+        app.world().resource::<DragAnchor>().0.map(|cell| cell.tile),
+        Some(anchor)
+    );
     // MinimalPlugins does not run InputPlugin's transition clearing between frames.
     app.world_mut()
         .resource_mut::<ButtonInput<MouseButton>>()
@@ -2830,6 +2833,17 @@ fn designation_app(
     (app, sender)
 }
 
+fn preview_tiles(app: &mut App) -> Vec<[i32; 3]> {
+    let mut tiles = app
+        .world_mut()
+        .query::<&DragPreview>()
+        .iter(app.world())
+        .map(|preview| preview.0)
+        .collect::<Vec<_>>();
+    tiles.sort_unstable();
+    tiles
+}
+
 fn set_mouse(app: &mut App, act: impl FnOnce(&mut ButtonInput<MouseButton>)) {
     act(&mut app.world_mut().resource_mut::<ButtonInput<MouseButton>>());
 }
@@ -2859,50 +2873,86 @@ fn drag_one_tile(app: &mut App, mode_key: KeyCode) {
     clear_mouse(app);
 }
 
-/// AC2, AC8 and AC10: each of the four mode keys issues ITS OWN wire command. Collapsing the
-/// digit arms, or making channel emit dig, or making stockpile emit nothing, all left the suite
-/// green — only `Digit1` was ever pressed anywhere.
+/// AC2, AC8 and AC10: each of the four mode keys issues ITS OWN wire command, AT THE CELL THE SIM
+/// WILL ACCEPT. Collapsing the digit arms, or making channel emit dig, or making stockpile emit
+/// nothing, all left the suite green — only `Digit1` was ever pressed anywhere.
+///
+/// The cell matters as much as the command, and that is what this test gained on 2026-08-27.
+/// Picking resolves a SOLID cell; `sim-core` filters channel and stockpile on standability and
+/// drops everything else in silence. Sending the picked cell therefore made both modes completely
+/// inert against the real daemon — proven, not inferred: a channel rect at the solid cell yields
+/// 0 designations and the same rect one level up yields 9. Asserting only the command variant, as
+/// this test did before, cannot see that at all.
 #[test]
-fn each_mode_key_sends_its_own_distinct_wire_command() {
-    let anchor = [1, 1, 1];
-    let rect = protocol::Rect {
-        min: anchor,
-        max: anchor,
+fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
+    let picked = [1, 1, 1];
+    // The ray enters the top face here, so the standable neighbour is the air cell directly
+    // above. Asserted rather than assumed: if the rig ever changes, this fails legibly instead of
+    // silently re-testing a different geometry.
+    let (probe, _probe_sender) = designation_app(picked);
+    assert_eq!(
+        probe.world().resource::<gui::pick::PickedTile>().0,
+        Some(gui::pick::PickedCell {
+            tile: picked,
+            face: gui::pick::Face::Top
+        }),
+        "this test's expectations are written for a top-face hit on the anchor"
+    );
+    let standable = [1, 1, 2];
+    assert!(
+        client_core::is_standable(&probe.world().resource::<MirrorResource>().0, standable),
+        "the neighbour across the entered face must be a cell the sim will keep — an independent \
+         check of the rule, not a re-run of the client's own arithmetic"
+    );
+
+    let at = |tile: [i32; 3]| protocol::Rect {
+        min: tile,
+        max: tile,
     };
     let expected: [(KeyCode, Vec<protocol::Command>); 4] = [
         (
             KeyCode::Digit1,
             vec![protocol::Command::Designate {
                 kind: DesignationKind::Dig,
-                rect,
+                rect: at(picked),
             }],
         ),
         (
             KeyCode::Digit2,
             vec![protocol::Command::Designate {
                 kind: DesignationKind::Channel,
-                rect,
+                rect: at(standable),
             }],
         ),
         (
             KeyCode::Digit3,
-            vec![protocol::Command::PlaceStockpile { rect }],
+            vec![protocol::Command::PlaceStockpile {
+                rect: at(standable),
+            }],
         ),
+        // Clear must reach BOTH cells: the dig at the cell the ray hit, and the channel or
+        // stockpile one cell across the entered face. Dropping either rect leaves the boss able
+        // to designate something he can never remove.
         (
             KeyCode::Digit4,
             vec![
-                protocol::Command::CancelDesignation { rect },
-                protocol::Command::RemoveStockpile { rect },
+                protocol::Command::CancelDesignation { rect: at(picked) },
+                protocol::Command::CancelDesignation {
+                    rect: at(standable),
+                },
+                protocol::Command::RemoveStockpile {
+                    rect: at(standable),
+                },
             ],
         ),
     ];
     for (key, want) in expected {
-        let (mut app, _sender) = designation_app(anchor);
+        let (mut app, _sender) = designation_app(picked);
         drag_one_tile(&mut app, key);
         assert_eq!(
             queued(&app),
             want,
-            "mode key {key:?} must issue its own command, not another mode's"
+            "mode key {key:?} must issue its own command, at the cell the sim accepts"
         );
     }
 }
@@ -3097,6 +3147,155 @@ fn the_drag_preview_appears_while_dragging_and_disappears_on_release() {
             .count(),
         0,
         "the preview must disappear when the drag commits"
+    );
+}
+
+/// The preview is the ONLY feedback for what a drag will designate, and it was being destroyed
+/// on any frame whose ray missed terrain — cursor over sky, over a gap, past the world edge —
+/// while the drag stayed live and still committed on release. Wolf hit it by hand on 2026-08-27:
+/// "sometimes it loses dragged tile color". Dragging blind is worse than a flicker.
+#[test]
+fn the_drag_preview_survives_a_frame_whose_ray_misses_terrain() {
+    let anchor = [1, 1, 1];
+    let (mut app, _sender) = designation_app(anchor);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    assert_eq!(
+        preview_tiles(&mut app),
+        vec![anchor],
+        "the held drag previews the tile it covers"
+    );
+
+    // The ray now hits nothing. The DRAG IS STILL LIVE.
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(None);
+    app.update();
+
+    assert!(
+        app.world().resource::<DragAnchor>().0.is_some(),
+        "a missed ray must not end the drag"
+    );
+    assert_eq!(
+        preview_tiles(&mut app),
+        vec![anchor],
+        "a frame whose ray misses terrain must not erase the preview — the drag is still live \
+         and still commits on release, so erasing it leaves the boss dragging blind"
+    );
+}
+
+/// The sim keeps channel and stockpile designations ONLY at standable cells and drops the rest in
+/// silence. An unfiltered preview therefore promised marks that could never appear — which is how
+/// two completely inert modes read as "fragile" rather than broken.
+#[test]
+fn the_preview_covers_only_the_cells_the_sim_will_keep() {
+    // Two solid cells on a diagonal. The drag rect is their 2x2 bounding box, but the two off-
+    // diagonal columns have no support, so their standable targets do not exist.
+    let anchor = [1, 1, 1];
+    let release = [2, 2, 1];
+    let rig = CameraRig::new(anchor);
+    let anchor_cursor = rig
+        .project_world_point(anchor)
+        .expect("the literal anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let release_cursor = rig
+        .project_world_point(release)
+        .expect("the literal release tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 4, y: 4, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    tiles[index(release)] = Tile::Solid(Material::Stone);
+    let mut app = live_app(snapshot_with_dims(dims, tiles, vec![])).0;
+    install_pick_camera(&mut app, rig, anchor_cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(2);
+    app.update();
+
+    press_once(&mut app, KeyCode::Digit2);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(Some(release_cursor));
+    app.update();
+
+    let previewed = preview_tiles(&mut app);
+    let mirror = &app.world().resource::<MirrorResource>().0;
+    assert!(
+        !previewed.is_empty(),
+        "the two supported columns must still preview"
+    );
+    for tile in &previewed {
+        assert!(
+            client_core::is_standable(mirror, *tile),
+            "previewed {tile:?} is a cell the sim would discard without a word"
+        );
+    }
+    assert_eq!(
+        previewed.len(),
+        2,
+        "the 2x2 rect has only two supported columns; previewing all four promises marks that \
+         will never appear. Got {previewed:?}"
+    );
+}
+
+/// A channel mark sits at the bottom of its air cell, which seals it inside opaque geometry the
+/// moment anything is drawn above — and the instruments cannot see it, because a slab inside rock
+/// is projected and counted like any other. 7.2 measured 0 of 50 marks visible while the count
+/// read 50 and fixed it FOR DIG ONLY. Deleting the climb here restores that defect for channel.
+#[test]
+fn a_buried_channel_mark_climbs_onto_the_rock_covering_it() {
+    let dims = Dims { x: 3, y: 3, z: 4 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    // Support beneath the channel cell, and two drawn cells stacked ON TOP of it.
+    tiles[index([1, 1, 0])] = Tile::Solid(Material::Stone);
+    tiles[index([1, 1, 2])] = Tile::Solid(Material::Stone);
+    tiles[index([1, 1, 3])] = Tile::Solid(Material::Stone);
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![]));
+    app.update();
+    app.world_mut().resource_mut::<SliceLevel>().set(3);
+    app.update();
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: [1, 1, 1],
+                kind: DesignationKind::Channel,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+
+    let height = app
+        .world_mut()
+        .query::<(&ProjectedDesignation, &Transform)>()
+        .iter(app.world())
+        .map(|(_, transform)| transform.translation.y)
+        .next()
+        .expect("the channel mark must be projected");
+    // Render Y is world Z. Unburied the slab would sit at 1 - 0.46 = 0.54, INSIDE the rock at
+    // z 2 and z 3. Climbing puts it on the top face of the highest drawn cell above it.
+    assert!(
+        height > 3.0,
+        "a buried channel mark must climb onto the rock covering it; it sits at y {height}, \
+         which is inside that rock and invisible while every instrument still counts it"
     );
 }
 

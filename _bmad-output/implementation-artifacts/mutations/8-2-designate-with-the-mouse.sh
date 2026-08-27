@@ -19,25 +19,25 @@ PY
 mutation "shared rect helper is replaced by local min max normalization" gui designation_input_uses_the_shared_rect_helper_not_local_normalization <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '''            let rect = client_core::rect_on_level(
-                (anchor_tile[0], anchor_tile[1]),
-                (release_tile[0], release_tile[1]),
-                anchor_tile[2],
-            );
+old = '''                client_core::rect_on_level(
+                    (anchor_tile[0], anchor_tile[1]),
+                    (release_tile[0], release_tile[1]),
+                    anchor_tile[2],
+                )
 '''
 assert s.count(old) == 1
-new = '''            let rect = Rect {
-                min: [
-                    anchor_tile[0].min(release_tile[0]),
-                    anchor_tile[1].min(release_tile[1]),
-                    anchor_tile[2],
-                ],
-                max: [
-                    anchor_tile[0].max(release_tile[0]),
-                    anchor_tile[1].max(release_tile[1]),
-                    anchor_tile[2],
-                ],
-            };
+new = '''                Rect {
+                    min: [
+                        anchor_tile[0].min(release_tile[0]),
+                        anchor_tile[1].min(release_tile[1]),
+                        anchor_tile[2],
+                    ],
+                    max: [
+                        anchor_tile[0].max(release_tile[0]),
+                        anchor_tile[1].max(release_tile[1]),
+                        anchor_tile[2],
+                    ],
+                }
 '''
 p.write_text(s.replace(old, new))
 PY
@@ -116,7 +116,7 @@ PY
 
 # THREE OF THE FOUR MODES IN THE STORY TITLE. Only Digit1 was ever pressed by any test, so each
 # of these left the whole suite green.
-mutation "every mode key selects dig" gui each_mode_key_sends_its_own_distinct_wire_command <<'PY'
+mutation "every mode key selects dig" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
 old = """    } else if keys.just_pressed(KeyCode::Digit2) {
@@ -136,7 +136,7 @@ new = """    } else if keys.just_pressed(KeyCode::Digit2)
 p.write_text(s.replace(old, new))
 PY
 
-mutation "channel designates a dig" gui each_mode_key_sends_its_own_distinct_wire_command <<'PY'
+mutation "channel designates a dig" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
 old = """        DesignateMode::Channel => vec![Command::Designate {
@@ -147,7 +147,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, old.replace('DesignationKind::Channel', 'DesignationKind::Dig')))
 PY
 
-mutation "stockpile placement issues nothing" gui each_mode_key_sends_its_own_distinct_wire_command <<'PY'
+mutation "stockpile placement issues nothing" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
 old = '        DesignateMode::Stockpile => vec![Command::PlaceStockpile { rect }],\n'
@@ -158,9 +158,9 @@ PY
 mutation "a mode key pressed mid-drag changes what the release commits" gui a_drag_commits_in_the_mode_it_began_in <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = 'for command in commands_for(drag_mode.0.unwrap_or(*mode), rect) {'
+old = 'let mode = drag_mode.0.unwrap_or(*mode);'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'for command in commands_for(*mode, rect) {'))
+p.write_text(s.replace(old, 'let mode = *mode;'))
 PY
 
 # The hint bar was inert: neutering the update left it reading its no-mode string forever.
@@ -239,7 +239,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        if false {\n'))
 PY
 
-mutation "clear mode omits stockpile removal" gui clear_issues_both_existing_commands_in_tui_order <<'PY'
+mutation "clear mode omits stockpile removal" gui clear_reaches_both_the_picked_cell_and_the_standable_one <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
 old = '            Command::RemoveStockpile { rect },\n'
@@ -273,4 +273,80 @@ p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = 'normal * 0.55'
 assert s.count(old) == 2
 p.write_text(s.replace(old, 'Vec3::Y * 0.55'))
+PY
+
+# ---------------------------------------------------------------------------
+# ROUND 2, 2026-08-27. Found by Wolf's hands on the vehicle, not by any layer:
+# channel and stockpile were COMPLETELY INERT. Picking only ever resolves a
+# solid cell; `sim-core` filters both commands on standability and discards the
+# rest in silence. Every test above asserts what the CLIENT queues, so all of
+# them stayed green while the daemon kept nothing.
+# ---------------------------------------------------------------------------
+
+mutation "channel and stockpile designate the solid cell the ray hit" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
+old = 'DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Clear => {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Clear if false => {'))
+PY
+
+mutation "clear stops reaching the cell the ray hit" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
+# The test's expectation carries the same line at a deeper indent, so the anchor takes the
+# production arm's TWO lines together -- a bare single line matches twice and cannot apply.
+old = '            Command::CancelDesignation { rect: picked_rect },\n            Command::CancelDesignation { rect },\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Command::CancelDesignation { rect },\n'))
+PY
+
+mutation "the daemon is assumed to keep a designation anywhere" simd the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells <<'PY'
+import pathlib
+p = pathlib.Path('crates/client-core/src/lib.rs'); s = p.read_text()
+old = """    matches!(mirror.tile(pos), Some(Tile::Empty))
+        && matches!(
+            mirror.tile([pos[0], pos[1], pos[2] - 1]),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    matches!(mirror.tile(pos), Some(Tile::Empty))'))
+PY
+
+mutation "a frame whose ray misses terrain erases the live preview" gui the_drag_preview_survives_a_frame_whose_ray_misses_terrain <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = """    let Some(release) = picked.0 else {
+        return;
+    };"""
+assert s.count(old) == 1
+new = """    let Some(release) = picked.0 else {
+        if preview_rect.0.take().is_some() {
+            for entity in &previews {
+                commands.entity(entity).despawn();
+            }
+        }
+        return;
+    };"""
+p.write_text(s.replace(old, new))
+PY
+
+mutation "the preview promises marks the sim will discard" gui the_preview_covers_only_the_cells_the_sim_will_keep <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '            if !sim_will_keep(&mirror.0, tile, mode) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false {\n'))
+PY
+
+mutation "a buried channel mark stays sealed inside the rock above it" gui a_buried_channel_mark_climbs_onto_the_rock_covering_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = """    if top == z {
+        slab_transform(position, -0.46)
+    } else {
+        slab_transform([x, y, top], 0.54)
+    }"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = (top, x, y, z);\n    slab_transform(position, -0.46)'))
 PY

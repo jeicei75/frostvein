@@ -4125,6 +4125,7 @@ name = "simd"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "client-core",
  "protocol",
  "serde_json",
  "sim-core",
