@@ -23,6 +23,72 @@ a missing rotation ships as an edge-on wafer or a highlight buried in the neighb
 
 ---
 
+## THE SHORT READOUT PASS — do only this
+
+**RULED 2026-08-27 (Wolf): the look half of this story is deferred to the gfx pass.** What remains
+is instruments, not judgement. Sections 0-9 below are the full session and are kept for when real
+art lands; **this card is the ~5 minutes that closes AC18, AC19's takes-effect half and the fps
+readings.** Nothing here asks you to decide whether anything looks good.
+
+**Binaries.** `gui.exe` was rebuilt for you: **built 2026-08-27T15:05:25Z, source `e01e7ff`**, the
+last commit touching `crates/gui`, `crates/client-core` or `crates/protocol` — it is current.
+Copy it Windows-side and check the copy's `LastWriteTimeUtc` matches; the copy is the file that
+has been stale every previous time. `simd` and `tui` build in WSL with `cargo build -p simd -p tui`.
+
+**1. Start the daemon and the client.**
+
+```bash
+./target/debug/simd 7451          # WSL, leave running
+gui.exe 7451                      # Windows
+```
+
+**2. Drag each mode once, ON OR NEAR THE MIDDLE OF THE MAP.** The world is 128x128 and the `tui`
+view opens at its centre, so drags near `(64, 64)` land where the readout is already looking.
+`1` dig, `2` channel, `3` stockpile, `4` clear — press, drag a patch you can count (a 3x3 is
+easiest), release. **Do clear LAST**, over something you designated, since it removes.
+
+**Write down the footprint you dragged before you read anything.** That is the range check;
+a count with no expectation is not a check.
+
+**3. Read it back — the one command that answers AC18.**
+
+```bash
+./target/debug/tui 7451 --frame --z 9 >/dev/null
+```
+
+The frame goes to stdout and is discarded; **the answer goes to stderr**:
+
+```
+marks: z 9 designations=9 of 9 zones=9 of 9
+```
+
+- **The `of X` numbers are the answer.** They are what the sim HOLDS at that cut, read by a second
+  client over its own connection — viewport-independent, and exactly AC18's "the sim received what
+  was intended". Compare against the footprint you wrote down.
+- The first number is the glyph count actually drawn. If it is lower you will get an `INCOMPLETE`
+  note: some marks are off-view or overpainted by the cursor, a dwarf or an item. **That is not a
+  failure** — read `of X`.
+- **`designations=0 of 0` after a channel drag means the sim kept nothing**, and that is a real
+  finding worth reporting.
+- `--z` must match the level you designated on. Dig marks sit at the cell you pointed at; channel
+  and stockpile sit one level up, on the standable cell.
+
+**4. The two fps readings.** `F3` toggles the overlay. `Q` zooms IN, `E` zooms OUT.
+
+| Where | Floor | Reading |
+| --- | --- | --- |
+| Working zoom | 60 fps sustained | |
+| Full vista (boot framing) | ≥30 fps sustained | |
+
+Let it settle and drag while you watch it — the point is NFR6 holding with the input path live.
+**A failed reading is the result and gets reported, not worked around**, and no figure is invented.
+
+**5. Paste back:** the `marks:` line for each mode, the footprint you expected, and the two fps
+numbers. That closes AC18, AC19's takes-effect half and NFR6. AC13's rendered half and AC19's
+reads-clearly half stay deferred to the gfx pass, on the record, unclaimed.
+
+---
+
 ## 0. Before you start
 
 **This story is on a branch, unlike 7.2.** Baseline `cca118a` is also `main`'s tip — 8.2 is NOT
