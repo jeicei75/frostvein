@@ -934,6 +934,32 @@ cross-client check must not be done by comparing pictures**, after the ~40-degre
 why the readout leads with `of X` — the mirror-wide count, which no viewport can clip — and prints
 a world span rather than asking anyone to match two views by eye.
 
+**THE READOUT REPORTED ZERO WHILE THE MARKS WERE VISIBLE, 2026-08-27.** Wolf: *"that `--frame`
+gives me 0 but I can see in tui."* Not a defect in the marks — he was reading a different cut than
+they were on. **No single `--z` can show all four modes**: a dig sits at the cell the ray hit while
+a channel or a stockpile sits one level up, and an interactive `tui` opens at `opening_z` rather
+than at whatever was passed to `--frame`. `0 of 0` was, once again, indistinguishable from "the sim
+kept nothing" — **the exact failure this readout was built to remove, reappearing one level along**.
+It now names the levels that DO hold marks and says what to do:
+
+```
+marks: z 20 designations=0 of 0 zones=0 of 0
+       marks at OTHER levels -- z 8: 9 designations, 0 zones  z 9: 0 designations, 9 zones
+       nothing at z 20. A dig sits at the cell the ray hit; a channel or a stockpile sits
+       ONE LEVEL UP. Re-read with --z set to one of the levels above.
+```
+
+2 further sabotage rows, both KILLED; table 390 → 392, suite 186 → 187. The runbook card now says
+to expect two reads per drag pair.
+
+**THE FLAKY DAEMON TEST IS CLOSED, on the second sighting this story's own deferral asked for.**
+`read_snapshot_after_load` budgeted **four lines** for the load snapshot — a timing assumption
+wearing a budget's clothes, since the daemon ticks at 10 Hz throughout and how many deltas arrive
+first is set by machine load. **The same unit error as M2-15.** Now a deadline with a runaway
+backstop; five consecutive runs green, then a full gate green. Worth noting against M2-15's own
+record: that action item named `--frames` in `gui`, and the identical mistake was sitting
+unnoticed in the daemon's test harness the whole time.
+
 **gui.exe MUST BE REBUILT before the session resumes.** The 05:13:38Z binary predates all of this
 and has two dead modes in it.
 

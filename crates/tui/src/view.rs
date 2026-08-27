@@ -65,7 +65,7 @@ pub enum Action {
 /// reported 7 glyphs, and an off-view one reported 0 — neither said a word. AC18 asks for a count
 /// that is RANGE-CHECKED rather than assumed, and a bare glyph count cannot be: zero reads
 /// identically as "the sim kept nothing" and "you were not looking at it".
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarkTally {
     pub z: i32,
     pub drawn_designations: usize,
@@ -77,6 +77,14 @@ pub struct MarkTally {
     /// screen — it is the half of this readout that can be checked against the other client's
     /// cursor coordinates, which is the only orientation-free way to compare the two views.
     pub span: Option<([i32; 2], [i32; 2])>,
+    /// `(z, designations, zones)` for every OTHER level that holds marks, lowest first.
+    ///
+    /// Without this, a reader at the wrong cut sees `0 of 0` and has no way to tell it from "the
+    /// sim kept nothing" — the exact failure this readout was built to remove, one level along.
+    /// It is easy to be at the wrong cut: a dig sits at the cell the ray hit while a channel or a
+    /// stockpile sits one level up, so no single `--z` shows all four modes, and an interactive
+    /// `tui` opens at `opening_z` rather than at whatever the operator passed to `--frame`.
+    pub elsewhere: Vec<(i32, usize, usize)>,
 }
 
 impl MarkTally {
@@ -129,6 +137,21 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
                     ),
                 })
             }),
+        elsewhere: {
+            let mut levels: std::collections::BTreeMap<i32, (usize, usize)> =
+                std::collections::BTreeMap::new();
+            for mark in mirror.designations() {
+                levels.entry(mark.pos[2]).or_default().0 += 1;
+            }
+            for zone in mirror.zones() {
+                levels.entry(zone.pos[2]).or_default().1 += 1;
+            }
+            levels.remove(&state.z);
+            levels
+                .into_iter()
+                .map(|(z, (designations, zones))| (z, designations, zones))
+                .collect()
+        },
     }
 }
 
@@ -678,10 +701,26 @@ mod tests {
             "the span must bound every mark at the cut, including any off-screen"
         );
         let empty = initial(&mirror, Some(2));
+        let empty_tally = tally_marks(&mirror, &empty, &render(&mirror, &empty, 200, 200));
         assert_eq!(
-            tally_marks(&mirror, &empty, &render(&mirror, &empty, 200, 200)).span,
-            None,
+            empty_tally.span, None,
             "a cut with no marks must report no span rather than a degenerate box"
+        );
+
+        // The wrong cut must SAY where the marks are. Wolf hit this on 2026-08-27: `--frame`
+        // reported 0 while he could plainly see the marks in an interactive `tui`, because the
+        // two were at different levels — and `0 of 0` is indistinguishable from "the sim kept
+        // nothing". It is easy to be at the wrong cut on purpose: a dig sits at the cell the ray
+        // hit while a channel or a stockpile sits one level up, so no single `--z` shows all four.
+        assert_eq!(
+            empty_tally.elsewhere,
+            vec![(1, 0, 6)],
+            "a cut holding nothing must name the levels that DO hold marks, or its zero is a lie \
+             by omission"
+        );
+        assert!(
+            tally.elsewhere.is_empty(),
+            "the cut being read must never list itself as elsewhere"
         );
     }
 

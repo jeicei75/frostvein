@@ -68,10 +68,23 @@ marks: z 9 designations=9 of 9 zones=9 of 9
 - The first number is the glyph count actually drawn. If it is lower you will get an `INCOMPLETE`
   note: some marks are off-view or overpainted by the cursor, a dwarf or an item. **That is not a
   failure** — read `of X`.
-- **`designations=0 of 0` after a channel drag means the sim kept nothing**, and that is a real
-  finding worth reporting.
-- `--z` must match the level you designated on. Dig marks sit at the cell you pointed at; channel
-  and stockpile sit one level up, on the standable cell.
+- **If you get zeros, read the next line, not the zeros.** No single `--z` can show all four
+  modes: a dig sits at the cell you pointed at, while a channel or a stockpile sits ONE LEVEL UP
+  on the standable cell. When the cut you asked for is empty the readout names the levels that do
+  hold marks and tells you to re-read:
+
+  ```
+  marks: z 20 designations=0 of 0 zones=0 of 0
+         marks at OTHER levels -- z 8: 9 designations, 0 zones  z 9: 0 designations, 9 zones
+         nothing at z 20. A dig sits at the cell the ray hit; a channel or a stockpile sits
+         ONE LEVEL UP. Re-read with --z set to one of the levels above.
+  ```
+
+  So expect to run it **twice per drag pair** — once at the dig's level, once one above.
+- **`designations=0 of 0` with NO "other levels" line means the sim genuinely kept nothing**, and
+  that is a real finding worth reporting.
+- An interactive `tui` opens at its own chosen level (`opening_z`), not at whatever you passed to
+  `--frame`, which is why the two can disagree about whether there is anything to see.
 
 **4. The two fps readings.** `F3` toggles the overlay. `Q` zooms IN, `E` zooms OUT.
 

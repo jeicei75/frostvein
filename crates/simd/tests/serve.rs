@@ -180,8 +180,26 @@ fn parse_saved_tick(line: &str) -> u64 {
         .expect("saved tick must be numeric")
 }
 
+/// Reads past the deltas already in flight until the load snapshot arrives.
+///
+/// FLAKY UNTIL 2026-08-27: the budget here was FOUR LINES, which is not a budget at all but a
+/// timing assumption wearing one. The daemon ticks at 10 Hz and keeps broadcasting while the load
+/// command is in flight, so the number of deltas that arrive first is set by how long the daemon
+/// takes to pick the command up — i.e. by machine load, not by anything the test controls. On a
+/// busy box more than four arrive and the test fails having observed nothing wrong.
+///
+/// Seen twice on 2026-08-27, once in a full gate and once alone, and a gate that goes red one run
+/// in N is a gate nobody trusts. This is the SAME unit error as M2-15 (`--frames` is a render-rate
+/// quantity feeding assertions denominated in ticks): the semantic is "wait for the snapshot", so
+/// the bound is a DEADLINE, with a generous line cap left only as a runaway backstop.
 fn read_snapshot_after_load(reader: &mut BufReader<TcpStream>) -> protocol::Snapshot {
-    for _ in 0..4 {
+    const MAX_LINES_BEFORE_LOAD_SNAPSHOT: usize = 1_000;
+    let deadline = Instant::now() + IO_TIMEOUT;
+    let mut deltas = 0usize;
+    for _ in 0..MAX_LINES_BEFORE_LOAD_SNAPSHOT {
+        if Instant::now() >= deadline {
+            break;
+        }
         let mut line = String::new();
         reader
             .read_line(&mut line)
@@ -191,11 +209,14 @@ fn read_snapshot_after_load(reader: &mut BufReader<TcpStream>) -> protocol::Snap
             Some("snapshot") => {
                 return serde_json::from_value(value).expect("load snapshot must match protocol");
             }
-            Some("delta") => {}
+            Some("delta") => deltas += 1,
             other => panic!("unexpected daemon message before load snapshot: {other:?}"),
         }
     }
-    panic!("daemon did not broadcast a snapshot within four lines");
+    panic!(
+        "daemon did not broadcast a load snapshot within {IO_TIMEOUT:?}; {deltas} deltas arrived \
+         first"
+    );
 }
 
 fn read_save_state(path: &Path) -> sim_core::SaveState {

@@ -226,6 +226,26 @@ what the sim holds"
         // The span is what a cross-client check actually compares against: this client's screen
         // axes ARE the world axes, while the Bevy client's boot camera is yawed ~40 degrees, so
         // "north" does not mean the same thing in the two views. Numbers do.
+        // A bare `0 of 0` at the wrong cut is indistinguishable from "the sim kept nothing".
+        // Naming the levels that DO hold marks turns it into an instruction.
+        if !tally.elsewhere.is_empty() {
+            let levels = tally
+                .elsewhere
+                .iter()
+                .map(|(z, designations, zones)| {
+                    format!("z {z}: {designations} designations, {zones} zones")
+                })
+                .collect::<Vec<_>>()
+                .join("  ");
+            eprintln!("       marks at OTHER levels -- {levels}");
+            if tally.mirror_designations == 0 && tally.mirror_zones == 0 {
+                eprintln!(
+                    "       nothing at z {}. A dig sits at the cell the ray hit; a channel or a \
+stockpile sits ONE LEVEL UP. Re-read with --z set to one of the levels above.",
+                    tally.z
+                );
+            }
+        }
         match tally.span {
             Some((min, max)) => eprintln!(
                 "       span x[{}..{}] y[{}..{}]  (compare against the Bevy client's cursor readout)",

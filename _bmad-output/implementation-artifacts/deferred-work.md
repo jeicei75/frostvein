@@ -937,7 +937,15 @@ executed a single line of its production path.**
 - **AC19's fps readings and AC18's `tui` cross-check are owed but NOT art-blocked.**
   Both are objective readouts that a short vehicle session closes regardless of how the client
   looks. Listed here so they are not swept up in the art deferral above. `[wolf/HIGH]`
-- **`a_mid_haul_save_loads_and_the_daemon_keeps_ticking` flaked once** [crates/simd/tests/serve.rs]
+- ~~**`a_mid_haul_save_loads_and_the_daemon_keeps_ticking` flaked once**~~ **CLOSED 2026-08-27 on
+  its second sighting**, which is the trigger this entry set for itself. Root cause was not
+  contention: `read_snapshot_after_load` budgeted **four lines** for the load snapshot to arrive,
+  which is a timing assumption wearing a budget's clothes — the daemon ticks at 10 Hz and keeps
+  broadcasting while the load command is in flight, so how many deltas arrive first is set by
+  machine load. **The same unit error as M2-15** (`--frames`, a render-rate quantity, feeding
+  assertions denominated in ticks). Now bounded by a deadline, with a 1,000-line runaway backstop,
+  and the panic reports how many deltas it saw. Five consecutive runs green, then a full gate
+  green. ORIGINAL ENTRY: `a_mid_haul_save_loads_and_the_daemon_keeps_ticking` flaked once
   — failed in one full-gate run on 2026-08-27, passed alone immediately after and on the next full
   gate. Pre-existing and untouched by that round, but the round added two daemon-spawning tests to
   the serialized `serve.rs` set, which lengthens the run and may have made an existing timing

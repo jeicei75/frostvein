@@ -521,3 +521,23 @@ old = '            .fold(None, |span, pos| {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            .take(0)\n            .fold(None, |span, pos| {\n'))
 PY
+
+# Wolf, 2026-08-27: "that --frame gives me 0 but I can see in tui" -- he was reading a different
+# cut than the marks were on, and `0 of 0` cannot be told from "the sim kept nothing". The readout
+# now names the levels that DO hold marks.
+
+mutation "the readout hides the levels that actually hold marks" tui the_mark_tally_reports_what_the_frame_could_not_show <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = '            levels.remove(&state.z);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            levels.clear();\n'))
+PY
+
+mutation "the readout lists the cut it is already reporting" tui the_mark_tally_reports_what_the_frame_could_not_show <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = '            levels.remove(&state.z);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
