@@ -43,7 +43,20 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-26  # STORY 8.2 CREATED -> ready-for-dev (see its block below).
+last_updated: 2026-08-27  # 8.2 TASK 7 RUNBOOK WRITTEN AHEAD OF THE SESSION --
+                          # 8-2-signoff/task-7-vehicle-runbook.md, sourced from aca07be rather than
+                          # carried forward from 7.2's, because --drag and --at-tick did not exist then
+                          # and three of its flag rules came only from the 08-26 review. It closes AC13's
+                          # rendered half, AC15/16 end to end, AC18 and AC19; NOTHING IN IT HAS RUN --
+                          # it is a recipe to be corrected by the session, not a record of one. The two
+                          # items carrying the weight: the DDA march's hit face and the slab's rotation
+                          # onto the face normal were BOTH entirely unpinned before the review, are now
+                          # patched and tested, and have still never been RENDERED. Separately, the
+                          # review's `.codex/` deferral was REOPENED AND CLOSED: that directory holds a
+                          # live auth.json and .gitignore's secret patterns (*token*, *secret*, .env*)
+                          # do not match that name, so one `git add -A` would have committed it.
+                          # STILL THE ONLY WAY 8.2 CLOSES: a live gingerspice session.
+                          # PRIOR: STORY 8.2 CREATED -> ready-for-dev (see its block below).
                           # STORY 8.1 DONE -- MERGED, PR #34 (f9df762). M2 at 9/11. Picking works: ray from
                           # the rendering camera, 389 tests, 9/9 mutations, gate green cold four times over
                           # (twice by agent, once by Wolf, once by the pre-push hook). AC12 met with margin.
