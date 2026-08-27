@@ -258,8 +258,14 @@ This is the **fifth** occurrence; say so in the record.
         effect, and that the hover highlight is visible on a cliff face.
   - [ ] Read sustained fps at working zoom and at full vista from the F3 overlay. A failed
         reading is the finding and gets reported, not worked around.
-  - [ ] Write `8-2-signoff/task-7-vehicle-runbook.md` from the worked example at
+  - [x] Write `8-2-signoff/task-7-vehicle-runbook.md` from the worked example at
         `7-2-signoff/task-6-vehicle-runbook.md` — the commands that actually ran, corrected.
+        **Written 2026-08-27, BEFORE the session rather than after it, which is the one way it
+        differs from its model.** 7.2's runbook recorded commands that had run; this one cannot,
+        because none of it can execute in a devpod. Every flag, threshold, glyph and colour in it
+        was read off the source at `aca07be` rather than carried forward — `--drag` and `--at-tick`
+        did not exist when 7.2's was written, and three of its flag rules were only added by the
+        2026-08-26 review. It is a recipe to be corrected by the session, not a record of one.
 
 - [x] **Task 8 — The gate (AC: 1)**
   - [x] `cargo clean -p gui`, then `scripts/gate.sh` full tier. Paste the tail. A
@@ -714,6 +720,7 @@ but three of the four sessions ended involuntarily.
 
 ### File List
 
+- _bmad-output/implementation-artifacts/8-2-signoff/task-7-vehicle-runbook.md (new)
 - crates/gui/src/command.rs (new)
 - crates/gui/src/designate.rs (new)
 - crates/gui/src/lib.rs
@@ -735,4 +742,5 @@ but three of the four sessions ended involuntarily.
 | 2026-08-26 | Story created. Four decisions ruled by Wolf at creation: press-drag-release, digit mode keys, hit-face highlight, `--capture-at-tick` in scope. Epic premises re-verified: the command set and `rect_on_level` hold; `simd`'s rect validation is already built and tested, so the epic's second AC2 clause is inherited rather than owed. |
 | 2026-08-26 | Implemented and committed Tasks 1–3 and the completed portions of Task 4; remaining instrument, mutation, vehicle, and final-gate work stays in-progress. |
 | 2026-08-26 | Tasks 3-6 and 8 completed across three further delegated sessions. `--drag` and `--at-tick` instruments built and tested; 9-row sabotage table run ALONE, **9/9 KILLED, no survivor**; full gate GREEN on a cold rebuild. Status → review. |
+| 2026-08-27 | Task 7's runbook written ahead of the session (`8-2-signoff/task-7-vehicle-runbook.md`), sourced from `aca07be` rather than carried forward from 7.2. Separately, the review's `.codex/` deferral was reopened and closed: the directory holds a live `auth.json` and the `.gitignore` secret patterns do not match that name. |
 | 2026-08-26 | Owed and stated rather than glossed: Task 7/AC19 unobserved (no devpod can open a window), M2-7's build stamp missing for the **fifth** time, and `codex review --base main` **never ran** (killed twice, quota-blocked once). |
