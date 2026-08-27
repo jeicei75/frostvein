@@ -853,6 +853,27 @@ floor, channel it, and the block beneath becomes a walkable ramp so dwarves can 
 the terrain rolling height specifically "to exercise climb pathfinding and channel digging". On a
 flat floor, which is where it is actually used, the single-z rect was always right for it.
 
+**WOLF'S CALL, 2026-08-27, closing the round:** *"ok well .. better .. so maybe it's ok at this
+point.. it will get clearer with only real gfx.. now it's too confusing still to understand what
+happens."* That is [[art-gates-visual-judgement]] applying to this story: placeholder cubes cap
+what visual judgement is worth making, and he is declining to spend more on it. **Recorded as a
+deferral, not a pass** — the difference matters and is spelled out below.
+
+**What the round actually settled, and what it did not:**
+
+| | State |
+| --- | --- |
+| The mechanism — four modes reach the sim at cells it keeps | **PROVEN**, real daemon as judge, 40/40 mutations killed |
+| AC15/16/17 instruments, AC14 headless | **MET** |
+| **AC13's rendered half** — is the hit-face highlight legible, distinct, clear of the reserved near-white | **DEFERRED to the gfx pass.** Not observed, not inferred |
+| **AC19** — each of the four drags "takes effect in the same client", by eye | **PARTIAL.** "Better" is not four confirmed drags. The *takes-effect* half is answerable without art; the *reads-clearly* half is not |
+| **AC18** — `tui` cross-check | **STILL OPEN**, and it is the one owed item that does not need art at all |
+| NFR6 fps at both zooms | **NOT READ** |
+
+**No fps figure was fabricated and no AC is being marked met on "better".** The honest summary is
+that 8.2's mechanism is done and its *observation* is blocked on two different things: real art
+for the look, and a short vehicle session for the readings.
+
 **gui.exe MUST BE REBUILT before the session resumes.** The 05:13:38Z binary predates all of this
 and has two dead modes in it.
 
