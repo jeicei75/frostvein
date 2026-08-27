@@ -919,6 +919,21 @@ daemon test that this round did not touch, but this round did add two more daemo
 to the serialized `serve.rs` set, which lengthens the run. Filed as deferred; a gate that goes red
 one run in N is a gate nobody trusts.
 
+**CONFIRMED ON THE VEHICLE, 2026-08-27** (Wolf): *"ok yes ..it's correct.. gui has just wider
+perspective than tui so it was confusing but it's ok now with compass."* **The orientation
+question is CLOSED as observed, not inferred** — a live confirmation that the coordinates agree
+across both clients, which is the first thing on this story to be settled by eye rather than by
+test.
+
+His second clause is a finding in its own right and belongs with the instrument design: **the two
+clients cover very different amounts of world.** The TUI draws one screenful of tiles — on the
+order of 80x22 of a 128x128 world, roughly a tenth of it — while the Bevy client at
+`BOOT_DISTANCE` frames the whole valley. So a mark plainly visible in one can be legitimately
+off-screen in the other, with neither client at fault. **That is the second independent reason a
+cross-client check must not be done by comparing pictures**, after the ~40-degree yaw, and it is
+why the readout leads with `of X` — the mirror-wide count, which no viewport can clip — and prints
+a world span rather than asking anyone to match two views by eye.
+
 **gui.exe MUST BE REBUILT before the session resumes.** The 05:13:38Z binary predates all of this
 and has two dead modes in it.
 
