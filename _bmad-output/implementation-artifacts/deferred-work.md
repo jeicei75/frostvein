@@ -901,9 +901,11 @@ executed a single line of its production path.**
   it as the command *write* timeout. The 30 s value is right for both; the name is now misleading.
   Deferred: cosmetic. (Note: if the blocking-write decision changes the write timeout, this stops
   being cosmetic and should be split then.)
-- **`.codex/` is untracked and not git-ignored** [.gitignore] — `git check-ignore .codex/` reports
-  NOT IGNORED. Harmless today because it is untracked, but it will attach itself to the next
-  `git add -A`. One line in `.gitignore`.
+- ~~**`.codex/` is untracked and not git-ignored** [.gitignore]~~ — **CLOSED 2026-08-27.** Not
+  deferred after all: the tree holds `.codex/auth.json`, a live credential, and the `.gitignore`
+  secret patterns (`*token*`, `*secret*`, `.env*`) do not match that name. One `git add -A` away
+  from committing an auth token is a latent trap, not housekeeping. `.codex/` added to
+  `.gitignore`; `git check-ignore -v .codex/auth.json` now resolves to `.gitignore:16`.
 - **M2-7's build stamp is missing for the FIFTH time** [scripts/] — `rg 'GIT_SHA|git_sha|vergen'
   crates/gui/src/` returns nothing and `scripts/` holds no build-stamp automation. Recurring
   because it is re-noted per story and never automated. The stale-binary trap it guards has fired
