@@ -937,3 +937,10 @@ executed a single line of its production path.**
 - **AC19's fps readings and AC18's `tui` cross-check are owed but NOT art-blocked.**
   Both are objective readouts that a short vehicle session closes regardless of how the client
   looks. Listed here so they are not swept up in the art deferral above. `[wolf/HIGH]`
+- **`a_mid_haul_save_loads_and_the_daemon_keeps_ticking` flaked once** [crates/simd/tests/serve.rs]
+  — failed in one full-gate run on 2026-08-27, passed alone immediately after and on the next full
+  gate. Pre-existing and untouched by that round, but the round added two daemon-spawning tests to
+  the serialized `serve.rs` set, which lengthens the run and may have made an existing timing
+  sensitivity more likely to fire. Deferred: one observation, not yet a pattern. **Reopen on the
+  second sighting** — a gate that goes red one run in N is a gate nobody trusts, and this project
+  relies on the gate being believed. `[feature/MED]`

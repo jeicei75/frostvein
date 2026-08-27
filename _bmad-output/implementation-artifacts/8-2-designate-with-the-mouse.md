@@ -874,6 +874,51 @@ deferral, not a pass** — the difference matters and is spelled out below.
 that 8.2's mechanism is done and its *observation* is blocked on two different things: real art
 for the look, and a short vehicle session for the readings.
 
+**ORIENTATION, 2026-08-27 — a correct result that read as a bug.** Wolf, running the readout
+pass: *"do we have coordinates wrong? I think I dig on north but got `*` in west."* Then, having
+checked: *"yes I counted and checked the form .. not sure the direction though."*
+
+**The coordinates were not wrong, and the count and footprint he checked were right.** Measured by
+projecting known world offsets through the real boot camera:
+
+| World direction | On the Bevy screen | In the TUI |
+| --- | --- | --- |
+| `+y` | up-right | down (south) |
+| `-y` (north) | **down-left** | up (north) |
+| `+x` | down-right | right (east) |
+| `-x` | up-left | left (west) |
+
+Solving for "straight up the Bevy screen" gives world **`-x, +y`** — a diagonal, because
+`BOOT_YAW = 0.7` rad ≈ 40 degrees and the camera orbits freely with `A`/`D`. The TUI's screen axes
+**are** the world axes. **World north lands DOWN-LEFT in the Bevy client at boot**, which nobody
+would guess, and neither client said which way it faced. The chain that would have to be broken
+for this to be a real defect was checked and is intact: `world_to_render`/`render_to_world`
+round-trip under a hand-written handedness test, 8.1's review proved the DDA against an
+independent oracle, the picked cell is what gets designated, the daemon keeps it, and the dug
+stone spawns at `job.target` — so his comparison was fair. **The frames differ, not the data.**
+
+**RULED (Wolf): a compass in both clients.** The TUI's is fixed (`N up`) because its axes cannot
+move. The Bevy one is computed by projecting a north probe through the **same projection the
+picking ray uses**, so a compass that disagrees with what is drawn is not possible, and it reports
+`?` rather than inventing a bearing when no camera resolves. The Bevy readout also names the cell
+under the pointer, and the `tui --frame` readout prints the world span of the marks at the cut —
+between them, a cross-client check is a comparison of **numbers** rather than a reconciliation of
+two orientations by eye, which is what produced this false alarm.
+
+**Sabotage — 6 rows, 6 KILLED, no survivor.** Table 384 → 390 rows, suite 180 → 186.
+
+**Recorded because it nearly went in the other direction:** the first run of this round reported
+all six KILLED from a harness that passed a bogus flag to the test binary and **failed on a clean
+tree** — six false kills. Caught by running the control before believing the result. The lesson is
+the one `mutate.sh` already encodes and this hand-rolled loop did not: **verify the harness against
+an unmutated tree before trusting a single verdict.**
+
+**One flake, stated rather than swallowed:** `a_mid_haul_save_loads_and_the_daemon_keeps_ticking`
+failed once in a full-gate run and passed alone and on the next full gate. It is a pre-existing
+daemon test that this round did not touch, but this round did add two more daemon-spawning tests
+to the serialized `serve.rs` set, which lengthens the run. Filed as deferred; a gate that goes red
+one run in N is a gate nobody trusts.
+
 **gui.exe MUST BE REBUILT before the session resumes.** The 05:13:38Z binary predates all of this
 and has two dead modes in it.
 
