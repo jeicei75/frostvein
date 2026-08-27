@@ -72,6 +72,11 @@ pub struct MarkTally {
     pub drawn_zones: usize,
     pub mirror_designations: usize,
     pub mirror_zones: usize,
+    /// The x/y bounding box of every mark the MIRROR holds at this cut, or `None` when there are
+    /// none. Read from the mirror rather than the frame so it does not depend on what fitted on
+    /// screen — it is the half of this readout that can be checked against the other client's
+    /// cursor coordinates, which is the only orientation-free way to compare the two views.
+    pub span: Option<([i32; 2], [i32; 2])>,
 }
 
 impl MarkTally {
@@ -109,6 +114,21 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
             .iter()
             .filter(|zone| zone.pos[2] == state.z)
             .count(),
+        span: mirror
+            .designations()
+            .iter()
+            .map(|mark| mark.pos)
+            .chain(mirror.zones().iter().map(|zone| zone.pos))
+            .filter(|pos| pos[2] == state.z)
+            .fold(None, |span, pos| {
+                Some(match span {
+                    None => ([pos[0], pos[1]], [pos[0], pos[1]]),
+                    Some((min, max)) => (
+                        [min[0].min(pos[0]), min[1].min(pos[1])],
+                        [max[0].max(pos[0]), max[1].max(pos[1])],
+                    ),
+                })
+            }),
     }
 }
 
@@ -343,8 +363,12 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
             Speed::Normal => "normal",
             Speed::Fast => "fast",
         };
+        // `N up` is fixed here because this client's screen axes ARE the world axes: right is
+        // +x, down is +y, so north (-y) is always up. It is printed anyway so the two clients
+        // can be compared without knowing that — the Bevy client's boot camera is yawed ~40
+        // degrees and its north lands DOWN-LEFT, which is the mismatch that cost a session.
         format!(
-            "tick {}  {}  z {}/{}  dwarves {}",
+            "tick {}  {}  z {}/{}  dwarves {}  N up",
             mirror.tick(),
             speed,
             state.z,
@@ -642,6 +666,22 @@ mod tests {
         assert!(
             tally.complete(),
             "a frame showing every mark must report complete"
+        );
+
+        // The span locates the marks in WORLD coordinates, which is the only orientation-free way
+        // to compare this client against the Bevy one: their screen axes do not agree, and the
+        // Bevy camera's do not even stay still. It is read from the mirror, so it must cover the
+        // far corners this viewport could not draw.
+        assert_eq!(
+            tally.span,
+            Some(([0, 0], [63, 63])),
+            "the span must bound every mark at the cut, including any off-screen"
+        );
+        let empty = initial(&mirror, Some(2));
+        assert_eq!(
+            tally_marks(&mirror, &empty, &render(&mirror, &empty, 200, 200)).span,
+            None,
+            "a cut with no marks must report no span rather than a degenerate box"
         );
     }
 
@@ -1247,7 +1287,7 @@ mod tests {
 
         assert_eq!(
             status,
-            "tick 87  normal  z 19/31  dwarves 3                                           "
+            "tick 87  normal  z 19/31  dwarves 3  N up                                     "
         );
     }
 
@@ -1347,7 +1387,9 @@ mod tests {
                     light: None,
                 })
                 .collect();
-            let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5");
+            // Worst case with the compass appended is 46 of 80 columns, so the budget this
+            // test guards still holds with room to spare.
+            let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5  N up");
 
             let framebuffer = render(&mirror(&snapshot), &state, 80, 3);
             let rendered_width = (0..80)
@@ -1364,7 +1406,8 @@ mod tests {
             );
             assert_eq!(rendered_width, expected_width);
             assert_eq!(rendered, expected);
-            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, '5');
+            // The LAST character of the line, pinning that nothing was truncated off the tail.
+            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, 'p');
         }
     }
 

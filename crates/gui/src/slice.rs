@@ -54,12 +54,28 @@ impl SliceLevel {
         if covered { "underground" } else { "surface" }
     }
 
-    pub fn readout(self, covered: bool) -> String {
+    /// `cursor` is the cell under the pointer, and it is here because the client had NO
+    /// coordinate feedback of any kind.
+    ///
+    /// The boot camera is yawed 0.7 rad (~40 degrees), so straight up this client's screen is
+    /// world -x +y — a diagonal — while the TUI's screen axes ARE the world axes. The two views
+    /// therefore disagree about which way is north by about 135 degrees, and nothing said so.
+    /// Wolf hit it on 2026-08-27: dug at what read as north here, found the stone to the west in
+    /// the TUI, and reasonably asked whether the coordinates were wrong. They were not. Printing
+    /// the cell turns any future cross-client check into a comparison of NUMBERS instead of a
+    /// reconciliation of two orientations by eye.
+    ///
+    /// ASCII only, like the hint bar: the shipped font draws a replacement box for anything else.
+    pub fn readout(self, covered: bool, cursor: Option<[i32; 3]>) -> String {
         format!(
-            "Slice: z {}/{} - {}",
+            "Slice: z {}/{} - {}  cursor {}",
             self.level,
             self.top,
-            self.label(covered)
+            self.label(covered),
+            match cursor {
+                Some([x, y, z]) => format!("{x},{y},{z}"),
+                None => "-".to_string(),
+            }
         )
     }
 }
@@ -85,9 +101,16 @@ mod tests {
     #[test]
     fn the_readout_names_the_current_level_and_whether_it_is_surface_or_underground() {
         let mut slice = SliceLevel::at_world_top(Dims { x: 1, y: 1, z: 3 });
-        assert_eq!(slice.readout(false), "Slice: z 2/2 - surface");
+        assert_eq!(
+            slice.readout(false, Some([7, 8, 2])),
+            "Slice: z 2/2 - surface  cursor 7,8,2"
+        );
         slice.step(-1);
-        assert_eq!(slice.readout(true), "Slice: z 1/2 - underground");
+        assert_eq!(
+            slice.readout(true, None),
+            "Slice: z 1/2 - underground  cursor -",
+            "a pointer over nothing must say so rather than print a stale cell"
+        );
     }
 
     /// The readout is drawn in the shipped default font, which has no glyph for most non-ASCII
@@ -100,7 +123,7 @@ mod tests {
         let mut slice = SliceLevel::at_world_top(Dims { x: 4, y: 4, z: 32 });
         for _ in 0..33 {
             for covered in [true, false] {
-                let readout = slice.readout(covered);
+                let readout = slice.readout(covered, None);
                 assert!(
                     readout.is_ascii(),
                     "the slice readout must stay ASCII or it draws boxes on the vehicle: \

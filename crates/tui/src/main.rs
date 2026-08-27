@@ -223,6 +223,16 @@ the viewport, or overpainted by the cursor, a dwarf or an item. Do not read the 
 what the sim holds"
             }
         );
+        // The span is what a cross-client check actually compares against: this client's screen
+        // axes ARE the world axes, while the Bevy client's boot camera is yawed ~40 degrees, so
+        // "north" does not mean the same thing in the two views. Numbers do.
+        match tally.span {
+            Some((min, max)) => eprintln!(
+                "       span x[{}..{}] y[{}..{}]  (compare against the Bevy client's cursor readout)",
+                min[0], max[0], min[1], max[1]
+            ),
+            None => eprintln!("       span: no marks at this cut"),
+        }
         return Ok(());
     }
 

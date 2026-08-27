@@ -193,6 +193,10 @@ pub fn projection_systems(app: &mut App) {
         let dims = app.world().resource::<MirrorResource>().0.dims();
         app.insert_resource(SliceLevel::at_world_top(dims));
     }
+    // The readout names the cell under the pointer, so this set now depends on the pick. Defaulted
+    // here rather than made `Option` in the system: a resource that is genuinely missing in
+    // production should fail loudly, not quietly render "cursor -" forever.
+    app.init_resource::<PickedTile>();
     app.init_resource::<TickClock>()
         .add_systems(Startup, setup_slice_readout)
         .add_systems(
@@ -649,7 +653,7 @@ fn setup_slice_readout(
 ) {
     let covered = has_terrain_above(&mirror.0, slice.level());
     commands.spawn((
-        Text::new(slice.readout(covered)),
+        Text::new(slice.readout(covered, None)),
         TextFont::from_font_size(22.0),
         TextColor(Color::srgb(0.86, 0.91, 1.0)),
         Node {
@@ -671,16 +675,29 @@ fn setup_slice_readout(
 fn update_slice_readout(
     slice: Res<SliceLevel>,
     mirror: Res<MirrorResource>,
+    picked: Res<PickedTile>,
+    cameras: Query<&CameraRig>,
+    mut covered: bevy::prelude::Local<Option<bool>>,
     mut readout: Query<&mut Text, With<SliceReadout>>,
 ) {
-    // `has_terrain_above` walks the world, so it must not run every frame. Both inputs are
-    // change-detected; nothing else can alter the answer.
-    if !slice.is_changed() && !mirror.is_changed() {
-        return;
+    // `has_terrain_above` walks the world, so it must not run every frame. Its two inputs are
+    // change-detected and cached; the cursor half changes far more often and costs nothing, so
+    // the two are tracked separately rather than making the world walk follow the pointer.
+    if slice.is_changed() || mirror.is_changed() || covered.is_none() {
+        *covered = Some(has_terrain_above(&mirror.0, slice.level()));
     }
-    let covered = has_terrain_above(&mirror.0, slice.level());
-    for mut text in &mut readout {
-        *text = Text::new(slice.readout(covered));
+    // The camera is not change-detected here: it orbits continuously while `A`/`D` are held, and
+    // a compass that only refreshes when the slice or the pick changes would sit on a stale
+    // bearing for exactly as long as the camera is moving — which is when it is read.
+    let north = cameras
+        .single()
+        .map_or("?", |rig| crate::camera::north_on_screen(rig));
+    let text = format!(
+        "{}  N {north}",
+        slice.readout(covered.unwrap_or(false), picked.tile())
+    );
+    for mut readout in &mut readout {
+        *readout = Text::new(text.clone());
     }
 }
 
@@ -1195,16 +1212,27 @@ mod tests {
             .map(|text| text.0.clone())
             .collect::<Vec<_>>();
         spawned.sort();
+        // The bearing is part of the expectation on purpose. This readout was found DELETABLE
+        // with the suite green once already, and the compass is the newest thing hanging off it:
+        // a `N ?` here would mean the production path spawned the readout but never resolved a
+        // camera, which is the silent half-working state this test exists to catch.
         let mut expected = vec![
-            app.world()
-                .resource::<crate::slice::SliceLevel>()
-                .readout(false),
+            format!(
+                "{}  N down-left",
+                app.world()
+                    .resource::<crate::slice::SliceLevel>()
+                    .readout(false, None)
+            ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
         ];
         expected.sort();
         assert_eq!(
             spawned, expected,
             "projection_systems must be registered from the production path too"
+        );
+        assert!(
+            spawned.iter().all(|text| !text.contains("N ?")),
+            "the compass must resolve a real camera on the production path, not report unknown"
         );
     }
 

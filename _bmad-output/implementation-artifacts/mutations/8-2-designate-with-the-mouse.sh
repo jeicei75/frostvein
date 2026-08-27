@@ -468,3 +468,56 @@ p.write_text(s.replace(old, """        drawn_zones: mirror
             .filter(|zone| zone.pos[2] == state.z)
             .count(),"""))
 PY
+
+# ORIENTATION, 2026-08-27. Wolf: "do we have coordinates wrong? I think I dig on north but got *
+# in west". They were not wrong -- the Bevy camera boots yawed ~40 degrees so its north lands
+# DOWN-LEFT, while the TUI's screen axes ARE the world axes. Neither client said which way it
+# faced, so a correct result read as a bug. Both now carry a compass, and the Bevy one turns.
+
+mutation "the compass stops turning with the camera" gui the_compass_reports_where_north_actually_is_and_turns_with_the_camera <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
+old = '    let north = rig.project_world_point([focus[0], focus[1] - NORTH_PROBE_TILES, focus[2]]);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let north = rig.project_world_point([focus[0] - NORTH_PROBE_TILES, focus[1], focus[2]]);\n'))
+PY
+
+mutation "the compass reads the screen y axis upside down" gui the_compass_reports_where_north_actually_is_and_turns_with_the_camera <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
+old = '    let sector = (delta.y.atan2(delta.x) / std::f32::consts::FRAC_PI_4).round() as i32;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let sector = ((-delta.y).atan2(delta.x) / std::f32::consts::FRAC_PI_4).round() as i32;\n'))
+PY
+
+mutation "the live readout drops the compass" gui the_production_wiring_runs_every_call_run_makes_after_its_plugins <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        "{}  N {north}",\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        "{}",\n').replace('    let north = cameras\n', '    let _north = cameras\n'))
+PY
+
+mutation "the live readout stops naming the cell under the pointer" gui the_readout_names_the_current_level_and_whether_it_is_surface_or_underground <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/slice.rs'); s = p.read_text()
+old = '                Some([x, y, z]) => format!("{x},{y},{z}"),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                Some(_) => "-".to_string(),\n'))
+PY
+
+mutation "the tui status drops its compass" tui status_line_reports_speed_z_and_dwarf_count <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = '            "tick {}  {}  z {}/{}  dwarves {}  N up",\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            "tick {}  {}  z {}/{}  dwarves {}",\n'))
+PY
+
+mutation "the tui readout stops locating its marks" tui the_mark_tally_reports_what_the_frame_could_not_show <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = '            .fold(None, |span, pos| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            .take(0)\n            .fold(None, |span, pos| {\n'))
+PY

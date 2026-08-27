@@ -112,9 +112,79 @@ impl CameraRig {
     }
 }
 
+/// Where world NORTH points on this camera's screen, as one of eight ASCII labels.
+///
+/// This client had no orientation cue of any kind, and its screen axes are not the world's: the
+/// boot camera is yawed 0.7 rad (~40 degrees) and orbits freely with `A`/`D`, so "up" here is a
+/// world diagonal that MOVES. The TUI's screen axes, by contrast, ARE the world axes. Wolf hit the
+/// consequence on 2026-08-27 — dug at what read as north here, found the stone to the west in the
+/// TUI — and the honest answer was that neither client was wrong and neither said which way it
+/// faced. At boot, world north points DOWN-LEFT on this screen, which nobody would guess.
+///
+/// North is world -y, matching the TUI, where -y is up the screen.
+pub fn north_on_screen(rig: &CameraRig) -> &'static str {
+    let focus = rig.focus;
+    // Two projected points rather than an analytic derivation: this reuses the SAME projection
+    // the picking ray and every capture assertion go through, so a compass that disagrees with
+    // what is drawn is not possible.
+    let here = rig.project_world_point(focus);
+    let north = rig.project_world_point([focus[0], focus[1] - NORTH_PROBE_TILES, focus[2]]);
+    let (Some(here), Some(north)) = (here, north) else {
+        // Never guess a bearing. An unprojectable probe means the compass does not know, and a
+        // compass that invents a direction is worse than one that admits it cannot say.
+        return "?";
+    };
+    let delta = north - here;
+    if delta.length_squared() < f32::EPSILON {
+        return "?";
+    }
+    // Screen y runs DOWN, so a negative dy is up the screen.
+    let sector = (delta.y.atan2(delta.x) / std::f32::consts::FRAC_PI_4).round() as i32;
+    match sector.rem_euclid(8) {
+        0 => "right",
+        1 => "down-right",
+        2 => "down",
+        3 => "down-left",
+        4 => "left",
+        5 => "up-left",
+        6 => "up",
+        _ => "up-right",
+    }
+}
+
+/// Far enough that the projected delta is not swallowed by rounding, close enough that a modest
+/// world still contains it.
+const NORTH_PROBE_TILES: i32 = 8;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pins the measured boot bearing. At `BOOT_YAW` world north points DOWN-LEFT on screen —
+    /// measured 2026-08-27, and the whole reason a compass exists. A camera change that quietly
+    /// moves this must show up here rather than in a confused reading months later.
+    #[test]
+    fn the_compass_reports_where_north_actually_is_and_turns_with_the_camera() {
+        let rig = CameraRig::new([64, 64, 9]);
+        assert_eq!(
+            north_on_screen(&rig),
+            "down-left",
+            "at boot yaw, world north is down-left on this screen"
+        );
+
+        // A quarter turn must move the needle, and by roughly a quarter of the compass.
+        let mut turned = CameraRig::new([64, 64, 9]);
+        turned.orbit(std::f32::consts::FRAC_PI_2, 0.0);
+        let after = north_on_screen(&turned);
+        assert_ne!(
+            after, "down-left",
+            "a compass that does not turn with the camera is a decoration"
+        );
+        // And a full turn must bring it back, so the needle tracks yaw rather than drifting.
+        let mut round = CameraRig::new([64, 64, 9]);
+        round.orbit(std::f32::consts::TAU, 0.0);
+        assert_eq!(north_on_screen(&round), "down-left");
+    }
 
     #[test]
     fn orbit_reaches_every_yaw_and_clamps_pitch() {
