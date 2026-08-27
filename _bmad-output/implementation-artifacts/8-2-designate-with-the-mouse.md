@@ -718,6 +718,34 @@ auth failure, no OOM, RAM free. Session 4 hit the usage limit mid-fix. The orche
 each interruption by hand (see the split-of-hands note under Agent Model Used); nothing was lost,
 but three of the four sessions ended involuntarily.
 
+### Vehicle Session Record — 2026-08-27 (IN PROGRESS)
+
+**Build stamp (M2-7's fifth occurrence, worked around by hand for the fifth time).**
+
+| | |
+| --- | --- |
+| Binary | `target/x86_64-pc-windows-gnu/release/gui.exe`, 188,932,160 bytes |
+| Built | **2026-08-27T05:13:38Z** — artifact mtime; `gui.exe`, its `deps/gui-9fadb9141a8d5463.exe` hardlink and `gui.d` all agree |
+| Source commit | **`fb61f3f`** — the last commit touching `crates/`. `612cbdf` was HEAD at build time, but `aca07be`, `bfac2c4` and `612cbdf` are `_bmad-output/`, `.gitignore` and `scripts/audit-mutations.py` only |
+| Tree at build | clean; HEAD committed 05:06:10Z, 7m28s before the build |
+| Wall-clock | 9.62s, **incremental** — only `gui` recompiled. A freshness stamp, NOT a build-cost figure |
+
+**The stamp step failed on its first use, in exactly the way M2-7 predicts.** The runbook as
+written asked for `date -u` around the build; it was run **~114 minutes after** it, and would have
+recorded `2026-08-27T07:07:17Z` for a binary written at `05:13:38Z`. That is the same shape as
+8.1's 216-minute-old binary, arrived at by a different route — not a stale binary this time, but a
+stale *reading* of a current one. **A hand-typed clock reading is not a build stamp.** The runbook
+was corrected the same day to take the stamp from the artifact's mtime and the last `crates/`
+commit, neither of which can drift or be pasted from scrollback. This is the sixth time M2-7 has
+cost something and the first time the cost was caught before it entered the record.
+
+The binary is confirmed current: mtime 2026-08-27T05:13:38Z is later than `fb61f3f`, the tree is
+clean, so every 2026-08-26 review patch is in it.
+
+**Owed by the rest of this session:** AC19's four hand drags on surface and slice, AC13's rendered
+half on a cliff face / corridor wall / shaft side, AC15 and AC16 end to end, AC18's `tui`
+cross-check, and the two fps readings. None observed yet.
+
 ### File List
 
 - _bmad-output/implementation-artifacts/8-2-signoff/task-7-vehicle-runbook.md (new)

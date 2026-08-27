@@ -50,23 +50,48 @@ crates/gui/src/` returns nothing and `scripts/` holds no build-stamp automation;
 to read the build identity out of the binary at runtime. 8.1 recorded the commit and not the
 wall-clock. **Record both**, and paste them into the story:
 
-```bash
-git rev-parse --short HEAD                  # the source commit
-date -u +%Y-%m-%dT%H:%M:%SZ                 # build start, UTC
+**CORRECTED 2026-08-27, on this step's FIRST USE. Do not stamp with `date`.** As first written
+this step said to run `date -u` around the build. It was run ~114 minutes after the build and would
+have recorded 07:07:17Z for a binary written at 05:13:38Z — M2-7's sixth wrong stamp, by the same
+mechanism as 8.1's 216-minute-old binary. **A hand-typed clock reading is not a build stamp; the
+artifact's own mtime is.** It cannot drift, cannot be pasted from scrollback, and is what a
+`--build-sha` flag would report if M2-7 were ever closed.
 
+```bash
 time CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
   cargo build -p gui --release --target x86_64-pc-windows-gnu
 
 cargo build -p simd -p tui                  # WSL side, debug is fine
 ```
 
-**Then re-copy `gui.exe` Windows-side and confirm the copy is the new one.** The stale-binary trap
-has fired five times on this project — three in 5.4, a 216-minute-old binary at 8.1's vehicle
-session, and the 08-25 stamp that predated every 8.1 patch. The mtime of the copied file, checked
-against the build you just ran, is the whole guard:
+**Then read the stamp off the filesystem and off git — never off the clock:**
 
 ```bash
-ls -l --time-style=full-iso target/x86_64-pc-windows-gnu/release/gui.exe
+# WHEN it was built. Three files must agree; gui.exe is a hardlink of the deps artifact.
+find target/x86_64-pc-windows-gnu/release -maxdepth 2 -name 'gui.exe' -o -maxdepth 2 -name 'gui.d' \
+  | xargs -r stat -c '%y  %n'
+
+# WHAT went into it. HEAD is NOT the answer -- most commits on this branch are _bmad-output/ only.
+git log --oneline -1 -- crates/           # <-- the source commit for the binary
+git status --short                        # MUST be empty, or the binary is from uncommitted work
+git log -1 --format=%cd --date=format-local:'%Y-%m-%dT%H:%M:%SZ' -- crates/
+```
+
+**The binary is current iff its mtime is later than the last `crates/` commit AND the tree is
+clean.** Record the mtime, the `crates/` commit, and the wall-clock from `time`. Note whether the
+build was cold or incremental — an incremental "9.62s" is a valid freshness stamp but is not a
+build-cost figure, and 8.1 conflated the two.
+
+**Then re-copy `gui.exe` Windows-side and confirm THE COPY carries the same mtime.** The
+stale-binary trap has fired five times on this project — three in 5.4, a 216-minute-old binary at
+8.1's vehicle session, and the 08-25 stamp that predated every 8.1 patch. Checking the source
+artifact is only half the guard; **the file you actually launch is the one that has been stale
+every previous time**, and a copy that silently did not happen looks exactly like one that did.
+
+```bash
+# Windows side, after copying:
+#   powershell -c "(Get-Item .\gui.exe).LastWriteTimeUtc"
+# It must match the mtime recorded above. If it is older, the copy did not happen.
 ```
 
 Launch the daemon and leave it running:
