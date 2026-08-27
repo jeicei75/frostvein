@@ -439,3 +439,32 @@ old = '        DesignateMode::Channel | DesignateMode::Stockpile => client_core:
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        DesignateMode::Stockpile => client_core::surface_targets(\n'))
 PY
+
+# AC18's readout. Found 2026-08-27 while testing the recipe rather than shipping it: `tui --frame`
+# drew only what fit its viewport and reported nothing about the rest, so a 9-tile stockpile read
+# as 0 glyphs from one terminal and 7 from another, silently. An instrument that reports success
+# when it captured nothing is worse than no instrument -- the standing exception to out-of-scope.
+
+mutation "the tui frame reports a mark count it cannot back up" tui the_mark_tally_reports_what_the_frame_could_not_show <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = """        self.drawn_designations == self.mirror_designations && self.drawn_zones == self.mirror_zones"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        true'))
+PY
+
+mutation "the tally counts the mirror twice instead of the frame" tui the_mark_tally_reports_what_the_frame_could_not_show <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = """        drawn_zones: framebuffer
+            .cells
+            .iter()
+            .filter(|cell| cell.glyph == zone_glyph)
+            .count(),"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, """        drawn_zones: mirror
+            .zones()
+            .iter()
+            .filter(|zone| zone.pos[2] == state.z)
+            .count(),"""))
+PY

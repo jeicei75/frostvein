@@ -26,7 +26,7 @@ use protocol::{Delta, Snapshot};
 
 use crate::{
     frame::{RowEnd, write_frame},
-    view::{Action, apply_key, initial, render},
+    view::{Action, apply_key, initial, render, tally_marks},
 };
 
 /// Mirrors the daemon's 30 s write timeout. Without it a peer that accepts and
@@ -199,6 +199,30 @@ fn main() -> anyhow::Result<()> {
         write_frame(&mut out, &framebuffer, RowEnd::Newline)
             .context("could not write terminal frame")?;
         out.flush().context("could not flush terminal frame")?;
+        // AC18 wants a count that is RANGE-CHECKED, not assumed, and a bare glyph count cannot
+        // be: `screen_index` silently drops every mark outside the viewport, so zero glyphs reads
+        // identically as "the sim kept nothing" and "your terminal is too small". Both numbers go
+        // to STDERR so the frame on stdout stays byte-clean for anything already parsing it.
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        eprintln!(
+            "marks: z {} designations={} of {} zones={} of {}{}",
+            tally.z,
+            tally.drawn_designations,
+            tally.mirror_designations,
+            tally.drawn_zones,
+            tally.mirror_zones,
+            if tally.complete() {
+                ""
+            } else {
+                // Two causes, and the message names both because guessing at one sends the
+                // reader looking in the wrong place: `screen_index` drops marks outside the
+                // viewport, and the cursor, entity and item layers are painted AFTER the marks,
+                // so a mark beneath any of them is overwritten in the framebuffer.
+                "  INCOMPLETE: the frame does not show every mark at this cut - some are outside \
+the viewport, or overpainted by the cursor, a dwarf or an item. Do not read the drawn count as \
+what the sim holds"
+            }
+        );
         return Ok(());
     }
 

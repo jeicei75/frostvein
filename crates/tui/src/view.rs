@@ -56,6 +56,62 @@ pub enum Action {
 /// every run, so a scripted capture aims where its author thought it did.
 ///
 /// `z_override` is `--z`. It is clamped because it is operator input.
+/// What a rendered frame actually SHOWS, against what the mirror holds at that cut.
+///
+/// The two numbers exist because they can disagree, and the disagreement is invisible without
+/// them, and they disagree for two independent reasons. `screen_index` drops any mark outside the
+/// viewport, and the cursor, entity and item layers are painted AFTER the marks, so a mark
+/// beneath any of them is overwritten. Measured 2026-08-27: a 9-tile stockpile drawn dead centre
+/// reported 7 glyphs, and an off-view one reported 0 — neither said a word. AC18 asks for a count
+/// that is RANGE-CHECKED rather than assumed, and a bare glyph count cannot be: zero reads
+/// identically as "the sim kept nothing" and "you were not looking at it".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MarkTally {
+    pub z: i32,
+    pub drawn_designations: usize,
+    pub drawn_zones: usize,
+    pub mirror_designations: usize,
+    pub mirror_zones: usize,
+}
+
+impl MarkTally {
+    /// Whether the frame showed everything the mirror holds at this cut.
+    pub fn complete(&self) -> bool {
+        self.drawn_designations == self.mirror_designations && self.drawn_zones == self.mirror_zones
+    }
+}
+
+pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer) -> MarkTally {
+    let designation_glyphs = [
+        designation_cell(protocol::DesignationKind::Dig).glyph,
+        designation_cell(protocol::DesignationKind::Channel).glyph,
+    ];
+    let zone_glyph = zone_cell().glyph;
+    MarkTally {
+        z: state.z,
+        drawn_designations: framebuffer
+            .cells
+            .iter()
+            .filter(|cell| designation_glyphs.contains(&cell.glyph))
+            .count(),
+        drawn_zones: framebuffer
+            .cells
+            .iter()
+            .filter(|cell| cell.glyph == zone_glyph)
+            .count(),
+        mirror_designations: mirror
+            .designations()
+            .iter()
+            .filter(|mark| mark.pos[2] == state.z)
+            .count(),
+        mirror_zones: mirror
+            .zones()
+            .iter()
+            .filter(|zone| zone.pos[2] == state.z)
+            .count(),
+    }
+}
+
 pub fn initial(mirror: &Mirror, z_override: Option<i32>) -> ViewState {
     // NOTE: clamped because the dims are wire data.
     let dims = mirror.dims();
@@ -537,6 +593,56 @@ mod tests {
 
     fn mirror(snapshot: &Snapshot) -> Mirror {
         Mirror::from_snapshot(snapshot.clone()).expect("test snapshots must be consistent")
+    }
+
+    /// AC18 asks for a mark count that is RANGE-CHECKED, not assumed. A bare glyph count cannot
+    /// be: `screen_index` drops every mark outside the viewport, so zero glyphs reads identically
+    /// as "the sim kept nothing" and "you were not looking at it". Measured 2026-08-27 against
+    /// the real daemon — a 9-tile stockpile reported 0 glyphs from one read and 7 from another,
+    /// and said nothing either time.
+    #[test]
+    fn the_mark_tally_reports_what_the_frame_could_not_show() {
+        let dims = Dims { x: 64, y: 64, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        // Three zones in a row at the world centre, where the view opens, and three far away.
+        snapshot.zones = vec![
+            Zone { pos: [32, 32, 1] },
+            Zone { pos: [33, 32, 1] },
+            Zone { pos: [34, 32, 1] },
+            Zone { pos: [0, 0, 1] },
+            Zone { pos: [1, 0, 1] },
+            Zone { pos: [63, 63, 1] },
+        ];
+        let mirror = mirror(&snapshot);
+        let state = initial(&mirror, Some(1));
+
+        // A viewport wide enough for the middle three but not for the far corners.
+        let framebuffer = render(&mirror, &state, 11, 9);
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        assert_eq!(
+            tally.mirror_zones, 6,
+            "the mirror side must count every zone at the cut, seen or not"
+        );
+        assert!(
+            tally.drawn_zones < tally.mirror_zones,
+            "this viewport cannot show the corner zones; drawn {} of {}",
+            tally.drawn_zones,
+            tally.mirror_zones
+        );
+        assert!(
+            !tally.complete(),
+            "a frame that could not show every mark must report itself INCOMPLETE — reporting \
+             complete here is the silence AC18 exists to remove"
+        );
+
+        // Wide enough for all six, and the tally must then agree.
+        let framebuffer = render(&mirror, &state, 200, 200);
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        assert_eq!(tally.drawn_zones, 6);
+        assert!(
+            tally.complete(),
+            "a frame showing every mark must report complete"
+        );
     }
 
     fn index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
