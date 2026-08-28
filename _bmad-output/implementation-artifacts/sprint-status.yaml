@@ -765,7 +765,10 @@ development_status:
   # forbidden. A story that proves shadows insufficient, with numbers, has done its job.
   # NFR6 IS THE REAL RISK: shadow-casting point lights are the one M2 change with a real chance of
   # spending the ~140 fps headroom. No figure may be fabricated.
-  # Baseline b1cd5f9, full gate GREEN at creation (run, not claimed). Vehicle-bound: ACs 12-15.
+  # Baseline 15b3635 after a rebase onto the merged PR #38 (build-cache reaper); created against
+  # b1cd5f9 and full gate GREEN on both (run, not claimed). The rebase crossed NO crate source --
+  # `git diff b1cd5f9 15b3635 -- crates/` is empty -- so every figure measured at creation stands.
+  # Vehicle-bound: ACs 12-15.
   9-1-the-frame-stops-blowing-out: ready-for-dev
   9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
   9-3-the-four-modes-read-apart: backlog

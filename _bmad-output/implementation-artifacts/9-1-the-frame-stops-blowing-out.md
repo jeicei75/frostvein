@@ -1,6 +1,6 @@
 ---
 model: claude-opus-5[1m]  # policy default (Opus); recorded per the model policy so the ledger row is readable
-baseline_commit: b1cd5f9946fd5517e3b7b086693fc98bb3cb788e
+baseline_commit: 15b3635688ddcc2168ef9f2981b477d1490d8fa9
 ---
 
 # Story 9.1: The Frame Stops Blowing Out
@@ -379,7 +379,12 @@ story's card so it can be merged into that sitting.
 
 ### Verification
 
-**Executed at story creation, 2026-08-28** — the full gate on `b1cd5f9`, clean tree:
+**Executed at story creation, 2026-08-28** — the full gate on `b1cd5f9`, clean tree. **Re-run
+on the rebased baseline `15b3635` the same day and green again** (77 s, full tier). Both runs are
+recorded rather than the second replacing the first: the numbers throughout this story were
+measured on `b1cd5f9`, and what makes them still valid is not the re-run but the fact that
+`git diff b1cd5f9 15b3635 -- crates/` is **empty** — the rebase crossed scripts and process files
+only, so no measurement in this story moved:
 
 ```
 frostvein gate
@@ -503,4 +508,5 @@ only in a handback message is lost at the session boundary.
 
 | date | change |
 | --- | --- |
+| 2026-08-28 | **Rebased onto `15b3635`** after PR #38 (the build-cache reaper) merged, and `baseline_commit` moved with it. The rebase is what makes AC1 answerable: every M2 story is stacked, and an AC that names a range from a stale baseline is wrong by default — this story's own commit range must start at its true parent. Verified rather than assumed: `git diff b1cd5f9 15b3635 -- crates/` is **empty**, so the 0.6651 % / 0.9883 % / 123.4 figures measured at creation all still hold, and AC3's byte-identical claim and AC4's untouched-crates claim are unaffected. Full gate re-run on the new baseline and green. |
 | 2026-08-28 | Story created. Baseline `b1cd5f9`, full gate green at creation. **The epic's premise was falsified against source**: ruling (d) already landed the peak at 35.0M under the 35.52M pin on 2026-08-22, and Wolf re-confirmed the blow-out on 2026-08-27 anyway — so the reason in the epic text is wrong while the decision stands. **The epic's AC1 was found vacuous**: the 70–180 median band reads 123 on the very frame called blown, measured on the record at 6.2. Three rulings taken from Wolf (W1 local blow-out measure, W2 shadows and only shadows, W3 no Task 0). The blown-pool measure was calibrated at creation against the committed PNGs and the ceiling rests on measurement rather than estimate: **0.6651 % on `boot7.png`, the frame Wolf approved, against 0.9883 % today**, while the ground median reads 123.4 on both. A first draft calibrated against the approved artifact and was corrected before saving — the artifact is a software mock whose near-white distribution has a different shape, so that comparison would have measured the renderer rather than the defect. The remaining caveat (archive frames, not a controlled A/B) is stated in the story and assigned to AC13. |
