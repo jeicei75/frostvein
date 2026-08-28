@@ -50,8 +50,8 @@ luminance of 22.5 against the artifact's 112.6 (~18x short in linear light); sca
 factor then measured 156 on the boot3 vehicle capture — 26% over — with shadows flooded (p05 87
 vs the artifact's 28) and a saturated blue-green cast. The overshoot taught the real rule:
 **the budget divides, it doesn't just scale.** A small desaturated ambient (`(120,140,165)` at
-6,000) lets shadow faces go genuinely dark; a desaturated cool directional (`(150,190,180)` at
-30,000) carries the lit faces. Both tints sit near neutral because light colour MULTIPLIES onto
+4,500) lets shadow faces go genuinely dark; a desaturated cool directional (`(150,190,180)` at
+22,000) carries the lit faces. Both tints sit near neutral because light colour MULTIPLIES onto
 already-blue materials — the boot3 cast came from lighting blue snow with saturated blue-green
 lights, not from the material table. Torches are 14M lm and the campfire 25M lm (35M at its
 1.40 flicker peak): the white-clip radius scales as sqrt(intensity), and 72M blew a ~9-tile pool
@@ -144,7 +144,9 @@ shared respawn height re-synchronizes the field into marching rows.
 Motion is presentation only: dynamic entities blend between the previous and current positions
 the wire delivered, clamped at the current position with no prediction or extrapolation. Torch
 and campfire point lights breathe inside their table-defined bands from a deterministic function
-of simulation id and client elapsed time; the emitter material remains static. When an `Empty`
+of simulation id and client elapsed time; the emitter material remains static. The campfire — and
+only the campfire — casts point-light shadows, so its light no longer passes through solid
+terrain; each additional shadow-casting emitter would cost six cube-map faces against NFR6. When an `Empty`
 tile arrives, four deterministic, client-local stone chips sit at the position until a snapshot
 rebuild clears them. They make digging read as work without inventing simulation state.
 

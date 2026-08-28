@@ -162,6 +162,16 @@ story's card so it can be merged into that sitting.
    `--at-tick` wrote `AppExit::error()` into a discarded return and a run that captured nothing
    exited 0.*
 
+   > **PARTIALLY MET — code review 2026-08-28.** The sabotage half is genuinely met: row (b)
+   > deletes the assertion and `blown_pool_range_failure_is_a_real_panic_not_a_successful_capture`
+   > goes RED. The *process exit* half is proved by trace and by live measurement, not by a test —
+   > the acceptance layer followed `resume_unwind` through `bevy_ecs` `single_threaded.rs:151`,
+   > `command_queue.rs:280` and `bevy_app/app.rs:571` with no `panic = "abort"` in any manifest,
+   > and the feature layer measured a real `gui` main-thread panic exiting **101**. But no test in
+   > the repo spawns the binary (`rg 'Command::new|CARGO_BIN_EXE' crates/gui/` is empty), and the
+   > observer needs a render surface, so **this cannot be closed in a devpod**. It closes when the
+   > vehicle card's `exit=101` and `exit=1` blanks are filled in (§2 of the Task 6 card).
+
 ### Non-regression — the guards that must still hold
 
 9. The 70–180 valley-floor band still passes at the boot vista, unchanged in both literals
@@ -267,8 +277,16 @@ story's card so it can be merged into that sitting.
   - [x] Leave a `// NOTE:` naming the limitation you chose, per the simple-over-general rule.
   - [x] A headless test asserts the projected campfire light is shadow-casting and survives the
         next reconciliation pass unchanged — the same guard AC11 gave the flicker
-        [6-1-the-world-moves.md:103-105]. Reconciliation re-inserts the component
-        [project.rs:583-593], so this is a real regression risk, not a hypothetical.
+        [6-1-the-world-moves.md:103-105]. ~~Reconciliation re-inserts the component
+        [project.rs:583-593], so this is a real regression risk, not a hypothetical.~~
+        **PREMISE FALSIFIED at code review 2026-08-28 (edge layer).** Reconciliation re-inserts
+        only when the light KIND changes — `projected_light.is_none_or(|existing| existing.0 !=
+        light)` at [project.rs:587] — and a campfire's `EntityKind`→`LightKind` mapping is static,
+        so the insert at :588-591 is structurally unreachable for a steady campfire and the test
+        reads back the component created at spawn. The guard is real but it is a **not-rewritten**
+        guard, not a re-insert guard; the test and its message were renamed to say so. Production
+        is correct either way — `point_light()` is the single construction site — and sabotage row
+        (a) still kills the test through its first assertion.
   - [x] Verify by diff that `appearance.rs`'s table and `project.rs:403`'s emissive are untouched.
 
 - [x] **Task 5 — The sabotage table (AC: 16)**
@@ -309,6 +327,63 @@ story's card so it can be merged into that sitting.
         register and the orchestrator, not a review layer, caught it.*
   - [x] Correct `docs/tech-art-guidelines.md:56`, which still says the campfire is **32M lm** —
         stale since 2026-08-22. Also check `:46-63` and `:144-149` against the shipped table.
+
+### Review Findings — code review 2026-08-28 (4 layers, all live, fresh context, NO coverage holes)
+
+Every layer verified `cargo 1.97.1` and executed the binaries under its own `CARGO_TARGET_DIR`;
+none timed out and none is a coverage hole. **The calibration now rests on four independent
+measurements that agree to the digit** — the Rust instrument, the dev's pure-Python decoder, and
+two more decoders written from scratch by the acceptance and feature layers: `boot7 0.665148% /
+p99 216.7 / median 123.4` and `7-2-marks-vista 0.988281% / p99 225.6 / median 123.4`. AC6 is
+genuinely RED at `baseline_commit` and the median genuinely cannot separate the frames.
+
+**Layer attribution and convergence.** blind=Blind Hunter (Sonnet, `capture.rs`), edge=Edge Case
+Hunter (Sonnet, `project.rs` + tests), acceptance=Acceptance Auditor (Opus, whole diff),
+feature=Feature Auditor (Opus, whole diff). Findings raised: blind 3, edge 3, acceptance 8,
+feature 10. **Two convergences**, both on `tests/capture.rs:187-192`: acceptance+edge+feature on
+the hard straddle literals (P2), and acceptance+feature on sabotage row (c)'s weak kill (same
+site). **One inter-layer disagreement, resolved against the acceptance layer**: it verified the
+campfire/torch figures in `tech-art-guidelines.md` and generalised to "no stale record left",
+while feature checked the ambient/directional pair in the same paragraph and found it stale. The
+orchestrator confirmed feature is right (P7).
+
+- [ ] [Review][Decision] **The new ceiling is a hard abort, and Epic 9 spends ONE vehicle sitting for four stories** — every full-depth `--capture` now exits 101 when the pool exceeds 0.6651%. If shadows do not bring it under (which the story's own stated W1+W2 tension says is likely), then 9.2, 9.3 and 9.4's captures in the shared sitting die the same way. The PNG is written before validation so evidence always survives, but the sitting's plan needs a ruling: keep the ceiling hard as the story intends, or make it report-only until AC13 has produced the controlled pair. This is an intent question, not a code question. [feature] [capture.rs:1128]
+
+- [ ] [Review][Patch] **The vehicle card cannot execute AC13's controlled pair — three compounding defects** [_bmad-output/implementation-artifacts/9-1-signoff/task-6-vehicle-runbook.md:19-38] — (a) §1 says the build line must match `git rev-parse --short HEAD` "exactly and without `-dirty`. Stop if it does not", but §2's shadows-off half REQUIRES an uncommitted edit to `project.rs:422`, so it necessarily reads `-dirty`; the feature layer proved this by cloning the repo, applying the edit and rebuilding — it printed `gui build 8cacdb0-dirty`. An operator following the card literally halts at the first half of the story's only real A/B. (b) §2 says "rebuild/run a deliberately shadows-disabled binary" and names no file, no line, no edit and no revert step — `shadow_maps_enabled` is a hardcoded `matches!` with no flag, env var or resource. (c) The card contains NO `--capture` invocation and no exit codes at all, while the shadows-off run is EXPECTED to exit 101 (0.9883% over the ceiling) — an operator will read that crash as a broken build and stop. AC13 is unexecutable as written, independent of the devpod limitation. [feature]
+
+- [ ] [Review][Patch] **AC7's straddle asserts compare against a hard literal that is one ulp ABOVE the shipped ceiling, so no test behaviourally guards the constant** [crates/gui/tests/capture.rs:191-192] — `0.006_651_5` is f32 `0.0066514998`; `BLOWN_POOL_FRACTION_CEILING` is f32 `0.0066514760`. The literal is strictly greater, so `assert!(boot_pool <= 0.006_651_5)` never proves boot7 satisfies the ceiling that actually ships. The shipped constant is tied to the calibration ONLY by the equality pin at :190 — which is exactly why sabotage row (c) is a pin-kill rather than a behavioural one. Replacing both literals with `BLOWN_POOL_FRACTION_CEILING` upgrades row (c) to a behavioural kill at zero cost to AC7's non-tautology, because the oracle remains the external committed PNGs. [acceptance+edge+feature — 3-layer convergence]
+
+- [ ] [Review][Patch] **The "survives a later reconciliation" half of the campfire shadow test is vacuous, and the story's Task 4 premise is false** [crates/gui/tests/headless.rs:1250-1284; crates/gui/src/project.rs:587] — the re-insert branch is guarded by `projected_light.is_none_or(|existing| existing.0 != light)`. For a steady campfire, `ProjectedLight(Campfire)` already equals `light`, so the insert at :588-591 is NEVER entered and the test re-reads the component created at spawn. An untouched component trivially "survives". Task 4's text asserts the opposite — "Reconciliation re-inserts the component [project.rs:583-593], so this is a real regression risk, not a hypothetical" — and that premise is wrong; a campfire's `EntityKind`→`LightKind` mapping is static, so the branch is structurally unreachable from this fixture. NOT a production defect: `point_light()` is the single construction site (2 call sites, both correct) and sabotage row (a) still kills the test through its FIRST assertion. Fix the record and the assertion's wording to claim what it actually proves — that a steady campfire's light is not rewritten by reconciliation, which is true and is the same property the flicker precedent guards. [edge]
+
+- [ ] [Review][Patch] **AC8's evidence stops at `catch_unwind`; no test observes a process exit code** [crates/gui/tests/capture.rs:218-220] — AC8 says "makes the process exit non-zero, and a test proves it". Every test proves an in-process panic; `rg 'Command::new|CARGO_BIN_EXE' crates/gui/` returns nothing. The inference is sound and was verified two ways rather than assumed — the acceptance layer traced `resume_unwind` at `bevy_ecs/schedule/executor/single_threaded.rs:151`, `bevy_ecs/world/command_queue.rs:280` and `bevy_app/app.rs:571` with no `panic = "abort"` in any manifest, and the feature layer measured a real `gui` main-thread panic exiting 101 — but AC8 exists precisely because inference is where 8.2 failed. The observer needs a render surface, so this is NOT closable in a devpod. Record AC8 as PARTIALLY MET and capture `echo "exit=$?"` on the vehicle (folds into the card fix above). [acceptance+feature]
+
+- [ ] [Review][Patch] **Enabling campfire shadows is a look change that AC14's questions cannot catch** [crates/gui/src/project.rs:422] — the campfire light sits ~0.5 world units above the snow it lights (`transform.rs:5`), with Bevy's default `shadow_depth_bias`/`shadow_normal_bias` and a 1024 cube map over a 28-unit range. Grazing-angle point-light shadows on a large flat snow field are the classic acne/banding case. AC14 asks Wolf only whether the fire reads as light-not-glare and whether adjacent things are discernible — nothing asks whether the newly-introduced shadows themselves look correct, so the boss's outcome could get WORSE while both AC14 questions answer "yes". Add one line to the card: does the snow around the fire show shadow stripes or acne that were not there before? [feature]
+
+- [ ] [Review][Patch] **`p99_luminance`'s f32 index arithmetic picks the wrong sample for ~7.5% of possible pixel counts** [crates/gui/src/capture.rs:507] — `((values.len() - 1) as f32 * 0.99).round() as usize`. The blind layer compiled and ran a scan over 1..3,000,000 candidate lengths: 225,210 diverge by one sample from the f64 answer. Dormant today — every resolution this repo produces (1280×720 included) agrees with f64, and p99 is printed rather than asserted — but that is exactly what makes it the project's named latent-silent-failure class: a broken observability instrument reporting a wrong number that no test and no human would ever catch, in the one figure the vehicle sitting is asked to record. One-word fix to f64; the recorded 216.7 / 225.6 figures must be unchanged afterwards. [blind]
+
+- [ ] [Review][Patch] **`docs/tech-art-guidelines.md` still contradicts the shipped light table** [docs/tech-art-guidelines.md:52-54, :144-149] — Task 7 said to correct `:56` AND "check `:46-63` and `:144-149` against the shipped table". The campfire 32M→25M fix landed, but the same paragraph still states, in present tense as the rule, ambient `(120,140,165)` at **6,000** and directional `(150,190,180)` at **30,000**, while `appearance.rs:44-46` ships **4,500** and **22,000**. `:144-149` also still describes the lighting model with no mention that the campfire now casts point-light shadows. Record-contradicts-code in a file this story already edits, and the exact shape that made two of two checked epic premises wrong. [feature]
+
+- [ ] [Review][Patch] **The AC5 ordering guard overwrites instead of latching** [crates/gui/src/capture.rs:1321-1323] — `reported.set(line.contains("blown-pool=") && line.contains("p99-luminance="))` assigns on EVERY call. One report line exists on the asserting path today so it works, but adding a second report line after the metrics line silently flips the guard to whatever the last line says, and the test goes on passing while guarding nothing. Latching form: `if line.contains(..) { reported.set(true) }`. [acceptance]
+
+- [x] [Review][Defer] **AC5's "before ANY assertion" is only half-guarded** [crates/gui/src/capture.rs:1091-1103] — the source is correct, but the only ordering guard uses a frame that is neither black nor uniform, so moving `report(...)` back below `capture is black` / `capture is uniform` leaves every test green and sabotage row (e) untouched. Closing it needs a new mutation row paired with a black/uniform test frame. [acceptance]
+- [x] [Review][Defer] **No sabotage row exercises AC7's second clause** [mutations/9-1-the-frame-stops-blowing-out.sh] — row (d) kills the discrimination test through the pool clause only; nothing proves the `median_ground_luminance == 123` clauses at tests/capture.rs:193-200 are load-bearing, and that clause is the whole reason AC7 is non-tautological. A row that moves the ground window so the median DOES separate the frames would be the honest guard. [acceptance]
+- [x] [Review][Defer] **The ceiling carries ~1 ulp of headroom over boot7's own measurement** [crates/gui/src/capture.rs:442] — constant f32 `0.0066514760` vs boot7's `6130/921600` = f32 `0.0066514756`; difference ≈4.7e-10. Deliberate per AC6's "no larger than boot7", but it means the vehicle frame must be at or below boot7 to the pixel. State it before the sitting so a one-pixel overshoot reads as the intended bar rather than as noise. [acceptance]
+- [x] [Review][Defer] **The cut-level skip line bypasses the injected reporter** [crates/gui/src/capture.rs:1107-1110] — it prints via `println!` rather than `report`, so it is invisible to any report-capturing test. Not an AC violation; the seam is simply half-injected. [acceptance]
+- [x] [Review][Defer] **Panic-hook contamination between concurrent tests** [crates/gui/tests/capture.rs:216-221] — `set_hook`/`take_hook` are process-global while `cargo test` runs this binary across up to 32 threads, so a sibling test panicking inside the window loses its diagnostic stderr. Diagnostics-only: the affected tests read the panic payload, not stderr, and the hook is restored before any assertion can fail. Three default-threaded runs showed no message loss. [edge]
+- [x] [Review][Defer] **This story carries ZERO self-gate coverage** [story:558, :600] — Codex's single `codex review --base main` pass was harness-killed before producing findings, against a cap of three. Disclosed honestly in the Dev Agent Record. Recorded here so nobody reads this code review as having backfilled that hole: it did not. [acceptance]
+
+**Dismissed as noise (2).** The blown-pool assertion sitting after the ground asserts, so a
+doubly-bad frame hides the second panic message — the metrics line prints every number before all
+assertions, so no information is lost and the exit is non-zero either way. And the lever/instrument
+decoupling (shadows cannot dim an unoccluded pool) — real, but the story states it at `:86-96` and
+in its Completion Notes and rules that reporting the numbers is a complete outcome; it is the
+story's design, not a defect.
+
+**What this review did NOT prove.** Nothing here is evidence for AC12, AC13, AC14, AC15, AC2's
+rendered half, or AC6's on-vehicle half. The headless suite is green and the instrument is real,
+reaches the live `--capture` path, prints before it asserts and measures a quantity the median
+provably cannot see — but no frame has been looked at. AC13 additionally cannot be run until the
+card is fixed.
 
 ## Dev Notes
 

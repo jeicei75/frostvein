@@ -1019,3 +1019,42 @@ executed a single line of its production path.**
   the same silent-no-op shape as the two dead modes this story already produced
   ([[silent-sim-filter-trap]]), so it is logged rather than dropped. REOPEN TRIGGER: caves,
   overhangs or multi-level interiors become reachable by a drag. `[feature/MED]`
+
+## Deferred from: code review of 9-1-the-frame-stops-blowing-out (2026-08-28)
+
+Four layers, all live, fresh context, **no coverage holes**. Six deferrals; the review's HIGH and
+MED findings were routed to patch, not here.
+
+- **AC5's "before ANY assertion" is only half-guarded** [crates/gui/src/capture.rs:1091-1103].
+  The source ordering is correct — the metrics line precedes `capture is black` and `capture is
+  uniform` — but `capture_range_report_is_emitted_before_a_blown_pool_panic` uses a frame that is
+  neither black nor uniform, so moving `report(...)` back below those two guards leaves every test
+  green and sabotage row (e) untouched. Closing it needs a new mutation row paired with a
+  black-or-uniform test frame. Raised by the acceptance layer.
+- **No sabotage row exercises AC7's second clause** [mutations/9-1-the-frame-stops-blowing-out.sh].
+  Row (d) kills the discrimination test through the pool clause only. Nothing proves the
+  `median_ground_luminance == 123` assertions at tests/capture.rs:193-200 are load-bearing — and
+  that clause is the entire reason AC7 is non-tautological rather than self-referential. The honest
+  guard is a row that moves the ground window so the median DOES separate the two frames. Raised by
+  the acceptance layer.
+- **The blown-pool ceiling carries ~1 ulp of headroom over boot7's own measurement**
+  [crates/gui/src/capture.rs:442]. Constant as f32 is `0.0066514760`; boot7's `6130/921600` is
+  `0.0066514756`. Difference ≈4.7e-10. This is deliberate — AC6 says "no larger than in boot7.png"
+  — but it means the vehicle frame must come in at or below boot7 to the pixel, with no tolerance.
+  Stated here so a one-pixel overshoot at the sitting is read as the intended bar and not as noise.
+  Raised by the acceptance layer.
+- **The cut-level skip line bypasses the injected reporter** [crates/gui/src/capture.rs:1107-1110].
+  It prints via `println!` rather than through `report`, so it is invisible to any
+  report-capturing test. Not an AC violation; the reporting seam is simply half-injected. Raised by
+  the acceptance layer.
+- **Panic-hook contamination between concurrent tests** [crates/gui/tests/capture.rs:216-221].
+  `std::panic::set_hook`/`take_hook` are process-global while `cargo test` runs this binary across
+  up to 32 worker threads, so a sibling test panicking inside the window loses its diagnostic
+  stderr. Diagnostics-only — the affected tests assert on the panic payload rather than stderr, and
+  the hook is restored before the test's own assertion can fail, so nothing leaks into later tests.
+  Three default-threaded runs showed no observed message loss. Raised by the edge layer.
+- **Story 9.1 carries ZERO self-gate coverage.** Codex's single `codex review --base main` pass was
+  harness-killed before producing any findings, against a cap of three. Disclosed honestly in the
+  story's own Dev Agent Record. Recorded here so that this code review is not later mistaken for
+  having backfilled that hole — four review layers are not a self-gate, and the two are counted
+  separately on this project. Raised by the acceptance layer.

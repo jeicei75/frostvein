@@ -507,7 +507,11 @@ pub fn p99_luminance(pixels: &[[u8; 4]]) -> f32 {
     }
     let mut values = pixels.iter().copied().map(luminance).collect::<Vec<_>>();
     values.sort_by(f32::total_cmp);
-    values[((values.len() - 1) as f32 * 0.99).round() as usize]
+    // NOTE: the index is computed in f64. At f32, 225,210 of the first 3M possible pixel
+    // counts round to the neighbouring sample; no resolution this repo produces is among them
+    // today, but a printed instrument that is silently off by one sample is exactly the class
+    // this project keeps getting bitten by.
+    values[((values.len() - 1) as f64 * 0.99).round() as usize]
 }
 
 /// Median luminance of the valley floor. Median, not mean, so a handful of blown-out emitter
@@ -1319,7 +1323,10 @@ mod tests {
                 true,
                 9,
                 |line| {
-                    reported.set(line.contains("blown-pool=") && line.contains("p99-luminance="))
+                    // Latch, never assign: a second report line must not be able to clear this.
+                    if line.contains("blown-pool=") && line.contains("p99-luminance=") {
+                        reported.set(true);
+                    }
                 },
             );
         }));

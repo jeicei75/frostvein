@@ -1,6 +1,6 @@
 # Story 9.1 sabotage table. Run alone: scripts/mutate.sh <this file>
 
-mutation "campfire shadows return to Bevy's default" gui campfire_light_casts_shadows_and_survives_a_later_reconciliation <<'PY'
+mutation "campfire shadows return to Bevy's default" gui campfire_light_casts_shadows_and_is_not_rewritten_by_a_later_reconciliation <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '        shadow_maps_enabled: matches!(kind, protocol::LightKind::Campfire),\n'
