@@ -16,21 +16,16 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        Material::TreeFoliage => Color::srgb_u8(55, 73, 84),\n'))
 PY
 
-mutation "the foliage separation floor is lowered until the old colour passes" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+# NOTE: an earlier row here lowered MIN_MARK_SEPARATION itself and SURVIVED, correctly -- you
+# cannot sabotage an assertion and expect that same assertion to catch it. A weakened floor is
+# invisible while the colour is good, and a bad colour is already caught by the row above. This
+# row replaces it with a PRODUCTION mutation the invariant must catch, guarding W2's ruling.
+mutation "foliage goes brown, breaking the blueward-of-red terrain invariant" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '''        for (name, terrain) in [("stone", [60, 70, 92]), ("soil", [56, 52, 62])] {
-            let separation = channel_distance(foliage, terrain);
-            assert!(
-                separation >= MIN_MARK_SEPARATION,
-'''
+old = '        Material::TreeFoliage => Color::srgb_u8(44, 100, 58),\n'
 assert s.count(old) == 1
-new = '''        for (name, terrain) in [("stone", [60, 70, 92]), ("soil", [56, 52, 62])] {
-            let separation = channel_distance(foliage, terrain);
-            assert!(
-                separation >= 5.0,
-'''
-p.write_text(s.replace(old, new))
+p.write_text(s.replace(old, '        Material::TreeFoliage => Color::srgb_u8(100, 74, 52),\n'))
 PY
 
 mutation "the tree count oracle counts trunk cells instead of columns" sim-core tree_density_for_seed_42_is_deterministic_and_in_target_band <<'PY'
