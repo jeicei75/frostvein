@@ -11,14 +11,21 @@ emitter faces. These choices live in `gui`'s appearance tables, not beside draw 
 Snow is a client-side settled cap: exposed snow, stone, and soil tops receive the distinct
 cap material, while
 ice keeps its blue surface and covered terrain retains its bare flank. Foliage receives
-no terrain-style snow slab: its dark, broken silhouette leaves the valley's snow landform
-visible instead of turning every ground-level tree skirt into a bright tile. Foliage cubes
+no terrain-style snow slab: its broken silhouette leaves the valley's snow landform
+visible instead of turning every ground-level tree skirt into a bright tile. **Foliage is green
+`(44,100,58)` since story 9.4** — it was `(55,73,84)`, only 9.9 from stone on the same measure the
+marks are held to at 40, so the base cubes were near-camouflage against the ground. Trees separate
+on GREEN, the axis the cool directional does not compress; every terrain material still keeps blue
+at or above red. Foliage cubes
 taper by their contiguous foliage above: ground skirts and crown tips scale to 0.72, the
 upper crown to 0.86, and the mid-crown stays full scale. Ramps follow the same material
 rules because the renderer presents them as full cubes.
 
 The **exposed crown** of a spruce — foliage with nothing solid above it — takes its own
-`(172, 186, 210)` snow-laden material, matching the approved artifact's `SPRUCE_SNOW`. This
+`(156, 170, 196)` snow-laden material. That started as the approved artifact's `SPRUCE_SNOW`
+`(172, 186, 210)` and was trimmed at round 7: the artifact shows that colour on thin sprite tops
+while our cubes show whole faces of it, and every tree glowing at near-cap brightness is what made
+the boot4 foreground read as clutter. This
 is a material swap and deliberately not a terrain cap: capping foliage puts a bright slab on
 every ground-level skirt tile and buries the landform, which is what the round-3 capture
 showed. Bare cube foliage without it reads as a dark clump in a lit field.

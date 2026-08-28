@@ -5,7 +5,7 @@ baseline_commit: 815cd6cd913f9dcc7fa1948c06a4d9ac008c68c4
 
 # Story 9.4: Trees — Fewer, and Distinct from the Ground
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -156,65 +156,65 @@ warmer authored look.
         cells: trunk height is `4..=6`, so cells move with height and are the wrong oracle.
   - [x] **Hardcoded constant is fine** (technical-preferences). No density config, no builder.
 
-- [ ] **Task 3 — The foliage hue (AC: 4, 5, 6)**
-  - [ ] `appearance.rs:215` `Material::TreeFoliage => Color::srgb_u8(55, 73, 84)` → a green that
+- [x] **Task 3 — The foliage hue (AC: 4, 5, 6)**
+  - [x] `appearance.rs:215` `Material::TreeFoliage => Color::srgb_u8(55, 73, 84)` → a green that
         clears stone **and** soil by ≥ 40.0 while keeping `rgb[2] >= rgb[0]`. `(44,100,58)` was
         checked at creation and clears stone by **48.1** and soil by **49.6** — use it or beat it,
         but state the measured distances you actually got.
-  - [ ] Update the pin at `appearance.rs:311` in the same commit — it asserts the exact literal and
+  - [x] Update the pin at `appearance.rs:311` in the same commit — it asserts the exact literal and
         will go red otherwise. That is the pin working, not a defect.
-  - [ ] Extend `appearance_tables_pin_the_cold_boot_palette` (or add a sibling test) to assert the
+  - [x] Extend `appearance_tables_pin_the_cold_boot_palette` (or add a sibling test) to assert the
         foliage↔stone and foliage↔soil distances against `MIN_MARK_SEPARATION`, so a future palette
         edit cannot silently re-merge them. **Reuse `channel_distance` and `MIN_MARK_SEPARATION`;
         do not invent a second helper or a second floor.**
-  - [ ] Leave the doc comment on `material_color` naming the measured before/after distance, in the
+  - [x] Leave the doc comment on `material_color` naming the measured before/after distance, in the
         style of the existing table comments.
 
-- [ ] **Task 4 — Walk the blast radius (AC: 7, 8)**
-  - [ ] Search for anything depending on tree tiles or foliage colour: `rg -n "TreeFoliage|TreeTrunk"
+- [x] **Task 4 — Walk the blast radius (AC: 7, 8)**
+  - [x] Search for anything depending on tree tiles or foliage colour: `rg -n "TreeFoliage|TreeTrunk"
         crates/` and the capture recipes. **`crates/tui/src/palette.rs` also carries tree colours** —
         decide and state whether the TUI follows. The gui↔tui cross-check at
         [appearance.rs:441-456] covers **marks only**, not terrain, so the TUI is not forced by a
         test; say what you chose and why in one sentence.
-  - [ ] Run `python3 scripts/audit-mutations.py`. Expect clean — no row anchors on the density
+  - [x] Run `python3 scripts/audit-mutations.py`. Expect clean — no row anchors on the density
         literal (verified at creation) — and if a row DOES fail to apply, that is a finding, not
         noise.
-  - [ ] Name in the Dev Agent Record every test you found that touches trees, and its outcome.
+  - [x] Name in the Dev Agent Record every test you found that touches trees, and its outcome.
 
-- [ ] **Task 5 — The interaction with 9.1 (AC: 7)**
-  - [ ] This story is **stacked on 9.1**, so 9.1's blown-pool ceiling is live in your tree. Fewer
+- [x] **Task 5 — The interaction with 9.1 (AC: 7)**
+  - [x] This story is **stacked on 9.1**, so 9.1's blown-pool ceiling is live in your tree. Fewer
         dark trees near the campfire can only make the near-white pool **larger**. If a boot-vista
         capture now exits **101** on `BLOWN_POOL_FRACTION_CEILING`, that is this story's most
         important finding — **report it with the number, do not raise the ceiling.** The ceiling is
         9.1's calibrated bar and Wolf ruled on 2026-08-28 that it stays hard.
-  - [ ] Likewise the 70–180 band: fewer dark skirts push the ground median **up** from today's
+  - [x] Likewise the 70–180 band: fewer dark skirts push the ground median **up** from today's
         123.4. Record the new median. A breach of 180 is a finding, not something to tune away.
-  - [ ] Both numbers are headless-measurable from the committed-PNG path only if a frame exists;
+  - [x] Both numbers are headless-measurable from the committed-PNG path only if a frame exists;
         the live capture is vehicle-bound. State plainly which you measured and which you did not.
 
-- [ ] **Task 6 — The sabotage table (AC: 9)**
-  - [ ] Commit first, then mutate — never `git checkout --` over an uncommitted fix.
-  - [ ] Rows: (a) density literal back to `0..12` → count test RED; (b) foliage back to
+- [x] **Task 6 — The sabotage table (AC: 9)**
+  - [x] Commit first, then mutate — never `git checkout --` over an uncommitted fix.
+  - [x] Rows: (a) density literal back to `0..12` → count test RED; (b) foliage back to
         `(55,73,84)` → separation test RED; (c) the separation floor lowered (e.g. to 5.0) so the
         old colour would pass → the test RED.
-  - [ ] **Check WHICH assertion kills each row**, not merely that the row says KILLED. A row killed
+  - [x] **Check WHICH assertion kills each row**, not merely that the row says KILLED. A row killed
         by an earlier assertion than the one you strengthened is a row that proves nothing — this
         exact defect was found in 9.1's review patch pass, where an equality pin sat ahead of the
         behavioural clause and hid it.
-  - [ ] `scripts/mutate.sh` is **not concurrency-safe** — run it alone, read the exit code before
+  - [x] `scripts/mutate.sh` is **not concurrency-safe** — run it alone, read the exit code before
         any pipe.
 
 - [ ] **Task 7 — VEHICLE-BOUND: Wolf's eye (AC: 10)**
-  - [ ] Write the session card for Epic 9's shared sitting **before** the session, ordered so
+  - [x] Write the session card for Epic 9's shared sitting **before** the session, ordered so
         nothing erases its own evidence. Use 9.1's corrected card
         (`9-1-signoff/task-6-vehicle-runbook.md`) as the worked example — in particular its §0,
         which states expected-failure traps up front.
   - [ ] Wolf's AC10 judgement. **A dev agent cannot check this box.**
 
-- [ ] **Task 8 — The gate and the record (AC: 1, 8)**
-  - [ ] `scripts/gate.sh` full tier on a cold rebuild.
-  - [ ] Verify AC6's untouched-colours claim by diff over **this story's own commit range**.
-  - [ ] Update `docs/tech-art-guidelines.md` if it names the foliage colour or tree density — it
+- [x] **Task 8 — The gate and the record (AC: 1, 8)**
+  - [x] `scripts/gate.sh` full tier on a cold rebuild.
+  - [x] Verify AC6's untouched-colours claim by diff over **this story's own commit range**.
+  - [x] Update `docs/tech-art-guidelines.md` if it names the foliage colour or tree density — it
         carries the light/material table prose and went stale twice already (corrected 2026-08-28
         for both the campfire lumens and the ambient/directional pair).
 
@@ -349,7 +349,9 @@ push, no PR** until Wolf says so.
 
 ### Agent Model Used
 
-gpt-5.6-terra, effort high
+gpt-5.6-terra, effort high (Tasks 1-2) — **harness-killed mid-Task-3**.
+claude-opus-5[1m] (Tasks 3-8, orchestrator completion). Both recorded because the ledger row is
+otherwise unreadable.
 
 ### Debug Log References
 
@@ -359,14 +361,81 @@ gpt-5.6-terra, effort high
 
 ### Completion Notes List
 
+**Orchestrator (Claude) completion after the delegated run was killed, 2026-08-28.**
+
+- **The Codex run was terminated by the devpod execution layer mid-Task-3**, the same failure mode
+  that killed three of story 9.1's runs. **Not an auth failure**: the wrapper's `401` warning fired
+  7 times, all false positives — a source line number (`appearance.rs:401`), git blob hashes
+  containing `401`, and the handoff prompt echoed back. Quota was probed live before handoff and
+  was healthy; the banner read `gpt-5.6-terra` / effort `high`, no drift.
+- **The commit-cadence floor paid for itself.** Codex had committed Tasks 1 and 2 rather than
+  squashing, so the run resumed from a green commit instead of from nothing. It was killed in the
+  RED phase of Task 3 — the separation test and pin were written, production colour not yet changed
+  — which is correct TDD, caught mid-cycle.
+- **Codex's committed work was verified independently, not trusted**: `cargo test -p sim-core`
+  green (50/10/30/13 across four binaries), `tree_density_for_seed_42_is_deterministic_and_in_target_band`
+  passing, and its 704 / 696 figures reproduce the story-creation table exactly.
+- **Task 3 completed red→green, watched not claimed**: the pin failed at `appearance.rs:291`
+  (foliage 9.9 from stone, inside the 40.0 floor) before the change and passed after
+  `(44,100,58)`. **Measured distances: stone 48.1, soil 49.6.** Blue (58) ≥ red (44), so W2's
+  invariant holds.
+- **Task 4 found the TUI needs no change, and the reason is the interesting part**: the TUI has
+  rendered foliage GREEN at `(54,106,78)` since it was written (`palette.rs:199`). The 3D client
+  was the odd one out, so this change brings the two clients into agreement rather than conflict.
+  The gui↔tui cross-check at `appearance.rs:441-456` covers marks only, so nothing forced this —
+  it was found by looking.
+- **A SABOTAGE ROW SURVIVED, and the row was wrong rather than the code.** The first table lowered
+  `MIN_MARK_SEPARATION` itself and SURVIVED — correctly, because **you cannot sabotage an assertion
+  and expect that same assertion to catch it**; a weakened floor is invisible while the colour is
+  good, and a bad colour is already caught by another row. Replaced with a production mutation
+  (foliage → brown). **That then killed at the `assert_eq!` pin (`:333`), not at the invariant** —
+  the exact weak-kill shape 9.1's review found. Fixed again so the row moves the colour AND the
+  pin, as a real brown change would; it now kills at `appearance.rs:338`, the
+  `actual_rgb[2] >= actual_rgb[0]` invariant that carries W2. **Two rounds, both caught only by
+  running the table and reading the kill line.**
+- **Final table: 4 rows, 4 KILLED, 0 APPLY-FAILED**, each at the assertion it is meant to prove —
+  `worldgen.rs:200` (band), `appearance.rs:298` (separation), `appearance.rs:338` (invariant),
+  `worldgen.rs:201` (column-vs-cell oracle). `audit-mutations.py` clean at **402 rows**.
+- **Cold full gate GREEN** after `cargo clean -p gui -p sim-core` (3,386 files / 15.1 GiB).
+- **Measured result: 265 trees on the default seed** (242 on seed 42, 258 on 7451), against 704
+  before — all inside the 230–300 band. Foliage cells 16,786 → 6,329.
+- **AC6 verified by diff over this story's own range** (`815cd6c..HEAD`, not `main..HEAD`):
+  `Material::TreeFoliage` is the ONLY `Material::` line that moved. Trunk, stone, soil, ice and
+  snow are untouched, and the range touches exactly three crate files.
+- **`docs/tech-art-guidelines.md` carried a THIRD stale figure**, found while doing Task 8's check:
+  it stated the exposed crown takes `(172,186,210)`, which is the *artifact's* SPRUCE_SNOW — the
+  shipped `foliage_snow_color()` is `(156,170,196)`, trimmed at round 7. Corrected, and the foliage
+  prose now records the green. (The campfire lumens and the ambient/directional pair in the same
+  file were corrected earlier the same day.)
+
+**AC7 IS NOT MET AND CANNOT BE MET HEADLESSLY — read this before reading the green gate.** The
+capture tests decode COMMITTED PNGs (`boot7.png`, `7-2-marks-vista.png`), which are static images
+that cannot see a tree-density change. Nothing headless renders this world, because no devpod can
+open a window. **So the 9.1 × 9.4 interaction — the one number this story owes — has not been
+measured.** What is established: no headless regression, and the direction is known (fewer dark
+tree skirts can only raise the valley floor and can only enlarge the blown pool). What is NOT
+established: whether the 70–180 band and 9.1's 0.6651 % ceiling still hold. Task 7's card takes
+both readings, and it is written to take the baseline FIRST, because Wolf observed on 2026-08-28
+that 9.1's shadows did not close the blow-out — so a capture may already exit 101 before trees are
+the cause.
+
+**AC10 is Wolf's and is unmet.** No fps, no capture and no visual judgement was fabricated.
+
+
+
 - Task 1: added the pre-change trunk-column measurement checkpoint. It is intentionally temporary evidence for the existing `0..12` density and will be replaced by Task 2's 230–300 deterministic named-seed guard before changing the roll.
 - Task 2: changed only the tree placement roll to `0..48`; default seed now measures 265 trunk columns and named seed 42 is deterministically inside 230–300.
 
 ### File List
 
-- crates/sim-core/tests/worldgen.rs
 - crates/sim-core/src/worldgen.rs
+- crates/sim-core/tests/worldgen.rs
+- crates/gui/src/appearance.rs
+- docs/tech-art-guidelines.md
+- _bmad-output/implementation-artifacts/mutations/9-4-trees-fewer-and-distinct-from-the-ground.sh
+- _bmad-output/implementation-artifacts/9-4-signoff/task-7-vehicle-runbook.md
 - _bmad-output/implementation-artifacts/9-4-trees-fewer-and-distinct-from-the-ground.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
 
@@ -374,4 +443,5 @@ gpt-5.6-terra, effort high
 | --- | --- |
 | 2026-08-28 | Task 2 complete: changed only the tree roll from `0..12` to `0..48`; default-world density measures 265 distinct trunk columns, and a seed-42 two-run test pins the 230–300 band and determinism. |
 | 2026-08-28 | Task 1 complete: independently counted distinct `TreeTrunk` columns in the default world and reproduced the required pre-change measurement of 704. |
+| 2026-08-28 | **Implemented.** Density roll `0..12` → `0..48`: **704 → 265 trees** on the default seed (242 / 258 on seeds 42 / 7451), all inside the agreed 230–300 band, with a deterministic named-seed guard. Foliage `(55,73,84)` → **`(44,100,58)`**, clearing stone by **48.1** and soil by **49.6** against the shipped 40.0 floor it was 9.9 from, and keeping blue ≥ red so W2's invariant stands. The TUI needed no change — it has rendered foliage green at `(54,106,78)` all along, so the two clients now agree. **Delegated run was harness-killed mid-Task-3** (not auth: 7 false-positive 401s); Codex's per-task commits let the work resume from green, and the orchestrator completed Tasks 3–8 and verified Codex's half independently. **The sabotage table took two corrections, both found by running it**: a row that sabotaged an assertion and expected that assertion to catch it SURVIVED, and its replacement then killed at the pin rather than the invariant — the 9.1 weak-kill shape. Final 4/4 KILLED at the right assertions, audit clean at 402 rows, cold full gate GREEN. **AC7 is UNMET and unmeetable headlessly** (the capture tests decode static committed PNGs; nothing renders this world without a window) and AC10 is Wolf's. |
 | 2026-08-28 | Story created. Baseline `815cd6c`, full gate green at creation (run, not claimed). **The epic's blast-radius paragraph was falsified against source**: trees draw from a dedicated `STREAM_TREES`, so terrain heights, camp origin and spawn positions do NOT move, and no mutation row anchors on the density literal — the radius is tile contents only. **The density curve was measured rather than estimated** (704 / 531 / 400 / 265 at rolls 12/20/30/48) and revealed that the 2-cell spacing exclusion damps the knob, so a 2.5× cut in the roll removes only 43 % of trees. Two rulings taken from Wolf: W1 the target band 230–300 at roll `0..48`; W2 **green, not brown** — the epic's "brown/green" collides with the shipped `rgb[2] >= rgb[0]` invariant at `appearance.rs:319-322`, which brown cannot satisfy, so the invariant stands and green carries the separation. The hue defect was measured: foliage sits **9.9** from stone against a shipped mark floor of 40.0. |

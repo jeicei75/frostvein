@@ -815,7 +815,7 @@ development_status:
   9-1-the-frame-stops-blowing-out: in-progress
   9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
   9-3-the-four-modes-read-apart: backlog
-  9-4-trees-fewer-and-distinct-from-the-ground: in-progress
+  9-4-trees-fewer-and-distinct-from-the-ground: review
   # 9.4 IS THE ONE STORY IN THIS EPIC THAT TOUCHES sim-core (worldgen density): every seeded world
   # changes, terrain-dependent tests and capture recipes need re-checking, and mutation rows anchored
   # near worldgen literals may APPLY-FAIL. It also pushes valley-floor luminance UP while 9.1 pushes
