@@ -952,3 +952,24 @@ executed a single line of its production path.**
   sensitivity more likely to fire. Deferred: one observation, not yet a pattern. **Reopen on the
   second sighting** — a gate that goes red one run in N is a gate nobody trusts, and this project
   relies on the gate being believed. `[feature/MED]`
+
+## Deferred from: 8.2 vehicle session (2026-08-28)
+
+- **Clear cannot reach a mark whose column holds a SECOND standable cell, if the clear drag is
+  anchored at a different height than the drag that made it.** [crates/client-core/src/lib.rs
+  `standable_in_column`] Each column resolves to the standable cell nearest the *drag anchor's*
+  height, so a channel anchored on a cave floor and a clear anchored on the surface above it
+  target different cells in the same column. The mark survives, silently, with no way to remove
+  it but re-dragging from the original height. MEASURED 2026-08-28 on a synthetic column with
+  standable cells at z 2 and z 5: `near_z=2 -> [[0,0,2]]`, `near_z=5 -> [[0,0,5]]`.
+
+  **NOT what the vehicle session hit** — the two leftover marks there were at z 9 and z 10, which
+  cannot both be standable in one column, so they were separate columns outside the clear drag's
+  footprint. This was found while checking that, and is a distinct latent case.
+
+  **DEFERRED by Wolf 2026-08-28**, asked and answered explicitly rather than filed and forgotten:
+  it needs a cave or an overhang to fire, and open ground has one standable cell per column. It is
+  the same silent-no-op shape as the two dead modes this story already produced
+  ([[silent-sim-filter-trap]]), so it is logged rather than dropped. REOPEN TRIGGER: caves,
+  overhangs or multi-level interiors become reachable by a drag. `[feature/MED]`
+
