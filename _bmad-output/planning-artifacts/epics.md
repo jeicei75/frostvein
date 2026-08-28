@@ -1360,9 +1360,16 @@ the devpod: gingerspice, which gets Blender for 10.2 anyway — costs agent-clos
 bench.
 
 **Portability is a design constraint, not a preference (Wolf, 2026-08-28):** the gfx skills are
-expected to eventually move out of the Nidavellir court onto their own. Bench scripts are
-self-contained; world data crosses via an explicit export file, never by reaching into this
-repo's internals.
+expected to eventually move out of the Nidavellir court onto their own — and the candidate venue
+is named: **Wolf's GPU-capable k3s already running on gingerspice**. That target is why the
+constraint has teeth: bench scripts are self-contained and world data crosses via an explicit
+export file, never by reaching into this repo's internals — if the bench cannot run in a pod, it
+is not portable. What the k3s venue unlocks, recorded for the court's own plan and deliberately
+NOT built now: GPU Cycles speed at scale; **headless Eevee via EGL + NVIDIA runtime** — ruled out
+on the devpod but viable there, and a rasterizer's artifacts sit closer to what Bevy will
+actually show, shrinking the artifact-vs-reality gap UX-DR22 polices; and remote job submission,
+which restores agent-closability at the better venue. Verifying the NVIDIA container runtime on
+that cluster is the future court's Task 0, vehicle-side.
 
 ### Story 10.1: The Headless Bench
 
