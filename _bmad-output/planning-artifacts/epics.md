@@ -1201,6 +1201,20 @@ observation. The bar is instrument-then-eye (RULED 2026-08-28, Wolf): the `--cap
 median-luminance band (70–180, approved artifact reads 123) must hold, and then Wolf views it
 live — the instrument catches regressions cheaply, the eye stays the authority.
 
+**Acceptance Criteria:**
+
+**Given** the boot camp with the campfire lit,
+**When** `gui --capture` renders the approved 5.4 framing,
+**Then** the valley-floor median luminance sits inside the 70–180 band, range-checked by the
+instrument rather than exit 0
+**And** the flicker stays inside its table-defined band, deterministic as before.
+
+**Given** the campfire at working zoom on the vehicle,
+**When** Wolf views the camp live (UX-DR22 closing half),
+**Then** the fire reads as light on snow, not glare — and things adjacent to it (dwarves, marks,
+the hover slab) are discernible, closing the recorded "hover slab not visible near the campfire"
+observation at its root, or reopening it as evidence this story did not finish the job.
+
 ### Story 9.2: The Cell Under the Cursor Is Visible on Every Face
 
 As the boss,
@@ -1214,6 +1228,24 @@ already knows the crossed axis; an outline box; a slightly-inflated cell cube); 
 ruled out** because the picked tile is by construction visible and hoisting would highlight a
 different tile than the one under the cursor. Closes 8.2's deferred AC13 rendered half.
 
+**Acceptance Criteria:**
+
+**Given** the three candidate treatments on the record,
+**When** the story opens,
+**Then** Wolf approves a cheap "here is what you will see" artifact of the chosen treatment on a
+cliff face **before** implementation (UX-DR22 opening half — hand-made; Epic 10's bench arrives
+later).
+
+**Given** a cliff face, a corridor wall and a shaft side,
+**When** Wolf points at a cell on each (vehicle, by eye),
+**Then** the treatment marks **the picked cell** visibly on all three — never a hoisted
+neighbour — closing 8.2's deferred AC13 rendered half.
+
+**Given** the headless suite,
+**When** the treatment's geometry is sabotaged (face assignment, rotation, offset),
+**Then** tests go red — the 8.2 lesson: the highlight's geometry was sabotage-green through a
+full review.
+
 ### Story 9.3: The Four Modes Read Apart
 
 As the boss,
@@ -1224,6 +1256,18 @@ Closes 8.2's deferred AC19 reads-clearly half; this is UX-DR17 applied to design
 must also stay distinct from the hover highlight (9.2) and clear of the near-white reserved for
 stars and emitter faces. The 8.2 readout evidence (marks split across z-levels by design) makes
 the vehicle check concrete: what the `tui` count proved arrived must now be tellable apart by eye.
+
+**Acceptance Criteria:**
+
+**Given** the appearance tables,
+**When** tested headlessly,
+**Then** the four mark colours are pairwise separated by a stated minimum channel distance, all
+clear of the near-white reserved for stars and emitter faces, and distinct from 9.2's highlight —
+so a future palette edit cannot silently re-merge them.
+
+**Given** a scene holding all four mark kinds at working zoom,
+**When** Wolf views it live and tells them apart at a glance, unprompted (UX-DR17; vehicle),
+**Then** 8.2's deferred AC19 reads-clearly half closes.
 
 ### Story 9.4: Trees — Fewer, and Distinct from the Ground
 
@@ -1245,6 +1289,32 @@ tests and capture recipes need re-checking, mutation rows anchored near worldgen
 APPLY-FAIL (the gate audits this), and fewer dark tree skirts push the valley-floor luminance
 *up* while 9.1 pushes it *down* — the 70–180 band watches both. **NOTE:** 9.4's colour values are
 a legibility patch, not settled art — Epic 10's tree pilot may refine them through the bench.
+
+**Acceptance Criteria:**
+
+**Given** the same world seed,
+**When** the density knob is reduced,
+**Then** the default world's tree count lands in a target band agreed at story start (current
+count measured first — expectation before reading), deterministic across runs.
+
+**Given** the foliage hue shifted brown/green,
+**When** tested headlessly,
+**Then** foliage sits a stated minimum channel distance from stone **and** soil, while staying
+inside the night palette's value discipline
+**And** the `SPRUCE_SNOW` exposed-crown tests still pass untouched.
+
+**Given** 9.1 and 9.4 push valley-floor luminance in opposite directions,
+**When** `--capture` runs after both land,
+**Then** the 70–180 band still holds — the interaction is measured, not assumed.
+
+**Given** the density change touches `sim-core`,
+**Then** terrain-dependent tests and capture recipes are re-checked and the gate's
+mutation-apply audit runs clean — the blast radius walked deliberately, not discovered.
+
+**Given** the valley on the vehicle,
+**When** Wolf looks (UX-DR22 closing, shared session with 9.1–9.3),
+**Then** it reads as a landscape with trees in it — trees tellable from ground at a glance
+(UX-DR17/18).
 
 ---
 
@@ -1275,9 +1345,24 @@ own bar for shared machinery.
 the workspace Bevy is 0.19.0 with a deliberate feature trim (`default-features = false`, devpod
 system-library constraints) that includes **neither `bevy_gltf` nor `file_watcher`** — enabling
 them is explicit story work with a justification line against the trim's reasons, not a silent
-edit. Blender is not installed on any devpod; no devpod can open a window; BlenderMCP requires a
-live GUI Blender session — so MCP work is vehicle-side (gingerspice) by construction, and
-headless Blender (`blender --background --python`) is the only Blender any devpod can run.
+edit. No devpod can open a window; BlenderMCP requires a live GUI Blender session — so MCP work
+is vehicle-side (gingerspice) by construction, and headless Blender is the only Blender any
+devpod can run.
+
+**The headless venue was PROBED at planning (2026-08-28), on Wolf's doubt, not assumed:**
+Blender 4.3.2 installs from this devpod's apt; **Cycles CPU** renders headless with no GPU and no
+display — 960×540 at 32 samples in **1.0 s** on 32 cores — and is **pixel-deterministic** across
+runs (0 of 2,073,600 values differ; byte-level diff is PNG metadata only). One quirk on the
+record: the Debian build **lacks OpenImageDenoise**, so `use_denoising = False` is mandatory —
+Cycles hard-fails otherwise. **Eevee and Workbench are ruled out on this hardware** (they need a
+GL context; llvmpipe is the recorded dead end). Fallback venue if the real-world scene defeats
+the devpod: gingerspice, which gets Blender for 10.2 anyway — costs agent-closability, not the
+bench.
+
+**Portability is a design constraint, not a preference (Wolf, 2026-08-28):** the gfx skills are
+expected to eventually move out of the Nidavellir court onto their own. Bench scripts are
+self-contained; world data crosses via an explicit export file, never by reaching into this
+repo's internals.
 
 ### Story 10.1: The Headless Bench
 
@@ -1293,6 +1378,27 @@ worldgen-exported geometry at the real palette — not generic scenes; a Task-0 
 geometry nobody is tasked to build is the recorded 5.4 failure and is the first thing this bench
 must not repeat.
 
+**Acceptance Criteria:**
+
+**Given** the planning-time probe (Cycles CPU, denoising off, 1.0 s, pixel-deterministic),
+**When** the bench renders the real exported world instead of a test cube,
+**Then** wall-time and pixel-determinism are RE-measured at that scale and recorded — the probe
+proved the venue, not the workload — and denoising stays off (the Debian build has no
+OpenImageDenoise; enabling it hard-fails).
+
+**Given** a committed script and the default world seed,
+**When** `blender --background --python <script>` runs in the devpod,
+**Then** it produces an image of **our actual valley** — worldgen geometry crossing via an
+explicit export file at the real palette, no invented geometry, no reaching into repo internals
+(portability constraint above; the 5.4 spruce-sprite failure is the standing counterexample).
+
+**Given** a look story opening after this lands,
+**Then** its UX-DR22 opening artifact comes off the bench — the hand-made-every-time era ends.
+
+**Given** the real-world scene defeats the devpod after all,
+**Then** the recorded fallback fires: the same script runs on gingerspice, the venue note is
+written the way NFR6's was, and the bench survives at the cost of agent-closability.
+
 ### Story 10.2: The Live Seat — BlenderMCP on Gingerspice (SPIKE)
 
 As the boss,
@@ -1306,6 +1412,18 @@ session. The spike answers: what the handoff is, what it costs, and whether MCP 
 the standing workflow or stays an exploration tool. Writing a confident AC over this unknown
 would be the 4.1a shape; the AC is the decision itself, recorded.
 
+**Acceptance Criteria:**
+
+**Given** a live GUI Blender on gingerspice with BlenderMCP connected to Claude,
+**When** Wolf runs one real exploration session (a tree or dwarf blockout),
+**Then** the session happens, its output is captured, and one artifact found live is carried into
+a committed headless script — the handoff proven once, end to end.
+
+**Given** the spike closes,
+**Then** its output is a **recorded decision**: what the MCP-to-script handoff is, what it costs,
+and whether MCP joins the standing workflow or stays an exploration tool. No pipeline AC — the
+decision is the deliverable.
+
 ### Story 10.3: The Rules of the Look
 
 As the boss,
@@ -1317,6 +1435,19 @@ Extends `docs/tech-art-guidelines.md`: the procedural-content rules the existing
 but never state as a contract, and the asset contract the PRD says is owed when the pipeline
 opens — grid scale, orientation, origin, palette/material mapping, naming, where files live.
 Blocks 10.4/10.5: no asset is authored against an undefined target.
+
+**Acceptance Criteria:**
+
+**Given** `docs/tech-art-guidelines.md`,
+**When** this story closes,
+**Then** it contains a **procedural-content contract** (the rules the existing sections imply,
+stated checkably) and an **asset contract** — grid scale, orientation, origin, palette/material
+mapping, naming, file locations — each concrete enough that a reviewer can check an actual asset
+against it line by line.
+
+**Given** the PRD's obligation ("a tech-art-guidelines deliverable defines the asset contract
+when the pipeline opens"),
+**Then** it is discharged here, on the record.
 
 ### Story 10.4: The Trees Look Right (the pilot)
 
@@ -1332,6 +1463,19 @@ better"), and the bench confirms or overturns it cheaply. Hard constraint either
 captures, hold in whatever wins. Builds on 9.4's density/hue patch; supersedes its colour values
 if the bench finds better ones.
 
+**Acceptance Criteria:**
+
+**Given** bench artifacts of at least two tree treatments (tuned-procedural mandatory; authored
+optional),
+**When** Wolf judges them side by side against the current trees,
+**Then** the **procedural-vs-authored decision is made and recorded on that evidence** — his
+standing instinct is procedural (2026-08-28); the bench confirms or overturns it cheaply.
+
+**Given** the winning treatment lands in the client,
+**Then** the `SPRUCE_SNOW` exposed-crown rule and the landform-not-buried result still hold
+(existing tests stay green), 9.4's colour values are superseded or confirmed explicitly, and
+Wolf views the valley live (UX-DR22 closing half).
+
 ### Story 10.5: Dwarves Worth Looking At
 
 As the boss,
@@ -1344,4 +1488,29 @@ via Bevy's native loader, checked against 10.3's contract, hot-reloaded during i
 currently colour `[151,116,96]` at scale 0.65). Enabling `bevy_gltf` + `file_watcher` happens
 here with its justification against the feature trim. UX-DR22 both halves; the lantern-carrying
 dwarf keeps its table-driven moving light.
+
+**Acceptance Criteria:**
+
+**Given** the Bevy feature trim,
+**When** `bevy_gltf` and `file_watcher` are enabled,
+**Then** the workspace manifest carries a justification line against the trim's recorded reasons,
+and the gate stays green on all devpods.
+
+**Given** a Blender-authored dwarf checked against 10.3's contract,
+**When** the client runs against the real daemon,
+**Then** every wire dwarf renders as the authored model on the existing reconciliation seam —
+position blending, and the lantern-carrier's table-driven moving light, preserved — **observed
+live on the vehicle**, not inferred from unit tests (the silent-inert lesson: loading green is
+not standing in the world).
+
+**Given** Wolf iterates on the model file,
+**Then** the running client hot-reloads it without restart — the art-iteration loop the addendum
+promised, demonstrated.
+
+**Given** the milestone eye,
+**Then** Wolf signs the dwarves off live (UX-DR22 both halves — bench artifact before, vehicle
+after).
+
+**SPLIT LINE, named now:** if this overruns a dev session, "feature enablement + a stand-in glTF
+rendering on the seam" splits from "the authored dwarf itself" — the seam story first.
 
