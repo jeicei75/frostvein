@@ -13,6 +13,7 @@ _bmad/custom/*
 !_bmad/custom/bmad-code-review.toml
 .claude/
 .agents/
+.codex/
 
 # --- Python (uv resolves HERE now, not the forge; see pyproject.toml) ---
 /.venv

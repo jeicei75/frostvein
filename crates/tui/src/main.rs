@@ -26,7 +26,7 @@ use protocol::{Delta, Snapshot};
 
 use crate::{
     frame::{RowEnd, write_frame},
-    view::{Action, apply_key, initial, render},
+    view::{Action, apply_key, initial, render, tally_marks},
 };
 
 /// Mirrors the daemon's 30 s write timeout. Without it a peer that accepts and
@@ -199,6 +199,60 @@ fn main() -> anyhow::Result<()> {
         write_frame(&mut out, &framebuffer, RowEnd::Newline)
             .context("could not write terminal frame")?;
         out.flush().context("could not flush terminal frame")?;
+        // AC18 wants a count that is RANGE-CHECKED, not assumed, and a bare glyph count cannot
+        // be: `screen_index` silently drops every mark outside the viewport, so zero glyphs reads
+        // identically as "the sim kept nothing" and "your terminal is too small". Both numbers go
+        // to STDERR so the frame on stdout stays byte-clean for anything already parsing it.
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        eprintln!(
+            "marks: z {} designations={} of {} zones={} of {}{}",
+            tally.z,
+            tally.drawn_designations,
+            tally.mirror_designations,
+            tally.drawn_zones,
+            tally.mirror_zones,
+            if tally.complete() {
+                ""
+            } else {
+                // Two causes, and the message names both because guessing at one sends the
+                // reader looking in the wrong place: `screen_index` drops marks outside the
+                // viewport, and the cursor, entity and item layers are painted AFTER the marks,
+                // so a mark beneath any of them is overwritten in the framebuffer.
+                "  INCOMPLETE: the frame does not show every mark at this cut - some are outside \
+the viewport, or overpainted by the cursor, a dwarf or an item. Do not read the drawn count as \
+what the sim holds"
+            }
+        );
+        // The span is what a cross-client check actually compares against: this client's screen
+        // axes ARE the world axes, while the Bevy client's boot camera is yawed ~40 degrees, so
+        // "north" does not mean the same thing in the two views. Numbers do.
+        // A bare `0 of 0` at the wrong cut is indistinguishable from "the sim kept nothing".
+        // Naming the levels that DO hold marks turns it into an instruction.
+        if !tally.elsewhere.is_empty() {
+            let levels = tally
+                .elsewhere
+                .iter()
+                .map(|(z, designations, zones)| {
+                    format!("z {z}: {designations} designations, {zones} zones")
+                })
+                .collect::<Vec<_>>()
+                .join("  ");
+            eprintln!("       marks at OTHER levels -- {levels}");
+            if tally.mirror_designations == 0 && tally.mirror_zones == 0 {
+                eprintln!(
+                    "       nothing at z {}. A dig sits at the cell the ray hit; a channel or a \
+stockpile sits ONE LEVEL UP. Re-read with --z set to one of the levels above.",
+                    tally.z
+                );
+            }
+        }
+        match tally.span {
+            Some((min, max)) => eprintln!(
+                "       span x[{}..{}] y[{}..{}]  (compare against the Bevy client's cursor readout)",
+                min[0], max[0], min[1], max[1]
+            ),
+            None => eprintln!("       span: no marks at this cut"),
+        }
         return Ok(());
     }
 

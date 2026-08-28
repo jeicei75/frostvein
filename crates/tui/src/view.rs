@@ -56,6 +56,105 @@ pub enum Action {
 /// every run, so a scripted capture aims where its author thought it did.
 ///
 /// `z_override` is `--z`. It is clamped because it is operator input.
+/// What a rendered frame actually SHOWS, against what the mirror holds at that cut.
+///
+/// The two numbers exist because they can disagree, and the disagreement is invisible without
+/// them, and they disagree for two independent reasons. `screen_index` drops any mark outside the
+/// viewport, and the cursor, entity and item layers are painted AFTER the marks, so a mark
+/// beneath any of them is overwritten. Measured 2026-08-27: a 9-tile stockpile drawn dead centre
+/// reported 7 glyphs, and an off-view one reported 0 — neither said a word. AC18 asks for a count
+/// that is RANGE-CHECKED rather than assumed, and a bare glyph count cannot be: zero reads
+/// identically as "the sim kept nothing" and "you were not looking at it".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkTally {
+    pub z: i32,
+    pub drawn_designations: usize,
+    pub drawn_zones: usize,
+    pub mirror_designations: usize,
+    pub mirror_zones: usize,
+    /// The x/y bounding box of every mark the MIRROR holds at this cut, or `None` when there are
+    /// none. Read from the mirror rather than the frame so it does not depend on what fitted on
+    /// screen — it is the half of this readout that can be checked against the other client's
+    /// cursor coordinates, which is the only orientation-free way to compare the two views.
+    pub span: Option<([i32; 2], [i32; 2])>,
+    /// `(z, designations, zones)` for every OTHER level that holds marks, lowest first.
+    ///
+    /// Without this, a reader at the wrong cut sees `0 of 0` and has no way to tell it from "the
+    /// sim kept nothing" — the exact failure this readout was built to remove, one level along.
+    /// It is easy to be at the wrong cut: a dig sits at the cell the ray hit while a channel or a
+    /// stockpile sits one level up, so no single `--z` shows all four modes, and an interactive
+    /// `tui` opens at `opening_z` rather than at whatever the operator passed to `--frame`.
+    pub elsewhere: Vec<(i32, usize, usize)>,
+}
+
+impl MarkTally {
+    /// Whether the frame showed everything the mirror holds at this cut.
+    pub fn complete(&self) -> bool {
+        self.drawn_designations == self.mirror_designations && self.drawn_zones == self.mirror_zones
+    }
+}
+
+pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer) -> MarkTally {
+    let designation_glyphs = [
+        designation_cell(protocol::DesignationKind::Dig).glyph,
+        designation_cell(protocol::DesignationKind::Channel).glyph,
+    ];
+    let zone_glyph = zone_cell().glyph;
+    MarkTally {
+        z: state.z,
+        drawn_designations: framebuffer
+            .cells
+            .iter()
+            .filter(|cell| designation_glyphs.contains(&cell.glyph))
+            .count(),
+        drawn_zones: framebuffer
+            .cells
+            .iter()
+            .filter(|cell| cell.glyph == zone_glyph)
+            .count(),
+        mirror_designations: mirror
+            .designations()
+            .iter()
+            .filter(|mark| mark.pos[2] == state.z)
+            .count(),
+        mirror_zones: mirror
+            .zones()
+            .iter()
+            .filter(|zone| zone.pos[2] == state.z)
+            .count(),
+        span: mirror
+            .designations()
+            .iter()
+            .map(|mark| mark.pos)
+            .chain(mirror.zones().iter().map(|zone| zone.pos))
+            .filter(|pos| pos[2] == state.z)
+            .fold(None, |span, pos| {
+                Some(match span {
+                    None => ([pos[0], pos[1]], [pos[0], pos[1]]),
+                    Some((min, max)) => (
+                        [min[0].min(pos[0]), min[1].min(pos[1])],
+                        [max[0].max(pos[0]), max[1].max(pos[1])],
+                    ),
+                })
+            }),
+        elsewhere: {
+            let mut levels: std::collections::BTreeMap<i32, (usize, usize)> =
+                std::collections::BTreeMap::new();
+            for mark in mirror.designations() {
+                levels.entry(mark.pos[2]).or_default().0 += 1;
+            }
+            for zone in mirror.zones() {
+                levels.entry(zone.pos[2]).or_default().1 += 1;
+            }
+            levels.remove(&state.z);
+            levels
+                .into_iter()
+                .map(|(z, (designations, zones))| (z, designations, zones))
+                .collect()
+        },
+    }
+}
+
 pub fn initial(mirror: &Mirror, z_override: Option<i32>) -> ViewState {
     // NOTE: clamped because the dims are wire data.
     let dims = mirror.dims();
@@ -287,8 +386,12 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
             Speed::Normal => "normal",
             Speed::Fast => "fast",
         };
+        // `N up` is fixed here because this client's screen axes ARE the world axes: right is
+        // +x, down is +y, so north (-y) is always up. It is printed anyway so the two clients
+        // can be compared without knowing that — the Bevy client's boot camera is yawed ~40
+        // degrees and its north lands DOWN-LEFT, which is the mismatch that cost a session.
         format!(
-            "tick {}  {}  z {}/{}  dwarves {}",
+            "tick {}  {}  z {}/{}  dwarves {}  N up",
             mirror.tick(),
             speed,
             state.z,
@@ -537,6 +640,88 @@ mod tests {
 
     fn mirror(snapshot: &Snapshot) -> Mirror {
         Mirror::from_snapshot(snapshot.clone()).expect("test snapshots must be consistent")
+    }
+
+    /// AC18 asks for a mark count that is RANGE-CHECKED, not assumed. A bare glyph count cannot
+    /// be: `screen_index` drops every mark outside the viewport, so zero glyphs reads identically
+    /// as "the sim kept nothing" and "you were not looking at it". Measured 2026-08-27 against
+    /// the real daemon — a 9-tile stockpile reported 0 glyphs from one read and 7 from another,
+    /// and said nothing either time.
+    #[test]
+    fn the_mark_tally_reports_what_the_frame_could_not_show() {
+        let dims = Dims { x: 64, y: 64, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        // Three zones in a row at the world centre, where the view opens, and three far away.
+        snapshot.zones = vec![
+            Zone { pos: [32, 32, 1] },
+            Zone { pos: [33, 32, 1] },
+            Zone { pos: [34, 32, 1] },
+            Zone { pos: [0, 0, 1] },
+            Zone { pos: [1, 0, 1] },
+            Zone { pos: [63, 63, 1] },
+        ];
+        let mirror = mirror(&snapshot);
+        let state = initial(&mirror, Some(1));
+
+        // A viewport wide enough for the middle three but not for the far corners.
+        let framebuffer = render(&mirror, &state, 11, 9);
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        assert_eq!(
+            tally.mirror_zones, 6,
+            "the mirror side must count every zone at the cut, seen or not"
+        );
+        assert!(
+            tally.drawn_zones < tally.mirror_zones,
+            "this viewport cannot show the corner zones; drawn {} of {}",
+            tally.drawn_zones,
+            tally.mirror_zones
+        );
+        assert!(
+            !tally.complete(),
+            "a frame that could not show every mark must report itself INCOMPLETE — reporting \
+             complete here is the silence AC18 exists to remove"
+        );
+
+        // Wide enough for all six, and the tally must then agree.
+        let framebuffer = render(&mirror, &state, 200, 200);
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        assert_eq!(tally.drawn_zones, 6);
+        assert!(
+            tally.complete(),
+            "a frame showing every mark must report complete"
+        );
+
+        // The span locates the marks in WORLD coordinates, which is the only orientation-free way
+        // to compare this client against the Bevy one: their screen axes do not agree, and the
+        // Bevy camera's do not even stay still. It is read from the mirror, so it must cover the
+        // far corners this viewport could not draw.
+        assert_eq!(
+            tally.span,
+            Some(([0, 0], [63, 63])),
+            "the span must bound every mark at the cut, including any off-screen"
+        );
+        let empty = initial(&mirror, Some(2));
+        let empty_tally = tally_marks(&mirror, &empty, &render(&mirror, &empty, 200, 200));
+        assert_eq!(
+            empty_tally.span, None,
+            "a cut with no marks must report no span rather than a degenerate box"
+        );
+
+        // The wrong cut must SAY where the marks are. Wolf hit this on 2026-08-27: `--frame`
+        // reported 0 while he could plainly see the marks in an interactive `tui`, because the
+        // two were at different levels — and `0 of 0` is indistinguishable from "the sim kept
+        // nothing". It is easy to be at the wrong cut on purpose: a dig sits at the cell the ray
+        // hit while a channel or a stockpile sits one level up, so no single `--z` shows all four.
+        assert_eq!(
+            empty_tally.elsewhere,
+            vec![(1, 0, 6)],
+            "a cut holding nothing must name the levels that DO hold marks, or its zero is a lie \
+             by omission"
+        );
+        assert!(
+            tally.elsewhere.is_empty(),
+            "the cut being read must never list itself as elsewhere"
+        );
     }
 
     fn index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
@@ -1141,7 +1326,7 @@ mod tests {
 
         assert_eq!(
             status,
-            "tick 87  normal  z 19/31  dwarves 3                                           "
+            "tick 87  normal  z 19/31  dwarves 3  N up                                     "
         );
     }
 
@@ -1241,7 +1426,9 @@ mod tests {
                     light: None,
                 })
                 .collect();
-            let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5");
+            // Worst case with the compass appended is 46 of 80 columns, so the budget this
+            // test guards still holds with room to spare.
+            let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5  N up");
 
             let framebuffer = render(&mirror(&snapshot), &state, 80, 3);
             let rendered_width = (0..80)
@@ -1258,7 +1445,8 @@ mod tests {
             );
             assert_eq!(rendered_width, expected_width);
             assert_eq!(rendered, expected);
-            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, '5');
+            // The LAST character of the line, pinning that nothing was truncated off the tail.
+            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, 'p');
         }
     }
 

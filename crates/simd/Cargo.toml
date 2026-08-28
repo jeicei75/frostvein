@@ -8,3 +8,9 @@ anyhow.workspace = true
 protocol = { path = "../protocol" }
 serde_json.workspace = true
 sim-core = { path = "../sim-core" }
+
+[dev-dependencies]
+# The daemon's own round-trip test uses the CLIENT's standability predicate as its oracle, so the
+# rule `client-core` restates and the rule `sim-core` enforces are pinned against each other.
+# client-core is pure (protocol + thiserror) and pulls in no sim-core edge.
+client-core = { path = "../client-core" }

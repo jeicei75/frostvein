@@ -15,6 +15,8 @@ use crate::{
         light_properties, material_color, rim_dissolved_color, snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
+    designate::{DesignateMode, DragAnchor, DragMode, designation_target},
+    pick::{PickedCell, PickedTile},
     slice::SliceLevel,
     transform::world_to_render,
 };
@@ -83,6 +85,16 @@ pub struct ProjectedZone(pub [i32; 3]);
 /// The client-local slab drawn under the tile currently under the cursor.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HoverHighlight(pub [i32; 3]);
+
+/// Client-only slabs shown while a designation drag is held.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DragPreview(pub [i32; 3]);
+
+#[derive(Resource, Default)]
+/// The cells the preview currently covers, cached so an unchanged drag does not respawn its
+/// slabs every frame. Cells rather than a rect since the standable modes follow the ground and
+/// their footprint is no longer a single-z box.
+pub struct DragPreviewCells(Option<Vec<[i32; 3]>>);
 
 /// Leaves a visible gutter between neighbouring mark slabs. The mesh is 1.02 wide and this scale
 /// is applied on top of it, so a slab covers 1.02 x 0.94 = 0.9588 of its tile — inset ~2% per
@@ -217,16 +229,20 @@ pub fn sync_hover_highlight(
     assets: Option<Res<ProjectionAssets>>,
     highlights: Query<(BevyEntity, &HoverHighlight)>,
 ) {
-    if let Some(position) = picked.0 {
+    if let Some(cell) = picked.0 {
+        let position = cell.tile;
+        let normal = cell.face.normal();
         if let Some((entity, _)) = highlights.iter().next() {
             commands.entity(entity).insert((
                 HoverHighlight(position),
-                Transform::from_translation(world_to_render(position) + Vec3::Y * 0.55),
+                Transform::from_translation(world_to_render(position) + normal * 0.55)
+                    .with_rotation(bevy::prelude::Quat::from_rotation_arc(Vec3::Y, normal)),
             ));
         } else if let Some(assets) = assets {
             commands.spawn((
                 HoverHighlight(position),
-                Transform::from_translation(world_to_render(position) + Vec3::Y * 0.55),
+                Transform::from_translation(world_to_render(position) + normal * 0.55)
+                    .with_rotation(bevy::prelude::Quat::from_rotation_arc(Vec3::Y, normal)),
                 Mesh3d(assets.mark_mesh.clone()),
                 MeshMaterial3d(assets.hover_highlight.clone()),
                 ClientLocal,
@@ -236,6 +252,136 @@ pub fn sync_hover_highlight(
         for (entity, _) in highlights.iter() {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+/// Rebuilds the deliberately small preview set from the same single-z rect helper used on wire.
+#[allow(clippy::too_many_arguments)]
+pub fn sync_drag_preview(
+    mut commands: Commands,
+    anchor: Res<DragAnchor>,
+    drag_mode: Res<DragMode>,
+    picked: Res<PickedTile>,
+    mirror: Res<crate::ingest::MirrorResource>,
+    slice: Res<SliceLevel>,
+    assets: Option<Res<ProjectionAssets>>,
+    previews: Query<BevyEntity, With<DragPreview>>,
+    mut preview_cells_cache: ResMut<DragPreviewCells>,
+) {
+    let (Some(anchor), Some(assets)) = (anchor.0, assets) else {
+        if preview_cells_cache.0.take().is_some() {
+            for entity in &previews {
+                commands.entity(entity).despawn();
+            }
+        }
+        return;
+    };
+    // A drag stays live across frames whose ray misses terrain — cursor over sky, over a gap,
+    // past the world edge. Despawning the whole preview on those frames left the boss dragging
+    // BLIND while the drag went on committing on release; keep the last rect standing and let the
+    // next frame that hits something update it.
+    let Some(release) = picked.0 else {
+        return;
+    };
+    let mode = drag_mode.0.unwrap_or(DesignateMode::None);
+    // The preview is built from THE SAME functions the release path sends, so what is on screen
+    // is what goes on the wire — the property that was missing when two inert modes previewed a
+    // full rect and designated nothing.
+    let cells = preview_cells(&mirror.0, slice.level(), anchor, release, mode);
+    if preview_cells_cache.0.as_deref() == Some(cells.as_slice()) {
+        return;
+    }
+    for entity in &previews {
+        commands.entity(entity).despawn();
+    }
+    for tile in &cells {
+        let (transform, material) =
+            preview_appearance(mode, &mirror.0, *tile, slice.level(), &assets);
+        commands.spawn((
+            DragPreview(*tile),
+            transform,
+            Mesh3d(assets.mark_mesh.clone()),
+            MeshMaterial3d(material),
+            ClientLocal,
+        ));
+    }
+    preview_cells_cache.0 = Some(cells);
+}
+
+/// Exactly the cells the release will designate, for the mode that will commit.
+///
+/// Dig and clear keep AC4's single-z rect at the cells the ray hit; channel and stockpile follow
+/// the ground. Both branches then drop whatever the sim would refuse, so the preview never
+/// promises a mark that cannot appear.
+fn preview_cells(
+    mirror: &Mirror,
+    level: i32,
+    anchor: PickedCell,
+    release: PickedCell,
+    mode: DesignateMode,
+) -> Vec<[i32; 3]> {
+    match mode {
+        DesignateMode::Channel | DesignateMode::Stockpile => client_core::surface_targets(
+            mirror,
+            level,
+            designation_target(mirror, anchor, mode),
+            designation_target(mirror, release, mode),
+        ),
+        _ => {
+            let rect = client_core::rect_on_level(
+                (anchor.tile[0], anchor.tile[1]),
+                (release.tile[0], release.tile[1]),
+                anchor.tile[2],
+            );
+            (rect.min[1]..=rect.max[1])
+                .flat_map(|y| (rect.min[0]..=rect.max[0]).map(move |x| [x, y, rect.min[2]]))
+                .filter(|tile| sim_will_keep(mirror, *tile, mode))
+                .collect()
+        }
+    }
+}
+
+/// Whether the sim would KEEP a designation of this mode at this cell.
+///
+/// Mirrors the two filters in `sim-core`'s command handling: dig keeps `Tile::Solid`, channel and
+/// stockpile keep standable cells, and both drop the remainder in silence.
+fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
+    match mode {
+        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_))),
+        DesignateMode::Channel | DesignateMode::Stockpile => {
+            client_core::is_standable(mirror, tile)
+        }
+        // Clear removes rather than designates; there is nothing for the sim to filter.
+        DesignateMode::Clear | DesignateMode::None => true,
+    }
+}
+
+/// Where a pending drag tile will sit, and what it will look like, IN THE MODE THAT WILL COMMIT.
+/// Task 4 requires the preview to sit where the committed marks will sit, so each arm mirrors the
+/// matching arm of `designation_mark_transform` / `zone_mark_transform` rather than assuming dig.
+/// Clear commits nothing, so it keeps the neutral hover material at the dig height.
+fn preview_appearance(
+    mode: DesignateMode,
+    mirror: &Mirror,
+    tile: [i32; 3],
+    level: i32,
+    assets: &ProjectionAssets,
+) -> (Transform, Handle<StandardMaterial>) {
+    let [x, y, _] = tile;
+    match mode {
+        DesignateMode::Dig => (
+            slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
+            assets.dig_mark.clone(),
+        ),
+        DesignateMode::Channel => (
+            channel_slab(mirror, tile, level),
+            assets.channel_mark.clone(),
+        ),
+        DesignateMode::Stockpile => (slab_transform(tile, -0.46), assets.zone_mark.clone()),
+        DesignateMode::None | DesignateMode::Clear => (
+            slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
+            assets.hover_highlight.clone(),
+        ),
     }
 }
 
@@ -614,7 +760,22 @@ fn designation_mark_transform(
             let [x, y, _] = position;
             slab_transform([x, y, dig_mark_level(mirror, position, level)], 0.54)
         }
-        DesignationKind::Channel => slab_transform(position, -0.46),
+        DesignationKind::Channel => channel_slab(mirror, position, level),
+    }
+}
+
+/// A channel mark sits at the BOTTOM of its air cell — the top face of the rock it will turn into
+/// a ramp. That is right until something is drawn above it, and then the slab is sealed inside
+/// opaque geometry, exactly as buried digs were before 7.2 fixed them. The instruments cannot see
+/// it: a slab inside rock is projected and counted like any other, and 7.2 measured 0 of 50 marks
+/// visible while the count correctly read 50. Dig got that fix; channel never did. This is it.
+fn channel_slab(mirror: &Mirror, position: [i32; 3], level: i32) -> Transform {
+    let [x, y, z] = position;
+    let top = dig_mark_level(mirror, position, level);
+    if top == z {
+        slab_transform(position, -0.46)
+    } else {
+        slab_transform([x, y, top], 0.54)
     }
 }
 

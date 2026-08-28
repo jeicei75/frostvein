@@ -74,9 +74,11 @@ p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 # AC13's "exit 0 is not a result", against this story's measured trap: the dwarves consume the
 # designations, so a capture aimed at a small site arrives after they are gone and photographs
 # nothing it came to see.
-old = '                self.expected_designations > 0,\n'
+# 8.2 added a SECOND `expected_designations > 0` assertion for scripted drags, so this row
+# must name the --expect-work one specifically or it sabotages whichever comes first.
+old = '                self.expected_designations > 0,\n                "capture of a working site'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                self.expected_designations >= 0,\n'))
+p.write_text(s.replace(old, old.replace('> 0', '>= 0')))
 PYX
 
 mutation "distance capture validation is disabled" gui capture_distance_requires_capture_and_is_retained_for_pinning <<'PY'

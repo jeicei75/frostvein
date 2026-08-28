@@ -25,9 +25,9 @@ PY
 mutation "the startup scene loses its sky and snowfall" gui the_live_startup_scene_spawns_its_camera_lighting_and_atmosphere <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            setup_atmosphere,\n            log_adapter,'
+old = '            setup_atmosphere,\n            setup_designate_hint,\n            log_adapter,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            log_adapter,'))
+p.write_text(s.replace(old, '            setup_designate_hint,\n            log_adapter,'))
 PY
 
 mutation "the client-local classification pass never runs" gui the_classification_pass_leaves_no_entity_outside_the_partition <<'PY'

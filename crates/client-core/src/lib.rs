@@ -185,6 +185,98 @@ impl Mirror {
     }
 }
 
+/// Whether the sim will KEEP a designation at `pos`, for the two commands it filters on
+/// standability: `Designate { kind: Channel }` and `PlaceStockpile`.
+///
+/// The sim keeps only standable positions and **drops the rest without a word** — no error, no
+/// ack, no diagnostic. Measured 2026-08-27 against the real daemon: a channel rect at a solid
+/// cell yields 0 designations, the same rect one level up yields 9; a stockpile rect behaves
+/// identically. A client that cannot answer this question has no way to tell "the sim refused
+/// every tile" from "the feature is broken", which is exactly how every channel and every
+/// stockpile the Bevy client had ever issued stayed inert through a full code review.
+///
+/// NOTE: this deliberately restates `sim-core`'s `Terrain::is_standable`. Clients must not depend
+/// on `sim-core` (the gate probes for that edge), so the rule is duplicated here on purpose and
+/// pinned against the real daemon by `crates/simd/tests/designation_targets.rs` — if the sim's
+/// rule ever moves, that test goes red rather than this silently disagreeing.
+pub fn is_standable(mirror: &Mirror, pos: [i32; 3]) -> bool {
+    matches!(mirror.tile(pos), Some(Tile::Empty))
+        && matches!(
+            mirror.tile([pos[0], pos[1], pos[2] - 1]),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+}
+
+/// The standable cell in one column that a drag started at `near_z` should designate.
+///
+/// A column can hold several standable cells — the surface, and any cave floor beneath it. The
+/// one nearest the height the drag began at is the one the boss is looking at, and it keeps a
+/// drag that started on a ledge on that ledge instead of jumping to the clifftop above it. Ties
+/// go to the higher cell, which is the one you can see.
+fn standable_in_column(
+    mirror: &Mirror,
+    x: i32,
+    y: i32,
+    near_z: i32,
+    level: i32,
+) -> Option<[i32; 3]> {
+    // `level + 1`, not `level`: the cell you stand on above the cut surface sits ONE ABOVE it, and
+    // that is precisely what a top-face pick targets. Capping at `level` excluded it and made
+    // every standable drag on a cut level designate nothing.
+    (0..=level + 1)
+        .map(|z| [x, y, z])
+        .filter(|cell| is_standable(mirror, *cell))
+        .min_by_key(|cell| ((cell[2] - near_z).abs(), -cell[2]))
+}
+
+/// Every cell a standable-target drag designates: one per column of the drag's footprint,
+/// FOLLOWING THE GROUND rather than flattening to the anchor's height.
+///
+/// MEASURED 2026-08-27 on the real world: with AC4's single-z rect, a 6x6 stockpile drag on
+/// natural terrain keeps a median 19.4% of its footprint and a 10x10 keeps 14.0% — because a
+/// fixed z crosses a hillside in a thin band, and standable cells exist only where the surface IS
+/// that height. That is Wolf's "stockpiling does pretty much nothing usually", and it had been
+/// true since the AC was written. RULED 2026-08-27 (Wolf): the standable modes follow the
+/// surface. Dig keeps the single-z rule, where cutting one level into a slope is the point.
+pub fn surface_targets(mirror: &Mirror, level: i32, a: [i32; 3], b: [i32; 3]) -> Vec<[i32; 3]> {
+    let mut cells = Vec::new();
+    for y in a[1].min(b[1])..=a[1].max(b[1]) {
+        for x in a[0].min(b[0])..=a[0].max(b[0]) {
+            if let Some(cell) = standable_in_column(mirror, x, y, a[2], level) {
+                cells.push(cell);
+            }
+        }
+    }
+    cells
+}
+
+/// Packs the followed surface into rects, merging each row of same-height neighbours into one.
+///
+/// NOTE: exact rather than a bounding box — a box would also cover cells this drag did NOT
+/// choose, and the sim would silently keep any that happen to be standable, which is a cave floor
+/// zoned underground and out of sight. That is the same silent-wrong-cell class this whole round
+/// exists to close, so it is not traded away for fewer commands. Merging runs keeps a 10x10 drag
+/// near ten commands instead of a hundred, well clear of the 256 bound.
+pub fn rects_for_cells(cells: &[[i32; 3]]) -> Vec<Rect> {
+    let mut rects: Vec<Rect> = Vec::new();
+    for cell in cells {
+        match rects.last_mut() {
+            Some(last)
+                if last.max[1] == cell[1]
+                    && last.max[2] == cell[2]
+                    && last.max[0] + 1 == cell[0] =>
+            {
+                last.max[0] = cell[0];
+            }
+            _ => rects.push(Rect {
+                min: *cell,
+                max: *cell,
+            }),
+        }
+    }
+    rects
+}
+
 pub fn rect_on_level(a: (i32, i32), b: (i32, i32), z: i32) -> Rect {
     Rect {
         min: [a.0.min(b.0), a.1.min(b.1), z],

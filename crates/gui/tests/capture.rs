@@ -24,7 +24,7 @@ use gui::{
         IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, WireMessage,
         projection_systems,
     },
-    project::{ProjectedDesignation, setup_projection_assets},
+    project::{ProjectedDesignation, TerrainTile, setup_projection_assets},
     slice::SliceLevel,
 };
 use protocol::{
@@ -147,6 +147,120 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
 fn warm_pixel_threshold_requires_red_to_exceed_blue_by_the_named_margin() {
     assert_eq!(warm_lit_pixels(&[[220, 120, 150, 255]]), 1);
     assert_eq!(warm_lit_pixels(&[[180, 120, 150, 255]]), 0);
+}
+
+#[test]
+fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
+    let dims = Dims { x: 1, y: 1, z: 1 };
+    let snapshot = Snapshot {
+        msg_type: MessageType::Snapshot,
+        dims,
+        tiles: vec![Tile::Solid(protocol::Material::Stone)],
+        entities: Vec::new(),
+        designations: vec![Designation {
+            pos: [0, 0, 0],
+            kind: DesignationKind::Dig,
+        }],
+        zones: Vec::new(),
+        items: Vec::new(),
+        speed: Speed::Normal,
+        tick: 7,
+    };
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
+        .insert_resource(SliceLevel::pinned(dims, 0))
+        .insert_resource(CaptureState::at_tick(
+            PathBuf::from("unused.png"),
+            4,
+            7,
+            3,
+            false,
+        ))
+        .add_systems(Update, capture_after_frames);
+    app.world_mut().spawn((TerrainTile([0, 0, 0]),));
+    app.world_mut().spawn((ProjectedDesignation([0, 0, 0]),));
+
+    app.update();
+    app.world_mut()
+        .resource_mut::<MirrorResource>()
+        .0
+        .apply_delta(Delta {
+            msg_type: MessageType::Delta,
+            tick: 9,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: [0, 0, 0],
+                kind: DesignationKind::Dig,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        });
+    app.update();
+    assert!(
+        !app.world().resource::<CaptureState>().requested(),
+        "two frames must not substitute for tick 10"
+    );
+
+    app.update();
+    assert!(
+        !app.world().resource::<CaptureState>().requested(),
+        "a third frame at tick 9 must not substitute for tick 10"
+    );
+
+    app.world_mut()
+        .resource_mut::<MirrorResource>()
+        .0
+        .apply_delta(Delta {
+            msg_type: MessageType::Delta,
+            tick: 10,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: [0, 0, 0],
+                kind: DesignationKind::Dig,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        });
+    app.update();
+    assert!(
+        app.world().resource::<CaptureState>().requested(),
+        "tick 10 must trigger an at-tick capture"
+    );
+
+    let snapshot = Snapshot {
+        msg_type: MessageType::Snapshot,
+        dims,
+        tiles: vec![Tile::Solid(protocol::Material::Stone)],
+        entities: Vec::new(),
+        designations: Vec::new(),
+        zones: Vec::new(),
+        items: Vec::new(),
+        speed: Speed::Normal,
+        tick: 7,
+    };
+    let mut exhausted = App::new();
+    exhausted
+        .add_plugins(MinimalPlugins)
+        .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
+        .insert_resource(SliceLevel::pinned(dims, 0))
+        .insert_resource(CaptureState::at_tick(
+            PathBuf::from("unused.png"),
+            1,
+            7,
+            3,
+            false,
+        ))
+        .add_systems(Update, capture_after_frames);
+    exhausted.update();
+    assert!(
+        exhausted.world().resource::<CaptureState>().failed(),
+        "an at-tick capture that runs out of frames must fail instead of capturing early"
+    );
 }
 
 #[test]

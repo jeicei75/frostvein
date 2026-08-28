@@ -882,3 +882,94 @@ executed a single line of its production path.**
   hover defect: `04e6de5` raised the campfire amplitude 0.11→0.40, peaking at 44.8M, ~40% above the
   value 5.4 was sized against, and a cyan slab at `(80,220,210)` will not survive that exposure.
   Recorded against that open item; no look-tuning now, per the art rule. `[wolf/MED]`
+
+## Deferred from: code review of 8-2-designate-with-the-mouse (2026-08-26)
+
+- **Paired `Clear` commands can split at the 256-command bound** [crates/gui/src/command.rs:18] —
+  `PendingCommands::push` is called in a loop across the bound check, so a Clear designation can
+  send `CancelDesignation` while `RemoveStockpile` is dropped, leaving the daemon with an
+  inconsistent designate/stockpile pair. Deferred: reaching the bound needs 256 queued
+  designations. Fix shape is a single atomic `push_all(Vec<Command>)`.
+- **`--at-tick 0` boundary untested** [crates/gui/tests/capture.rs:933] — `target_tick ==
+  start_tick` means the first `capture_after_frames` call satisfies the tick test trivially.
+  Tested value is 3; 0 is a distinct literal boundary. Deferred: plausible-but-untested only.
+- **Test-harness writers set no write timeout, unlike production** [crates/gui/src/command.rs:84] —
+  production sets one in `connect_to_daemon`; no test harness does, so a harness bug (e.g. a wrong
+  `read_line` count) hangs the test process indefinitely instead of failing fast. Deferred:
+  test-only, no production consequence.
+- **`SNAPSHOT_READ_TIMEOUT` names two unrelated things** [crates/gui/src/ingest.rs:57] — 8.2 reuses
+  it as the command *write* timeout. The 30 s value is right for both; the name is now misleading.
+  Deferred: cosmetic. (Note: if the blocking-write decision changes the write timeout, this stops
+  being cosmetic and should be split then.)
+- ~~**`.codex/` is untracked and not git-ignored** [.gitignore]~~ — **CLOSED 2026-08-27.** Not
+  deferred after all: the tree holds `.codex/auth.json`, a live credential, and the `.gitignore`
+  secret patterns (`*token*`, `*secret*`, `.env*`) do not match that name. One `git add -A` away
+  from committing an auth token is a latent trap, not housekeeping. `.codex/` added to
+  `.gitignore`; `git check-ignore -v .codex/auth.json` now resolves to `.gitignore:16`.
+- **M2-7's build stamp is missing for the FIFTH time** [scripts/] — `rg 'GIT_SHA|git_sha|vergen'
+  crates/gui/src/` returns nothing and `scripts/` holds no build-stamp automation. Recurring
+  because it is re-noted per story and never automated. The stale-binary trap it guards has fired
+  five times. Deferred here only because it is a process/tooling item, not part of this diff — but
+  it is now the longest-running open item in M2.
+- **Blocking socket write inside the Bevy `Update` schedule** [crates/gui/src/command.rs:37] —
+  `send_commands` blocks on `write_all` under a 30 s write timeout, in the frame loop; an executed
+  reproducer confirms a back-pressured peer stalls it for the full timeout. **ACCEPTED, not
+  unnoticed** (Wolf, 2026-08-26): the daemon is localhost, so the stall shape is not real today,
+  and a background writer thread is speculative machinery YAGNI forbids. REOPEN TRIGGER: `simd`
+  running off-box, or the client pointed at any non-loopback daemon. If that happens this is a
+  render-loop freeze, not a latency nit.
+
+## Deferred from: 8.2 vehicle session (2026-08-27)
+
+- **AC13's rendered half — the hit-face hover highlight has never been judged by eye.**
+  [crates/gui/src/project.rs] The geometry is proven (the march face and the slab rotation both
+  have tests and sabotage rows now), but whether the slab READS on a cliff face, stays distinct
+  from the dig/channel/zone marks and clear of the near-white reserved for stars and emitter
+  faces is a look question. **DEFERRED by Wolf 2026-08-27**: *"it will get clearer with only real
+  gfx... now it's too confusing still to understand what happens."* This is the standing art rule
+  ([[art-gates-visual-judgement]]) applied to 8.2. REOPEN TRIGGER: real game art lands.
+  `[wolf/MED]`
+- **The campfire is still blown out and is now measurably obstructing observation.**
+  Carried open since 6.2 and re-confirmed by Wolf on 2026-08-27 as a reason the client is hard to
+  read: *"campfire is still overblown so it hides stuff"*. This is no longer only a look
+  complaint — it is degrading the vehicle as an instrument, which is what makes it worth ranking
+  above ordinary look items when the gfx pass is planned. `[feature/MED]`
+- **AC19's fps readings and AC18's `tui` cross-check are owed but NOT art-blocked.**
+  Both are objective readouts that a short vehicle session closes regardless of how the client
+  looks. Listed here so they are not swept up in the art deferral above. `[wolf/HIGH]`
+- ~~**`a_mid_haul_save_loads_and_the_daemon_keeps_ticking` flaked once**~~ **CLOSED 2026-08-27 on
+  its second sighting**, which is the trigger this entry set for itself. Root cause was not
+  contention: `read_snapshot_after_load` budgeted **four lines** for the load snapshot to arrive,
+  which is a timing assumption wearing a budget's clothes — the daemon ticks at 10 Hz and keeps
+  broadcasting while the load command is in flight, so how many deltas arrive first is set by
+  machine load. **The same unit error as M2-15** (`--frames`, a render-rate quantity, feeding
+  assertions denominated in ticks). Now bounded by a deadline, with a 1,000-line runaway backstop,
+  and the panic reports how many deltas it saw. Five consecutive runs green, then a full gate
+  green. ORIGINAL ENTRY: `a_mid_haul_save_loads_and_the_daemon_keeps_ticking` flaked once
+  — failed in one full-gate run on 2026-08-27, passed alone immediately after and on the next full
+  gate. Pre-existing and untouched by that round, but the round added two daemon-spawning tests to
+  the serialized `serve.rs` set, which lengthens the run and may have made an existing timing
+  sensitivity more likely to fire. Deferred: one observation, not yet a pattern. **Reopen on the
+  second sighting** — a gate that goes red one run in N is a gate nobody trusts, and this project
+  relies on the gate being believed. `[feature/MED]`
+
+## Deferred from: 8.2 vehicle session (2026-08-28)
+
+- **Clear cannot reach a mark whose column holds a SECOND standable cell, if the clear drag is
+  anchored at a different height than the drag that made it.** [crates/client-core/src/lib.rs
+  `standable_in_column`] Each column resolves to the standable cell nearest the *drag anchor's*
+  height, so a channel anchored on a cave floor and a clear anchored on the surface above it
+  target different cells in the same column. The mark survives, silently, with no way to remove
+  it but re-dragging from the original height. MEASURED 2026-08-28 on a synthetic column with
+  standable cells at z 2 and z 5: `near_z=2 -> [[0,0,2]]`, `near_z=5 -> [[0,0,5]]`.
+
+  **NOT what the vehicle session hit** — the two leftover marks there were at z 9 and z 10, which
+  cannot both be standable in one column, so they were separate columns outside the clear drag's
+  footprint. This was found while checking that, and is a distinct latent case.
+
+  **DEFERRED by Wolf 2026-08-28**, asked and answered explicitly rather than filed and forgotten:
+  it needs a cave or an overhang to fire, and open ground has one standable cell per column. It is
+  the same silent-no-op shape as the two dead modes this story already produced
+  ([[silent-sim-filter-trap]]), so it is logged rather than dropped. REOPEN TRIGGER: caves,
+  overhangs or multi-level interiors become reachable by a drag. `[feature/MED]`
+

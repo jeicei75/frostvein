@@ -3,7 +3,7 @@
 mutation "pick system leaves the shared client schedule" gui a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            update_pick.after(apply_scripted_cursor),\n'
+old = '            update_pick.after(apply_scripted_input),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
@@ -45,13 +45,13 @@ old = '''    } else {
     }
 }
 
-fn terrain_standard_material'''
+/// Rebuilds the deliberately'''
 assert s.count(old) == 1
 new = '''    } else {
     }
 }
 
-fn terrain_standard_material'''
+/// Rebuilds the deliberately'''
 p.write_text(s.replace(old, new))
 PY
 
@@ -70,9 +70,15 @@ PY
 mutation "the hover highlight is spawned without its client-local tag" gui the_live_pick_spawns_a_client_local_highlight_and_despawns_it_without_a_pick <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                MeshMaterial3d(assets.hover_highlight.clone()),\n                ClientLocal,\n'
+old = '''                HoverHighlight(position),
+                Transform::from_translation(world_to_render(position) + normal * 0.55)
+                    .with_rotation(bevy::prelude::Quat::from_rotation_arc(Vec3::Y, normal)),
+                Mesh3d(assets.mark_mesh.clone()),
+                MeshMaterial3d(assets.hover_highlight.clone()),
+                ClientLocal,
+'''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                MeshMaterial3d(assets.hover_highlight.clone()),\n'))
+p.write_text(s.replace(old, old.replace('                ClientLocal,\n', '')))
 PY
 
 mutation "the hover colour drifts to a near-neighbour of the dig mark" gui hover_highlight_colour_is_a_distinct_cold_literal <<'PY'

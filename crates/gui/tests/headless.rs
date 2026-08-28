@@ -16,7 +16,7 @@ use bevy::{
     camera::{CameraProjection, RenderTargetInfo},
     dev_tools::fps_overlay::FpsOverlayConfig,
     ecs::system::RunSystemOnce,
-    input::ButtonInput,
+    input::{ButtonInput, mouse::MouseButton},
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         Assets, Camera, DirectionalLight, Entity as BevyEntity, GlobalTransform, KeyCode, Mesh,
@@ -33,15 +33,18 @@ use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, Snowflake, setup_atmosphere},
     camera::CameraRig,
     capture::{CaptureState, accumulate_motion},
+    command::PendingCommands,
+    designate::{DesignateHint, DesignateMode, DragAnchor, DragMode, designation_hint},
     ingest::{
         CaptureDistance, IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork,
         ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
         reconcile_projection,
     },
-    pick::PickedTile,
+    pick::{Face, PickedCell, PickedTile},
     project::{
-        ClientLocal, HoverHighlight, ProjectedDesignation, ProjectedItem, ProjectedZone, SnowCap,
-        TerrainTile, WorldProjected, setup_projection_assets,
+        ClientLocal, DragPreview, HoverHighlight, ProjectedDesignation, ProjectedItem,
+        ProjectedZone, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
+        sync_hover_highlight,
     },
     slice::SliceLevel,
     transform::world_to_render,
@@ -277,6 +280,44 @@ fn snapshot_marks_project_through_the_live_ingest_schedule() {
         .collect::<BTreeSet<_>>();
     assert_eq!(designations, BTreeSet::from([[0, 0, 1]]));
     assert_eq!(zones, BTreeSet::from([[1, 0, 2]]));
+}
+
+/// AC12: a delivered designation must be visible at the end of the FIRST frame that ingests it.
+/// A second update here would hide an extra-frame projection latency behind reconciliation.
+#[test]
+fn designation_delta_projects_in_the_same_update_that_ingests_it() {
+    let dims = Dims { x: 2, y: 2, z: 2 };
+    let initial = snapshot_with_dims(dims, vec![Tile::Solid(Material::Stone); 8], Vec::new());
+    let mut app = headless_app(initial);
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.insert_resource(IngestReceiver::new(receiver));
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: [1, 0, 1],
+                kind: DesignationKind::Dig,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&ProjectedDesignation>()
+            .iter(app.world())
+            .map(|mark| mark.0)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([[1, 0, 1]]),
+        "the designation delta must project in its first ingested frame"
+    );
 }
 
 #[test]
@@ -795,23 +836,27 @@ fn the_level_readout_is_drawn_on_the_live_path_and_follows_the_cut() {
     };
 
     // Independent oracle: the expected strings are written here, not read back from SliceLevel.
+    // `cursor -` and `N ?` are the HONEST answers under `MinimalPlugins`: nothing is picked and
+    // there is no camera to take a bearing from. A readout that invented a cell or a direction
+    // here would be worse than one that says it does not know — the compass exists precisely
+    // because this client used to say nothing about which way it faced.
     assert_eq!(
         readout(&mut app),
-        vec!["Slice: z 2/2 - surface".to_string()],
+        vec!["Slice: z 2/2 - surface  cursor -  N ?".to_string()],
         "the readout must exist at boot and name the level"
     );
 
     press_once(&mut app, KeyCode::Comma);
     assert_eq!(
         readout(&mut app),
-        vec!["Slice: z 1/2 - surface".to_string()],
+        vec!["Slice: z 1/2 - surface  cursor -  N ?".to_string()],
         "z 1 has only empty sky above it, so it is not underground"
     );
 
     press_once(&mut app, KeyCode::Comma);
     assert_eq!(
         readout(&mut app),
-        vec!["Slice: z 0/2 - underground".to_string()],
+        vec!["Slice: z 0/2 - underground  cursor -  N ?".to_string()],
         "z 0 is covered by the rock at z 1"
     );
 }
@@ -2094,7 +2139,7 @@ fn a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile() {
     app.update();
 
     assert_eq!(
-        app.world().resource::<PickedTile>().0,
+        app.world().resource::<PickedTile>().tile(),
         Some([1, 1, 0]),
         "the live client schedule must pick the visible tile under its projected cursor"
     );
@@ -2157,12 +2202,51 @@ fn the_live_pick_spawns_a_client_local_highlight_and_despawns_it_without_a_pick(
     );
 }
 
+#[test]
+fn a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side() {
+    let mut app = headless_app(one_tile_snapshot());
+    app.update();
+    let tile = [3, 4, 5];
+    app.insert_resource(PickedTile(Some(PickedCell {
+        tile,
+        face: Face::East,
+    })));
+    app.world_mut()
+        .run_system_once(sync_hover_highlight)
+        .unwrap();
+    app.world_mut().flush();
+
+    let transform = *app
+        .world_mut()
+        .query::<(&HoverHighlight, &Transform)>()
+        .single(app.world())
+        .unwrap()
+        .1;
+    assert_eq!(
+        transform.translation,
+        world_to_render(tile) + bevy::prelude::Vec3::X * 0.55,
+        "a side hit must hoist the thin mesh beyond that side, not onto the old top face"
+    );
+    // The offset alone is not the feature. `mark_mesh` is a THIN SLAB whose flat face is normal
+    // to its local Y; hoisted beside a wall without being turned, it is a horizontal wafer seen
+    // edge-on, which is invisible from exactly the viewpoint AC13 is about. This assertion reads
+    // the rotation, which nothing did — deleting `with_rotation` from both call sites left the
+    // whole suite green.
+    let turned = transform.rotation * bevy::prelude::Vec3::Y;
+    let normal = Face::East.normal();
+    assert!(
+        turned.distance(normal) < 1e-5,
+        "the slab's thin axis must be turned onto the face normal {normal:?}, but it points \
+         {turned:?} — the slab is lying flat against a vertical wall"
+    );
+}
+
 fn picked_at(snapshot: Snapshot, rig: CameraRig, level: i32, cursor: Vec2) -> Option<[i32; 3]> {
     let mut app = live_app(snapshot).0;
     install_pick_camera(&mut app, rig, cursor);
     app.world_mut().resource_mut::<SliceLevel>().set(level);
     app.update();
-    let picked = app.world().resource::<PickedTile>().0;
+    let picked = app.world().resource::<PickedTile>().tile();
     if picked.is_none() {
         assert_eq!(
             app.world_mut()
@@ -2372,9 +2456,161 @@ fn the_scripted_capture_cursor_reaches_the_live_pick_system() {
     app.update();
 
     assert_eq!(
-        app.world().resource::<PickedTile>().0,
+        app.world().resource::<PickedTile>().tile(),
         Some([1, 1, 0]),
         "the parsed capture cursor must be written before the shared pick system runs"
+    );
+}
+
+#[test]
+fn mouse_drag_uses_the_anchor_level_and_clears_its_anchor_on_release() {
+    let anchor = [1, 1, 1];
+    let release = [2, 1, 0];
+    let rig = CameraRig::new(anchor);
+    let anchor_cursor = rig
+        .project_world_point(anchor)
+        .expect("the literal anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let release_cursor = rig
+        .project_world_point(release)
+        .expect("the literal release tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 2 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    tiles[index(release)] = Tile::Solid(Material::Stone);
+    let mut app = live_app(snapshot_with_dims(dims, tiles, vec![])).0;
+    install_pick_camera(&mut app, rig, anchor_cursor);
+    app.update();
+
+    press_once(&mut app, KeyCode::Digit1);
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.update();
+    assert_eq!(
+        app.world().resource::<DragAnchor>().0.map(|cell| cell.tile),
+        Some(anchor)
+    );
+    // MinimalPlugins does not run InputPlugin's transition clearing between frames.
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .unwrap()
+        .set_cursor_position(Some(release_cursor));
+    {
+        let mut mouse = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+        mouse.release(MouseButton::Left);
+    }
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+
+    assert_eq!(app.world().resource::<DragAnchor>().0, None);
+    assert_eq!(
+        app.world()
+            .resource::<PendingCommands>()
+            .commands()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: protocol::Rect {
+                min: [1, 1, 1],
+                max: [2, 1, 1]
+            },
+        }],
+        "a cross-height drag is one inclusive rectangle on the literal anchor level"
+    );
+}
+
+/// AC11: this is the complete client round trip below the world top: a real mouse drag enters
+/// the shared input schedule, the daemon's designation delta comes back, and the mark projects
+/// at the pinned underground level rather than on the surface.
+#[test]
+fn mouse_designation_on_a_sliced_underground_level_round_trips_to_a_projected_mark() {
+    let anchor = [1, 1, 1];
+    let rig = CameraRig::new(anchor);
+    let cursor = rig
+        .project_world_point(anchor)
+        .expect("the underground anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![]));
+    install_pick_camera(&mut app, rig, cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(anchor[2]);
+    app.update();
+
+    press_once(&mut app, KeyCode::Digit1);
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Left);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+
+    assert_eq!(
+        app.world()
+            .resource::<PendingCommands>()
+            .commands()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: protocol::Rect {
+                min: anchor,
+                max: anchor,
+            },
+        }],
+        "the underground drag must send its literal picked level, not the world top"
+    );
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: anchor,
+                kind: DesignationKind::Dig,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&ProjectedDesignation>()
+            .iter(app.world())
+            .map(|mark| mark.0)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([anchor]),
+        "the returned designation must project on the pinned underground slice"
     );
 }
 
@@ -2565,5 +2801,676 @@ fn f3_toggles_the_diagnostic_overlay() {
         app.world().resource::<FpsOverlayConfig>().enabled,
         !before,
         "F3 did not flip the overlay; toggle_overlay is not running"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Designation interaction, driven THROUGH the shared registration point.
+//
+// Round 1 of this story's review found that three of the four modes named in the story title,
+// both `Esc` transitions, the hint bar and the drag preview could each be broken or deleted with
+// the whole suite green. Every test below therefore presses real keys and real mouse buttons on a
+// `live_app` and reads the wire commands the client actually queued.
+// ---------------------------------------------------------------------------------------------
+
+/// A 3x3x3 world with one solid tile, the camera aimed at it, sliced to its level.
+fn designation_app(
+    anchor: [i32; 3],
+) -> (
+    App,
+    std::sync::mpsc::SyncSender<anyhow::Result<WireMessage>>,
+) {
+    let rig = CameraRig::new(anchor);
+    let cursor = rig
+        .project_world_point(anchor)
+        .expect("the anchor tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![]));
+    install_pick_camera(&mut app, rig, cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(anchor[2]);
+    app.update();
+    (app, sender)
+}
+
+fn preview_tiles(app: &mut App) -> Vec<[i32; 3]> {
+    let mut tiles = app
+        .world_mut()
+        .query::<&DragPreview>()
+        .iter(app.world())
+        .map(|preview| preview.0)
+        .collect::<Vec<_>>();
+    tiles.sort_unstable();
+    tiles
+}
+
+fn set_mouse(app: &mut App, act: impl FnOnce(&mut ButtonInput<MouseButton>)) {
+    act(&mut app.world_mut().resource_mut::<ButtonInput<MouseButton>>());
+}
+
+/// MinimalPlugins does not run InputPlugin's transition clearing between frames.
+fn clear_mouse(app: &mut App) {
+    set_mouse(app, |mouse| mouse.clear());
+}
+
+fn queued(app: &App) -> Vec<protocol::Command> {
+    app.world()
+        .resource::<PendingCommands>()
+        .commands()
+        .iter()
+        .copied()
+        .collect()
+}
+
+/// Presses the mode key, then presses and releases the left button on the same tile.
+fn drag_one_tile(app: &mut App, mode_key: KeyCode) {
+    press_once(app, mode_key);
+    set_mouse(app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(app);
+    set_mouse(app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(app);
+}
+
+/// AC2, AC8 and AC10: each of the four mode keys issues ITS OWN wire command, AT THE CELL THE SIM
+/// WILL ACCEPT. Collapsing the digit arms, or making channel emit dig, or making stockpile emit
+/// nothing, all left the suite green — only `Digit1` was ever pressed anywhere.
+///
+/// The cell matters as much as the command, and that is what this test gained on 2026-08-27.
+/// Picking resolves a SOLID cell; `sim-core` filters channel and stockpile on standability and
+/// drops everything else in silence. Sending the picked cell therefore made both modes completely
+/// inert against the real daemon — proven, not inferred: a channel rect at the solid cell yields
+/// 0 designations and the same rect one level up yields 9. Asserting only the command variant, as
+/// this test did before, cannot see that at all.
+#[test]
+fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
+    let picked = [1, 1, 1];
+    // The ray enters the top face here, so the standable neighbour is the air cell directly
+    // above. Asserted rather than assumed: if the rig ever changes, this fails legibly instead of
+    // silently re-testing a different geometry.
+    let (probe, _probe_sender) = designation_app(picked);
+    assert_eq!(
+        probe.world().resource::<gui::pick::PickedTile>().0,
+        Some(gui::pick::PickedCell {
+            tile: picked,
+            face: gui::pick::Face::Top
+        }),
+        "this test's expectations are written for a top-face hit on the anchor"
+    );
+    let standable = [1, 1, 2];
+    assert!(
+        client_core::is_standable(&probe.world().resource::<MirrorResource>().0, standable),
+        "the neighbour across the entered face must be a cell the sim will keep — an independent \
+         check of the rule, not a re-run of the client's own arithmetic"
+    );
+
+    let at = |tile: [i32; 3]| protocol::Rect {
+        min: tile,
+        max: tile,
+    };
+    let expected: [(KeyCode, Vec<protocol::Command>); 4] = [
+        (
+            KeyCode::Digit1,
+            vec![protocol::Command::Designate {
+                kind: DesignationKind::Dig,
+                rect: at(picked),
+            }],
+        ),
+        (
+            KeyCode::Digit2,
+            vec![protocol::Command::Designate {
+                kind: DesignationKind::Channel,
+                rect: at(standable),
+            }],
+        ),
+        (
+            KeyCode::Digit3,
+            vec![protocol::Command::PlaceStockpile {
+                rect: at(standable),
+            }],
+        ),
+        // Clear must reach BOTH cells: the dig at the cell the ray hit, and the channel or
+        // stockpile one cell across the entered face. Dropping either rect leaves the boss able
+        // to designate something he can never remove.
+        (
+            KeyCode::Digit4,
+            vec![
+                protocol::Command::CancelDesignation { rect: at(picked) },
+                protocol::Command::CancelDesignation {
+                    rect: at(standable),
+                },
+                protocol::Command::RemoveStockpile {
+                    rect: at(standable),
+                },
+            ],
+        ),
+    ];
+    for (key, want) in expected {
+        let (mut app, _sender) = designation_app(picked);
+        drag_one_tile(&mut app, key);
+        assert_eq!(
+            queued(&app),
+            want,
+            "mode key {key:?} must issue its own command, at the cell the sim accepts"
+        );
+    }
+}
+
+/// AC7, AC14: the right-button abort, driven through the shared registration point rather than
+/// by `run_system_once` with a hand-inserted anchor.
+#[test]
+fn right_button_during_a_drag_abandons_it_and_sends_nothing() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    assert!(app.world().resource::<DragAnchor>().0.is_some());
+    clear_mouse(&mut app);
+
+    set_mouse(&mut app, |mouse| {
+        mouse.press(MouseButton::Right);
+        mouse.release(MouseButton::Left);
+    });
+    app.update();
+    clear_mouse(&mut app);
+
+    assert_eq!(app.world().resource::<DragAnchor>().0, None);
+    assert!(
+        queued(&app).is_empty(),
+        "an aborted drag must put nothing on the wire"
+    );
+}
+
+/// AC7's `Esc` half. `Esc` appeared ONLY in production source before this: removing it from the
+/// abort condition left every test green.
+#[test]
+fn escape_during_a_drag_abandons_it_and_sends_nothing() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    assert!(app.world().resource::<DragAnchor>().0.is_some());
+    clear_mouse(&mut app);
+
+    press_once(&mut app, KeyCode::Escape);
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    assert_eq!(app.world().resource::<DragAnchor>().0, None);
+    assert!(queued(&app).is_empty(), "Esc must abandon the drag");
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::Dig,
+        "Esc during a drag abandons the DRAG; it does not also leave the mode"
+    );
+}
+
+/// AC8's second clause: `Esc` with no drag in progress leaves the mode. That `else if` branch was
+/// reached by no test at all.
+#[test]
+fn escape_with_no_drag_leaves_the_mode() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    press_once(&mut app, KeyCode::Digit2);
+    app.update();
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::Channel
+    );
+
+    press_once(&mut app, KeyCode::Escape);
+    app.update();
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::None,
+        "Esc outside a drag must leave the mode"
+    );
+}
+
+/// Wolf's ruling at review: a drag commits in the mode it BEGAN in, so a mode key pressed
+/// mid-drag takes effect on the next drag rather than silently changing what the release issues.
+#[test]
+fn a_drag_commits_in_the_mode_it_began_in() {
+    let anchor = [1, 1, 1];
+    let (mut app, _sender) = designation_app(anchor);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    // Switch to channel WHILE the button is still held.
+    press_once(&mut app, KeyCode::Digit2);
+    app.update();
+    clear_mouse(&mut app);
+
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    assert_eq!(
+        queued(&app),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: protocol::Rect {
+                min: anchor,
+                max: anchor
+            },
+        }],
+        "the drag began in dig and must commit as dig, whatever was pressed mid-drag"
+    );
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::Channel,
+        "the mode key still takes effect — for the NEXT drag"
+    );
+    assert_eq!(app.world().resource::<DragMode>().0, None);
+}
+
+/// AC6's no-pick clause. `PickedTile(None)` appeared nowhere in the suite.
+#[test]
+fn a_release_over_nothing_commits_nothing_and_leaves_no_anchor() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    assert!(app.world().resource::<DragAnchor>().0.is_some());
+    clear_mouse(&mut app);
+
+    // Point at the sky: the cursor leaves the terrain entirely before the release.
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .unwrap()
+        .set_cursor_position(Some(Vec2::new(2.0, 2.0)));
+    app.update();
+    assert_eq!(
+        app.world().resource::<PickedTile>().tile(),
+        None,
+        "the corner of the viewport must not pick a tile in this world"
+    );
+    clear_mouse(&mut app);
+
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    assert!(
+        queued(&app).is_empty(),
+        "a release over nothing must commit nothing"
+    );
+    assert_eq!(
+        app.world().resource::<DragAnchor>().0,
+        None,
+        "a missed release must never leave a stale anchor for the next drag"
+    );
+}
+
+/// AC7's preview clause and Task 4. `DragPreview` was referenced only by production code, so the
+/// whole preview system could be unregistered with the suite green.
+#[test]
+fn the_drag_preview_appears_while_dragging_and_disappears_on_release() {
+    let anchor = [1, 1, 1];
+    let (mut app, _sender) = designation_app(anchor);
+    assert_eq!(
+        app.world_mut()
+            .query::<&DragPreview>()
+            .iter(app.world())
+            .count(),
+        0,
+        "nothing is previewed before a drag starts"
+    );
+
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    let previewed = app
+        .world_mut()
+        .query::<&DragPreview>()
+        .iter(app.world())
+        .map(|preview| preview.0)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        previewed,
+        vec![anchor],
+        "the held drag must preview exactly the tile it covers"
+    );
+
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    assert_eq!(
+        app.world_mut()
+            .query::<&DragPreview>()
+            .iter(app.world())
+            .count(),
+        0,
+        "the preview must disappear when the drag commits"
+    );
+}
+
+/// The preview is the ONLY feedback for what a drag will designate, and it was being destroyed
+/// on any frame whose ray missed terrain — cursor over sky, over a gap, past the world edge —
+/// while the drag stayed live and still committed on release. Wolf hit it by hand on 2026-08-27:
+/// "sometimes it loses dragged tile color". Dragging blind is worse than a flicker.
+#[test]
+fn the_drag_preview_survives_a_frame_whose_ray_misses_terrain() {
+    let anchor = [1, 1, 1];
+    let (mut app, _sender) = designation_app(anchor);
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    assert_eq!(
+        preview_tiles(&mut app),
+        vec![anchor],
+        "the held drag previews the tile it covers"
+    );
+
+    // The ray now hits nothing. The DRAG IS STILL LIVE.
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(None);
+    app.update();
+
+    assert!(
+        app.world().resource::<DragAnchor>().0.is_some(),
+        "a missed ray must not end the drag"
+    );
+    assert_eq!(
+        preview_tiles(&mut app),
+        vec![anchor],
+        "a frame whose ray misses terrain must not erase the preview — the drag is still live \
+         and still commits on release, so erasing it leaves the boss dragging blind"
+    );
+}
+
+/// The sim keeps channel and stockpile designations ONLY at standable cells and drops the rest in
+/// silence. An unfiltered preview therefore promised marks that could never appear — which is how
+/// two completely inert modes read as "fragile" rather than broken.
+#[test]
+fn the_preview_covers_only_the_cells_the_sim_will_keep() {
+    // Two solid cells on a diagonal. The drag rect is their 2x2 bounding box, but the two off-
+    // diagonal columns have no support, so their standable targets do not exist.
+    let anchor = [1, 1, 1];
+    let release = [2, 2, 1];
+    let rig = CameraRig::new(anchor);
+    let anchor_cursor = rig
+        .project_world_point(anchor)
+        .expect("the literal anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let release_cursor = rig
+        .project_world_point(release)
+        .expect("the literal release tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 4, y: 4, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    tiles[index(release)] = Tile::Solid(Material::Stone);
+    let mut app = live_app(snapshot_with_dims(dims, tiles, vec![])).0;
+    install_pick_camera(&mut app, rig, anchor_cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(2);
+    app.update();
+
+    press_once(&mut app, KeyCode::Digit2);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(Some(release_cursor));
+    app.update();
+
+    let previewed = preview_tiles(&mut app);
+    let mirror = &app.world().resource::<MirrorResource>().0;
+    assert!(
+        !previewed.is_empty(),
+        "the two supported columns must still preview"
+    );
+    for tile in &previewed {
+        assert!(
+            client_core::is_standable(mirror, *tile),
+            "previewed {tile:?} is a cell the sim would discard without a word"
+        );
+    }
+    assert_eq!(
+        previewed.len(),
+        2,
+        "the 2x2 rect has only two supported columns; previewing all four promises marks that \
+         will never appear. Got {previewed:?}"
+    );
+}
+
+/// A channel mark sits at the bottom of its air cell, which seals it inside opaque geometry the
+/// moment anything is drawn above — and the instruments cannot see it, because a slab inside rock
+/// is projected and counted like any other. 7.2 measured 0 of 50 marks visible while the count
+/// read 50 and fixed it FOR DIG ONLY. Deleting the climb here restores that defect for channel.
+#[test]
+fn a_buried_channel_mark_climbs_onto_the_rock_covering_it() {
+    let dims = Dims { x: 3, y: 3, z: 4 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    // Support beneath the channel cell, and two drawn cells stacked ON TOP of it.
+    tiles[index([1, 1, 0])] = Tile::Solid(Material::Stone);
+    tiles[index([1, 1, 2])] = Tile::Solid(Material::Stone);
+    tiles[index([1, 1, 3])] = Tile::Solid(Material::Stone);
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![]));
+    app.update();
+    app.world_mut().resource_mut::<SliceLevel>().set(3);
+    app.update();
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(Delta {
+            msg_type: MessageType::Delta,
+            tick: 1,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: vec![Designation {
+                pos: [1, 1, 1],
+                kind: DesignationKind::Channel,
+            }],
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        }))))
+        .unwrap();
+    app.update();
+
+    let height = app
+        .world_mut()
+        .query::<(&ProjectedDesignation, &Transform)>()
+        .iter(app.world())
+        .map(|(_, transform)| transform.translation.y)
+        .next()
+        .expect("the channel mark must be projected");
+    // Render Y is world Z. Unburied the slab would sit at 1 - 0.46 = 0.54, INSIDE the rock at
+    // z 2 and z 3. Climbing puts it on the top face of the highest drawn cell above it.
+    assert!(
+        height > 3.0,
+        "a buried channel mark must climb onto the rock covering it; it sits at y {height}, \
+         which is inside that rock and invisible while every instrument still counts it"
+    );
+}
+
+/// MEASURED on the real world: the face neighbour is standable for 100% of TOP-face hits and only
+/// 8.5-11.8% of SIDE-face hits, because on flat ground the cell beside a block is another block.
+/// Pointing at the front edge of a surface block instead of its top therefore designated nothing —
+/// Wolf's "dragging might skip 2 first blocks". The fallback keeps the ledge case and fixes the
+/// flat-ground case.
+#[test]
+fn a_side_face_hit_on_flat_ground_falls_back_to_the_cell_above() {
+    let dims = Dims { x: 4, y: 4, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    // Flat ground: every column solid at z 1, open above.
+    for y in 0..dims.y as i32 {
+        for x in 0..dims.x as i32 {
+            tiles[index([x, y, 1])] = Tile::Solid(Material::Stone);
+        }
+    }
+    let mirror = client_core::Mirror::from_snapshot(snapshot_with_dims(dims, tiles, vec![]))
+        .expect("the flat world must build a mirror");
+
+    let picked = [1, 1, 1];
+    let east = [2, 1, 1];
+    assert!(
+        !client_core::is_standable(&mirror, east),
+        "on flat ground the cell beside a block is another block — this is the 8.5% case"
+    );
+    assert_eq!(
+        gui::designate::designation_target(
+            &mirror,
+            gui::pick::PickedCell {
+                tile: picked,
+                face: gui::pick::Face::East
+            },
+            DesignateMode::Channel
+        ),
+        [1, 1, 2],
+        "a side-face hit whose neighbour is solid must fall back to the cell above the block"
+    );
+    // The ledge case Wolf's ruling exists for is NOT sacrificed: where the face neighbour IS
+    // standable, it still wins over the cell above.
+    let mut ledged = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    ledged[index([1, 1, 1])] = Tile::Solid(Material::Stone);
+    ledged[index([1, 1, 2])] = Tile::Solid(Material::Stone);
+    ledged[index([2, 1, 0])] = Tile::Solid(Material::Stone);
+    let mirror = client_core::Mirror::from_snapshot(snapshot_with_dims(dims, ledged, vec![]))
+        .expect("the ledge world must build a mirror");
+    assert_eq!(
+        gui::designate::designation_target(
+            &mirror,
+            gui::pick::PickedCell {
+                tile: picked,
+                face: gui::pick::Face::East
+            },
+            DesignateMode::Channel
+        ),
+        [2, 1, 1],
+        "pointing at a wall that borders a ledge must still target that ledge"
+    );
+}
+
+/// AC4's single-z rect kept a median 19.4% of a 6x6 stockpile footprint on natural ground. RULED
+/// 2026-08-27 (Wolf): the standable modes follow the surface instead. Dig keeps single-z, where
+/// cutting one level into a slope is the point.
+#[test]
+fn a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level() {
+    let anchor = [1, 1, 1];
+    let release = [2, 1, 0];
+    let rig = CameraRig::new(anchor);
+    let anchor_cursor = rig
+        .project_world_point(anchor)
+        .expect("the literal anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let release_cursor = rig
+        .project_world_point(release)
+        .expect("the literal release tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    tiles[index(release)] = Tile::Solid(Material::Stone);
+
+    let drag = |key: KeyCode| {
+        let mut app = live_app(snapshot_with_dims(dims, tiles.clone(), vec![])).0;
+        install_pick_camera(&mut app, rig, anchor_cursor);
+        app.world_mut().resource_mut::<SliceLevel>().set(2);
+        app.update();
+        press_once(&mut app, key);
+        set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+        app.update();
+        clear_mouse(&mut app);
+        app.world_mut()
+            .query_filtered::<&mut Window, With<PrimaryWindow>>()
+            .single_mut(app.world_mut())
+            .expect("the pick harness owns one primary window")
+            .set_cursor_position(Some(release_cursor));
+        set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+        app.update();
+        clear_mouse(&mut app);
+        queued(&app)
+    };
+
+    assert_eq!(
+        drag(KeyCode::Digit2),
+        vec![
+            protocol::Command::Designate {
+                kind: DesignationKind::Channel,
+                rect: protocol::Rect {
+                    min: [1, 1, 2],
+                    max: [1, 1, 2]
+                },
+            },
+            protocol::Command::Designate {
+                kind: DesignationKind::Channel,
+                rect: protocol::Rect {
+                    min: [2, 1, 1],
+                    max: [2, 1, 1]
+                },
+            },
+        ],
+        "a channel drag across a step must reach the ground at BOTH heights, not flatten to one"
+    );
+    assert_eq!(
+        drag(KeyCode::Digit1),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Dig,
+            rect: protocol::Rect {
+                min: [1, 1, 1],
+                max: [2, 1, 1]
+            },
+        }],
+        "dig is unchanged: one single-z rect at the anchor's level"
+    );
+}
+
+/// AC9's load-bearing clause: the bar NAMES THE ACTIVE MODE. Neutering `update_designate_hint`
+/// left the suite green and the bar reading its no-mode string forever.
+#[test]
+fn the_hint_bar_names_the_mode_that_will_commit() {
+    let (mut app, _sender) = designation_app([1, 1, 1]);
+    let read_hint = |app: &mut App| -> String {
+        app.world_mut()
+            .query_filtered::<&Text, With<DesignateHint>>()
+            .single(app.world())
+            .expect("the hint bar must exist")
+            .0
+            .clone()
+    };
+    assert_eq!(
+        read_hint(&mut app),
+        designation_hint(DesignateMode::None, false)
+    );
+
+    press_once(&mut app, KeyCode::Digit3);
+    app.update();
+    assert_eq!(
+        read_hint(&mut app),
+        designation_hint(DesignateMode::Stockpile, false),
+        "the bar must name the mode the operator just selected"
+    );
+
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    assert_eq!(
+        read_hint(&mut app),
+        designation_hint(DesignateMode::Stockpile, true),
+        "the bar must switch to its dragging text while a drag is live"
     );
 }

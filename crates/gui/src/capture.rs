@@ -18,8 +18,9 @@ use protocol::{EntityKind, JobState, LightKind, Tile};
 
 use crate::{
     camera::{BOOT_VERTICAL_FOV, CameraRig},
+    designate::DesignateMode,
     ingest::MirrorResource,
-    ingest::ScriptedCursor,
+    ingest::{ScriptedCursor, ScriptedDrag},
     pick::PickedTile,
     project::{ProjectedDesignation, ProjectedZone, TerrainTile, WorldProjected},
     slice::SliceLevel,
@@ -133,6 +134,34 @@ impl DrawStats {
     }
 }
 
+impl DrawStats {
+    /// AC15's non-zero range check, for the ONE case that could not reach it. The check lived
+    /// only behind `--expect-work`, which the story's own `--drag` recipe does not pass and which
+    /// a dig-only drag CANNOT pass — it also demands `expected_zones > 0`, and a fresh world has
+    /// no zones. So a `--drag` that designated nothing evaluated `0 == 0`, printed a pass, saved
+    /// the PNG and exited 0: verbatim the 7.2 empty-site false pass this AC was written to kill.
+    /// A drag asserts against the count for the mode it actually dragged, so it needs neither
+    /// flag nor a zone it was never going to create.
+    fn assert_drag_produced_work(&self, mode: DesignateMode) {
+        match mode {
+            DesignateMode::Dig | DesignateMode::Channel => assert!(
+                self.expected_designations > 0,
+                "scripted --drag designated nothing: the mirror holds no designations at or \
+                 below z {}, so this capture shows none of what it was taken to show",
+                self.level
+            ),
+            DesignateMode::Stockpile => assert!(
+                self.expected_zones > 0,
+                "scripted --drag placed no stockpile: the mirror holds no zones at or below z \
+                 {}. A stockpile rect on non-standable ground is silently dropped by the sim",
+                self.level
+            ),
+            // Clear REMOVES; a correct clear legitimately ends with nothing to count.
+            DesignateMode::Clear | DesignateMode::None => {}
+        }
+    }
+}
+
 /// The capture's projection-derived draw counts. Kept as one production system so the headless
 /// instrument test drives the exact queries the capture uses, without requiring a render surface.
 pub fn draw_stats(
@@ -176,6 +205,14 @@ fn collect_draw_stats(
 /// MIRROR whether any dwarf sits at or below the cut: an empty observation means "the slice hides
 /// them" AND "entity projection is broken", and keying off the observation alone let every capture
 /// below the top — which is every capture this story takes — exit 0 on a total lantern regression.
+/// Whether this world can move at all. A mirror with no dwarves cannot report a position change
+/// or a mid-blend frame, so the motion instrument has nothing to say about it.
+fn motion_assertions_apply(mirror: &Mirror) -> bool {
+    mirror
+        .entities()
+        .any(|entity| entity.kind == EntityKind::Dwarf)
+}
+
 fn lantern_assertions_apply(mirror: &Mirror, level: i32) -> bool {
     mirror
         .entities()
@@ -204,7 +241,9 @@ pub struct CaptureState {
     path: PathBuf,
     frames: u32,
     elapsed: u32,
+    at_tick: Option<(u64, u64)>,
     requested: bool,
+    failed: bool,
     expect_work: bool,
     motion: MotionStats,
     lantern: LanternStats,
@@ -252,11 +291,22 @@ impl MotionStats {
     }
 
     pub fn assert_valid(&self, expect_work: bool) {
+        self.assert_tick_floor(100);
+        self.assert_motion(expect_work);
+    }
+
+    /// The delivered-tick floor, SEPARATED so an `--at-tick N` capture can scale it to the ticks
+    /// it actually asked for. Previously the whole motion instrument was skipped for `--at-tick`,
+    /// which silently dropped the two checks below that have nothing to do with tick count.
+    pub fn assert_tick_floor(&self, min_ticks: usize) {
         assert!(
-            self.ticks.len() >= 100,
-            "capture observed only {} delivered ticks",
+            self.ticks.len() >= min_ticks,
+            "capture observed only {} delivered ticks, expected at least {min_ticks}",
             self.ticks.len()
         );
+    }
+
+    pub fn assert_motion(&self, expect_work: bool) {
         assert!(
             self.position_changes > 0,
             "capture observed no dwarf position changes"
@@ -431,11 +481,33 @@ impl CaptureState {
             path,
             frames,
             elapsed: 0,
+            at_tick: None,
             requested: false,
+            failed: false,
             expect_work,
             motion: MotionStats::default(),
             lantern: LanternStats::default(),
         }
+    }
+
+    pub fn at_tick(
+        path: PathBuf,
+        frames: u32,
+        start_tick: u64,
+        ticks_after_start: u64,
+        expect_work: bool,
+    ) -> Self {
+        let mut capture = Self::new(path, frames, expect_work);
+        capture.at_tick = Some((start_tick, ticks_after_start));
+        capture
+    }
+
+    pub fn requested(&self) -> bool {
+        self.requested
+    }
+
+    pub fn failed(&self) -> bool {
+        self.failed
     }
 
     /// Read path for the headless test that drives `accumulate_motion` through the production
@@ -540,14 +612,37 @@ pub fn capture_after_frames(
     zones: Query<&ProjectedZone>,
     picked: Option<Res<PickedTile>>,
     cursor: Option<Res<ScriptedCursor>>,
+    drag: Option<Res<ScriptedDrag>>,
     cameras: Query<&CameraRig, With<Camera3d>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    mut exit: MessageWriter<AppExit>,
 ) {
-    if capture.requested {
+    if capture.requested || capture.failed {
         return;
     }
     capture.elapsed += 1;
-    if capture.elapsed >= capture.frames {
+    let capture_due = match capture.at_tick {
+        Some((start_tick, ticks_after_start)) => {
+            let target_tick = start_tick.saturating_add(ticks_after_start);
+            if mirror.0.tick() >= target_tick {
+                true
+            } else if capture.elapsed >= capture.frames {
+                eprintln!(
+                    "capture --at-tick {ticks_after_start} did not reach tick {target_tick} \
+                     within {} frames; reached tick {}",
+                    capture.frames,
+                    mirror.0.tick()
+                );
+                capture.failed = true;
+                exit.write(AppExit::error());
+                false
+            } else {
+                false
+            }
+        }
+        None => capture.elapsed >= capture.frames,
+    };
+    if capture_due {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
         let draw = collect_draw_stats(slice.level(), &mirror.0, &terrain, &designations, &zones);
@@ -558,7 +653,7 @@ pub fn capture_after_frames(
                     .ok()
                     .and_then(|window| expected_pick(cursor.0, *rig, window, &terrain))
             });
-            let picked = picked.and_then(|picked| picked.0);
+            let picked = picked.and_then(|picked| picked.tile());
             println!("{}", pick_capture_line(cursor.0, picked, expected));
             assert_eq!(
                 picked, expected,
@@ -611,6 +706,15 @@ pub fn capture_after_frames(
         // thresholds is exactly the run whose numbers are needed to diagnose it, and a panic
         // prints none of them. The draw check was briefly asserted up at its own print, which
         // silenced the lantern, motion and range numbers on precisely those failures.
+        if let Some(drag) = drag.as_deref() {
+            // A drag still mid-stage never released, so nothing it was meant to create exists.
+            assert!(
+                drag.completed(),
+                "scripted --drag never completed: it is still mid-stage at the capture frame, so \
+                 no designation was ever issued and this PNG shows the world untouched"
+            );
+            draw.assert_drag_produced_work(drag.mode());
+        }
         draw.assert_valid(capture.expect_work);
         // A cut below the dwarves hides every lantern, so the lantern assertions would report a
         // defect when the operator merely asked for a lower slice. Ask the MIRROR whether any
@@ -627,7 +731,30 @@ pub fn capture_after_frames(
                 slice.level()
             );
         }
-        capture.motion.assert_valid(capture.expect_work);
+        match capture.at_tick {
+            // An `--at-tick N` run cannot meet the 100-tick floor, but the movement and mid-blend
+            // checks are live-client health, unrelated to tick count, and were being dropped with
+            // it on precisely the new path the vehicle recipe uses. Scale the floor to the ticks
+            // actually requested and keep the rest.
+            //
+            // Applicability is asked of the MIRROR, exactly as `lantern_assertions_apply` does:
+            // a world with no dwarves in it cannot produce a position change, and demanding one
+            // would report a defect when the operator merely captured an empty scene. Keying off
+            // the OBSERVATION instead would be the trap that rule already exists to avoid — it is
+            // empty both when there is nothing to see and when the instrument is broken.
+            Some((_, ticks_after_start)) => {
+                if motion_assertions_apply(&mirror.0) {
+                    capture.motion.assert_tick_floor(ticks_after_start as usize);
+                    capture.motion.assert_motion(capture.expect_work);
+                } else {
+                    println!(
+                        "motion: the mirror holds no dwarves — motion assertions skipped for \
+                         this --at-tick capture"
+                    );
+                }
+            }
+            None => capture.motion.assert_valid(capture.expect_work),
+        }
         capture.requested = true;
         commands
             .spawn(Screenshot::primary_window())
@@ -1094,6 +1221,26 @@ mod tests {
         // A capture that never claimed to be of a working site, over a view the mirror agrees is
         // markless: correct, and the old instrument panicked on it.
         DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0).assert_valid(false);
+        // AC15's non-zero range check, for the path that could not reach it. A `--drag` that
+        // designated nothing used to evaluate `0 == 0`, print a pass, save the PNG and exit 0 —
+        // the 7.2 empty-site false pass, reproduced on the new instrument.
+        assert!(
+            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0)
+                .assert_drag_produced_work(DesignateMode::Dig))
+            .is_err(),
+            "a dig drag that produced no designation must fail, not pass silently"
+        );
+        assert!(
+            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0)
+                .assert_drag_produced_work(DesignateMode::Stockpile))
+            .is_err(),
+            "a stockpile drag that produced no zone must fail: a rect on non-standable ground is \
+             silently dropped by the sim"
+        );
+        DrawStats::new(4, 12, 5, 5, 1, 0, 1, 0).assert_drag_produced_work(DesignateMode::Dig);
+        DrawStats::new(4, 12, 5, 5, 0, 1, 0, 1).assert_drag_produced_work(DesignateMode::Stockpile);
+        // Clear REMOVES; ending with nothing to count is the correct outcome, not a failure.
+        DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0).assert_drag_produced_work(DesignateMode::Clear);
     }
 
     #[test]

@@ -20,7 +20,7 @@ use bevy::{
     ecs::change_detection::DetectChanges,
     ecs::message::MessageWriter,
     ecs::schedule::IntoScheduleConfigs,
-    input::ButtonInput,
+    input::{ButtonInput, mouse::MouseButton},
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
@@ -40,12 +40,17 @@ use crate::{
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{CaptureState, accumulate_motion, capture_after_frames},
+    command::send_commands,
+    designate::{
+        DesignateMode, DragAnchor, DragMode, designation_input, setup_designate_hint,
+        update_designate_hint,
+    },
     pick::{PickedTile, update_pick},
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
         ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery, TerrainTile,
         WorldProjected, blend_entities, flicker_lights, has_terrain_above, reconcile,
-        setup_projection_assets, sync_hover_highlight,
+        setup_projection_assets, sync_drag_preview, sync_hover_highlight,
     },
     slice::SliceLevel,
 };
@@ -53,6 +58,7 @@ use crate::{
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const MESSAGE_QUEUE: usize = 16;
+const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
 
 pub enum WireMessage {
     Snapshot(Box<Snapshot>),
@@ -79,28 +85,42 @@ pub struct ProjectionWork {
 
 pub fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
-    let (mirror, receiver) = connect_to_daemon(args.port)?;
+    let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(FpsOverlayPlugin {
             config: overlay_config_off(),
         });
-    configure_client_app(&mut app, mirror, receiver, args);
-    app.run();
+    configure_client_app(&mut app, mirror, receiver, writer, args);
+    // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
+    // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
+    // AC16 requires a run that never reaches its tick to exit NON-ZERO; the flag was already set
+    // (`capture.rs`, `AppExit::error()`) and only the consumer was missing.
+    if let AppExit::Error(code) = app.run() {
+        std::process::exit(code.get().into());
+    }
     Ok(())
 }
 
 /// Opens the daemon socket, reads the opening snapshot, and leaves a reader thread feeding the
 /// returned channel. The only part of `run()` that is I/O and therefore the only part a test
 /// cannot reach.
-fn connect_to_daemon(port: u16) -> anyhow::Result<(Mirror, Receiver<anyhow::Result<WireMessage>>)> {
+fn connect_to_daemon(
+    port: u16,
+) -> anyhow::Result<(Mirror, Receiver<anyhow::Result<WireMessage>>, TcpStream)> {
     let address = format!("127.0.0.1:{port}");
     let stream = TcpStream::connect(("127.0.0.1", port))
         .with_context(|| format!("could not connect to {address}"))?;
     stream
         .set_read_timeout(Some(SNAPSHOT_READ_TIMEOUT))
         .context("could not set snapshot read timeout")?;
+    let writer = stream
+        .try_clone()
+        .context("could not clone command writer")?;
+    writer
+        .set_write_timeout(Some(SNAPSHOT_READ_TIMEOUT))
+        .context("could not set command write timeout")?;
     let mut reader = BufReader::new(stream);
     let mirror = Mirror::from_snapshot(read_snapshot(&mut reader)?)
         .context("could not build client mirror")?;
@@ -109,7 +129,7 @@ fn connect_to_daemon(port: u16) -> anyhow::Result<(Mirror, Receiver<anyhow::Resu
         .name("server-read".to_string())
         .spawn(move || read_messages(reader, sender))
         .context("could not spawn server reader thread")?;
-    Ok((mirror, receiver))
+    Ok((mirror, receiver, writer))
 }
 
 /// Everything `run()` does to the App once its plugins are in: the world resources, the parsed
@@ -126,12 +146,15 @@ fn configure_client_app(
     app: &mut App,
     mirror: Mirror,
     receiver: Receiver<anyhow::Result<WireMessage>>,
+    writer: TcpStream,
     args: Args,
 ) {
     let slice = initial_slice(mirror.dims(), args.slice_level);
+    let capture_start_tick = mirror.tick();
     app.insert_resource(MirrorResource(mirror))
         .insert_resource(slice)
         .insert_resource(IngestReceiver::new(receiver))
+        .insert_resource(crate::command::CommandSink(Mutex::new(writer)))
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
@@ -143,7 +166,17 @@ fn configure_client_app(
     if let Some(capture) = args.capture {
         // Capture output must never contain the diagnostic overlay.
         force_capture_overlay_off(app);
-        app.insert_resource(CaptureState::new(capture, args.frames, args.expect_work));
+        let capture = match args.at_tick {
+            Some(ticks_after_start) => CaptureState::at_tick(
+                capture,
+                args.frames,
+                capture_start_tick,
+                ticks_after_start,
+                args.expect_work,
+            ),
+            None => CaptureState::new(capture, args.frames, args.expect_work),
+        };
+        app.insert_resource(capture);
         capture_systems(app);
     }
 }
@@ -160,6 +193,10 @@ pub fn projection_systems(app: &mut App) {
         let dims = app.world().resource::<MirrorResource>().0.dims();
         app.insert_resource(SliceLevel::at_world_top(dims));
     }
+    // The readout names the cell under the pointer, so this set now depends on the pick. Defaulted
+    // here rather than made `Option` in the system: a resource that is genuinely missing in
+    // production should fail loudly, not quietly render "cursor -" forever.
+    app.init_resource::<PickedTile>();
     app.init_resource::<TickClock>()
         .add_systems(Startup, setup_slice_readout)
         .add_systems(
@@ -194,7 +231,13 @@ pub fn projection_systems(app: &mut App) {
 /// class, and the Milestone 2 retrospective ruled it closed at the root rather than caught a
 /// sixth time.
 pub fn client_systems(app: &mut App) {
-    app.init_resource::<PickedTile>();
+    app.init_resource::<PickedTile>()
+        .init_resource::<crate::project::DragPreviewCells>()
+        .init_resource::<crate::command::PendingCommands>()
+        .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
+        .init_resource::<DesignateMode>()
+        .init_resource::<DragMode>()
+        .init_resource::<DragAnchor>();
     app.add_systems(
         Startup,
         (
@@ -202,6 +245,7 @@ pub fn client_systems(app: &mut App) {
             setup_night_lighting,
             setup_projection_assets,
             setup_atmosphere,
+            setup_designate_hint,
             log_adapter,
         ),
     )
@@ -220,9 +264,13 @@ pub fn client_systems(app: &mut App) {
     .add_systems(
         PostUpdate,
         (
-            apply_scripted_cursor.after(TransformSystems::Propagate),
-            update_pick.after(apply_scripted_cursor),
+            apply_scripted_input.after(TransformSystems::Propagate),
+            update_pick.after(apply_scripted_input),
             sync_hover_highlight.after(update_pick),
+            designation_input.after(update_pick),
+            sync_drag_preview.after(designation_input),
+            send_commands.after(designation_input),
+            update_designate_hint.after(designation_input),
         ),
     );
 }
@@ -272,6 +320,8 @@ struct Args {
     slice_level: Option<i32>,
     distance: Option<f32>,
     cursor: Option<Vec2>,
+    at_tick: Option<u64>,
+    drag: Option<ScriptedDragSpec>,
 }
 
 #[derive(Resource)]
@@ -280,6 +330,29 @@ pub struct CaptureDistance(pub f32);
 /// A capture-only viewport position written before the camera pick runs.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct ScriptedCursor(pub Vec2);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ScriptedDragSpec {
+    mode: DesignateMode,
+    start: Vec2,
+    end: Vec2,
+}
+
+/// A capture-only press-drag-release sequence. It writes the same input resources a window does;
+/// it never constructs a rectangle, so the human and scripted paths share the mode machine.
+#[derive(Resource, Debug, Clone, Copy, PartialEq)]
+pub struct ScriptedDrag {
+    spec: ScriptedDragSpec,
+    stage: ScriptedDragStage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScriptedDragStage {
+    Press,
+    Hold,
+    Release,
+    Done,
+}
 
 fn parse_args() -> anyhow::Result<Args> {
     parse_args_from(std::env::args_os().skip(1))
@@ -293,6 +366,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut slice_level = None;
     let mut distance = None;
     let mut cursor = None;
+    let mut at_tick = None;
+    let mut drag = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -329,12 +404,23 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         } else if arg == "--cursor" {
             let value = args.next().context("--cursor requires x,y")?;
             cursor = Some(parse_cursor(value)?);
+        } else if arg == "--at-tick" {
+            let value = args.next().context("--at-tick requires a tick count")?;
+            at_tick = Some(
+                value
+                    .to_string_lossy()
+                    .parse()
+                    .context("invalid --at-tick count")?,
+            );
+        } else if arg == "--drag" {
+            let value = args.next().context("--drag requires mode,x0,y0,x1,y1")?;
+            drag = Some(parse_drag(value)?);
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
     }
-    if capture.is_some() && frames.is_none() {
-        bail!("--capture requires --frames N");
+    if capture.is_some() && frames.is_none() && at_tick.is_none() {
+        bail!("--capture requires --frames N or --at-tick N");
     }
     if capture.is_some() && frames == Some(0) {
         bail!("--capture --frames must be positive");
@@ -348,14 +434,31 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if cursor.is_some() && capture.is_none() {
         bail!("--cursor requires --capture");
     }
+    if at_tick.is_some() && capture.is_none() {
+        bail!("--at-tick requires --capture");
+    }
+    if drag.is_some() && capture.is_none() {
+        bail!("--drag requires --capture");
+    }
+    if drag.is_some() && cursor.is_some() {
+        // `apply_scripted_input` takes the drag branch OR the cursor branch, never both, so a
+        // `--cursor` passed alongside `--drag` is parsed, validated, inserted and then never
+        // written to the window — while `capture_after_frames` still asserts the live pick
+        // against it. That combination cannot succeed; every other bad pairing here bails, and
+        // silently ignoring one of two flags the operator typed is the trap this parser exists
+        // to close.
+        bail!("--cursor and --drag are mutually exclusive; a scripted drag moves the cursor");
+    }
     Ok(Args {
         port,
         capture,
-        frames: frames.unwrap_or(0),
+        frames: frames.unwrap_or(DEFAULT_AT_TICK_FRAME_BUDGET),
         expect_work,
         slice_level,
         distance,
         cursor,
+        at_tick,
+        drag,
     })
 }
 
@@ -375,12 +478,102 @@ fn parse_cursor(value: OsString) -> anyhow::Result<Vec2> {
     Ok(Vec2::new(x, y))
 }
 
-fn apply_scripted_cursor(
+fn parse_drag(value: OsString) -> anyhow::Result<ScriptedDragSpec> {
+    let value = value.to_string_lossy();
+    let parts = value.split(',').collect::<Vec<_>>();
+    let [mode, x0, y0, x1, y1] = parts.as_slice() else {
+        bail!("invalid --drag; expected mode,x0,y0,x1,y1");
+    };
+    let mode = match *mode {
+        "dig" => DesignateMode::Dig,
+        "channel" => DesignateMode::Channel,
+        "stockpile" => DesignateMode::Stockpile,
+        "clear" => DesignateMode::Clear,
+        _ => bail!("invalid --drag mode; expected dig,channel,stockpile,clear"),
+    };
+    let parse_coordinate = |name: &str, value: &str| -> anyhow::Result<f32> {
+        let value: f32 = value
+            .parse()
+            .with_context(|| format!("invalid --drag {name}"))?;
+        if !value.is_finite() {
+            bail!("invalid --drag {name}; coordinates must be finite");
+        }
+        Ok(value)
+    };
+    Ok(ScriptedDragSpec {
+        mode,
+        start: Vec2::new(parse_coordinate("x0", x0)?, parse_coordinate("y0", y0)?),
+        end: Vec2::new(parse_coordinate("x1", x1)?, parse_coordinate("y1", y1)?),
+    })
+}
+
+fn apply_scripted_input(
     cursor: Option<Res<ScriptedCursor>>,
+    drag: Option<ResMut<ScriptedDrag>>,
+    picked: Res<PickedTile>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) {
-    if let (Some(cursor), Ok(mut window)) = (cursor, windows.single_mut()) {
+    let Ok(mut window) = windows.single_mut() else {
+        return;
+    };
+    if let Some(mut drag) = drag {
+        // The previous frame's pick answers "is the pick machinery live yet?" — camera, primary
+        // window and viewport all resolved. On a cold first frame it is `None`, and pressing then
+        // anchors on nothing: the drag is lost and NOTHING reports it. 8.1's `--cursor` rewrote
+        // the cursor every frame and self-healed; three unconditional shots at the coldest moment
+        // in the app's life do not. So the press and the release WAIT rather than fire blind.
+        let pick_is_live = picked.tile().is_some();
+        match drag.stage {
+            ScriptedDragStage::Press => {
+                window.set_cursor_position(Some(drag.spec.start));
+                if pick_is_live {
+                    keys.press(mode_key(drag.spec.mode));
+                    mouse.press(MouseButton::Left);
+                    drag.stage = ScriptedDragStage::Hold;
+                }
+            }
+            ScriptedDragStage::Hold => {
+                window.set_cursor_position(Some(drag.spec.end));
+                keys.release(mode_key(drag.spec.mode));
+                keys.clear();
+                mouse.clear();
+                drag.stage = ScriptedDragStage::Release;
+            }
+            ScriptedDragStage::Release => {
+                window.set_cursor_position(Some(drag.spec.end));
+                if pick_is_live {
+                    mouse.release(MouseButton::Left);
+                    drag.stage = ScriptedDragStage::Done;
+                }
+            }
+            ScriptedDragStage::Done => {}
+        }
+    } else if let Some(cursor) = cursor {
         window.set_cursor_position(Some(cursor.0));
+    }
+}
+
+impl ScriptedDrag {
+    pub fn mode(&self) -> DesignateMode {
+        self.spec.mode
+    }
+
+    /// Whether the scripted drag ran to completion. A drag still mid-stage at capture time never
+    /// released, so the capture it is about to authorise shows no designation it created.
+    pub fn completed(&self) -> bool {
+        matches!(self.stage, ScriptedDragStage::Done)
+    }
+}
+
+fn mode_key(mode: DesignateMode) -> KeyCode {
+    match mode {
+        DesignateMode::Dig => KeyCode::Digit1,
+        DesignateMode::Channel => KeyCode::Digit2,
+        DesignateMode::Stockpile => KeyCode::Digit3,
+        DesignateMode::Clear => KeyCode::Digit4,
+        DesignateMode::None => unreachable!("a scripted drag always names an active mode"),
     }
 }
 
@@ -397,6 +590,12 @@ fn insert_capture_resources(app: &mut App, args: &Args) {
     }
     if let Some(cursor) = args.cursor {
         app.insert_resource(ScriptedCursor(cursor));
+    }
+    if let Some(spec) = args.drag {
+        app.insert_resource(ScriptedDrag {
+            spec,
+            stage: ScriptedDragStage::Press,
+        });
     }
 }
 
@@ -454,7 +653,7 @@ fn setup_slice_readout(
 ) {
     let covered = has_terrain_above(&mirror.0, slice.level());
     commands.spawn((
-        Text::new(slice.readout(covered)),
+        Text::new(slice.readout(covered, None)),
         TextFont::from_font_size(22.0),
         TextColor(Color::srgb(0.86, 0.91, 1.0)),
         Node {
@@ -476,16 +675,29 @@ fn setup_slice_readout(
 fn update_slice_readout(
     slice: Res<SliceLevel>,
     mirror: Res<MirrorResource>,
+    picked: Res<PickedTile>,
+    cameras: Query<&CameraRig>,
+    mut covered: bevy::prelude::Local<Option<bool>>,
     mut readout: Query<&mut Text, With<SliceReadout>>,
 ) {
-    // `has_terrain_above` walks the world, so it must not run every frame. Both inputs are
-    // change-detected; nothing else can alter the answer.
-    if !slice.is_changed() && !mirror.is_changed() {
-        return;
+    // `has_terrain_above` walks the world, so it must not run every frame. Its two inputs are
+    // change-detected and cached; the cursor half changes far more often and costs nothing, so
+    // the two are tracked separately rather than making the world walk follow the pointer.
+    if slice.is_changed() || mirror.is_changed() || covered.is_none() {
+        *covered = Some(has_terrain_above(&mirror.0, slice.level()));
     }
-    let covered = has_terrain_above(&mirror.0, slice.level());
-    for mut text in &mut readout {
-        *text = Text::new(slice.readout(covered));
+    // The camera is not change-detected here: it orbits continuously while `A`/`D` are held, and
+    // a compass that only refreshes when the slice or the pick changes would sit on a stale
+    // bearing for exactly as long as the camera is moving — which is when it is read.
+    let north = cameras
+        .single()
+        .map_or("?", |rig| crate::camera::north_on_screen(rig));
+    let text = format!(
+        "{}  N {north}",
+        slice.readout(covered.unwrap_or(false), picked.tile())
+    );
+    for mut readout in &mut readout {
+        *readout = Text::new(text.clone());
     }
 }
 
@@ -744,11 +956,19 @@ fn read_messages(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, mpsc};
+    use std::{
+        io::{BufRead, BufReader},
+        sync::{Mutex, mpsc},
+        time::Duration,
+    };
 
     use bevy::{
         app::{App, Update},
+        camera::{CameraProjection, RenderTargetInfo},
         dev_tools::fps_overlay::FpsOverlayConfig,
+        input::{ButtonInput, mouse::MouseButton},
+        prelude::{Camera, Camera3d, GlobalTransform, KeyCode, UVec2, Window, With},
+        window::{PrimaryWindow, WindowResolution},
     };
     use client_core::Mirror;
     use protocol::{Delta, Dims, MessageType, Snapshot, Speed, Tile, TileChange};
@@ -788,26 +1008,51 @@ mod tests {
     ///
     /// `--frames 60` on purpose: `capture_after_frames` fires on the frame its count reaches, and
     /// this harness renders nothing for it to assert about.
-    fn configured_app(args: &[&str]) -> (App, mpsc::SyncSender<anyhow::Result<WireMessage>>) {
+    fn configured_app(
+        args: &[&str],
+    ) -> (
+        App,
+        mpsc::SyncSender<anyhow::Result<WireMessage>>,
+        std::net::TcpStream,
+    ) {
+        configured_app_with_snapshot(
+            args,
+            Snapshot {
+                msg_type: MessageType::Snapshot,
+                dims: Dims { x: 2, y: 1, z: 1 },
+                tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Normal,
+                tick: 0,
+            },
+        )
+    }
+
+    fn configured_app_with_snapshot(
+        args: &[&str],
+        snapshot: Snapshot,
+    ) -> (
+        App,
+        mpsc::SyncSender<anyhow::Result<WireMessage>>,
+        std::net::TcpStream,
+    ) {
         let parsed = super::parse_args_from(
             args.iter()
                 .map(std::ffi::OsString::from)
                 .collect::<Vec<_>>(),
         )
         .expect("the arguments under test must parse");
-        let mirror = Mirror::from_snapshot(Snapshot {
-            msg_type: MessageType::Snapshot,
-            dims: Dims { x: 2, y: 1, z: 1 },
-            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
-            entities: Vec::new(),
-            designations: Vec::new(),
-            zones: Vec::new(),
-            items: Vec::new(),
-            speed: Speed::Normal,
-            tick: 0,
-        })
-        .unwrap();
+        let mirror = Mirror::from_snapshot(snapshot).unwrap();
         let (sender, receiver) = mpsc::sync_channel(2);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let writer = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
         let mut app = App::new();
         app.add_plugins(bevy::MinimalPlugins)
             .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
@@ -815,8 +1060,95 @@ mod tests {
             .init_resource::<bevy::asset::Assets<bevy::prelude::StandardMaterial>>()
             .init_resource::<bevy::asset::Assets<bevy::image::Image>>()
             .init_resource::<FpsOverlayConfig>();
-        super::configure_client_app(&mut app, mirror, receiver, parsed);
-        (app, sender)
+        super::configure_client_app(&mut app, mirror, receiver, writer, parsed);
+        (app, sender, server)
+    }
+
+    fn scripted_drag_line(start: [i32; 3], end: [i32; 3]) -> String {
+        let viewport = UVec2::new(1920, 1080);
+        let rig = CameraRig::new([0, 0, 0]);
+        let start_cursor = rig
+            .project_world_point(start)
+            .expect("the literal start tile must project")
+            * viewport.as_vec2();
+        let end_cursor = rig
+            .project_world_point(end)
+            .expect("the literal end tile must project")
+            * viewport.as_vec2();
+        let drag = format!(
+            "dig,{},{},{},{}",
+            start_cursor.x, start_cursor.y, end_cursor.x, end_cursor.y
+        );
+        let snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 3, y: 2, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone); 6],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let (mut app, _sender, server) = configured_app_with_snapshot(
+            &[
+                "--capture",
+                "working.png",
+                "--frames",
+                "60",
+                "--drag",
+                &drag,
+            ],
+            snapshot,
+        );
+
+        app.update();
+        let camera_entity = app
+            .world_mut()
+            .query_filtered::<bevy::prelude::Entity, With<CameraRig>>()
+            .single(app.world())
+            .unwrap();
+        let mut camera = Camera::default();
+        camera.computed.target_info = Some(RenderTargetInfo {
+            physical_size: viewport,
+            scale_factor: 1.0,
+        });
+        let mut projection = bevy::prelude::PerspectiveProjection::default();
+        projection.update(viewport.x as f32, viewport.y as f32);
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        let transform = rig.transform();
+        app.world_mut().entity_mut(camera_entity).insert((
+            Camera3d::default(),
+            camera,
+            transform,
+            GlobalTransform::from(transform),
+            rig,
+        ));
+        app.world_mut().spawn((
+            Window {
+                resolution: WindowResolution::new(viewport.x, viewport.y),
+                ..Default::default()
+            },
+            PrimaryWindow,
+        ));
+
+        // Press, move while held, then release. The press now WAITS for the first live pick
+        // instead of firing on frame 1 regardless, so the stage count is no longer fixed — drive
+        // until the drag reports completion, which also fails loudly if it never does.
+        for _ in 0..8 {
+            app.update();
+            if app.world().resource::<super::ScriptedDrag>().completed() {
+                break;
+            }
+        }
+        assert!(
+            app.world().resource::<super::ScriptedDrag>().completed(),
+            "scripted drag never reached its release stage"
+        );
+
+        let mut line = String::new();
+        BufReader::new(server).read_line(&mut line).unwrap();
+        line
     }
 
     /// The wiring CALLS, not just the functions they call.
@@ -827,7 +1159,7 @@ mod tests {
     /// headless harness invoked itself. Every expectation below is hand-written here.
     #[test]
     fn the_production_wiring_runs_every_call_run_makes_after_its_plugins() {
-        let (mut app, _sender) = configured_app(&[
+        let (mut app, _sender, _server) = configured_app(&[
             "--capture",
             "working.png",
             "--frames",
@@ -871,18 +1203,126 @@ mod tests {
         // `projection_systems` owns the on-screen level readout's startup spawn — 7.1's review
         // found that whole readout deletable with the suite green, so it is observed here rather
         // than asserted to be registered.
-        assert_eq!(
-            app.world_mut()
-                .query::<&bevy::prelude::Text>()
-                .iter(app.world())
-                .map(|text| text.0.clone())
-                .collect::<Vec<_>>(),
-            vec![
+        // NOTE: compared as a set — query iteration order follows archetype order, which a new
+        // client-local resource reshuffles; the claim is which readouts exist, not their order.
+        let mut spawned = app
+            .world_mut()
+            .query::<&bevy::prelude::Text>()
+            .iter(app.world())
+            .map(|text| text.0.clone())
+            .collect::<Vec<_>>();
+        spawned.sort();
+        // The bearing is part of the expectation on purpose. This readout was found DELETABLE
+        // with the suite green once already, and the compass is the newest thing hanging off it:
+        // a `N ?` here would mean the production path spawned the readout but never resolved a
+        // camera, which is the silent half-working state this test exists to catch.
+        let mut expected = vec![
+            format!(
+                "{}  N down-left",
                 app.world()
                     .resource::<crate::slice::SliceLevel>()
-                    .readout(false)
-            ],
+                    .readout(false, None)
+            ),
+            "1 dig  2 channel  3 stockpile  4 clear".to_string(),
+        ];
+        expected.sort();
+        assert_eq!(
+            spawned, expected,
             "projection_systems must be registered from the production path too"
+        );
+        assert!(
+            spawned.iter().all(|text| !text.contains("N ?")),
+            "the compass must resolve a real camera on the production path, not report unknown"
+        );
+    }
+
+    #[test]
+    fn configured_app_sends_a_real_mouse_drags_command_to_the_daemon_socket() {
+        let (mut app, _sender, server) = configured_app(&[]);
+        let viewport = UVec2::new(1920, 1080);
+        let rig = CameraRig::new([0, 0, 0]);
+        let cursor = rig
+            .project_world_point([0, 0, 0])
+            .expect("the literal visible tile must project")
+            * viewport.as_vec2();
+
+        app.update();
+        let camera_entity = app
+            .world_mut()
+            .query_filtered::<bevy::prelude::Entity, With<CameraRig>>()
+            .single(app.world())
+            .unwrap();
+        let mut camera = Camera::default();
+        camera.computed.target_info = Some(RenderTargetInfo {
+            physical_size: viewport,
+            scale_factor: 1.0,
+        });
+        let mut projection = bevy::prelude::PerspectiveProjection::default();
+        projection.update(viewport.x as f32, viewport.y as f32);
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        let transform = rig.transform();
+        app.world_mut().entity_mut(camera_entity).insert((
+            Camera3d::default(),
+            camera,
+            transform,
+            GlobalTransform::from(transform),
+            rig,
+        ));
+        let mut window = Window {
+            resolution: WindowResolution::new(viewport.x, viewport.y),
+            ..Default::default()
+        };
+        window.set_cursor_position(Some(cursor));
+        app.world_mut().spawn((window, PrimaryWindow));
+        app.update();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Digit1);
+        app.update();
+        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+        keys.release(KeyCode::Digit1);
+        keys.clear();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .clear();
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .release(MouseButton::Left);
+        app.update();
+
+        let mut line = String::new();
+        BufReader::new(server).read_line(&mut line).unwrap();
+        assert_eq!(
+            line,
+            "{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[0,0,0],\"max\":[0,0,0]}}\n",
+            "the production configuration must carry the mouse path all the way to daemon bytes"
+        );
+    }
+
+    #[test]
+    fn parsed_capture_drags_send_their_own_rectangles_to_the_daemon_socket() {
+        let first = scripted_drag_line([0, 0, 0], [1, 0, 0]);
+        let second = scripted_drag_line([1, 0, 0], [2, 1, 0]);
+
+        assert_eq!(
+            first,
+            "{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[0,0,0],\"max\":[1,0,0]}}\n",
+            "the first parsed --drag must send its literal anchor-level rectangle"
+        );
+        assert_eq!(
+            second,
+            "{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{\"min\":[1,0,0],\"max\":[2,1,0]}}\n",
+            "the second parsed --drag must send its literal anchor-level rectangle"
+        );
+        assert_ne!(
+            first, second,
+            "different parsed --drag values must not collapse to the same wire rectangle"
         );
     }
 
@@ -967,6 +1407,128 @@ mod tests {
             ])
             .is_err(),
             "a camera distance must be finite"
+        );
+    }
+
+    /// The scripted drag used to advance Press -> Hold -> Release on the first three `Update`s
+    /// UNCONDITIONALLY, whether or not the pick had resolved. On a cold first frame — camera
+    /// `computed.target_info` not yet written, no primary window resolved yet, `viewport_to_world`
+    /// failing — the press anchored on `None`, no command was ever built, and NOTHING reported it.
+    /// 8.1's `--cursor` rewrote the cursor every frame and self-healed; three unconditional shots
+    /// at the coldest moment in the app's life do not.
+    #[test]
+    fn a_scripted_drag_waits_for_a_live_pick_instead_of_pressing_into_the_dark() {
+        use bevy::prelude::Vec2;
+
+        use crate::{
+            designate::DesignateMode,
+            pick::{Face, PickedCell, PickedTile},
+        };
+
+        let spec = super::ScriptedDragSpec {
+            mode: DesignateMode::Dig,
+            start: Vec2::new(100.0, 100.0),
+            end: Vec2::new(200.0, 200.0),
+        };
+        let mut app = bevy::app::App::new();
+        app.add_plugins(bevy::MinimalPlugins)
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<ButtonInput<MouseButton>>()
+            .init_resource::<PickedTile>()
+            .insert_resource(super::ScriptedDrag {
+                spec,
+                stage: super::ScriptedDragStage::Press,
+            });
+        app.world_mut().spawn((Window::default(), PrimaryWindow));
+
+        // No pick has ever resolved: the drag must hold at Press however many frames pass.
+        for _ in 0..5 {
+            app.world_mut()
+                .run_system_once(super::apply_scripted_input)
+                .unwrap();
+        }
+        assert!(
+            matches!(
+                app.world().resource::<super::ScriptedDrag>().stage,
+                super::ScriptedDragStage::Press
+            ),
+            "the drag pressed before any pick resolved; it would anchor on nothing and vanish"
+        );
+        assert!(
+            !app.world()
+                .resource::<ButtonInput<MouseButton>>()
+                .pressed(MouseButton::Left),
+            "no button may be pressed while the pick machinery is still cold"
+        );
+
+        // The moment a pick is live, the drag proceeds.
+        app.world_mut().insert_resource(PickedTile(Some(PickedCell {
+            tile: [1, 1, 1],
+            face: Face::Top,
+        })));
+        app.world_mut()
+            .run_system_once(super::apply_scripted_input)
+            .unwrap();
+        assert!(
+            matches!(
+                app.world().resource::<super::ScriptedDrag>().stage,
+                super::ScriptedDragStage::Hold
+            ),
+            "with a live pick the drag must advance rather than stalling forever"
+        );
+    }
+
+    /// `apply_scripted_input` takes the drag branch OR the cursor branch, never both, so a
+    /// `--cursor` alongside `--drag` was parsed, validated, inserted and then never written to
+    /// the window — while the capture still asserted the live pick against it. A guaranteed
+    /// spurious failure, in a parser where every other bad pairing bails.
+    #[test]
+    fn a_scripted_cursor_and_a_scripted_drag_are_mutually_exclusive() {
+        let both = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("30"),
+            std::ffi::OsString::from("--cursor"),
+            std::ffi::OsString::from("960,540"),
+            std::ffi::OsString::from("--drag"),
+            std::ffi::OsString::from("dig,10,10,20,20"),
+        ]);
+        assert!(
+            both.is_err(),
+            "a scripted drag moves the cursor itself; accepting both silently ignores one flag \
+             the operator typed"
+        );
+        let Err(error) = both else {
+            unreachable!("asserted above to be rejected");
+        };
+        assert!(
+            error.to_string().contains("mutually exclusive"),
+            "the rejection must say WHY, not merely fail: {error}"
+        );
+    }
+
+    /// AC16 requires a run that never reaches its tick to exit NON-ZERO. `App::run()` RETURNS the
+    /// status and `AppExit` is not `#[must_use]`, so `app.run();` compiled clean under
+    /// `-D warnings` while throwing every capture failure away.
+    ///
+    /// Asserted against the source because `run()` needs a socket AND a window: no test in this
+    /// environment can execute it, and a process exit code is not observable from inside the
+    /// process that would set it. This is the same include_str! shape `designate.rs` uses for the
+    /// rect helper — weaker than an execution, and far stronger than the nothing that was here.
+    #[test]
+    fn run_consumes_the_runners_exit_status_rather_than_discarding_it() {
+        let source = include_str!("ingest.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the production module precedes its tests");
+        assert!(
+            !source.contains("    app.run();\n"),
+            "`app.run();` discards the AppExit, so a failed capture exits 0"
+        );
+        assert!(
+            source.contains("if let AppExit::Error(code) = app.run()"),
+            "run() must inspect the runner's exit status and propagate a non-zero code"
         );
     }
 

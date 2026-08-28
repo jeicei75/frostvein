@@ -180,8 +180,26 @@ fn parse_saved_tick(line: &str) -> u64 {
         .expect("saved tick must be numeric")
 }
 
+/// Reads past the deltas already in flight until the load snapshot arrives.
+///
+/// FLAKY UNTIL 2026-08-27: the budget here was FOUR LINES, which is not a budget at all but a
+/// timing assumption wearing one. The daemon ticks at 10 Hz and keeps broadcasting while the load
+/// command is in flight, so the number of deltas that arrive first is set by how long the daemon
+/// takes to pick the command up — i.e. by machine load, not by anything the test controls. On a
+/// busy box more than four arrive and the test fails having observed nothing wrong.
+///
+/// Seen twice on 2026-08-27, once in a full gate and once alone, and a gate that goes red one run
+/// in N is a gate nobody trusts. This is the SAME unit error as M2-15 (`--frames` is a render-rate
+/// quantity feeding assertions denominated in ticks): the semantic is "wait for the snapshot", so
+/// the bound is a DEADLINE, with a generous line cap left only as a runaway backstop.
 fn read_snapshot_after_load(reader: &mut BufReader<TcpStream>) -> protocol::Snapshot {
-    for _ in 0..4 {
+    const MAX_LINES_BEFORE_LOAD_SNAPSHOT: usize = 1_000;
+    let deadline = Instant::now() + IO_TIMEOUT;
+    let mut deltas = 0usize;
+    for _ in 0..MAX_LINES_BEFORE_LOAD_SNAPSHOT {
+        if Instant::now() >= deadline {
+            break;
+        }
         let mut line = String::new();
         reader
             .read_line(&mut line)
@@ -191,11 +209,14 @@ fn read_snapshot_after_load(reader: &mut BufReader<TcpStream>) -> protocol::Snap
             Some("snapshot") => {
                 return serde_json::from_value(value).expect("load snapshot must match protocol");
             }
-            Some("delta") => {}
+            Some("delta") => deltas += 1,
             other => panic!("unexpected daemon message before load snapshot: {other:?}"),
         }
     }
-    panic!("daemon did not broadcast a snapshot within four lines");
+    panic!(
+        "daemon did not broadcast a load snapshot within {IO_TIMEOUT:?}; {deltas} deltas arrived \
+         first"
+    );
 }
 
 fn read_save_state(path: &Path) -> sim_core::SaveState {
@@ -267,6 +288,215 @@ fn read_delta_with_marks(
         }
     }
     panic!("daemon never emitted expected marks; observed {observed:?}");
+}
+
+/// AC10 END TO END, and the coverage hole that let two dead modes survive a full code review.
+///
+/// Every `gui` test asserts what the CLIENT queues. Not one of them ever asked the daemon whether
+/// it KEPT anything — and that is exactly where channel and stockpile were being thrown away.
+/// Picking can only ever resolve a SOLID cell, `sim-core` filters both of those commands on
+/// standability, and the remainder is dropped in silence: no error, no ack, no log. So the client
+/// sent well-formed commands that the daemon accepted and discarded, and every layer above was
+/// green. Measured 2026-08-27 against this binary: a channel rect at a solid cell yields 0
+/// designations, the same rect one cell up yields 9.
+///
+/// The oracle here is `client_core::is_standable` — the predicate the CLIENT uses to choose a
+/// cell — judged by the real daemon. If either rule ever moves, this goes red instead of the two
+/// silently disagreeing again.
+#[test]
+fn the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let mirror =
+        client_core::Mirror::from_snapshot(snapshot).expect("the snapshot must build a mirror");
+    let dims = mirror.dims();
+
+    // A solid cell with a standable cell directly above it: what a top-face pick resolves, and
+    // the neighbour the client now targets for channel and stockpile.
+    let (solid, standable) = (0..dims.z as i32)
+        .flat_map(|z| {
+            (0..dims.y as i32).flat_map(move |y| (0..dims.x as i32).map(move |x| [x, y, z]))
+        })
+        .find_map(|cell| {
+            let above = [cell[0], cell[1], cell[2] + 1];
+            (matches!(mirror.tile(cell), Some(protocol::Tile::Solid(_)))
+                && client_core::is_standable(&mirror, above))
+            .then_some((cell, above))
+        })
+        .expect("the generated world must hold a solid cell with standable air above it");
+    assert!(
+        !client_core::is_standable(&mirror, solid),
+        "the cell the ray hits must NOT be standable — that is the whole defect"
+    );
+
+    let rect = |cell: [i32; 3]| format!("{{\"min\":{cell:?},\"max\":{cell:?}}}");
+    let designation = |cell: [i32; 3], kind| protocol::Designation { pos: cell, kind };
+
+    // A channel at the cell the ray hit, followed by a dig at the SAME cell. The dig is a
+    // positive control: commands on one connection are ordered, so when the dig's mark arrives
+    // the channel has certainly been processed. Without it, "no channel mark" is indistinguishable
+    // from "the daemon has not read the command yet" — and would pass on an empty first delta.
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{}}}\n",
+            rect(solid)
+        )
+        .as_bytes(),
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{}}}\n",
+            rect(solid)
+        )
+        .as_bytes(),
+    );
+    let applied = read_delta_with_marks(
+        &mut reader,
+        &[designation(solid, protocol::DesignationKind::Dig)],
+        &[],
+    );
+    assert!(
+        !applied
+            .designations
+            .iter()
+            .any(|mark| mark.kind == protocol::DesignationKind::Channel),
+        "a channel at the picked (solid) cell must be dropped; the daemon kept {:?}",
+        applied.designations
+    );
+
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"cancel_designation\",\"rect\":{}}}\n",
+            rect(solid)
+        )
+        .as_bytes(),
+    );
+    let _ = read_delta_with_marks(&mut reader, &[], &[]);
+
+    // The same rect one cell across the entered face IS kept.
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"designate\",\"kind\":\"channel\",\"rect\":{}}}\n",
+            rect(standable)
+        )
+        .as_bytes(),
+    );
+    let _ = read_delta_with_marks(
+        &mut reader,
+        &[designation(standable, protocol::DesignationKind::Channel)],
+        &[],
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"cancel_designation\",\"rect\":{}}}\n",
+            rect(standable)
+        )
+        .as_bytes(),
+    );
+    let _ = read_delta_with_marks(&mut reader, &[], &[]);
+
+    // Stockpiles run through the same filter. Send the rejected one FIRST so the accepted one
+    // that follows proves both were processed.
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"place_stockpile\",\"rect\":{}}}\n",
+            rect(solid)
+        )
+        .as_bytes(),
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"place_stockpile\",\"rect\":{}}}\n",
+            rect(standable)
+        )
+        .as_bytes(),
+    );
+    let zoned = read_delta_with_marks(&mut reader, &[], &[protocol::Zone { pos: standable }]);
+    assert!(
+        !zoned.zones.iter().any(|zone| zone.pos == solid),
+        "a stockpile at the picked (solid) cell must be dropped; the daemon kept {:?}",
+        zoned.zones
+    );
+}
+
+/// The coverage claim, judged by the daemon rather than asserted by the client.
+///
+/// MEASURED 2026-08-27: with AC4's single-z rect, a 6x6 stockpile drag on natural terrain kept a
+/// MEDIAN 19.4% of its footprint — because standable cells exist only where the surface IS the
+/// anchor's height, and a fixed z crosses a hillside in a thin band. That is Wolf's "stockpiling
+/// does pretty much nothing usually". Following the ground instead must land the WHOLE footprint,
+/// and must land NOTHING ELSE: a bounding box would also cover cells the drag never chose, and
+/// the sim would silently keep any cave floor among them — zoned underground, out of sight, the
+/// same silent-wrong-cell class this round exists to close.
+#[test]
+fn a_surface_following_drag_lands_its_whole_footprint_and_nothing_else() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let mirror =
+        client_core::Mirror::from_snapshot(snapshot).expect("the snapshot must build a mirror");
+    let dims = mirror.dims();
+    let top = dims.z as i32 - 1;
+
+    // A 6x6 footprint over rolling ground, chosen for genuine height variation so the single-z
+    // rule would demonstrably lose most of it.
+    let (corner, cells) = (0..dims.y as i32 - 6)
+        .flat_map(|y| (0..dims.x as i32 - 6).map(move |x| [x, y, top]))
+        .find_map(|corner| {
+            let far = [corner[0] + 5, corner[1] + 5, corner[2]];
+            let cells = client_core::surface_targets(&mirror, top, corner, far);
+            let heights: std::collections::BTreeSet<i32> =
+                cells.iter().map(|cell| cell[2]).collect();
+            (cells.len() == 36 && heights.len() >= 3).then_some((corner, cells))
+        })
+        .expect("the world must hold a 6x6 patch of rolling standable ground");
+
+    let flat_z = cells[0][2];
+    let single_z_would_keep = cells.iter().filter(|cell| cell[2] == flat_z).count();
+    assert!(
+        single_z_would_keep < cells.len(),
+        "this patch must actually be sloped, or the test proves nothing"
+    );
+
+    let rects = client_core::rects_for_cells(&cells);
+    assert!(
+        rects.len() < cells.len(),
+        "runs of same-height neighbours must merge; {} cells became {} rects",
+        cells.len(),
+        rects.len()
+    );
+    for rect in &rects {
+        let line = format!(
+            "{{\"type\":\"place_stockpile\",\"rect\":{{\"min\":{:?},\"max\":{:?}}}}}\n",
+            rect.min, rect.max
+        );
+        send_literal(&mut writer, line.as_bytes());
+    }
+
+    let mut expected: Vec<protocol::Zone> = cells
+        .iter()
+        .map(|cell| protocol::Zone { pos: *cell })
+        .collect();
+    expected.sort_by_key(|zone| zone.pos);
+    let observed = read_delta_with_marks(&mut reader, &[], &expected);
+    assert_eq!(
+        observed.zones.len(),
+        36,
+        "following the ground must land the whole 6x6 footprint; the single-z rect would have \
+         kept only {single_z_would_keep} of 36 here, at corner {corner:?}"
+    );
 }
 
 #[test]

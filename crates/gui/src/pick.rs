@@ -12,8 +12,44 @@ use crate::{
 };
 
 /// The client-local tile currently under the cursor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Face {
+    Top,
+    Bottom,
+    East,
+    West,
+    North,
+    South,
+}
+
+impl Face {
+    pub fn normal(self) -> Vec3 {
+        match self {
+            Self::Top => Vec3::Y,
+            Self::Bottom => -Vec3::Y,
+            Self::East => Vec3::X,
+            Self::West => -Vec3::X,
+            Self::North => Vec3::Z,
+            Self::South => -Vec3::Z,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PickedCell {
+    pub tile: [i32; 3],
+    pub face: Face,
+}
+
+/// The client-local cell currently under the cursor, plus the face its ray entered.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PickedTile(pub Option<[i32; 3]>);
+pub struct PickedTile(pub Option<PickedCell>);
+
+impl PickedTile {
+    pub fn tile(&self) -> Option<[i32; 3]> {
+        self.0.map(|cell| cell.tile)
+    }
+}
 
 /// Resolves the primary window's cursor through the rendering camera into the visible terrain.
 pub fn update_pick(
@@ -51,7 +87,7 @@ fn first_visible_hit(
     direction: Vec3,
     mirror: &client_core::Mirror,
     level: i32,
-) -> Option<[i32; 3]> {
+) -> Option<PickedCell> {
     let dims = mirror.dims();
     // AC2: `world_to_render` is the ONLY axis conversion. The two opposite world corners are
     // projected through it and the cell half-extent added afterwards, so a change to the y/z
@@ -104,6 +140,7 @@ fn first_visible_hit(
         ray_step_distance(direction.z),
     );
 
+    let mut face = entry_face(origin, direction, min, max, entry);
     while distance <= end {
         let centre = cell.as_vec3();
         let world = render_to_world(centre);
@@ -111,23 +148,89 @@ fn first_visible_hit(
             && is_visible_at_slice(mirror, world, level)
             && !is_tree_foliage(mirror, world)
         {
-            return Some(world);
+            return Some(PickedCell { tile: world, face });
         }
         if next.x <= next.y && next.x <= next.z {
             distance = next.x;
             next.x += delta.x;
             cell.x += step.x;
+            face = if step.x >= 0 { Face::West } else { Face::East };
         } else if next.y <= next.z {
             distance = next.y;
             next.y += delta.y;
             cell.y += step.y;
+            face = if step.y >= 0 { Face::Bottom } else { Face::Top };
         } else {
             distance = next.z;
             next.z += delta.z;
             cell.z += step.z;
+            face = if step.z >= 0 {
+                Face::South
+            } else {
+                Face::North
+            };
         }
     }
     None
+}
+
+fn entry_face(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3, entry: f32) -> Face {
+    if origin.x > min.x
+        && origin.x < max.x
+        && origin.y > min.y
+        && origin.y < max.y
+        && origin.z > min.z
+        && origin.z < max.z
+    {
+        // A ray starting inside the world crosses no boundary, so there is no entry face to
+        // compute. Label it the face the viewer is looking at head-on, which is what the DDA
+        // would report had it marched in from outside.
+        return facing_face(direction);
+    }
+    for (origin, direction, low, high, positive, negative) in [
+        (origin.x, direction.x, min.x, max.x, Face::West, Face::East),
+        (origin.y, direction.y, min.y, max.y, Face::Bottom, Face::Top),
+        (
+            origin.z,
+            direction.z,
+            min.z,
+            max.z,
+            Face::South,
+            Face::North,
+        ),
+    ] {
+        if direction.abs() >= f32::EPSILON {
+            let boundary = if direction > 0.0 { low } else { high };
+            if ((boundary - origin) / direction - entry).abs() <= 1e-5 {
+                return if direction > 0.0 { positive } else { negative };
+            }
+        }
+    }
+    Face::Top
+}
+
+/// The face a ray of this direction presents to the viewer: the one whose outward normal most
+/// opposes travel. Deliberately the same mapping the DDA uses per step, so a cell hit from inside
+/// the world is labelled exactly as the same cell hit from outside it.
+fn facing_face(direction: Vec3) -> Face {
+    let magnitude = direction.abs();
+    if magnitude.x >= magnitude.y && magnitude.x >= magnitude.z {
+        if direction.x >= 0.0 {
+            Face::West
+        } else {
+            Face::East
+        }
+    } else if magnitude.y >= magnitude.z {
+        if direction.y >= 0.0 {
+            Face::Bottom
+        } else {
+            Face::Top
+        }
+    } else if direction.z >= 0.0 {
+        Face::South
+    } else {
+        Face::North
+    }
 }
 
 fn ray_box_interval(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3) -> Option<(f32, f32)> {
@@ -174,7 +277,7 @@ mod tests {
     use client_core::Mirror;
     use protocol::{Dims, Material, MessageType, Snapshot, Speed, Tile};
 
-    use super::first_visible_hit;
+    use super::{Face, first_visible_hit};
     use crate::camera::CameraRig;
     use crate::project::is_visible_at_slice;
     use crate::transform::world_to_render;
@@ -229,12 +332,119 @@ mod tests {
 
     const FOLIAGE_PILLAR: [i32; 2] = [100, 100];
 
+    #[test]
+    fn a_world_boundary_hit_keeps_its_entry_face() {
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(Material::Stone)],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        assert_eq!(
+            first_visible_hit(Vec3::new(-2.0, 0.0, 0.0), Vec3::X, &mirror, 0).map(|hit| hit.face),
+            Some(Face::West),
+        );
+    }
+
     /// The pillar tops, hand-derived from `pillars`' own construction rule rather than read back
     /// out of the mirror, so a mirror that lost a pillar cannot quietly shrink the test.
     fn pillar_tops() -> Vec<[i32; 3]> {
         (0..24i32)
             .map(|i| [5 + i * 5, 7 + (i * 11) % 120, 1 + (i * 3) % 8])
             .collect()
+    }
+
+    /// INDEPENDENT ORACLE for the FACE, and deliberately not a restatement of the mapping the
+    /// production code uses. The invariant a hit face must satisfy is geometric: you can only see
+    /// the side of a cube that faces you, so the face's outward normal must OPPOSE the ray. That
+    /// holds however the six labels are assigned, which is exactly what makes it able to catch a
+    /// swapped pair — inverting `West`/`East` (or `Top`/`Bottom`) sends the normal the other way
+    /// and every one of these dot products flips sign.
+    ///
+    /// This is the check the change shipped without: the per-step `face` assignments inside the
+    /// DDA loop produce the face for essentially every real pick, and both could be inverted with
+    /// the whole suite green. An inverted face offsets the hover slab INTO the neighbouring cube,
+    /// which is 8.1's buried-highlight defect this story exists to fix.
+    #[test]
+    fn a_marched_hit_face_always_opposes_the_ray_that_found_it() {
+        let mirror = pillars();
+        // The first pillar, tall enough to be struck side-on and from above.
+        let target = [5, 7, 1];
+        let centre = world_to_render(target);
+        let approaches = [
+            (
+                "from -x",
+                Vec3::new(centre.x - 40.0, centre.y, centre.z),
+                Vec3::X,
+            ),
+            (
+                "from +x",
+                Vec3::new(centre.x + 40.0, centre.y, centre.z),
+                -Vec3::X,
+            ),
+            (
+                "from -z",
+                Vec3::new(centre.x, centre.y, centre.z - 40.0),
+                Vec3::Z,
+            ),
+            (
+                "from +z",
+                Vec3::new(centre.x, centre.y, centre.z + 40.0),
+                -Vec3::Z,
+            ),
+            (
+                "from above",
+                Vec3::new(centre.x, centre.y + 40.0, centre.z),
+                -Vec3::Y,
+            ),
+        ];
+        for (label, origin, direction) in approaches {
+            let hit = first_visible_hit(origin, direction, &mirror, TOP)
+                .unwrap_or_else(|| panic!("the ray {label} must strike the pillar"));
+            assert_eq!(hit.tile, target, "the ray {label} struck the wrong cell");
+            assert!(
+                hit.face.normal().dot(direction) < 0.0,
+                "the ray {label} hit {:?}, whose normal {:?} points ALONG the ray {:?} — that \
+                 face is turned away from the viewer and its slab lands inside the neighbouring \
+                 cube",
+                hit.face,
+                hit.face.normal(),
+                direction
+            );
+        }
+    }
+
+    /// A camera embedded in or touching solid rock is reachable in normal play: the camera has no
+    /// terrain collision, the zoom clamp bottoms out at 4 units, and designating by mouse is a
+    /// close-range interaction against tunnel and shaft walls. The ray then crosses no world
+    /// boundary, so there is no entry face to compute, and the historic fallback answered `Top`
+    /// regardless of where the ray was pointing.
+    #[test]
+    fn a_ray_starting_inside_solid_rock_reports_the_face_it_looks_at_not_the_top() {
+        let mirror = pillars();
+        let target = [5, 7, 1];
+        let origin = world_to_render(target);
+        for direction in [Vec3::X, -Vec3::X, Vec3::Z, -Vec3::Z] {
+            let hit = first_visible_hit(origin, direction, &mirror, TOP)
+                .expect("a ray inside a solid cell hits that cell immediately");
+            assert_eq!(hit.tile, target);
+            assert_ne!(
+                hit.face,
+                Face::Top,
+                "a ray travelling {direction:?} from inside the rock reported the TOP face; the \
+                 slab is then laid flat on the cell roof instead of on the wall being looked at"
+            );
+            assert!(
+                hit.face.normal().dot(direction) < 0.0,
+                "the face must still oppose the ray, whatever the ray is doing inside the rock"
+            );
+        }
     }
 
     /// INDEPENDENT ORACLE. It answers the same question by a different method: instead of
@@ -321,7 +531,7 @@ mod tests {
             let yaw = -2.1 + index as f32 * 0.27;
             let (pitch, distance) = poses[index % poses.len()];
             let (origin, direction) = ray_at(target, yaw, pitch, distance);
-            let marched = first_visible_hit(origin, direction, &mirror, TOP);
+            let marched = first_visible_hit(origin, direction, &mirror, TOP).map(|hit| hit.tile);
             let traced = nearest_visible_cell(&mirror, origin, direction, TOP);
             assert_eq!(
                 marched, traced,
@@ -345,7 +555,7 @@ mod tests {
         // Hand-written: pillar 3 stands at x 20, y 40, solid through z 0..=2.
         let above = world_to_render([20, 40, TOP]) + Vec3::Y * 10.0;
         assert_eq!(
-            first_visible_hit(above, -Vec3::Y, &mirror, TOP),
+            first_visible_hit(above, -Vec3::Y, &mirror, TOP).map(|hit| hit.tile),
             Some([20, 40, 2]),
             "the march must stop at the pillar's top tile, not run through it to the one below"
         );
@@ -357,7 +567,7 @@ mod tests {
         let [x, y] = FOLIAGE_PILLAR;
         let above = world_to_render([x, y, TOP]) + Vec3::Y * 10.0;
         assert_eq!(
-            first_visible_hit(above, -Vec3::Y, &mirror, TOP),
+            first_visible_hit(above, -Vec3::Y, &mirror, TOP).map(|hit| hit.tile),
             Some([x, y, 3]),
             "foliage is drawn at 0.62-0.95 of its cell, so it is not pickable geometry and must \
              not occlude the stone the player can plainly see through it"
