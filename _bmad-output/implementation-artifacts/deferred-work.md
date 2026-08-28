@@ -753,11 +753,23 @@ executed a single line of its production path.**
   save round-trip. AC11 is the story's headline interaction and its one falsifiable assertion is
   unsabotaged. This is the residue once the extraction-block mutation named in the story's second HIGH
   patch item is added. `[auditor/LOW]`
-- **Process, not code — the per-layer build isolation has no reaper.** This review's four
-  `CARGO_TARGET_DIR`s cost **~92 GB**, and `/tmp` already held ~25 GB of orphans from earlier reviews
-  (`review-accept`, `review-orchestrator`, `review-sim-core`, `review-tui`, `review-protocol`).
-  Headroom was fine (439 GB free) and nothing was deleted during the review, but the P2 isolation rule
-  shipped without a cleanup step and the cost accumulates one review at a time. `[orchestrator/LOW]`
+- ~~**Process, not code — the per-layer build isolation has no reaper.**~~ **CLOSED 2026-08-28**,
+  and the entry under-estimated it by an order of magnitude. Wolf noticed the symptom from the
+  outside — `frostvein/target` at 62 GB with 38.5 GB written in 24 h — and the target tree turned out
+  to be the *smaller* half: **`/tmp` held 295 GB, of which 277 GB was stale layer caches**, the oldest
+  dated 2026-08-09, none in use, nothing running against any of them. The review scaffolding
+  outweighed the project's entire build tree more than fourfold. The 62 GB itself is not a leak:
+  Bevy links 1.2–1.5 GB test binaries with full debuginfo and cargo never GCs stale hashes, so each
+  gate round that touches `gui` relinks ~6.3 GB — six rounds in 24 h is exactly the 38.5 GB observed.
+  **276 GB reclaimed; free space 304 GB → 581 GB, 69 % → 40 % used.** The fix is a command, not a
+  reminder: `scripts/reap-review-caches.sh`, which the code-review config now requires the
+  orchestrator to run after triage (`--force`), with the reclaimed figure recorded in the review.
+  It touches only *directories* under `/tmp` matching `review-*`/`verify-*`/`mut`, never the repo,
+  never a file (so `/tmp/review-findings.md` and the two stray `.diff`s survived), never a symlink,
+  and it refuses anything touched within the hour unless forced — all six paths tested against a
+  fixture before it was wired in. **Standing lesson, the same one M2-7 taught:** every previous guard
+  here was a procedure, and a procedure is exactly what an accumulating cache defeats.
+  `[orchestrator/LOW → closed]`
 
 ## Deferred from: code review of 7-1-slice-into-the-mountain (2026-08-19)
 
