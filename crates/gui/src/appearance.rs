@@ -205,6 +205,13 @@ mod flicker_tests {
     }
 }
 
+/// RULED 2026-08-28 (Wolf, story 9.4): foliage shifts GREEN, not brown. It sat at `(55,73,84)`,
+/// only **9.9** from stone `(60,70,92)` on the same Euclidean measure the marks are held to at a
+/// 40.0 floor — trees separated from ground by snow cap and taper alone, the base cubes near
+/// camouflage. `(44,100,58)` clears stone by **48.1** and soil by **49.6**. The epic said
+/// "brown/green"; brown is unreachable because every terrain material must keep blue >= red (the
+/// invariant asserted below), and brown is red over blue. Trees therefore separate on GREEN, the
+/// axis the cool directional does not compress.
 pub fn material_color(material: Material) -> Color {
     match material {
         Material::Stone => Color::srgb_u8(60, 70, 92),
@@ -212,7 +219,7 @@ pub fn material_color(material: Material) -> Color {
         Material::Ice => Color::srgb_u8(104, 128, 170),
         Material::Snow => Color::srgb_u8(136, 150, 178),
         Material::TreeTrunk => Color::srgb_u8(43, 47, 58),
-        Material::TreeFoliage => Color::srgb_u8(55, 73, 84),
+        Material::TreeFoliage => Color::srgb_u8(44, 100, 58),
     }
 }
 
@@ -283,6 +290,18 @@ mod tests {
 
     #[test]
     fn appearance_tables_pin_the_cold_boot_palette() {
+        let foliage = material_color(Material::TreeFoliage)
+            .to_srgba()
+            .to_u8_array_no_alpha();
+        for (name, terrain) in [("stone", [60, 70, 92]), ("soil", [56, 52, 62])] {
+            let separation = channel_distance(foliage, terrain);
+            assert!(
+                separation >= MIN_MARK_SEPARATION,
+                "foliage {foliage:?} sits {separation:.1} from {name} {terrain:?}, inside the \
+                 {MIN_MARK_SEPARATION} separation floor"
+            );
+        }
+
         let lights = [
             (LightKind::Torch, [255, 140, 62], 14_000_000.0, 20.0),
             (LightKind::Campfire, [255, 173, 92], 25_000_000.0, 28.0),
@@ -308,7 +327,7 @@ mod tests {
             (Material::Ice, [104, 128, 170]),
             (Material::Snow, [136, 150, 178]),
             (Material::TreeTrunk, [43, 47, 58]),
-            (Material::TreeFoliage, [55, 73, 84]),
+            (Material::TreeFoliage, [44, 100, 58]),
         ];
         for (material, rgb) in terrain {
             assert_eq!(
