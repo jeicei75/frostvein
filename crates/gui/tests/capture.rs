@@ -15,13 +15,14 @@ use bevy::{
     ecs::system::RunSystemOnce,
     input::ButtonInput,
     prelude::{Assets, KeyCode, Mesh, StandardMaterial},
+    render::render_resource::TextureFormat,
 };
 use client_core::Mirror;
 use gui::{
     camera::CameraRig,
     capture::{
         CaptureState, capture_after_frames, draw_stats, largest_blown_pool_fraction,
-        median_ground_luminance, p99_luminance, warm_lit_pixels,
+        median_ground_luminance, p99_luminance, validate_capture_ranges, warm_lit_pixels,
     },
     ingest::{
         IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, WireMessage,
@@ -153,7 +154,7 @@ fn warm_pixel_threshold_requires_red_to_exceed_blue_by_the_named_margin() {
 }
 
 #[test]
-fn committed_bevy_vistas_confirm_the_blown_pool_calibration() {
+fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let boot =
         image::open(repo.join("_bmad-output/implementation-artifacts/5-4-signoff/boot7.png"))
@@ -167,22 +168,61 @@ fn committed_bevy_vistas_confirm_the_blown_pool_calibration() {
     let boot_pixels = boot.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
     let current_pixels = current.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
 
-    let boot_pool = largest_blown_pool_fraction(&boot_pixels, boot.width(), boot.height(), 200);
-    let current_pool =
-        largest_blown_pool_fraction(&current_pixels, current.width(), current.height(), 200);
+    let boot_pool = largest_blown_pool_fraction(
+        &boot_pixels,
+        boot.width(),
+        boot.height(),
+        gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+    );
+    let current_pool = largest_blown_pool_fraction(
+        &current_pixels,
+        current.width(),
+        current.height(),
+        gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+    );
     println!(
-        "calibration: boot pool={:.4}% p99={:.1}; current pool={:.4}% p99={:.1}",
+        "calibration: boot pool={:.8}% ({boot_pool:.10}) p99={:.1}; current pool={:.8}% ({current_pool:.10}) p99={:.1}",
         boot_pool * 100.0,
         p99_luminance(&boot_pixels),
         current_pool * 100.0,
         p99_luminance(&current_pixels),
     );
-    assert!((boot_pool * 100.0 - 0.6651).abs() < 0.0001);
-    assert!((current_pool * 100.0 - 0.9883).abs() < 0.0001);
+    assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_651_476);
+    assert!(boot_pool <= 0.006_651_5);
+    assert!(current_pool > 0.006_651_5);
     assert_eq!(
         median_ground_luminance(&boot_pixels, boot.width(), boot.height()),
+        123
+    );
+    assert_eq!(
         median_ground_luminance(&current_pixels, current.width(), current.height()),
-        "the ground-median guard must not distinguish the two frames"
+        123
+    );
+}
+
+#[test]
+fn blown_pool_range_failure_is_a_real_panic_not_a_successful_capture() {
+    let mut bytes = vec![0; 64 * 64 * 4];
+    for pixel in bytes.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[195, 150, 130, 255]);
+    }
+    for row in 0..20 {
+        for column in 0..20 {
+            let start = (row * 64 + column) * 4;
+            bytes[start..start + 4].copy_from_slice(&[230, 230, 230, 255]);
+        }
+    }
+
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, true, 9);
+    }));
+    std::panic::set_hook(previous);
+
+    assert!(
+        outcome.is_err(),
+        "a range assertion panics out of the observer and therefore exits the app with 101"
     );
 }
 

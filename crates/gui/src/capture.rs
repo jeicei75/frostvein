@@ -439,7 +439,7 @@ pub const GROUND_LUMINANCE_CEILING: u8 = 180;
 pub const BLOWN_POOL_LUMINANCE_THRESHOLD: u8 = 200;
 
 /// `boot7.png`, the 5.4 Bevy frame Wolf approved, measures a 0.6651% largest near-white pool.
-pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651;
+pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651_476;
 
 fn luminance(pixel: [u8; 4]) -> f32 {
     0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32
@@ -1054,7 +1054,7 @@ fn range_band_applies(slice: SliceLevel) -> bool {
     slice.level() >= slice.top()
 }
 
-fn validate_capture_ranges(
+pub fn validate_capture_ranges(
     bytes: &[u8],
     format: TextureFormat,
     width: u32,
@@ -1062,17 +1062,37 @@ fn validate_capture_ranges(
     band_applies: bool,
     level: i32,
 ) {
+    validate_capture_ranges_with_report(
+        bytes,
+        format,
+        width,
+        height,
+        band_applies,
+        level,
+        |line| println!("{line}"),
+    );
+}
+
+fn validate_capture_ranges_with_report(
+    bytes: &[u8],
+    format: TextureFormat,
+    width: u32,
+    height: u32,
+    band_applies: bool,
+    level: i32,
+    mut report: impl FnMut(&str),
+) {
     let pixels = decode_rgba8(bytes, format);
     let warm = warm_lit_pixels(&pixels);
     let ground = median_ground_luminance(&pixels, width, height);
     let blown_pool =
         largest_blown_pool_fraction(&pixels, width, height, BLOWN_POOL_LUMINANCE_THRESHOLD);
     let p99 = p99_luminance(&pixels);
-    println!(
+    report(&format!(
         "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \
          blown-pool={:.4}% p99-luminance={p99:.1}",
         blown_pool * 100.0
-    );
+    ));
     assert!(
         pixels.iter().any(|pixel| pixel[..3] != [0, 0, 0]),
         "capture is black"
@@ -1271,6 +1291,47 @@ mod tests {
         assert!(
             at_cut.is_ok(),
             "the same frame at a cut must keep skipping the boot-vista range checks"
+        );
+    }
+
+    #[test]
+    fn capture_range_report_is_emitted_before_a_blown_pool_panic() {
+        let mut bytes = vec![0; 64 * 64 * 4];
+        for pixel in bytes.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[195, 150, 130, 255]);
+        }
+        for row in 0..20 {
+            for column in 0..20 {
+                let start = (row * 64 + column) * 4;
+                bytes[start..start + 4].copy_from_slice(&[230, 230, 230, 255]);
+            }
+        }
+
+        let reported = std::cell::Cell::new(false);
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            validate_capture_ranges_with_report(
+                &bytes,
+                TextureFormat::Rgba8Unorm,
+                64,
+                64,
+                true,
+                9,
+                |line| {
+                    reported.set(line.contains("blown-pool=") && line.contains("p99-luminance="))
+                },
+            );
+        }));
+        std::panic::set_hook(previous);
+
+        assert!(
+            reported.get(),
+            "the metrics must be reported before the ceiling panics"
+        );
+        assert!(
+            outcome.is_err(),
+            "the ceiling must still make the observer panic"
         );
     }
 
