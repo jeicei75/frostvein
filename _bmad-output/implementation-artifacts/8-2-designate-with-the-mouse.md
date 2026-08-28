@@ -1017,8 +1017,9 @@ standable cell when the two drags are anchored at different heights. Measured, n
 logged in `deferred-work.md`; ruled deferred by Wolf 2026-08-28 because it needs a cave or an
 overhang to fire.
 
-**Not pushed.** 45 commits on `8-2-designate-with-the-mouse`, no PR, full gate green. Push and PR
-stay Wolf's call per the story rules.
+**Pushed and opened as PR #35** on Wolf's explicit yes, 2026-08-28 — 45 commits on
+`8-2-designate-with-the-mouse`, full gate green (FULL tier, not `--fast`) immediately before the
+push. https://github.com/jeicei75/frostvein/pull/35
 
 **The lesson worth carrying out of this story:** three consecutive reads showed `designations=0`
 for a channel that worked perfectly, and the story's own history — two genuinely dead modes found
