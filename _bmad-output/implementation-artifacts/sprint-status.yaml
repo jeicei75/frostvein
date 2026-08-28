@@ -43,7 +43,13 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-27  # VEHICLE SESSION STARTED -- AND IT FOUND TWO MODES THAT HAD NEVER WORKED.
+last_updated: 2026-08-28  # STORY 8.2 DONE -- MERGED, PR #35 (a949835). M2 at 10/11. AC18 met on all
+                          # four modes on the vehicle, read back by a second client; NFR6 ~140 fps
+                          # against floors of 60/30. AC13's rendered half and AC19's reads-clearly
+                          # half carried to the gfx pass UNCLAIMED. A channel that worked read as a
+                          # THIRD dead mode across three reads -- its marks are consumed in ~2.5 s,
+                          # so an after-the-fact instrument cannot see them. Pause first.
+                          # PRIOR: VEHICLE SESSION STARTED -- AND IT FOUND TWO MODES THAT HAD NEVER WORKED.
                           # Wolf drove it by hand and reported "fragile and confusing... sometimes it
                           # loses dragged tile color... channelling, what should it do". That was FOUR
                           # defects. The big one: CHANNEL AND STOCKPILE DESIGNATION WERE COMPLETELY
@@ -599,7 +605,35 @@ development_status:
   # VEHICLE; NFR6-with-picking is unmeasured and no fps figure was fabricated. Rebuild gui.exe and
   # record its build time + source commit first -- the stale-binary trap fired three times in 5.4.
   8-1-point-at-the-world: done
-  8-2-designate-with-the-mouse: in-progress
+  8-2-designate-with-the-mouse: done
+  # DONE 2026-08-28 -- MERGED, PR #35 (a949835). M2 at 10/11. The readout pass ran on the
+  # vehicle and AC18 is MET ON ALL FOUR MODES, each read back from the sim by a second client
+  # over its own connection: dig 8 designations @ z8, stockpile 12 zones @ z9, channel 16
+  # designations SPLIT 9/7 ACROSS z9 AND z10 (channel follows the ground, so ONE drag lands on
+  # several levels -- sum them, never read one cut), clear removed every zone and every channel
+  # mark across two drags while leaving all 8 digs untouched (the negative control). AC19's
+  # takes-effect half MET, AC15/16 MET, NFR6 read at ~140 fps against floors of 60 and 30.
+  # CARRIED TO THE GFX PASS, UNCLAIMED, where Wolf ruled them: AC13's rendered half and AC19's
+  # reads-clearly half. Neither inferred, neither marked met.
+  # THE THING TO CARRY FORWARD: three consecutive vehicle reads showed designations=0 for a
+  # channel that WORKED PERFECTLY, and this story's own history -- two genuinely dead modes
+  # found in review -- made the wrong reading the plausible one. Settled not by more
+  # code-reading (every link was already tested green) but by putting it to the REAL DAEMON:
+  # 16 channel designations accepted in full, ALL consumed within ~25 ticks (~2.5 s), 16 blocks
+  # below left as Ramp. A channel job is worked from the cell the dwarf already stands on, so
+  # it needs no travel; a dig sits at a solid cell a dwarf must path to, which is why dig marks
+  # linger and channel marks do not. AN INSTRUMENT THAT READS STATE AFTER THE FACT CANNOT SEE
+  # AN OBSERVABLE WHOSE LIFETIME IS SHORTER THAN THE GAP BETWEEN THE ACTION AND THE READ --
+  # pause first, and look for the consequence the work leaves behind.
+  # TWO RUNBOOK DEFECTS FED IT, both agent-authored, both fixed: the card named a gui.exe ONE
+  # COMMIT STALE (the stale-binary trap relocating into the INSTRUCTIONS, its sixth variant),
+  # and it ordered the clear drag BEFORE the only read -- clear cancels on both the picked rect
+  # and the standable rect, so it erased the evidence it was meant to check.
+  # DEFERRED with a reopen trigger: clear cannot reach a mark in a column holding a SECOND
+  # standable cell when the two drags are anchored at different heights (measured: near_z=2 ->
+  # z2, near_z=5 -> z5). Needs a cave or an overhang to fire.
+  # STILL AN ABSENCE, NOT A PASS: `codex review --base main` NEVER RAN on this story (killed
+  # twice, quota-blocked once). PRIOR: 8.2 in-progress after code review --
   # CODE REVIEW 2026-08-26 (4 layers, fresh context, NONE a coverage hole) -> back to in-progress.
   # First four-layer full house with per-layer CARGO_TARGET_DIR isolation: nothing starved, no
   # layer killed on silence. 26 findings; 4 decisions ruled by Wolf, 19 patched, 6 deferred, 1
