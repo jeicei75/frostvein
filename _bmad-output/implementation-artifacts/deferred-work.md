@@ -906,11 +906,22 @@ executed a single line of its production path.**
   secret patterns (`*token*`, `*secret*`, `.env*`) do not match that name. One `git add -A` away
   from committing an auth token is a latent trap, not housekeeping. `.codex/` added to
   `.gitignore`; `git check-ignore -v .codex/auth.json` now resolves to `.gitignore:16`.
-- **M2-7's build stamp is missing for the FIFTH time** [scripts/] — `rg 'GIT_SHA|git_sha|vergen'
-  crates/gui/src/` returns nothing and `scripts/` holds no build-stamp automation. Recurring
-  because it is re-noted per story and never automated. The stale-binary trap it guards has fired
-  five times. Deferred here only because it is a process/tooling item, not part of this diff — but
-  it is now the longest-running open item in M2.
+- ~~**M2-7's build stamp is missing for the FIFTH time**~~ **CLOSED 2026-08-28**, on its SIXTH
+  firing and after being re-noted in five stories without ever being automated. The sixth was the
+  one that settled it: the trap left the binary and moved into the *instructions* — 8.2's vehicle
+  runbook card named a `gui.exe` one commit stale, so the procedure telling you to check the mtime
+  was itself checking against the wrong build. Every previous guard was a procedure, and a
+  procedure is what a stale binary defeats. Now `crates/gui/build.rs` stamps the short SHA into the
+  binary (`-dirty` when the tree had uncommitted changes, `unknown` when git cannot answer — never
+  a fabricated value), `gui::BUILD_SHA` exposes it, and `ingest::run` prints `gui build <sha>` as
+  its first line, before the connect can fail, so a session that cannot even reach the daemon still
+  learns which binary it is holding. A value compiled into the binary cannot go stale: it is
+  whatever the binary actually is. Mutation row added and KILLED. The runbook now compares that
+  line against `git rev-parse --short HEAD` instead of doing timestamp arithmetic.
+  ORIGINAL ENTRY: `rg 'GIT_SHA|git_sha|vergen' crates/gui/src/` returns nothing and `scripts/`
+  holds no build-stamp automation. Recurring because it is re-noted per story and never automated.
+  The stale-binary trap it guards has fired five times. Deferred here only because it is a
+  process/tooling item, not part of this diff — but it is now the longest-running open item in M2.
 - **Blocking socket write inside the Bevy `Update` schedule** [crates/gui/src/command.rs:37] —
   `send_commands` blocks on `write_all` under a 30 s write timeout, in the frame loop; an executed
   reproducer confirms a back-pressured peer stalls it for the full timeout. **ACCEPTED, not
