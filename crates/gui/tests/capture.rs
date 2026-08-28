@@ -187,11 +187,13 @@ fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
         current_pool * 100.0,
         p99_luminance(&current_pixels),
     );
-    assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_651_476);
-    // Against the SHIPPED constant, not a literal one ulp above it: this is what makes a
-    // raised ceiling a behavioural failure rather than one caught only by the pin below.
+    // Behavioural first, pin second, and the ORDER is load-bearing: these compare against the
+    // SHIPPED constant, so moving the ceiling breaks the separation itself rather than merely
+    // tripping the pin. With the pin first it fired first and hid that this clause even bites.
     assert!(boot_pool <= gui::capture::BLOWN_POOL_FRACTION_CEILING);
     assert!(current_pool > gui::capture::BLOWN_POOL_FRACTION_CEILING);
+    // Backstop: the constant is the calibrated figure, not merely some separating value.
+    assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_651_476);
     assert_eq!(
         median_ground_luminance(&boot_pixels, boot.width(), boot.height()),
         123
