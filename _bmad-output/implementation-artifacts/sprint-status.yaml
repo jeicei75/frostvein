@@ -43,7 +43,41 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-28  # STORY 9.1 -> REVIEW. Tasks 1-5 + 7 done: blown-pool instrument calibrated
+last_updated: 2026-08-28  # STORY 9.1 CODE-REVIEWED -> in-progress. 4 layers, all live, fresh
+                          # context, NO coverage holes -- the second clean four-layer full house.
+                          # 17 findings: 1 decision (Wolf: the blown-pool ceiling stays HARD for
+                          # Epic 9's shared sitting; the PNG is written before validation so
+                          # evidence survives every abort), 8 PATCHED, 6 deferred, 2 dismissed.
+                          # THE HIGH WAS NOT IN THE CODE -- it was the vehicle card: its own
+                          # "-dirty" stop rule halted the shadows-off half of AC13's only
+                          # controlled pair (that half NEEDS an uncommitted edit), it never named
+                          # the edit that disables shadows, and it carried no --capture command at
+                          # all while that run is EXPECTED to exit 101. AC13 was unexecutable as
+                          # written, independent of the devpod limit. Card rewritten; the feature
+                          # layer proved the -dirty trap by rebuilding a modified clone.
+                          # THE PATCH PASS FOUND ITS OWN DEFECT: pointing the straddle asserts at
+                          # the shipped constant was NOT enough -- the equality pin sat ahead of
+                          # them and fired first, so row (c) was still a pin-kill and the
+                          # strengthened test looked identical from outside. Assertion ORDER was
+                          # load-bearing and no layer had said so. Reversed; row (c) now dies at
+                          # tests/capture.rs:194 on current_pool > BLOWN_POOL_FRACTION_CEILING.
+                          # Also patched: p99's index was f32 (wrong sample for 225,210 of the
+                          # first 3M pixel counts -- dormant at every resolution this repo makes,
+                          # and the exact broken-instrument class); the reconcile guard is a
+                          # NOT-REWRITTEN guard, not a re-insert guard, because project.rs:587
+                          # only re-inserts on a light-KIND change and a campfire's kind is static
+                          # -- Task 4's premise was falsified and the test renamed; AC8 recorded
+                          # PARTIALLY MET (panic->101 traced through three resume_unwind sites AND
+                          # measured live, but no test spawns the binary and the observer needs a
+                          # render surface, so it closes only on the vehicle); tech-art-guidelines
+                          # ambient/directional still said 6,000/30,000 against a shipped
+                          # 4,500/22,000. Verification: full gate GREEN, audit clean at 398 rows,
+                          # whole table re-run 5/5 KILLED with the p99 figures byte-identical.
+                          # NOT PROVEN BY ANY OF THIS: ACs 12-15 and AC6's on-vehicle half. No
+                          # frame has been looked at. Story 9.1 also still carries ZERO self-gate
+                          # coverage (Codex's single pass was harness-killed) -- four review
+                          # layers are not a self-gate and the two are counted separately.
+                          # PRIOR: STORY 9.1 -> REVIEW. Tasks 1-5 + 7 done: blown-pool instrument calibrated
                           # on committed pixels (boot7 0.6651% vs today 0.9883%, ground median 123.4
                           # on BOTH), campfire-only shadow maps, cold full gate GREEN, 5/5 sabotage
                           # rows KILLED. TWO HOLES CARRIED INTO REVIEW: the Codex self-gate produced
@@ -778,7 +812,7 @@ development_status:
   # b1cd5f9 and full gate GREEN on both (run, not claimed). The rebase crossed NO crate source --
   # `git diff b1cd5f9 15b3635 -- crates/` is empty -- so every figure measured at creation stands.
   # Vehicle-bound: ACs 12-15.
-  9-1-the-frame-stops-blowing-out: review
+  9-1-the-frame-stops-blowing-out: in-progress
   9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
   9-3-the-four-modes-read-apart: backlog
   9-4-trees-fewer-and-distinct-from-the-ground: backlog
