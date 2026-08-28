@@ -962,19 +962,23 @@ unnoticed in the daemon's test harness the whole time.
 
 ## RESUME HERE — 2026-08-28
 
-**Session paused 2026-08-27 by Wolf.** Tree clean, full gate GREEN, **16 commits on
-`8-2-designate-with-the-mouse`, none pushed, no PR.** Status stays `in-progress`.
+**Session paused 2026-08-27 by Wolf; re-checked 2026-08-28.** Tree clean, **38 commits on
+`8-2-designate-with-the-mouse`, none pushed, no PR** (21 on 08-26, 17 on 08-27 — the "16" written
+here on the 27th counted that day only). Status stays `in-progress`.
 
 **Binaries are current — do not rebuild blind, check the stamps:**
 
 | Binary | Built | From |
 | --- | --- | --- |
 | `target/x86_64-pc-windows-gnu/release/gui.exe` | 2026-08-27T16:54:53Z | `8ee683c`, the last commit touching `gui`/`client-core`/`protocol` |
-| `target/debug/tui` | 2026-08-27T17:25:42Z | `5880e51` |
+| `target/debug/tui` | 2026-08-27T17:26:07Z | `5880e51` |
 | `target/debug/simd` | 2026-08-27T15:41:19Z | unchanged since; `5880e51` touched only its *tests* |
 
 **Copy `gui.exe` Windows-side and check the copy's mtime** — the stale-binary trap has fired five
-times and the copy is the file that has been stale every time.
+times and the copy is the file that has been stale every time. The runbook card named a *sixth*
+variant of it on 2026-08-28: its Binaries paragraph still pointed at the `e01e7ff` build from
+15:05:25Z, one commit behind the `gui.exe` on disk and without the compass or cursor readout.
+Corrected in place — the card now carries the same three-row table as above.
 
 **The only work left is the readout pass** — `8-2-signoff/task-7-vehicle-runbook.md`, the card at
 the top. It asks no visual judgement. Owed:

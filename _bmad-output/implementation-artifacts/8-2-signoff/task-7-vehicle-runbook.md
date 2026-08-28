@@ -30,10 +30,18 @@ is instruments, not judgement. Sections 0-9 below are the full session and are k
 art lands; **this card is the ~5 minutes that closes AC18, AC19's takes-effect half and the fps
 readings.** Nothing here asks you to decide whether anything looks good.
 
-**Binaries.** `gui.exe` was rebuilt for you: **built 2026-08-27T15:05:25Z, source `e01e7ff`**, the
-last commit touching `crates/gui`, `crates/client-core` or `crates/protocol` — it is current.
-Copy it Windows-side and check the copy's `LastWriteTimeUtc` matches; the copy is the file that
-has been stale every previous time. `simd` and `tui` build in WSL with `cargo build -p simd -p tui`.
+**Binaries.** All three are current with the branch tip — checked 2026-08-28, do not rebuild blind:
+
+| Binary | Built (UTC) | Newest commit touching its sources |
+| --- | --- | --- |
+| `target/x86_64-pc-windows-gnu/release/gui.exe` | 2026-08-27T16:54:53Z | `8ee683c` (`gui`/`client-core`/`protocol`) |
+| `target/debug/tui` | 2026-08-27T17:26:07Z | `5880e51` |
+| `target/debug/simd` | 2026-08-27T15:41:19Z | `5880e51`, which touched only `simd`'s tests |
+
+`gui.exe` carries the compass and the cursor readout from `8ee683c`; the earlier
+`e01e7ff` build this card used to name does not. Copy `gui.exe` Windows-side and check the
+copy's `LastWriteTimeUtc` reads **16:54:53Z**; the copy is the file that has been stale every
+previous time. `simd` and `tui` rebuild in WSL with `cargo build -p simd -p tui`.
 
 **1. Start the daemon and the client.**
 
