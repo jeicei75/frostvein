@@ -23,9 +23,14 @@ PY
 mutation "foliage goes brown, breaking the blueward-of-red terrain invariant" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+# Mutate the PIN TOO. A colour-only change dies at the assert_eq! pin, which proves the pin
+# works and never reaches the invariant. A real brown change would move both, so this does.
 old = '        Material::TreeFoliage => Color::srgb_u8(44, 100, 58),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        Material::TreeFoliage => Color::srgb_u8(100, 74, 52),\n'))
+s = s.replace(old, '        Material::TreeFoliage => Color::srgb_u8(100, 74, 52),\n')
+pin = '            (Material::TreeFoliage, [44, 100, 58]),\n'
+assert s.count(pin) == 1
+p.write_text(s.replace(pin, '            (Material::TreeFoliage, [100, 74, 52]),\n'))
 PY
 
 mutation "the tree count oracle counts trunk cells instead of columns" sim-core tree_density_for_seed_42_is_deterministic_and_in_target_band <<'PY'
