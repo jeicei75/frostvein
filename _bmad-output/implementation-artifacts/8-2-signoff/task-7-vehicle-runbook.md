@@ -117,7 +117,13 @@ marks: z 9 designations=9 of 9 zones=9 of 9
 
   Designations still apply while paused (`simd/tests/serve.rs`,
   `designation_is_applied_while_tick_is_paused`), so pause, channel, read, then unpause with the
-  same command. **The ramps are the other half of the evidence**: unpause and the blocks you
+  same command.
+- **ONE channel drag legitimately lands on SEVERAL levels, and no single `--z` shows all of it.**
+  Channel follows the ground: `standable_in_column` picks each column's own surface cell, so a
+  drag across a step or a slope splits across levels. Observed on the vehicle 2026-08-28 — one
+  drag, 9 designations at z 9 and 7 at z 10. Read `9 of 9` at one cut and it looks like 7 of your
+  16 vanished; they did not. **Add up the designations across the levels the OTHER-levels line
+  names** — that sum is what to compare against your footprint, never one cut's count. **The ramps are the other half of the evidence**: unpause and the blocks you
   channelled become slopes. That is channel working, not channel failing.
 
 **3b. Now clear, and read again.** `4`, drag over ONE of the three patches, note which. Re-read
