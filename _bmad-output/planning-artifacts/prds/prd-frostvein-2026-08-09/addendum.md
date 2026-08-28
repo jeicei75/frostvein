@@ -57,3 +57,12 @@ short path is MagicaVoxel `.vox` via `bevy_vox_scene` (greedy meshing through
 stays off at this scale. Caveat on those dependencies: Bevy breaks its API
 ~3×/year and community voxel crates lag each release — every one is a
 maintenance edge on a solo project.
+
+> **SUPERSEDED 2026-08-28 (Wolf, at gfx-pass planning — Epics 9–10 in `epics.md`).** The forcing
+> case fired as predicted: dwarves (and trees). The pipeline chosen is **Blender → glTF via
+> Bevy's native loader**, not `.vox`/`bevy_vox_scene`: Wolf's authoring tool is Blender, and
+> Blender→`.vox` means lossy voxelisation every iteration plus exactly the community-crate
+> maintenance edge this paragraph warned about. (`bevy_vox_scene` 0.22 did match Bevy 0.19 at the
+> time of the decision — the supersession is iteration cost and maintenance surface, not a
+> present incompatibility.) The `file_watcher` hot-reload point and the processing-off point
+> stand. Asset contract: `docs/tech-art-guidelines.md`, story 10.3.
