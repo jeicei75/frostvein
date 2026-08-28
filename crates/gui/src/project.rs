@@ -419,6 +419,9 @@ fn point_light(kind: protocol::LightKind) -> PointLight {
         color: properties.color,
         intensity: properties.intensity,
         range: properties.range,
+        // NOTE: only the campfire casts point-light shadows; each additional emitter costs six
+        // cube-map faces, and this story's measured defect is confined to the campfire.
+        shadow_maps_enabled: matches!(kind, protocol::LightKind::Campfire),
         ..Default::default()
     }
 }
