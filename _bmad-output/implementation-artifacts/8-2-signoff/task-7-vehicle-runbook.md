@@ -102,9 +102,23 @@ marks: z 9 designations=9 of 9 zones=9 of 9
 
   So expect to run it **twice per drag pair** — once at the dig's level, once one above.
 - **Channel and stockpile target the SAME cell** — both take the standable rect, so they land on
-  the same level as each other. A cut that shows stockpile zones but zero designations, with no
-  designations at any other level either, means the channel drag kept nothing. That is a real
-  finding **provided nothing has been cleared yet**, which is why clear waits for step 3b.
+  the same level as each other.
+- **PAUSE BEFORE YOU CHANNEL, or you will read zero and it will mean nothing.** A channel job is
+  worked from the cell the dwarf stands on, so it needs no travel and completes almost at once.
+  MEASURED 2026-08-28 against the real daemon, seed default, patch `x[62..65] y[62..66]`: 16
+  channel designations accepted at z 9, **all 16 consumed within ~25 ticks (~2.5 s)**, and all 16
+  blocks at z 8 left as `Ramp`. A read taken any later than that shows `designations=0` for a
+  channel that worked perfectly. Dig does not do this — a dig sits at a solid cell a dwarf has to
+  reach, so dig marks linger and channel marks do not.
+
+  ```bash
+  ./target/debug/tui 7451 --key space --frames 2 >/dev/null   # toggles pause, sim-wide
+  ```
+
+  Designations still apply while paused (`simd/tests/serve.rs`,
+  `designation_is_applied_while_tick_is_paused`), so pause, channel, read, then unpause with the
+  same command. **The ramps are the other half of the evidence**: unpause and the blocks you
+  channelled become slopes. That is channel working, not channel failing.
 
 **3b. Now clear, and read again.** `4`, drag over ONE of the three patches, note which. Re-read
 the same two levels. The counts should fall by exactly that patch and nothing else should move.
