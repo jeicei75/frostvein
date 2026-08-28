@@ -52,11 +52,23 @@ gui.exe 7451                      # Windows
 
 **2. Drag each mode once, ON OR NEAR THE MIDDLE OF THE MAP.** The world is 128x128 and the `tui`
 view opens at its centre, so drags near `(64, 64)` land where the readout is already looking.
-`1` dig, `2` channel, `3` stockpile, `4` clear — press, drag a patch you can count (a 3x3 is
-easiest), release. **Do clear LAST**, over something you designated, since it removes.
+`1` dig, `2` channel, `3` stockpile — press, drag a patch you can count (a 3x3 is easiest),
+release. Keep the three patches APART, so a later clear can only eat the one you aim it at.
+
+**CLEAR IS NOT PART OF THIS STEP. Read (step 3) BEFORE you clear anything.** Clear cancels
+designations on both the picked rect and the standable rect one level up, so a clear that
+overlaps the channel patch erases the only evidence channel ever worked — and the readout
+cannot tell that apart from channel never landing. This bit the 2026-08-28 pass: it produced
+one read, taken after clear, with no channel designations anywhere and no way to say why.
+Clear gets its own drag and its own read, in step 3b.
 
 **Write down the footprint you dragged before you read anything.** That is the range check;
 a count with no expectation is not a check.
+
+**Expect dig to come back SHORT, and do not report that as a defect.** `sim-core` keeps a dig
+only where the cell is `Tile::Solid`, and a drag is a flat rect at one z, so on uneven ground
+part of it is air and is dropped by design — a 3x7 drag returning 8 is a correct result. The
+`span` line is the check that matters for dig: it should match the footprint you dragged.
 
 **3. Read it back — the one command that answers AC18.**
 
@@ -89,6 +101,13 @@ marks: z 9 designations=9 of 9 zones=9 of 9
   ```
 
   So expect to run it **twice per drag pair** — once at the dig's level, once one above.
+- **Channel and stockpile target the SAME cell** — both take the standable rect, so they land on
+  the same level as each other. A cut that shows stockpile zones but zero designations, with no
+  designations at any other level either, means the channel drag kept nothing. That is a real
+  finding **provided nothing has been cleared yet**, which is why clear waits for step 3b.
+
+**3b. Now clear, and read again.** `4`, drag over ONE of the three patches, note which. Re-read
+the same two levels. The counts should fall by exactly that patch and nothing else should move.
 - **`designations=0 of 0` with NO "other levels" line means the sim genuinely kept nothing**, and
   that is a real finding worth reporting.
 - An interactive `tui` opens at its own chosen level (`opening_z`), not at whatever you passed to
