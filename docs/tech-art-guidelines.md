@@ -53,7 +53,8 @@ vs the artifact's 28) and a saturated blue-green cast. The overshoot taught the 
 6,000) lets shadow faces go genuinely dark; a desaturated cool directional (`(150,190,180)` at
 30,000) carries the lit faces. Both tints sit near neutral because light colour MULTIPLIES onto
 already-blue materials — the boot3 cast came from lighting blue snow with saturated blue-green
-lights, not from the material table. Torches are 14M lm and the campfire 32M lm: the white-clip
+lights, not from the material table. Torches are 14M lm and the campfire 25M lm (35M at its
+1.40 flicker peak): the white-clip
 radius scales as sqrt(intensity), and 72M blew a ~9-tile pool to flat white where AC9 reserves
 white for emissive faces alone.
 

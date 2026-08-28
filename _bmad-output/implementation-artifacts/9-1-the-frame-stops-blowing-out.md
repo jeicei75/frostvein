@@ -5,7 +5,7 @@ baseline_commit: 15b3635688ddcc2168ef9f2981b477d1490d8fa9
 
 # Story 9.1: The Frame Stops Blowing Out
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -209,43 +209,43 @@ story's card so it can be merged into that sitting.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — The blown-pool measure and its ceiling (AC: 5, 6)**
-  - [ ] Add the measure beside `median_ground_luminance` in `crates/gui/src/capture.rs` — a pure
+- [x] **Task 1 — The blown-pool measure and its ceiling (AC: 5, 6)**
+  - [x] Add the measure beside `median_ground_luminance` in `crates/gui/src/capture.rs` — a pure
         function over `&[[u8; 4]]` returning the **largest connected region** of pixels at or above
         a named threshold, as a fraction of the frame, reusing the existing `luminance` helper
         [capture.rs:437-439]. Add the p99 alongside it. Four-connectivity and an iterative flood
         fill; a 1280×720 frame is 921,600 pixels, so **no recursion** — stack depth is a real
         failure mode here, not a hypothetical.
-  - [ ] **Threshold 200, ceiling from `boot7.png`.** At 200 the star colour `(173,196,220)` sits at
+  - [x] **Threshold 200, ceiling from `boot7.png`.** At 200 the star colour `(173,196,220)` sits at
         luma 192.9 [appearance.rs:43], i.e. **just below**, so the star shell is largely excluded by
         construction — that is why 200 and not 190. The ceiling is `boot7.png`'s **0.6651 %**;
         today's frame reads **0.9883 %**, so the assertion is RED at `baseline_commit`. Confirm both
         numbers yourself before writing them into a constant.
-  - [ ] If you move the threshold, **re-measure every row of this story's table** and say what the
+  - [x] If you move the threshold, **re-measure every row of this story's table** and say what the
         new numbers are. A threshold change silently re-bases the ceiling.
-  - [ ] Name the constants in the same style as `GROUND_LUMINANCE_FLOOR` / `_CEILING` and give each
+  - [x] Name the constants in the same style as `GROUND_LUMINANCE_FLOOR` / `_CEILING` and give each
         a doc comment carrying the measured figure it came from, as those two do
         [capture.rs:425-435].
-  - [ ] **Hardcoded constants are fine** (technical-preferences). No threshold config, no builder,
+  - [x] **Hardcoded constants are fine** (technical-preferences). No threshold config, no builder,
         no trait.
 
-- [ ] **Task 2 — Wire it into the capture's range check (AC: 5, 9, 11)**
-  - [ ] Print the numbers in `validate_capture_ranges` alongside the existing line
+- [x] **Task 2 — Wire it into the capture's range check (AC: 5, 9, 11)**
+  - [x] Print the numbers in `validate_capture_ranges` alongside the existing line
         [capture.rs:1004], **before** any assertion, so a failing run still reports what it saw.
-  - [ ] Assert the ceiling **only where the band applies** — `range_band_applies(slice)` is
+  - [x] Assert the ceiling **only where the band applies** — `range_band_applies(slice)` is
         `slice.level() >= slice.top()` [capture.rs:981-983]. A cut below the world top must keep
         skipping, with the number still printed. *7.2 ruled the skip CORRECT: lit cut-face rock is
         not the sky-lit snow 5.4 calibrated against [capture.rs:968-980]. Do not make the cut level
         assert; the working-zoom 15.5 % figure is recorded here as an inherited target for a later
         story, not this story's bar.*
-  - [ ] **Do not touch** `GROUND_LUMINANCE_FLOOR`, `GROUND_LUMINANCE_CEILING` or
+  - [x] **Do not touch** `GROUND_LUMINANCE_FLOOR`, `GROUND_LUMINANCE_CEILING` or
         `WARM_PIXEL_FLOOR`.
 
-- [ ] **Task 3 — The instrument's own tests (AC: 7, 8)**
-  - [ ] Unit tests over hand-built pixel buffers, following
+- [x] **Task 3 — The instrument's own tests (AC: 7, 8)**
+  - [x] Unit tests over hand-built pixel buffers, following
         `a_blown_out_field_fails_the_value_ceiling_that_a_midtone_one_passes` [capture.rs:1141]:
         a blown frame fails the ceiling that a clean one passes, and the cut level stands aside.
-  - [ ] **The discrimination test (AC7).** Decode `5-4-signoff/boot7.png` and
+  - [x] **The discrimination test (AC7).** Decode `5-4-signoff/boot7.png` and
         `7-2-signoff/7-2-marks-vista.png` with `image` and assert **both** clauses: the blown-pool
         measure straddles the ceiling in the right direction (0.6651 % vs 0.9883 %), **and** the
         existing `median_ground_luminance` does *not* separate them (123.4 on both, well inside
@@ -253,23 +253,23 @@ story's card so it can be merged into that sitting.
         new measure sees what the old one cannot, so a later edit collapsing them goes red. Paths
         are repo-relative from `CARGO_MANIFEST_DIR`; the crate already decodes PNGs this way in
         `non_background_pixels` [tests/capture.rs:37-50].
-  - [ ] **The exit-code test (AC8).** The band assertions panic out of a Bevy observer, so a
+  - [x] **The exit-code test (AC8).** The band assertions panic out of a Bevy observer, so a
         failure is exit **101**, while `--at-tick` exhaustion is exit **1** via
         `AppExit::error()` consumed at [ingest.rs:100-107]. Prove the new ceiling actually bites —
         `catch_unwind` around the real `validate_capture_ranges` is the in-repo precedent
         [tests/capture.rs:464-467]. **A recipe that asserts `exit=1` for a band failure is wrong.**
 
-- [ ] **Task 4 — Campfire shadows (AC: 2, 3, 4, 10)**
-  - [ ] `point_light` [project.rs:416-424] sets `shadows_enabled` for the campfire. Decide and
+- [x] **Task 4 — Campfire shadows (AC: 2, 3, 4, 10)**
+  - [x] `point_light` [project.rs:416-424] sets `shadows_enabled` for the campfire. Decide and
         state whether torches and lanterns follow: the measured defect is the **campfire**, so
         YAGNI says campfire only, and each additional shadow-casting point light costs six cube-map
         faces against NFR6. If you extend it, justify it in one sentence and measure it.
-  - [ ] Leave a `// NOTE:` naming the limitation you chose, per the simple-over-general rule.
-  - [ ] A headless test asserts the projected campfire light is shadow-casting and survives the
+  - [x] Leave a `// NOTE:` naming the limitation you chose, per the simple-over-general rule.
+  - [x] A headless test asserts the projected campfire light is shadow-casting and survives the
         next reconciliation pass unchanged — the same guard AC11 gave the flicker
         [6-1-the-world-moves.md:103-105]. Reconciliation re-inserts the component
         [project.rs:583-593], so this is a real regression risk, not a hypothetical.
-  - [ ] Verify by diff that `appearance.rs`'s table and `project.rs:403`'s emissive are untouched.
+  - [x] Verify by diff that `appearance.rs`'s table and `project.rs:403`'s emissive are untouched.
 
 - [ ] **Task 5 — The sabotage table (AC: 16)**
   - [ ] Commit first, then mutate — never `git checkout --` over an uncommitted fix.
@@ -498,11 +498,39 @@ only in a handback message is lost at the session boundary.
 
 ### Agent Model Used
 
+gpt-5.6-terra / high
+
 ### Debug Log References
+
+- RED Task 1: `cargo test --offline -p gui capture::tests::blown_pool_uses_the_largest_four_connected_region_and_reports_p99` failed with `E0425` for the two absent measure functions. GREEN after the iterative four-connected flood fill and p99 implementation.
+- Calibration: committed PNG decoding measured boot7 at **0.66514754%** (reported 0.6651%) and p99 **216.7**; current vista at **0.98828125%** (reported 0.9883%) and p99 **225.6**. Both ground medians are independently pinned at 123 (the existing integer-rounded instrument value for the recorded 123.4).
+- RED Task 2: a warm, midtone 64x64 frame with a 20x20 near-white pool returned `Ok(())` at full depth before the new ceiling; after implementation it panicked while the same cut-level frame returned `Ok(())` and printed its metrics.
+- RED Task 3: compilation first failed for the absent reporting seam; the completed tests prove the committed PNG discrimination, a real `validate_capture_ranges` panic (the observer's app exit path is 101), and reporting before that panic.
+- RED Task 4: Bevy 0.16 rejected the story's generic field spelling (`E0609`: `shadows_enabled` absent; its `PointLight` field is `shadow_maps_enabled`). The corrected test then failed `the campfire light must cast shadows` before implementation and passed after campfire-only shadow maps.
+- Mutation runner: rows (a) and (b) were KILLED. The devpod execution layer terminated two full-table runs mid-table (first after row b; second after beginning row c/d), briefly leaving mutations that were verified and restored. `python3 scripts/audit-mutations.py` is clean (398 rows). The full table exit code was therefore not observed; Task 5 remains unchecked.
+- Full cold gate: `cargo clean -p gui` removed 3,728 files / 14.9 GiB; the environment then terminated `scripts/gate.sh` after `cargo fmt --check ok`, `cargo clippy -D warnings ok`, and the start of `cargo test`. No full-gate result was observed.
 
 ### Completion Notes List
 
+- Tasks 1–4 complete in four local Völundr commits. The capture instrument uses hard-coded threshold 200, an iterative four-connected flood fill, p99, and the exact ceiling 0.006651476 (0.6651% rounded from boot7's pixel count). The current committed vista remains above it at 0.9883%.
+- Campfire-only point-light shadows preserve every table/emissive look lever; torches and lanterns remain unshadowed by deliberate YAGNI/performance scope.
+- Task 6 is vehicle-bound and intentionally unchecked. Its pre-session, evidence-preserving card is at `9-1-signoff/task-6-vehicle-runbook.md`; no fps, controlled-pair, or Wolf judgement was fabricated.
+- Task 5 and Task 7 remain unchecked because the runner and cold full gate were externally interrupted. Status remains `in-progress`; AC6's shadows-enabled vehicle result is unavailable, so it is neither claimed green nor claimed red.
+
 ### File List
+
+- _bmad-output/implementation-artifacts/9-1-signoff/task-6-vehicle-runbook.md
+- _bmad-output/implementation-artifacts/9-1-the-frame-stops-blowing-out.md
+- _bmad-output/implementation-artifacts/deferred-work.md
+- _bmad-output/implementation-artifacts/metrics/.session-cursors.json
+- _bmad-output/implementation-artifacts/metrics/9-1-the-frame-stops-blowing-out.md
+- _bmad-output/implementation-artifacts/mutations/9-1-the-frame-stops-blowing-out.sh
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- crates/gui/src/capture.rs
+- crates/gui/src/project.rs
+- crates/gui/tests/capture.rs
+- crates/gui/tests/headless.rs
+- docs/tech-art-guidelines.md
 
 ## Change Log
 
@@ -510,3 +538,4 @@ only in a handback message is lost at the session boundary.
 | --- | --- |
 | 2026-08-28 | **Rebased onto `15b3635`** after PR #38 (the build-cache reaper) merged, and `baseline_commit` moved with it. The rebase is what makes AC1 answerable: every M2 story is stacked, and an AC that names a range from a stale baseline is wrong by default — this story's own commit range must start at its true parent. Verified rather than assumed: `git diff b1cd5f9 15b3635 -- crates/` is **empty**, so the 0.6651 % / 0.9883 % / 123.4 figures measured at creation all still hold, and AC3's byte-identical claim and AC4's untouched-crates claim are unaffected. Full gate re-run on the new baseline and green. |
 | 2026-08-28 | Story created. Baseline `b1cd5f9`, full gate green at creation. **The epic's premise was falsified against source**: ruling (d) already landed the peak at 35.0M under the 35.52M pin on 2026-08-22, and Wolf re-confirmed the blow-out on 2026-08-27 anyway — so the reason in the epic text is wrong while the decision stands. **The epic's AC1 was found vacuous**: the 70–180 median band reads 123 on the very frame called blown, measured on the record at 6.2. Three rulings taken from Wolf (W1 local blow-out measure, W2 shadows and only shadows, W3 no Task 0). The blown-pool measure was calibrated at creation against the committed PNGs and the ceiling rests on measurement rather than estimate: **0.6651 % on `boot7.png`, the frame Wolf approved, against 0.9883 % today**, while the ground median reads 123.4 on both. A first draft calibrated against the approved artifact and was corrected before saving — the artifact is a software mock whose near-white distribution has a different shape, so that comparison would have measured the renderer rather than the defect. The remaining caveat (archive frames, not a controlled A/B) is stated in the story and assigned to AC13. |
+| 2026-08-28 | Implemented Tasks 1–4: calibrated blown-pool/p99 instrument, range ceiling, discriminating and exit seams, and campfire-only shadow maps. Added the Task 6 vehicle card and corrected the stale art/deferred records. Task 5's full mutation run and Task 7's cold full gate were interrupted by the devpod execution layer; recorded honestly and left unchecked. |

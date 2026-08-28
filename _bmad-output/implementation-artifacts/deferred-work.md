@@ -616,10 +616,10 @@ below as "what one layer found", not as "what is wrong with 3.3".
   `sim-core`'s single `IdAllocator` never collides entity and item ids, but nothing in
   `gui`/`client-core`/`protocol` documents or asserts that invariant, and 5.4 widened the
   blast radius from position-only to full identity. `[edge/LOW]`
-- Point lights cast no shadows (`crates/gui/src/project.rs:118`, `..Default::default()` →
-  `shadow_maps_enabled: false`); AC4's "shadow" term is carried entirely by the single
-  250-lux directional. Perf-vs-look tradeoff for a vehicle session, not a headless call.
-  `[auditor/LOW]`
+- ~~Point lights cast no shadows~~ **CLOSED 2026-08-28 by Story 9.1:** the campfire's projected
+  `PointLight` now sets `shadow_maps_enabled: true`, pinned through a later reconciliation pass.
+  Torches and lanterns deliberately remain unshadowed: each extra point light costs six cube-map
+  faces, and the measured defect is the campfire. Vehicle performance remains Task 6 evidence.
 - Degenerate captures produce misleading diagnostics (`crates/gui/src/capture.rs:76`): an
   empty pixel buffer asserts "capture is black", a 1-pixel capture always asserts "capture
   is uniform". Unreachable through a real primary-window screenshot. `[edge/LOW]`
@@ -915,10 +915,9 @@ executed a single line of its production path.**
   by pointing at exactly these vertical faces, so this lands before 8.2 ships, not after.**
   `crates/gui/src/project.rs:227,230` `[feature/HIGH]`
 - **The hover slab is not visible near the campfire.** Observed by Wolf at the 8.1 review, 2026-08-25.
-  Almost certainly downstream of the campfire's already-open blown-emitter item rather than a new
-  hover defect: `04e6de5` raised the campfire amplitude 0.11→0.40, peaking at 44.8M, ~40% above the
-  value 5.4 was sized against, and a cyan slab at `(80,220,210)` will not survive that exposure.
-  Recorded against that open item; no look-tuning now, per the art rule. `[wolf/MED]`
+  Story 9.1 enabled campfire shadows without changing intensity, range, flicker, or emissive; its
+  vehicle card requires a re-check at Epic 9's shared sitting to determine whether the campfire
+  was the cause. The rendered hover fix, if still needed, remains Story 9.2. `[wolf/MED]`
 
 ## Deferred from: code review of 8-2-designate-with-the-mouse (2026-08-26)
 
@@ -977,11 +976,11 @@ executed a single line of its production path.**
   gfx... now it's too confusing still to understand what happens."* This is the standing art rule
   ([[art-gates-visual-judgement]]) applied to 8.2. REOPEN TRIGGER: real game art lands.
   `[wolf/MED]`
-- **The campfire is still blown out and is now measurably obstructing observation.**
-  Carried open since 6.2 and re-confirmed by Wolf on 2026-08-27 as a reason the client is hard to
-  read: *"campfire is still overblown so it hides stuff"*. This is no longer only a look
-  complaint — it is degrading the vehicle as an instrument, which is what makes it worth ranking
-  above ordinary look items when the gfx pass is planned. `[feature/MED]`
+- **The campfire's vehicle outcome remains open.** Story 9.1 added the discriminating blown-pool
+  instrument (boot7 ceiling 0.6651% at threshold 200) and enabled campfire-only shadow maps, while
+  preserving every withheld look lever. The required controlled shadows-off/on capture and Wolf's
+  judgement have not run outside gingerspice; record those numbers before closing or escalating
+  this item. `[feature/MED]`
 - **AC19's fps readings and AC18's `tui` cross-check are owed but NOT art-blocked.**
   Both are objective readouts that a short vehicle session closes regardless of how the client
   looks. Listed here so they are not swept up in the art deferral above. `[wolf/HIGH]`
@@ -1020,4 +1019,3 @@ executed a single line of its production path.**
   the same silent-no-op shape as the two dead modes this story already produced
   ([[silent-sim-filter-trap]]), so it is logged rather than dropped. REOPEN TRIGGER: caves,
   overhangs or multi-level interiors become reachable by a drag. `[feature/MED]`
-
