@@ -5,7 +5,7 @@ baseline_commit: 815cd6cd913f9dcc7fa1948c06a4d9ac008c68c4
 
 # Story 9.4: Trees — Fewer, and Distinct from the Ground
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
