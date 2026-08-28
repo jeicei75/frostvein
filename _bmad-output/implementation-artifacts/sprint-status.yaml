@@ -43,7 +43,13 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-28  # STORY 9.1 IN-PROGRESS -- delegated to Codex (gpt-5.6-terra/high) on
+last_updated: 2026-08-28  # STORY 9.1 -> REVIEW. Tasks 1-5 + 7 done: blown-pool instrument calibrated
+                          # on committed pixels (boot7 0.6651% vs today 0.9883%, ground median 123.4
+                          # on BOTH), campfire-only shadow maps, cold full gate GREEN, 5/5 sabotage
+                          # rows KILLED. TWO HOLES CARRIED INTO REVIEW: the Codex self-gate produced
+                          # ZERO passes (harness-killed), and Task 6's vehicle ACs 12-15 are unmet --
+                          # they need Epic 9's shared gingerspice sitting and cannot run in a devpod.
+                          # PRIOR: delegated to Codex (gpt-5.6-terra/high) on
                           # baseline 15b3635. Quota probed before handoff: weekly window 8%,
                           # 5h window 27% -- the 8.2 exhaustion window has reset.
                           # PRIOR SAME DAY: STORY 9.1 CREATED (ready-for-dev), epic-9 in-progress. Two spec
@@ -772,7 +778,7 @@ development_status:
   # b1cd5f9 and full gate GREEN on both (run, not claimed). The rebase crossed NO crate source --
   # `git diff b1cd5f9 15b3635 -- crates/` is empty -- so every figure measured at creation stands.
   # Vehicle-bound: ACs 12-15.
-  9-1-the-frame-stops-blowing-out: in-progress
+  9-1-the-frame-stops-blowing-out: review
   9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
   9-3-the-four-modes-read-apart: backlog
   9-4-trees-fewer-and-distinct-from-the-ground: backlog

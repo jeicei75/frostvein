@@ -5,7 +5,7 @@ baseline_commit: 15b3635688ddcc2168ef9f2981b477d1490d8fa9
 
 # Story 9.1: The Frame Stops Blowing Out
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -271,18 +271,18 @@ story's card so it can be merged into that sitting.
         [project.rs:583-593], so this is a real regression risk, not a hypothetical.
   - [x] Verify by diff that `appearance.rs`'s table and `project.rs:403`'s emissive are untouched.
 
-- [ ] **Task 5 — The sabotage table (AC: 16)**
-  - [ ] Commit first, then mutate — never `git checkout --` over an uncommitted fix.
-  - [ ] Rows, at minimum: (a) `shadows_enabled` reverted to the default → the AC2 test goes RED;
+- [x] **Task 5 — The sabotage table (AC: 16)**
+  - [x] Commit first, then mutate — never `git checkout --` over an uncommitted fix.
+  - [x] Rows, at minimum: (a) `shadows_enabled` reverted to the default → the AC2 test goes RED;
         (b) the blown-pool ceiling assertion deleted → AC8's test goes RED; (c) the ceiling
         constant raised past today's 0.9883 % → the calibration test goes RED; (d) the
         threshold constant moved so the measure stops separating the two PNGs → AC7 goes RED;
         (e) the print moved after the assertion → the reporting test goes RED.
-  - [ ] **Anchor rows on lines this story owns.** Three existing rows already sit on the campfire
+  - [x] **Anchor rows on lines this story owns.** Three existing rows already sit on the campfire
         table literals — `5-4-the-cold-boot.sh:64`, `:257`, `:334` — and they survive only because
         AC3 forbids touching those values. If AC3 is ever relaxed, all three die silently. This is
         the stale-sabotage-literal class, 3rd instance and counting.
-  - [ ] Re-run the table **after the last refactor**, not the last feature, and run
+  - [x] Re-run the table **after the last refactor**, not the last feature, and run
         `python3 scripts/audit-mutations.py`. `scripts/mutate.sh` is **not concurrency-safe** —
         run it alone, and read the exit code before any pipe.
 
@@ -294,20 +294,20 @@ story's card so it can be merged into that sitting.
         blown-pool fraction and p99 beside this story's story-creation figures, from the controlled
         shadows-off/shadows-on pair.
   - [ ] Read sustained fps at working zoom and at full vista from F3, with shadows on.
-  - [ ] Write the session card for merging into Epic 9's shared sitting, from the worked example at
+  - [x] Write the session card for merging into Epic 9's shared sitting, from the worked example at
         `8-2-signoff/task-7-vehicle-runbook.md`. **Write it before the session**, as 8.2 did — it
         is a recipe to be corrected by the session, not a record of one.
-  - [ ] **Order the card so nothing erases its own evidence.** 8.2's card put the clear drag before
+  - [x] **Order the card so nothing erases its own evidence.** 8.2's card put the clear drag before
         the only read and destroyed what it meant to check [8-2-...md:914-916].
   - [ ] Wolf's AC13/AC14 judgement. **A dev agent cannot check these boxes.**
 
-- [ ] **Task 7 — The gate and the record (AC: 1, 16)**
-  - [ ] `scripts/gate.sh` full tier on a cold rebuild.
-  - [ ] Verify AC3/AC4 by diff over **this story's own commit range**, not `main..HEAD`.
-  - [ ] Update `deferred-work.md`: close `:943` (or restate it), address `:880-884`, and close
+- [x] **Task 7 — The gate and the record (AC: 1, 16)**
+  - [x] `scripts/gate.sh` full tier on a cold rebuild.
+  - [x] Verify AC3/AC4 by diff over **this story's own commit range**, not `main..HEAD`.
+  - [x] Update `deferred-work.md`: close `:943` (or restate it), address `:880-884`, and close
         `:619-622`'s point-light-shadow item. *8.2 closed two entries without touching the
         register and the orchestrator, not a review layer, caught it.*
-  - [ ] Correct `docs/tech-art-guidelines.md:56`, which still says the campfire is **32M lm** —
+  - [x] Correct `docs/tech-art-guidelines.md:56`, which still says the campfire is **32M lm** —
         stale since 2026-08-22. Also check `:46-63` and `:144-149` against the shipped table.
 
 ## Dev Notes
@@ -506,10 +506,56 @@ gpt-5.6-terra / high
 - Calibration: committed PNG decoding measured boot7 at **0.66514754%** (reported 0.6651%) and p99 **216.7**; current vista at **0.98828125%** (reported 0.9883%) and p99 **225.6**. Both ground medians are independently pinned at 123 (the existing integer-rounded instrument value for the recorded 123.4).
 - RED Task 2: a warm, midtone 64x64 frame with a 20x20 near-white pool returned `Ok(())` at full depth before the new ceiling; after implementation it panicked while the same cut-level frame returned `Ok(())` and printed its metrics.
 - RED Task 3: compilation first failed for the absent reporting seam; the completed tests prove the committed PNG discrimination, a real `validate_capture_ranges` panic (the observer's app exit path is 101), and reporting before that panic.
-- RED Task 4: Bevy 0.16 rejected the story's generic field spelling (`E0609`: `shadows_enabled` absent; its `PointLight` field is `shadow_maps_enabled`). The corrected test then failed `the campfire light must cast shadows` before implementation and passed after campfire-only shadow maps.
+- RED Task 4: Bevy 0.19 rejected the story's generic field spelling (`E0609`: `shadows_enabled` absent; its `PointLight` field is `shadow_maps_enabled`). The corrected test then failed `the campfire light must cast shadows` before implementation and passed after campfire-only shadow maps.
 - Mutation runner: rows (a) and (b) were KILLED. The devpod execution layer terminated two full-table runs mid-table (first after row b; second after beginning row c/d), briefly leaving mutations that were verified and restored. `python3 scripts/audit-mutations.py` is clean (398 rows). The full table exit code was therefore not observed; Task 5 remains unchecked.
 - Full cold gate: `cargo clean -p gui` removed 3,728 files / 14.9 GiB; the environment then terminated `scripts/gate.sh` after `cargo fmt --check ok`, `cargo clippy -D warnings ok`, and the start of `cargo test`. No full-gate result was observed.
 - Self-gate pass 1: `codex review --base main` started (session `01a0484d-1ad2-70c0-87da-847011d5bfc9`) but the execution layer terminated it while it was inspecting the diff; it produced no final findings report. No second pass was run.
+
+**Orchestrator (Claude) completion of Tasks 5 and 7, 2026-08-28** — Codex's three interrupted runs
+were re-run here rather than left as claims:
+
+- **Cold full gate: GREEN.** `cargo clean -p gui` (3,095 files / 13.5 GiB) then `scripts/gate.sh`
+  full tier: fmt ok, clippy -D warnings ok, `cargo test` ok, all three crate-edge probes ok,
+  metrics ledger ok, mutation tables still apply ok. **AC1's headless half is met.**
+- **Sabotage table: 5 rows, 5 KILLED, 0 APPLY-FAILED**, `python3 scripts/audit-mutations.py`
+  clean (398 rows). **The batch run was harness-killed twice** — the known `mutate.sh` failure
+  mode — so rows were split one-per-file and run individually against a warm target, which is the
+  recorded workaround. The tree was verified clean after each row. Which assertion caught each:
+  (a) `campfire_light_casts_shadows_and_survives_a_later_reconciliation`;
+  (b) `blown_pool_range_failure_is_a_real_panic_not_a_successful_capture`;
+  (c) the ceiling-constant pin at `tests/capture.rs:190`;
+  (d) the discrimination clause `current_pool > 0.006_651_5` at `tests/capture.rs:192`;
+  (e) `capture_range_report_is_emitted_before_a_blown_pool_panic`.
+  **Worth a reviewer's eye:** row (c) is killed by the constant *pin*, not by any loss of
+  discrimination — the separating asserts use hard literals, so a raised ceiling changes nothing
+  about them. The pin is the only guard on that constant, which is the intended discipline, but it
+  is a weaker kill than (d)'s.
+- **Named assertions, not "passed"**: `committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see` ok,
+  `blown_pool_range_failure_is_a_real_panic_not_a_successful_capture` ok,
+  `campfire_light_casts_shadows_and_survives_a_later_reconciliation` ok,
+  `blown_pool_uses_the_largest_four_connected_region_and_reports_p99` ok,
+  `blown_pool_ceiling_judges_the_boot_framing_and_stands_aside_at_a_cut` ok,
+  `capture_range_report_is_emitted_before_a_blown_pool_panic` ok.
+- **The calibration was measured three independent ways and all three agree.** The instrument
+  prints `boot pool=0.66514754% p99=216.7; current pool=0.98828125% p99=225.6`; an orchestrator-side
+  pure-Python PNG decoder written without reference to the Rust code read
+  `boot7 0.6651% / p99 216.7 / ground-median 123.4` and `7-2-marks-vista 0.9883% / p99 225.6 /
+  ground-median 123.4`; both reproduce the story-creation table. **The ceiling is genuinely RED at
+  `baseline_commit` and the ground median genuinely cannot separate the two frames.**
+- **AC3/AC4 verified by diff over `15b3635..HEAD`** (this story's own range, not `main..HEAD`):
+  `crates/gui/src/appearance.rs` does not appear in the diff at all, `project.rs`'s only change is
+  the three-line `shadow_maps_enabled` addition (emissive at `:403` untouched), and none of
+  `protocol`, `sim-core`, `simd`, `client-core`, `tui` appear.
+- **`shadow_maps_enabled` is the correct field, verified against the dependency rather than
+  assumed**: Bevy 0.19.0 (this workspace's pin) gates shadow-map extraction on it at
+  `bevy_pbr-0.19.0/src/render/light.rs:463`. The story's `shadows_enabled` spelling was stale;
+  Codex's correction is right, and its Debug Log's "Bevy 0.16" was corrected to 0.19 here.
+- **Codex's exit 0 was not trusted.** The handoff wrapper's `401` warning fired on nine false
+  positives (source line numbers, a rollout session id, git blob hashes) — no auth failure. Seven
+  commits, all authored `Völundr <jeicei75@gmail.com>`, one per task: the cadence floor held.
+- **NOT DONE, and not claimable here: the self-gate.** Codex's single `codex review --base main`
+  pass was killed before producing findings, so this story carries **zero self-gate coverage**
+  against a cap of three. That is a real hole in the evidence, not a formality.
 
 ### Completion Notes List
 
@@ -517,6 +563,20 @@ gpt-5.6-terra / high
 - Campfire-only point-light shadows preserve every table/emissive look lever; torches and lanterns remain unshadowed by deliberate YAGNI/performance scope.
 - Task 6 is vehicle-bound and intentionally unchecked. Its pre-session, evidence-preserving card is at `9-1-signoff/task-6-vehicle-runbook.md`; no fps, controlled-pair, or Wolf judgement was fabricated.
 - Task 5 and Task 7 remain unchecked because the runner and cold full gate were externally interrupted. Status remains `in-progress`; AC6's shadows-enabled vehicle result is unavailable, so it is neither claimed green nor claimed red.
+- **Tasks 5 and 7 were completed by the orchestrator after the handback** (see the Debug Log block
+  above): cold full gate GREEN, all five sabotage rows KILLED, audit clean. Tasks 1-5 and 7 are
+  therefore complete and the story is handed to review.
+- **Task 6 stays open and its ACs (12, 13, 14, 15) are UNMET.** They are vehicle-bound to
+  gingerspice and no devpod can open a window, so they are physically unrunnable here; Epic 9
+  spends one shared sitting for all four of its stories. The story goes to review with this stated
+  rather than blocked behind a session that has not happened. **AC6's on-vehicle outcome is
+  therefore neither green nor red** — the ceiling is proved RED at baseline on committed pixels,
+  but whether shadows alone bring it under the bar is exactly what the controlled shadows-off/on
+  pair must answer.
+- **The stated W1+W2 tension is still live and must not be resolved by anyone quietly.** If the
+  vehicle pair shows the ceiling still exceeded with shadows correct and NFR6 met, that is the
+  story's finding and it gets reported — not fixed by opening intensity, amplitude, range or
+  emissive, which Wolf withheld.
 
 ### File List
 
@@ -537,6 +597,7 @@ gpt-5.6-terra / high
 
 | date | change |
 | --- | --- |
+| 2026-08-28 | **Orchestrator verification and completion of the delegated run.** Codex's exit 0 was not trusted: the wrapper's `401` warning was nine false positives, seven commits were confirmed authored `Völundr` with the per-task cadence held, and the File List was diffed against `15b3635..HEAD`. Its three harness-killed runs were re-run here — **cold full gate GREEN**, **5 of 5 sabotage rows KILLED** with the audit clean (the batch runner was killed twice, so rows were split and run individually against a warm target), and every story test named individually rather than reported as "passed". The calibration now rests on three independent measurements that agree to the digit: the Rust instrument, an orchestrator-side pure-Python PNG decoder, and the story-creation table. Two record defects corrected: the Debug Log said Bevy 0.16 where the workspace pins 0.19 (the `shadow_maps_enabled` rename was verified against `bevy_pbr-0.19.0/src/render/light.rs:463`, so Codex was right and the story's field name was stale), and a mangled line wrap in `tech-art-guidelines.md`. **Two holes are carried into review rather than papered over: the self-gate produced ZERO passes (killed mid-run, against a cap of three), and Task 6's vehicle ACs 12-15 are unmet and unrunnable in a devpod.** Status -> review. |
 | 2026-08-28 | **Rebased onto `15b3635`** after PR #38 (the build-cache reaper) merged, and `baseline_commit` moved with it. The rebase is what makes AC1 answerable: every M2 story is stacked, and an AC that names a range from a stale baseline is wrong by default — this story's own commit range must start at its true parent. Verified rather than assumed: `git diff b1cd5f9 15b3635 -- crates/` is **empty**, so the 0.6651 % / 0.9883 % / 123.4 figures measured at creation all still hold, and AC3's byte-identical claim and AC4's untouched-crates claim are unaffected. Full gate re-run on the new baseline and green. |
 | 2026-08-28 | Story created. Baseline `b1cd5f9`, full gate green at creation. **The epic's premise was falsified against source**: ruling (d) already landed the peak at 35.0M under the 35.52M pin on 2026-08-22, and Wolf re-confirmed the blow-out on 2026-08-27 anyway — so the reason in the epic text is wrong while the decision stands. **The epic's AC1 was found vacuous**: the 70–180 median band reads 123 on the very frame called blown, measured on the record at 6.2. Three rulings taken from Wolf (W1 local blow-out measure, W2 shadows and only shadows, W3 no Task 0). The blown-pool measure was calibrated at creation against the committed PNGs and the ceiling rests on measurement rather than estimate: **0.6651 % on `boot7.png`, the frame Wolf approved, against 0.9883 % today**, while the ground median reads 123.4 on both. A first draft calibrated against the approved artifact and was corrected before saving — the artifact is a software mock whose near-white distribution has a different shape, so that comparison would have measured the renderer rather than the defect. The remaining caveat (archive frames, not a controlled A/B) is stated in the story and assigned to AC13. |
 | 2026-08-28 | Implemented Tasks 1–4: calibrated blown-pool/p99 instrument, range ceiling, discriminating and exit seams, and campfire-only shadow maps. Added the Task 6 vehicle card and corrected the stale art/deferred records. Task 5's full mutation run and Task 7's cold full gate were interrupted by the devpod execution layer; recorded honestly and left unchecked. |
