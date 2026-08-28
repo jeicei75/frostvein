@@ -900,7 +900,16 @@ executed a single line of its production path.**
   `ViewVisibility` on its spawn frame. Not observable at 60 fps, but worth knowing before anyone
   chases a "one tile behind" report from the vehicle.
   `crates/gui/src/project.rs:214-240` `[feature/LOW]`
-- **The hover highlight is invisible on every tile with a drawn tile above it.** DEFERRED TO 8.2 by
+- ~~**The hover highlight is invisible on every tile with a drawn tile above it.**~~ **CLOSED
+  2026-08-26 by commit `8782a0d` "Preview mouse designations on picked faces"** — 8.2 took the
+  first of the three candidate fixes below, the hit-face slab: `sync_hover_highlight` now offsets
+  along the picked face normal and rotates to it (`project.rs:236-238`), guarded by
+  `a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side` and four sabotage rows in
+  8.2's table. **This entry was left unstruck for two days and Epic 9's story 9.2 was then written
+  from it on 2026-08-28, copying the defect description and its three candidate fixes verbatim —
+  fabricating a story's worth of scope for work already shipped.** Only the LOOK question remains
+  and it is filed separately under 8.2's vehicle deferrals. Struck 2026-08-28. ORIGINAL ENTRY
+  BELOW, kept for the record: DEFERRED TO 8.2 by
   Wolf, 2026-08-25 — reason: waiting on final gfx, and the standing art rule (2026-08-22) is that a
   look change needs a concrete defect and the art pass is owed first. The defect is concrete and
   measured: `sync_hover_highlight` places the slab at `world_to_render(pos) + Y*0.55`, the cube above

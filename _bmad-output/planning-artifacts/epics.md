@@ -1221,12 +1221,19 @@ As the boss,
 I want to see which cell I am pointing at on cliff faces, corridor walls and shaft sides,
 So that I can trust where my orders will land anywhere in the fortress, not only on open ground.
 
-The defect, measured: the 0.08-thick hover slab at render y `z+0.51..z+0.59` is wholly enclosed
-by the cube above (`z+0.5..z+1.5`) on every vertical face — picks correct, highlight buried, only
-the top row visible. Three candidate treatments are on the record (hit-face slab — the DDA
-already knows the crossed axis; an outline box; a slightly-inflated cell cube); **hoisting is
-ruled out** because the picked tile is by construction visible and hoisting would highlight a
-different tile than the one under the cursor. Closes 8.2's deferred AC13 rendered half.
+**CORRECTED 2026-08-28 — THE GEOMETRIC HALF ALREADY SHIPPED.** This story was written on
+2026-08-28 from `deferred-work.md`'s pre-fix entry, which had not been struck when 8.2 closed it
+two days earlier. What that entry described — the 0.08-thick slab at render y `z+0.51..z+0.59`
+enclosed by the cube above on every vertical face — **was fixed on 2026-08-26 by commit `8782a0d`**,
+which took the first of the three candidate treatments (the hit-face slab): `sync_hover_highlight`
+offsets along the picked face normal and rotates to it (`project.rs:236-238`), covered by
+`a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side` and four sabotage rows.
+
+**What actually remains is the LOOK question only**, and it is already deferred: 8.2's AC13
+rendered half — whether the slab READS on a cliff face, stays distinct from the marks and clear of
+the near-white — was **DEFERRED by Wolf 2026-08-27** under the standing art rule, *"it will get
+clearer with only real gfx"*, with REOPEN TRIGGER: real game art lands. That trigger is Epic 10.
+**So 9.2 has no buildable headless work and should not be picked up before Epic 10's art pass.**
 
 **Acceptance Criteria:**
 
@@ -1259,11 +1266,19 @@ the vehicle check concrete: what the `tui` count proved arrived must now be tell
 
 **Acceptance Criteria:**
 
-**Given** the appearance tables,
-**When** tested headlessly,
-**Then** the four mark colours are pairwise separated by a stated minimum channel distance, all
-clear of the near-white reserved for stars and emitter faces, and distinct from 9.2's highlight —
-so a future palette edit cannot silently re-merge them.
+**CORRECTED 2026-08-28 — THIS AC IS ALREADY MET, AND WAS UNMEETABLE AS WRITTEN.**
+Already met: `mark_colours_are_distinct_cold_literals` (`appearance.rs:381`) asserts pairwise
+separation at a `MIN_MARK_SEPARATION = 40.0` floor across dig/channel/zone, plus separation from
+every terrain colour and from the TUI's three mark colours; `hover_highlight_colour_is_a_distinct_cold_literal`
+covers hover-vs-marks and hover-vs-near-white.
+Unmeetable as written: it asks for **four** mark colours pairwise separated **and** distinct from
+the hover. There are only **three** persistent marks — the wire's `DesignationKind` carries just
+`Dig` and `Channel`, plus the stockpile zone. **Clear commits nothing** (it deletes designations),
+so it has no persistent mark at all, and its drag preview deliberately *is* the hover material
+(`project.rs:381-384`). The one candidate fourth element is therefore required to be simultaneously
+distinct from the hover and equal to it. Spec-defect class: "AC unmeetable as written".
+**What remains is the eye check only** — 8.2's AC19 reads-clearly half, recorded in that story as
+*"DEFERRED to the gfx pass"*, i.e. Epic 10.
 
 **Given** a scene holding all four mark kinds at working zoom,
 **When** Wolf views it live and tells them apart at a glance, unprompted (UX-DR17; vehicle),

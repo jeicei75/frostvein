@@ -590,6 +590,32 @@ only in a handback message is lost at the session boundary.
 - The vehicle: `vehicle-session-runbook.md:17-44`; `8-2-signoff/task-7-vehicle-runbook.md:41-55`
 - Standing art rule: memory `art-gates-visual-judgement`; `epic-5-retro-2026-08-23.md:279-281, :399-401`
 
+## VEHICLE OBSERVATION — 2026-08-28, Wolf
+
+**The blow-out is NOT closed. Shadows were not enough.** Wolf, on the vehicle:
+*"9.1 lights are still blown out .. shadows are not strong enough or light is still too strong."*
+
+**This is the story's predicted outcome, not a surprise.** The W1+W2 tension was stated at
+creation and again in the Completion Notes: shadows remove light passing *through* geometry and
+cannot dim the unoccluded pool immediately around the fire, so the near-white ceiling might not be
+reachable by shadows alone. Both Opus review layers independently expected this. The story's own
+standing rule now applies verbatim:
+
+> If AC5 stays red with shadows correct and NFR6 met, **STOP and report the measured numbers.** Do
+> NOT open intensity, amplitude, range or emissive to reach the ceiling — those are levers Wolf
+> considered and did not authorise.
+
+**So AC14 is answered NO and the story has done its job**: it proved, with an instrument that did
+not exist before, that shadows are insufficient. What is still owed before this can be closed or
+escalated is the *numbers* — AC13's controlled shadows-off/on pair and AC12's fps — because
+"still blown out" is a judgement and the ceiling is a measurement. The corrected Task 6 card is
+ready to take both.
+
+**What must NOT happen next:** a quiet intensity/amplitude/range/emissive change to force the
+ceiling green. If the next step is opening one of those levers, that is a new ruling from Wolf and
+belongs in a follow-up story with its own before/after numbers — this is the failure mode the
+project has named three times.
+
 ## Dev Agent Record
 
 ### Agent Model Used
