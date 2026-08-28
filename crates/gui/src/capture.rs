@@ -1063,6 +1063,16 @@ fn validate_capture_ranges(
     level: i32,
 ) {
     let pixels = decode_rgba8(bytes, format);
+    let warm = warm_lit_pixels(&pixels);
+    let ground = median_ground_luminance(&pixels, width, height);
+    let blown_pool =
+        largest_blown_pool_fraction(&pixels, width, height, BLOWN_POOL_LUMINANCE_THRESHOLD);
+    let p99 = p99_luminance(&pixels);
+    println!(
+        "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \
+         blown-pool={:.4}% p99-luminance={p99:.1}",
+        blown_pool * 100.0
+    );
     assert!(
         pixels.iter().any(|pixel| pixel[..3] != [0, 0, 0]),
         "capture is black"
@@ -1071,15 +1081,12 @@ fn validate_capture_ranges(
         pixels.windows(2).any(|pair| pair[0] != pair[1]),
         "capture is uniform"
     );
-    let warm = warm_lit_pixels(&pixels);
-    let ground = median_ground_luminance(&pixels, width, height);
-    println!("capture range check: warm-lit pixels={warm} ground-median-luminance={ground}");
     // The numbers print either way. Only the calibrated band is conditional, and `capture is
     // black` / `capture is uniform` above are not — a slice capture is never left ungated.
     if !band_applies {
         println!(
             "capture range check: the cut at z {level} is below the world top, where 5.4's band \
-             was measured on sky-lit snow — warm and ground assertions skipped"
+             was measured on sky-lit snow — warm, ground, and blown-pool assertions skipped"
         );
         return;
     }
@@ -1097,6 +1104,12 @@ fn validate_capture_ranges(
         ground <= GROUND_LUMINANCE_CEILING,
         "the valley floor reads {ground}, above the {GROUND_LUMINANCE_CEILING} value ceiling — \
          night snow must stay midtone; only emissive approaches white"
+    );
+    assert!(
+        blown_pool <= BLOWN_POOL_FRACTION_CEILING,
+        "the largest near-white pool is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
+        blown_pool * 100.0,
+        BLOWN_POOL_FRACTION_CEILING * 100.0
     );
 }
 
@@ -1226,6 +1239,39 @@ mod tests {
 
         assert_eq!(largest_blown_pool_fraction(&pixels, 4, 4, 200), 0.25);
         assert_eq!(p99_luminance(&pixels), 220.0);
+    }
+
+    #[test]
+    fn blown_pool_ceiling_judges_the_boot_framing_and_stands_aside_at_a_cut() {
+        let mut bytes = vec![0; 64 * 64 * 4];
+        for pixel in bytes.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[195, 150, 130, 255]);
+        }
+        for row in 0..20 {
+            for column in 0..20 {
+                let start = (row * 64 + column) * 4;
+                bytes[start..start + 4].copy_from_slice(&[230, 230, 230, 255]);
+            }
+        }
+
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let at_top = std::panic::catch_unwind(|| {
+            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, true, 9);
+        });
+        let at_cut = std::panic::catch_unwind(|| {
+            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, false, 8);
+        });
+        std::panic::set_hook(previous);
+
+        assert!(
+            at_top.is_err(),
+            "a large near-white pool at the boot framing must fail its own ceiling"
+        );
+        assert!(
+            at_cut.is_ok(),
+            "the same frame at a cut must keep skipping the boot-vista range checks"
+        );
     }
 
     fn mirror_with_dwarf_at(z: i32) -> Mirror {
