@@ -17,6 +17,9 @@ inputDocuments:
   - docs/narrative.md
   - docs/17d7215b-6c05-4286-b3bb-56592ca617ec.jpg
   - docs/a9d4e72b-b4c3-43f2-8a1c-e25c539fd6c1.jpg
+  # Gfx pass (2026-08-28, additive — Epics 9–10 appended, nothing above regenerated)
+  - _bmad-output/implementation-artifacts/deferred-work.md
+  - docs/tech-art-guidelines.md
 ---
 
 # frostvein - Epic Breakdown
@@ -306,6 +309,43 @@ Wolf slices into the mountain and sees the dig underground: he can always tell w
 Wolf works the fortress from the Bevy client with the mouse — clicking and dragging rectangles to designate digs and channels, cancelling them, placing and removing stockpiles, including on sliced underground levels — plus speed, save/load, and quit. Full parity with the TUI, and the walking skeleton runs end to end in 3D.
 **FRs covered:** FR35, FR36
 **M2's hardest input work and the main story-count driver.** Standalone: builds on Epics 5–7; it is also the cut-list's second victim, shrinking to camera + speed control if the story cap binds.
+
+## Epic List — the gfx pass (added 2026-08-28)
+
+**Why this list exists:** "the gfx pass" had become a load-bearing placeholder — four deferred
+items, two of 8.2's AC halves, and the standing art rule all pointed at it, and it appeared in no
+plan. Meanwhile 8.3 closes M2 on Wolf's judgement of all six anti-requirement bars, a judgement
+Wolf has twice refused to make against placeholder material. RULED 2026-08-28 (Wolf): the gfx
+pass runs **before 8.3** — order is Epic 9, Epic 10, then 8.3 closes the milestone.
+
+**The story cap, stated honestly:** M2 was planned at 10–14 stories and sits at 11. These two
+epics add nine, which the original cap never contemplated. This is added scope ruled by Wolf, not
+cap slippage: the cap governed the path to the walking skeleton, which 8.1–8.2 have delivered;
+CM2's first-third wow landed long ago and is unaffected. The milestone's *close* now waits on the
+look work because closing it without the look work would mean signing off UX-DR15–20 against
+material every prior ruling refused to judge.
+
+### Epic 9: A Client You Can Read
+Every legibility defect on the record is closed: the campfire stops blowing out the frame, the
+cell under the cursor is visible on every face, the four designation modes read apart at a
+glance, and the valley has fewer trees that no longer camouflage against the ground. No new
+capability — the client Wolf already has becomes one he can actually read.
+**FRs covered:** none new — closes the visual halves of FR31/FR34 via UX-DR15–UX-DR20, and 8.2's
+deferred AC13-rendered and AC19-reads-clearly halves.
+**Every story is gated by a concrete, measured defect already in `deferred-work.md` or named by
+Wolf on the record — no taste-driven tuning.** Standalone: all in today's stack, no new
+dependencies. One vehicle session closes all four UX-DR22 halves.
+
+### Epic 10: The Look Bench
+Wolf designs the game's look before building it: a headless Blender bench renders "here is what
+you will see" artifacts from committed scripts, BlenderMCP on gingerspice gives him a live
+creative seat with Claude, the guidelines grow an asset contract — and the bench proves itself by
+making the trees look right, then delivers the first authored assets: dwarves.
+**FRs covered:** none new — this is the PRD's own asset-pipeline trigger firing ("dwarves are the
+expected first case") plus UX-DR22's opening-artifact obligation gaining repeatable machinery.
+**RULED 2026-08-28 (Wolf): the pipeline is Blender → glTF via Bevy's native loader** — this
+supersedes the addendum's recorded MagicaVoxel/`bevy_vox_scene` path (note added there). Game
+first; the pipeline is an outcome, not the goal. Standalone: builds on Epic 9's legible client.
 
 ---
 
@@ -1124,3 +1164,184 @@ So that Milestone 2 is done: designate, pathfind, dig, haul — live, in the cli
 
 **Given** the milestone,
 **Then** Wolf signs off **both wow beats in one sitting** — the boot frame on looks alone, and the alive moment thirty seconds later — and confirms that none of the six 4.1a words is true of this client: ugly, flat, cluttered, confusing, lifeless, camera unusable (PRD success criteria 1 and 3, UX-DR13–UX-DR20).
+
+---
+
+## Epic 9: A Client You Can Read
+
+Wolf looks at the client and can tell instantly what he is seeing — terrain from trees, dwarves
+from designations, the cell under his cursor from the cells beside it — and the campfire no
+longer hides any of it. Nothing new is built; the client he already has becomes one he can read.
+
+**Added 2026-08-28.** The forcing observation is Wolf's own, from the 8.2 vehicle sessions: *"too
+confusing still to understand what happens"* and *"campfire is still overblown so it hides
+stuff"* — the client is a compromised instrument, and everything after this epic (the bench's
+tree verdicts, 8.3's six-bar sign-off) is a judgement made through that instrument. Every story
+below is gated by a concrete, measured defect, which is what the standing art rule (2026-08-22)
+requires; none is taste-driven tuning.
+
+**UX-DR22 applies to every story, both halves.** The opening artifact for 9.1 is the existing
+approved 5.4 artifact plus the value-floor band; 9.2–9.4 each need a cheap "here is what you will
+see" artifact before build. The closing halves of all four share **one vehicle session** —
+Wolf's time at gingerspice is the scarcest resource this plan spends, and it is spent once.
+
+**Sequencing inside the epic:** 9.1 first — nothing else can be judged while an emitter that
+bright is in frame, and the hover slab's invisibility near the campfire is already recorded as
+downstream of it. 9.2–9.4 are order-free after that.
+
+### Story 9.1: The Frame Stops Blowing Out
+
+As the boss,
+I want the campfire to light the camp without washing out everything near it,
+So that I can see what is happening at the heart of my fortress.
+
+The defect, measured: `04e6de5` raised campfire amplitude 0.11→0.40, peaking at 44.8M, ~40% above
+what 5.4's look was sized against; open since 6.2 and re-confirmed 2026-08-27 as obstructing
+observation. The bar is instrument-then-eye (RULED 2026-08-28, Wolf): the `--capture` valley-floor
+median-luminance band (70–180, approved artifact reads 123) must hold, and then Wolf views it
+live — the instrument catches regressions cheaply, the eye stays the authority.
+
+### Story 9.2: The Cell Under the Cursor Is Visible on Every Face
+
+As the boss,
+I want to see which cell I am pointing at on cliff faces, corridor walls and shaft sides,
+So that I can trust where my orders will land anywhere in the fortress, not only on open ground.
+
+The defect, measured: the 0.08-thick hover slab at render y `z+0.51..z+0.59` is wholly enclosed
+by the cube above (`z+0.5..z+1.5`) on every vertical face — picks correct, highlight buried, only
+the top row visible. Three candidate treatments are on the record (hit-face slab — the DDA
+already knows the crossed axis; an outline box; a slightly-inflated cell cube); **hoisting is
+ruled out** because the picked tile is by construction visible and hoisting would highlight a
+different tile than the one under the cursor. Closes 8.2's deferred AC13 rendered half.
+
+### Story 9.3: The Four Modes Read Apart
+
+As the boss,
+I want dig, channel, stockpile and clear marks to be distinguishable at a glance at working zoom,
+So that I can see what I have ordered without cross-checking in the TUI.
+
+Closes 8.2's deferred AC19 reads-clearly half; this is UX-DR17 applied to designations. The marks
+must also stay distinct from the hover highlight (9.2) and clear of the near-white reserved for
+stars and emitter faces. The 8.2 readout evidence (marks split across z-levels by design) makes
+the vehicle check concrete: what the `tui` count proved arrived must now be tellable apart by eye.
+
+### Story 9.4: Trees — Fewer, and Distinct from the Ground
+
+As the boss,
+I want fewer trees, coloured apart from the terrain,
+So that the valley reads as a landscape with trees in it rather than a confusion of same-coloured
+blocks.
+
+Two knobs, one story, judged together. **Density** is sim-side: `worldgen.rs` places a trunk at
+1-in-12 per eligible cell with a 2-cell spacing exclusion — reduce it. **Hue** is client-side and
+the defect is measurable: foliage `(55,73,84)` sits within ~8 points per channel of stone
+`(60,70,92)` and soil `(56,52,62)` — trees separate from ground only by snow cap and taper, the
+base cubes are near-camouflage. Shift foliage brown/green (RULED 2026-08-28, Wolf), inside the
+night palette's value discipline.
+
+**Blast radius, stated at planning so the story does not rediscover it:** the density change is
+the one story in this epic that touches `sim-core` — every seeded world changes, terrain-dependent
+tests and capture recipes need re-checking, mutation rows anchored near worldgen literals may
+APPLY-FAIL (the gate audits this), and fewer dark tree skirts push the valley-floor luminance
+*up* while 9.1 pushes it *down* — the 70–180 band watches both. **NOTE:** 9.4's colour values are
+a legibility patch, not settled art — Epic 10's tree pilot may refine them through the bench.
+
+---
+
+## Epic 10: The Look Bench
+
+Wolf designs the game's look before building it. A headless Blender bench turns committed scripts
+into "here is what you will see" artifacts; BlenderMCP on gingerspice gives him a live creative
+seat with Claude in the loop; the guidelines grow an asset contract; and the bench proves itself
+on the trees before the first authored assets — dwarves — go through it.
+
+**Added 2026-08-28. The PRD's asset-pipeline trigger has fired.** The PRD holds authored assets
+until "a concrete case forces the decision — dwarves are the expected first case." RULED
+2026-08-28 (Wolf): the case is here — he wants authored dwarves and better trees, and the PRD
+predicted the first correctly. **The pipeline is Blender → glTF via Bevy's native loader**,
+superseding the addendum's MagicaVoxel/`bevy_vox_scene` path: `.vox` from Blender means lossy
+voxelisation on every iteration, and the addendum's own caveat — community voxel crates lagging
+each Bevy release — is precisely what the native loader deletes. (Verified 2026-08-28:
+`bevy_vox_scene` 0.22 does match Bevy 0.19 today; the supersession is about iteration cost and
+maintenance surface, not a present incompatibility.) A dated supersession note lives in the
+addendum itself.
+
+**Game first; the pipeline is an outcome, not the goal** (Wolf, 2026-08-28). Each story below is
+pulled in by a concrete need — UX-DR22's opening artifact (owed on every visual story, hand-made
+every time so far), the tree redesign, the dwarf assets. Three concrete uses is this project's
+own bar for shared machinery.
+
+**Technical premises, verified at planning (2026-08-28), to be RE-verified at story creation:**
+the workspace Bevy is 0.19.0 with a deliberate feature trim (`default-features = false`, devpod
+system-library constraints) that includes **neither `bevy_gltf` nor `file_watcher`** — enabling
+them is explicit story work with a justification line against the trim's reasons, not a silent
+edit. Blender is not installed on any devpod; no devpod can open a window; BlenderMCP requires a
+live GUI Blender session — so MCP work is vehicle-side (gingerspice) by construction, and
+headless Blender (`blender --background --python`) is the only Blender any devpod can run.
+
+### Story 10.1: The Headless Bench
+
+As the boss,
+I want a committed script to render a reviewable image of proposed look work from our actual
+world data,
+So that I can judge a look before anyone builds it, and the artifact UX-DR22 demands stops being
+hand-made every time.
+
+Deterministic, diffable, runs in the devpod: `blender --background --python <script>`. Output is
+the UX-DR22 opening artifact for look stories from here on. The bench renders *our* world —
+worldgen-exported geometry at the real palette — not generic scenes; a Task-0 artifact that draws
+geometry nobody is tasked to build is the recorded 5.4 failure and is the first thing this bench
+must not repeat.
+
+### Story 10.2: The Live Seat — BlenderMCP on Gingerspice (SPIKE)
+
+As the boss,
+I want to explore shapes and looks interactively in Blender with Claude driving alongside me,
+So that starting points for assets come out of creative sessions, not cold scripts.
+
+**A spike: its output is a decision, not a pipeline.** BlenderMCP runs against a live GUI Blender
+on gingerspice with Claude Code in the Claude app; the open question is the handoff — how a look
+found live becomes a committed headless script, so nothing the build depends on lives only in a
+session. The spike answers: what the handoff is, what it costs, and whether MCP earns a place in
+the standing workflow or stays an exploration tool. Writing a confident AC over this unknown
+would be the 4.1a shape; the AC is the decision itself, recorded.
+
+### Story 10.3: The Rules of the Look
+
+As the boss,
+I want the tech-art guidelines to grow two contracts — one for procedural content, one for
+authored assets,
+So that output from any tool, hand, script or MCP session, can be checked against the same bar.
+
+Extends `docs/tech-art-guidelines.md`: the procedural-content rules the existing sections imply
+but never state as a contract, and the asset contract the PRD says is owed when the pipeline
+opens — grid scale, orientation, origin, palette/material mapping, naming, where files live.
+Blocks 10.4/10.5: no asset is authored against an undefined target.
+
+### Story 10.4: The Trees Look Right (the pilot)
+
+As the boss,
+I want the trees redesigned through the bench until the valley's trees look like trees I chose,
+So that the bench proves itself on the asset I am least attached to before touching the one I
+care about most.
+
+**The procedural-vs-authored decision is this story's output, made on bench evidence** — Wolf's
+standing instinct is procedural (2026-08-28, "procedural is ok but we need to make them look
+better"), and the bench confirms or overturns it cheaply. Hard constraint either way: the
+`SPRUCE_SNOW` exposed-crown rule and the landform-not-buried result, both earned against real
+captures, hold in whatever wins. Builds on 9.4's density/hue patch; supersedes its colour values
+if the bench finds better ones.
+
+### Story 10.5: Dwarves Worth Looking At
+
+As the boss,
+I want my dwarves to be authored models I made,
+So that the creatures at the heart of the game carry my hand, not a placeholder cube's.
+
+The PRD's predicted first authored asset, through the now-proven bench: Blender-authored, glTF
+via Bevy's native loader, checked against 10.3's contract, hot-reloaded during iteration
+(`file_watcher`), landing on the existing appearance-table/reconciliation seam (`EntityKind::Dwarf`,
+currently colour `[151,116,96]` at scale 0.65). Enabling `bevy_gltf` + `file_watcher` happens
+here with its justification against the feature trim. UX-DR22 both halves; the lantern-carrying
+dwarf keeps its table-driven moving light.
+
