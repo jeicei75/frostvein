@@ -5,7 +5,7 @@ baseline_commit: cca118a3a6fc9c0fe1676f454f3556ed9c424eab
 
 # Story 8.2: Designate with the Mouse
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -866,8 +866,8 @@ deferral, not a pass** — the difference matters and is spelled out below.
 | The mechanism — four modes reach the sim at cells it keeps | **PROVEN**, real daemon as judge, 40/40 mutations killed |
 | AC15/16/17 instruments, AC14 headless | **MET** |
 | **AC13's rendered half** — is the hit-face highlight legible, distinct, clear of the reserved near-white | **DEFERRED to the gfx pass.** Not observed, not inferred |
-| **AC19** — each of the four drags "takes effect in the same client", by eye | **PARTIAL.** "Better" is not four confirmed drags. The *takes-effect* half is answerable without art; the *reads-clearly* half is not |
-| **AC18** — `tui` cross-check | **MET for dig, stockpile and channel** 2026-08-28; clear demonstrated, pending one drag on a counted footprint. See the readout pass below |
+| **AC19** — each of the four drags "takes effect in the same client", by eye | **takes-effect half MET** 2026-08-28, all four modes; **reads-clearly half DEFERRED to the gfx pass** |
+| **AC18** — `tui` cross-check | **MET** 2026-08-28, all four modes. See the readout pass below |
 | NFR6 fps at both zooms | **READ 2026-08-28: ~140 fps**, clears both floors |
 
 **No fps figure was fabricated and no AC is being marked met on "better".** The honest summary is
@@ -884,16 +884,18 @@ is a `marks:` line off `tui --frame`, read over a second connection. Nothing her
 | Dig | 8 designations | z 8 |
 | Stockpile | 12 zones | z 9 |
 | Channel | 16 designations (9 + 7) | z 9 **and** z 10 |
-| Clear | 12 zones and 14 channel marks removed | z 9, z 10 |
+| Clear | every zone and every channel mark removed | z 9, z 10 |
 
 **NFR6: ~140 fps**, against floors of 60 (working zoom) and 30 (full vista) — clears both with
 room. No figure invented; a failed reading would have been reported as the result.
 
-**AC18 is met for dig, stockpile and channel.** Each was read back from the sim by a second client
-over its own connection, which is exactly the AC's "the sim received what was intended". **Clear is
-demonstrated but not yet closed on a counted footprint**: it removed all 12 zones and 14 of 16
-channel marks, leaving two — at z 9 `x 60, y 62` and one at z 10 — that sit outside the rect that
-was dragged. One clear drag over the leftover closes it.
+**AC18 IS MET ON ALL FOUR MODES.** Each was read back from the sim by a second client over its own
+connection, which is exactly the AC's "the sim received what was intended". Clear took two drags:
+the first removed all 12 zones and 14 of 16 channel marks, leaving two outside the rect it was
+given (z 9 `x 60, y 62`, and one at z 10); a second drag over the leftover closed it. The final
+read is the unambiguous one — `z 9 designations=0 of 0 zones=0 of 0`, with the OTHER-levels line
+naming **only** z 8's 8 dig marks and no z 10 at all. The digs were untouched by every clear drag,
+which is the negative control: clear removed what it was aimed at and nothing else.
 
 **Channel's two-level split is correct, not a loss.** One drag put 9 marks on z 9 and 7 on z 10:
 channel follows the ground, so each column contributes its own surface cell. The footprint check
@@ -999,50 +1001,32 @@ backstop; five consecutive runs green, then a full gate green. Worth noting agai
 record: that action item named `--frames` in `gui`, and the identical mistake was sitting
 unnoticed in the daemon's test harness the whole time.
 
-## RESUME HERE — 2026-08-28
+## CLOSED — 2026-08-28
 
-**Session paused 2026-08-27 by Wolf; re-checked 2026-08-28.** Tree clean, **38 commits on
-`8-2-designate-with-the-mouse`, none pushed, no PR** (21 on 08-26, 17 on 08-27 — the "16" written
-here on the 27th counted that day only). Status stays `in-progress`.
+**8.2 is `done`.** The readout pass ran on the vehicle and every AC that did not need art is met
+on observed evidence; see the readout-pass section above for the figures.
 
-**Binaries are current — do not rebuild blind, check the stamps:**
+**Closed on evidence:** AC15, AC16, AC18 (all four modes), AC19's takes-effect half, NFR6 (~140 fps
+against floors of 60 and 30).
 
-| Binary | Built | From |
-| --- | --- | --- |
-| `target/x86_64-pc-windows-gnu/release/gui.exe` | 2026-08-27T16:54:53Z | `8ee683c`, the last commit touching `gui`/`client-core`/`protocol` |
-| `target/debug/tui` | 2026-08-27T17:26:07Z | `5880e51` |
-| `target/debug/simd` | 2026-08-27T15:41:19Z | unchanged since; `5880e51` touched only its *tests* |
+**Carried to the gfx pass, unclaimed and on the record** — where Wolf ruled them 2026-08-27:
+AC13's rendered half, and AC19's reads-clearly half. Neither is inferred and neither is marked met.
 
-**Copy `gui.exe` Windows-side and check the copy's mtime** — the stale-binary trap has fired five
-times and the copy is the file that has been stale every time. The runbook card named a *sixth*
-variant of it on 2026-08-28: its Binaries paragraph still pointed at the `e01e7ff` build from
-15:05:25Z, one commit behind the `gui.exe` on disk and without the compass or cursor readout.
-Corrected in place — the card now carries the same three-row table as above.
+**Deferred with a reopen trigger:** clear cannot reach a mark in a column holding a second
+standable cell when the two drags are anchored at different heights. Measured, not suspected;
+logged in `deferred-work.md`; ruled deferred by Wolf 2026-08-28 because it needs a cave or an
+overhang to fire.
 
-**The only work left is the readout pass** — `8-2-signoff/task-7-vehicle-runbook.md`, the card at
-the top. It asks no visual judgement. Owed:
+**Not pushed.** 45 commits on `8-2-designate-with-the-mouse`, no PR, full gate green. Push and PR
+stay Wolf's call per the story rules.
 
-- [ ] Four `marks:` lines, one per mode. **Two reads per drag pair**: a dig sits at the cell the
-      ray hit, a channel or stockpile ONE LEVEL UP, so no single `--z` shows all four. Write the
-      footprint down BEFORE reading; a count with no expectation is not a check.
-- [ ] Two fps readings, `F3`, working zoom and full vista. **A failed reading is the result.**
-
-Dig was already confirmed by Wolf on 2026-08-27 — he counted it and checked the form — and the
-orientation question is closed as observed. Channel, stockpile and clear plus the two fps numbers
-are the remainder. When they land: AC18, AC19's takes-effect half and NFR6 close on evidence, and
-**8.2 goes to `done` with AC13's rendered half and AC19's reads-clearly half filed against the gfx
-pass**, which is where Wolf ruled them.
-
-**Do not** re-open the look questions, re-tune a colour, or claim an AC on "better".
-
----
-
-**gui.exe MUST BE REBUILT before the session resumes.** The 05:13:38Z binary predates all of this
-and has two dead modes in it.
-
-**Owed by the rest of this session:** AC19's four hand drags on surface and slice, AC13's rendered
-half on a cliff face / corridor wall / shaft side, AC15 and AC16 end to end, AC18's `tui`
-cross-check, and the two fps readings. None observed yet.
+**The lesson worth carrying out of this story:** three consecutive reads showed `designations=0`
+for a channel that worked perfectly, and the story's own history — two genuinely dead modes found
+in review — made the wrong reading the plausible one. What settled it was not more code-reading
+but putting the question to the real daemon, which showed the marks landing in full and being
+consumed in ~2.5 s. An instrument that reads state after the fact cannot see an observable whose
+lifetime is shorter than the gap between the action and the read. Stop the clock first, and look
+for the consequence the work leaves behind.
 
 ### File List
 
@@ -1070,3 +1054,4 @@ cross-check, and the two fps readings. None observed yet.
 | 2026-08-26 | Tasks 3-6 and 8 completed across three further delegated sessions. `--drag` and `--at-tick` instruments built and tested; 9-row sabotage table run ALONE, **9/9 KILLED, no survivor**; full gate GREEN on a cold rebuild. Status → review. |
 | 2026-08-27 | Task 7's runbook written ahead of the session (`8-2-signoff/task-7-vehicle-runbook.md`), sourced from `aca07be` rather than carried forward from 7.2. Separately, the review's `.codex/` deferral was reopened and closed: the directory holds a live `auth.json` and the `.gitignore` secret patterns do not match that name. |
 | 2026-08-26 | Owed and stated rather than glossed: Task 7/AC19 unobserved (no devpod can open a window), M2-7's build stamp missing for the **fifth** time, and `codex review --base main` **never ran** (killed twice, quota-blocked once). |
+| 2026-08-28 | Readout pass run on the vehicle. AC18 met on all four modes, AC19's takes-effect half met, NFR6 read at ~140 fps. Three reads showed zero channel marks for a working channel — the marks are consumed in ~2.5 s — which cost two runbook corrections (a stale `gui.exe` stamp, and a clear drag ordered before the only read). One latent clear gap measured and deferred by Wolf. Status → done. |
