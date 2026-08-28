@@ -867,12 +867,51 @@ deferral, not a pass** — the difference matters and is spelled out below.
 | AC15/16/17 instruments, AC14 headless | **MET** |
 | **AC13's rendered half** — is the hit-face highlight legible, distinct, clear of the reserved near-white | **DEFERRED to the gfx pass.** Not observed, not inferred |
 | **AC19** — each of the four drags "takes effect in the same client", by eye | **PARTIAL.** "Better" is not four confirmed drags. The *takes-effect* half is answerable without art; the *reads-clearly* half is not |
-| **AC18** — `tui` cross-check | **STILL OPEN**, and it is the one owed item that does not need art at all |
-| NFR6 fps at both zooms | **NOT READ** |
+| **AC18** — `tui` cross-check | **MET for dig, stockpile and channel** 2026-08-28; clear demonstrated, pending one drag on a counted footprint. See the readout pass below |
+| NFR6 fps at both zooms | **READ 2026-08-28: ~140 fps**, clears both floors |
 
 **No fps figure was fabricated and no AC is being marked met on "better".** The honest summary is
 that 8.2's mechanism is done and its *observation* is blocked on two different things: real art
 for the look, and a short vehicle session for the readings.
+
+## READOUT PASS — 2026-08-28, on the vehicle
+
+Wolf at the vehicle, `simd` in WSL, `gui.exe` 2026-08-27T16:54:53Z (`8ee683c`). Every figure below
+is a `marks:` line off `tui --frame`, read over a second connection. Nothing here is inferred.
+
+| Mode | Held by the sim | Level(s) |
+| --- | --- | --- |
+| Dig | 8 designations | z 8 |
+| Stockpile | 12 zones | z 9 |
+| Channel | 16 designations (9 + 7) | z 9 **and** z 10 |
+| Clear | 12 zones and 14 channel marks removed | z 9, z 10 |
+
+**NFR6: ~140 fps**, against floors of 60 (working zoom) and 30 (full vista) — clears both with
+room. No figure invented; a failed reading would have been reported as the result.
+
+**AC18 is met for dig, stockpile and channel.** Each was read back from the sim by a second client
+over its own connection, which is exactly the AC's "the sim received what was intended". **Clear is
+demonstrated but not yet closed on a counted footprint**: it removed all 12 zones and 14 of 16
+channel marks, leaving two — at z 9 `x 60, y 62` and one at z 10 — that sit outside the rect that
+was dragged. One clear drag over the leftover closes it.
+
+**Channel's two-level split is correct, not a loss.** One drag put 9 marks on z 9 and 7 on z 10:
+channel follows the ground, so each column contributes its own surface cell. The footprint check
+is the SUM across the levels the OTHER-levels line names, never one cut's count.
+
+**THREE READS SAID `designations=0` FOR CHANNEL AND CHANNEL WAS FINE.** The story had already
+produced two genuinely dead modes, so absence read as a third. It was not. Measured against the
+real daemon (`crates/simd/tests/serve.rs` harness, default seed, patch `x[62..65] y[62..66]`): 16
+channel designations accepted at z 9, **all 16 consumed within ~25 ticks (~2.5 s)**, and all 16
+blocks at z 8 left as `Ramp`. A channel job is worked from the cell the dwarf already stands on, so
+it needs no travel and finishes before a human can type the read command; a dig sits at a solid
+cell a dwarf must path to, which is why dig marks linger and channel marks do not. **The fix is to
+pause before channelling** — designations still apply while paused — and to treat the ramps as the
+other half of the evidence. Runbook corrected; recorded as [[transient-observable-needs-pause]].
+
+Two further defects in the runbook itself, both mine, both corrected: it named a `gui.exe` one
+commit stale, and it ordered the clear drag BEFORE the only read, which erases the evidence it was
+meant to check.
 
 **ORIENTATION, 2026-08-27 — a correct result that read as a bug.** Wolf, running the readout
 pass: *"do we have coordinates wrong? I think I dig on north but got `*` in west."* Then, having
