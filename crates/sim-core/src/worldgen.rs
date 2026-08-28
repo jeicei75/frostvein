@@ -181,7 +181,7 @@ pub(crate) fn place_trees(
             {
                 continue;
             }
-            if rng.random_range(0..12) != 0
+            if rng.random_range(0..48) != 0
                 || trunks
                     .iter()
                     .any(|&(tx, ty): &(u32, u32)| tx.abs_diff(x) <= 2 && ty.abs_diff(y) <= 2)

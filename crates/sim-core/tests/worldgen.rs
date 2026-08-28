@@ -183,10 +183,25 @@ fn pines_use_both_tree_materials_and_leave_the_camp_clear() {
 }
 
 #[test]
-fn default_world_tree_column_count_is_measured_before_density_change() {
-    let count = tree_trunk_columns(&World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT));
+fn tree_density_for_seed_42_is_deterministic_and_in_target_band() {
+    const SEED: u64 = 42;
+    const MIN_TREE_COLUMNS: usize = 230;
+    const MAX_TREE_COLUMNS: usize = 300;
 
-    assert_eq!(count, 704, "count distinct trunk columns, not trunk cells");
+    let first = World::generate(SEED, Dims::DEFAULT);
+    let second = World::generate(SEED, Dims::DEFAULT);
+    let count = tree_trunk_columns(&first);
+
+    assert_eq!(
+        count,
+        tree_trunk_columns(&second),
+        "tree placement must be deterministic for seed {SEED}"
+    );
+    assert!(
+        (MIN_TREE_COLUMNS..=MAX_TREE_COLUMNS).contains(&count),
+        "seed {SEED} generated {count} distinct trunk columns, outside the \
+         {MIN_TREE_COLUMNS}..={MAX_TREE_COLUMNS} target band"
+    );
 }
 
 #[test]
@@ -249,7 +264,9 @@ fn spawn_positions_for_seed_42_are_pinned() {
             };
             (hash ^ code).wrapping_mul(0x0000_0100_0000_01b3)
         });
-    assert_eq!(terrain_fingerprint, 0xbd48_ac6b_7250_d2e9);
+    // Tree tiles are intentionally included: the dedicated tree stream changes tile contents
+    // without changing the independently pinned camp or dwarf spawn positions above.
+    assert_eq!(terrain_fingerprint, 0xcb7a_c31e_2faf_4b6c);
 }
 
 #[test]

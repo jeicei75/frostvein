@@ -145,16 +145,16 @@ warmer authored look.
         — something moved and every number in this story needs re-taking.
   - [x] Only then change the roll. The target is `0..48` → **265**, band 230–300.
 
-- [ ] **Task 2 — The density knob (AC: 2, 3)**
-  - [ ] `worldgen.rs:184` `rng.random_range(0..12)` → `0..48`. **Nothing else in `place_trees`
+- [x] **Task 2 — The density knob (AC: 2, 3)**
+  - [x] `worldgen.rs:184` `rng.random_range(0..12)` → `0..48`. **Nothing else in `place_trees`
         changes** — not the 2-cell exclusion, not the camp clearing, not the trunk height range,
         not the crown shape.
-  - [ ] A test in **`crates/sim-core/tests/worldgen.rs`** (beside the existing
+  - [x] A test in **`crates/sim-core/tests/worldgen.rs`** (beside the existing
         `pines_use_both_tree_materials_and_leave_the_camp_clear`, which is the only test that
         filter matches today) asserts the tree count for a **named seed** is inside the band, and a
         second run of the same seed gives the identical count. Count **trunk columns**, not trunk
         cells: trunk height is `4..=6`, so cells move with height and are the wrong oracle.
-  - [ ] **Hardcoded constant is fine** (technical-preferences). No density config, no builder.
+  - [x] **Hardcoded constant is fine** (technical-preferences). No density config, no builder.
 
 - [ ] **Task 3 — The foliage hue (AC: 4, 5, 6)**
   - [ ] `appearance.rs:215` `Material::TreeFoliage => Color::srgb_u8(55, 73, 84)` → a green that
@@ -354,19 +354,24 @@ gpt-5.6-terra, effort high
 ### Debug Log References
 
 - Task 1 green: `cargo test --offline -p sim-core default_world_tree_column_count_is_measured_before_density_change -- --exact` ran `default_world_tree_column_count_is_measured_before_density_change`; its independent trunk-column oracle measured exactly `704` for `DEFAULT_SEED`.
+- Task 2 RED: before changing the roll, `cargo test --offline -p sim-core tree_density_for_seed_42_is_deterministic_and_in_target_band -- --exact` failed its target-band assertion: `seed 42 generated 696 distinct trunk columns, outside the 230..=300 target band`.
+- Task 2 green: after only changing `rng.random_range(0..12)` to `0..48`, `cargo test --offline -p sim-core tree -- --nocapture` ran and passed `tree_density_for_seed_42_is_deterministic_and_in_target_band` (including its second-generation equality assertion) and `pines_use_both_tree_materials_and_leave_the_camp_clear`; the other tree-named regression assertions also passed. A temporary upper-bound probe measured 265 default-seed trunk columns (`seed 4026891802 generated 265 distinct trunk columns, outside the 230..=264 target band`), then was restored before this commit.
 
 ### Completion Notes List
 
 - Task 1: added the pre-change trunk-column measurement checkpoint. It is intentionally temporary evidence for the existing `0..12` density and will be replaced by Task 2's 230–300 deterministic named-seed guard before changing the roll.
+- Task 2: changed only the tree placement roll to `0..48`; default seed now measures 265 trunk columns and named seed 42 is deterministically inside 230–300.
 
 ### File List
 
 - crates/sim-core/tests/worldgen.rs
+- crates/sim-core/src/worldgen.rs
 - _bmad-output/implementation-artifacts/9-4-trees-fewer-and-distinct-from-the-ground.md
 
 ## Change Log
 
 | date | change |
 | --- | --- |
+| 2026-08-28 | Task 2 complete: changed only the tree roll from `0..12` to `0..48`; default-world density measures 265 distinct trunk columns, and a seed-42 two-run test pins the 230–300 band and determinism. |
 | 2026-08-28 | Task 1 complete: independently counted distinct `TreeTrunk` columns in the default world and reproduced the required pre-change measurement of 704. |
 | 2026-08-28 | Story created. Baseline `815cd6c`, full gate green at creation (run, not claimed). **The epic's blast-radius paragraph was falsified against source**: trees draw from a dedicated `STREAM_TREES`, so terrain heights, camp origin and spawn positions do NOT move, and no mutation row anchors on the density literal — the radius is tile contents only. **The density curve was measured rather than estimated** (704 / 531 / 400 / 265 at rolls 12/20/30/48) and revealed that the 2-cell spacing exclusion damps the knob, so a 2.5× cut in the roll removes only 43 % of trees. Two rulings taken from Wolf: W1 the target band 230–300 at roll `0..48`; W2 **green, not brown** — the epic's "brown/green" collides with the shipped `rgb[2] >= rgb[0]` invariant at `appearance.rs:319-322`, which brown cannot satisfy, so the invariant stands and green carries the separation. The hue defect was measured: foliage sits **9.9** from stone against a shipped mark floor of 40.0. |
