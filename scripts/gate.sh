@@ -123,6 +123,19 @@ run "metrics ledger tests" python3 -m unittest discover -s _bmad/scripts/tests
 # nothing, which is why it can sit in the gate; a real mutation run takes ~11 minutes per table.
 run "mutation tables still apply" python3 scripts/audit-mutations.py
 
+# Disk hygiene, and ONLY at the push boundary. The gate is what CREATES this garbage -- a
+# gui-touching round links ~4 GB of test binaries with full debuginfo and cargo never GCs a
+# stale hash -- so this is where the reaping belongs; a reminder elsewhere is what let 29 GB of
+# stale `gui`, `headless` and `capture` binaries pile up by 2026-08-28. It is NOT in the fast
+# tier on purpose: any reap that actually deletes something costs the next build a relink
+# (measured: 28-43s against 9s warm), and Wolf's two-tier ruling is that a clumsy pre-commit
+# gate tempts --no-verify, which makes the gate worthless. On a tree with nothing older than a
+# week this deletes nothing and costs ~0.3s. Never allowed to fail the gate: it is hygiene, not
+# a check, and a full disk is not a quality verdict.
+if [ "$FAST" -eq 0 ]; then
+  scripts/reap-build-caches.sh --auto || echo "  (build-cache reap skipped; not a gate failure)"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "GATE RED"
   exit 1
