@@ -38,10 +38,21 @@ readings.** Nothing here asks you to decide whether anything looks good.
 | `target/debug/tui` | 2026-08-27T17:26:07Z | `5880e51` |
 | `target/debug/simd` | 2026-08-27T15:41:19Z | `5880e51`, which touched only `simd`'s tests |
 
-`gui.exe` carries the compass and the cursor readout from `8ee683c`; the earlier
-`e01e7ff` build this card used to name does not. Copy `gui.exe` Windows-side and check the
-copy's `LastWriteTimeUtc` reads **16:54:53Z**; the copy is the file that has been stale every
-previous time. `simd` and `tui` rebuild in WSL with `cargo build -p simd -p tui`.
+**STOP CHECKING THE MTIME. `gui.exe` now tells you what it is.** As of M2-7 the commit is
+compiled into the binary and printed as the first line on startup, before it even tries to
+connect:
+
+```
+gui build c2aa7fc
+```
+
+Compare that against `git rev-parse --short HEAD` in WSL. If they differ, the copy is stale — no
+timestamps, no arithmetic, no trusting a table in a document that can itself be out of date. A
+`-dirty` suffix means the build had uncommitted changes and the SHA does **not** describe what is
+running. The mtime table above is kept only as a cross-check; the printed line is the answer.
+
+This closes the trap that has fired six times, the sixth being this very card naming a `gui.exe`
+one commit stale. `simd` and `tui` rebuild in WSL with `cargo build -p simd -p tui`.
 
 **1. Start the daemon and the client.**
 

@@ -85,6 +85,10 @@ pub struct ProjectionWork {
 
 pub fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
+    // M2-7. FIRST line out, before the connect can fail: a session that cannot reach the daemon
+    // still learns which binary it is holding, and that is exactly the case where the answer
+    // usually turns out to be "a stale one". See `crate::BUILD_SHA`.
+    eprintln!("gui build {}", crate::BUILD_SHA);
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
