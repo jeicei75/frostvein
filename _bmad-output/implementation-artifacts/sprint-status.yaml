@@ -43,7 +43,15 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-28  # STORY 8.2 DONE -- MERGED, PR #35 (a949835). M2 at 10/11. AC18 met on all
+last_updated: 2026-08-28  # STORY 9.1 CREATED (ready-for-dev), epic-9 in-progress. Two spec
+                          # defects found at creation in the epic's own 9.1 text: the 44.8M
+                          # premise is stale (fixed 2026-08-22, the defect survived it) and
+                          # the epic's AC1 is VACUOUS -- the median band reads 123.4 on every
+                          # frame ever approved AND every frame ever rejected. Three rulings
+                          # taken from Wolf; instrument calibrated on committed pixels.
+                          # PRIOR SAME DAY: THE GFX PASS IS PLANNED AND TRACKED: epics 9 + 10 enter this file at
+                          # `backlog`, 9 stories, no story files yet. Order ruled 9 -> 10 -> 8.3.
+                          # PRIOR SAME DAY: STORY 8.2 DONE -- MERGED, PR #35 (a949835). M2 at 10/11. AC18 met on all
                           # four modes on the vehicle, read back by a second client; NFR6 ~140 fps
                           # against floors of 60/30. AC13's rendered half and AC19's reads-clearly
                           # half carried to the gfx pass UNCLAIMED. A channel that worked read as a
@@ -707,6 +715,79 @@ development_status:
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.
   8-3-master-of-time-and-the-skeleton-walks-in-3d: backlog
   epic-8-retrospective: optional
+
+  # ---- the gfx pass (epics 9 + 10, added to epics.md 2026-08-28) ----
+  # EXECUTION ORDER IS NOT NUMERIC ORDER. RULED 2026-08-28 (Wolf): Epic 9, then Epic 10,
+  # THEN 8.3 closes the milestone. 8.3 asks Wolf to sign off all six anti-requirement bars,
+  # a judgement he has twice refused to make against placeholder material -- so the look work
+  # runs first and 8.3 stays `backlog` behind it, not because it is blocked by code.
+  # SCOPE, STATED HONESTLY: M2 was planned at 10-14 stories and sits at 11. These nine are
+  # added scope ruled by Wolf, not cap slippage -- the cap governed the path to the walking
+  # skeleton, which 8.1-8.2 delivered.
+  epic-9: in-progress
+  # Every story here is gated by a CONCRETE MEASURED DEFECT already on the record (deferred-work.md
+  # or named by Wolf at the 8.2 vehicle sessions) -- this is what the standing art rule (2026-08-22)
+  # requires, and none of it is taste-driven tuning. Closes the visual halves of FR31/FR34 via
+  # UX-DR15-UX-DR20, plus 8.2's deferred AC13-rendered and AC19-reads-clearly halves.
+  # UX-DR22 applies to every story, BOTH halves; the four closing halves share ONE vehicle session.
+  # 9.1 goes first -- nothing else can be judged with an emitter that bright in frame. 9.2-9.4 are
+  # order-free after it.
+  # STORY CREATED 2026-08-28 (ready-for-dev). TWO SPEC DEFECTS FOUND AT CREATION, both in the epic's
+  # own 9.1 text, both falsified against source.
+  # (1) THE PREMISE IS STALE: the epic says the campfire peaks at 44.8M, ~40% over what 5.4 sized
+  #     against. It has not since 2026-08-22 -- commit 57e468e applied Wolf's ruling (d) (base
+  #     32M -> 25M, amplitude kept) landing the peak at 35.0M, UNDER the APPROVED_PEAK = 35_520_000.0
+  #     pin that now guards it. Wolf then re-confirmed the blow-out on 2026-08-27, FIVE DAYS LATER,
+  #     on a binary carrying the 25M base. The decision stands and the REASON is wrong -- the cause
+  #     is somewhere ruling (d) could not reach.
+  # (2) THE EPIC'S AC1 IS VACUOUS, and this was MEASURED rather than inferred: it names the 70-180
+  #     valley-floor median band as 9.1's instrument, and 6.2 recorded that band reading 123 -- the
+  #     approved artifact's own figure to the digit -- ON THE VERY FRAME Wolf called too blown out,
+  #     with the note "no range check can see that". Re-measured at creation: the ground median is
+  #     123.4 on 5.4's approved frame, on 6.1's, AND on today's. Constant across every frame anyone
+  #     has approved and every frame anyone has rejected. AC1 passes today, unchanged.
+  # WOLF RULED THREE THINGS AT CREATION so the dev pass inherits them: (W1) add a local blow-out
+  # measure the median cannot see, band demoted to a non-regression guard; (W2) the ONLY lever this
+  # story may open is PointLight shadows -- project.rs:416-424 sets colour/intensity/range and
+  # nothing else, so shadows_enabled defaults FALSE and the campfire lights straight through solid
+  # terrain, the one structural cause the peak ruling never touched (filed at 5.4's review,
+  # deferred-work.md:619-622, never acted on). No intensity, amplitude, range or emissive change;
+  # (W3) NO Task 0 -- UX-DR22's opening half is met by the approved 5.4 artifact.
+  # THE INSTRUMENT WAS CALIBRATED AT CREATION on committed pixels, and the first draft was WRONG and
+  # corrected before saving: calibrating against the approved artifact would have measured the
+  # RENDERER, since that artifact is a software mock -- whiter than every Bevy frame at threshold 250
+  # and darker at 200. The bar is Bevy against Bevy. Measure = largest connected near-white region:
+  # 0.6651% on boot7.png (the frame Wolf approved) against 0.9883% today, up 49%, while whole-frame
+  # near-white area moved only 18% and the median moved not at all. RED at baseline.
+  # STATED TENSION, deliberately not hidden: shadows and the blown-pool ceiling may not be coupled --
+  # shadows remove light passing THROUGH geometry, not the unoccluded pool. If the ceiling stays red
+  # with shadows correct and NFR6 met, the story STOPS AND REPORTS. Opening another lever silently is
+  # forbidden. A story that proves shadows insufficient, with numbers, has done its job.
+  # NFR6 IS THE REAL RISK: shadow-casting point lights are the one M2 change with a real chance of
+  # spending the ~140 fps headroom. No figure may be fabricated.
+  # Baseline b1cd5f9, full gate GREEN at creation (run, not claimed). Vehicle-bound: ACs 12-15.
+  9-1-the-frame-stops-blowing-out: ready-for-dev
+  9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
+  9-3-the-four-modes-read-apart: backlog
+  9-4-trees-fewer-and-distinct-from-the-ground: backlog
+  # 9.4 IS THE ONE STORY IN THIS EPIC THAT TOUCHES sim-core (worldgen density): every seeded world
+  # changes, terrain-dependent tests and capture recipes need re-checking, and mutation rows anchored
+  # near worldgen literals may APPLY-FAIL. It also pushes valley-floor luminance UP while 9.1 pushes
+  # it DOWN -- the 70-180 band watches both.
+  epic-9-retrospective: optional
+  epic-10: backlog
+  # The PRD's asset-pipeline trigger has fired -- it held authored assets until "a concrete case
+  # forces the decision -- dwarves are the expected first case", and the PRD predicted right.
+  # RULED 2026-08-28 (Wolf): the pipeline is Blender -> glTF via Bevy's NATIVE loader, SUPERSEDING
+  # the addendum's MagicaVoxel/`bevy_vox_scene` path. Not a present incompatibility (bevy_vox_scene
+  # 0.22 does match Bevy 0.19 today) -- the supersession is about iteration cost and maintenance
+  # surface. Dated note lives in the addendum. Game first; the pipeline is an outcome, not the goal.
+  10-1-the-headless-bench: backlog
+  10-2-the-live-seat-blendermcp-on-gingerspice-spike: backlog
+  10-3-the-rules-of-the-look: backlog
+  10-4-the-trees-look-right-the-pilot: backlog
+  10-5-dwarves-worth-looking-at: backlog
+  epic-10-retrospective: optional
 
 # Appended by the Epic 1 retrospective (2026-08-03).
 # Full context: epic-1-retro-2026-08-03.md
