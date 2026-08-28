@@ -29,6 +29,16 @@ fn is_standable(world: &World, pos: Pos) -> bool {
         )
 }
 
+fn tree_trunk_columns(world: &World) -> usize {
+    (0..world.dims().y as i32)
+        .flat_map(|y| (0..world.dims().x as i32).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            (0..world.dims().z as i32)
+                .any(|z| world.tile(Pos { x, y, z }) == Some(Tile::Solid(Material::TreeTrunk)))
+        })
+        .count()
+}
+
 #[test]
 fn same_seed_produces_identical_worlds() {
     let first = World::generate(42, Dims::DEFAULT);
@@ -170,6 +180,13 @@ fn pines_use_both_tree_materials_and_leave_the_camp_clear() {
             }
         }
     }
+}
+
+#[test]
+fn default_world_tree_column_count_is_measured_before_density_change() {
+    let count = tree_trunk_columns(&World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT));
+
+    assert_eq!(count, 704, "count distinct trunk columns, not trunk cells");
 }
 
 #[test]

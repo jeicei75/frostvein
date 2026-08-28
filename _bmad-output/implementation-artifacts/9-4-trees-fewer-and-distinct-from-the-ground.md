@@ -139,11 +139,11 @@ warmer authored look.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Measure before you change (AC: 2)**
-  - [ ] Reproduce the creation figure first: count distinct trunk columns in
+- [x] **Task 1 — Measure before you change (AC: 2)**
+  - [x] Reproduce the creation figure first: count distinct trunk columns in
         `World::generate(DEFAULT_SEED, Dims::DEFAULT)` and confirm **704**. If it is not 704, stop
         — something moved and every number in this story needs re-taking.
-  - [ ] Only then change the roll. The target is `0..48` → **265**, band 230–300.
+  - [x] Only then change the roll. The target is `0..48` → **265**, band 230–300.
 
 - [ ] **Task 2 — The density knob (AC: 2, 3)**
   - [ ] `worldgen.rs:184` `rng.random_range(0..12)` → `0..48`. **Nothing else in `place_trees`
@@ -349,14 +349,24 @@ push, no PR** until Wolf says so.
 
 ### Agent Model Used
 
+gpt-5.6-terra, effort high
+
 ### Debug Log References
+
+- Task 1 green: `cargo test --offline -p sim-core default_world_tree_column_count_is_measured_before_density_change -- --exact` ran `default_world_tree_column_count_is_measured_before_density_change`; its independent trunk-column oracle measured exactly `704` for `DEFAULT_SEED`.
 
 ### Completion Notes List
 
+- Task 1: added the pre-change trunk-column measurement checkpoint. It is intentionally temporary evidence for the existing `0..12` density and will be replaced by Task 2's 230–300 deterministic named-seed guard before changing the roll.
+
 ### File List
+
+- crates/sim-core/tests/worldgen.rs
+- _bmad-output/implementation-artifacts/9-4-trees-fewer-and-distinct-from-the-ground.md
 
 ## Change Log
 
 | date | change |
 | --- | --- |
+| 2026-08-28 | Task 1 complete: independently counted distinct `TreeTrunk` columns in the default world and reproduced the required pre-change measurement of 704. |
 | 2026-08-28 | Story created. Baseline `815cd6c`, full gate green at creation (run, not claimed). **The epic's blast-radius paragraph was falsified against source**: trees draw from a dedicated `STREAM_TREES`, so terrain heights, camp origin and spawn positions do NOT move, and no mutation row anchors on the density literal — the radius is tile contents only. **The density curve was measured rather than estimated** (704 / 531 / 400 / 265 at rolls 12/20/30/48) and revealed that the 2-cell spacing exclusion damps the knob, so a 2.5× cut in the roll removes only 43 % of trees. Two rulings taken from Wolf: W1 the target band 230–300 at roll `0..48`; W2 **green, not brown** — the epic's "brown/green" collides with the shipped `rgb[2] >= rgb[0]` invariant at `appearance.rs:319-322`, which brown cannot satisfy, so the invariant stands and green carries the separation. The hue defect was measured: foliage sits **9.9** from stone against a shipped mark floor of 40.0. |
