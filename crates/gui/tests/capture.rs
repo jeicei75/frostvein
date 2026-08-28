@@ -19,7 +19,10 @@ use bevy::{
 use client_core::Mirror;
 use gui::{
     camera::CameraRig,
-    capture::{CaptureState, capture_after_frames, draw_stats, warm_lit_pixels},
+    capture::{
+        CaptureState, capture_after_frames, draw_stats, largest_blown_pool_fraction,
+        median_ground_luminance, p99_luminance, warm_lit_pixels,
+    },
     ingest::{
         IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, WireMessage,
         projection_systems,
@@ -147,6 +150,40 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
 fn warm_pixel_threshold_requires_red_to_exceed_blue_by_the_named_margin() {
     assert_eq!(warm_lit_pixels(&[[220, 120, 150, 255]]), 1);
     assert_eq!(warm_lit_pixels(&[[180, 120, 150, 255]]), 0);
+}
+
+#[test]
+fn committed_bevy_vistas_confirm_the_blown_pool_calibration() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let boot =
+        image::open(repo.join("_bmad-output/implementation-artifacts/5-4-signoff/boot7.png"))
+            .expect("the approved boot vista must decode")
+            .to_rgba8();
+    let current = image::open(
+        repo.join("_bmad-output/implementation-artifacts/7-2-signoff/7-2-marks-vista.png"),
+    )
+    .expect("the current vista must decode")
+    .to_rgba8();
+    let boot_pixels = boot.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
+    let current_pixels = current.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
+
+    let boot_pool = largest_blown_pool_fraction(&boot_pixels, boot.width(), boot.height(), 200);
+    let current_pool =
+        largest_blown_pool_fraction(&current_pixels, current.width(), current.height(), 200);
+    println!(
+        "calibration: boot pool={:.4}% p99={:.1}; current pool={:.4}% p99={:.1}",
+        boot_pool * 100.0,
+        p99_luminance(&boot_pixels),
+        current_pool * 100.0,
+        p99_luminance(&current_pixels),
+    );
+    assert!((boot_pool * 100.0 - 0.6651).abs() < 0.0001);
+    assert!((current_pool * 100.0 - 0.9883).abs() < 0.0001);
+    assert_eq!(
+        median_ground_luminance(&boot_pixels, boot.width(), boot.height()),
+        median_ground_luminance(&current_pixels, current.width(), current.height()),
+        "the ground-median guard must not distinguish the two frames"
+    );
 }
 
 #[test]

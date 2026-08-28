@@ -434,8 +434,80 @@ pub const GROUND_LUMINANCE_FLOOR: u8 = 70;
 /// "Night snow stays midtone" needs a ceiling as much as a floor.
 pub const GROUND_LUMINANCE_CEILING: u8 = 180;
 
+/// `boot7.png`, the 5.4 Bevy frame Wolf approved, measures a 0.6651% largest region at this
+/// luminance. The star shell (192.9 luma) stays below it, so the measure follows the pool.
+pub const BLOWN_POOL_LUMINANCE_THRESHOLD: u8 = 200;
+
+/// `boot7.png`, the 5.4 Bevy frame Wolf approved, measures a 0.6651% largest near-white pool.
+pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651;
+
 fn luminance(pixel: [u8; 4]) -> f32 {
     0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32
+}
+
+/// Fraction of the frame occupied by its largest four-connected near-white region.
+pub fn largest_blown_pool_fraction(
+    pixels: &[[u8; 4]],
+    width: u32,
+    height: u32,
+    threshold: u8,
+) -> f32 {
+    assert_eq!(
+        pixels.len(),
+        (width as usize) * (height as usize),
+        "capture dimensions must describe every pixel"
+    );
+    if pixels.is_empty() {
+        return 0.0;
+    }
+
+    let mut visited = vec![false; pixels.len()];
+    let mut largest = 0;
+    for start in 0..pixels.len() {
+        if visited[start] || luminance(pixels[start]) < threshold as f32 {
+            continue;
+        }
+
+        let mut region = 0;
+        let mut pending = vec![start];
+        visited[start] = true;
+        while let Some(index) = pending.pop() {
+            region += 1;
+            let row = index / width as usize;
+            let column = index % width as usize;
+            let mut visit = |neighbour: usize| {
+                if !visited[neighbour] && luminance(pixels[neighbour]) >= threshold as f32 {
+                    visited[neighbour] = true;
+                    pending.push(neighbour);
+                }
+            };
+            if column > 0 {
+                visit(index - 1);
+            }
+            if column + 1 < width as usize {
+                visit(index + 1);
+            }
+            if row > 0 {
+                visit(index - width as usize);
+            }
+            if row + 1 < height as usize {
+                visit(index + width as usize);
+            }
+        }
+        largest = largest.max(region);
+    }
+
+    largest as f32 / pixels.len() as f32
+}
+
+/// The 99th percentile of frame luminance, using the nearest sample in sorted pixel order.
+pub fn p99_luminance(pixels: &[[u8; 4]]) -> f32 {
+    if pixels.is_empty() {
+        return 0.0;
+    }
+    let mut values = pixels.iter().copied().map(luminance).collect::<Vec<_>>();
+    values.sort_by(f32::total_cmp);
+    values[((values.len() - 1) as f32 * 0.99).round() as usize]
 }
 
 /// Median luminance of the valley floor. Median, not mean, so a handful of blown-out emitter
@@ -1143,6 +1215,17 @@ mod tests {
         assert!(median_ground_luminance(&blown, 8, 8) > GROUND_LUMINANCE_CEILING);
         let midtone = vec![[95u8, 112, 129, 255]; 64];
         assert!(median_ground_luminance(&midtone, 8, 8) <= GROUND_LUMINANCE_CEILING);
+    }
+
+    #[test]
+    fn blown_pool_uses_the_largest_four_connected_region_and_reports_p99() {
+        let mut pixels = vec![[20, 20, 20, 255]; 16];
+        for index in [0, 1, 4, 5, 15] {
+            pixels[index] = [220, 220, 220, 255];
+        }
+
+        assert_eq!(largest_blown_pool_fraction(&pixels, 4, 4, 200), 0.25);
+        assert_eq!(p99_luminance(&pixels), 220.0);
     }
 
     fn mirror_with_dwarf_at(z: i32) -> Mirror {
