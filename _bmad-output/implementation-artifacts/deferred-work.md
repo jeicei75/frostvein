@@ -762,14 +762,39 @@ executed a single line of its production path.**
   Bevy links 1.2–1.5 GB test binaries with full debuginfo and cargo never GCs stale hashes, so each
   gate round that touches `gui` relinks ~6.3 GB — six rounds in 24 h is exactly the 38.5 GB observed.
   **276 GB reclaimed; free space 304 GB → 581 GB, 69 % → 40 % used.** The fix is a command, not a
-  reminder: `scripts/reap-review-caches.sh`, which the code-review config now requires the
-  orchestrator to run after triage (`--force`), with the reclaimed figure recorded in the review.
-  It touches only *directories* under `/tmp` matching `review-*`/`verify-*`/`mut`, never the repo,
-  never a file (so `/tmp/review-findings.md` and the two stray `.diff`s survived), never a symlink,
-  and it refuses anything touched within the hour unless forced — all six paths tested against a
-  fixture before it was wired in. **Standing lesson, the same one M2-7 taught:** every previous guard
-  here was a procedure, and a procedure is exactly what an accumulating cache defeats.
-  `[orchestrator/LOW → closed]`
+  reminder: `scripts/reap-build-caches.sh`, which the code-review config now requires the
+  orchestrator to run after triage (`--tmp-only --force`), with the reclaimed figure recorded in the
+  review. It touches only *directories* under `/tmp`, never the repo, never a file (so
+  `/tmp/review-findings.md` and the two stray `.diff`s survived), never a symlink, and it refuses
+  anything touched within the hour unless forced.
+
+  **SECOND PASS THE SAME DAY, because the first fix answered the smaller half.** Asked whether it
+  would hold for 9.1, the honest answer was no: `mutate.sh` and the gate build into the repo's own
+  `target/`, which the reaper is forbidden to touch. Measured there: **49 GB of the 62 was
+  `debug/deps`, and 29 GB of THAT was 60 stale hash-copies of our own `gui` binary plus its
+  `headless` and `capture` test binaries** at 1.2–1.4 GB each. Bevy's rlibs — the expensive half to
+  rebuild — are the *small* half and are never touched. So the script gained a second zone and a
+  name that no longer lies. **35.2 GB reclaimed in the second pass** (28.8 GB from `target/`, 6.4 GB
+  from `/tmp` directories that matched no name pattern), and the trigger moved from a person to
+  `scripts/gate.sh`'s full tier — the gate is what *creates* the garbage.
+
+  **Three defects were caught by testing it before trusting it, and two were serious:**
+  (1) the symlink guard tested the *leaf*, so a second-level glob walked through a symlinked `/tmp`
+  entry and queued **8.6 GB inside the repository** for deletion — the one thing the header promised
+  could never happen; now a `realpath` containment test. (2) `CACHEDIR.TAG` as the proof-of-target-dir
+  was a **silent no-op on the only tree that mattered**: cargo writes that marker only when *cargo*
+  creates the directory, and `gate.sh` does `mkdir -p target` first, so the whole 62 GB was skipped
+  while the script reported success — this project's signature failure shape, caught only because the
+  dry run's number looked too small. (3) "Keep the newest N sets" was **wrong on its own** and the
+  clock said so: one gate round keeps ~11 `gui` hashes alive at once, so N=2 deleted live artifacts
+  and made the next gate cost 28–43 s against 9 s warm. The rule is now an age window (7 days) with a
+  floor (newest 4), which makes the steady state a genuine no-op — nothing deleted, nothing relinked,
+  ~0.3 s — and is why it sits in the full tier and never in the pre-commit one.
+
+  **Standing lesson, the same one M2-7 taught:** every previous guard here was a procedure, and a
+  procedure is exactly what an accumulating cache defeats. **Second lesson, from the second pass:**
+  a fix aimed at the half you happened to measure is not a fix — the question "will it work for the
+  next story?" is what turned a closed entry back into 35 GB. `[orchestrator/LOW → closed]`
 
 ## Deferred from: code review of 7-1-slice-into-the-mountain (2026-08-19)
 
