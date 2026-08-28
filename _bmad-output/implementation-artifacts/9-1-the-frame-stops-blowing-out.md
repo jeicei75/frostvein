@@ -509,6 +509,7 @@ gpt-5.6-terra / high
 - RED Task 4: Bevy 0.16 rejected the story's generic field spelling (`E0609`: `shadows_enabled` absent; its `PointLight` field is `shadow_maps_enabled`). The corrected test then failed `the campfire light must cast shadows` before implementation and passed after campfire-only shadow maps.
 - Mutation runner: rows (a) and (b) were KILLED. The devpod execution layer terminated two full-table runs mid-table (first after row b; second after beginning row c/d), briefly leaving mutations that were verified and restored. `python3 scripts/audit-mutations.py` is clean (398 rows). The full table exit code was therefore not observed; Task 5 remains unchecked.
 - Full cold gate: `cargo clean -p gui` removed 3,728 files / 14.9 GiB; the environment then terminated `scripts/gate.sh` after `cargo fmt --check ok`, `cargo clippy -D warnings ok`, and the start of `cargo test`. No full-gate result was observed.
+- Self-gate pass 1: `codex review --base main` started (session `01a0484d-1ad2-70c0-87da-847011d5bfc9`) but the execution layer terminated it while it was inspecting the diff; it produced no final findings report. No second pass was run.
 
 ### Completion Notes List
 
