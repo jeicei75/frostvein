@@ -666,10 +666,10 @@
   "c3b59d82-e110-4b03-9062-d8863d69c71c.jsonl": {
     "by_model": {
       "claude-opus-5": {
-        "cache_creation": 1173101,
-        "cache_read": 56313136,
-        "input": 834,
-        "output": 332558
+        "cache_creation": 1312671,
+        "cache_read": 89882339,
+        "input": 1050,
+        "output": 429120
       },
       "claude-sonnet-5": {
         "cache_creation": 348347,
@@ -678,16 +678,16 @@
         "output": 34615
       }
     },
-    "cache_creation": 1521448,
-    "cache_read": 66438323,
-    "input": 1138,
-    "last_ts": "2026-08-28T14:41:42.455Z",
+    "cache_creation": 1661018,
+    "cache_read": 100007526,
+    "input": 1354,
+    "last_ts": "2026-08-28T15:24:19.874Z",
     "marked_at": null,
-    "output": 367173,
+    "output": 463735,
     "primary_only": false,
     "quota_last": null,
     "schema": 2,
-    "turns": 569
+    "turns": 677
   },
   "d56b7c28-c33e-408a-98b6-916cf652e5b7.jsonl": {
     "by_model": {
@@ -1366,5 +1366,25 @@
     "quota_last": 63.0,
     "schema": 2,
     "turns": 134
+  },
+  "rollout-2026-08-28T14-56-27-01a048df-45f3-7980-9d0f-5bd7b98a82ca.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 1945600,
+        "input": 88343,
+        "output": 12108
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 1945600,
+    "input": 88343,
+    "last_ts": "2026-08-28T15:02:21.497Z",
+    "marked_at": null,
+    "output": 12108,
+    "primary_only": false,
+    "quota_last": 7.0,
+    "schema": 2,
+    "turns": 32
   }
 }
