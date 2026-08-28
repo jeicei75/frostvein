@@ -43,7 +43,10 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-28  # STORY 9.1 CREATED (ready-for-dev), epic-9 in-progress. Two spec
+last_updated: 2026-08-28  # STORY 9.1 IN-PROGRESS -- delegated to Codex (gpt-5.6-terra/high) on
+                          # baseline 15b3635. Quota probed before handoff: weekly window 8%,
+                          # 5h window 27% -- the 8.2 exhaustion window has reset.
+                          # PRIOR SAME DAY: STORY 9.1 CREATED (ready-for-dev), epic-9 in-progress. Two spec
                           # defects found at creation in the epic's own 9.1 text: the 44.8M
                           # premise is stale (fixed 2026-08-22, the defect survived it) and
                           # the epic's AC1 is VACUOUS -- the median band reads 123.4 on every
@@ -769,7 +772,7 @@ development_status:
   # b1cd5f9 and full gate GREEN on both (run, not claimed). The rebase crossed NO crate source --
   # `git diff b1cd5f9 15b3635 -- crates/` is empty -- so every figure measured at creation stands.
   # Vehicle-bound: ACs 12-15.
-  9-1-the-frame-stops-blowing-out: ready-for-dev
+  9-1-the-frame-stops-blowing-out: in-progress
   9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
   9-3-the-four-modes-read-apart: backlog
   9-4-trees-fewer-and-distinct-from-the-ground: backlog
