@@ -1369,7 +1369,12 @@ NOT built now: GPU Cycles speed at scale; **headless Eevee via EGL + NVIDIA runt
 on the devpod but viable there, and a rasterizer's artifacts sit closer to what Bevy will
 actually show, shrinking the artifact-vs-reality gap UX-DR22 polices; and remote job submission,
 which restores agent-closability at the better venue. Verifying the NVIDIA container runtime on
-that cluster is the future court's Task 0, vehicle-side.
+that cluster is the future court's Task 0, vehicle-side. **The court plan itself is a separate
+Nidavellir-level work item, ruled out of this project's scope (Wolf, 2026-08-28)** — planned from
+a forge session, per this repo's never-write-to-the-forge rule. Its tenant list already includes
+**ComfyUI** alongside Blender: UX-DR22's opening half sanctions "generated reference" as an
+artifact type, so ComfyUI is a second artifact source feeding the same sign-off machinery, not a
+side-tenant.
 
 ### Story 10.1: The Headless Bench
 
