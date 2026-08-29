@@ -137,7 +137,8 @@ def mesh_geometry(snapshot, material_indexes):
         for corner in FACE_CORNERS[face_index]:
             cx, cy, cz = corner
             vertices.append(world_to_render((x + cx - 0.5, y + cy - 0.5, z + cz - 0.5)))
-        faces.append((first, first + 1, first + 2, first + 3))
+        # world_to_render changes handedness, so face winding follows it to preserve normals.
+        faces.append((first, first + 3, first + 2, first + 1))
         material_name = material
         if has_snow_laden_crown(snapshot, x, y, z):
             material_name = "foliage_snow"
@@ -206,13 +207,15 @@ def setup_scene(snapshot):
     scene.render.resolution_y = 540
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
+    scene.view_settings.look = "None"
+    scene.view_settings.view_transform = "Standard"
     scene.world.color = srgb_to_linear(SKY_RGB)
     scene.world.use_nodes = True
     scene.world.node_tree.nodes["Background"].inputs["Color"].default_value = (
         *srgb_to_linear(SKY_RGB),
         1.0,
     )
-    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.18
+    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 1.5
 
     materials = {name: make_material(name, rgb) for name, rgb in TERRAIN_RGB.items()}
     materials["snow_cap"] = make_material("snow_cap", SNOW_CAP_RGB)
@@ -237,9 +240,9 @@ def setup_scene(snapshot):
 
     sun_data = bpy.data.lights.new("directional", "SUN")
     sun_data.color = srgb_to_linear(DIRECTIONAL_RGB)
-    sun_data.energy = 2.0
+    sun_data.energy = 3.0
     sun = bpy.data.objects.new("directional", sun_data)
-    sun.rotation_euler = (math.radians(35), math.radians(-20), math.radians(30))
+    sun.rotation_euler = (math.radians(-35), math.radians(20), math.radians(30))
     bpy.context.collection.objects.link(sun)
 
     camera_data = bpy.data.cameras.new("boot camera")
