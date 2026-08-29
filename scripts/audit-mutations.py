@@ -105,7 +105,7 @@ def audit():
                 ) if tier == "py" else sources
                 test_pattern = rf"\bdef {re.escape(bare)}\b" if tier == "py" else rf"\bfn {re.escape(bare)}\b"
                 if not re.search(test_pattern, test_sources):
-                    orphaned.append((table.name, name, bare))
+                    orphaned.append((table.name, name, bare, tier))
 
             match = TARGET.search(block)
             if not match:
@@ -182,10 +182,14 @@ def audit():
 
     if orphaned:
         print(f"  {len(orphaned)} of {total} mutation rows NAME A TEST THAT NO LONGER EXISTS:")
-        for table_name, row_name, test in orphaned:
+        for table_name, row_name, test, tier in orphaned:
+            # Tier-aware, because the SEARCH above already is: a py row is looked for as a `def`
+            # under scripts/. Printing the Rust wording for a py row sent the reader to hunt for
+            # an `fn` under crates/ that was never supposed to exist.
+            keyword, where = ("def", "scripts/") if tier == "py" else ("fn", "crates/")
             print(f"    {table_name}")
             print(f"      - {row_name}")
-            print(f"          no `fn {test}` anywhere under crates/")
+            print(f"          no `{keyword} {test}` anywhere under {where}")
         print()
         print("  A row whose test is gone reports SURVIVED, not an error. Re-point it at the")
         print("  test that pins the seam today, or write the test that should.")
