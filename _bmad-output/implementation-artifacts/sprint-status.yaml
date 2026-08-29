@@ -43,7 +43,41 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-29  # STORY 9.4 CODE-REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE,
+STORY 9.4: AC7 IS MEASURED, AND THE PREMISE THAT
+                          # BLOCKED IT FOR THE WHOLE OF M2 WAS FALSE. The devpods cannot open a
+                          # WINDOW -- true, measured 2026-08-11 -- and that got generalised into
+                          # "cannot render". RENDERING NEEDS A DEVICE, NOT A WINDOW, and one is
+                          # here: Mesa lavapipe, llvmpipe (LLVM 19.1.7), Vulkan 1.4, and wgpu 29
+                          # (Bevy 0.19's own version) creates a device on it. `--headless` swaps
+                          # winit for ScheduleRunnerPlugin and points the camera at a 1280x720
+                          # offscreen texture -- the vehicle's own capture resolution. Every
+                          # instrument downstream is untouched, which is the point.
+                          # THE CONTROL RAN FIRST: the headless client rendered the PRE-9.4 world
+                          # and printed `projected 53365 terrain cubes`, reproducing story 5.3's
+                          # recorded oracle exactly, then the current world at 44,984. The
+                          # instrument recovers a historical figure nobody told it.
+                          # AC7, llvmpipe vs llvmpipe (baseline = 815cd6c with the same --headless
+                          # patch cherry-picked on, so the builds differ ONLY by this story),
+                          # 4 baseline runs vs 3 HEAD runs at --frames 220:
+                          #   ground median  123 -> 117   INSIDE 70-180, NO BREACH
+                          #   blown pool     0.9408-0.9475% -> 0.9605-1.0666%  up, sets disjoint
+                          #   p99 luminance  217.5-217.8 -> 230.3-233.2        up ~13, disjoint
+                          #   warm-lit px    21816-22795 -> 20227-20367        down
+                          # THE STORY PREDICTED THE MEDIAN WOULD RISE; IT FELL. The prediction was
+                          # reasoning, this is measurement, and the band holds either way. The
+                          # blown pool DID grow as predicted, so 9.4 did not help 9.1's blow-out
+                          # and marginally worsened it. 9.1's 0.6651% ceiling CANNOT be judged on
+                          # this renderer -- the BASELINE already reads 0.94% here, 41% above the
+                          # ceiling before 9.4 touched anything -- so that ceiling stays a vehicle
+                          # measurement and only the DELTA is claimed. Both frames committed to
+                          # 9-4-signoff/ as evidence.
+                          # NOT CLAIMED AND STILL VEHICLE-BOUND: AC10 (Wolf's eye) and NFR6 (fps).
+                          # A software rasteriser's frame time says nothing about the real machine.
+                          # WHAT THIS UNBLOCKS BEYOND 9.4: 9.1's ACs 12-15 and the pixel half of
+                          # every gui story in Epics 9 and 10. The eye and fps still need the
+                          # vehicle; the NUMBERS no longer do.
+                          # Table now 8 rows, 8/8 KILLED, audit clean at 406, full gate GREEN.
+                          # PRIOR: STORY 9.4 CODE-REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE,
                           # all reporting, no coverage holes, no time-outs -- the third clean
                           # four-layer full house. Edge Case Hunter was REASSIGNED off its R1 shell
                           # territory (simd/tui/protocol), which this diff does not touch at all,
