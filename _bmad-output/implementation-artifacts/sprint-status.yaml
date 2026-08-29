@@ -43,7 +43,76 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-29  # STORY 9.4 -> REVIEW. Dev complete, metrics recorded.
+last_updated: 2026-08-29  # STORY 9.4 CODE-REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE,
+                          # all reporting, no coverage holes, no time-outs -- the third clean
+                          # four-layer full house. Edge Case Hunter was REASSIGNED off its R1 shell
+                          # territory (simd/tui/protocol), which this diff does not touch at all,
+                          # onto crates/gui. Diff taken over the story's own baseline_commit range.
+                          # THE CODE WAS SOUND AND EVERY MEASURED FIGURE REPRODUCED EXACTLY -- two
+                          # layers plus the orchestrator independently rebuilt worldgen and got
+                          # 704->265 / 696->242 / 709->258 and 48.08 / 49.64. 1 decision, 6 patched,
+                          # 6 deferred, 1 dismissed. ALMOST EVERY FINDING WAS OUTSIDE THE DIFF.
+                          # HIGH 1 -- THE DRAW-SET ORACLE WAS STALE BY 8,104 CUBES. The world
+                          # reports 45,261 exposed cubes, not the 53,365 that FOUR documents call an
+                          # oracle that "must never change" -- including the LIVE vehicle runbook,
+                          # which would have told Wolf to expect the old figure at the very sitting
+                          # that judges AC10, and read a 15.2% drop as a regression. NO TEST COULD
+                          # HAVE CAUGHT IT: the only 53_365 in the crates is hand-written sample
+                          # data in a test about empty cut faces (capture.rs:1460), so the oracle
+                          # exists solely as a println read by eye. Corrected in all four places and
+                          # REWORDED AS A MEASUREMENT that tracks world content, not a constant --
+                          # which is what it always was. Confirmed independently by the orchestrator.
+                          # HIGH 2 -- THE RECORD SAID A PIN WAS "NOT AT RISK" WHEN IT HAD MOVED.
+                          # spawn_positions_for_seed_42_are_pinned had its terrain fingerprint
+                          # re-pinned; no Debug Log, Completion Note or Change Log said so. The
+                          # positions genuinely did not move, so the reasoning was right and the
+                          # conclusion wrong. Aggravating: that fingerprint is now the TIGHTEST
+                          # tree-stream guard in the repo -- the 230-300 band only discriminates
+                          # roll denominators outside ~36..52 -- and the record hid it.
+                          # WOLF LOOKED AT A FRAME DURING THE REVIEW AND REPORTED TWO THINGS. Both
+                          # were then MEASURED rather than left as impressions, and both are
+                          # pre-existing geometry that 9.4 did not cause.
+                          # (a) "fix also snow cover" -- RULED AND FIXED HERE (a634235).
+                          # has_snow_laden_crown tested sky exposure ALONE, which did exactly what
+                          # its own doc comment says the material swap exists to avoid: place_trees
+                          # stamps a foliage ring at surface+1 whose cells have open sky beside the
+                          # trunk, so 1,246 of 1,824 ground-level skirt cells (68%) rendered at the
+                          # bright crown colour -- a lit ring ON THE GROUND around every trunk. Snow
+                          # now also requires the cell not to rest on terrain. Ground-resting bright
+                          # cells 1,029 -> 0. Side effect that closes a review finding: 9.4's green
+                          # now reaches 3,727 of 6,329 foliage cells (58.9%) instead of 2,698
+                          # (42.6%), because the crown swap had been claiming the rest.
+                          # (b) "some trees look like they don't have trunk at all" -- MEASURED AND
+                          # DEFERRED AS ITS OWN STORY. 86 of 265 trees (32.5%) draw NO trunk, and it
+                          # is exactly the height-4 trees, 100% of them. The trunk spans
+                          # surface+1..=surface+height-1 while foliage rings sit at surface+1,
+                          # crown_top-2 and crown_top-1, so at height 4 every trunk level is
+                          # enclosed and is_exposed never fires. The trunks are not underground --
+                          # they are buried in their own foliage. Changes every seeded world, so it
+                          # needs its own before/after numbers.
+                          # THE SABOTAGE ROW CAUGHT THE REVIEW'S OWN BAD TEST, which is the third
+                          # time in this story that RUNNING the table beat reading it: the first
+                          # fixture for the snow fix stacked foliage above the skirt cell, so the
+                          # pre-existing sky-exposure clause fired first and the new clause was
+                          # never reached -- the assertion passed for the wrong reason and the row
+                          # SURVIVED. Rebuilt; 5/5 KILLED. Kill lines MOVED with the patches
+                          # (appearance.rs :298->:316, :338->:356), which the record now says.
+                          # ALSO PATCHED: the separation guard compared against hardcoded stone/soil
+                          # literals untied to the table -- a stale-reference trap that would keep
+                          # the guard GREEN while validating foliage against a colour nothing
+                          # renders; now read from material_color(). TreeTrunk added to that loop:
+                          # trunk and foliage are the two materials of ONE drawn object and the OLD
+                          # foliage sat 38.7 from trunk, already inside the 40.0 floor, with no
+                          # terrain-vs-terrain test in existence to notice. Two Task 5 subtasks were
+                          # UNTICKED -- they were ticked for a median that was never recorded; the
+                          # prose had been honest while the checkboxes were not.
+                          # STILL UNMET AND UNCHANGED BY ANY OF THIS: AC7 (the 9.1 x 9.4 luminance
+                          # interaction) and AC10 (Wolf's eye). The acceptance layer confirmed
+                          # independently that NO part of AC7 was headlessly checkable and skipped
+                          # -- the only rendering capture test is #[ignore]d, "requires a real
+                          # render surface". Verification: full gate GREEN, audit clean at 403 rows,
+                          # whole table re-run 5/5 KILLED. Reaped 107.2 GB of layer caches.
+                          # PRIOR: STORY 9.4 -> REVIEW. Dev complete, metrics recorded.
                           # THIS BLOCK AND THE TWO BELOW IT ARE BACKFILLED on 2026-08-29: 9.4's
                           # create, in-progress and review transitions each moved the status line
                           # only, so this header sat four events stale and still led with 9.1's
@@ -895,7 +964,7 @@ development_status:
   9-1-the-frame-stops-blowing-out: in-progress
   9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
   9-3-the-four-modes-read-apart: backlog
-  9-4-trees-fewer-and-distinct-from-the-ground: review
+  9-4-trees-fewer-and-distinct-from-the-ground: in-progress
   # 9.4 IS THE ONE STORY IN THIS EPIC THAT TOUCHES sim-core (worldgen density): every seeded world
   # changes, terrain-dependent tests and capture recipes need re-checking, and mutation rows anchored
   # near worldgen literals may APPLY-FAIL. It also pushes valley-floor luminance UP while 9.1 pushes

@@ -245,7 +245,8 @@ the orchestrator independently rebuilt the worldgen and got 704 -> 265 / 696 -> 
 48.08 / 49.64, and all four sabotage rows replay KILLED at the named assertions. **Three of the four
 HIGH/MED findings are about what the change does OUTSIDE the diff, and about the record.**
 
-- [ ] [Review][Decision] **57.4 % of foliage never takes the new green** — `[crates/gui/src/project.rs:933]`
+- [x] [Review][Decision] **RESOLVED — Wolf ruled "fix also snow cover", 2026-08-29. See the
+      snow-cover fix below.** **57.4 % of foliage never takes the new green** — `[crates/gui/src/project.rs:933]`
       `[feature/HIGH]`, independently reproduced by the orchestrator. `has_snow_laden_crown` swaps
       ANY foliage cell with nothing solid directly above it to the unchanged `foliage_snow_color()`
       `(156,170,196)`. That is not just the apex: it is the whole outward-facing surface. Measured on
@@ -517,9 +518,42 @@ otherwise unreadable.
   pin, as a real brown change would; it now kills at `appearance.rs:338`, the
   `actual_rgb[2] >= actual_rgb[0]` invariant that carries W2. **Two rounds, both caught only by
   running the table and reading the kill line.**
-- **Final table: 4 rows, 4 KILLED, 0 APPLY-FAILED**, each at the assertion it is meant to prove —
-  `worldgen.rs:200` (band), `appearance.rs:298` (separation), `appearance.rs:338` (invariant),
-  `worldgen.rs:201` (column-vs-cell oracle). `audit-mutations.py` clean at **402 rows**.
+- **Final table at dev: 4 rows, 4 KILLED, 0 APPLY-FAILED**, each at the assertion it is meant to
+  prove. **Re-run after the review patches, 2026-08-29: 5 rows, 5 KILLED**, and the kill lines
+  MOVED because the patch pass added comment lines above them — `worldgen.rs:200` (band),
+  `appearance.rs:316` (separation, was :298), `appearance.rs:356` (invariant, was :338),
+  `worldgen.rs:201` (column-vs-cell oracle), `project.rs:1424` (the new skirt guard).
+  `audit-mutations.py` clean at **403 rows**.
+
+### Snow cover — Wolf's ruling at review, 2026-08-29
+
+The review measured that only 42.6 % of foliage took this story's new green, because
+`has_snow_laden_crown` claimed the rest. Wolf ruled **"fix also snow cover"** rather than deferring
+it. The predicate tested sky exposure alone, which did exactly what its own doc comment says the
+material swap exists to avoid: `place_trees` stamps a foliage ring at `surface + 1` whose cells have
+open sky beside the trunk, so **1,246 of 1,824 ground-level skirt cells (68 %) rendered at the
+bright crown colour** — a lit ring sitting on the ground around every trunk. Snow now additionally
+requires the cell not to rest on terrain.
+
+| measured on the shipped default world | before | after |
+| --- | --- | --- |
+| bright cells resting on the ground | 1,029 | **0** |
+| foliage taking the crown colour | 3,631 (57.4 %) | 2,602 (41.1 %) |
+| foliage taking this story's green | 2,698 (42.6 %) | **3,727 (58.9 %)** |
+
+**The first fixture for this was VACUOUS and the sabotage row caught it.** It stacked foliage
+directly above the skirt cell, so the pre-existing sky-exposure clause returned false first and the
+new ground-rest clause was never reached — the assertion passed for the wrong reason. This is the
+third time in this story that running the table, rather than reading it, found the defect. Fixture
+rebuilt so the skirt cell has open sky and the new clause is the only thing that can make it false.
+
+**Also measured at the review and NOT fixed here** (filed in `deferred-work.md`): **86 of 265 trees
+(32.5 %) draw no trunk at all** — exactly the height-4 trees, 100 % of them. The trunk spans
+`surface+1 ..= surface+height-1` while foliage rings are stamped at `surface+1`, `crown_top-2` and
+`crown_top-1`, so at height 4 every trunk level is enclosed and never exposed. This is Wolf's
+observation *"some trees look like they don't have trunk at all"*, and the trunks are not
+underground — they are buried in their own foliage. It changes every seeded world and needs its own
+before/after numbers, so it is a story, not a patch.
 - **Cold full gate GREEN** after `cargo clean -p gui -p sim-core` (3,386 files / 15.1 GiB).
 - **Measured result: 265 trees on the default seed** (242 on seed 42, 258 on 7451), against 704
   before — all inside the 230–300 band. Foliage cells 16,786 → 6,329.
@@ -595,6 +629,7 @@ the cause.
 - crates/sim-core/src/worldgen.rs
 - crates/sim-core/tests/worldgen.rs
 - crates/gui/src/appearance.rs
+- crates/gui/src/project.rs (review: snow-cover fix, and the stale cube oracle comment)
 - docs/tech-art-guidelines.md
 - _bmad-output/implementation-artifacts/mutations/9-4-trees-fewer-and-distinct-from-the-ground.sh
 - _bmad-output/implementation-artifacts/9-4-signoff/task-7-vehicle-runbook.md

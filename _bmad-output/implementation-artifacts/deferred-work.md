@@ -1137,7 +1137,16 @@ look change becomes a story.
   they are enclosed by their own foliage. Cheapest fix to weigh: raise the minimum height to 5, or
   stop stamping the skirt ring at `surface+1`. Either changes every seeded world and needs its own
   before/after numbers.
-- **Most of the "snow-laden crown" is not on top — 68% of the ground-level skirt is bright.**
+- ~~**Most of the "snow-laden crown" is not on top — 68% of the ground-level skirt is bright.**~~
+  **RESOLVED THE SAME DAY, 2026-08-29, commit `a634235`** — Wolf ruled "fix also snow cover" at the
+  review rather than deferring it. `has_snow_laden_crown` now additionally requires the cell not to
+  rest on terrain. Measured on the shipped world: ground-resting bright cells **1,029 -> 0**, crown
+  cells 3,631 -> 2,602, and 9.4's new green reaches 3,727 of 6,329 foliage cells (58.9%) rather than
+  2,698 (42.6%). Pinned by `foliage_resting_on_the_ground_is_a_skirt_and_never_catches_snow`
+  [crates/gui/src/project.rs:1424] and by a sabotage row that deletes the clause. **The first
+  fixture was VACUOUS and the row caught it** — it stacked foliage above the skirt cell so the
+  pre-existing sky-exposure clause fired first and the new clause was never reached. The finding as
+  originally recorded follows, unedited:
   [crates/gui/src/project.rs:933]. `has_snow_laden_crown` fires for ANY foliage cell with nothing
   solid directly above it, which is the whole outward-facing surface, not the apex. Measured on the
   shipped world: the tip ring is 265 cells, 100% crown-coloured (correct); the upper shoulder rings
