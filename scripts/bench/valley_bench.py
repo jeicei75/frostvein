@@ -55,8 +55,12 @@ ENTITY_APPEARANCE = {
     "campfire": ((255, 173, 92), 0.55),
 }
 
-# Delivered full-valley measurement is much higher than these floors; reframing changes the
-# fraction, while material and light tuning move the quantised colour count.
+# Floors, each well below its delivered measurement so reframing does not trip them.
+# MEASURED on the delivered bench, shipped seed, 960x540: non_sky_fraction 0.674020 and
+# distinct_colors 45,642. An all-sky frame reads 0.000000 / 4, which is what these floors exist to
+# reject. What moves them: reframing and world content move the fraction; material and light
+# tuning move the quantised colour count. Story 10.4 will move both, so they are floors and not
+# pins.
 MIN_NON_SKY_FRACTION = 0.02
 MIN_DISTINCT_COLORS = 32
 

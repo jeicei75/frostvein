@@ -130,105 +130,105 @@ trees by construction. Do not port its tree code, and do not port its printed `5
 ## Tasks / Subtasks
 
 - [x] **Task 1 — The export file (AC: 5)**
-  - [ ] Promote `5-4-signoff/capture_snapshot.py` to `scripts/bench/export_world.py`: spawn
+  - [x] Promote `5-4-signoff/capture_snapshot.py` to `scripts/bench/export_world.py`: spawn
         `simd 0`, parse the `listening on 127.0.0.1:<port>` banner, read one snapshot line, write
         it out, print tick/entities/dims. **Keep the banner parse** — `simd`'s only argument is
         the port and `0` means OS-assigned, which is exactly why the parse exists.
-  - [ ] **Replace the hardcoded `/workspace/projects/frostvein/target/debug/simd`** with a path
+  - [x] **Replace the hardcoded `/workspace/projects/frostvein/target/debug/simd`** with a path
         derived from the script's own location. `gate.sh:58-63` records that this repo is mounted
         at two different absolute paths; the literal fails on one of them and contradicts AC2's
         portability constraint.
-  - [ ] The exported tick is a **sample, not a property** (the original sleeps 2.1 s to land near
+  - [x] The exported tick is a **sample, not a property** (the original sleeps 2.1 s to land near
         tick 20). Entity positions differ between exports; terrain does not. Say so in a comment.
-  - [ ] Leave the original in `5-4-signoff/` untouched — it is provenance for an approved artifact.
+  - [x] Leave the original in `5-4-signoff/` untouched — it is provenance for an approved artifact.
 
 - [x] **Task 2 — The bench script, geometry half (AC: 2, 3, 4)**
-  - [ ] `scripts/bench/valley_bench.py`, run as
+  - [x] `scripts/bench/valley_bench.py`, run as
         `blender --background --python scripts/bench/valley_bench.py -- <snapshot.json> <out.png>`.
-  - [ ] **Guard the `bpy` import** (`try: import bpy / except ImportError: bpy = None`) so the
+  - [x] **Guard the `bpy` import** (`try: import bpy / except ImportError: bpy = None`) so the
         pure functions are importable by a plain `python3` test without Blender.
-  - [ ] **stdlib only.** No numpy, no PIL. Measured at creation: Debian's Blender does not bundle
+  - [x] **stdlib only.** No numpy, no PIL. Measured at creation: Debian's Blender does not bundle
         a Python — it resolves to the uv CPython at
         `/home/vscode/.local/share/uv/python/cpython-3.13-linux-x86_64-gnu`, so Debian's
         `python3-numpy` is not on its `sys.path`, and appending `/usr/lib/python3/dist-packages`
         fails on numpy's own source-tree guard. `mathutils` ships with Blender and is fine.
-  - [ ] **The exposed predicate, exactly** [project.rs:429-442, NEIGHBOURS at project.rs:24-31]:
+  - [x] **The exposed predicate, exactly** [project.rs:429-442, NEIGHBOURS at project.rs:24-31]:
         **six orthogonal neighbours only**, `Solid(_)` and `Ramp(_)` both occlude, `Empty` does
         not, and **out-of-bounds counts as not-solid** so every world-edge cell is exposed. All
         three are needed to reproduce the client's count; each is a natural coin-flip in a
         reimplementation. Index is `x + y*dx + z*dx*dy`.
-  - [ ] Emit **exposed faces only**, one mesh, via `from_pydata` + `foreach_set("material_index")`.
+  - [x] Emit **exposed faces only**, one mesh, via `from_pydata` + `foreach_set("material_index")`.
         Measured: 244,568 verts / 61,142 quads, built in 0.9 s. **Do not create one Blender object
         per cube** — that is the difference between 2 s and minutes.
-  - [ ] Print the exposed-cell count. **Do not assert its value anywhere that runs in the gate**
+  - [x] Print the exposed-cell count. **Do not assert its value anywhere that runs in the gate**
         (AC4) — 10.4 will move it, and a pinned count turns a correct change into a red gate.
-  - [ ] `// NOTE:` the one known divergence: the client's boot draw set is
+  - [x] `// NOTE:` the one known divergence: the client's boot draw set is
         `is_exposed(..) || (z == level && solid)` with `level = dims.z-1` [project.rs:1041-1073],
         so the client draws a thin extra top layer the bench does not. Small; named so it is not
         chased.
 
 - [x] **Task 3 — The bench script, look half (AC: 2, 9)**
-  - [ ] Terrain materials from `appearance.rs::material_color`, sRGB u8 converted to linear for
+  - [x] Terrain materials from `appearance.rs::material_color`, sRGB u8 converted to linear for
         the Principled BSDF: Stone `(60,70,92)`, Soil `(56,52,62)`, Ice `(104,128,170)`,
         Snow `(136,150,178)`, TreeTrunk `(43,47,58)`, TreeFoliage `(44,100,58)`.
-  - [ ] **Include the two presentation swaps, or the picture will not predict the build.**
+  - [x] **Include the two presentation swaps, or the picture will not predict the build.**
         `snow_cap_color()` `(146,158,184)` [appearance.rs:233-239] — its own comment says at the
         boot pitch the caps dominate the visible area — and `foliage_snow_color()` `(156,170,196)`
         for the exposed spruce crown [appearance.rs:241-247, project.rs:934-959]. The crown rule
         is client-derived, not in the wire: exposed above AND not resting directly on ground.
-  - [ ] Sky as a flat background at `night_lighting().sky` `(5,12,28)` — the client's sky is a
+  - [x] Sky as a flat background at `night_lighting().sky` `(5,12,28)` — the client's sky is a
         flat `ClearColor` [ingest.rs:198].
-  - [ ] Ambient `(120,140,165)` and directional `(150,190,180)` from the same table. Point lights
+  - [x] Ambient `(120,140,165)` and directional `(150,190,180)` from the same table. Point lights
         from `light_properties()`: Torch `(255,140,62)`, Campfire `(255,173,92)`, Lantern
         `(255,195,110)`. Note lanterns are **not** an `EntityKind` — `EntityKind` is
         `Dwarf|Torch|Campfire` and a lantern arrives as `Entity.light: Some(Lantern)` on a dwarf
         [protocol/src/lib.rs:37-49, 100-107].
-  - [ ] Entities as cubes at `entity_appearance` colour and scale (Dwarf `(151,116,96)` @ 0.65).
-  - [ ] **The camera** — see Dev Notes for the exact block. **Blender FOV trap:** Bevy's
+  - [x] Entities as cubes at `entity_appearance` colour and scale (Dwarf `(151,116,96)` @ 0.65).
+  - [x] **The camera** — see Dev Notes for the exact block. **Blender FOV trap:** Bevy's
         `PerspectiveProjection.fov` is the *vertical* FOV [ingest.rs:707-710], while Blender's
         `camera.data.angle` follows `sensor_fit`, which defaults to AUTO and therefore means
         *horizontal* on a 16:9 render. Set `sensor_fit = 'VERTICAL'` (or set `angle_y`), or the
         frame comes out visibly tighter than the client's.
 
 - [x] **Task 4 — The range check that can actually fail (AC: 6, 10, 11)**
-  - [ ] After rendering, read the frame back — Blender hands you the pixels directly
+  - [x] After rendering, read the frame back — Blender hands you the pixels directly
         (`bpy.data.images.load(out).pixels`), so no PNG decoder is needed inside the bench.
-  - [ ] **The emptiness metric is distance from the SKY colour, not from black.** An empty frame
+  - [x] **The emptiness metric is distance from the SKY colour, not from black.** An empty frame
         renders 100 % non-black once Task 3 sets the sky to `(5,12,28)`, so a non-black floor
         cannot detect one. Count pixels differing from the sky colour beyond a small tolerance.
-  - [ ] Print one range-check line naming every figure, **then** assert. A failing run must still
+  - [x] Print one range-check line naming every figure, **then** assert. A failing run must still
         show its numbers.
-  - [ ] Exit non-zero on any floor breach, and confirm the non-zero reaches the shell —
+  - [x] Exit non-zero on any floor breach, and confirm the non-zero reaches the shell —
         `bpy.ops.render.render()` returning is not the bench succeeding.
-  - [ ] **Measure the floors on the delivered bench, with sky and lights in place, and record
+  - [x] **Measure the floors on the delivered bench, with sky and lights in place, and record
         them.** The creation-time 79.3 % / 22,422 figures came from a throwaway bench with a
         black background and do not transfer. Give each floor a comment naming the figure it came
         from and what moves it; set them well below measurement so reframing does not trip them.
-  - [ ] Cycles CPU, 32 samples, 960x540. `scene.cycles.use_denoising = False` with a comment
+  - [x] Cycles CPU, 32 samples, 960x540. `scene.cycles.use_denoising = False` with a comment
         naming the hard failure: `RuntimeError: Error: Failed to denoise, build has no
         OpenImageDenoise support`, exit 1, no PNG written.
 
 - [x] **Task 5 — Tests, and getting them into the gate (AC: 7, 8, 9, 13)**
-  - [ ] `scripts/tests/test_valley_bench.py` (unittest): exposed-face extraction over small
+  - [x] `scripts/tests/test_valley_bench.py` (unittest): exposed-face extraction over small
         hand-built worlds (including an out-of-bounds edge case), the floor functions, and AC7's
         two assertions — geometry summary changes across two worlds, **and** the pixel figures
         change between a one-cell world and an empty one.
-  - [ ] **`scripts/bench` is not on `sys.path`** for `unittest discover -s scripts/tests`. Insert
+  - [x] **`scripts/bench` is not on `sys.path`** for `unittest discover -s scripts/tests`. Insert
         it explicitly or use `importlib`; the `_bmad/scripts/tests` precedent does not cover this
         because its subject is a sibling.
-  - [ ] AC8's test **spawns Blender** against a minimal synthetic export (a handful of tiles, and
+  - [x] AC8's test **spawns Blender** against a minimal synthetic export (a handful of tiles, and
         an empty one) and asserts the process exit code. Keep the synthetic worlds tiny — this
         must not render the full valley, because it runs on every commit via the pre-commit hook.
         Guard with `skipUnless(shutil.which("blender"))` so a Blender-less machine skips rather
         than fails, and **report which tests actually ran** — a skipped AC8 has judged nothing.
-  - [ ] Add one line to `scripts/gate.sh` using its existing `run` helper exactly as the
+  - [x] Add one line to `scripts/gate.sh` using its existing `run` helper exactly as the
         neighbouring line does [gate.sh:116]:
         `run "bench tests" python3 -m unittest discover -s scripts/tests`.
-  - [ ] **The AC9 drift guard goes in Rust**, at `crates/gui/tests/bench_contract.rs`. The reason
+  - [x] **The AC9 drift guard goes in Rust**, at `crates/gui/tests/bench_contract.rs`. The reason
         is not the mutation harness (Task 6 gives that a Python tier anyway): it guards the
         *client's* constants against a downstream consumer, so it belongs with the client's suite
         and must run even where Blender is absent.
-  - [ ] Two things that will otherwise cost the dev an hour: an integration test's cwd is the
+  - [x] Two things that will otherwise cost the dev an hour: an integration test's cwd is the
         **package** root, so reach the repo root the way the existing test does —
         `Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")` [crates/gui/tests/capture.rs:159].
         And the boot-camera constants are **private** `const`, not `pub` (only
@@ -237,46 +237,46 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         crate change this story forbids.
 
 - [x] **Task 6 — The sabotage table, and the harness gaps it exposes (AC: 12)**
-  - [ ] **Commit first, then mutate.** Never `git checkout --` over an uncommitted fix.
-  - [ ] **Gap 1, a live trap worth closing regardless of this story:** `backup_all` snapshots only
+  - [x] **Commit first, then mutate.** Never `git checkout --` over an uncommitted fix.
+  - [x] **Gap 1, a live trap worth closing regardless of this story:** `backup_all` snapshots only
         `$(git ls-files 'crates/*')` [mutate.sh:46], so a sabotage patching anything under
         `scripts/` is **never restored** — it silently survives the run. Extend the backup set.
-  - [ ] **Gap 2:** `mutation()` runs `cargo test --offline -p "$pkg" "$test"` [mutate.sh:69]. Add
+  - [x] **Gap 2:** `mutation()` runs `cargo test --offline -p "$pkg" "$test"` [mutate.sh:69]. Add
         a `py` tier that runs the unittest instead.
-  - [ ] **Gap 3, and this one is the whole point of the script:** KILLED is decided as
+  - [x] **Gap 3, and this one is the whole point of the script:** KILLED is decided as
         "not `could not compile`, then `rc != 0`" [mutate.sh:82-94], and that compile guard is
         Rust-specific. A Python sabotage that lands a `SyntaxError`/`ImportError` exits non-zero
         and would print **KILLED while proving nothing** — verbatim the false-kill class the
         script's own comment records from story 5.3 [mutate.sh:71-79]. The `py` tier must treat
         collection/import/syntax errors as **SURVIVOR**, and require a genuine assertion failure
         to call a row KILLED.
-  - [ ] Rows, at minimum: (a) a palette literal in `appearance.rs` changed -> the AC9 drift test
+  - [x] Rows, at minimum: (a) a palette literal in `appearance.rs` changed -> the AC9 drift test
         goes RED; (b) a boot-camera constant in `camera.rs` changed -> the same; (c) the bench's
         range-check assertion deleted -> AC6's test goes RED; (d) the exposed-face neighbour test
         inverted so every face is emitted -> AC7's geometry assertion goes RED; (e) the non-zero
         exit replaced with `exit(0)` -> AC8's test goes RED.
-  - [ ] **Check WHICH assertion kills each row, not just that it says KILLED.** An earlier pin
+  - [x] **Check WHICH assertion kills each row, not just that it says KILLED.** An earlier pin
         absorbing the mutation is this project's most repeated review finding — the strengthened
         test then looks identical to the weak one from outside.
-  - [ ] Confirm `python3 scripts/audit-mutations.py` still runs clean over every table.
+  - [x] Confirm `python3 scripts/audit-mutations.py` still runs clean over every table.
 
 - [x] **Task 7 — The instrument, named and demonstrated (AC: 4, 6, 10)**
-  - [ ] **The instrument for this story is the bench itself**; its exact command is in
+  - [x] **The instrument for this story is the bench itself**; its exact command is in
         Verification. It is not a substitute for the tests above, and Task 5 is its own test.
-  - [ ] Run it end to end on the shipped seed. Record the exposed-cell count, the Cycles-internal
+  - [x] Run it end to end on the shipped seed. Record the exposed-cell count, the Cycles-internal
         time, the whole-process time, and the full range-check line in the Dev Agent Record.
-  - [ ] Run it **twice** to different outputs and diff the pixels (RGBA values, `w*h*4`). Record
+  - [x] Run it **twice** to different outputs and diff the pixels (RGBA values, `w*h*4`). Record
         how many differ. **Do not tick AC10 until the numbers are pasted in** — a checkbox is
         worth only what its verification is worth.
 
 - [x] **Task 8 — The comparison pair for Wolf (AC: 15)**
-  - [ ] Create `_bmad-output/implementation-artifacts/10-1-signoff/`.
-  - [ ] Commit one bench artifact and one `gui --capture` frame at the boot framing. Both are
+  - [x] Create `_bmad-output/implementation-artifacts/10-1-signoff/`.
+  - [x] Commit one bench artifact and one `gui --capture` frame at the boot framing. Both are
         producible headlessly here (9.1 established the path; the 9.4 signoff PNGs were made this
         way). `--capture` requires `--frames N` or `--at-tick N`, needs `--headless` on a devpod,
         and needs a live `simd` [ingest.rs:394-396, 497, 1464-1478]. Put the exact command you
         used in the Dev Agent Record.
-  - [ ] Write a short `what-you-will-see.md` naming what to compare and, up front, **every known
+  - [x] Write a short `what-you-will-see.md` naming what to compare and, up front, **every known
         difference** so Wolf is not asked to rediscover them: a path tracer against a rasterizer;
         `gui --headless` renders 1280x720 against the bench's 960x540 (same aspect); no aurora,
         stars, fog or `rim_level` in the bench; and the two frames sit at different ticks, so
@@ -490,16 +490,109 @@ gpt-5.6-terra
 
 ### Debug Log References
 
-- RED evidence: empty benchmark first logged `AssertionError: no exposed cells` yet Blender exited 0; after explicit `SystemExit`, the same export printed its range line and exited 1. Geometry sabotage RED: `{'exposed_cells': 2, 'faces': 12} != {'exposed_cells': 2, 'faces': 10}`. Palette sabotage RED: `client literal drifted: Material::Stone => Color::srgb_u8(60, 70, 92)`.
-- Instrument: export tick 22, entities 10, dims 128x128x32. Bench A: Cycles 1.60 s, whole process 4625 ms; Bench B: Cycles 1.51 s, whole process 4456 ms. Both: `range-check: exposed_cells=44984 non_sky_fraction=0.997218 distinct_colors=42935 floors(non_sky_fraction=0.020000, distinct_colors=32)`; pixel diff 0 of 2,073,600 RGBA values.
-- Unittests ran (none skipped): `test_empty_export_exits_nonzero`, `test_exposed_faces_use_six_orthogonal_neighbours_and_world_edges`, `test_geometry_summary_changes_when_world_content_changes`, `test_floor_functions_reject_empty_geometry_and_accept_visible_frame`, `test_pixel_figures_change_between_empty_and_one_cell_frames`.
-- Mutation results: palette drift KILLED; boot camera drift KILLED; missing range assertion KILLED; inverted neighbour predicate KILLED; zero exit KILLED. Audit: 413 rows matched, 11 legacy rows unguarded.
+**Dev run 1 (Codex, `gpt-5.6-terra`, 9 commits).**
+- RED evidence: empty bench first logged `AssertionError: no exposed cells` yet Blender exited 0;
+  after explicit `SystemExit`, the same export printed its range line and exited 1. Geometry
+  sabotage RED: `{'exposed_cells': 2, 'faces': 12} != {'exposed_cells': 2, 'faces': 10}`. Palette
+  sabotage RED: `client literal drifted: Material::Stone => Color::srgb_u8(60, 70, 92)`.
+- Handed back three honest caveats: its own full gate never finished, the `gui --capture` command
+  exited 101, and it did not run the `codex review` self-gate. All three were correct.
+
+**Orchestrator verification, and the two defects a green gate could not see.**
+
+Both were found by *looking at the rendered frame*, not by reading exit codes. Both are the same
+class the story warns about: a guard sitting one level above the thing it claims to guard.
+
+1. **The bench camera was rolled 110 degrees, so the artifact did not predict the build** — AC15's
+   stated failure mode. `to_track_quat` levels against Blender's global +Z, but the scene is built
+   in Bevy's Y-up render space. Measured against the delivered camera block: scene-up landed at
+   `(0.845, -0.310, 0.435)` in camera space (correct is `~(0, 1, 0)`), while Blender's own +Z
+   landed at `(0.000, 0.815, 0.580)` — it had levelled to the wrong axis. AC9's drift guard stayed
+   green throughout because it compares literals as **text**: the constants were right and the
+   maths consuming them was wrong.
+   *Fix:* the basis is built explicitly as Bevy's `look_at` does, and `setup_scene` now consumes
+   the same `boot_camera_frame()` the framing test checks — one camera, so the test cannot stay
+   green against a frame it no longer matches.
+   *New test:* asserts the client's own pinned composition (camp 0.48 width / 0.78 height, skyline
+   0.24 height, tol 0.03). Non-tautological: against the old camera it reads camp `(0.352, 0.404)`
+   and skyline y `1.207` — off-frame entirely.
+
+2. **The pixel half of the range check was inert on real renders.** `pixel_figures` compared the
+   readback against `srgb_to_linear(SKY_RGB)`, but a rendered frame reads back display-referred.
+   MEASURED: a real all-sky frame reads `(0.01961, 0.04706, 0.1098)`, exactly `SKY_RGB/255`, while
+   the code compared against `(0.00152, 0.00368, 0.01161)` — 0.098 away in blue against a 0.02
+   tolerance. So **every sky pixel counted as non-sky, and a 100%-sky frame scored
+   `non_sky_fraction=1.000000`**, far above the 0.02 floor. The floor could never fire. Only
+   `exposed_cells > 0` was catching the empty case; the pixel half reported success on nothing,
+   which is precisely what AC6 exists to prevent.
+   The unit test could not see it because it built its input from `srgb_to_linear(SKY_RGB)` — the
+   same conversion the code used, so it agreed with the code in whichever colour space the code
+   picked. The self-referential-test antipattern, third instance on this project.
+   *Fix:* compare in the render's own colour space. *New tests:* the sky reference is now the
+   measured display-referred literal (an independent oracle), and a new test drives the **real
+   renderer** to assert an all-sky frame reads `non_sky_fraction=0.000000`.
+
+**Instrument, re-measured on the delivered bench after both fixes (AC 4, 6, 10):**
+- `exposed cells: 44984 faces: 61142` — matches the client's cube oracle for the shipped seed.
+  Nothing pins this value; 10.4 will move it.
+- `range-check: exposed_cells=44984 non_sky_fraction=0.674020 distinct_colors=45642 floors(non_sky_fraction=0.020000, distinct_colors=32)`
+- An all-sky frame, by contrast: `exposed_cells=0 non_sky_fraction=0.000000 distinct_colors=4`,
+  exit non-zero. The two ends of the instrument now genuinely differ.
+- Cycles internal: **1.77 s / 1.66 s**. Whole `blender --background` process: **4.68 s / 4.54 s**.
+- Pixel determinism: **0 of 2,073,600 RGBA values differ** across two full-scale runs.
+- Export: `tick: 21 entities: 10 dims: {'x': 128, 'y': 128, 'z': 32}`.
+
+**Tests (AC 7, 8, 13) — 7 ran, 0 SKIPPED** (`python3 -m unittest discover -s scripts/tests -v`):
+`test_exposed_faces_use_six_orthogonal_neighbours_and_world_edges`,
+`test_geometry_summary_changes_when_world_content_changes`,
+`test_floor_functions_reject_empty_geometry_and_accept_visible_frame`,
+`test_pixel_figures_change_between_empty_and_one_cell_frames`,
+`test_boot_projection_matches_the_client_composition`,
+`test_empty_export_exits_nonzero`,
+`test_all_sky_frame_reads_as_sky_in_a_real_render`.
+The last two spawn Blender; both ran here rather than skipping.
+
+**Mutations (AC 12) — 7 rows, ALL KILLED, zero APPLY-FAILED**, re-run independently by the
+orchestrator. Each row was checked for *which* assertion kills it, not merely that it says KILLED:
+| row | killing assertion |
+| --- | --- |
+| palette drift | `bench_contract.rs:74` — the client-literal assert |
+| boot camera drift | `bench_contract.rs:111` — the camera-literal assert |
+| missing range assertion | exit-code assert, `0 == 0` |
+| inverted neighbour predicate | `{'faces': 12} != {'faces': 10}` — the geometry quantity |
+| zero exit | exit-code assert, `0 == 0` |
+| z-up camera basis | `0.352 != 0.48 within 0.03 delta` — the framing assert |
+| linear sky reference | real render prints `non_sky_fraction=1.000000` — reproduces the defect |
+
+**Gate (AC 1):** FULL tier run by the orchestrator, GATE GREEN, including the new `bench tests`
+line. `python3 scripts/audit-mutations.py` clean.
+
+**Known limitation, reported not worked around (AC 15's client half):** the
+`gui --headless --capture` command exits **101** on a devpod. `capture.rs`'s delivered-tick floor
+is unreachable under llvmpipe, where tick delivery is erratic — measured 26 ticks at `--frames`
+1,500 and 9,000, then 2 ticks at `--at-tick 20 --frames 200000`. The PNG is written *before*
+validation, so the committed frame is genuine and complete; only the integrity assertion fails.
+Story 9.1 already recorded that every `--capture` AC is vehicle-bound on a devpod. The assertion
+was deliberately left alone: weakening a client-side integrity rule to make a bench story's
+artifact green would ship a workaround for an environment limitation.
+
+**Self-gate: NOT RUN — this is a coverage hole the review should know about.** Dev run 1 skipped
+it; the continuation run that would have carried it was killed by the harness at its commit step,
+and its authored work was recovered by hand rather than relaunched (a restart bills full quota and
+buys nothing). No `codex review` conclusion exists for this story.
 
 ### Completion Notes List
 
-- Promoted the wire snapshot exporter and added a Cycles CPU bench with exposed-only mesh geometry, client palette/camera contract, range checks, and gate-integrated tests.
-- Added the signoff pair and comparison notes. GUI capture command used a live `simd` and `target/debug/gui <port> --headless --capture ... --at-tick 100 --frames 20`; it wrote the PNG but exited 101 because the existing capture integrity rule observed only 13 delivered ticks. Wolf's visual judgement remains open.
-- Full gate was started after all changes, but the execution session ended during its `cargo test` stage before it printed a result; no green full-gate claim is made.
+- Promoted the wire snapshot exporter and added a Cycles CPU bench: exposed-only mesh geometry
+  from the export file alone, the client's palette/lights/camera, a range check that prints before
+  it asserts, and gate-integrated tests.
+- Fixed two defects found in verification: a 110-degree camera roll that made the artifact fail to
+  predict the build, and a colour-space error that made the pixel half of the range check inert on
+  real renders. Both now carry a test and a sabotage row.
+- Collapsed the two camera implementations into one so the framing test guards the code that
+  actually renders, rather than a parallel copy of it.
+- AC15 (Wolf's judgement of whether the bench predicts the build) remains **open** — no agent can
+  close it. The pair is committed with every known difference written down.
 
 ### File List
 
@@ -526,3 +619,5 @@ gpt-5.6-terra
 | --- | --- |
 | 2026-08-29 | Story created. Epic 10 opens. **AC1's workload re-measurement was executed at creation rather than deferred**: 44,984 exposed cells, Cycles 2.01 s / process 3.67 s, 0 of 2,073,600 pixel values differing across two full-scale runs — so the epic's gingerspice fallback does not fire and the devpod stays the venue. Three epic premises checked (one false: `bevy_gltf` IS enabled, which corrects 10.5). The export file was found to exist already and is promoted, not rebuilt. Baseline `212fbcd`, full gate GREEN at creation (run, not claimed); stacks on the 9.4 tip because `main` still carries the superseded foliage colour. Revised after an adversarial checklist review that found five criticals — the emptiness metric was inert (a non-black floor cannot detect an empty frame once the sky is `(5,12,28)`), AC8's exit-code check was unbuildable against the bpy-free test rule, the new `py` mutation tier reopened the false-KILL class, the drift guard's placement was justified circularly, and Task 2 pinned a moving content measurement inside the epic that will move it. |
 | 2026-08-29 | Implemented the headless bench, tests, mutation coverage, and signoff artifacts. |
+| 2026-08-29 | Dev run 1 (Codex `gpt-5.6-terra`, 9 commits): export, geometry, look, range check, tests, mutation table, signoff pair. Handed back three honest caveats rather than claiming success. |
+| 2026-08-29 | Orchestrator verification found two defects a green gate could not see, both fixed with tests and sabotage rows: the bench camera was **rolled 110 degrees** so the artifact did not predict the build (AC15's failure mode; AC9's text-scrape guard stayed green because the constants were right and the maths was wrong), and the range check's pixel half was **inert on real renders** because it compared a display-referred readback against a linear reference, scoring a 100%-sky frame at `non_sky_fraction=1.000000`. Mutation table 5 rows -> **7, all KILLED**, each verified to kill on the intended assertion. Full gate GREEN, 7 bench tests, 0 skipped. Re-measured: Cycles 1.77 s / 1.66 s, process 4.68 s / 4.54 s, 0 of 2,073,600 pixels differ. Self-gate NOT run — a named coverage hole. AC15 remains open for Wolf. |
