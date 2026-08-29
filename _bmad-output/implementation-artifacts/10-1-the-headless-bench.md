@@ -516,6 +516,9 @@ gpt-5.6-terra
 - _bmad-output/implementation-artifacts/10-1-signoff/what-you-will-see.md
 - docs/tech-art-guidelines.md
 - _bmad-output/implementation-artifacts/10-1-the-headless-bench.md
+- _bmad-output/implementation-artifacts/metrics/.session-cursors.json
+- _bmad-output/implementation-artifacts/metrics/10-1-the-headless-bench.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
 
