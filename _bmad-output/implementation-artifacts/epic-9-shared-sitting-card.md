@@ -22,7 +22,7 @@ stale binary, which is the one failure this project has hit repeatedly.
 
 ```
 simd.exe 7451
-gui.exe 7451 --capture 9-1-vista.png --at-tick 20 --frames 6000
+gui.exe 7451 --capture 9-1-vista.png --at-tick 20 --frames 200000
 echo "exit=$?"
 ```
 
@@ -34,12 +34,15 @@ Read the range-check line. **It gained a field on 2026-08-29** and now reads:
   ground-median:   ______     (band 70-180)
   p99:             ______     exit: ______
 
-**`--frames` IS A TIME BUDGET IN DISGUISE — this is why the first attempt aborted.** It counts
-FRAMES, not seconds, and the default is 1,500. On the headless software renderer (~2 fps) that is
-twelve minutes and hundreds of ticks; on the vehicle's RTX 4080 (~140 fps) it is eleven seconds and
-**8 ticks**, which fails the `--at-tick 20` floor before any range check prints. The faster the
-machine, the SHORTER the budget in wall-clock. 6,000 frames is ~43 s there. If it still aborts on
-tick count, raise it again — the daemon delivers roughly one tick per second.
+**`--frames` IS A SAFETY CAP, NOT A DURATION — set it absurdly high and it costs nothing.**
+With `--at-tick N` the run ENDS the moment tick N arrives, so the budget only ever cuts a run
+short. The daemon ticks every 100 ms (`TICK_PERIOD`), so **tick 20 is 2 seconds of wall-clock** —
+that is all this capture needs.
+
+The default cap is 1,500 FRAMES, and frames are not seconds. Headless (~2 fps) that is 12 minutes;
+on the vehicle's RTX 4080 the update loop runs unthrottled at thousands per second, so it is under
+a second — which is why the first two attempts aborted at 8 and 11 ticks having never reached 20.
+Raising the cap to 200,000 does not make the run longer; it just stops the cap firing first.
 
 **EXPECT exit 101.** Headless predicts ~1.74 % area on this branch against a ceiling calibrated on
 a GPU frame. That is the measurement, not a broken build — the PNG is written before validation, so

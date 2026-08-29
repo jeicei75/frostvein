@@ -1208,4 +1208,11 @@ look change becomes a story.
   became a trap once headless rendering existed and the same recipe started running on machines two
   orders of magnitude apart in frame rate. Fix shape: express the budget in ticks or seconds, or
   derive the frame budget from the requested tick count and the observed tick rate. Vehicle cards
-  now carry an explicit `--frames 6000`, which is a workaround, not the fix. `[measured]`
+  now carry an explicit `--frames 200000`, which is a workaround, not the fix.
+  **Measured on the vehicle, 2026-08-29:** the daemon ticks every 100 ms (`TICK_PERIOD`), so
+  `--at-tick 20` needs 2 SECONDS. The RTX 4080 ran 1,500 frames in under a second (8 ticks) and
+  6,000 in about a second (11 ticks) — the update loop is unthrottled, so the cap expires long
+  before the sim advances. Note the cap is only ever a cut-off: with `--at-tick` the run ends when
+  the tick arrives, so a huge cap costs nothing and a small one silently truncates. An operator has
+  no way to convert "frames" into "will this reach tick 20 on my machine" without knowing their own
+  frame rate, which is exactly the calculation a recipe should not require. `[measured]`

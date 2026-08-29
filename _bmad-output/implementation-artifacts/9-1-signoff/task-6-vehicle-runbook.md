@@ -83,9 +83,9 @@ hardcoded by design (YAGNI), so a rebuild is the only lever.
 
 ```bash
 # Windows, once per half of the pair. Rename the PNG between halves so nothing is overwritten.
-gui.exe 7451 --capture 9-1-vista-shadows-off.png --at-tick 20 --frames 6000
+gui.exe 7451 --capture 9-1-vista-shadows-off.png --at-tick 20 --frames 200000
 echo "exit=$?"     # EXPECTED 101 — the ceiling fires; the PNG is still written
-gui.exe 7451 --capture 9-1-vista-shadows-on.png --at-tick 20 --frames 6000
+gui.exe 7451 --capture 9-1-vista-shadows-on.png --at-tick 20 --frames 200000
 echo "exit=$?"     # 0 if shadows brought the pool under 0.6651 %, 101 if they did not
 ```
 

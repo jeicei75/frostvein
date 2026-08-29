@@ -52,7 +52,7 @@ Copy `gui.exe` across. Its first line must read `gui build <sha>` matching the W
 judged nothing. Match the `capture range check:` line by **prefix**, never whole-line.
 
 ```bash
-gui.exe 7451 --capture 9-4-vista-trees.png --at-tick 20 --frames 6000
+gui.exe 7451 --capture 9-4-vista-trees.png --at-tick 20 --frames 200000
 echo "exit=$?"     # 0, or 101 if the blown-pool ceiling fires (see §0)
 ```
 
