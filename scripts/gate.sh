@@ -114,6 +114,7 @@ for crate in tui client-core gui; do
 done
 
 run "metrics ledger tests" python3 -m unittest discover -s _bmad/scripts/tests
+run "bench tests" python3 -m unittest discover -s scripts/tests
 
 # The sixth check is about EVIDENCE, not the product. A mutation table is evidence only as of its
 # last run, and nothing re-runs an old story's table — so later stories quietly refactor the code
