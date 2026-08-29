@@ -5,7 +5,7 @@ baseline_commit: 212fbcdc3caa0bf2daba821fe1598df2c1fdbf38
 
 # Story 10.1: The Headless Bench
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -93,8 +93,15 @@ trees by construction. Do not port its tree code, and do not port its printed `5
    3.3's recipe captured zero of every glyph and exited 0. Exit 0 is not a result.*
 7. A test drives the bench over two export files whose world content differs and asserts the
    reported geometry summary **changes**; a second test does the same for the **pixel** figures
-   between a one-cell world and an empty one. A test that only asserts the bench ran satisfies
-   neither. *Both halves of the instrument must visibly differ when what they report on differs.*
+   between a **populated** world and an empty one, **through a real render**. A test that only
+   asserts the bench ran satisfies neither. *Both halves of the instrument must visibly differ
+   when what they report on differs.*
+   *(**Reworded 2026-08-29 by Wolf, at code review.** The AC originally said "between a one-cell
+   world and an empty one". Measured: at the fixed boot camera those two render **pixel-identical**
+   — 0 of 2,073,600 values differ — because the single cell falls outside the frame, so the
+   comparison could never have proved anything. The delivered test had quietly substituted two
+   hand-built pixel lists and rendered nothing. A populated world is the smallest input that
+   exercises the pixel half end to end.)*
 8. Running the bench on an export file with no solid tiles exits **non-zero** and claims no
    success, proved by a test that spawns Blender against a minimal synthetic export.
 9. The bench's terrain palette, light table and boot-camera constants are literal-equal to the
@@ -281,6 +288,168 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         `gui --headless` renders 1280x720 against the bench's 960x540 (same aspect); no aurora,
         stars, fog or `rim_level` in the bench; and the two frames sit at different ticks, so
         dwarf positions differ while terrain does not.
+
+### Review Findings
+
+Code review 2026-08-29, fresh context, four layers (Blind Hunter / Edge Case Hunter on Sonnet,
+Acceptance Auditor / Feature Auditor on Opus), per-layer `CARGO_TARGET_DIR`. **Zero coverage
+holes** — every layer ran `cargo --version` clean, every layer executed the binaries, none timed
+out, none was killed. Convergence: 3 findings raised independently by two layers (marked below).
+Severity set by the orchestrator after reading each site, not inherited from the layers.
+
+**What the review CONFIRMED as honest:** the full gate is GREEN (run, not claimed); `strace` shows
+**0 `connect()` / 0 `socket()`** and the only repo file the bench opens is itself (AC2 proven
+mechanically); 61,142 drawn quads == 61,142 exposed faces (AC3); no test pins 44,984 anywhere
+(AC4); `bench-valley.png` reproduces from current code **bit-for-bit**, 0 of 2,073,600 values
+differing; all 7 mutation rows replay RED on their named assertion; `audit-mutations.py` clean over
+415 rows. The recorded figures (44984 / 61142 / 0.674020 / 45642) reproduced exactly on three
+independent runs.
+
+- [x] [Review][Patch] **AC7's pixel half is unachievable as worded** — the AC asks for pixel
+      figures that change "between a one-cell world and an empty one", but a real one-cell export
+      and a real empty export render **pixel-identical (0 of 2,073,600 values differ)** at the
+      fixed boot camera: the single cell is off-frame, both report
+      `non_sky_fraction=0.000000 distinct_colors=4`. The committed test
+      [scripts/tests/test_valley_bench.py:53-63] calls `pixel_figures()` on two hand-built pixel
+      lists and renders nothing, so the AC is ticked against a substitution. Residual risk is
+      bounded (AC6's floor fires at runtime; mutation row (g) drives a real render), but **no
+      committed test asserts a pixel figure from a populated real render.** Options: (a) reword
+      AC7 to "a populated world vs an empty one" and add that test; (b) place the one cell in
+      frame; (c) accept the substitution and record why. `auditor+feature`
+      **Wolf's call, 2026-08-29 — option (a):** reword AC7 to a populated world vs an empty one,
+      and add a test that asserts the pixel figures from a real populated render.
+- [x] [Review][Patch] **The bench ignores `foliage_scale`, so tree silhouettes do not predict
+      the build** — the client draws every foliage cell at **0.62–0.95** of its cell
+      [crates/gui/src/project.rs:868-892, "Keeps cube foliage readable as sparse spruce branches
+      instead of a solid square canopy"]; the bench emits full unit faces for every material
+      [scripts/bench/valley_bench.py:205-213]. In matched crops the client's trees are a slim trunk
+      carrying separated, shrunken crown cubes with sky between them; the bench's are solid green
+      slabs with a white lid. AC3 is still met (a scale, not a substituted shape). **This is the
+      geometry 10.4 will be judged on, using this bench.** Options: (a) apply `foliage_scale` now;
+      (b) document it as a known difference and let 10.4 fix the bench first. Note the "no tree
+      redesign" guardrail forbids *redesigning* trees, not reproducing the client's current draw.
+      `feature`
+      **Wolf's call, 2026-08-29 — option (a):** apply `foliage_scale` to the bench now, so 10.4 is
+      judged against a bench that draws today's trees correctly.
+- [x] [Review][Patch] **The bench's key-light direction is invented, 122° from the client's** —
+      [scripts/bench/valley_bench.py:354] `rotation_euler = (-35°, 20°, 30°)`; the client aims its
+      directional light by `aurora_light_transform()` [crates/gui/src/atmosphere.rs:209-211].
+      Measured: client light direction `(0.761, 0.112, 0.639)`, a near-horizontal rake from 6.4°
+      *below* the horizon; bench sun `(0.044, -0.637, -0.770)`, from 39.6° elevation on the
+      opposite side — **122.0° apart**, so different faces are lit and shadowed. The spec fixed the
+      light *colours*, never the direction. Options: (a) aim the sun with the client's transform
+      (aiming is not aurora geometry, so the guardrail arguably permits it); (b) document as a
+      known difference. `feature`
+      **Wolf's call, 2026-08-29 — option (a):** aim the sun with the client's
+      `aurora_light_transform()`; aiming a light is not building aurora geometry.
+- [x] [Review][Patch] **HIGH — Exit 0 is not a result: only `assert_range` is guarded** — the sole
+      exception translated into a non-zero exit is `assert_range`'s `AssertionError`
+      [scripts/bench/valley_bench.py:402-405], whose own comment explains why the translation is
+      needed. Every other exception in `main()` is unguarded and Blender's `--background --python`
+      runner prints the traceback and **still exits 0**. Reproduced three ways: malformed JSON
+      (`JSONDecodeError`, exit 0), an unknown entity kind (`KeyError` at :336, exit 0), and `dims`
+      claiming more cells than `tiles` holds (`IndexError` at :148, exit 0). Any malformed export,
+      any protocol drift, or any `export_world.py` bug crashes the renderer mid-script and reports
+      success. Fix: wrap the body of `main()` in `except Exception as error: raise SystemExit(...)
+      from error`. [scripts/bench/valley_bench.py:376-405] `blind`
+- [x] [Review][Patch] **HIGH — `AMBIENT_RGB` is a dead constant; the bench applies no ambient
+      light** — [scripts/bench/valley_bench.py:45] defines it and the only other occurrence in the
+      repo is the assertion that pins it [crates/gui/tests/bench_contract.rs:50-52]. `setup_scene`
+      builds a sun, point lights and a sky-coloured world background, and never an ambient fill;
+      the client applies `AmbientLight { color: night_lighting().ambient, brightness: 4_500.0 }`
+      [crates/gui/src/ingest.rs:714-718]. Measured over non-sky pixels of the committed pair by two
+      layers independently: bench mean luma **68.7** vs client **90.9** (medians 74.9 / 99.0), mean
+      terrain RGB `(56,81,92)` vs `(70,96,120)` — the artifact is systematically ~24 % darker and
+      less blue than the build it must predict. **Task 3 ticks this sub-requirement `[x]` and AC9
+      pins the literal as though it proved something.** Same class as this story's own two fixed
+      defects: the constant is right and nothing consumes it. `auditor+feature` (convergence)
+- [x] [Review][Patch] **HIGH — `what-you-will-see.md` omits differences Wolf is asked to judge
+      around** — AC15 requires **every** known difference written down so Wolf is not asked to
+      rediscover them. The file [_bmad-output/implementation-artifacts/10-1-signoff/what-you-will-see.md:14-27]
+      lists renderer, resolution, aurora/stars/fog/rim_level, tick and the top slice. It omits: the
+      missing ambient light (the largest tonal difference after the aurora); the invented key-light
+      direction; the ignored `foliage_scale`; the client's snow cap being a **separate raised slab**
+      `Cuboid::new(1.02, 0.08, 1.02)` at `+Y*0.54` [project.rs:195, 894-906] where the bench
+      recolours a top face [valley_bench.py:219-220]; visible Cycles sampling grain at 32 samples
+      with denoising correctly off; and ramp tiles drawn as full cubes. Content depends on the
+      three decisions above. `auditor+feature` (convergence)
+- [x] [Review][Patch] **MED — FOV and aspect are a parallel copy, so the framing test is blind to
+      the renderer's projection** — `project_boot_point` re-declares `math.pi / 4` and `16.0 / 9.0`
+      as its own literals [scripts/bench/valley_bench.py:126-128] while the renderer reads
+      `camera_data.angle` [:359] and `resolution_x/y` [:315-316]. Demonstrated on a `/tmp` copy:
+      widening `camera_data.angle` to `math.pi / 3` changes **1,050,234 of 2,073,600 pixel values**
+      — a visibly different frame — while the framing test still reads
+      `camp=(0.500, 0.779) skyline_y=0.240`, inside tolerance, and the range check still exits 0.
+      Only the text scrape catches it, which is the guard that stayed green through the 110° roll.
+      The comment at [:363-366] claims "a change here cannot leave that test green against a frame
+      it no longer matches" — true for the basis, **false for the projection**. `feature`
+- [x] [Review][Patch] **MED — AC9's dwarf row anchors a match-arm header, not the values** — the
+      client literal is `"EntityKind::Dwarf => EntityAppearance {"`
+      [crates/gui/tests/bench_contract.rs:69-72]; every other row anchors the value line itself.
+      Mutating the dwarf colour to `(9,9,9)` and scale to `0.01` in a fixture left the anchor
+      matching. The bench's pinned `"dwarf": ((151, 116, 96), 0.65)` can go stale with the guard
+      green, and the sabotage table has no dwarf row. [crates/gui/src/appearance.rs:277-278]
+      `edge+auditor` (convergence)
+- [x] [Review][Patch] **MED — AC9's light rows match a literal that occurs 4x file-wide** —
+      [crates/gui/tests/bench_contract.rs:57-68] matches `"color: Color::srgb_u8(255, 140, 62)"`
+      against the whole of `appearance.rs`, not against the `LightKind::Torch` arm. Counted in
+      current source: `255, 140, 62` **4 occurrences**, `255, 173, 92` **4**, `255, 195, 110` **3**.
+      Swap Torch and Campfire colours in the client and every literal is still present — the test
+      stays green while the bench's lights no longer match. `auditor`
+- [x] [Review][Patch] **MED — the `py` tier reports SURVIVED, with no diagnostic, when Blender is
+      merely absent** — 3 of the 7 rows target `ValleyBlenderTests`, which is
+      `skipUnless(shutil.which("blender"))` [scripts/tests/test_valley_bench.py:79]. With Blender
+      off `PATH` the row exits 0, misses the NO-COLLECT regex, and falls to the SURVIVED branch
+      [scripts/mutate.sh:69-73, 99-103]; its diagnostic greps for cargo's `test result` string,
+      which never matches unittest output, so the operator sees an empty row and reads "the test is
+      not pinning what it claims" when the test never ran. This is the false-KILL class the story
+      closed, reappearing as its mirror. `edge`
+- [x] [Review][Patch] **MED — a mistyped tier is reported as KILLED** — `[ "$tier" = "py" ]` is the
+      only gate [scripts/mutate.sh:69-73]; anything else (`"Py"`, a stray space, empty) goes to
+      `cargo test --offline -p "$tier"`, which exits **101** with `did not match any packages` /
+      `package name cannot be empty`. Neither matches the `could not compile` guard, so `rc != 0`
+      → **KILLED** [scripts/mutate.sh:82-94], a clean kill proving nothing about any test. `edge`
+- [x] [Review][Patch] **MED — the gate prints `ok` while bench tests skip** — [scripts/gate.sh:117]
+      with the `run` helper [:73-83] discarding stdout on success. With Blender off `PATH`,
+      `python3 -m unittest discover -s scripts/tests` exits 0 printing `OK (skipped=2)`, and the
+      gate line reads `bench tests  ok` with no skip announcement. Task 5 explicitly required
+      "report which tests actually ran — a skipped AC8 has judged nothing." `edge`
+- [x] [Review][Patch] **MED — the orchestrator's dev-phase spend is unrecorded** — the ledger has
+      **zero `dev | claude` rows** for 10.1, only two `dev | codex` rows ($2.12 + $0.29), and
+      session `2870b2e6` (2.4 MB, running to 18:37:49 UTC) is **absent from `.session-cursors.json`
+      entirely** — neither rowed nor `--mark`ed. That window produced `74f3a23`..`40acd37`: the
+      verification, both defect fixes, the two new tests, the two extra sabotage rows, the
+      re-rendered pair, the gate and the record. So 10.1's dev reads as $2.41/132 turns while the
+      work that found and fixed both HIGH defects is billed to nobody, which will corrupt Epic 10's
+      dev-vs-review comparison. Per the METRIC RULE that window was owed a **row**. Still
+      recoverable: the transcript is on disk and the cursor never advanced past it.
+      [_bmad-output/implementation-artifacts/metrics/10-1-the-headless-bench.md] `orchestrator`
+- [x] [Review][Patch] **LOW (latent silent-failure — patched under the standing exception) —
+      `audit-mutations.py` prints Rust-only wording for py-tier orphans** — [scripts/audit-mutations.py:186-188]
+      unconditionally prints ``no `fn {test}` anywhere under crates/`` even though the tier-aware
+      search added in this diff [:99-107] looks for `def` under `scripts/` when `tier == "py"`.
+      Reproduced against a scratch fixture. A developer chasing a real orphaned py row is sent to
+      look for a Rust `fn` under `crates/`. `edge`
+- [x] [Review][Patch] **LOW (latent silent-failure — patched under the standing exception) — the
+      widened backup set still misses `_bmad/scripts/*.py`** — [scripts/mutate.sh:46]
+      `git ls-files 'crates/*' 'scripts/*'` now covers this story's Gap 1, but leaves
+      `_bmad/scripts/session_tokens.py` and its tests outside the restore set, while `gate.sh:116`
+      runs them. The `py` tier is generic, so a future row sabotaging that file would be **silently
+      left mutated on disk**, contradicting the file's own header ("Every tracked file is restored
+      from a backup after each mutation"). Same shape as the gap this story closed. `edge`
+- [x] [Review][Defer] **No `timeout=` anywhere in the new Blender-spawning chain**
+      [scripts/tests/test_valley_bench.py:81-101; scripts/mutate.sh:69-70; scripts/gate.sh:117] —
+      deferred, first subprocess in this repo that can hang the gate indefinitely; no observed hang.
+- [x] [Review][Defer] **`export_world.py` ignores `CARGO_TARGET_DIR`** [scripts/bench/export_world.py:18]
+      — deferred, AC5's actual requirement (both devpod mounts) is met; a target-dir override yields
+      a stale or missing binary, the stale-binary trap's seventh shape.
+- [x] [Review][Defer] **AC9 guards light colours but not intensities**
+      [crates/gui/src/appearance.rs:45,48 vs scripts/bench/valley_bench.py:344,352] — deferred,
+      Blender and Bevy units genuinely differ so literal equality is impossible; an interpretation
+      question for 10.3's contract work, not a defect.
+- [x] [Review][Defer] **Ramp tiles render as full cubes** [scripts/bench/valley_bench.py:215-218,
+      FACE_CORNERS] — deferred, `Ramp(_)` correctly occludes for the exposed predicate, but no
+      sloped geometry exists; a known simplification that was never written down.
 
 ## Dev Notes
 
@@ -613,6 +782,127 @@ buys nothing). No `codex review` conclusion exists for this story.
 - _bmad-output/implementation-artifacts/metrics/10-1-the-headless-bench.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
+### Review Patch Record — 2026-08-29
+
+**All 15 patch findings applied; all 3 decision-needed resolved by Wolf as option (a).** Full gate
+GREEN (run, not claimed). Mutation table 7 -> 14 rows, **14/14 KILLED, zero APPLY-FAILED, zero
+NOT-RUN, zero BAD-TIER**. Bench tests **7 -> 17, none skipped**. `audit-mutations.py` clean (422
+rows).
+
+**The three defects the review found were one shape, and it is this story's own shape.** 10.1
+already shipped two fixes for "the constant is right and the code consuming it is wrong or
+absent". The review found three more of exactly that:
+
+1. **`AMBIENT_RGB` was a dead constant.** Defined at `valley_bench.py:45`, pinned by the AC9 drift
+   guard, and read by nothing. `setup_scene` built a sun, point lights and a sky-coloured world
+   background but never an ambient fill, while the client applies
+   `AmbientLight { .., brightness: 4_500.0 }` [ingest.rs:714-718]. Measured over non-sky pixels of
+   the committed pair, independently by two review layers and again by the orchestrator: bench
+   mean luma **68.2** against the client's **90.3**. Task 3 ticked the sub-requirement `[x]`.
+   *Fix:* Cycles has no ambient-light object, so the world background now mixes on `Is Camera Ray`
+   — flat `SKY_RGB` to the camera, `AMBIENT_RGB` to every other ray.
+2. **The exit-0 guard was applied to one call site, not to `main()`.** Only `assert_range`'s
+   `AssertionError` reached the shell. Malformed JSON, an unknown entity kind and a `dims`/`tiles`
+   mismatch each printed a traceback under `blender --background` and **exited 0**. Reproduced
+   three ways by the Blind Hunter, and all three are now a test.
+3. **FOV and aspect were a parallel copy.** `project_boot_point` re-declared `math.pi / 4` and
+   `16.0 / 9.0` while the renderer set `camera_data.angle` and `resolution_x/y` independently.
+   Demonstrated: widening only the render FOV to `pi/3` moved **1,050,234 of 2,073,600 pixels**
+   while the framing test still read `camp=(0.500, 0.779)`, inside tolerance, and the range check
+   still exited 0. The camera comment claimed a change "cannot leave that test green against a
+   frame it no longer matches" — true for the basis it had just fixed, false for the projection.
+
+**Wolf's three calls, all option (a):**
+- **AC7 reworded** and given a real test. The AC asked for pixel figures differing between a
+  one-cell world and an empty one; measured, those two render **pixel-identical** at the fixed
+  boot camera because the cell is off-frame. The delivered test had substituted two hand-built
+  pixel lists and rendered nothing. Now a populated world vs an empty one, through Blender.
+- **`foliage_scale` applied** [project.rs:868-892]: foliage draws at 0.62/0.78/0.95 of its cell,
+  so crowns read as sparse branches rather than solid slabs. 10.4 is judged on this bench, and it
+  was mis-drawing the geometry 10.4 changes. Scale moves only where a face is DRAWN, never which
+  faces are exposed — cell and face counts are unchanged.
+- **The sun is aimed the way the client aims it.** `aurora_core()` is ported [atmosphere.rs:67-71];
+  `sun_direction()` computes **(0.761, 0.112, 0.639)**, matching the Feature Auditor's independent
+  derivation exactly. The replaced hand-picked euler pointed **122 degrees** away.
+
+**Exposure is CALIBRATED, not converted, and not tuned by eye.** Bevy's `brightness: 4_500` /
+22,000 lux and Cycles' background strength / sun energy share no units, and the bench omits the
+aurora, which is a real light source in the client. Both scalars were fitted to one objective
+target — mean Rec.709 luma over the bottom 65% of frame, terrain-dominated at the boot framing and
+free of the aurora that contaminates a whole-frame average:
+
+| | client `gui-capture.png` | bench, before | bench, after |
+| --- | --- | --- | --- |
+| mean luma, bottom 65% | **105.7** | 65.0 | **103.6** |
+| mean RGB | (87, 108, 138) | (49, 68, 78) | (81, 106, 147) |
+
+**A new figure in the range check: `terrain_luma`** — the one that would have caught the dead
+ambient, which no existing floor could, because a dark frame is neither empty nor monochrome. On
+the populated test world it reads **124.3 wired against 0.456 unwired**.
+
+**Instrument, re-measured on the patched bench (AC 4, 6, 10):**
+- `exposed cells: 44984 faces: 61142` — unchanged, and still pinned by nothing.
+- `range-check: exposed_cells=44984 non_sky_fraction=0.686815 distinct_colors=58993 terrain_luma=106.260 floors(non_sky_fraction=0.020000, distinct_colors=32, terrain_luma=20.000)`
+- Cycles internal **1.42 s / 1.41 s**; whole `blender --background` process **4.34 s / 4.35 s**.
+- Pixel determinism: **0 of 2,073,600 RGBA values differ**. PNG bytes still differ (tEXt).
+
+**Harness: three false verdicts, all reproduced before being fixed.**
+- A py row whose test SKIPPED (Blender absent) exited 0, missed every guard and landed in
+  **SURVIVED** — "your test is not pinning what it claims", when the test never ran. Now `NOT-RUN`.
+- A **mistyped tier** fell through to `cargo test -p <typo>`, which exits 101 with "did not match
+  any packages" — not "could not compile" — and printed **KILLED** having run nothing. Tiers are
+  now validated against the workspace package list; `Py`, `""` and `" gui"` all return `BAD-TIER`.
+- `gate.sh` printed `bench tests  ok` with 2 of 7 tests skipped. It now prints
+  `ok — WITH SKIPS (coverage hole)`, verified with Blender genuinely off `PATH`.
+- Backup set widened again to `_bmad/scripts/*`; `audit-mutations.py` no longer prints Rust
+  wording for py-tier orphans.
+
+**Mutation rows — 14/14 KILLED, and each checked for WHICH assertion kills it:**
+
+| row | killing assertion |
+| --- | --- |
+| palette drift | `bench_contract.rs:24` — anchor matched 0 |
+| boot camera drift | `bench_contract.rs:24` — anchor matched 0 |
+| missing range assertion | exit-code assert, `0 == 0` |
+| inverted neighbour predicate | `{'faces': 12} != {'faces': 10}` |
+| zero exit | exit-code assert, `0 == 0` |
+| z-up camera basis | `0.352 != 0.48 within 0.03 delta` |
+| linear sky reference | real render prints `non_sky_fraction=1.000000` |
+| **unwired ambient** | real render EXITS NON-ZERO — the `terrain_luma` floor rejects it |
+| **dwarf colour drift** | `bench_contract.rs:24` — arm anchor matched 0 |
+| **torch/campfire swapped** | `bench_contract.rs:24` — arm anchor matched 0 |
+| **full-size foliage** | `1.0 != 0.62 within 6 places` |
+| **re-copied FOV literal** | `projection ignores BOOT_VERTICAL_FOV` |
+| **hand-picked sun aim** | `key light points downward: (0.044, -0.637, -0.77)` |
+| **swallowed exception** | exit-code assert `0 == 0`, on all three broken exports |
+
+**One row was re-mutated after being strengthened, and it mattered.** The sun-aim row first died on
+`1.000605 != 1.0` — the *normalisation* assert, because a hand-written vector is never exactly unit
+length. It reported KILLED while pinning nothing about direction, and looked identical from outside
+to a row that worked. The aim assertions were moved ahead of the normalisation and the row re-run:
+it now dies on `key light points downward`. This is the third time this project has hit "KILLED
+names the test, not the assertion".
+
+**Metrics defect closed.** The ledger had zero `dev | claude` rows and session `2870b2e6` was
+absent from `.session-cursors.json` entirely — neither rowed nor marked — while that window
+produced the verification and both original defect fixes. Recorded: **226 turns, $22.36**. 10.1's
+dev cost is **$24.77, not $2.41**.
+
+**STILL OPEN — AC15, and its "known differences" clause is now met but its judgement is not.**
+The signoff pair was **re-rendered**: the previous `bench-valley.png` was made unlit, with the sun
+122 degrees off and full-size foliage, so it is not the picture to judge. `what-you-will-see.md`
+was rewritten and now names every difference the review found — the aurora and stars, the camp
+pool's much larger blown core (the client drives its campfire at 25M lm against the bench's Cycles
+1,500; only light *colours* are pinned, intensities are a deferred calibration question), Cycles
+grain at 32 samples, the snow-cap slab geometry, ramps drawn as cubes, and the exposure
+calibration — ordered by how much of the frame each moves. **Whether the bench artifact predicts
+the build remains Wolf's call and no agent can close it.**
+
+**Coverage holes carried into this record, not resolved by it:** `codex review --base main` still
+never ran on this story. The `gui --headless --capture` exit-101 limitation is unchanged and the
+client half of the pair was not re-rendered, correctly — the review changed no crate behaviour,
+only a test, proved against this story's own commit range.
+
 ## Change Log
 
 | date | change |
@@ -621,3 +911,4 @@ buys nothing). No `codex review` conclusion exists for this story.
 | 2026-08-29 | Implemented the headless bench, tests, mutation coverage, and signoff artifacts. |
 | 2026-08-29 | Dev run 1 (Codex `gpt-5.6-terra`, 9 commits): export, geometry, look, range check, tests, mutation table, signoff pair. Handed back three honest caveats rather than claiming success. |
 | 2026-08-29 | Orchestrator verification found two defects a green gate could not see, both fixed with tests and sabotage rows: the bench camera was **rolled 110 degrees** so the artifact did not predict the build (AC15's failure mode; AC9's text-scrape guard stayed green because the constants were right and the maths was wrong), and the range check's pixel half was **inert on real renders** because it compared a display-referred readback against a linear reference, scoring a 100%-sky frame at `non_sky_fraction=1.000000`. Mutation table 5 rows -> **7, all KILLED**, each verified to kill on the intended assertion. Full gate GREEN, 7 bench tests, 0 skipped. Re-measured: Cycles 1.77 s / 1.66 s, process 4.68 s / 4.54 s, 0 of 2,073,600 pixels differ. Self-gate NOT run — a named coverage hole. AC15 remains open for Wolf. |
+| 2026-08-29 | **Code review (4 layers, zero coverage holes) + patch pass.** 15 patch findings and 3 decisions, all applied. Three defects of the story's own signature shape: `AMBIENT_RGB` was a dead constant (frame ~24% dark), the exit-0 guard covered one call site so malformed exports reported success, and FOV/aspect were a parallel copy (a pi/3 FOV moved 1,050,234 pixels with the framing test green). Wolf took option (a) on all three decisions: AC7 reworded and given a real populated-vs-empty render, `foliage_scale` applied, and the sun aimed by the client's `aurora_light_transform()`. Exposure calibrated against the client capture: 103.6 vs 105.7 mean luma. New `terrain_luma` figure in the range check. Harness stopped reporting three false verdicts (skip-as-SURVIVED, typo-as-KILLED, gate `ok` over skips). Mutations 7 -> **14, all KILLED**, one re-mutated after an earlier assert absorbed it. Tests 7 -> **17, none skipped**. Full gate GREEN. Orchestrator's unbilled dev window recorded: dev cost $2.41 -> **$24.77**. Signoff pair re-rendered; **AC15 still open for Wolf**. |

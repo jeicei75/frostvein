@@ -1244,3 +1244,40 @@ look change becomes a story.
   as a delta between two headless runs — which is how AC7 and AC13's controlled pair were read, so
   neither conclusion is affected. If headless area is ever wanted as a gate, it needs its own
   renderer-specific ceiling calibrated the same way boot7's was. `[measured]`
+
+## Deferred from: code review of 10-1-the-headless-bench (2026-08-29)
+
+Four layers, zero coverage holes. Three items deferred as real-but-not-now; the two LOW
+latent-silent-failure items (`audit-mutations.py`'s Rust-only orphan wording and `mutate.sh`'s
+backup set missing `_bmad/scripts/*.py`) were NOT deferred — they were patched under the standing
+frostvein exception for instruments that report a wrong value nobody will ever see.
+
+- **No `timeout=` anywhere in the new Blender-spawning chain.**
+  `scripts/tests/test_valley_bench.py:81-101` calls `subprocess.run([...blender...])` with no
+  `timeout=`; `scripts/mutate.sh:69-70` and `scripts/gate.sh:117` both call into it unwrapped.
+  These are the first subprocesses in this repo that can hang the gate or a mutation run
+  indefinitely with no recovery. `mutate.sh`'s own comments treat exactly this class as
+  first-class for cargo (the NO-COMPILE false-green history) but nothing covers the new tier.
+  No hang has been observed; deferred on that basis.
+
+- **`export_world.py` ignores `CARGO_TARGET_DIR`.**
+  `scripts/bench/export_world.py:18` derives `<repo>/target/debug/simd` from `__file__`, which is
+  exactly what AC5 required (runs from either devpod mount) and is met. But a user who builds with
+  a target-dir override gets a stale or missing binary — the "stale-binary trap" the story records
+  as having fired six times, in a seventh shape. Deferred: correct for both real mount paths today.
+
+- **AC9 guards the light table's colours but not its intensities.**
+  `crates/gui/src/appearance.rs:45,48` carries `ambient_brightness: 4_500.0` and
+  `directional_illuminance: 22_000.0`; the bench uses `sun_data.energy = 3.0`
+  (`scripts/bench/valley_bench.py:352`) and point energies `750/1500/300` against the client's
+  `14M/25M/5M` (`appearance.rs:52-86`). Blender and Bevy units genuinely differ, so the AC's
+  "literal-equal" cannot apply to intensities and the delivered guard silently covers only the
+  colour half. An interpretation question for 10.3's contract work, not a defect.
+
+- **Ramp tiles render as full cubes; the bench has no sloped geometry.**
+  `scripts/bench/valley_bench.py:215-218` treats a `{"ramp": ...}` tile as solid for exposure
+  (correct — it matches `project.rs:429-442`, and `Ramp(_)` must occlude), but `FACE_CORNERS`
+  defines only axis-aligned cube faces, so a ramp draws as an ordinary cube. The script names its
+  other known divergence in a `// NOTE:` (the client's top-slice layer) and does not name this one.
+  Deferred as a simplification; folded into `what-you-will-see.md` so Wolf is not asked to
+  rediscover it.

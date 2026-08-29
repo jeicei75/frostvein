@@ -43,7 +43,49 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-29  # 10.1 -> REVIEW. Codex dev + orchestrator verification found TWO defects a
+last_updated: 2026-08-29  # 10.1 CODE-REVIEWED -> IN-PROGRESS. Four layers, ZERO coverage holes (every
+                          # layer ran cargo AND the binaries; none timed out) -- the second clean full house
+                          # since the isolation fix. 15 patch findings + 3 decisions, ALL APPLIED.
+                          # THE REVIEW FOUND THREE MORE OF THIS STORY'S OWN SIGNATURE SHAPE, "the constant
+                          # is right and the code consuming it is absent": (1) AMBIENT_RGB was DEFINED,
+                          # PINNED BY THE DRIFT GUARD, AND READ BY NOTHING -- the artifact rendered ~24%
+                          # darker than the build it exists to predict (bench mean luma 68.2 vs client 90.3,
+                          # measured by two layers independently); (2) the exit-0 guard was applied to ONE
+                          # CALL SITE, not to main(), so malformed JSON / an unknown entity kind / a
+                          # dims-vs-tiles mismatch each printed a traceback and EXITED 0; (3) FOV and aspect
+                          # were a PARALLEL COPY -- widening only the render FOV moved 1,050,234 of 2,073,600
+                          # pixels while the framing test stayed inside tolerance and the range check exited 0.
+                          # The camera comment claimed that could not happen; it was true for the basis the
+                          # dev pass had just fixed, false for the projection.
+                          # WOLF TOOK OPTION (a) ON ALL THREE DECISIONS. AC7 WAS REWORDED because it was
+                          # UNACHIEVABLE AS WRITTEN: a one-cell export and an empty one render PIXEL-IDENTICAL
+                          # at the fixed boot camera (the cell is off-frame), and the delivered test had
+                          # quietly substituted two hand-built pixel lists and rendered nothing. Now a
+                          # populated world vs an empty one, through Blender. foliage_scale APPLIED (10.4 is
+                          # judged on this bench and it was mis-drawing the very geometry 10.4 changes), and
+                          # the sun is aimed by the client's aurora_light_transform() -- the hand-picked euler
+                          # was 122 DEGREES OFF. Exposure CALIBRATED, not converted and not eyeballed: mean
+                          # luma over the bottom 65% of frame 103.6 vs the client capture's 105.7.
+                          # NEW INSTRUMENT FIGURE terrain_luma, the one no existing floor could provide --
+                          # a dark frame is neither empty nor monochrome. 124.3 wired vs 0.456 unwired.
+                          # HARNESS STOPPED REPORTING THREE FALSE VERDICTS, each reproduced first: a SKIPPED
+                          # py row read as SURVIVED ("your test is weak" when it never ran) -> NOT-RUN; a
+                          # MISTYPED TIER read as KILLED via cargo's package-resolution 101 -> BAD-TIER; and
+                          # gate.sh printed "bench tests ok" over 2 skipped tests -> "ok - WITH SKIPS".
+                          # Mutations 7 -> 14, ALL KILLED, and ONE WAS RE-MUTATED after strengthening: the
+                          # sun row first died on the NORMALISATION assert (1.000605 != 1.0), reporting KILLED
+                          # while pinning nothing about direction. Third instance of "KILLED names the TEST,
+                          # not the assertion" here. Tests 7 -> 17, none skipped. FULL GATE GREEN.
+                          # METRICS DEFECT CLOSED: zero dev|claude rows existed and session 2870b2e6 was
+                          # ABSENT FROM THE CURSORS ENTIRELY -- neither rowed nor marked -- though it produced
+                          # both original defect fixes. Recorded 226 turns / $22.36; dev $2.41 -> $24.77.
+                          # SIGNOFF PAIR RE-RENDERED (the old one was unlit, mis-aimed and full-size-foliage,
+                          # so it was not the picture to judge) and what-you-will-see.md now names EVERY known
+                          # difference, including the camp pool's blown core (client campfire 25M lm vs the
+                          # bench's 1,500 -- only light COLOURS are pinned, intensities are deferred).
+                          # AC15 STILL OPEN: whether the artifact PREDICTS the build is Wolf's eye alone.
+                          # `codex review --base main` STILL NEVER RAN on this story -- an absence, not a pass.
+                          # PRIOR: 10.1 -> REVIEW. Codex dev + orchestrator verification found TWO defects a
                           # green gate could not see: the bench camera was ROLLED 110 DEGREES (the artifact
                           # did not predict the build = AC15's failure mode; AC9's text-scrape guard stayed
                           # green because the literals were right and the maths using them was wrong), and
@@ -1206,7 +1248,7 @@ development_status:
   # the frame (snow caps, spruce crowns) were missing from the palette; Blender's sensor_fit
   # defaults to HORIZONTAL fov against Bevy's vertical; and the promoted exporter carried a
   # hardcoded absolute path that fails on the second devpod mount.
-  10-1-the-headless-bench: review
+  10-1-the-headless-bench: in-progress
   10-2-the-live-seat-blendermcp-on-gingerspice-spike: backlog
   10-3-the-rules-of-the-look: backlog
   10-4-the-trees-look-right-the-pilot: backlog

@@ -13,3 +13,4 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | create | claude | claude-opus-5, claude-sonnet-5 | 438 | 876 | 2,235,306 | 41,502,805 | 279,536 | 44,018,523 | $36.30 | `e24e10db-4175-41e1-aec5-95638e1b854d.jsonl` | 2026-08-29 17:27 UTC · rates 2026-08-01 | 30 | — |
 | dev | codex | gpt-5.6-terra | 117 | 202,760 | 0 | 12,006,784 | 36,306 | 12,245,850 | $2.12 | `rollout-2026-08-29T17-36-49-01a04e98-747f-7c23-9ec4-9d79b7a3d768.jsonl` | 2026-08-29 18:22 UTC · rates 2026-08-01 | 23 | 45pp |
 | dev | codex | gpt-5.6-terra | 15 | 66,151 | 0 | 788,736 | 10,923 | 865,810 | $0.29 | `rollout-2026-08-29T18-04-36-01a04eb1-e331-77e1-a198-258296658660.jsonl` | 2026-08-29 18:23 UTC · rates 2026-08-01 | 4 | 9pp |
+| dev | claude | claude-opus-5 | 226 | 452 | 406,371 | 30,189,292 | 188,874 | 30,784,989 | $22.36 | `2870b2e6-ac51-4ae3-8a12-7700b6b9eacc.jsonl` | 2026-08-29 22:30 UTC · rates 2026-08-01 | 64 | — |
