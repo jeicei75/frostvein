@@ -927,6 +927,17 @@ executed a single line of its production path.**
   Story 9.1 enabled campfire shadows without changing intensity, range, flicker, or emissive; its
   vehicle card requires a re-check at Epic 9's shared sitting to determine whether the campfire
   was the cause. The rendered hover fix, if still needed, remains Story 9.2. `[wolf/MED]`
+  **RESTATED 2026-08-29 (9.1 AC15). CAUSATION ANSWERED: YES, and it is structural rather than
+  incidental.** The hover slab is `(80,220,210)`, luminance **189.5** — a LIGHT-ON-DARK marker,
+  +40.5 against night snow (149.0), which is why it reads everywhere else. It sits **10.5 BELOW
+  the 200 near-white threshold** that defines the campfire's blown pool, and that pool covers
+  0.65-1.0 % of the frame and saturates toward 255. Inside it the background is BRIGHTER than the
+  marker, so the contrast inverts and the slab disappears. Measured on 9.1's controlled pair: the
+  pool persists at every threshold in BOTH shadow states, so shadows do not recover it.
+  **WHAT 9.2 INHERITS:** a brighter slab cannot fix this — nothing beats a background that reaches
+  255 on luminance alone. The marker needs hue/saturation separation or an outline. **STILL OPEN:**
+  the rendered judgement, which is 9.2's, and which needs a window (the hover path reads
+  `windows.single()`, so it cannot be exercised headlessly).
 
 ## Deferred from: code review of 8-2-designate-with-the-mouse (2026-08-26)
 

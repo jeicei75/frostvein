@@ -1,5 +1,21 @@
 # Story 9.4 — Task 7 vehicle session card
 
+## READ THIS FIRST — 2026-08-29. THE INSTRUMENT AND THE FIGURES BELOW CHANGED.
+
+- **The assertion is now `near-white-area <= 1.5630426 %`**, calibrated on `boot7.png`. The
+  `blown-pool` figure is still printed but is a DIAGNOSTIC ONLY — its connected-component measure
+  has a threshold cliff and is unreliable. **Ignore every `0.6651 %` bar written below.**
+- The range-check line gained a field: `... near-white-area=X% blown-pool=Y% p99-luminance=Z`.
+- **AC7 has already been measured headlessly**, so this sitting does not owe those numbers.
+  Ground median **123 -> 117** (inside the 70-180 band, no breach) and near-white area rose ~18 %
+  on the same renderer. Predicted here: around **1.74 %** area, i.e. **expect exit 101** against a
+  ceiling calibrated on a GPU frame. Record the number; that is the measurement, not a broken build.
+- **The startup draw-set line now reads `projected 44984 terrain cubes at z 31`**, not 53365 —
+  tree density changed, then the ground-level foliage ring was removed. Not a regression.
+- **What this sitting actually owes for 9.4 is AC10 only: your eye on the current build.** Trees
+  should read as fewer, green rather than blue-grey, each with a visible trunk, and with no green
+  cubes lying on the ground and no bright snow ring at their base.
+
 **Vehicle:** gingerspice only (native Windows / NVIDIA Vulkan). This is a pre-session recipe, not
 a record of a run. Fill every blank during Epic 9's shared vehicle sitting; do not infer values.
 

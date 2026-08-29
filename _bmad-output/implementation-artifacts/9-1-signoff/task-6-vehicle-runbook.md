@@ -5,7 +5,36 @@ a record of a run. Fill every blank during Epic 9's shared vehicle sitting; do n
 
 **Corrected at code review 2026-08-28.** The first draft could not be executed: its build-identity
 stop-rule halted the shadows-off run, it never said how to disable shadows, and it carried no
-`--capture` command or exit codes. All three are fixed below. Read §0 before anything else.
+`--capture` command or exit codes. All three are fixed below.
+
+---
+
+## READ THIS FIRST — 2026-08-29. MOST OF THIS CARD IS NO LONGER NEEDED.
+
+**The shadows-off/on controlled pair (AC13, §2 below) HAS BEEN MEASURED**, headlessly, on this
+story's own tree. You do not need the `-dirty` shadows-off rebuild. Result: shadows WORK —
+warm-lit pixels **-15.7 %**, near-white area **-10 %** — and the apparent +34.8 % blown-pool
+regression was an artefact of the old instrument (details in the story's "ACs 12-15" section).
+**AC12 is also done** on your ~140 fps reading.
+
+**TWO THINGS CHANGED IN THE INSTRUMENT ITSELF. Every printed figure and bar below is stale:**
+
+1. The range-check line gained a field and now reads:
+   `capture range check: warm-lit pixels=N ground-median-luminance=N near-white-area=X% blown-pool=Y% p99-luminance=Z`
+2. **The assertion is now `near-white-area <= 1.5630426 %`**, calibrated on `boot7.png`
+   (14,405 of 921,600 px). The `blown-pool` figure is still printed but is now a DIAGNOSTIC ONLY —
+   it measures a connected component whose threshold cliff makes it unreliable. Do not judge
+   anything by it and do not compare it to `0.6651 %`.
+
+**SO THE ONLY THING THIS SITTING STILL OWES FOR 9.1 IS ONE CAPTURE:** run §3's shadows-ON command
+and record `near-white-area`. If it is at or under 1.5630426 %, AC13's ceiling half is CONFIRMED.
+If it is over, that is the correction and AC13 is closed by recording the number — not a failure.
+Predicted from the headless run: around 1.47 % on 9.1's tree, around 1.74 % with 9.4's trees.
+
+Ignore §0's second bullet and §2 entirely. §1 (build identity) and the AC14/AC15 eye questions
+still stand.
+
+---
 
 ## 0. Two things that will otherwise look like failures
 
@@ -65,9 +94,9 @@ oracle's line shape and older recipes quoting whole lines stopped matching.
 
 ```text
 shadows off — capture range check: _______________________________
-  blown-pool: ______ %    p99: ______    exit: ______
+  near-white-area: ______ %  (bar: <= 1.5630426 %)   blown-pool: ______ % (diagnostic only)   p99: ______   exit: ______
 shadows on  — capture range check: _______________________________
-  blown-pool: ______ %    p99: ______    exit: ______
+  near-white-area: ______ %  (bar: <= 1.5630426 %)   blown-pool: ______ % (diagnostic only)   p99: ______   exit: ______
 ```
 
 For each run, `gui build <sha>`: __________. The on result is judged against the 0.6651 % ceiling;

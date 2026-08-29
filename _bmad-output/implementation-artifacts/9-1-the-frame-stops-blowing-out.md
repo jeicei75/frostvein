@@ -675,10 +675,17 @@ now supplies the numbers behind it, and corrects their direction: shadows moved 
 way (warm-lit -15.7 %, area -10 %), just nowhere near far enough. **This story proved shadows are
 insufficient, with an instrument that did not exist before — which is what it set out to do.**
 
-**AC15 — PARTIALLY ANSWERED.** What 9.1 owes is *whether the campfire was the cause*, and the
-answer is yes: the near-white pool around the fire persists at every threshold and in both shadow
-states. The slab's rendered judgement remains 9.2's. **Not closed headlessly**: the hover slab needs
-the scripted-cursor path, which reads `windows.single()` and is empty without a window.
+**AC15 — 9.1's HALF IS ANSWERED, WITH NUMBERS.** The AC scopes 9.1 to one question — *was the
+campfire the cause?* — and hands the rendered fix to 9.2. **Yes, and it is structural.** The hover
+slab is `(80,220,210)`, luminance **189.5**: a light-on-dark marker, +40.5 against night snow
+(149.0), which is why it reads everywhere else. It sits **10.5 below the 200 near-white threshold**
+that defines the blown pool, and that pool covers 0.65-1.0 % of the frame and saturates toward 255.
+Inside it the background is brighter than the marker, the contrast inverts, and the slab vanishes.
+The controlled pair shows the pool persists at every threshold in BOTH shadow states, so shadows do
+not recover it. **What 9.2 inherits:** a brighter slab cannot fix this — nothing beats a background
+reaching 255 on luminance alone; the marker needs hue/saturation separation or an outline.
+**Still 9.2's and still vehicle-bound:** the rendered judgement. The hover path reads
+`windows.single()` and cannot be exercised headlessly.
 
 **WHAT REMAINS FOR THE VEHICLE:** AC13's ceiling half, AC15's rendered half, and any decision to
 open the withheld levers (intensity, amplitude, range, emissive). Those stay withheld.
