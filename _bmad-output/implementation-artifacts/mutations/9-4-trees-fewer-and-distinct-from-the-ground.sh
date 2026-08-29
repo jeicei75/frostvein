@@ -74,3 +74,26 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''        )
 }''', 1))
 PY
+
+# Added 2026-08-29 with Wolf's second vehicle ruling. Restores the ground-level foliage ring, which
+# is the production defect: it seals the lower trunk so a third of trees draw none. The row must
+# die on the TRUNKLESS assertion, not on the foliage-at-base one -- the trunkless clause is the
+# outcome Wolf asked for and the base-level clause is only its mechanism.
+mutation "the ground-level foliage ring comes back and seals the trunks" sim-core every_tree_shows_a_trunk_and_no_foliage_sits_at_the_trunk_base <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/worldgen.rs'); s = p.read_text()
+anchor = '            // NO FOLIAGE RING AT surface + 1.'
+assert s.count(anchor) == 1
+ring = '''            for fy in y - 1..=y + 1 {
+                for fx in x - 1..=x + 1 {
+                    if fx != x || fy != y {
+                        let foliage = index(dims, fx, fy, surface + 1);
+                        if tiles[foliage] == Tile::Empty {
+                            tiles[foliage] = Tile::Solid(Material::TreeFoliage);
+                        }
+                    }
+                }
+            }
+'''
+p.write_text(s.replace(anchor, ring + anchor, 1))
+PY

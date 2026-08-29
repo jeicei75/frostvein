@@ -547,13 +547,55 @@ new ground-rest clause was never reached — the assertion passed for the wrong 
 third time in this story that running the table, rather than reading it, found the defect. Fixture
 rebuilt so the skirt cell has open sky and the new clause is the only thing that can make it false.
 
-**Also measured at the review and NOT fixed here** (filed in `deferred-work.md`): **86 of 265 trees
-(32.5 %) draw no trunk at all** — exactly the height-4 trees, 100 % of them. The trunk spans
+### The ground-level foliage ring — Wolf's second vehicle ruling, 2026-08-29
+
+Looking again after the snow fix, Wolf reported *"I see green boxes on ground level next to some
+full trees"* and *"some trees are still partially even more now underground"*. Measured, both were
+ONE cause, and the snow fix had not created it — it had **revealed** it. Those cubes were previously
+painted with the bright crown colour and read as snow on the ground; correctly green, the ring is
+visible for what it is.
+
+`place_trees` stamped a foliage ring at `surface + 1` — ground level — around every trunk. It did
+three wrong things at once:
+
+1. it read as foliage lying on the terrain rather than as a tree, which is precisely what this
+   story is named for;
+2. it sealed the lower trunk on all four sides, so **86 of 265 trees (every height-4 tree, 100 % of
+   them) had no exposed trunk cell and drew no trunk at all**;
+3. it broke on slopes, because it used the TRUNK's surface for all eight neighbours regardless of
+   their own terrain — **285 cubes hung in the air** over lower ground and **296 were dropped**
+   where higher ground intruded, on 110 of 265 trees.
+
+**"Underground" was measured and DISPROVEN.** All 265 trunks sit flush on their own column's ground
+(`base − surface = 1`, every tree), and no tree cell sits below its column's top terrain. The trees
+read as sunk because their base ring was broken, not because anything was buried.
+
+| measured on the shipped default world | before | after |
+| --- | --- | --- |
+| trees showing a trunk | 179 of 265 | **265 of 265** |
+| exposed trunk cells | 0 on 86 trees | 547 |
+| foliage cells | 6,329 | 4,505 |
+| foliage resting on terrain | 1,649 | 110 |
+| draw-set oracle | 45,261 | **44,984** |
+| trunk columns (the density band) | 265 | 265 — unchanged |
+
+Pinned by `every_tree_shows_a_trunk_and_no_foliage_sits_at_the_trunk_base`, which asserts the
+OUTCOME (a tree the player can see a trunk on) ahead of the mechanism (no foliage at the base
+level), and by a sabotage row that restores the ring — it dies at `worldgen.rs:277`, the trunkless
+clause, not the mechanism clause. **The terrain fingerprint is re-pinned a SECOND time**
+(`0xcb7a_c31e_2faf_4b6c` → `0x4337_57ca_d2ba_77bc`) and this is disclosed here, in the commit and
+beside the pin — failing to disclose the first re-pin was the review's second HIGH finding.
+
+**The draw-set oracle moved twice in one story** (53,365 → 45,261 → 44,984). That is the argument
+for having reworded it as a measurement rather than a constant, and all four sites now say so.
+
+**Previously recorded here as deferred, now fixed** (the trunk half): **86 of 265 trees
+(32.5 %) drew no trunk at all** — exactly the height-4 trees, 100 % of them. The trunk spans
 `surface+1 ..= surface+height-1` while foliage rings are stamped at `surface+1`, `crown_top-2` and
 `crown_top-1`, so at height 4 every trunk level is enclosed and never exposed. This is Wolf's
 observation *"some trees look like they don't have trunk at all"*, and the trunks are not
-underground — they are buried in their own foliage. It changes every seeded world and needs its own
-before/after numbers, so it is a story, not a patch.
+underground — they were buried in their own foliage. **Wolf ruled it in rather than deferring it;
+the fix is above.**
 - **Cold full gate GREEN** after `cargo clean -p gui -p sim-core` (3,386 files / 15.1 GiB).
 - **Measured result: 265 trees on the default seed** (242 on seed 42, 258 on 7451), against 704
   before — all inside the 230–300 band. Foliage cells 16,786 → 6,329.

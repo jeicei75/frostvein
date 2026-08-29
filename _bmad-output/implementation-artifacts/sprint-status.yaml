@@ -83,13 +83,36 @@ last_updated: 2026-08-29  # STORY 9.4 CODE-REVIEWED -> in-progress. FOUR LAYERS,
                           # now reaches 3,727 of 6,329 foliage cells (58.9%) instead of 2,698
                           # (42.6%), because the crown swap had been claiming the rest.
                           # (b) "some trees look like they don't have trunk at all" -- MEASURED AND
-                          # DEFERRED AS ITS OWN STORY. 86 of 265 trees (32.5%) draw NO trunk, and it
-                          # is exactly the height-4 trees, 100% of them. The trunk spans
+                          # THEN RULED IN, not deferred. 86 of 265 trees (32.5%) drew NO trunk, and
+                          # it was exactly the height-4 trees, 100% of them. The trunk spans
                           # surface+1..=surface+height-1 while foliage rings sit at surface+1,
                           # crown_top-2 and crown_top-1, so at height 4 every trunk level is
                           # enclosed and is_exposed never fires. The trunks are not underground --
-                          # they are buried in their own foliage. Changes every seeded world, so it
-                          # needs its own before/after numbers.
+                          # they were buried in their own foliage.
+                          # (c) WOLF LOOKED A THIRD TIME, AFTER THE SNOW FIX: "I see green boxes on
+                          # ground level next to some full trees .. some trees are still partially
+                          # even more now underground". THE SNOW FIX HAD NOT CAUSED IT, IT HAD
+                          # REVEALED IT -- those cubes were previously painted with the bright crown
+                          # colour and read as snow; correctly green, the ring showed for what it
+                          # was. ONE CAUSE BEHIND (b) AND (c): place_trees stamped a foliage ring at
+                          # surface+1, ON THE GROUND, around every trunk. It read as foliage lying
+                          # on terrain (which is what this story is NAMED for), it sealed the lower
+                          # trunk on four sides so a third of trees drew none, and it broke on
+                          # slopes -- stamped at the TRUNK's surface across all eight neighbours
+                          # regardless of their own terrain, so 285 cubes hung in the air and 296
+                          # were dropped, on 110 of 265 trees. RING REMOVED (465f967): trees showing
+                          # a trunk 179 -> 265 of 265, foliage 6,329 -> 4,505, foliage resting on
+                          # terrain 1,649 -> 110, oracle 45,261 -> 44,984, trunk columns unchanged
+                          # at 265 so the density band still holds. "UNDERGROUND" WAS MEASURED AND
+                          # DISPROVEN: every trunk sits flush on its own column's ground and no tree
+                          # cell is below its column's top terrain -- the trees read as sunk because
+                          # their base ring was broken, not because anything was buried.
+                          # THE FINGERPRINT IS RE-PINNED A SECOND TIME and it is disclosed this
+                          # time, in the commit, beside the pin and in the story -- not disclosing
+                          # the first re-pin was this review's second HIGH finding. THE ORACLE MOVED
+                          # TWICE IN ONE STORY (53,365 -> 45,261 -> 44,984), which is the whole
+                          # argument for rewording it as a measurement rather than a constant.
+                          # Table now 6 rows, 6/6 KILLED, audit clean at 404, full gate GREEN.
                           # THE SABOTAGE ROW CAUGHT THE REVIEW'S OWN BAD TEST, which is the third
                           # time in this story that RUNNING the table beat reading it: the first
                           # fixture for the snow fix stacked foliage above the skirt cell, so the

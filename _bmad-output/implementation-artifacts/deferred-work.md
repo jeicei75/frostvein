@@ -1125,7 +1125,14 @@ worldgen/projection geometry that the density cut merely made easier to see. Rec
 concrete measured defects, which is what the standing art rule (2026-08-22) requires before any
 look change becomes a story.
 
-- **A THIRD OF ALL TREES HAVE NO VISIBLE TRUNK, and it is deterministic rather than incidental.**
+- ~~**A THIRD OF ALL TREES HAVE NO VISIBLE TRUNK, and it is deterministic rather than
+  incidental.**~~ **RESOLVED THE SAME DAY, 2026-08-29, commit `465f967`** — Wolf ruled it in rather
+  than deferring it, after a second look showed the same ring as "green boxes on ground level".
+  Removing the `surface + 1` foliage ring fixed both: trees showing a trunk **179 -> 265 of 265**,
+  foliage cells 6,329 -> 4,505, draw-set oracle 45,261 -> 44,984, trunk columns unchanged at 265.
+  "Underground" was measured and disproven — every trunk sits flush on its own ground. Pinned by
+  `every_tree_shows_a_trunk_and_no_foliage_sits_at_the_trunk_base` plus a sabotage row that restores
+  the ring. The finding as originally recorded follows, unedited:
   **86 of 265 trees (32.5%) draw zero trunk cells** — and it is exactly the height-4 trees, 100% of
   them; height 5 leaves one bare trunk level, height 6 leaves two.
   [crates/sim-core/src/worldgen.rs:196-227]. **Cause, from the source:** the trunk spans
