@@ -43,7 +43,34 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-29  # STORIES 9.1 AND 9.4 ARE BOTH DONE. Wolf ran the shared sitting and
+last_updated: 2026-08-29  # EPIC 9 IS CLOSED OUT: 9.1 and 9.4 DONE, 9.2 and 9.3 DROPPED.
+                          # 9.2 AND 9.3 HAD NO BUILDABLE WORK LEFT, and both premises were
+                          # RE-VERIFIED against source before dropping rather than trusted (this
+                          # epic has already had two stale premises). 9.2's geometric half shipped
+                          # 2026-08-26 in 8782a0d and is pinned by a test that does exist -- in
+                          # crates/gui/tests/headless.rs:2246, not project.rs as the epic text
+                          # said; that reference is corrected. 9.3's AC is already met by
+                          # mark_colours_are_distinct_cold_literals (appearance.rs:418), and its
+                          # "four modes" framing was unmeetable: there are THREE persistent marks,
+                          # because Clear commits nothing and its preview deliberately IS the
+                          # hover. What remained in each was ONE JUDGEMENT BY EYE, deferred under
+                          # the standing art rule until real art lands -- and that trigger is Epic
+                          # 10. A story whose entire content is "Wolf looks at it after Epic 10"
+                          # is not a story, so both eye-checks are folded into Epic 10 as
+                          # acceptance conditions (epics.md, "Inherited eye-checks"). Nothing is
+                          # lost and the measured evidence stays on the record.
+                          # 9.2's eye-check CARRIES A MEASURED CONSTRAINT: the hover slab is
+                          # luminance 189.5 against a pool that saturates to 255, so a BRIGHTER
+                          # slab cannot fix it -- hue/saturation separation or an outline. AND AN
+                          # ORDERING NOTE: the vehicle capture measured the frame 30% over the
+                          # ceiling, so the washout may be a SYMPTOM of the over-bright emitter.
+                          # The withheld-levers story runs FIRST; it may close this for free.
+                          # NEXT: the withheld-levers story (intensity / amplitude / range /
+                          # emissive), which has the strongest evidence on the record -- a
+                          # controlled pair proving shadows insufficient, and a vehicle reading
+                          # 30% over the ceiling. Not yet created; it needs Wolf's ruling on WHICH
+                          # lever opens, which is the whole point of it being a new story.
+                          # PRIOR: STORIES 9.1 AND 9.4 ARE BOTH DONE. Wolf ran the shared sitting and
                           # reported "did it already .. I think it's fine" on the current build --
                           # after the snow fix and the ground-ring removal, which is what made a
                           # re-look necessary. That closes 9.4's AC10 and confirms 9.1's AC14 and
@@ -1103,8 +1130,8 @@ development_status:
   # `git diff b1cd5f9 15b3635 -- crates/` is empty -- so every figure measured at creation stands.
   # Vehicle-bound: ACs 12-15.
   9-1-the-frame-stops-blowing-out: done
-  9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
-  9-3-the-four-modes-read-apart: backlog
+  9-2-the-cell-under-the-cursor-is-visible-on-every-face: dropped
+  9-3-the-four-modes-read-apart: dropped
   9-4-trees-fewer-and-distinct-from-the-ground: done
   # 9.4 IS THE ONE STORY IN THIS EPIC THAT TOUCHES sim-core (worldgen density): every seeded world
   # changes, terrain-dependent tests and capture recipes need re-checking, and mutation rows anchored

@@ -1215,7 +1215,12 @@ instrument rather than exit 0
 the hover slab) are discernible, closing the recorded "hover slab not visible near the campfire"
 observation at its root, or reopening it as evidence this story did not finish the job.
 
-### Story 9.2: The Cell Under the Cursor Is Visible on Every Face
+### Story 9.2: The Cell Under the Cursor Is Visible on Every Face — DROPPED 2026-08-29
+
+**DROPPED, and its remaining half moved to Epic 10 (Wolf, 2026-08-29).** Both premises were
+re-verified against source before dropping. Nothing is lost: the buildable half already shipped,
+and the eye-check now sits in the epic whose art it was waiting for — see Epic 10's
+"Inherited eye-checks". Its measured evidence stays on the record here and in `deferred-work.md`.
 
 As the boss,
 I want to see which cell I am pointing at on cliff faces, corridor walls and shaft sides,
@@ -1227,7 +1232,9 @@ two days earlier. What that entry described — the 0.08-thick slab at render y 
 enclosed by the cube above on every vertical face — **was fixed on 2026-08-26 by commit `8782a0d`**,
 which took the first of the three candidate treatments (the hit-face slab): `sync_hover_highlight`
 offsets along the picked face normal and rotates to it (`project.rs:236-238`), covered by
-`a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side` and four sabotage rows.
+`a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side`
+(`crates/gui/tests/headless.rs:2246` — this text said `project.rs`; corrected 2026-08-29 when
+the premise was re-verified) and four sabotage rows.
 
 **What actually remains is the LOOK question only**, and it is already deferred: 8.2's AC13
 rendered half — whether the slab READS on a cliff face, stays distinct from the marks and clear of
@@ -1253,7 +1260,12 @@ neighbour — closing 8.2's deferred AC13 rendered half.
 **Then** tests go red — the 8.2 lesson: the highlight's geometry was sabotage-green through a
 full review.
 
-### Story 9.3: The Four Modes Read Apart
+### Story 9.3: The Four Modes Read Apart — DROPPED 2026-08-29
+
+**DROPPED, and its remaining half moved to Epic 10 (Wolf, 2026-08-29).** Its AC is already met by
+`mark_colours_are_distinct_cold_literals` (`appearance.rs:418`, re-verified 2026-08-29), and the
+"four modes" framing was unmeetable as written. What remained was one glance, gated on art that
+Epic 10 delivers — see Epic 10's "Inherited eye-checks".
 
 As the boss,
 I want dig, channel, stockpile and clear marks to be distinguishable at a glance at working zoom,
@@ -1390,6 +1402,36 @@ a forge session, per this repo's never-write-to-the-forge rule. Its tenant list 
 **ComfyUI** alongside Blender: UX-DR22's opening half sanctions "generated reference" as an
 artifact type, so ComfyUI is a second artifact source feeding the same sign-off machinery, not a
 side-tenant.
+
+### Inherited eye-checks — folded in from dropped stories 9.2 and 9.3 (2026-08-29)
+
+Epic 9 closed with two stories that had **no buildable work left** — their code halves had shipped
+and their tests passed; what remained in each was a single judgement by eye, deliberately deferred
+under the standing art rule until real art landed. That trigger is this epic, so the judgements
+belong here rather than in stories that would sit in backlog describing nothing.
+
+**Both are acceptance conditions on Epic 10's art pass, taken at whatever sitting it needs.**
+
+1. **The hover slab reads on a vertical face** (from 9.2; closes 8.2's deferred AC13 rendered
+   half). The geometry shipped 2026-08-26 (`8782a0d`) and is pinned by
+   `a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side`
+   [crates/gui/tests/headless.rs:2246]. **What is owed is whether it READS** on a cliff face, a
+   corridor wall and a shaft side, and stays distinct from the marks.
+   **IT CARRIES A MEASURED CONSTRAINT, not a preference** (2026-08-29): the slab is `(80,220,210)`,
+   luminance **189.5**, while the campfire's near-white pool exceeds **200** and saturates toward
+   **255** — near the fire the background is brighter than the marker and it inverts.
+   **A brighter slab cannot fix this**; it needs hue/saturation separation or an outline.
+   **CHECK THE ORDER FIRST:** the vehicle capture of 2026-08-29 measured the frame **30 % over the
+   blown-pool ceiling**, so this washout may be a SYMPTOM of the over-bright emitter. The
+   withheld-levers story runs first; if it dims the fire, this may close for free.
+
+2. **The mark modes read apart at a glance** (from 9.3; closes 8.2's deferred AC19 reads-clearly
+   half). Separation is already asserted headlessly — `mark_colours_are_distinct_cold_literals`
+   [crates/gui/src/appearance.rs:418] pins pairwise separation at `MIN_MARK_SEPARATION = 40.0`
+   across dig/channel/zone plus every terrain colour and the TUI's three marks. **What is owed is
+   one unprompted glance** at a scene holding them at working zoom (UX-DR17). Note there are
+   **three** persistent marks, not four: Clear commits nothing and its preview deliberately IS the
+   hover material — the original "four" was unmeetable and is not to be reinstated.
 
 ### Story 10.1: The Headless Bench
 
