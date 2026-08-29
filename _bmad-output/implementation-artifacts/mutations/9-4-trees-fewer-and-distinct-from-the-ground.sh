@@ -97,3 +97,24 @@ ring = '''            for fy in y - 1..=y + 1 {
 '''
 p.write_text(s.replace(anchor, ring + anchor, 1))
 PY
+
+# Headless capture, added 2026-08-29. Row 7 removes the flag so a --headless run silently opens the
+# windowed path; row 8 makes setup_camera ignore the request so a headless run renders to a window
+# that does not exist -- the silent-empty-frame shape this whole path exists to avoid.
+mutation "the --headless flag stops being parsed" gui headless_is_off_by_default_and_on_only_when_asked <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '''        } else if arg == "--headless" {
+            headless = true;
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+
+mutation "a headless camera keeps its window target" gui a_headless_camera_draws_into_an_offscreen_target_and_a_windowed_one_does_not <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    let headless_target = match (headless.is_some(), images) {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let headless_target = match (false, images) {', 1))
+PY

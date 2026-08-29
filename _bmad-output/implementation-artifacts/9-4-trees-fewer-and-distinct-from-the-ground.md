@@ -194,14 +194,16 @@ warmer authored look.
         see "Tree-dependent tests, the inventory AC8 asked for" in the Dev Agent Record.
 
 - [x] **Task 5 — The interaction with 9.1 (AC: 7)**
-  - [ ] This story is **stacked on 9.1**, so 9.1's blown-pool ceiling is live in your tree. Fewer
+  - [x] This story is **stacked on 9.1**, so 9.1's blown-pool ceiling is live in your tree. Fewer
         dark trees near the campfire can only make the near-white pool **larger**. If a boot-vista
         capture now exits **101** on `BLOWN_POOL_FRACTION_CEILING`, that is this story's most
         important finding — **report it with the number, do not raise the ceiling.** The ceiling is
         9.1's calibrated bar and Wolf ruled on 2026-08-28 that it stays hard.
-  - [ ] Likewise the 70–180 band: fewer dark skirts push the ground median **up** from today's
+  - [x] Likewise the 70–180 band: fewer dark skirts push the ground median **up** from today's
         123.4. Record the new median. A breach of 180 is a finding, not something to tune away.
-        **UNTICKED AT REVIEW 2026-08-29: no median was ever recorded.** The Completion Notes say so
+        **DONE 2026-08-29 by headless render: the median is 117, DOWN from 123, band holds. The
+        story's predicted direction was wrong.** Previously unticked at review because no median
+        had been recorded. The Completion Notes say so
         plainly, so the prose was honest while the checkbox was not. Vehicle-bound — nothing
         headless renders this world.
   - [x] Both numbers are headless-measurable from the committed-PNG path only if a frame exists;
@@ -647,6 +649,55 @@ runbook) depends directly on tree tile counts and is verified only by eye at the
   directional does not compress", which contradicts the shipped comment at `appearance.rs:117-119`
   giving the opposite as the reason dig and channel moved onto RED. Narrowed to what was actually
   measured (table-space distances) with the contradiction filed in deferred-work.md.
+
+### AC7 IS NOW MEASURED — 2026-08-29, and the premise that blocked it was false
+
+**Superseded: the paragraph below said AC7 could not be met headlessly. That was true of the
+CLIENT, not of the machine.** The devpods cannot open a WINDOW — no display server, winit panics —
+and that was over-generalised into "cannot render". Rendering needs a DEVICE. One is present:
+Mesa's lavapipe, `llvmpipe (LLVM 19.1.7)`, Vulkan 1.4, and wgpu 29 (Bevy 0.19's own version)
+creates a device on it. `--headless` swaps winit for `ScheduleRunnerPlugin` and points the camera
+at a 1280×720 offscreen texture — the vehicle's own capture resolution. Every instrument downstream
+is unchanged.
+
+**THE CONTROL, run before trusting a single number:** the headless client rendered the *pre-9.4*
+world and printed `projected 53365 terrain cubes` — reproducing story 5.3's recorded oracle
+exactly — then the current world at `44984`, matching this story's independent probe. The
+instrument recovers a historical figure it was never told.
+
+**Compared llvmpipe against llvmpipe**, never against the vehicle. Baseline = `815cd6c` (9.1
+complete, before 9.4) with the same `--headless` patch cherry-picked onto it, so the two differ
+only by this story. Four baseline runs, three HEAD runs, `--frames 220`:
+
+| | baseline (n=4) | HEAD (n=3) | verdict |
+| --- | --- | --- | --- |
+| ground median luminance | **123** (all four) | **117** (all three) | **inside the 70–180 band. NO BREACH.** |
+| largest blown pool | 0.9408 – 0.9475 % | 0.9605 – 1.0666 % | **up, no overlap between the sets** |
+| p99 luminance | 217.5 – 217.8 | 230.3 – 233.2 | up ~13, no overlap |
+| warm-lit pixels | 21,816 – 22,795 | 20,227 – 20,367 | down |
+
+**THE STORY'S PREDICTED DIRECTION WAS WRONG ON THE MEDIAN.** Task 5 said "fewer dark skirts push
+the ground median **up** from today's 123.4" and a breach of 180 would be a finding. It went
+**down**, 123 → 117, and the band holds comfortably. The prediction was reasoning; this is
+measurement.
+
+**The blown pool DID grow, as predicted** — every HEAD sample sits above every baseline sample. So
+9.4 did not help 9.1's blow-out and marginally worsened it. **9.1's 0.6651 % ceiling cannot be
+judged on this renderer**: the *baseline* already reads 0.94 % here, 41 % above the ceiling before
+9.4 touched anything, so the ceiling stays a vehicle measurement. What this run establishes is the
+DELTA, which is what AC7 actually asks for.
+
+**One honest oddity worth carrying:** HEAD's blown pool is ~19× noisier than baseline's (spread
+0.106 pp vs 0.006 pp) while its median is rock-stable. The likely cause is that with fewer trees
+the campfire's pool is less occluded, so flicker phase at the capture frame matters more. Not
+investigated further; recorded so nobody reads a single sample as precise.
+
+**STILL VEHICLE-BOUND AND NOT CLAIMED:** AC10 (Wolf's eye) and NFR6 (fps). A software rasteriser's
+frame time says nothing about the machine that will run this, and no figure was fabricated.
+
+---
+
+**SUPERSEDED, kept for the record — what was true before `--headless` existed:**
 
 **AC7 IS NOT MET AND CANNOT BE MET HEADLESSLY — read this before reading the green gate.** The
 capture tests decode COMMITTED PNGs (`boot7.png`, `7-2-marks-vista.png`), which are static images
