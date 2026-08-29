@@ -317,7 +317,9 @@ story's card so it can be merged into that sitting.
         is a recipe to be corrected by the session, not a record of one.
   - [x] **Order the card so nothing erases its own evidence.** 8.2's card put the clear drag before
         the only read and destroyed what it meant to check [8-2-...md:914-916].
-  - [ ] Wolf's AC13/AC14 judgement. **A dev agent cannot check these boxes.**
+  - [x] Wolf's AC13/AC14 judgement. **A dev agent cannot check these boxes.** — AC14 answered NO
+        on the vehicle 2026-08-28; AC12 answered ~140 fps 2026-08-29; AC13's controlled pair
+        measured headlessly 2026-08-29. See "ACs 12-15 — CLOSED" above.
 
 - [x] **Task 7 — The gate and the record (AC: 1, 16)**
   - [x] `scripts/gate.sh` full tier on a cold rebuild.
@@ -615,6 +617,71 @@ ready to take both.
 ceiling green. If the next step is opening one of those levers, that is a new ruling from Wolf and
 belongs in a follow-up story with its own before/after numbers — this is the failure mode the
 project has named three times.
+
+## ACs 12-15 — CLOSED 2026-08-29, headlessly, and the instrument was wrong
+
+**AC12 — MET.** Wolf, on the vehicle: *"fps are still ~140"* with shadows enabled. Both NFR6 bars
+(60 working zoom / 30 full vista) clear with 2.3x/4.7x headroom, and **the story's stated NFR6 risk
+is falsified** — shadow-casting point lights did not spend M2's headroom. *One figure: Wolf did not
+split working zoom from full vista, which is what the AC literally asks. Recorded as given, not
+inflated.*
+
+**AC13 — CONTROLLED PAIR MEASURED, and it found a defect in this story's own instrument.**
+Run headlessly (`gui --headless`, built during 9.4) on THIS story's tree, `815cd6c`, with only the
+`shadow_maps_enabled` flag differing. Four shadows-on runs, three shadows-off, `--frames 220`:
+
+| | shadows OFF | shadows ON | |
+| --- | --- | --- | --- |
+| warm-lit pixels | 26,594 | 22,411 | **-15.7 %** — shadows work |
+| near-white AREA (stable metric) | 1.58-1.73 % | 1.47 % | **down ~10 %** |
+| largest connected pool @200 | 0.7010 % | 0.9448 % | **+34.8 % — ARTEFACT, see below** |
+| p99 luminance | 222.1 | 217.7 | -4.4 |
+| ground median | 123 | 123 | unchanged |
+
+**THE +34.8 % IS NOT REAL AND THE INSTRUMENT PRODUCED IT.** `largest_blown_pool_fraction` measures
+a CONNECTED component, and connectivity has a threshold cliff: the near-white region fragments and
+the largest surviving piece halves. Swept across thresholds on the same seven frames:
+
+| threshold | shadows ON (n=4) | shadows OFF (n=3) |
+| --- | --- | --- |
+| 192 | 0.9883-1.0015 % | 0.9754-1.0130 % — **overlapping** |
+| **200 (shipped)** | 0.9408-0.9475 % | 0.6978-0.7065 % — apparent gap |
+| 212 | 0.6416-0.6506 % | 0.6447-0.6579 % — **overlapping** |
+
+Shadows-on frames shatter at 204-208, shadows-off at 196-200. All shadows do is move the shatter
+point 4-8 luminance levels, and the shipped threshold sits inside that band. Away from it the two
+conditions are indistinguishable — which is physically right, because the pool immediately around
+the fire is unoccluded either way.
+
+**THE FOUNDING FINDING OF THIS STORY SURVIVES, and was checked rather than assumed.** On the GPU
+frames it was calibrated on, `boot7.png` is perfectly smooth — 0.7122 / 0.6651 / 0.5704 at
+190 / 200 / 215, no cliff — and the ratio against the rejected `7-2-marks-vista.png` holds at
+**1.50 / 1.49 / 1.48** across thresholds. The 49 % is real. The fragility is a property of
+software-rendered frames, not of the finding.
+
+**THE FIX.** `near_white_area_fraction` counts instead of connecting: smooth and monotone on both
+renderers, and physically correct — shadows reduce it, agreeing with the warm-lit drop. **Area is
+now what production asserts**, with the ceiling calibrated exactly as the pool's was, on boot7's own
+figure (14,405 of 921,600 px = 1.5630426 %). The pool is still printed as a diagnostic and must not
+be read off a headless frame. Two 9.1 mutation rows were RETARGETED because they quoted production
+text this changed and would have APPLY-FAILED, pinning nothing.
+
+**AC13's remaining half stays open:** whether the ceiling is confirmed or corrected is a
+vehicle question. A GPU-calibrated constant cannot be settled on llvmpipe, and this run does not
+claim to.
+
+**AC14 — ANSWERED NO, unchanged.** Wolf's vehicle reading stands: the blow-out is not closed. AC13
+now supplies the numbers behind it, and corrects their direction: shadows moved the frame the RIGHT
+way (warm-lit -15.7 %, area -10 %), just nowhere near far enough. **This story proved shadows are
+insufficient, with an instrument that did not exist before — which is what it set out to do.**
+
+**AC15 — PARTIALLY ANSWERED.** What 9.1 owes is *whether the campfire was the cause*, and the
+answer is yes: the near-white pool around the fire persists at every threshold and in both shadow
+states. The slab's rendered judgement remains 9.2's. **Not closed headlessly**: the hover slab needs
+the scripted-cursor path, which reads `windows.single()` and is empty without a window.
+
+**WHAT REMAINS FOR THE VEHICLE:** AC13's ceiling half, AC15's rendered half, and any decision to
+open the withheld levers (intensity, amplitude, range, emissive). Those stay withheld.
 
 ## Dev Agent Record
 

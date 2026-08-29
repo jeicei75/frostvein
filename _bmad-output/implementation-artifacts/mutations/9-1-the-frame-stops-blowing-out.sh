@@ -62,10 +62,10 @@ new = '''    let report_line = format!(
 '''
 s = s.replace(old, new)
 old_assert = '''    assert!(
-        blown_pool <= BLOWN_POOL_FRACTION_CEILING,
-        "the largest near-white pool is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
-        blown_pool * 100.0,
-        BLOWN_POOL_FRACTION_CEILING * 100.0
+        near_white <= NEAR_WHITE_AREA_CEILING,
+        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
+        near_white * 100.0,
+        NEAR_WHITE_AREA_CEILING * 100.0
     );
 '''
 assert s.count(old_assert) == 1

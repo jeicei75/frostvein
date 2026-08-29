@@ -43,7 +43,51 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-STORY 9.4: AC7 IS MEASURED, AND THE PREMISE THAT
+last_updated: 2026-08-29  # STORY 9.1's ACs 12-15 CLOSED, AND 9.1's OWN INSTRUMENT WAS FOUND
+                          # DEFECTIVE. AC12 MET: Wolf read ~140 fps with shadows on, so both NFR6
+                          # bars clear at 2.3x/4.7x and the story's stated NFR6 risk is FALSIFIED.
+                          # AC13's controlled pair finally ran -- headlessly, on 9.1's own tree,
+                          # only the shadow flag differing, 4 runs on / 3 off. SHADOWS WORK:
+                          # warm-lit pixels -15.7%, near-white area -10%. But the shipped pool
+                          # metric read +34.8% THE WRONG WAY, and that number is an ARTEFACT:
+                          # largest_blown_pool_fraction measures a CONNECTED component and
+                          # connectivity has a threshold cliff. Swept across thresholds,
+                          # shadows-on frames shatter at 204-208 and shadows-off at 196-200, so
+                          # the shipped threshold of 200 sits inside the band; at t=192 and t=212
+                          # the two conditions OVERLAP. All shadows do is move the shatter point
+                          # 4-8 levels -- physically right, since the pool around the fire is
+                          # unoccluded either way.
+                          # THE FOUNDING FINDING SURVIVES, checked rather than assumed: on the GPU
+                          # frames it was calibrated on, boot7 is smooth (0.7122 / 0.6651 / 0.5704
+                          # at 190/200/215) and the ratio against the rejected frame holds at
+                          # 1.50/1.49/1.48 across thresholds. The 49% is REAL. The fragility
+                          # belongs to software-rendered frames, not to the finding.
+                          # FIXED: near_white_area_fraction counts instead of connecting -- smooth
+                          # on both renderers and physically correct. AREA is now what production
+                          # asserts, ceiling calibrated on boot7's own figure exactly as the
+                          # pool's was (14,405 of 921,600 px = 1.5630426%). The pool stays a
+                          # printed diagnostic and must NOT be read off a headless frame. TWO 9.1
+                          # MUTATION ROWS RETARGETED -- they quoted production text this changed
+                          # and would have APPLY-FAILED; one was caught only by RUNNING the table
+                          # after a partial fix.
+                          # AC14 unchanged (NO, blow-out not closed) but its DIRECTION corrected:
+                          # shadows moved the frame the RIGHT way, just nowhere near far enough.
+                          # 9.1 did what it set out to do -- proved shadows insufficient with an
+                          # instrument that did not exist before. AC15 partially answered (the
+                          # campfire IS the cause; the slab's rendered judgement is 9.2's, and the
+                          # hover path needs a window so it cannot close headlessly).
+                          # STILL VEHICLE-BOUND: AC13's ceiling half, AC15's rendered half, and
+                          # any decision to open the withheld levers. Those stay withheld.
+                          # 9.1 table 7/7 KILLED, audit clean at 408, full gate GREEN.
+                          #
+                          # RECORD DEFECT REPAIRED IN THIS SAME EDIT: the `last_updated:` KEY was
+                          # lost on 2026-08-29 when the AC7 block was written -- the replacement
+                          # swapped the whole prefix instead of just the comment, leaving a bare
+                          # `STORY 9.4: AC7 IS MEASURED...` line. YAML then parsed that as a KEY
+                          # and the file still loaded, so nothing complained; the post-edit check
+                          # printed development_status and never looked at last_updated. A silent
+                          # schema loss that a green parse hid -- this project's signature shape.
+                          # PRIOR: STORY 9.4: AC7 IS MEASURED, AND THE PREMISE THAT
                           # BLOCKED IT FOR THE WHOLE OF M2 WAS FALSE. The devpods cannot open a
                           # WINDOW -- true, measured 2026-08-11 -- and that got generalised into
                           # "cannot render". RENDERING NEEDS A DEVICE, NOT A WINDOW, and one is
