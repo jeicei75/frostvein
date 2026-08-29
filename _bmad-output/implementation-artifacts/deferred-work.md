@@ -1216,3 +1216,20 @@ look change becomes a story.
   the tick arrives, so a huge cap costs nothing and a small one silently truncates. An operator has
   no way to convert "frames" into "will this reach tick 20 on my machine" without knowing their own
   frame rate, which is exactly the calculation a recipe should not require. `[measured]`
+
+- **`--at-tick`'s floor counts SAMPLED ticks, not ticks the world advanced — and a startup burst
+  breaks it on any fast machine.** [crates/gui/src/capture.rs:302, crates/gui/src/ingest.rs:911]
+  `ingest_messages` drains the socket in a `loop`, applying every queued delta in ONE frame, while
+  `accumulate_motion` runs once per frame and records at most one tick per frame. During startup
+  (window creation, ~45k cubes) the client stalls for a second or two; the daemon keeps ticking at
+  10/s (`TICK_PERIOD` 100 ms), those deltas queue, and the first drain leaps the mirror ~15 ticks in
+  a single frame. **Measured on the vehicle 2026-08-29, three runs: the mirror reached the target
+  tick — the capture fired, and no budget message printed — while only 8, 11 and 11 distinct ticks
+  had been sampled, against a floor of 20.** `--at-tick 20` is therefore unusable on the RTX 4080
+  vehicle and cost three attempts at 9.1's AC13 ceiling reading.
+  **Why it never showed up before:** on the headless software renderer (~2 fps) the client is always
+  the slower party, so no backlog forms and sampled ticks track real ones — the bug needs a machine
+  fast enough to stall at startup and then outrun the daemon.
+  **Fix shape:** assert on `mirror.tick() - start_tick` (what the world actually advanced), which is
+  what the AC means, and keep the sampled count as a separate diagnostic. The plain `--frames` path
+  is unaffected in kind but shares the sampling weakness. `[measured]`

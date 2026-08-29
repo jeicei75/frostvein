@@ -22,7 +22,7 @@ stale binary, which is the one failure this project has hit repeatedly.
 
 ```
 simd.exe 7451
-gui.exe 7451 --capture 9-1-vista.png --at-tick 20 --frames 200000
+gui.exe 7451 --capture 9-1-vista.png --frames 400000
 echo "exit=$?"
 ```
 
@@ -33,6 +33,13 @@ Read the range-check line. **It gained a field on 2026-08-29** and now reads:
   blown-pool:      ______ %   ← DIAGNOSTIC ONLY. Do NOT judge by it, do NOT compare to 0.6651 %.
   ground-median:   ______     (band 70-180)
   p99:             ______     exit: ______
+
+**DO NOT USE `--at-tick` ON THE VEHICLE.** Its floor counts ticks the client SAMPLED, not ticks
+the world advanced, and one sample is taken per frame. On a fast machine the startup stall queues
+deltas that then apply in a single frame, so the mirror leaps ~15 ticks while 1 is recorded. Three
+attempts on the RTX 4080 fired the capture correctly and still failed the floor at 8, 11 and 11
+sampled ticks against 20. Filed in deferred-work.md. The plain `--frames` path above avoids it by
+running long enough that steady state dominates the burst — ~80 s at vehicle frame rates.
 
 **`--frames` IS A SAFETY CAP, NOT A DURATION — set it absurdly high and it costs nothing.**
 With `--at-tick N` the run ENDS the moment tick N arrives, so the budget only ever cuts a run
