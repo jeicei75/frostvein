@@ -36,10 +36,10 @@
   "12c1b954-2845-4dec-8077-3baa388d9a00.jsonl": {
     "by_model": {
       "claude-opus-5": {
-        "cache_creation": 1345788,
-        "cache_read": 88219068,
-        "input": 1110,
-        "output": 505879
+        "cache_creation": 1641812,
+        "cache_read": 166409436,
+        "input": 1492,
+        "output": 797395
       },
       "claude-sonnet-5": {
         "cache_creation": 384663,
@@ -48,16 +48,16 @@
         "output": 11639
       }
     },
-    "cache_creation": 1730451,
-    "cache_read": 92228008,
-    "input": 1278,
-    "last_ts": "2026-08-29T11:51:37.260Z",
+    "cache_creation": 2026475,
+    "cache_read": 170418376,
+    "input": 1660,
+    "last_ts": "2026-08-29T15:38:59.245Z",
     "marked_at": null,
-    "output": 517518,
+    "output": 809034,
     "primary_only": false,
     "quota_last": null,
     "schema": 2,
-    "turns": 639
+    "turns": 830
   },
   "13194c34-65ea-4469-8773-cd4e25cd50bd.jsonl": {
     "by_model": {
