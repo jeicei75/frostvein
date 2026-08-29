@@ -96,10 +96,15 @@ def audit():
             # weak" when the truth is "your test is gone". Found 2026-08-22: five rows named a
             # test that no longer existed, one of them the reason a repaired row still reported
             # SURVIVED after its literal was fixed.
-            named = re.match(r'^mutation "[^"]+" \S+ (\S+)', block)
+            named = re.match(r'^mutation "[^"]+" (\S+) (\S+)', block)
             if named and sources:
-                bare = named.group(1).split("::")[-1]
-                if not re.search(rf"\bfn {re.escape(bare)}\b", sources):
+                tier, test = named.groups()
+                bare = test.split(".")[-1] if tier == "py" else test.split("::")[-1]
+                test_sources = "\n".join(
+                    f.read_text() for f in pathlib.Path("scripts").rglob("*.py")
+                ) if tier == "py" else sources
+                test_pattern = rf"\bdef {re.escape(bare)}\b" if tier == "py" else rf"\bfn {re.escape(bare)}\b"
+                if not re.search(test_pattern, test_sources):
                     orphaned.append((table.name, name, bare))
 
             match = TARGET.search(block)

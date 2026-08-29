@@ -43,7 +43,7 @@ trap 'restore_all; rm -rf "$BACKUP"' EXIT
 # `cargo test -p simd` failed 1 of 18 with crates/ git-clean; `touch`ing the sources rebuilt and
 # it passed 18/18, same flags, same binary name. `-m` (--touch) stamps extraction time as NOW,
 # so the restored source always postdates the artifacts and cargo always rebuilds.
-backup_all() { tar -cf "$BACKUP/tree.tar" $(git ls-files 'crates/*'); }
+backup_all() { tar -cf "$BACKUP/tree.tar" $(git ls-files 'crates/*' 'scripts/*'); }
 restore_all() { [ -f "$BACKUP/tree.tar" ] && tar -xmf "$BACKUP/tree.tar"; }
 
 # Initialized empty, not merely declared: under `set -u`, `${#NAMES[@]}` on a declared-but-unset
@@ -54,7 +54,7 @@ RESULTS=()
 survivors=0
 
 mutation() {
-  local name="$1" pkg="$2" test="$3"
+  local name="$1" tier="$2" test="$3"
   local script; script=$(cat)
 
   printf '\n=== %s ===\n' "$name"
@@ -66,7 +66,11 @@ mutation() {
   fi
 
   local out rc
-  out=$(cargo test --offline -p "$pkg" "$test" 2>&1); rc=$?
+  if [ "$tier" = "py" ]; then
+    out=$(python3 -m unittest "$test" 2>&1); rc=$?
+  else
+    out=$(cargo test --offline -p "$tier" "$test" 2>&1); rc=$?
+  fi
   restore_all
 
   NAMES+=("$name")
@@ -84,9 +88,14 @@ mutation() {
     survivors=$((survivors + 1))
     echo "  mutation does NOT COMPILE — proves nothing, treating as a survivor"
     printf '%s\n' "$out" | rg -N '^error(\[|:)' | head -3
+  elif [ "$tier" = "py" ] && printf '%s' "$out" | rg -qN 'SyntaxError|ImportError|ModuleNotFoundError|Failed to import test module|ERROR:.*_FailedTest'; then
+    RESULTS+=("NO-COLLECT")
+    survivors=$((survivors + 1))
+    echo "  Python collection/import error — proves nothing, treating as a survivor"
+    printf '%s\n' "$out" | rg -N 'SyntaxError|ImportError|ModuleNotFoundError|Failed to import test module|ERROR:' | head -3
   elif [ "$rc" -ne 0 ]; then
     RESULTS+=("KILLED")
-    printf '%s\n' "$out" | rg -N 'panicked at|assertion|test result: FAILED' | head -4
+    printf '%s\n' "$out" | rg -N 'panicked at|AssertionError|assertion|test result: FAILED' | head -4
   else
     RESULTS+=("SURVIVED")
     survivors=$((survivors + 1))
@@ -114,7 +123,7 @@ done
 
 if [ "$survivors" -ne 0 ]; then
   printf '\n%d mutation(s) did not KILL. SURVIVED = the test is not pinning what it claims.\n' "$survivors"
-  printf 'NO-COMPILE / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.\n'
+  printf 'NO-COMPILE / NO-COLLECT / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.\n'
   exit 1
 fi
 printf '\nAll mutations killed.\n'
