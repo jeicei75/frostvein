@@ -60,3 +60,17 @@ new = '''fn tree_trunk_columns(world: &World) -> usize {
 '''
 p.write_text(s.replace(old, new))
 PY
+
+# Added at review, 2026-08-29, with Wolf's snow-cover fix. The guard being pinned is the
+# ground-rest clause, so the row DELETES that clause rather than touching the colour: a colour
+# mutation would die at the palette pin and never reach this behaviour.
+mutation "snow returns to the skirt by dropping the ground-rest clause" gui foliage_resting_on_the_ground_is_a_skirt_and_never_catches_snow <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '''        )
+        && !rests_on_the_ground(mirror, position)
+}'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''        )
+}''', 1))
+PY
