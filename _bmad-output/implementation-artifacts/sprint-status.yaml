@@ -43,7 +43,31 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-29  # STORY 9.1's ACs 12-15 CLOSED, AND 9.1's OWN INSTRUMENT WAS FOUND
+last_updated: 2026-08-29  # STORIES 9.1 AND 9.4 ARE BOTH DONE. Wolf ran the shared sitting and
+                          # reported "did it already .. I think it's fine" on the current build --
+                          # after the snow fix and the ground-ring removal, which is what made a
+                          # re-look necessary. That closes 9.4's AC10 and confirms 9.1's AC14 and
+                          # AC15 re-check.
+                          # ONE HALF IS CARRIED, NOT CLAIMED: AC13's CEILING READING. A visual
+                          # judgement contains no near-white-area figure, so the ceiling is neither
+                          # confirmed nor corrected ON THE VEHICLE and neither record pretends
+                          # otherwise. It carries to the withheld-levers follow-up, which must
+                          # recalibrate it there anyway -- the assertion changed from a connected
+                          # pool to near-white area on 2026-08-29, so NEAR_WHITE_AREA_CEILING is
+                          # calibrated on boot7.png (a GPU frame) while every figure behind it was
+                          # taken on llvmpipe. ONE capture settles it; card at
+                          # epic-9-shared-sitting-card.md section 1.
+                          # EPIC 9 IS NOW 2 OF 4: 9.2 and 9.3 remain backlog. 9.2 inherits a hard
+                          # constraint measured here -- the hover slab is luminance 189.5 and the
+                          # campfire pool exceeds 200 and saturates to 255, so a BRIGHTER slab
+                          # cannot fix it; it needs hue/saturation separation or an outline.
+                          # NEXT STORY CANDIDATE, filed but not yet created: the withheld levers
+                          # (intensity, amplitude, range, emissive) plus AC13's ceiling reading.
+                          # 9.1 proved shadows insufficient WITH NUMBERS and stopped rather than
+                          # reaching for those levers, which is exactly what its standing rule
+                          # required. Opening them is a new ruling from Wolf and needs its own
+                          # before/after.
+                          # PRIOR: STORY 9.1's ACs 12-15 CLOSED, AND 9.1's OWN INSTRUMENT WAS FOUND
                           # DEFECTIVE. AC12 MET: Wolf read ~140 fps with shadows on, so both NFR6
                           # bars clear at 2.3x/4.7x and the story's stated NFR6 risk is FALSIFIED.
                           # AC13's controlled pair finally ran -- headlessly, on 9.1's own tree,
@@ -1062,10 +1086,10 @@ development_status:
   # b1cd5f9 and full gate GREEN on both (run, not claimed). The rebase crossed NO crate source --
   # `git diff b1cd5f9 15b3635 -- crates/` is empty -- so every figure measured at creation stands.
   # Vehicle-bound: ACs 12-15.
-  9-1-the-frame-stops-blowing-out: in-progress
+  9-1-the-frame-stops-blowing-out: done
   9-2-the-cell-under-the-cursor-is-visible-on-every-face: backlog
   9-3-the-four-modes-read-apart: backlog
-  9-4-trees-fewer-and-distinct-from-the-ground: in-progress
+  9-4-trees-fewer-and-distinct-from-the-ground: done
   # 9.4 IS THE ONE STORY IN THIS EPIC THAT TOUCHES sim-core (worldgen density): every seeded world
   # changes, terrain-dependent tests and capture recipes need re-checking, and mutation rows anchored
   # near worldgen literals may APPLY-FAIL. It also pushes valley-floor luminance UP while 9.1 pushes

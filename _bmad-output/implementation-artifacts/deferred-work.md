@@ -1178,3 +1178,21 @@ look change becomes a story.
   tip and upper rings (or requiring the cell to be the topmost foliage in its column) would remove
   the ground ring. Interacts with 9.4: only 42.6% of foliage takes 9.4's new green precisely because
   the crown swap claims the other 57.4%.
+
+## Carried out of Epic 9's shared sitting (2026-08-29) — the next story candidate
+
+- **The withheld levers, plus AC13's ceiling reading.** Story 9.1 proved with a controlled pair that
+  campfire shadows are insufficient to close the blow-out — they help (warm-lit pixels −15.7 %,
+  near-white area −10 %) but nowhere near enough, and Wolf's eye agrees. Its standing rule then
+  stopped it rather than reaching further, which is what the rule is for. **Opening intensity,
+  amplitude, range or emissive is a new ruling from Wolf and belongs in its own story with its own
+  before/after numbers.** That story must also take **AC13's ceiling reading**, which the sitting did
+  not produce: Wolf's report was a visual judgement and carries no `near-white-area` figure, so
+  `NEAR_WHITE_AREA_CEILING` is still calibrated on `boot7.png` (a GPU frame) while every figure
+  behind it was measured on llvmpipe. One capture on the vehicle settles it —
+  `epic-9-shared-sitting-card.md` §1. `[wolf/MED]`
+- **9.2 inherits a measured constraint, not a preference.** The hover slab is `(80,220,210)`,
+  luminance **189.5**; the campfire's near-white pool exceeds **200** and saturates toward **255**,
+  in both shadow states and at every threshold swept. **A brighter slab cannot fix this** — nothing
+  beats a background reaching 255 on luminance alone. 9.2's fix needs hue/saturation separation or
+  an outline. `[measured 2026-08-29]`

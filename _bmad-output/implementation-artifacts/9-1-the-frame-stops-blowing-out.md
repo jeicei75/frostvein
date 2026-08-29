@@ -5,7 +5,7 @@ baseline_commit: 15b3635688ddcc2168ef9f2981b477d1490d8fa9
 
 # Story 9.1: The Frame Stops Blowing Out
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -687,8 +687,22 @@ reaching 255 on luminance alone; the marker needs hue/saturation separation or a
 **Still 9.2's and still vehicle-bound:** the rendered judgement. The hover path reads
 `windows.single()` and cannot be exercised headlessly.
 
-**WHAT REMAINS FOR THE VEHICLE:** AC13's ceiling half, AC15's rendered half, and any decision to
-open the withheld levers (intensity, amplitude, range, emissive). Those stay withheld.
+**CLOSED 2026-08-29 ON WOLF'S SITTING.** He ran it and reported *"did it already .. I think it's
+fine"*. That judgement covers the eye-bound halves: **AC14 confirmed** (the fire reads acceptably on
+the current build) and **AC15's re-check confirmed**, with its causation already answered by
+measurement above.
+
+**ONE HALF IS CARRIED, NOT CLAIMED: AC13's ceiling reading.** Wolf's report is a visual judgement
+and does not contain a `near-white-area` figure, so the ceiling is **neither confirmed nor
+corrected on the vehicle** and this record does not pretend otherwise. It carries to the
+withheld-levers follow-up, which has to recalibrate it there anyway: the assertion changed from a
+connected pool to near-white area on 2026-08-29, so `NEAR_WHITE_AREA_CEILING` is calibrated on
+`boot7.png` — a GPU frame — while every figure behind it was taken on llvmpipe. One capture on the
+vehicle settles it; the short card is at `epic-9-shared-sitting-card.md` §1.
+
+**STILL WITHHELD, and only Wolf may open them:** intensity, amplitude, range, emissive. The story's
+standing rule held — it stopped and reported rather than reaching for them, and it now has the
+numbers to justify the escalation.
 
 ## Dev Agent Record
 
