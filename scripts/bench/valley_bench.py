@@ -5,6 +5,7 @@ Run with Blender: ``blender --background --python valley_bench.py -- SNAPSHOT OU
 
 import json
 import math
+import traceback
 import sys
 
 try:
@@ -55,6 +56,46 @@ ENTITY_APPEARANCE = {
     "campfire": ((255, 173, 92), 0.55),
 }
 
+# The boot camera, SINGLE-SOURCED. `project_boot_point` and the rendered camera must read the
+# same constants or the framing test guards a projection the renderer does not use: measured on
+# the previous split version, widening only the render FOV to pi/3 changed 1,050,234 of 2,073,600
+# pixel values while the framing test still read camp=(0.500, 0.779) skyline_y=0.240, inside
+# tolerance, and the range check still exited 0.
+BOOT_YAW, BOOT_PITCH, BOOT_DISTANCE = 0.7, 0.45, 90.0
+BOOT_COMPOSITION_FORWARD = 33.0
+BOOT_COMPOSITION_LIFT = -0.5
+BOOT_VERTICAL_FOV = math.pi / 4
+BOOT_ASPECT_RATIO = 16.0 / 9.0
+BOOT_FOCUS = (64.0, 64.0, 9.0)
+RENDER_HEIGHT = 540
+RENDER_WIDTH = round(RENDER_HEIGHT * BOOT_ASPECT_RATIO)
+
+# The aurora itself is out of scope and is NOT drawn, but the client aims its directional light
+# from the aurora's core at the camp [atmosphere.rs:209-211, 67-71], so reproducing the LIGHT
+# needs these numbers. Without them the bench sun was a guess pointing 122 degrees away from the
+# client's, lighting and shadowing different faces of the same terrain.
+AURORA_RADIUS = 600.0
+AURORA_BOTTOM = -162.0
+AURORA_TOP = 45.0
+SKY_CENTRE = (63.5, 0.0, -63.5)
+CAMP_FOCUS = (64.0, 9.0, -64.0)
+
+# Cycles has no ambient-light object: the world background IS the ambient term. The client adds
+# `AmbientLight { color: night_lighting().ambient, brightness: 4_500.0 }` [ingest.rs:714-718] on
+# top of its flat sky, and drives its sun at 22,000 lux [appearance.rs:48].
+#
+# NEITHER number converts: Bevy's brightness/illuminance and Cycles' background strength and sun
+# energy share no units, and the bench deliberately omits the aurora curtain, which is a real
+# light source in the client. So these two scalars are CALIBRATED, not converted, against one
+# objective target: mean Rec.709 luma over the bottom 65% of the frame (terrain-dominated at the
+# boot framing, and free of the aurora that contaminates a whole-frame average).
+#   client `gui-capture.png`  105.7   mean RGB (87, 108, 138)
+#   bench at these values     103.6   mean RGB (81, 106, 147)
+# Re-calibrate against a fresh client capture if the client's lighting moves; do not tune these
+# by eye. Before ambient was wired at all the same band read 65.0 and the frame was visibly flat.
+AMBIENT_STRENGTH = 3.3
+SUN_ENERGY = 21.0
+
 # Floors, each well below its delivered measurement so reframing does not trip them.
 # MEASURED on the delivered bench, shipped seed, 960x540: non_sky_fraction 0.674020 and
 # distinct_colors 45,642. An all-sky frame reads 0.000000 / 4, which is what these floors exist to
@@ -63,6 +104,10 @@ ENTITY_APPEARANCE = {
 # pins.
 MIN_NON_SKY_FRACTION = 0.02
 MIN_DISTINCT_COLORS = 32
+# The figure that would have caught an unlit scene. AMBIENT_RGB was defined, pinned by the drift
+# guard, and read by nothing -- the frame rendered ~24% darker than the client and every existing
+# floor stayed green, because a dark frame is neither empty nor monochrome.
+MIN_TERRAIN_LUMA = 20.0
 
 
 def vector_add(left, right):
@@ -96,13 +141,34 @@ def vector_normalize(vector):
     return vector_scale(vector, 1.0 / length)
 
 
+def boot_horizontal_forward():
+    """[camera.rs:21-23] -- also the direction the aurora core sits along."""
+    return (-math.cos(BOOT_YAW), 0.0, -math.sin(BOOT_YAW))
+
+
+def aurora_core():
+    """[atmosphere.rs:67-71]. The compass point the client's directional light comes from."""
+    return vector_add(
+        vector_add(SKY_CENTRE, vector_scale(boot_horizontal_forward(), AURORA_RADIUS)),
+        (0.0, (AURORA_BOTTOM + AURORA_TOP) * 0.5, 0.0),
+    )
+
+
+def sun_direction():
+    """The client's `aurora_light_transform()` [atmosphere.rs:209-211] as a unit vector."""
+    return vector_normalize(vector_subtract(CAMP_FOCUS, aurora_core()))
+
+
 def boot_camera_frame():
     """Return the boot camera's location and local axes without requiring Blender."""
-    yaw, pitch, distance = 0.7, 0.45, 90.0
-    forward = (-math.cos(yaw), 0.0, -math.sin(yaw))
+    yaw, pitch, distance = BOOT_YAW, BOOT_PITCH, BOOT_DISTANCE
+    forward = boot_horizontal_forward()
     target = vector_add(
-        vector_add(world_to_render((64.0, 64.0, 9.0)), vector_scale(forward, 33.0)),
-        (0.0, -0.5, 0.0),
+        vector_add(
+            world_to_render(BOOT_FOCUS),
+            vector_scale(forward, BOOT_COMPOSITION_FORWARD),
+        ),
+        (0.0, BOOT_COMPOSITION_LIFT, 0.0),
     )
     horizontal = distance * math.cos(pitch)
     location = vector_add(
@@ -123,9 +189,9 @@ def project_boot_point(point):
     depth = -vector_dot(offset, back)
     if depth <= 0.0:
         return None
-    half_vertical = math.tan((math.pi / 4) * 0.5)
+    half_vertical = math.tan(BOOT_VERTICAL_FOV * 0.5)
     return (
-        0.5 + vector_dot(offset, right) / (2.0 * depth * half_vertical * (16.0 / 9.0)),
+        0.5 + vector_dot(offset, right) / (2.0 * depth * half_vertical * BOOT_ASPECT_RATIO),
         0.5 - vector_dot(offset, up) / (2.0 * depth * half_vertical),
     )
 
@@ -176,6 +242,26 @@ def has_snow_laden_crown(snapshot, x, y, z):
     )
 
 
+def foliage_scale(snapshot, x, y, z):
+    """The client's cube-foliage shrink [project.rs:874-892]: 0.62 / 0.78 / 0.95 by crown depth.
+
+    Counts consecutive TreeFoliage SOLID cells directly above, at most two, exactly as the
+    client's `take_while` does -- a ramp does not count and the walk stops at the first gap.
+    Scale changes only where a face is DRAWN, never which faces are exposed, so the cell and
+    face counts are untouched by it.
+    """
+    if terrain_material(tile_at(snapshot, x, y, z)) != "tree_foliage":
+        return 1.0
+    above = 0
+    for offset in (1, 2):
+        tile = tile_at(snapshot, x, y, z + offset)
+        if isinstance(tile, dict) and tile.get("solid") == "tree_foliage":
+            above += 1
+        else:
+            break
+    return (0.62, 0.78, 0.95)[above]
+
+
 def exposed_faces(snapshot):
     """Yield (position, material, face-direction) for every externally visible face."""
     dims = dims_of(snapshot)
@@ -208,9 +294,21 @@ def mesh_geometry(snapshot, material_indexes):
     face_materials = []
     for (x, y, z), material, face_index in exposed_faces(snapshot):
         first = len(vertices)
+        # Foliage is drawn shrunk about its cell centre so a crown reads as sparse branches
+        # rather than a solid canopy; a full-size cube tree is the 5.4 "the artifact does not
+        # predict the build" failure in miniature, and 10.4 is judged on this picture.
+        scale = foliage_scale(snapshot, x, y, z)
         for corner in FACE_CORNERS[face_index]:
             cx, cy, cz = corner
-            vertices.append(world_to_render((x + cx - 0.5, y + cy - 0.5, z + cz - 0.5)))
+            vertices.append(
+                world_to_render(
+                    (
+                        x + (cx - 0.5) * scale,
+                        y + (cy - 0.5) * scale,
+                        z + (cz - 0.5) * scale,
+                    )
+                )
+            )
         # world_to_render changes handedness, so face winding follows it to preserve normals.
         faces.append((first, first + 3, first + 2, first + 1))
         material_name = material
@@ -257,12 +355,20 @@ def pixel_figures(pixels):
     non_sky = 0
     colors = set()
     total = 0
+    luma_sum = 0.0
     for red, green, blue, _ in zip(*[iter(pixels)] * 4):
         total += 1
         if max(abs(red - sky[0]), abs(green - sky[1]), abs(blue - sky[2])) > 0.02:
             non_sky += 1
+            # Rec.709 luma over the LIT pixels only. Averaging the whole frame would let a
+            # bigger sky hide a darker scene, which is the confound this figure exists to avoid.
+            luma_sum += 255.0 * (0.2126 * red + 0.7152 * green + 0.0722 * blue)
         colors.add((round(red * 255), round(green * 255), round(blue * 255)))
-    return {"non_sky_fraction": non_sky / total if total else 0.0, "distinct_colors": len(colors)}
+    return {
+        "non_sky_fraction": non_sky / total if total else 0.0,
+        "distinct_colors": len(colors),
+        "terrain_luma": luma_sum / non_sky if non_sky else 0.0,
+    }
 
 
 def range_check(summary, figures):
@@ -270,8 +376,10 @@ def range_check(summary, figures):
         "exposed_cells": summary["exposed_cells"],
         "non_sky_fraction": figures["non_sky_fraction"],
         "distinct_colors": figures["distinct_colors"],
+        "terrain_luma": figures["terrain_luma"],
         "minimum_non_sky_fraction": MIN_NON_SKY_FRACTION,
         "minimum_distinct_colors": MIN_DISTINCT_COLORS,
+        "minimum_terrain_luma": MIN_TERRAIN_LUMA,
     }
 
 
@@ -279,6 +387,35 @@ def assert_range(check):
     assert check["exposed_cells"] > 0, "no exposed cells"
     assert check["non_sky_fraction"] >= check["minimum_non_sky_fraction"], "frame is too close to sky"
     assert check["distinct_colors"] >= check["minimum_distinct_colors"], "frame has too few colours"
+    assert check["terrain_luma"] >= check["minimum_terrain_luma"], "lit surfaces are too dark"
+
+
+def build_world(world):
+    """Flat SKY_RGB to the camera, AMBIENT_RGB fill to every other ray.
+
+    The client paints a flat `ClearColor` sky AND adds a separate `AmbientLight`
+    [ingest.rs:198, 714-718]. Cycles has no ambient-light object, so the world background has to
+    be both: mixing on `Is Camera Ray` keeps the visible backdrop exactly SKY_RGB while diffuse
+    rays pick up AMBIENT_RGB. Before this the only fill was the near-black sky, AMBIENT_RGB was
+    a dead constant, and the frame rendered ~24% darker than the build it must predict.
+    """
+    world.use_nodes = True
+    tree = world.node_tree
+    tree.nodes.clear()
+    output = tree.nodes.new("ShaderNodeOutputWorld")
+    mix = tree.nodes.new("ShaderNodeMixShader")
+    light_path = tree.nodes.new("ShaderNodeLightPath")
+    sky = tree.nodes.new("ShaderNodeBackground")
+    ambient = tree.nodes.new("ShaderNodeBackground")
+    sky.inputs["Color"].default_value = (*srgb_to_linear(SKY_RGB), 1.0)
+    sky.inputs["Strength"].default_value = 1.0
+    ambient.inputs["Color"].default_value = (*srgb_to_linear(AMBIENT_RGB), 1.0)
+    ambient.inputs["Strength"].default_value = AMBIENT_STRENGTH
+    # Fac 0 takes input 1, Fac 1 takes input 2, and Is Camera Ray is 1 only for the backdrop.
+    tree.links.new(light_path.outputs["Is Camera Ray"], mix.inputs["Fac"])
+    tree.links.new(ambient.outputs["Background"], mix.inputs[1])
+    tree.links.new(sky.outputs["Background"], mix.inputs[2])
+    tree.links.new(mix.outputs["Shader"], output.inputs["Surface"])
 
 
 def make_material(name, rgb):
@@ -312,19 +449,14 @@ def setup_scene(snapshot):
     scene.cycles.samples = 32
     # RuntimeError: Error: Failed to denoise, build has no OpenImageDenoise support.
     scene.cycles.use_denoising = False
-    scene.render.resolution_x = 960
-    scene.render.resolution_y = 540
+    scene.render.resolution_x = RENDER_WIDTH
+    scene.render.resolution_y = RENDER_HEIGHT
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
     scene.view_settings.look = "None"
     scene.view_settings.view_transform = "Standard"
     scene.world.color = srgb_to_linear(SKY_RGB)
-    scene.world.use_nodes = True
-    scene.world.node_tree.nodes["Background"].inputs["Color"].default_value = (
-        *srgb_to_linear(SKY_RGB),
-        1.0,
-    )
-    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 1.0
+    build_world(scene.world)
 
     materials = {name: make_material(name, rgb) for name, rgb in TERRAIN_RGB.items()}
     materials["snow_cap"] = make_material("snow_cap", SNOW_CAP_RGB)
@@ -349,14 +481,16 @@ def setup_scene(snapshot):
 
     sun_data = bpy.data.lights.new("directional", "SUN")
     sun_data.color = srgb_to_linear(DIRECTIONAL_RGB)
-    sun_data.energy = 3.0
+    sun_data.energy = SUN_ENERGY
     sun = bpy.data.objects.new("directional", sun_data)
-    sun.rotation_euler = (math.radians(-35), math.radians(20), math.radians(30))
+    # A SUN emits along its local -Z. Roll about that axis is meaningless for a directional
+    # light, so track_quat is safe here in a way it is NOT for the camera basis below.
+    sun.rotation_euler = Vector(sun_direction()).to_track_quat("-Z", "Y").to_euler()
     bpy.context.collection.objects.link(sun)
 
     camera_data = bpy.data.cameras.new("boot camera")
     camera_data.sensor_fit = "VERTICAL"
-    camera_data.angle = math.pi / 4
+    camera_data.angle = BOOT_VERTICAL_FOV
     camera = bpy.data.objects.new("boot camera", camera_data)
     bpy.context.collection.objects.link(camera)
     # The rendered camera IS the projected camera: boot_camera_frame() is what the framing test
@@ -373,12 +507,7 @@ def setup_scene(snapshot):
 # renders only the exposed set, so this small boot-draw divergence remains visible and named.
 
 
-def main():
-    if bpy is None:
-        raise SystemExit("run this script with blender")
-    args = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-    if len(args) != 2:
-        raise SystemExit("usage: valley_bench.py -- <snapshot.json> <out.png>")
+def render(args):
     with open(args[0], encoding="utf-8") as snapshot_file:
         snapshot = json.load(snapshot_file)
     summary = geometry_summary(snapshot)
@@ -395,14 +524,34 @@ def main():
         f" exposed_cells={check['exposed_cells']}"
         f" non_sky_fraction={check['non_sky_fraction']:.6f}"
         f" distinct_colors={check['distinct_colors']}"
+        f" terrain_luma={check['terrain_luma']:.3f}"
         f" floors(non_sky_fraction={check['minimum_non_sky_fraction']:.6f},"
-        f" distinct_colors={check['minimum_distinct_colors']})"
+        f" distinct_colors={check['minimum_distinct_colors']},"
+        f" terrain_luma={check['minimum_terrain_luma']:.3f})"
     )
     try:
         assert_range(check)
     except AssertionError as error:
         # Blender logs an uncaught Python AssertionError yet exits 0; propagate failure to shell.
         raise SystemExit(f"range check failed: {error}") from error
+
+
+def main():
+    if bpy is None:
+        raise SystemExit("run this script with blender")
+    args = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
+    if len(args) != 2:
+        raise SystemExit("usage: valley_bench.py -- <snapshot.json> <out.png>")
+    try:
+        render(args)
+    except Exception as error:
+        # Blender's --background runner prints a traceback for ANY uncaught exception and still
+        # exits 0. Guarding only the range assert left every other failure -- malformed JSON, an
+        # entity kind the palette does not know, a dims/tiles length mismatch -- printing a
+        # traceback and reporting success on a frame that was never rendered. Exit 0 is not a
+        # result. SystemExit is deliberately not caught: assert_range already raises it.
+        traceback.print_exc()
+        raise SystemExit(f"bench failed: {type(error).__name__}: {error}") from error
 
 
 if __name__ == "__main__":
