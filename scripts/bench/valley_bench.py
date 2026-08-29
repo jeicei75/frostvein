@@ -4,6 +4,7 @@ Run with Blender: ``blender --background --python valley_bench.py -- SNAPSHOT OU
 """
 
 import json
+import math
 import sys
 
 try:
@@ -29,6 +30,30 @@ FACE_CORNERS = (
     ((0, 0, 0), (0, 1, 0), (1, 1, 0), (1, 0, 0)),
     ((0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)),
 )
+
+TERRAIN_RGB = {
+    "stone": (60, 70, 92),
+    "soil": (56, 52, 62),
+    "ice": (104, 128, 170),
+    "snow": (136, 150, 178),
+    "tree_trunk": (43, 47, 58),
+    "tree_foliage": (44, 100, 58),
+}
+SNOW_CAP_RGB = (146, 158, 184)
+FOLIAGE_SNOW_RGB = (156, 170, 196)
+SKY_RGB = (5, 12, 28)
+AMBIENT_RGB = (120, 140, 165)
+DIRECTIONAL_RGB = (150, 190, 180)
+LIGHT_RGB = {
+    "torch": (255, 140, 62),
+    "campfire": (255, 173, 92),
+    "lantern": (255, 195, 110),
+}
+ENTITY_APPEARANCE = {
+    "dwarf": ((151, 116, 96), 0.65),
+    "torch": ((255, 140, 62), 0.28),
+    "campfire": ((255, 173, 92), 0.55),
+}
 
 
 def dims_of(snapshot):
@@ -57,6 +82,24 @@ def terrain_material(tile):
 
 def is_solid(tile):
     return terrain_material(tile) is not None
+
+
+def has_snow_cap(snapshot, x, y, z):
+    material = terrain_material(tile_at(snapshot, x, y, z))
+    return (
+        material not in (None, "ice", "soil", "tree_foliage")
+        and not is_solid(tile_at(snapshot, x, y, z + 1))
+    )
+
+
+def has_snow_laden_crown(snapshot, x, y, z):
+    if terrain_material(tile_at(snapshot, x, y, z)) != "tree_foliage":
+        return False
+    if is_solid(tile_at(snapshot, x, y, z + 1)):
+        return False
+    return terrain_material(tile_at(snapshot, x, y, z - 1)) not in (
+        "stone", "soil", "ice", "snow"
+    )
 
 
 def exposed_faces(snapshot):
@@ -95,7 +138,12 @@ def mesh_geometry(snapshot, material_indexes):
             cx, cy, cz = corner
             vertices.append(world_to_render((x + cx - 0.5, y + cy - 0.5, z + cz - 0.5)))
         faces.append((first, first + 1, first + 2, first + 3))
-        face_materials.append(material_indexes[material])
+        material_name = material
+        if has_snow_laden_crown(snapshot, x, y, z):
+            material_name = "foliage_snow"
+        elif face_index == 5 and has_snow_cap(snapshot, x, y, z):
+            material_name = "snow_cap"
+        face_materials.append(material_indexes[material_name])
     return vertices, faces, face_materials
 
 
@@ -115,6 +163,101 @@ def create_terrain(snapshot, materials):
     return terrain
 
 
+def srgb_to_linear(rgb):
+    def channel(value):
+        value /= 255.0
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+    return tuple(channel(value) for value in rgb)
+
+
+def make_material(name, rgb):
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    material.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (
+        *srgb_to_linear(rgb),
+        1.0,
+    )
+    material.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 1.0
+    return material
+
+
+def add_cube(name, location, scale, material):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=location)
+    cube = bpy.context.object
+    cube.name = name
+    cube.scale = (scale, scale, scale)
+    cube.data.materials.append(material)
+    return cube
+
+
+def setup_scene(snapshot):
+    from mathutils import Vector
+
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.object.delete(use_global=False)
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.samples = 32
+    # RuntimeError: Error: Failed to denoise, build has no OpenImageDenoise support.
+    scene.cycles.use_denoising = False
+    scene.render.resolution_x = 960
+    scene.render.resolution_y = 540
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "PNG"
+    scene.world.color = srgb_to_linear(SKY_RGB)
+    scene.world.use_nodes = True
+    scene.world.node_tree.nodes["Background"].inputs["Color"].default_value = (
+        *srgb_to_linear(SKY_RGB),
+        1.0,
+    )
+    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.18
+
+    materials = {name: make_material(name, rgb) for name, rgb in TERRAIN_RGB.items()}
+    materials["snow_cap"] = make_material("snow_cap", SNOW_CAP_RGB)
+    materials["foliage_snow"] = make_material("foliage_snow", FOLIAGE_SNOW_RGB)
+    create_terrain(snapshot, materials)
+
+    for entity in snapshot.get("entities", []):
+        kind = entity["kind"]
+        rgb, scale = ENTITY_APPEARANCE[kind]
+        position = Vector(world_to_render(entity["pos"]))
+        entity_material = make_material("entity_" + str(entity["id"]), rgb)
+        add_cube(kind, position, scale, entity_material)
+        light_kind = entity.get("light")
+        if light_kind:
+            light_data = bpy.data.lights.new(light_kind, "POINT")
+            light_data.color = srgb_to_linear(LIGHT_RGB[light_kind])
+            light_data.energy = {"torch": 750.0, "campfire": 1_500.0, "lantern": 300.0}[light_kind]
+            light_data.shadow_soft_size = 1.0
+            light = bpy.data.objects.new(light_kind, light_data)
+            light.location = position + Vector((0.0, 0.5, 0.0))
+            bpy.context.collection.objects.link(light)
+
+    sun_data = bpy.data.lights.new("directional", "SUN")
+    sun_data.color = srgb_to_linear(DIRECTIONAL_RGB)
+    sun_data.energy = 2.0
+    sun = bpy.data.objects.new("directional", sun_data)
+    sun.rotation_euler = (math.radians(35), math.radians(-20), math.radians(30))
+    bpy.context.collection.objects.link(sun)
+
+    camera_data = bpy.data.cameras.new("boot camera")
+    camera_data.sensor_fit = "VERTICAL"
+    camera_data.angle = math.pi / 4
+    camera = bpy.data.objects.new("boot camera", camera_data)
+    bpy.context.collection.objects.link(camera)
+    yaw, pitch, distance = 0.7, 0.45, 90.0
+    forward = Vector((-math.cos(yaw), 0.0, -math.sin(yaw)))
+    target = Vector(world_to_render((64, 64, 9))) + forward * 33.0 + Vector((0.0, -0.5, 0.0))
+    horizontal = distance * math.cos(pitch)
+    camera.location = target + Vector(
+        (horizontal * math.cos(yaw), distance * math.sin(pitch), horizontal * math.sin(yaw))
+    )
+    camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
+    scene.camera = camera
+
+
 # NOTE: The client also draws solid cells at its selected top slice. The bench intentionally
 # renders only the exposed set, so this small boot-draw divergence remains visible and named.
 
@@ -125,10 +268,13 @@ def main():
     args = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     if len(args) != 2:
         raise SystemExit("usage: valley_bench.py -- <snapshot.json> <out.png>")
-    snapshot = json.loads(open(args[0], encoding="utf-8").read())
+    with open(args[0], encoding="utf-8") as snapshot_file:
+        snapshot = json.load(snapshot_file)
     summary = geometry_summary(snapshot)
     print("exposed cells:", summary["exposed_cells"], "faces:", summary["faces"])
-    raise SystemExit("look setup follows in Task 3")
+    setup_scene(snapshot)
+    bpy.context.scene.render.filepath = args[1]
+    bpy.ops.render.render(write_still=True)
 
 
 if __name__ == "__main__":
