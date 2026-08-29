@@ -5,7 +5,7 @@ baseline_commit: 212fbcdc3caa0bf2daba821fe1598df2c1fdbf38
 
 # Story 10.1: The Headless Bench
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -129,7 +129,7 @@ trees by construction. Do not port its tree code, and do not port its printed `5
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — The export file (AC: 5)**
+- [x] **Task 1 — The export file (AC: 5)**
   - [ ] Promote `5-4-signoff/capture_snapshot.py` to `scripts/bench/export_world.py`: spawn
         `simd 0`, parse the `listening on 127.0.0.1:<port>` banner, read one snapshot line, write
         it out, print tick/entities/dims. **Keep the banner parse** — `simd`'s only argument is
@@ -142,7 +142,7 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         tick 20). Entity positions differ between exports; terrain does not. Say so in a comment.
   - [ ] Leave the original in `5-4-signoff/` untouched — it is provenance for an approved artifact.
 
-- [ ] **Task 2 — The bench script, geometry half (AC: 2, 3, 4)**
+- [x] **Task 2 — The bench script, geometry half (AC: 2, 3, 4)**
   - [ ] `scripts/bench/valley_bench.py`, run as
         `blender --background --python scripts/bench/valley_bench.py -- <snapshot.json> <out.png>`.
   - [ ] **Guard the `bpy` import** (`try: import bpy / except ImportError: bpy = None`) so the
@@ -167,7 +167,7 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         so the client draws a thin extra top layer the bench does not. Small; named so it is not
         chased.
 
-- [ ] **Task 3 — The bench script, look half (AC: 2, 9)**
+- [x] **Task 3 — The bench script, look half (AC: 2, 9)**
   - [ ] Terrain materials from `appearance.rs::material_color`, sRGB u8 converted to linear for
         the Principled BSDF: Stone `(60,70,92)`, Soil `(56,52,62)`, Ice `(104,128,170)`,
         Snow `(136,150,178)`, TreeTrunk `(43,47,58)`, TreeFoliage `(44,100,58)`.
@@ -190,7 +190,7 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         *horizontal* on a 16:9 render. Set `sensor_fit = 'VERTICAL'` (or set `angle_y`), or the
         frame comes out visibly tighter than the client's.
 
-- [ ] **Task 4 — The range check that can actually fail (AC: 6, 10, 11)**
+- [x] **Task 4 — The range check that can actually fail (AC: 6, 10, 11)**
   - [ ] After rendering, read the frame back — Blender hands you the pixels directly
         (`bpy.data.images.load(out).pixels`), so no PNG decoder is needed inside the bench.
   - [ ] **The emptiness metric is distance from the SKY colour, not from black.** An empty frame
@@ -208,7 +208,7 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         naming the hard failure: `RuntimeError: Error: Failed to denoise, build has no
         OpenImageDenoise support`, exit 1, no PNG written.
 
-- [ ] **Task 5 — Tests, and getting them into the gate (AC: 7, 8, 9, 13)**
+- [x] **Task 5 — Tests, and getting them into the gate (AC: 7, 8, 9, 13)**
   - [ ] `scripts/tests/test_valley_bench.py` (unittest): exposed-face extraction over small
         hand-built worlds (including an out-of-bounds edge case), the floor functions, and AC7's
         two assertions — geometry summary changes across two worlds, **and** the pixel figures
@@ -236,7 +236,7 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         Rust source text on both sides. **Do not add `pub` to make it importable**; that is a
         crate change this story forbids.
 
-- [ ] **Task 6 — The sabotage table, and the harness gaps it exposes (AC: 12)**
+- [x] **Task 6 — The sabotage table, and the harness gaps it exposes (AC: 12)**
   - [ ] **Commit first, then mutate.** Never `git checkout --` over an uncommitted fix.
   - [ ] **Gap 1, a live trap worth closing regardless of this story:** `backup_all` snapshots only
         `$(git ls-files 'crates/*')` [mutate.sh:46], so a sabotage patching anything under
@@ -260,7 +260,7 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         test then looks identical to the weak one from outside.
   - [ ] Confirm `python3 scripts/audit-mutations.py` still runs clean over every table.
 
-- [ ] **Task 7 — The instrument, named and demonstrated (AC: 4, 6, 10)**
+- [x] **Task 7 — The instrument, named and demonstrated (AC: 4, 6, 10)**
   - [ ] **The instrument for this story is the bench itself**; its exact command is in
         Verification. It is not a substitute for the tests above, and Task 5 is its own test.
   - [ ] Run it end to end on the shipped seed. Record the exposed-cell count, the Cycles-internal
@@ -269,7 +269,7 @@ trees by construction. Do not port its tree code, and do not port its printed `5
         how many differ. **Do not tick AC10 until the numbers are pasted in** — a checkbox is
         worth only what its verification is worth.
 
-- [ ] **Task 8 — The comparison pair for Wolf (AC: 15)**
+- [x] **Task 8 — The comparison pair for Wolf (AC: 15)**
   - [ ] Create `_bmad-output/implementation-artifacts/10-1-signoff/`.
   - [ ] Commit one bench artifact and one `gui --capture` frame at the boot framing. Both are
         producible headlessly here (9.1 established the path; the 9.4 signoff PNGs were made this
@@ -486,14 +486,40 @@ project has been burned by.
 
 ### Agent Model Used
 
+gpt-5.6-terra
+
 ### Debug Log References
+
+- RED evidence: empty benchmark first logged `AssertionError: no exposed cells` yet Blender exited 0; after explicit `SystemExit`, the same export printed its range line and exited 1. Geometry sabotage RED: `{'exposed_cells': 2, 'faces': 12} != {'exposed_cells': 2, 'faces': 10}`. Palette sabotage RED: `client literal drifted: Material::Stone => Color::srgb_u8(60, 70, 92)`.
+- Instrument: export tick 22, entities 10, dims 128x128x32. Bench A: Cycles 1.60 s, whole process 4625 ms; Bench B: Cycles 1.51 s, whole process 4456 ms. Both: `range-check: exposed_cells=44984 non_sky_fraction=0.997218 distinct_colors=42935 floors(non_sky_fraction=0.020000, distinct_colors=32)`; pixel diff 0 of 2,073,600 RGBA values.
+- Unittests ran (none skipped): `test_empty_export_exits_nonzero`, `test_exposed_faces_use_six_orthogonal_neighbours_and_world_edges`, `test_geometry_summary_changes_when_world_content_changes`, `test_floor_functions_reject_empty_geometry_and_accept_visible_frame`, `test_pixel_figures_change_between_empty_and_one_cell_frames`.
+- Mutation results: palette drift KILLED; boot camera drift KILLED; missing range assertion KILLED; inverted neighbour predicate KILLED; zero exit KILLED. Audit: 413 rows matched, 11 legacy rows unguarded.
 
 ### Completion Notes List
 
+- Promoted the wire snapshot exporter and added a Cycles CPU bench with exposed-only mesh geometry, client palette/camera contract, range checks, and gate-integrated tests.
+- Added the signoff pair and comparison notes. GUI capture command used a live `simd` and `target/debug/gui <port> --headless --capture ... --at-tick 100 --frames 20`; it wrote the PNG but exited 101 because the existing capture integrity rule observed only 13 delivered ticks. Wolf's visual judgement remains open.
+- Full gate was started after all changes, but the execution session ended during its `cargo test` stage before it printed a result; no green full-gate claim is made.
+
 ### File List
+
+- scripts/bench/export_world.py
+- scripts/bench/valley_bench.py
+- scripts/tests/test_valley_bench.py
+- crates/gui/tests/bench_contract.rs
+- scripts/gate.sh
+- scripts/mutate.sh
+- scripts/audit-mutations.py
+- _bmad-output/implementation-artifacts/mutations/10-1-the-headless-bench.sh
+- _bmad-output/implementation-artifacts/10-1-signoff/bench-valley.png
+- _bmad-output/implementation-artifacts/10-1-signoff/gui-capture.png
+- _bmad-output/implementation-artifacts/10-1-signoff/what-you-will-see.md
+- docs/tech-art-guidelines.md
+- _bmad-output/implementation-artifacts/10-1-the-headless-bench.md
 
 ## Change Log
 
 | date | change |
 | --- | --- |
 | 2026-08-29 | Story created. Epic 10 opens. **AC1's workload re-measurement was executed at creation rather than deferred**: 44,984 exposed cells, Cycles 2.01 s / process 3.67 s, 0 of 2,073,600 pixel values differing across two full-scale runs — so the epic's gingerspice fallback does not fire and the devpod stays the venue. Three epic premises checked (one false: `bevy_gltf` IS enabled, which corrects 10.5). The export file was found to exist already and is promoted, not rebuilt. Baseline `212fbcd`, full gate GREEN at creation (run, not claimed); stacks on the 9.4 tip because `main` still carries the superseded foliage colour. Revised after an adversarial checklist review that found five criticals — the emptiness metric was inert (a non-black floor cannot detect an empty frame once the sky is `(5,12,28)`), AC8's exit-code check was unbuildable against the bpy-free test rule, the new `py` mutation tier reopened the false-KILL class, the drift guard's placement was justified circularly, and Task 2 pinned a moving content measurement inside the epic that will move it. |
+| 2026-08-29 | Implemented the headless bench, tests, mutation coverage, and signoff artifacts. |
