@@ -898,6 +898,14 @@ grain at 32 samples, the snow-cap slab geometry, ramps drawn as cubes, and the e
 calibration — ordered by how much of the frame each moves. **Whether the bench artifact predicts
 the build remains Wolf's call and no agent can close it.**
 
+**Review cost, and one honest caveat about how it is booked.** 513 turns, $50.94, 96.1% of every
+token processed a cache read, 4 subagent transcripts = 38.8% of the session. **This single `review`
+row covers the patch pass too**, because both ran in one session and the delta cursor was never
+marked at the boundary — so the split between reviewing and repairing is not recoverable from the
+ledger. Next time, run `session_tokens.py --phase review` at the moment triage is written, before
+the first patch, so `review` and `review-patch` land as two rows. Build caches reaped after triage:
+**38.1 GB across 14 directories** under /tmp.
+
 **Coverage holes carried into this record, not resolved by it:** `codex review --base main` still
 never ran on this story. The `gui --headless --capture` exit-101 limitation is unchanged and the
 client half of the pair was not re-rendered, correctly — the review changed no crate behaviour,
