@@ -37,3 +37,19 @@ old = '        raise SystemExit(f"range check failed: {error}") from error'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        return'))
 PY
+
+mutation "z-up camera basis fails the framing test" py scripts.tests.test_valley_bench.ValleyFramingTests.test_boot_projection_matches_the_client_composition <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/valley_bench.py'); s = p.read_text()
+old = '    right = vector_normalize(vector_cross((0.0, 1.0, 0.0), back))'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    right = vector_normalize(vector_cross((0.0, 0.0, 1.0), back))'))
+PY
+
+mutation "linear sky reference fails the all-sky render test" py scripts.tests.test_valley_bench.ValleyBlenderTests.test_all_sky_frame_reads_as_sky_in_a_real_render <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/valley_bench.py'); s = p.read_text()
+old = '    sky = tuple(component / 255.0 for component in SKY_RGB)'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    sky = srgb_to_linear(SKY_RGB)'))
+PY
