@@ -14,6 +14,16 @@ use std::{
 
 use anyhow::{Context, bail};
 use bevy::{
+    app::PluginGroup,
+    app::ScheduleRunnerPlugin,
+    asset::{Assets, Handle},
+    camera::RenderTarget,
+    image::Image,
+    render::render_resource::{TextureFormat, TextureUsages},
+    window::{ExitCondition, WindowPlugin},
+    winit::WinitPlugin,
+};
+use bevy::{
     app::{App, AppExit, PostUpdate, Startup, Update},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
@@ -30,16 +40,6 @@ use bevy::{
     },
     render::renderer::RenderAdapterInfo,
     window::PrimaryWindow,
-};
-use bevy::{
-    app::PluginGroup,
-    app::ScheduleRunnerPlugin,
-    asset::{Assets, Handle},
-    camera::RenderTarget,
-    image::Image,
-    render::render_resource::{TextureFormat, TextureUsages},
-    window::{ExitCondition, WindowPlugin},
-    winit::WinitPlugin,
 };
 use client_core::Mirror;
 use protocol::{Delta, Dims, Snapshot};
@@ -105,7 +105,10 @@ pub fn run() -> anyhow::Result<()> {
         // No window, and therefore no winit: WinitPlugin panics outright where there is no display
         // server, which is every devpod this project builds on. ScheduleRunnerPlugin drives the
         // loop instead. The renderer is untouched and still real — see `HeadlessTarget`.
-        eprintln!("gui running HEADLESS: offscreen {}x{} target, no window", HEADLESS_SIZE.0, HEADLESS_SIZE.1);
+        eprintln!(
+            "gui running HEADLESS: offscreen {}x{} target, no window",
+            HEADLESS_SIZE.0, HEADLESS_SIZE.1
+        );
         app.add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
@@ -701,29 +704,29 @@ fn setup_camera(
     let (fog_start, fog_end) = fog_falloff(rig.distance);
     let camera = commands
         .spawn((
-        Camera3d::default(),
-        Projection::Perspective(PerspectiveProjection {
-            fov: BOOT_VERTICAL_FOV,
-            ..Default::default()
-        }),
-        rig.transform(),
-        rig,
-        AmbientLight {
-            color: night_lighting().ambient,
-            brightness: night_lighting().ambient_brightness,
-            ..Default::default()
-        },
-        DistanceFog {
-            color: night_lighting().sky,
-            falloff: FogFalloff::Linear {
-                start: fog_start,
-                end: fog_end,
+            Camera3d::default(),
+            Projection::Perspective(PerspectiveProjection {
+                fov: BOOT_VERTICAL_FOV,
+                ..Default::default()
+            }),
+            rig.transform(),
+            rig,
+            AmbientLight {
+                color: night_lighting().ambient,
+                brightness: night_lighting().ambient_brightness,
+                ..Default::default()
             },
-            ..Default::default()
-        },
-        ClientLocal,
-    ))
-    .id();
+            DistanceFog {
+                color: night_lighting().sky,
+                falloff: FogFalloff::Linear {
+                    start: fog_start,
+                    end: fog_end,
+                },
+                ..Default::default()
+            },
+            ClientLocal,
+        ))
+        .id();
     if let Some(handle) = headless_target {
         // In Bevy 0.19 the render target is its own COMPONENT, not a field on Camera.
         commands
@@ -1454,6 +1457,69 @@ mod tests {
         // And the pin is clamped by the same rule as every other level change.
         assert_eq!(super::initial_slice(dims, Some(999)).level(), 31);
         assert_eq!(super::initial_slice(dims, Some(-5)).level(), 0);
+    }
+
+    /// The devpods this project builds on have no display server, so winit panics and every
+    /// pixel AC has been vehicle-bound since 2026-08-11. They DO have a CPU Vulkan device
+    /// (lavapipe), and rendering needs a device rather than a window — `--headless` is what turns
+    /// that into a measurement. Verified live: the headless client reproduced the draw-set oracle
+    /// on both the pre-9.4 world (53,365) and the current one (44,984).
+    #[test]
+    fn headless_is_off_by_default_and_on_only_when_asked() {
+        let interactive = super::parse_args_from([std::ffi::OsString::from("7451")])
+            .expect("a bare port must parse");
+        assert!(
+            !interactive.headless,
+            "a client asked for nothing special must still open a window"
+        );
+        let headless = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--headless"),
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("boot.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("220"),
+        ])
+        .expect("a headless capture must parse");
+        assert!(headless.headless);
+        assert_eq!(headless.capture, Some(std::path::PathBuf::from("boot.png")));
+    }
+
+    /// The camera must actually be pointed somewhere. A headless run whose camera still targets a
+    /// window renders nothing and the screenshot is empty — silently, which is the failure shape
+    /// this project keeps meeting.
+    #[test]
+    fn a_headless_camera_draws_into_an_offscreen_target_and_a_windowed_one_does_not() {
+        use bevy::prelude::World as BevyWorld;
+
+        for headless in [false, true] {
+            let mut world = BevyWorld::new();
+            world.init_resource::<bevy::asset::Assets<bevy::image::Image>>();
+            if headless {
+                world.insert_resource(super::HeadlessRequested);
+            }
+            world
+                .run_system_once(super::setup_camera)
+                .expect("setup_camera must run");
+
+            // Count IMAGE targets specifically. A camera always carries a RenderTarget — the
+            // default one points at a window — so counting the component discriminates nothing.
+            // The first draft of this test did exactly that and passed for the wrong reason.
+            let targets = world
+                .query::<&bevy::camera::RenderTarget>()
+                .iter(&world)
+                .filter(|target| matches!(target, bevy::camera::RenderTarget::Image(_)))
+                .count();
+            let resource = world.get_resource::<super::HeadlessTarget>().is_some();
+            assert_eq!(
+                targets, headless as usize,
+                "headless={headless}: expected the offscreen render target only when headless"
+            );
+            assert_eq!(
+                resource, headless,
+                "headless={headless}: the capture reads HeadlessTarget to know what to screenshot"
+            );
+        }
     }
 
     #[test]
