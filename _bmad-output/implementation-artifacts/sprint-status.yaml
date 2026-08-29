@@ -43,7 +43,87 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-28  # STORY 9.1 CODE-REVIEWED -> in-progress. 4 layers, all live, fresh
+last_updated: 2026-08-29  # STORY 9.4 -> REVIEW. Dev complete, metrics recorded.
+                          # THIS BLOCK AND THE TWO BELOW IT ARE BACKFILLED on 2026-08-29: 9.4's
+                          # create, in-progress and review transitions each moved the status line
+                          # only, so this header sat four events stale and still led with 9.1's
+                          # review. The stories' own files carry the detail; this restores the
+                          # narrative anyone reads first.
+                          # Density roll `0..12` -> `0..48`: 704 -> 265 trees on the default seed
+                          # (242 / 258 on seeds 42 / 7451), all inside Wolf's ruled 230-300 band,
+                          # guarded by a deterministic named-seed test that counts trunk COLUMNS
+                          # rather than cells (trunk height is 4..=6, so cells are the wrong
+                          # oracle). Foliage (55,73,84) -> (44,100,58): clears stone by 48.1 and
+                          # soil by 49.6 against the shipped MIN_MARK_SEPARATION of 40.0 it sat
+                          # 9.9 from, blue >= red so W2's terrain invariant stands.
+                          # THE TUI NEEDED NO CHANGE, and the reason is the find: palette.rs:199
+                          # has rendered foliage green at (54,106,78) since it was written, so the
+                          # 3D client was the odd one out and this brings the two into agreement.
+                          # No test forced it -- the gui<->tui cross-check covers MARKS only.
+                          # DELEGATED RUN HARNESS-KILLED mid-Task-3, the 9.1 failure mode again.
+                          # NOT auth: the wrapper's 401 warning fired 7 times, all false positives
+                          # (a source line number, git blob hashes, the echoed prompt); quota was
+                          # probed healthy and the banner read gpt-5.6-terra / high, no drift. The
+                          # commit-cadence floor paid for itself -- Codex had committed Tasks 1-2
+                          # rather than squashing, so work resumed from a green commit, and the
+                          # kill landed in Task 3's RED phase, which is correct TDD caught
+                          # mid-cycle. Its committed half was re-verified, not trusted.
+                          # THE SABOTAGE TABLE TOOK TWO CORRECTIONS, both caught only by running
+                          # it and READING THE KILL LINE. (1) A row lowering MIN_MARK_SEPARATION
+                          # itself SURVIVED, correctly: you cannot sabotage an assertion and
+                          # expect that same assertion to catch it. (2) Its production replacement
+                          # (foliage -> brown) then killed at the equality pin rather than at the
+                          # invariant -- the exact weak-kill shape 9.1's review found, one story
+                          # later, in a table written after it. Final 4/4 KILLED at worldgen.rs
+                          # :200/:201 and appearance.rs:298/:338, audit clean at 402 rows, cold
+                          # full gate GREEN after `cargo clean -p gui -p sim-core`.
+                          # tech-art-guidelines carried a THIRD stale figure, found while doing
+                          # the Task 8 check: the exposed crown was documented at the ARTIFACT's
+                          # (172,186,210) against a shipped (156,170,196), trimmed at round 7.
+                          # CARRIED INTO REVIEW UNMET, NOT PAPERED OVER: AC7, the 9.1 x 9.4
+                          # luminance interaction. The capture tests decode static COMMITTED PNGs,
+                          # which cannot see a tree-density change, and no devpod can open a
+                          # window -- so neither the 70-180 band nor 9.1's 0.6651 % blown-pool
+                          # ceiling was re-measured. Direction is known (fewer dark tree skirts
+                          # can only raise the valley floor and only enlarge the pool); the
+                          # numbers are not. AC10 is Wolf's eye and is unmet. The vehicle card
+                          # takes the BASELINE reading first, because 9.1's blow-out is still open
+                          # and a capture may exit 101 before trees are the cause.
+                          # PRIOR SAME DAY, AND IT IS THE HIGHEST-SIGNAL OPEN FACT IN EPIC 9:
+                          # 9.1's VEHICLE OBSERVATION -- Wolf, on the vehicle: "9.1 lights are
+                          # still blown out .. shadows are not strong enough or light is still too
+                          # strong." THE BLOW-OUT IS NOT CLOSED; shadows were not enough. This is
+                          # the story's PREDICTED outcome, stated at creation and expected
+                          # independently by both Opus review layers: shadows remove light passing
+                          # THROUGH geometry and cannot dim the unoccluded pool around the fire.
+                          # So AC14 is answered NO and 9.1 has done its job -- it proved with a
+                          # new instrument that shadows are insufficient. STILL OWED before 9.1
+                          # closes or escalates: the NUMBERS -- AC13's controlled shadows-off/on
+                          # pair and AC12's fps -- because "still blown out" is a judgement and
+                          # the ceiling is a measurement. WHAT MUST NOT HAPPEN NEXT: a quiet
+                          # intensity / amplitude / range / emissive change to force the ceiling
+                          # green. Those levers are withheld pending a NEW ruling from Wolf and
+                          # belong in a follow-up story with its own before/after numbers.
+                          # PRIOR SAME DAY: STORY 9.4 CREATED (ready-for-dev), premises verified
+                          # against source rather than inherited. TWO EPIC CLAIMS FALSIFIED: trees
+                          # draw from a dedicated STREAM_TREES, so terrain heights, camp origin
+                          # and spawns do NOT move, and no mutation row anchors on the density
+                          # literal -- the epic's blast-radius paragraph is overstated and the
+                          # radius is tile contents only. The density curve was MEASURED, not
+                          # estimated (704 / 531 / 400 / 265 at rolls 12/20/30/48), revealing that
+                          # the 2-cell spacing exclusion damps the knob so a 2.5x cut in the roll
+                          # removes only 43 % of trees. Two rulings taken: (W1) band 230-300 at
+                          # `0..48`; (W2) GREEN, not brown -- the epic's "brown/green" collides
+                          # with the shipped rgb[2] >= rgb[0] invariant, which brown cannot
+                          # satisfy, so the invariant stands and green carries the separation.
+                          # SAME COMMIT, A RECORD DEFECT REPAIRED: deferred-work's buried-
+                          # highlight entry went unstruck for two days after 8.2 fixed it, and
+                          # 9.2 was written FROM it -- fabricating scope for shipped work. Entry
+                          # struck with its closing commit named, 9.2 and 9.3's epic text
+                          # corrected. 9.3's AC1 was additionally unmeetable: it asks for four
+                          # mark colours when only three persistent marks exist and Clear's
+                          # preview IS the hover by design.
+                          # PRIOR: STORY 9.1 CODE-REVIEWED -> in-progress. 4 layers, all live, fresh
                           # context, NO coverage holes -- the second clean four-layer full house.
                           # 17 findings: 1 decision (Wolf: the blown-pool ceiling stays HARD for
                           # Epic 9's shared sitting; the PNG is written before validation so
