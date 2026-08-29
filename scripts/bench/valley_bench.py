@@ -55,6 +55,11 @@ ENTITY_APPEARANCE = {
     "campfire": ((255, 173, 92), 0.55),
 }
 
+# Delivered full-valley measurement is much higher than these floors; reframing changes the
+# fraction, while material and light tuning move the quantised colour count.
+MIN_NON_SKY_FRACTION = 0.02
+MIN_DISTINCT_COLORS = 32
+
 
 def dims_of(snapshot):
     dims = snapshot["dims"]
@@ -172,6 +177,35 @@ def srgb_to_linear(rgb):
     return tuple(channel(value) for value in rgb)
 
 
+def pixel_figures(pixels):
+    sky = srgb_to_linear(SKY_RGB)
+    non_sky = 0
+    colors = set()
+    total = 0
+    for red, green, blue, _ in zip(*[iter(pixels)] * 4):
+        total += 1
+        if max(abs(red - sky[0]), abs(green - sky[1]), abs(blue - sky[2])) > 0.02:
+            non_sky += 1
+        colors.add((round(red * 255), round(green * 255), round(blue * 255)))
+    return {"non_sky_fraction": non_sky / total if total else 0.0, "distinct_colors": len(colors)}
+
+
+def range_check(summary, figures):
+    return {
+        "exposed_cells": summary["exposed_cells"],
+        "non_sky_fraction": figures["non_sky_fraction"],
+        "distinct_colors": figures["distinct_colors"],
+        "minimum_non_sky_fraction": MIN_NON_SKY_FRACTION,
+        "minimum_distinct_colors": MIN_DISTINCT_COLORS,
+    }
+
+
+def assert_range(check):
+    assert check["exposed_cells"] > 0, "no exposed cells"
+    assert check["non_sky_fraction"] >= check["minimum_non_sky_fraction"], "frame is too close to sky"
+    assert check["distinct_colors"] >= check["minimum_distinct_colors"], "frame has too few colours"
+
+
 def make_material(name, rgb):
     material = bpy.data.materials.new(name)
     material.use_nodes = True
@@ -278,6 +312,23 @@ def main():
     setup_scene(snapshot)
     bpy.context.scene.render.filepath = args[1]
     bpy.ops.render.render(write_still=True)
+    image = bpy.data.images.load(args[1], check_existing=False)
+    figures = pixel_figures(image.pixels[:])
+    bpy.data.images.remove(image)
+    check = range_check(summary, figures)
+    print(
+        "range-check:"
+        f" exposed_cells={check['exposed_cells']}"
+        f" non_sky_fraction={check['non_sky_fraction']:.6f}"
+        f" distinct_colors={check['distinct_colors']}"
+        f" floors(non_sky_fraction={check['minimum_non_sky_fraction']:.6f},"
+        f" distinct_colors={check['minimum_distinct_colors']})"
+    )
+    try:
+        assert_range(check)
+    except AssertionError as error:
+        # Blender logs an uncaught Python AssertionError yet exits 0; propagate failure to shell.
+        raise SystemExit(f"range check failed: {error}") from error
 
 
 if __name__ == "__main__":
