@@ -441,6 +441,30 @@ pub const BLOWN_POOL_LUMINANCE_THRESHOLD: u8 = 200;
 /// `boot7.png`, the 5.4 Bevy frame Wolf approved, measures a 0.6651% largest near-white pool.
 pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651_476;
 
+/// Fraction of the frame at or above [`BLOWN_POOL_LUMINANCE_THRESHOLD`], **counted rather than
+/// connected**. Calibrated the same way as the pool ceiling — on `boot7.png`, the frame Wolf
+/// approved, which measures 1.5630426 % (14,405 of 921,600 pixels) against the rejected `7-2-marks-vista.png` at
+/// 1.8395 %. Like the pool ceiling it is boot7's own figure to the digit, so the approved frame
+/// sits exactly AT the bar with no tolerance — deliberate, and the same rule the pool follows.
+///
+/// WHY THIS EXISTS, measured 2026-08-29 while closing 9.1's AC13. `largest_blown_pool_fraction`
+/// measures a CONNECTED component, and connectivity has a cliff: a near-white region fragments at
+/// some threshold, and the largest surviving piece then halves. On the frames this project renders
+/// on the vehicle that cliff is nowhere near 200 — `boot7.png` runs 0.7122 / 0.6651 / 0.5704 across
+/// 190 / 200 / 215, perfectly smooth — so the pool metric is sound THERE and its 49 % finding
+/// against the rejected frame holds at every threshold (ratios 1.50 / 1.49 / 1.48).
+///
+/// It is NOT sound on software-rendered frames. Under llvmpipe the cliff lands between 196 and
+/// 208, straddling the shipped threshold, and a controlled shadows-off/on pair read 0.70 % vs
+/// 0.94 % — an apparent 35 % regression that is pure artefact: at t=192 and t=212 the two
+/// conditions are indistinguishable. Area, on the same frames, is smooth, monotone and
+/// physically right — shadows REDUCE it (1.47 % vs 1.58–1.73 %), agreeing with the 15.7 % drop in
+/// warm-lit pixels that shadows are supposed to cause.
+///
+/// So: **area is what is asserted**, because it survives both renderers; the pool stays as a
+/// reported diagnostic and must not be read off a headless frame.
+pub const NEAR_WHITE_AREA_CEILING: f32 = 0.015_630_426;
+
 fn luminance(pixel: [u8; 4]) -> f32 {
     0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32
 }
@@ -498,6 +522,20 @@ pub fn largest_blown_pool_fraction(
     }
 
     largest as f32 / pixels.len() as f32
+}
+
+/// Fraction of the frame at or above `threshold`, counted rather than connected. The stable
+/// companion to [`largest_blown_pool_fraction`] — see [`NEAR_WHITE_AREA_CEILING`] for why
+/// connectivity is the fragile part and area is not.
+pub fn near_white_area_fraction(pixels: &[[u8; 4]], threshold: u8) -> f32 {
+    if pixels.is_empty() {
+        return 0.0;
+    }
+    let above = pixels
+        .iter()
+        .filter(|pixel| luminance(**pixel) >= threshold as f32)
+        .count();
+    above as f32 / pixels.len() as f32
 }
 
 /// The 99th percentile of frame luminance, using the nearest sample in sorted pixel order.
@@ -1100,10 +1138,12 @@ fn validate_capture_ranges_with_report(
     let ground = median_ground_luminance(&pixels, width, height);
     let blown_pool =
         largest_blown_pool_fraction(&pixels, width, height, BLOWN_POOL_LUMINANCE_THRESHOLD);
+    let near_white = near_white_area_fraction(&pixels, BLOWN_POOL_LUMINANCE_THRESHOLD);
     let p99 = p99_luminance(&pixels);
     report(&format!(
         "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \
-         blown-pool={:.4}% p99-luminance={p99:.1}",
+         near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1}",
+        near_white * 100.0,
         blown_pool * 100.0
     ));
     assert!(
@@ -1138,11 +1178,14 @@ fn validate_capture_ranges_with_report(
         "the valley floor reads {ground}, above the {GROUND_LUMINANCE_CEILING} value ceiling — \
          night snow must stay midtone; only emissive approaches white"
     );
+    // AREA IS THE ASSERTION, not the pool. The pool's connectivity has a threshold cliff that the
+    // vehicle's frames sit clear of but software-rendered ones do not; see NEAR_WHITE_AREA_CEILING.
+    // The pool is still printed above, so a vehicle run loses no diagnostic.
     assert!(
-        blown_pool <= BLOWN_POOL_FRACTION_CEILING,
-        "the largest near-white pool is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
-        blown_pool * 100.0,
-        BLOWN_POOL_FRACTION_CEILING * 100.0
+        near_white <= NEAR_WHITE_AREA_CEILING,
+        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
+        near_white * 100.0,
+        NEAR_WHITE_AREA_CEILING * 100.0
     );
 }
 

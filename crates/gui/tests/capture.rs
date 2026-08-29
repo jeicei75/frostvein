@@ -22,7 +22,8 @@ use gui::{
     camera::CameraRig,
     capture::{
         CaptureState, capture_after_frames, draw_stats, largest_blown_pool_fraction,
-        median_ground_luminance, p99_luminance, validate_capture_ranges, warm_lit_pixels,
+        median_ground_luminance, near_white_area_fraction, p99_luminance, validate_capture_ranges,
+        warm_lit_pixels,
     },
     ingest::{
         IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, WireMessage,
@@ -194,6 +195,48 @@ fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
     assert!(current_pool > gui::capture::BLOWN_POOL_FRACTION_CEILING);
     // Backstop: the constant is the calibrated figure, not merely some separating value.
     assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_651_476);
+
+    // AREA is what production asserts on, so it carries the same calibration, in the same
+    // behavioural-then-pin order. Measured 2026-08-29: boot 1.5630426%, current 1.8395%. The pool
+    // separates these two frames more sharply (49% vs 18%) and is kept above as the diagnostic —
+    // but its connectivity has a threshold cliff that software-rendered frames land on, so it
+    // cannot be the assertion. See NEAR_WHITE_AREA_CEILING.
+    let boot_area =
+        near_white_area_fraction(&boot_pixels, gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD);
+    let current_area = near_white_area_fraction(
+        &current_pixels,
+        gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+    );
+    println!(
+        "calibration: boot area={:.4}%; current area={:.4}%",
+        boot_area * 100.0,
+        current_area * 100.0
+    );
+    assert!(boot_area <= gui::capture::NEAR_WHITE_AREA_CEILING);
+    assert!(current_area > gui::capture::NEAR_WHITE_AREA_CEILING);
+    assert_eq!(gui::capture::NEAR_WHITE_AREA_CEILING, 0.015_630_426);
+
+    // THE CLIFF ITSELF, pinned so nobody re-derives it: on the vehicle's own frames the pool is
+    // smooth across the threshold band, which is why it was trustworthy there. A future frame set
+    // that fragments near 200 makes this fail and is exactly the warning worth having.
+    for threshold in [190u8, 195, 200, 205, 210, 215] {
+        let boot =
+            largest_blown_pool_fraction(&boot_pixels, boot.width(), boot.height(), threshold);
+        let current = largest_blown_pool_fraction(
+            &current_pixels,
+            current.width(),
+            current.height(),
+            threshold,
+        );
+        assert!(
+            current > boot * 1.2,
+            "at threshold {threshold} the rejected frame's pool ({:.4}%) must stay clearly above \
+             the approved frame's ({:.4}%) — if it does not, the pool has hit a fragmentation \
+             cliff and is no longer measuring blow-out",
+            current * 100.0,
+            boot * 100.0
+        );
+    }
     assert_eq!(
         median_ground_luminance(&boot_pixels, boot.width(), boot.height()),
         123
