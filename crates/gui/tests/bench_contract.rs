@@ -21,7 +21,10 @@ fn squeezed(source: &str) -> String {
 /// lights no longer matched the build.
 fn assert_anchor(haystack: &str, needle: &str, side: &str) {
     let count = haystack.matches(needle).count();
-    assert_eq!(count, 1, "{side} anchor must match exactly once, matched {count}: {needle}");
+    assert_eq!(
+        count, 1,
+        "{side} anchor must match exactly once, matched {count}: {needle}"
+    );
 }
 
 #[test]
@@ -35,10 +38,26 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
     // Each row anchors the client literal to the ARM that owns it, never to a bare value: the
     // value alone cannot tell a Torch from a Campfire.
     for (client_source, client_literal, bench_literal) in [
-        (&appearance, "Material::Stone => Color::srgb_u8(60, 70, 92)", "\"stone\": (60, 70, 92)"),
-        (&appearance, "Material::Soil => Color::srgb_u8(56, 52, 62)", "\"soil\": (56, 52, 62)"),
-        (&appearance, "Material::Ice => Color::srgb_u8(104, 128, 170)", "\"ice\": (104, 128, 170)"),
-        (&appearance, "Material::Snow => Color::srgb_u8(136, 150, 178)", "\"snow\": (136, 150, 178)"),
+        (
+            &appearance,
+            "Material::Stone => Color::srgb_u8(60, 70, 92)",
+            "\"stone\": (60, 70, 92)",
+        ),
+        (
+            &appearance,
+            "Material::Soil => Color::srgb_u8(56, 52, 62)",
+            "\"soil\": (56, 52, 62)",
+        ),
+        (
+            &appearance,
+            "Material::Ice => Color::srgb_u8(104, 128, 170)",
+            "\"ice\": (104, 128, 170)",
+        ),
+        (
+            &appearance,
+            "Material::Snow => Color::srgb_u8(136, 150, 178)",
+            "\"snow\": (136, 150, 178)",
+        ),
         (
             &appearance,
             "Material::TreeTrunk => Color::srgb_u8(43, 47, 58)",
@@ -49,10 +68,26 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
             "Material::TreeFoliage => Color::srgb_u8(44, 100, 58)",
             "\"tree_foliage\": (44, 100, 58)",
         ),
-        (&appearance, "Color::srgb_u8(146, 158, 184)", "SNOW_CAP_RGB = (146, 158, 184)"),
-        (&appearance, "Color::srgb_u8(156, 170, 196)", "FOLIAGE_SNOW_RGB = (156, 170, 196)"),
-        (&appearance, "sky: Color::srgb_u8(5, 12, 28)", "SKY_RGB = (5, 12, 28)"),
-        (&appearance, "ambient: Color::srgb_u8(120, 140, 165)", "AMBIENT_RGB = (120, 140, 165)"),
+        (
+            &appearance,
+            "Color::srgb_u8(146, 158, 184)",
+            "SNOW_CAP_RGB = (146, 158, 184)",
+        ),
+        (
+            &appearance,
+            "Color::srgb_u8(156, 170, 196)",
+            "FOLIAGE_SNOW_RGB = (156, 170, 196)",
+        ),
+        (
+            &appearance,
+            "sky: Color::srgb_u8(5, 12, 28)",
+            "SKY_RGB = (5, 12, 28)",
+        ),
+        (
+            &appearance,
+            "ambient: Color::srgb_u8(120, 140, 165)",
+            "AMBIENT_RGB = (120, 140, 165)",
+        ),
         (
             &appearance,
             "directional: Color::srgb_u8(150, 190, 180)",
@@ -90,32 +125,68 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
         ),
         // The boot camera. The bench holds these once each and both the projection and the
         // rendered camera read them, so a drift here cannot hide in one of two copies.
-        (&camera, "const BOOT_YAW: f32 = 0.7;", "BOOT_YAW, BOOT_PITCH, BOOT_DISTANCE = 0.7, 0.45, 90.0"),
-        (&camera, "const BOOT_PITCH: f32 = 0.45;", "BOOT_YAW, BOOT_PITCH, BOOT_DISTANCE = 0.7, 0.45, 90.0"),
-        (&camera, "const BOOT_DISTANCE: f32 = 90.0;", "BOOT_YAW, BOOT_PITCH, BOOT_DISTANCE = 0.7, 0.45, 90.0"),
+        (
+            &camera,
+            "const BOOT_YAW: f32 = 0.7;",
+            "BOOT_YAW, BOOT_PITCH, BOOT_DISTANCE = 0.7, 0.45, 90.0",
+        ),
+        (
+            &camera,
+            "const BOOT_PITCH: f32 = 0.45;",
+            "BOOT_YAW, BOOT_PITCH, BOOT_DISTANCE = 0.7, 0.45, 90.0",
+        ),
+        (
+            &camera,
+            "const BOOT_DISTANCE: f32 = 90.0;",
+            "BOOT_YAW, BOOT_PITCH, BOOT_DISTANCE = 0.7, 0.45, 90.0",
+        ),
         (
             &camera,
             "const BOOT_COMPOSITION_FORWARD: f32 = 33.0;",
             "BOOT_COMPOSITION_FORWARD = 33.0",
         ),
-        (&camera, "const BOOT_COMPOSITION_LIFT: f32 = -0.5;", "BOOT_COMPOSITION_LIFT = -0.5"),
+        (
+            &camera,
+            "const BOOT_COMPOSITION_LIFT: f32 = -0.5;",
+            "BOOT_COMPOSITION_LIFT = -0.5",
+        ),
         (
             &camera,
             "BOOT_VERTICAL_FOV: f32 = std::f32::consts::FRAC_PI_4",
             "BOOT_VERTICAL_FOV = math.pi / 4",
         ),
-        (&camera, "BOOT_ASPECT_RATIO: f32 = 16.0 / 9.0", "BOOT_ASPECT_RATIO = 16.0 / 9.0"),
+        (
+            &camera,
+            "BOOT_ASPECT_RATIO: f32 = 16.0 / 9.0",
+            "BOOT_ASPECT_RATIO = 16.0 / 9.0",
+        ),
         // The key light's aim. The bench does not draw the aurora, but the client's directional
         // light comes FROM it, so these four numbers decide which faces are lit.
-        (&atmosphere, "pub const AURORA_RADIUS: f32 = 600.0;", "AURORA_RADIUS = 600.0"),
-        (&atmosphere, "pub const AURORA_BOTTOM: f32 = -162.0;", "AURORA_BOTTOM = -162.0"),
-        (&atmosphere, "pub const AURORA_TOP: f32 = 45.0;", "AURORA_TOP = 45.0"),
+        (
+            &atmosphere,
+            "pub const AURORA_RADIUS: f32 = 600.0;",
+            "AURORA_RADIUS = 600.0",
+        ),
+        (
+            &atmosphere,
+            "pub const AURORA_BOTTOM: f32 = -162.0;",
+            "AURORA_BOTTOM = -162.0",
+        ),
+        (
+            &atmosphere,
+            "pub const AURORA_TOP: f32 = 45.0;",
+            "AURORA_TOP = 45.0",
+        ),
         (
             &atmosphere,
             "pub const SKY_CENTRE: Vec3 = Vec3::new(63.5, 0.0, -63.5);",
             "SKY_CENTRE = (63.5, 0.0, -63.5)",
         ),
-        (&atmosphere, "pub const CAMP_SURFACE_Y: f32 = 9.0;", "CAMP_FOCUS = (64.0, 9.0, -64.0)"),
+        (
+            &atmosphere,
+            "pub const CAMP_SURFACE_Y: f32 = 9.0;",
+            "CAMP_FOCUS = (64.0, 9.0, -64.0)",
+        ),
         (
             &atmosphere,
             "Transform::from_translation(aurora_core()).looking_at(CAMP_FOCUS, Vec3::Y)",
