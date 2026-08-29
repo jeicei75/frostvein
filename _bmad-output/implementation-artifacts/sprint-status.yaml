@@ -43,7 +43,15 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-29  # EPIC 10 OPENS: story 10.1 created ready-for-dev; epic-10 in-progress.
+last_updated: 2026-08-29  # 10.1 -> REVIEW. Codex dev + orchestrator verification found TWO defects a
+                          # green gate could not see: the bench camera was ROLLED 110 DEGREES (the artifact
+                          # did not predict the build = AC15's failure mode; AC9's text-scrape guard stayed
+                          # green because the literals were right and the maths using them was wrong), and
+                          # the range check's PIXEL HALF WAS INERT on real renders (display-referred readback
+                          # compared against a linear reference, so a 100%-sky frame scored non_sky_fraction=1.0
+                          # and the floor could never fire). Both now carry a test and a sabotage row; table
+                          # 5 -> 7 rows all KILLED. Full gate GREEN, 7 bench tests 0 skipped, 0/2,073,600 pixels
+                          # differ. SELF-GATE NEVER RAN = coverage hole. AC15 OPEN: only Wolf closes it.
                           # EPIC 9 IS CLOSED OUT: 9.1 and 9.4 DONE, 9.2 and 9.3 DROPPED.
                           # 9.2 AND 9.3 HAD NO BUILDABLE WORK LEFT, and both premises were
                           # RE-VERIFIED against source before dropping rather than trusted (this
@@ -1198,7 +1206,7 @@ development_status:
   # the frame (snow caps, spruce crowns) were missing from the palette; Blender's sensor_fit
   # defaults to HORIZONTAL fov against Bevy's vertical; and the promoted exporter carried a
   # hardcoded absolute path that fails on the second devpod mount.
-  10-1-the-headless-bench: ready-for-dev
+  10-1-the-headless-bench: review
   10-2-the-live-seat-blendermcp-on-gingerspice-spike: backlog
   10-3-the-rules-of-the-look: backlog
   10-4-the-trees-look-right-the-pilot: backlog
