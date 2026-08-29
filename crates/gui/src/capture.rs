@@ -691,6 +691,7 @@ pub fn capture_after_frames(
     drag: Option<Res<ScriptedDrag>>,
     cameras: Query<&CameraRig, With<Camera3d>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    headless: Option<Res<crate::ingest::HeadlessTarget>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if capture.requested || capture.failed {
@@ -832,8 +833,16 @@ pub fn capture_after_frames(
             None => capture.motion.assert_valid(capture.expect_work),
         }
         capture.requested = true;
+        // Headless runs have no window to screenshot; they draw into an offscreen texture and the
+        // shot is taken from that instead. Everything downstream -- save_to_disk, the range checks
+        // and the pixel instruments -- is identical, which is the point: the instrument does not
+        // change when the surface does.
+        let shot = match headless.as_deref() {
+            Some(target) => Screenshot::image(target.0.clone()),
+            None => Screenshot::primary_window(),
+        };
         commands
-            .spawn(Screenshot::primary_window())
+            .spawn(shot)
             .observe(save_then_validate(capture.path.clone(), *slice))
             .observe(exit_after_capture);
     }
