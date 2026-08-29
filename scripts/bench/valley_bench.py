@@ -61,6 +61,71 @@ MIN_NON_SKY_FRACTION = 0.02
 MIN_DISTINCT_COLORS = 32
 
 
+def vector_add(left, right):
+    return tuple(a + b for a, b in zip(left, right))
+
+
+def vector_subtract(left, right):
+    return tuple(a - b for a, b in zip(left, right))
+
+
+def vector_scale(vector, scalar):
+    return tuple(component * scalar for component in vector)
+
+
+def vector_dot(left, right):
+    return sum(a * b for a, b in zip(left, right))
+
+
+def vector_cross(left, right):
+    return (
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    )
+
+
+def vector_normalize(vector):
+    length = math.sqrt(vector_dot(vector, vector))
+    if length == 0.0:
+        raise ValueError("cannot normalize a zero-length vector")
+    return vector_scale(vector, 1.0 / length)
+
+
+def boot_camera_frame():
+    """Return the boot camera's location and local axes without requiring Blender."""
+    yaw, pitch, distance = 0.7, 0.45, 90.0
+    forward = (-math.cos(yaw), 0.0, -math.sin(yaw))
+    target = vector_add(
+        vector_add(world_to_render((64.0, 64.0, 9.0)), vector_scale(forward, 33.0)),
+        (0.0, -0.5, 0.0),
+    )
+    horizontal = distance * math.cos(pitch)
+    location = vector_add(
+        target,
+        (horizontal * math.cos(yaw), distance * math.sin(pitch), horizontal * math.sin(yaw)),
+    )
+    back = vector_normalize(vector_subtract(location, target))
+    # Match Bevy's `looking_at(target, Vec3::Y)`: Frostvein render space is Y-up.
+    right = vector_normalize(vector_cross((0.0, 1.0, 0.0), back))
+    up = vector_cross(back, right)
+    return location, right, up, back
+
+
+def project_boot_point(point):
+    """Project a render-space point to normalized (left, top) boot-frame coordinates."""
+    location, right, up, back = boot_camera_frame()
+    offset = vector_subtract(point, location)
+    depth = -vector_dot(offset, back)
+    if depth <= 0.0:
+        return None
+    half_vertical = math.tan((math.pi / 4) * 0.5)
+    return (
+        0.5 + vector_dot(offset, right) / (2.0 * depth * half_vertical * (16.0 / 9.0)),
+        0.5 - vector_dot(offset, up) / (2.0 * depth * half_vertical),
+    )
+
+
 def dims_of(snapshot):
     dims = snapshot["dims"]
     return dims["x"], dims["y"], dims["z"]
@@ -178,7 +243,13 @@ def srgb_to_linear(rgb):
 
 
 def pixel_figures(pixels):
-    sky = srgb_to_linear(SKY_RGB)
+    # MEASURED, not assumed: a rendered frame read back through `bpy.data.images.load(..).pixels`
+    # under the "Standard" view transform returns DISPLAY-referred sRGB, so an all-sky frame reads
+    # (0.01961, 0.04706, 0.1098) == SKY_RGB/255. Comparing against srgb_to_linear(SKY_RGB) instead
+    # put every sky pixel 0.098 away in blue against a 0.02 tolerance, so a 100%-sky frame scored
+    # non_sky_fraction=1.0 and the floor below could never fire. Materials still take the linear
+    # conversion; only this readback is display-referred.
+    sky = tuple(component / 255.0 for component in SKY_RGB)
     non_sky = 0
     colors = set()
     total = 0
@@ -227,7 +298,7 @@ def add_cube(name, location, scale, material):
 
 
 def setup_scene(snapshot):
-    from mathutils import Vector
+    from mathutils import Matrix, Vector
 
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
@@ -284,14 +355,13 @@ def setup_scene(snapshot):
     camera_data.angle = math.pi / 4
     camera = bpy.data.objects.new("boot camera", camera_data)
     bpy.context.collection.objects.link(camera)
-    yaw, pitch, distance = 0.7, 0.45, 90.0
-    forward = Vector((-math.cos(yaw), 0.0, -math.sin(yaw)))
-    target = Vector(world_to_render((64, 64, 9))) + forward * 33.0 + Vector((0.0, -0.5, 0.0))
-    horizontal = distance * math.cos(pitch)
-    camera.location = target + Vector(
-        (horizontal * math.cos(yaw), distance * math.sin(pitch), horizontal * math.sin(yaw))
-    )
-    camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
+    # The rendered camera IS the projected camera: boot_camera_frame() is what the framing test
+    # checks, so a change here cannot leave that test green against a frame it no longer matches.
+    # Blender's track quaternion would level against its Z-up scene, but Frostvein's render space
+    # is Y-up, so the basis is built explicitly, exactly as Bevy's look_at does.
+    location, right, up, back = boot_camera_frame()
+    camera.location = Vector(location)
+    camera.rotation_euler = Matrix((Vector(right), Vector(up), Vector(back))).transposed().to_euler()
     scene.camera = camera
 
 

@@ -96,11 +96,11 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
         ),
         (
             "const BOOT_COMPOSITION_FORWARD: f32 = 33.0;",
-            "forward * 33.0",
+            "vector_scale(forward, 33.0)",
         ),
         (
             "const BOOT_COMPOSITION_LIFT: f32 = -0.5;",
-            "Vector((0.0, -0.5, 0.0))",
+            "(0.0, -0.5, 0.0),",
         ),
         (
             "BOOT_VERTICAL_FOV: f32 = std::f32::consts::FRAC_PI_4",
