@@ -48,7 +48,23 @@ last_updated: 2026-08-29  # STORIES 9.1 AND 9.4 ARE BOTH DONE. Wolf ran the shar
                           # after the snow fix and the ground-ring removal, which is what made a
                           # re-look necessary. That closes 9.4's AC10 and confirms 9.1's AC14 and
                           # AC15 re-check.
-                          # ONE HALF IS CARRIED, NOT CLAIMED: AC13's CEILING READING. A visual
+                          # AC13's CEILING HALF IS CLOSED -- Wolf took the vehicle reading on
+                          # 2026-08-29 after four attempts defeated by a capture-recipe defect
+                          # (see deferred-work): near-white-area=2.0316% against the 1.5630426%
+                          # ceiling, OVER BY 30%. The ceiling is CONFIRMED, not corrected, and the
+                          # frame fails it -- consistent with Wolf's eye and with 9.1's conclusion
+                          # that shadows are insufficient. The frame carries 9.4's trees too, so
+                          # the breach belongs to the pair.
+                          # AND IT CALIBRATED THE HEADLESS PATH, which is worth more than the AC:
+                          # against the same tree, ground median matched EXACTLY (117 vs 117), and
+                          # warm-lit pixels, p99 and the blown-pool diagnostic all landed inside
+                          # the headless range. Four of five agree. THE ONE DIVERGENCE IS THE
+                          # METRIC NOW USED AS THE GATE: llvmpipe under-reads near-white area by
+                          # ~16% (1.74% vs 2.03%), so a headless area figure is OPTIMISTIC and must
+                          # never be judged against the GPU-calibrated ceiling. Read it as a delta
+                          # between two headless runs -- which is how AC7 and AC13's pair were
+                          # read, so neither conclusion moves.
+                          # SUPERSEDED: ONE HALF WAS CARRIED, NOT CLAIMED: AC13's CEILING READING. A visual
                           # judgement contains no near-white-area figure, so the ceiling is neither
                           # confirmed nor corrected ON THE VEHICLE and neither record pretends
                           # otherwise. It carries to the withheld-levers follow-up, which must

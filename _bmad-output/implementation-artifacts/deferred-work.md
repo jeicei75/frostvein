@@ -1186,11 +1186,11 @@ look change becomes a story.
   near-white area −10 %) but nowhere near enough, and Wolf's eye agrees. Its standing rule then
   stopped it rather than reaching further, which is what the rule is for. **Opening intensity,
   amplitude, range or emissive is a new ruling from Wolf and belongs in its own story with its own
-  before/after numbers.** That story must also take **AC13's ceiling reading**, which the sitting did
-  not produce: Wolf's report was a visual judgement and carries no `near-white-area` figure, so
-  `NEAR_WHITE_AREA_CEILING` is still calibrated on `boot7.png` (a GPU frame) while every figure
-  behind it was measured on llvmpipe. One capture on the vehicle settles it —
-  `epic-9-shared-sitting-card.md` §1. `[wolf/MED]`
+  before/after numbers.** **AC13's ceiling reading is DONE** — taken on the vehicle
+  2026-08-29: `near-white-area=2.0316%` against the 1.5630426 % ceiling, **over by 30 %**. The
+  ceiling is CONFIRMED, not corrected, and the frame fails it — consistent with Wolf's eye and with
+  9.1's conclusion that shadows are insufficient. The follow-up story inherits a measured bar rather
+  than an open question. `[wolf/MED]`
 - **9.2 inherits a measured constraint, not a preference.** The hover slab is `(80,220,210)`,
   luminance **189.5**; the campfire's near-white pool exceeds **200** and saturates toward **255**,
   in both shadow states and at every threshold swept. **A brighter slab cannot fix this** — nothing
@@ -1233,3 +1233,14 @@ look change becomes a story.
   **Fix shape:** assert on `mirror.tick() - start_tick` (what the world actually advanced), which is
   what the AC means, and keep the sampled count as a separate diagnostic. The plain `--frames` path
   is unaffected in kind but shares the sampling weakness. `[measured]`
+
+- **llvmpipe UNDER-READS near-white area by ~16 %, and that is the metric now used as the gate.**
+  Measured 2026-08-29 by running the same tree headlessly and on the vehicle. Four of five metrics
+  agree closely — ground median **exact** (117 vs 117), warm-lit pixels, p99 and the blown-pool
+  diagnostic all inside the headless range — so the software renderer is a faithful proxy for
+  luminance-distribution work. Near-white area is the exception: headless 1.738-1.753 % against the
+  vehicle's 2.0316 %. **A headless area figure is therefore OPTIMISTIC and must never be judged
+  against `NEAR_WHITE_AREA_CEILING`, which is calibrated on a GPU frame.** Read headless area only
+  as a delta between two headless runs — which is how AC7 and AC13's controlled pair were read, so
+  neither conclusion is affected. If headless area is ever wanted as a gate, it needs its own
+  renderer-specific ceiling calibrated the same way boot7's was. `[measured]`

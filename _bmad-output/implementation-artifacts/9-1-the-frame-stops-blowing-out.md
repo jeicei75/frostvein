@@ -692,7 +692,51 @@ fine"*. That judgement covers the eye-bound halves: **AC14 confirmed** (the fire
 the current build) and **AC15's re-check confirmed**, with its causation already answered by
 measurement above.
 
-**ONE HALF IS CARRIED, NOT CLAIMED: AC13's ceiling reading.** Wolf's report is a visual judgement
+**AC13's CEILING HALF IS NOW CLOSED — measured on the vehicle 2026-08-29, and the ceiling is
+CONFIRMED.** Wolf ran `--frames 3000` on the RTX 4080:
+
+```
+capture range check: warm-lit pixels=20258 ground-median-luminance=117
+                     near-white-area=2.0316% blown-pool=1.0343% p99-luminance=230.9
+```
+
+**near-white-area 2.0316 % against the 1.5630426 % ceiling — over by 0.4686 pp, +30 %.** The
+ceiling is not corrected; it stands, and the frame fails it. That is consistent with Wolf's eye
+("still blown out") and with 9.1's own conclusion that shadows are insufficient. Note the frame
+carries 9.4's tree work as well as 9.1's shadows, so the breach belongs to the pair, not to 9.1
+alone.
+
+**AND IT CALIBRATED THE HEADLESS PATH, which is worth more than the AC.** Against the headless
+figures for the same tree:
+
+| metric | headless (llvmpipe) | vehicle (RTX 4080) | |
+| --- | --- | --- | --- |
+| ground median | 117 | **117** | exact |
+| warm-lit pixels | 20,227-20,367 | **20,258** | inside range |
+| p99 luminance | 230.3-233.2 | **230.9** | inside range |
+| blown-pool (diagnostic) | 0.9605-1.0666 % | **1.0343 %** | inside range |
+| near-white area | 1.738-1.753 % | **2.0316 %** | **+16.4 %, the one divergence** |
+
+Four of five land inside the headless range and the median is exact, so llvmpipe is a faithful
+proxy for luminance-distribution work. **The exception is the metric now used as the gate**:
+software rendering UNDER-reads near-white area by ~16 %, so a headless area figure is optimistic
+and must never be judged against a GPU-calibrated ceiling. Read headless area as a DELTA between
+two headless runs, which is exactly how AC7 and AC13's pair were read.
+
+**THE FRAME ITSELF IS COMMITTED** at `9-1-signoff/9-1-vista.png` and was re-measured here
+independently of the run that produced it: area **2.0315754 %** and pool **1.0343 %**, matching the
+console line to the digit — the instrument agrees with itself across two machines.
+
+**AND IT SETTLES THE CLIFF QUESTION ON MORE THAN ONE FRAME.** Swept across thresholds, the vehicle's
+current frame is perfectly smooth — pool 1.0799 / 1.0561 / 1.0343 / 1.0128 / 0.9931 / 0.9698 at
+190 / 195 / 200 / 205 / 210 / 215 — exactly like `boot7.png`. The fragmentation cliff that made the
+pool metric unreliable is therefore a property of SOFTWARE-RENDERED frames, now shown on two
+independent GPU frames rather than inferred from one. On the vehicle the pool is not merely usable,
+it is the SHARPER discriminator: against boot7 it reads **+55 %** where area reads **+30 %**. That is
+why it stays printed. Area remains the assertion because it is the one that survives both renderers.
+
+**SUPERSEDED — what this record said before the vehicle reading:**
+**ONE HALF WAS CARRIED, NOT CLAIMED: AC13's ceiling reading.** Wolf's report is a visual judgement
 and does not contain a `near-white-area` figure, so the ceiling is **neither confirmed nor
 corrected on the vehicle** and this record does not pretend otherwise. It carries to the
 withheld-levers follow-up, which has to recalibrate it there anyway: the assertion changed from a
