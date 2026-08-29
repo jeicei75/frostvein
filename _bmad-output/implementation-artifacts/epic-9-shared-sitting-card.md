@@ -22,7 +22,7 @@ stale binary, which is the one failure this project has hit repeatedly.
 
 ```
 simd.exe 7451
-gui.exe 7451 --capture 9-1-vista.png --at-tick 20
+gui.exe 7451 --capture 9-1-vista.png --at-tick 20 --frames 6000
 echo "exit=$?"
 ```
 
@@ -33,6 +33,13 @@ Read the range-check line. **It gained a field on 2026-08-29** and now reads:
   blown-pool:      ______ %   ← DIAGNOSTIC ONLY. Do NOT judge by it, do NOT compare to 0.6651 %.
   ground-median:   ______     (band 70-180)
   p99:             ______     exit: ______
+
+**`--frames` IS A TIME BUDGET IN DISGUISE — this is why the first attempt aborted.** It counts
+FRAMES, not seconds, and the default is 1,500. On the headless software renderer (~2 fps) that is
+twelve minutes and hundreds of ticks; on the vehicle's RTX 4080 (~140 fps) it is eleven seconds and
+**8 ticks**, which fails the `--at-tick 20` floor before any range check prints. The faster the
+machine, the SHORTER the budget in wall-clock. 6,000 frames is ~43 s there. If it still aborts on
+tick count, raise it again — the daemon delivers roughly one tick per second.
 
 **EXPECT exit 101.** Headless predicts ~1.74 % area on this branch against a ceiling calibrated on
 a GPU frame. That is the measurement, not a broken build — the PNG is written before validation, so

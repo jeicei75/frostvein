@@ -1196,3 +1196,16 @@ look change becomes a story.
   in both shadow states and at every threshold swept. **A brighter slab cannot fix this** — nothing
   beats a background reaching 255 on luminance alone. 9.2's fix needs hue/saturation separation or
   an outline. `[measured 2026-08-29]`
+
+## Found while closing Epic 9 (2026-08-29)
+
+- **`--frames` is a wall-clock budget expressed in frames, and it inverts with machine speed.**
+  [crates/gui/src/ingest.rs:71] `DEFAULT_AT_TICK_FRAME_BUDGET = 1_500`. On the headless software
+  renderer (~2 fps) that is ~12 minutes and hundreds of daemon ticks; on the vehicle's RTX 4080
+  (~140 fps) it is ~11 seconds and **8 ticks**, which fails an `--at-tick 20` floor before any range
+  check prints. **The faster the machine, the shorter the budget in real time** — the opposite of
+  what an operator expects, and it cost the first vehicle attempt at 9.1's AC13 reading. This only
+  became a trap once headless rendering existed and the same recipe started running on machines two
+  orders of magnitude apart in frame rate. Fix shape: express the budget in ticks or seconds, or
+  derive the frame budget from the requested tick count and the observed tick rate. Vehicle cards
+  now carry an explicit `--frames 6000`, which is a workaround, not the fix. `[measured]`
