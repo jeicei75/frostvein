@@ -210,8 +210,15 @@ mod flicker_tests {
 /// 40.0 floor — trees separated from ground by snow cap and taper alone, the base cubes near
 /// camouflage. `(44,100,58)` clears stone by **48.1** and soil by **49.6**. The epic said
 /// "brown/green"; brown is unreachable because every terrain material must keep blue >= red (the
-/// invariant asserted below), and brown is red over blue. Trees therefore separate on GREEN, the
-/// axis the cool directional does not compress.
+/// invariant asserted below), and brown is red over blue. Trees therefore separate on GREEN.
+///
+/// NOTE: 48.1 and 49.6 are TABLE-SPACE distances, measured on the unlit literals. Three shipped
+/// stages sit between this table and a pixel -- the cool directional, `rim_dissolved_color` and
+/// `DistanceFog` -- and each compresses the separation; none is covered by any test. The screen
+/// half is vehicle-bound (AC7/AC10). An earlier draft of this comment also claimed green is "the
+/// axis the cool directional does not compress"; that contradicts `:117-119`, which gives the
+/// opposite as the reason dig and channel moved onto RED. One of the two is wrong and it is not
+/// this story's to rule -- see deferred-work.md.
 pub fn material_color(material: Material) -> Color {
     match material {
         Material::Stone => Color::srgb_u8(60, 70, 92),
@@ -247,7 +254,11 @@ pub const RIM_LEVELS: usize = 13;
 /// ending on a lit cube face. Level 0 is untouched interior; the last level is pure sky.
 ///
 /// NOTE: this dissolves the edge by COLOUR only. The tiles are still drawn, deliberately — the
-/// draw set is pinned by AC18's 53,365-cube oracle and must not change to hide an edge.
+/// draw set is watched by AC18's cube oracle and must not shrink to hide an edge. THE ORACLE IS A
+/// MEASUREMENT, NOT A CONSTANT: it counts exposed cubes in the shipped world, so it moves whenever
+/// world CONTENT moves. Story 9.4's tree-density cut took it 53,365 -> 45,261 (of 315,068 ->
+/// 302,872 solid). What must never change is the rim's own behaviour — colour only, no tiles
+/// removed.
 pub fn rim_dissolved_color(base: Color, level: usize) -> Color {
     let steps = (RIM_LEVELS - 1) as f32;
     let blend = (level.min(RIM_LEVELS - 1) as f32 / steps).clamp(0.0, 1.0);
@@ -290,15 +301,22 @@ mod tests {
 
     #[test]
     fn appearance_tables_pin_the_cold_boot_palette() {
-        let foliage = material_color(Material::TreeFoliage)
-            .to_srgba()
-            .to_u8_array_no_alpha();
-        for (name, terrain) in [("stone", [60, 70, 92]), ("soil", [56, 52, 62])] {
+        let rgb = |material| material_color(material).to_srgba().to_u8_array_no_alpha();
+        let foliage = rgb(Material::TreeFoliage);
+        // The reference colours are READ FROM THE TABLE, never copied as literals: a second hardcoded
+        // pair here would go stale the next time stone or soil moves, and this guard would then clear
+        // foliage against a colour nothing renders while staying green. TreeTrunk is in the list
+        // because trunk and foliage are the two materials of ONE drawn object -- the old foliage
+        // (55,73,84) sat 38.7 from trunk, already inside the floor, and no terrain-vs-terrain test
+        // existed to notice. Ice and Snow are deliberately out: 130.1 and 159.3 away, see
+        // deferred-work.md.
+        for material in [Material::Stone, Material::Soil, Material::TreeTrunk] {
+            let terrain = rgb(material);
             let separation = channel_distance(foliage, terrain);
             assert!(
                 separation >= MIN_MARK_SEPARATION,
-                "foliage {foliage:?} sits {separation:.1} from {name} {terrain:?}, inside the \
-                 {MIN_MARK_SEPARATION} separation floor"
+                "foliage {foliage:?} sits {separation:.1} from {material:?} {terrain:?}, inside \
+                 the {MIN_MARK_SEPARATION} separation floor"
             );
         }
 

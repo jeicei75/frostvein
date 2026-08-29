@@ -1067,3 +1067,87 @@ MED findings were routed to patch, not here.
   story's own Dev Agent Record. Recorded here so that this code review is not later mistaken for
   having backfilled that hole — four review layers are not a self-gate, and the two are counted
   separately on this project. Raised by the acceptance layer.
+
+## Deferred from: code review of 9-4-trees-fewer-and-distinct-from-the-ground (2026-08-29)
+
+- **Ice and Snow are excluded from the foliage separation guard**
+  [crates/gui/src/appearance.rs:296]. The new loop checks foliage against stone and soil only. Of
+  the five other `Material` variants, three are silent implicit branches; margins are currently
+  large (Ice 130.1, Snow 159.3) so there is no live risk. Trunk was the one that mattered and is
+  being patched now. Raised by the edge layer.
+- **`MIN_MARK_SEPARATION` now backs two orthogonal constraints with no isolation between them**
+  [crates/gui/src/appearance.rs:530]. It was authored as a mark-vs-palette floor — its own docstring
+  says to raise it "if a mark is ever tuned toward the palette" — and this story added a second,
+  unrelated terrain-vs-terrain use with only ~8-9.6 units of headroom. Raising the constant for mark
+  reasons would break the terrain check as an unrelated side effect. Deferred because it fails
+  LOUDLY (a red test), not silently, which is the opposite of the class this project patches on
+  sight. Nothing documents that the two purposes now share one knob. Raised by the edge layer.
+- **No cross-client consistency check exists for TERRAIN colours, only for marks**
+  [crates/tui/src/palette.rs:198]. The gui↔tui cross-check at `appearance.rs:441-471` covers
+  designation marks and carries an explicit docstring on why marks may diverge. Terrain has no
+  equivalent and no documented ruling: the tui's `TreeTrunk (105,76,48)` is warm brown, red over
+  blue, which would violate the gui's own terrain invariant, while the tui's foliage `(54,106,78)`
+  converges with the gui's new green only by coincidence. 9.4's claim that "the two clients now
+  agree" is true of foliage's hue direction and of nothing else — the two foliage values are 23.2
+  apart. Leaving the tui alone was still correct. Raised by the edge and feature layers.
+- **The density band only discriminates roll denominators outside roughly `36..52`**
+  [crates/sim-core/tests/worldgen.rs:190]. Measured by sweeping the denominator on an out-of-repo
+  copy: `0..36` → 310 (fails high), `0..40` → 282, `0..44` → 265, `0..48` → 242 (shipped), `0..56` →
+  214 (fails low). So a future tuning nudge from 48 to 44 would pass unnoticed. Inherent to one-seed
+  banded testing rather than a defect in this diff, and mitigated: the re-pinned terrain fingerprint
+  in the same file catches ANY perturbation of the tree stream. Related: `DEFAULT_SEED`'s 265 — the
+  number the band was chosen from — is the one figure with no direct guard. Raised by the blind and
+  acceptance layers.
+- **Two shipped comments assert opposite things about the cool directional**
+  [crates/gui/src/appearance.rs:117]. `:117-119` says the directional "compresses exactly that axis"
+  (green) and gives that as the reason dig and channel were moved onto RED; 9.4's new comment at
+  `:214` says foliage separates on "GREEN, the axis the cool directional does not compress". One of
+  two load-bearing rationales is false and both are quoted by later stories. The feature layer
+  measured the pure green-axis pair from `:117-119` under the shipped directional and found it does
+  NOT collapse (30.7 / 41.0 / 54.7 / 64.7 at gains 0.5-3.0), which favours 9.4's reading — but
+  re-ruling another story's stated rationale on one layer's measurement is not this story's to take.
+  9.4's own comment is being narrowed to what it actually measured. Raised by the feature layer.
+- **AC9's third sabotage row as specified is unkillable and had to be substituted**
+  [_bmad-output/implementation-artifacts/mutations/9-4-trees-fewer-and-distinct-from-the-ground.sh].
+  The AC demands a row that lowers the separation floor so the old colour would pass; with foliage at
+  48.1 a floor lowered to 5.0 still passes, so the row can never go red. The dev found this by running
+  the table, replaced it with a brown-foliage production mutation, and documented why — the right
+  call, and the replacement genuinely kills at W2's invariant rather than at the equality pin.
+  Recorded because the AC text remains a trap for anyone reusing this story as a template: you cannot
+  sabotage an assertion and expect that same assertion to catch it. Raised by the acceptance and
+  feature layers.
+
+## Deferred from: 9.4 review — Wolf's vehicle observations, measured (2026-08-29)
+
+Both were reported by Wolf from a rendered frame during 9.4's review and then measured against the
+shipped world by direct computation. **Neither is caused by story 9.4** — both are pre-existing
+worldgen/projection geometry that the density cut merely made easier to see. Recorded here as
+concrete measured defects, which is what the standing art rule (2026-08-22) requires before any
+look change becomes a story.
+
+- **A THIRD OF ALL TREES HAVE NO VISIBLE TRUNK, and it is deterministic rather than incidental.**
+  **86 of 265 trees (32.5%) draw zero trunk cells** — and it is exactly the height-4 trees, 100% of
+  them; height 5 leaves one bare trunk level, height 6 leaves two.
+  [crates/sim-core/src/worldgen.rs:196-227]. **Cause, from the source:** the trunk spans
+  `surface+1 ..= surface+height-1`, while foliage rings are stamped at `surface+1` (the skirt),
+  `crown_top-2` and `crown_top-1`. `height` is `rng.random_range(4..=6)`. At height 4 those three
+  rings cover *every* trunk level, so each trunk cell has all six neighbours solid, `is_exposed`
+  returns false and the cell is never drawn. Wolf: *"some trees look like they don't have trunk at
+  all (are trunks under ground level) .. not too many of those"* — the trunks are not underground;
+  they are enclosed by their own foliage. Cheapest fix to weigh: raise the minimum height to 5, or
+  stop stamping the skirt ring at `surface+1`. Either changes every seeded world and needs its own
+  before/after numbers.
+- **Most of the "snow-laden crown" is not on top — 68% of the ground-level skirt is bright.**
+  [crates/gui/src/project.rs:933]. `has_snow_laden_crown` fires for ANY foliage cell with nothing
+  solid directly above it, which is the whole outward-facing surface, not the apex. Measured on the
+  shipped world: the tip ring is 265 cells, 100% crown-coloured (correct); the upper shoulder rings
+  are 4,240 cells, 50% crown; and **the skirt ring at ground level is 1,824 cells of which 1,246
+  (68%) take the bright `(156,170,196)` crown colour**. That is a bright ring sitting on the ground
+  around each trunk. The predicate's own comment at `project.rs:931` says the material-swap design
+  was chosen precisely so that capping foliage would not "put a bright slab on every ground-level
+  skirt tile and bury the landform" — **it does exactly that anyway.** Wolf asked at review whether
+  snow-on-top would look better if fixed; the measurement says most of the snow is not on top today,
+  so there is a real defect to fix rather than a taste question. Restricting the crown swap to the
+  tip and upper rings (or requiring the cell to be the topmost foliage in its column) would remove
+  the ground ring. Interacts with 9.4: only 42.6% of foliage takes 9.4's new green precisely because
+  the crown swap claims the other 57.4%.
