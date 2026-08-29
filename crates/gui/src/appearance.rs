@@ -256,9 +256,9 @@ pub const RIM_LEVELS: usize = 13;
 /// NOTE: this dissolves the edge by COLOUR only. The tiles are still drawn, deliberately — the
 /// draw set is watched by AC18's cube oracle and must not shrink to hide an edge. THE ORACLE IS A
 /// MEASUREMENT, NOT A CONSTANT: it counts exposed cubes in the shipped world, so it moves whenever
-/// world CONTENT moves. Story 9.4's tree-density cut took it 53,365 -> 45,261 (of 315,068 ->
-/// 302,872 solid). What must never change is the rim's own behaviour — colour only, no tiles
-/// removed.
+/// world CONTENT moves. Story 9.4 moved it TWICE: the tree-density cut took it 53,365 -> 45,261,
+/// then removing the ground-level foliage ring took it -> 44,984 (of 315,068 -> 301,048 solid).
+/// What must never change is the rim's own behaviour — colour only, no tiles removed.
 pub fn rim_dissolved_color(base: Color, level: usize) -> Color {
     let steps = (RIM_LEVELS - 1) as f32;
     let blend = (level.min(RIM_LEVELS - 1) as f32 / steps).clamp(0.0, 1.0);

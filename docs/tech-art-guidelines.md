@@ -107,10 +107,11 @@ sky colour over the outermost 10 tiles in five quantised steps, so the boundary 
 every zoom and camera angle rather than at one tuned distance. Five shared steps per surface
 keep it to a handful of material handles; per-tile blending would mean one material per cube.
 The tiles are still drawn — the draw set is watched by the cube oracle and must never shrink to
-hide an edge. **The oracle is a measurement of the shipped world, not a constant**: it reads
-**45,261** exposed cubes of 302,872 solid since story 9.4's tree-density cut, and read 53,365 of
-315,068 before it. It moves whenever world content moves; what must not change is that the rim
-dissolves by colour alone and removes no tiles.
+hide an edge. **The oracle is a measurement of the shipped world, not a constant.** It reads
+**44,984** exposed cubes of 301,048 solid today. Story 9.4 moved it twice in one story: 53,365 of
+315,068 before it, 45,261 after the tree-density cut, 44,984 after the ground-level foliage ring was
+removed. It moves whenever world content moves; what must not change is that the rim dissolves by
+colour alone and removes no tiles.
 
 Per AC11's amendment the final choice is still Wolf's, at the vehicle. What is settled here is
 that fog-alone has been eliminated on evidence.

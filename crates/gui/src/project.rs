@@ -466,9 +466,10 @@ pub fn reconcile(
             commands.entity(entity).despawn();
         }
         let positions = terrain_positions_at(mirror, slice.level());
-        // The draw-set oracle instrument (AC13). The shipped seed reports 45,261 since story
-        // 9.4 cut tree density; it was 53,365 before. This number tracks world CONTENT — read it
-        // as "did the rim or a slice silently drop tiles?", never as a fixed constant.
+        // The draw-set oracle instrument (AC13). The shipped seed reports 44,984 after story
+        // 9.4; it was 53,365 before it, 45,261 between its two halves. This number tracks world
+        // CONTENT -- read it as "did the rim or a slice silently drop tiles?", never as a fixed
+        // constant. It moved twice in one story, which is the whole argument.
         println!(
             "projected {} terrain cubes at z {}",
             positions.len(),

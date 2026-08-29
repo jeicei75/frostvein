@@ -203,16 +203,16 @@ pub(crate) fn place_trees(
             if tiles[crown_tip] == Tile::Empty {
                 tiles[crown_tip] = Tile::Solid(Material::TreeFoliage);
             }
-            for fy in y - 1..=y + 1 {
-                for fx in x - 1..=x + 1 {
-                    if fx != x || fy != y {
-                        let foliage = index(dims, fx, fy, surface + 1);
-                        if tiles[foliage] == Tile::Empty {
-                            tiles[foliage] = Tile::Solid(Material::TreeFoliage);
-                        }
-                    }
-                }
-            }
+            // NO FOLIAGE RING AT surface + 1. Removed 2026-08-29 on Wolf's ruling at 9.4's
+            // review, after he saw it on the vehicle as "green boxes on ground level next to some
+            // full trees". A ring of foliage cubes sitting ON the ground did three wrong things at
+            // once: it read as foliage lying on the terrain rather than as a tree; it enclosed the
+            // lower trunk on all four sides, so 86 of 265 trees (every height-4 tree) had no
+            // exposed trunk cell and drew no trunk at all; and it broke on slopes, because it was
+            // stamped at the TRUNK's surface across all eight neighbours regardless of their own
+            // terrain -- 285 cubes hung in the air over lower ground and 296 were dropped where
+            // higher ground was in the way. Trees now taper from a bare trunk into the crown rings
+            // below, which is also the shape the approved artifact shows.
             for z in crown_top.saturating_sub(2)..crown_top {
                 for fy in y - 1..=y + 1 {
                     for fx in x - 1..=x + 1 {
