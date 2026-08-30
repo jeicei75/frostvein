@@ -74,7 +74,14 @@ run() {
   local name="$1"; shift
   printf '  %-28s' "$name"
   if out=$("$@" 2>&1); then
-    echo "ok"
+    # A SKIPPED check has judged nothing, and silent success is how a Blender-less machine reads
+    # `bench tests  ok` while AC8's exit-code proof never ran. Say so instead.
+    if printf '%s' "$out" | rg -qN 'skipped=|Ran 0 tests'; then
+      echo "ok — WITH SKIPS (coverage hole)"
+      printf '%s\n' "$out" | rg -N 'skipped=|Ran 0 tests' | head -3
+    else
+      echo "ok"
+    fi
   else
     echo "FAILED"
     printf '%s\n' "$out" | tail -40
@@ -114,6 +121,7 @@ for crate in tui client-core gui; do
 done
 
 run "metrics ledger tests" python3 -m unittest discover -s _bmad/scripts/tests
+run "bench tests" python3 -m unittest discover -s scripts/tests
 
 # The sixth check is about EVIDENCE, not the product. A mutation table is evidence only as of its
 # last run, and nothing re-runs an old story's table — so later stories quietly refactor the code

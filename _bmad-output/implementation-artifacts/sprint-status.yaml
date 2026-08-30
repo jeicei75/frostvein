@@ -43,7 +43,65 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-29  # EPIC 9 IS CLOSED OUT: 9.1 and 9.4 DONE, 9.2 and 9.3 DROPPED.
+last_updated: 2026-08-30  # 10.1 DONE. AC15 CLOSED BY WOLF on the RE-RENDERED pair: "geometrically
+                          # it's correct and overall looks the same" -- the bench PREDICTS THE BUILD, which
+                          # is the story's real bar and the only AC no agent could close. The two differences
+                          # he named were already on the difference list: brightness (point-light intensities
+                          # are NOT pinned -- client campfire 25M lm vs Cycles 1,500; terrain luma itself is
+                          # calibrated 103.6 vs 105.7) and Cycles dither at 32 samples with denoising
+                          # necessarily off. Render: Cycles 1.42s, whole process 4.34s. Epic 10 opens 1/5.
+                          # PRIOR 2026-08-29 -- 10.1 CODE-REVIEWED -> IN-PROGRESS. Four layers, ZERO coverage holes (every
+                          # layer ran cargo AND the binaries; none timed out) -- the second clean full house
+                          # since the isolation fix. 15 patch findings + 3 decisions, ALL APPLIED.
+                          # THE REVIEW FOUND THREE MORE OF THIS STORY'S OWN SIGNATURE SHAPE, "the constant
+                          # is right and the code consuming it is absent": (1) AMBIENT_RGB was DEFINED,
+                          # PINNED BY THE DRIFT GUARD, AND READ BY NOTHING -- the artifact rendered ~24%
+                          # darker than the build it exists to predict (bench mean luma 68.2 vs client 90.3,
+                          # measured by two layers independently); (2) the exit-0 guard was applied to ONE
+                          # CALL SITE, not to main(), so malformed JSON / an unknown entity kind / a
+                          # dims-vs-tiles mismatch each printed a traceback and EXITED 0; (3) FOV and aspect
+                          # were a PARALLEL COPY -- widening only the render FOV moved 1,050,234 of 2,073,600
+                          # pixels while the framing test stayed inside tolerance and the range check exited 0.
+                          # The camera comment claimed that could not happen; it was true for the basis the
+                          # dev pass had just fixed, false for the projection.
+                          # WOLF TOOK OPTION (a) ON ALL THREE DECISIONS. AC7 WAS REWORDED because it was
+                          # UNACHIEVABLE AS WRITTEN: a one-cell export and an empty one render PIXEL-IDENTICAL
+                          # at the fixed boot camera (the cell is off-frame), and the delivered test had
+                          # quietly substituted two hand-built pixel lists and rendered nothing. Now a
+                          # populated world vs an empty one, through Blender. foliage_scale APPLIED (10.4 is
+                          # judged on this bench and it was mis-drawing the very geometry 10.4 changes), and
+                          # the sun is aimed by the client's aurora_light_transform() -- the hand-picked euler
+                          # was 122 DEGREES OFF. Exposure CALIBRATED, not converted and not eyeballed: mean
+                          # luma over the bottom 65% of frame 103.6 vs the client capture's 105.7.
+                          # NEW INSTRUMENT FIGURE terrain_luma, the one no existing floor could provide --
+                          # a dark frame is neither empty nor monochrome. 124.3 wired vs 0.456 unwired.
+                          # HARNESS STOPPED REPORTING THREE FALSE VERDICTS, each reproduced first: a SKIPPED
+                          # py row read as SURVIVED ("your test is weak" when it never ran) -> NOT-RUN; a
+                          # MISTYPED TIER read as KILLED via cargo's package-resolution 101 -> BAD-TIER; and
+                          # gate.sh printed "bench tests ok" over 2 skipped tests -> "ok - WITH SKIPS".
+                          # Mutations 7 -> 14, ALL KILLED, and ONE WAS RE-MUTATED after strengthening: the
+                          # sun row first died on the NORMALISATION assert (1.000605 != 1.0), reporting KILLED
+                          # while pinning nothing about direction. Third instance of "KILLED names the TEST,
+                          # not the assertion" here. Tests 7 -> 17, none skipped. FULL GATE GREEN.
+                          # METRICS DEFECT CLOSED: zero dev|claude rows existed and session 2870b2e6 was
+                          # ABSENT FROM THE CURSORS ENTIRELY -- neither rowed nor marked -- though it produced
+                          # both original defect fixes. Recorded 226 turns / $22.36; dev $2.41 -> $24.77.
+                          # SIGNOFF PAIR RE-RENDERED (the old one was unlit, mis-aimed and full-size-foliage,
+                          # so it was not the picture to judge) and what-you-will-see.md now names EVERY known
+                          # difference, including the camp pool's blown core (client campfire 25M lm vs the
+                          # bench's 1,500 -- only light COLOURS are pinned, intensities are deferred).
+                          # AC15 STILL OPEN: whether the artifact PREDICTS the build is Wolf's eye alone.
+                          # `codex review --base main` STILL NEVER RAN on this story -- an absence, not a pass.
+                          # PRIOR: 10.1 -> REVIEW. Codex dev + orchestrator verification found TWO defects a
+                          # green gate could not see: the bench camera was ROLLED 110 DEGREES (the artifact
+                          # did not predict the build = AC15's failure mode; AC9's text-scrape guard stayed
+                          # green because the literals were right and the maths using them was wrong), and
+                          # the range check's PIXEL HALF WAS INERT on real renders (display-referred readback
+                          # compared against a linear reference, so a 100%-sky frame scored non_sky_fraction=1.0
+                          # and the floor could never fire). Both now carry a test and a sabotage row; table
+                          # 5 -> 7 rows all KILLED. Full gate GREEN, 7 bench tests 0 skipped, 0/2,073,600 pixels
+                          # differ. SELF-GATE NEVER RAN = coverage hole. AC15 OPEN: only Wolf closes it.
+                          # EPIC 9 IS CLOSED OUT: 9.1 and 9.4 DONE, 9.2 and 9.3 DROPPED.
                           # 9.2 AND 9.3 HAD NO BUILDABLE WORK LEFT, and both premises were
                           # RE-VERIFIED against source before dropping rather than trusted (this
                           # epic has already had two stale premises). 9.2's geometric half shipped
@@ -1138,14 +1196,66 @@ development_status:
   # near worldgen literals may APPLY-FAIL. It also pushes valley-floor luminance UP while 9.1 pushes
   # it DOWN -- the 70-180 band watches both.
   epic-9-retrospective: optional
-  epic-10: backlog
+  # EPIC 10 OPENS 2026-08-29 with story 10.1. Execution order stands: Epic 9 (closed), then
+  # Epic 10, then 8.3 closes the milestone.
+  epic-10: in-progress
   # The PRD's asset-pipeline trigger has fired -- it held authored assets until "a concrete case
   # forces the decision -- dwarves are the expected first case", and the PRD predicted right.
   # RULED 2026-08-28 (Wolf): the pipeline is Blender -> glTF via Bevy's NATIVE loader, SUPERSEDING
   # the addendum's MagicaVoxel/`bevy_vox_scene` path. Not a present incompatibility (bevy_vox_scene
   # 0.22 does match Bevy 0.19 today) -- the supersession is about iteration cost and maintenance
   # surface. Dated note lives in the addendum. Game first; the pipeline is an outcome, not the goal.
-  10-1-the-headless-bench: backlog
+  # STORY CREATED 2026-08-29 (ready-for-dev). AC1's workload re-measurement was EXECUTED AT
+  # CREATION rather than left to the dev pass, because the epic's own AC says the planning probe
+  # "proved the venue, not the workload": a throwaway Blender bench was built against a real
+  # exported snapshot and run twice. 44,984 exposed cells -- EXACTLY the client's own cube oracle
+  # for the shipped seed, reproduced through a wholly independent path (wire JSON -> Python ->
+  # Blender), which is the evidence that the bench renders OUR valley. 244,568 verts / 61,142
+  # quads; Cycles 2.01 s, whole process 3.67 s; 0 OF 2,073,600 PIXEL VALUES DIFFER across two
+  # full-scale runs. The frame was viewed: real terrain, 9.4's green spruce, ramps.
+  # THEREFORE THE EPIC'S GINGERSPICE FALLBACK (its AC4) DOES NOT FIRE -- the devpod is the venue.
+  # THE EXPORT FILE ALREADY EXISTED and is promoted, not rebuilt: 5-4-signoff/capture_snapshot.py
+  # pulls a wire-true snapshot off the real daemon, which is exactly the epic's "explicit export
+  # file, no repo internals". Its NEIGHBOUR artifact_render.py is the hand-made mock this story
+  # retires -- and the recorded 5.4 failure (it drew spruce sprites nobody was tasked to build).
+  # THREE EPIC PREMISES CHECKED, one FALSE: `bevy_gltf` IS enabled (transitively via
+  # 3d_bevy_render, Cargo.lock:754) -- only file_watcher is off, which corrects 10.5's AC, not
+  # this story. Eevee's blocker is a MISSING libegl1 (apt-installable), not llvmpipe -- decision
+  # stands, reason was wrong. And the "1.0 s" probe figure conflates Cycles-internal with
+  # whole-process time (0.54 vs 1.39 on the cube; 2.01 vs 3.67 at real scale).
+  # STACKED ON 212fbcd, NOT main: 9.1/9.4 are done but UNMERGED and main is 49 commits behind,
+  # still carrying the superseded foliage colour (55,73,84) against this branch's (44,100,58).
+  # A bench cut from main would bake in a dead palette.
+  # HARNESS GAP FOUND AND SCOPED IN: scripts/mutate.sh backs up only `git ls-files 'crates/*'`,
+  # so a sabotage patching anything under scripts/ is NEVER RESTORED -- a latent trap regardless
+  # of this story. Task 6 closes it and adds a `py` test tier so the bench can be sabotage-proven.
+  # Full gate GREEN at creation on 212fbcd, clean tree (run, not claimed).
+  # REVISED AFTER AN ADVERSARIAL CHECKLIST REVIEW at creation, which found FIVE criticals in the
+  # first draft -- all fixed before saving, none inherited by the dev pass:
+  # (1) THE HONESTY CHECK WAS INERT. AC6 named "non-black pixel fraction" as the empty-frame
+  #     detector, but the client's sky is a flat (5,12,28) -- an empty frame renders 100%
+  #     non-black and PASSES. The metric is now distance from the SKY colour, and the floors are
+  #     re-measured on the delivered bench (creation's 79.3% came from a black-background
+  #     throwaway and does not transfer).
+  # (2) AC8 wanted an exit code while Task 2 required the tests to run without Blender, and no
+  #     AC8 test was listed. Now: a Blender-spawning test over a MINIMAL synthetic export, skip-
+  #     guarded, kept tiny because the pre-commit hook runs it.
+  # (3) THE NEW `py` MUTATION TIER REOPENED THE FALSE-KILL CLASS mutate.sh exists to close: its
+  #     KILLED test is "not `could not compile`, then rc != 0" [mutate.sh:82-94] and that guard
+  #     is Rust-only, so a Python SyntaxError would print KILLED while proving nothing -- exactly
+  #     story 5.3's recorded defect. The tier must call import/syntax errors SURVIVOR.
+  # (4) The drift guard's Rust placement was justified circularly ("only cargo can reach it") by
+  #     the same story that teaches mutate.sh Python. Re-justified, and two real blockers named:
+  #     integration-test cwd is the PACKAGE root, and the boot-camera consts are private.
+  # (5) Task 2 ordered "must read 44,984" -- pinning a moving content measurement inside the
+  #     epic whose story 10.4 exists to move it. That pin would have turned 10.4's first commit
+  #     into a red gate. No test may assert the count; it is a human-read observation now.
+  # Also fixed: the exposed predicate's three coin-flips (6 orthogonal neighbours, OOB counts as
+  # not-solid) were unstated though AC4 turns on them; the two presentation swaps that dominate
+  # the frame (snow caps, spruce crowns) were missing from the palette; Blender's sensor_fit
+  # defaults to HORIZONTAL fov against Bevy's vertical; and the promoted exporter carried a
+  # hardcoded absolute path that fails on the second devpod mount.
+  10-1-the-headless-bench: done
   10-2-the-live-seat-blendermcp-on-gingerspice-spike: backlog
   10-3-the-rules-of-the-look: backlog
   10-4-the-trees-look-right-the-pilot: backlog
