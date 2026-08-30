@@ -95,15 +95,16 @@ unverifiable from here and is story work by design.
 
 - [ ] **Task 0 — The vehicle recipe (agent writes it into this file's record; Wolf executes on
       gingerspice)** (AC: 2)
-  - [ ] Install Blender 4.x (any current stable; the devpod's 4.3.2 is the reference point — a
+  - [x] Install Blender 4.x (any current stable; the devpod's 4.3.2 is the reference point — a
         wildly newer major on the vehicle is a known-difference to write down, not a blocker).
-  - [ ] Install `uv` via its official installer; download `addon.py` from
+        *Executed as 5.2 by Wolf's ruling (2026-08-30); consequences carried in the recipe's step 1.*
+  - [x] Install `uv` via its official installer; download `addon.py` from
         github.com/ahujasid/blender-mcp; Blender → Edit → Preferences → Add-ons → Install →
         enable "Interface: Blender MCP".
-  - [ ] Connect Claude: `claude mcp add blender -- uvx blender-mcp` (Claude Code), or the
+  - [x] Connect Claude: `claude mcp add blender -- uvx blender-mcp` (Claude Code), or the
         `claude_desktop_config.json` `mcpServers` entry for the Claude app. **Windows PATH trap:**
         if the tool fails to spawn, use the full path to `uvx.exe` or `cmd /c uvx blender-mcp`.
-  - [ ] In Blender: N-panel → BlenderMCP → Start MCP Server (localhost:9876). Smoke-test with one
+  - [x] In Blender: N-panel → BlenderMCP → Start MCP Server (localhost:9876). Smoke-test with one
         scene-info request from Claude before doing anything creative.
   - [ ] **Hygiene, both from upstream's own warning:** save the `.blend` before any
         `execute_blender_code` use, and leave the addon socket on localhost.
@@ -321,6 +322,12 @@ takes it from there (commits, handoff script, two-run evidence, decision record)
 
 ### Debug Log References
 
+- 2026-08-30 evening, Wolf reports from gingerspice: **"MCP setup with Blender works now"** —
+  the seat is live on Blender 5.2. That verifies the one premise unverifiable from any devpod:
+  the BlenderMCP addon registers and round-trips on a 5.x major. Task 0's setup boxes checked;
+  the hygiene subtask stays open (it is session-time behavior, exercised during Task 1). The
+  exploration session (Task 1, sample assets) continues tomorrow, 2026-08-31. Blender-mcp
+  version pin per the recipe still owed once Wolf notes the version that worked.
 - 2026-08-30 dev start: branch `10-2-the-live-seat-blendermcp-on-gingerspice-spike`, clean tree.
   Post-merge branch trap checked: PR #41 (10.1) merged; `origin/main` (09f24ae) verified an
   ancestor of HEAD — no rebase needed. No `10-2-signoff/` exists yet; Tasks 1–3 blocked on the
