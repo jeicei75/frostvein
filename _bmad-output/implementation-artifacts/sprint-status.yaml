@@ -43,7 +43,14 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-29  # 10.1 CODE-REVIEWED -> IN-PROGRESS. Four layers, ZERO coverage holes (every
+last_updated: 2026-08-30  # 10.1 DONE. AC15 CLOSED BY WOLF on the RE-RENDERED pair: "geometrically
+                          # it's correct and overall looks the same" -- the bench PREDICTS THE BUILD, which
+                          # is the story's real bar and the only AC no agent could close. The two differences
+                          # he named were already on the difference list: brightness (point-light intensities
+                          # are NOT pinned -- client campfire 25M lm vs Cycles 1,500; terrain luma itself is
+                          # calibrated 103.6 vs 105.7) and Cycles dither at 32 samples with denoising
+                          # necessarily off. Render: Cycles 1.42s, whole process 4.34s. Epic 10 opens 1/5.
+                          # PRIOR 2026-08-29 -- 10.1 CODE-REVIEWED -> IN-PROGRESS. Four layers, ZERO coverage holes (every
                           # layer ran cargo AND the binaries; none timed out) -- the second clean full house
                           # since the isolation fix. 15 patch findings + 3 decisions, ALL APPLIED.
                           # THE REVIEW FOUND THREE MORE OF THIS STORY'S OWN SIGNATURE SHAPE, "the constant
@@ -1248,7 +1255,7 @@ development_status:
   # the frame (snow caps, spruce crowns) were missing from the palette; Blender's sensor_fit
   # defaults to HORIZONTAL fov against Bevy's vertical; and the promoted exporter carried a
   # hardcoded absolute path that fails on the second devpod mount.
-  10-1-the-headless-bench: in-progress
+  10-1-the-headless-bench: done
   10-2-the-live-seat-blendermcp-on-gingerspice-spike: backlog
   10-3-the-rules-of-the-look: backlog
   10-4-the-trees-look-right-the-pilot: backlog

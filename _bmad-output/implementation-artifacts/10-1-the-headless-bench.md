@@ -5,7 +5,7 @@ baseline_commit: 212fbcdc3caa0bf2daba821fe1598df2c1fdbf38
 
 # Story 10.1: The Headless Bench
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -906,6 +906,24 @@ ledger. Next time, run `session_tokens.py --phase review` at the moment triage i
 the first patch, so `review` and `review-patch` land as two rows. Build caches reaped after triage:
 **38.1 GB across 14 directories** under /tmp.
 
+**AC15 CLOSED BY WOLF — 2026-08-30, on the re-rendered pair.** His judgement, verbatim: *"bench
+valley looks decent, better lighting than in gui-capture but that's ok. And it's a bit dithered but
+that's not big deal either. Geometrically it's correct and overall looks the same."* The bench
+artifact **predicts the build** — which is this story's real bar and the one thing no agent could
+close. Both differences he named were already on the difference list and are accounted for: the
+brightness is the un-pinned point-light intensity (client campfire 25M lm against the bench's Cycles
+1,500 — terrain luma itself is calibrated to 103.6 vs 105.7), and the dither is Cycles sampling
+noise at 32 samples with denoising necessarily off. Neither is a defect; both stay documented.
+
+**THE BENCH IMMEDIATELY EARNED ITS KEEP, and its first finding is about the CLIENT.** Wolf,
+2026-08-30, on the same pair: *"actually the bench looks more like what we are targeting"* (noise
+aside). Not the terrain — that is calibrated to match. The camp pool: client campfire 25M lm blows
+to flat white, bench Cycles 1,500 keeps detail. This is 6.2's carried-open "camp is too blown out",
+and the 2026-08-22 ruling that closed it treated the **peak** and states in its own comment that
+"this still frame never moved" [appearance.rs:66-76] — so the still-frame case was ruled out of
+scope, not ruled acceptable. Logged to `deferred-work.md` as an input for **10.4**; no light
+constant was touched here on the strength of one observation.
+
 **Coverage holes carried into this record, not resolved by it:** `codex review --base main` still
 never ran on this story. The `gui --headless --capture` exit-101 limitation is unchanged and the
 client half of the pair was not re-rendered, correctly — the review changed no crate behaviour,
@@ -920,3 +938,4 @@ only a test, proved against this story's own commit range.
 | 2026-08-29 | Dev run 1 (Codex `gpt-5.6-terra`, 9 commits): export, geometry, look, range check, tests, mutation table, signoff pair. Handed back three honest caveats rather than claiming success. |
 | 2026-08-29 | Orchestrator verification found two defects a green gate could not see, both fixed with tests and sabotage rows: the bench camera was **rolled 110 degrees** so the artifact did not predict the build (AC15's failure mode; AC9's text-scrape guard stayed green because the constants were right and the maths was wrong), and the range check's pixel half was **inert on real renders** because it compared a display-referred readback against a linear reference, scoring a 100%-sky frame at `non_sky_fraction=1.000000`. Mutation table 5 rows -> **7, all KILLED**, each verified to kill on the intended assertion. Full gate GREEN, 7 bench tests, 0 skipped. Re-measured: Cycles 1.77 s / 1.66 s, process 4.68 s / 4.54 s, 0 of 2,073,600 pixels differ. Self-gate NOT run — a named coverage hole. AC15 remains open for Wolf. |
 | 2026-08-29 | **Code review (4 layers, zero coverage holes) + patch pass.** 15 patch findings and 3 decisions, all applied. Three defects of the story's own signature shape: `AMBIENT_RGB` was a dead constant (frame ~24% dark), the exit-0 guard covered one call site so malformed exports reported success, and FOV/aspect were a parallel copy (a pi/3 FOV moved 1,050,234 pixels with the framing test green). Wolf took option (a) on all three decisions: AC7 reworded and given a real populated-vs-empty render, `foliage_scale` applied, and the sun aimed by the client's `aurora_light_transform()`. Exposure calibrated against the client capture: 103.6 vs 105.7 mean luma. New `terrain_luma` figure in the range check. Harness stopped reporting three false verdicts (skip-as-SURVIVED, typo-as-KILLED, gate `ok` over skips). Mutations 7 -> **14, all KILLED**, one re-mutated after an earlier assert absorbed it. Tests 7 -> **17, none skipped**. Full gate GREEN. Orchestrator's unbilled dev window recorded: dev cost $2.41 -> **$24.77**. Signoff pair re-rendered; **AC15 still open for Wolf**. |
+| 2026-08-30 | **AC15 CLOSED by Wolf on the re-rendered pair** — "geometrically it's correct and overall looks the same". The bench predicts the build. Story DONE. Render re-measured: Cycles **1.42 s / 1.41 s**, whole process **4.34 s / 4.35 s** — faster than before the patches, the shrunken foliage lets more rays escape to sky. Pushed and PR opened. |

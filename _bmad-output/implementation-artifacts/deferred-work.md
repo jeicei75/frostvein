@@ -1266,6 +1266,22 @@ frostvein exception for instruments that report a wrong value nobody will ever s
   a target-dir override gets a stale or missing binary — the "stale-binary trap" the story records
   as having fired six times, in a seventh shape. Deferred: correct for both real mount paths today.
 
+- **THE BENCH'S FIRST FINDING, and it points at the CLIENT, not the bench — Wolf, 2026-08-30.**
+  Shown the pair, Wolf's verdict was that **the bench looks MORE like what we are targeting than
+  `gui-capture.png` does** (noise aside). This inverts the story's premise, so it is worth stating
+  precisely. It is NOT the terrain: that is calibrated to the client (mean band luma 103.6 vs
+  105.7). The difference he is responding to is the **camp pool** — the client's campfire runs at
+  25,000,000 lm and blows its centre to flat white, where the bench's Cycles 1,500 keeps detail.
+  **This is the same complaint as 6.2's carried-open "camp is too blown out", and the 2026-08-22
+  ruling that closed it explicitly did NOT treat this case.** That ruling's own comment
+  [`appearance.rs:66-76`] says the blow-out "is in the PEAK", drops the base so the peak lands on
+  5.4's approved ceiling, and records that "this still frame never moved". `gui-capture.png` is a
+  still frame. So the still-frame blow-out was ruled out of scope, not ruled acceptable.
+  **For the art pass (10.4) to decide, not this story:** whether the client's still-frame camp
+  should come down toward what the bench shows. Do not change `light_properties()` on the strength
+  of one observation — but this is the first time the bench has been used for the thing it was
+  built for, judging a look before anyone builds it, and the answer it gave was about the client.
+
 - **AC9 guards the light table's colours but not its intensities.**
   `crates/gui/src/appearance.rs:45,48` carries `ambient_brightness: 4_500.0` and
   `directional_illuminance: 22_000.0`; the bench uses `sun_data.energy = 3.0`
