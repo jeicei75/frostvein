@@ -285,8 +285,14 @@ nothing here is verifiable agent-side until the captured files land in this repo
 5. **Start the socket:** in Blender's 3D viewport press `N` → **BlenderMCP** tab →
    **Start MCP Server** (localhost:9876; leave host/port alone — the socket stays
    localhost-only).
-6. **Smoke test before anything creative:** ask Claude for scene info (one
-   `get_scene_info`-shaped request). If that round-trips, the seat is live.
+6. **Smoke test before anything creative** — paste this to Claude:
+   *"Using the Blender MCP tools, get the current scene info and tell me: the Blender
+   version, the scene name, and a list of the objects in it. Read-only — don't execute any
+   code and don't modify anything."*
+   Success = the reply matches the outliner (fresh file: Cube/Camera/Light or 5.2's default
+   equivalent), confirming the data came from this Blender. Failure modes told apart: tool
+   never spawns → the PATH trap above; spawns but connection refused → Start MCP Server not
+   clicked, or the addon didn't register on 5.2 (that one is a spike finding — report it).
 
 **Hygiene (both from upstream's own warning):**
 - `execute_blender_code` runs arbitrary Python inside Blender. **Save the `.blend` before the
