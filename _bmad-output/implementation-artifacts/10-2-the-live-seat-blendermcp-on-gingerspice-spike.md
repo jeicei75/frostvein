@@ -251,14 +251,16 @@ nothing here is verifiable agent-side until the captured files land in this repo
 
 **Setup (once):**
 
-1. **Install Blender — prefer 4.3.2 to match the devpod exactly** (blender.org keeps prior
-   releases at download.blender.org/release/). Current newest is 5.2 (Wolf, 2026-08-30), a
-   major ahead of the devpod's 4.3.2 receiving end; the spike measures the handoff, and a
-   major-version gap confounds it three ways: `.blend` files are not backward-compatible
-   across majors (candidate (b) would need glTF instead), `bpy` API drift can break a
-   re-emitted script (candidate (a)), and the BlenderMCP addon on 5.x is unverified.
-   If 5.2 is installed anyway, that's allowed — use glTF as the data artifact and name the
-   version pair in `what-was-found.md` as a known difference.
+1. **Blender version: 5.2 — DECIDED** (Wolf, 2026-08-30: already installed, "not going to
+   uninstall and tired of having different versions around"). The receiving end stays the
+   devpod's 4.3.2 (the 10.1 bench venue is calibrated there and is not touched by a spike),
+   so the major-version gap is now a **named condition of the spike**, with three
+   consequences carried below: the data artifact is **glTF, not `.blend`** (`.blend` files
+   are not backward-compatible across majors — the `.blend` is still saved on the vehicle,
+   never committed); a candidate-(a) re-emitted script may hit 5.x→4.3 `bpy` API drift,
+   which the receiving end checks and records rather than predicts; and the BlenderMCP
+   addon on a 5.x major is unverified — the smoke test (step 6) is the tripwire. The
+   version pair goes in `what-was-found.md` as a known difference.
 2. **Install `uv` from its official installer** (upstream is explicit: not via pip).
    - Windows (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
    - Linux/macOS: `curl -LsSf https://astral.sh/uv/install.sh | sh`
@@ -289,9 +291,12 @@ nothing here is verifiable agent-side until the captured files land in this repo
 for. One is enough; the spike measures the handoff, not the catalogue.
 
 **Capture as the session ends, before closing anything:**
-1. Save the `.blend` (always, even if it never gets committed).
-2. Export **one viewport image** of the found look (Viewport Render Image is fine).
-3. Keep the **Claude transcript reachable** and note where it lives — the decision's fidelity
+1. Save the `.blend` (always — vehicle-side backup; it stays there, 4.3.2 can't read it).
+2. **Export glTF** (File → Export → glTF 2.0, `.glb` is fine) — with the 5.2/4.3.2 gap this
+   is the only data artifact the receiving end can open, so capture it even if candidate (a)
+   looks likely; it's the fallback if re-emission hits API drift.
+3. Export **one viewport image** of the found look (Viewport Render Image is fine).
+4. Keep the **Claude transcript reachable** and note where it lives — the decision's fidelity
    judgement needs the record of what was *asked for*. If the look involved any **by-hand
    viewport edits** (not through Claude's code actions), say so: it decides whether handoff
    candidate (a) can be trusted.
