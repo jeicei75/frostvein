@@ -276,6 +276,12 @@ nothing here is verifiable agent-side until the captured files land in this repo
    - **Windows PATH trap (premise 3):** GUI apps don't inherit the terminal PATH. If the tool
      fails to spawn, replace `uvx` with the full path to `uvx.exe`, or use
      `cmd /c uvx blender-mcp`.
+   - **Pin after first success (sandboxing ruled out as disproportionate, Wolf 2026-08-30):**
+     once the smoke test passes, note the blender-mcp version and change the config to
+     `uvx blender-mcp@<that-version>` — freezes supply-chain exposure to a release already
+     run, and makes the session reproducible. No sandbox around uv: the arbitrary-code
+     surface is `execute_blender_code` inside Blender itself, which a uv sandbox would not
+     contain; revisit only if the AC5 decision is "joins the standing workflow".
 5. **Start the socket:** in Blender's 3D viewport press `N` → **BlenderMCP** tab →
    **Start MCP Server** (localhost:9876; leave host/port alone — the socket stays
    localhost-only).
