@@ -5,7 +5,7 @@ baseline_commit: d02f9595a9e137c4dac8873b593fdc8a9886c7cf
 
 # Story 10.2: The Live Seat — BlenderMCP on Gingerspice (SPIKE)
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -235,13 +235,74 @@ Wolf's judgement (AC4) compares `10-2-signoff/` pair by eye — no agent closes 
 
 | date | change |
 | --- | --- |
+| 2026-08-30 | Dev started (orchestrator-side; no Codex delegation per Dev Notes). Status → in-progress, sprint-status updated. Branch trap checked: PR #41 merged, origin/main is ancestor of HEAD, no rebase needed. Task 0 vehicle recipe written into the Dev Agent Record for Wolf to execute on gingerspice. Tasks 1–3 blocked until the session's captured files land in this tree. |
 | 2026-08-30 | Story created. Epic premises re-verified: BlenderMCP's live-GUI requirement CONFIRMED against upstream (addon socket server in a running Blender, localhost:9876; `uvx blender-mcp` on the Claude side; arbitrary-code caveat now on our record; Windows PATH trap noted). Blender-on-gingerspice is unverifiable from the devpod and budgeted as Task 0, Wolf-side. The receiving end was proven live by a control run at creation that reproduced 10.1's recorded range-check line exactly (4.7 s whole process). Handoff candidates named for testing, not decided. No gate wiring and no mutation table for the spike script — a stated exception to the tested-instrument rule, with the two-run recipe standing in and hardening named as the follow-up's first task if the script survives its own decision. Stacked on 10.1's tip `d02f959` (PR #40 open); post-merge rebase noted. Revised after an adversarial fresh-context checklist review found 3 criticals before save: a fabricated explanation for a luma discrepancy that does not exist, an AC2-vs-Task-3 artifact-list contradiction, and a deferral aimed at 10.4 for hardening work 10.4's text never contains — plus a missing Wolf-side transfer step without which Task 3 could not start. |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+claude-fable-5 (orchestrator-side, not delegated — the story names itself a poor Codex fit).
+
+### The Vehicle Recipe (Task 0 — written by the agent, executed by Wolf on gingerspice)
+
+Everything below runs on gingerspice, by hand. The devpod has no path to that machine, so
+nothing here is verifiable agent-side until the captured files land in this repo's tree.
+
+**Setup (once):**
+
+1. **Install Blender 4.x** (any current stable) from blender.org. The devpod's reference is
+   4.3.2 — if the vehicle lands a wildly newer major, write the version into
+   `what-was-found.md` as a known difference; it is not a blocker.
+2. **Install `uv` from its official installer** (upstream is explicit: not via pip).
+   - Windows (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+   - Linux/macOS: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+3. **Install the addon:** download `addon.py` from github.com/ahujasid/blender-mcp (repo root).
+   Blender → Edit → Preferences → Add-ons → Install → pick `addon.py` → enable
+   **"Interface: Blender MCP"**.
+4. **Connect Claude** (either seat):
+   - Claude Code: `claude mcp add blender -- uvx blender-mcp`
+   - Claude app: add to `claude_desktop_config.json`:
+     ```json
+     { "mcpServers": { "blender": { "command": "uvx", "args": ["blender-mcp"] } } }
+     ```
+   - **Windows PATH trap (premise 3):** GUI apps don't inherit the terminal PATH. If the tool
+     fails to spawn, replace `uvx` with the full path to `uvx.exe`, or use
+     `cmd /c uvx blender-mcp`.
+5. **Start the socket:** in Blender's 3D viewport press `N` → **BlenderMCP** tab →
+   **Start MCP Server** (localhost:9876; leave host/port alone — the socket stays
+   localhost-only).
+6. **Smoke test before anything creative:** ask Claude for scene info (one
+   `get_scene_info`-shaped request). If that round-trips, the seat is live.
+
+**Hygiene (both from upstream's own warning):**
+- `execute_blender_code` runs arbitrary Python inside Blender. **Save the `.blend` before the
+  first such call**, and save again at any point you'd mind losing.
+- Do not expose the addon socket beyond localhost.
+
+**The session (Task 1):** one real exploration — a tree or dwarf blockout, whichever you reach
+for. One is enough; the spike measures the handoff, not the catalogue.
+
+**Capture as the session ends, before closing anything:**
+1. Save the `.blend` (always, even if it never gets committed).
+2. Export **one viewport image** of the found look (Viewport Render Image is fine).
+3. Keep the **Claude transcript reachable** and note where it lives — the decision's fidelity
+   judgement needs the record of what was *asked for*. If the look involved any **by-hand
+   viewport edits** (not through Claude's code actions), say so: it decides whether handoff
+   candidate (a) can be trusted.
+
+**Transfer (without this, Task 3 cannot start):** land the captured files —
+viewport image, `.blend` (and/or a glTF export), transcript pointer — anywhere in this repo's
+working tree on either devpod mount, e.g. drop them under
+`_bmad-output/implementation-artifacts/10-2-signoff/`. Any transfer route you prefer; the agent
+takes it from there (commits, handoff script, two-run evidence, decision record).
+
 ### Debug Log References
+
+- 2026-08-30 dev start: branch `10-2-the-live-seat-blendermcp-on-gingerspice-spike`, clean tree.
+  Post-merge branch trap checked: PR #41 (10.1) merged; `origin/main` (09f24ae) verified an
+  ancestor of HEAD — no rebase needed. No `10-2-signoff/` exists yet; Tasks 1–3 blocked on the
+  Wolf-side session and file transfer.
 
 ### Completion Notes List
 

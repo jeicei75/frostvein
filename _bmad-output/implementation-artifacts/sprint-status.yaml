@@ -43,7 +43,12 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-30  # 10.1 DONE. AC15 CLOSED BY WOLF on the RE-RENDERED pair: "geometrically
+last_updated: 2026-08-30  # 10.2 DEV STARTED -> in-progress (orchestrator-side, NOT delegated: the story
+                          # names itself a poor Codex fit — interactive, Wolf-gated). Branch verified
+                          # stacked cleanly: PR #41 (10.1) merged, origin/main is ancestor of HEAD.
+                          # Vehicle recipe written into the story record; Tasks 1-2 are Wolf-side on
+                          # gingerspice and block Task 3 until captured files land in this tree.
+                          # PRIOR: 10.1 DONE. AC15 CLOSED BY WOLF on the RE-RENDERED pair: "geometrically
                           # it's correct and overall looks the same" -- the bench PREDICTS THE BUILD, which
                           # is the story's real bar and the only AC no agent could close. The two differences
                           # he named were already on the difference list: brightness (point-light intensities
@@ -1276,7 +1281,7 @@ development_status:
   # range-check line exactly -- any future drift is real change, not sampling noise); an
   # AC2-vs-Task-3 contradiction on which artifacts land in 10-2-signoff/; and a deferral aimed
   # at 10.4 for bench-hardening work 10.4's text never contains.
-  10-2-the-live-seat-blendermcp-on-gingerspice-spike: ready-for-dev
+  10-2-the-live-seat-blendermcp-on-gingerspice-spike: in-progress
   10-3-the-rules-of-the-look: backlog
   10-4-the-trees-look-right-the-pilot: backlog
   10-5-dwarves-worth-looking-at: backlog
