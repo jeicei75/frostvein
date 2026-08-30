@@ -702,6 +702,26 @@
     "schema": 2,
     "turns": 81
   },
+  "bae20bdf-ee48-4c97-b7f9-83b90b612736.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 765604,
+        "cache_read": 11365625,
+        "input": 242,
+        "output": 77163
+      }
+    },
+    "cache_creation": 765604,
+    "cache_read": 11365625,
+    "input": 242,
+    "last_ts": "2026-08-30T11:10:40.003Z",
+    "marked_at": null,
+    "output": 77163,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 121
+  },
   "bb7aef73-12e3-4304-9761-ecf0e9437260.jsonl": {
     "cache_creation": 418931,
     "cache_read": 23660658,
