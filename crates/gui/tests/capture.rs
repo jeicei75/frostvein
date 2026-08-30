@@ -15,11 +15,16 @@ use bevy::{
     ecs::system::RunSystemOnce,
     input::ButtonInput,
     prelude::{Assets, KeyCode, Mesh, StandardMaterial},
+    render::render_resource::TextureFormat,
 };
 use client_core::Mirror;
 use gui::{
     camera::CameraRig,
-    capture::{CaptureState, capture_after_frames, draw_stats, warm_lit_pixels},
+    capture::{
+        CaptureState, capture_after_frames, draw_stats, largest_blown_pool_fraction,
+        median_ground_luminance, near_white_area_fraction, p99_luminance, validate_capture_ranges,
+        warm_lit_pixels,
+    },
     ingest::{
         IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork, WireMessage,
         projection_systems,
@@ -147,6 +152,125 @@ fn capture_exists_is_not_black_and_changes_with_the_world() {
 fn warm_pixel_threshold_requires_red_to_exceed_blue_by_the_named_margin() {
     assert_eq!(warm_lit_pixels(&[[220, 120, 150, 255]]), 1);
     assert_eq!(warm_lit_pixels(&[[180, 120, 150, 255]]), 0);
+}
+
+#[test]
+fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let boot =
+        image::open(repo.join("_bmad-output/implementation-artifacts/5-4-signoff/boot7.png"))
+            .expect("the approved boot vista must decode")
+            .to_rgba8();
+    let current = image::open(
+        repo.join("_bmad-output/implementation-artifacts/7-2-signoff/7-2-marks-vista.png"),
+    )
+    .expect("the current vista must decode")
+    .to_rgba8();
+    let boot_pixels = boot.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
+    let current_pixels = current.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
+
+    let boot_pool = largest_blown_pool_fraction(
+        &boot_pixels,
+        boot.width(),
+        boot.height(),
+        gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+    );
+    let current_pool = largest_blown_pool_fraction(
+        &current_pixels,
+        current.width(),
+        current.height(),
+        gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+    );
+    println!(
+        "calibration: boot pool={:.8}% ({boot_pool:.10}) p99={:.1}; current pool={:.8}% ({current_pool:.10}) p99={:.1}",
+        boot_pool * 100.0,
+        p99_luminance(&boot_pixels),
+        current_pool * 100.0,
+        p99_luminance(&current_pixels),
+    );
+    // Behavioural first, pin second, and the ORDER is load-bearing: these compare against the
+    // SHIPPED constant, so moving the ceiling breaks the separation itself rather than merely
+    // tripping the pin. With the pin first it fired first and hid that this clause even bites.
+    assert!(boot_pool <= gui::capture::BLOWN_POOL_FRACTION_CEILING);
+    assert!(current_pool > gui::capture::BLOWN_POOL_FRACTION_CEILING);
+    // Backstop: the constant is the calibrated figure, not merely some separating value.
+    assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_651_476);
+
+    // AREA is what production asserts on, so it carries the same calibration, in the same
+    // behavioural-then-pin order. Measured 2026-08-29: boot 1.5630426%, current 1.8395%. The pool
+    // separates these two frames more sharply (49% vs 18%) and is kept above as the diagnostic —
+    // but its connectivity has a threshold cliff that software-rendered frames land on, so it
+    // cannot be the assertion. See NEAR_WHITE_AREA_CEILING.
+    let boot_area =
+        near_white_area_fraction(&boot_pixels, gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD);
+    let current_area = near_white_area_fraction(
+        &current_pixels,
+        gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+    );
+    println!(
+        "calibration: boot area={:.4}%; current area={:.4}%",
+        boot_area * 100.0,
+        current_area * 100.0
+    );
+    assert!(boot_area <= gui::capture::NEAR_WHITE_AREA_CEILING);
+    assert!(current_area > gui::capture::NEAR_WHITE_AREA_CEILING);
+    assert_eq!(gui::capture::NEAR_WHITE_AREA_CEILING, 0.015_630_426);
+
+    // THE CLIFF ITSELF, pinned so nobody re-derives it: on the vehicle's own frames the pool is
+    // smooth across the threshold band, which is why it was trustworthy there. A future frame set
+    // that fragments near 200 makes this fail and is exactly the warning worth having.
+    for threshold in [190u8, 195, 200, 205, 210, 215] {
+        let boot =
+            largest_blown_pool_fraction(&boot_pixels, boot.width(), boot.height(), threshold);
+        let current = largest_blown_pool_fraction(
+            &current_pixels,
+            current.width(),
+            current.height(),
+            threshold,
+        );
+        assert!(
+            current > boot * 1.2,
+            "at threshold {threshold} the rejected frame's pool ({:.4}%) must stay clearly above \
+             the approved frame's ({:.4}%) — if it does not, the pool has hit a fragmentation \
+             cliff and is no longer measuring blow-out",
+            current * 100.0,
+            boot * 100.0
+        );
+    }
+    assert_eq!(
+        median_ground_luminance(&boot_pixels, boot.width(), boot.height()),
+        123
+    );
+    assert_eq!(
+        median_ground_luminance(&current_pixels, current.width(), current.height()),
+        123
+    );
+}
+
+#[test]
+fn blown_pool_range_failure_is_a_real_panic_not_a_successful_capture() {
+    let mut bytes = vec![0; 64 * 64 * 4];
+    for pixel in bytes.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[195, 150, 130, 255]);
+    }
+    for row in 0..20 {
+        for column in 0..20 {
+            let start = (row * 64 + column) * 4;
+            bytes[start..start + 4].copy_from_slice(&[230, 230, 230, 255]);
+        }
+    }
+
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, true, 9);
+    }));
+    std::panic::set_hook(previous);
+
+    assert!(
+        outcome.is_err(),
+        "a range assertion panics out of the observer and therefore exits the app with 101"
+    );
 }
 
 #[test]

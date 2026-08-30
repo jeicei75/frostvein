@@ -14,6 +14,16 @@ use std::{
 
 use anyhow::{Context, bail};
 use bevy::{
+    app::PluginGroup,
+    app::ScheduleRunnerPlugin,
+    asset::{Assets, Handle},
+    camera::RenderTarget,
+    image::Image,
+    render::render_resource::{TextureFormat, TextureUsages},
+    window::{ExitCondition, WindowPlugin},
+    winit::WinitPlugin,
+};
+use bevy::{
     app::{App, AppExit, PostUpdate, Startup, Update},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
@@ -91,11 +101,33 @@ pub fn run() -> anyhow::Result<()> {
     eprintln!("gui build {}", crate::BUILD_SHA);
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins)
-        .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        .add_plugins(FpsOverlayPlugin {
-            config: overlay_config_off(),
-        });
+    if args.headless {
+        // No window, and therefore no winit: WinitPlugin panics outright where there is no display
+        // server, which is every devpod this project builds on. ScheduleRunnerPlugin drives the
+        // loop instead. The renderer is untouched and still real — see `HeadlessTarget`.
+        eprintln!(
+            "gui running HEADLESS: offscreen {}x{} target, no window",
+            HEADLESS_SIZE.0, HEADLESS_SIZE.1
+        );
+        app.add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: None,
+                    exit_condition: ExitCondition::DontExit,
+                    ..Default::default()
+                })
+                .disable::<WinitPlugin>(),
+        )
+        .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO))
+        // The overlay plugin wants a window; its config resource is all the client systems read.
+        .init_resource::<FpsOverlayConfig>();
+    } else {
+        app.add_plugins(DefaultPlugins)
+            .add_plugins(FrameTimeDiagnosticsPlugin::default())
+            .add_plugins(FpsOverlayPlugin {
+                config: overlay_config_off(),
+            });
+    }
     configure_client_app(&mut app, mirror, receiver, writer, args);
     // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
     // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
@@ -164,6 +196,9 @@ fn configure_client_app(
             dirty_tiles: BTreeSet::new(),
         })
         .insert_resource(ClearColor(night_lighting().sky));
+    if args.headless {
+        app.insert_resource(HeadlessRequested);
+    }
     insert_capture_resources(app, &args);
     client_systems(app);
     projection_systems(app);
@@ -326,7 +361,39 @@ struct Args {
     cursor: Option<Vec2>,
     at_tick: Option<u64>,
     drag: Option<ScriptedDragSpec>,
+    headless: bool,
 }
+
+/// Present only under `--headless`: the offscreen texture the camera draws into, and which the
+/// capture screenshots instead of a window.
+///
+/// WHY THIS EXISTS. The premise that this project's devpods "cannot render" was measured on
+/// 2026-08-11 and generalised too far: they cannot open a WINDOW (no display server, and winit
+/// panics with "neither WAYLAND_DISPLAY nor WAYLAND_SOCKET nor DISPLAY is set"), but a CPU Vulkan
+/// device IS present — Mesa's lavapipe, `llvmpipe (LLVM 19.1.7)`, Vulkan 1.4 — and wgpu creates a
+/// device on it. Rendering needs a device, not a window. Verified before this was written.
+///
+/// THE CAVEAT THAT MATTERS, and it is not optional when reading any number this produces:
+/// llvmpipe is a SOFTWARE rasteriser, so its pixels are not guaranteed identical to the vehicle's
+/// GPU. A figure taken here may NOT be compared against one calibrated on the vehicle — story
+/// 9.1's 0.6651 % blown-pool ceiling was measured on GPU-rendered committed PNGs and is not a
+/// bar this path can be judged against. Compare llvmpipe against llvmpipe: render the baseline
+/// commit and the candidate the same way and read the DELTA. That is the same Bevy-against-Bevy
+/// discipline 9.1 used to calibrate in the first place.
+///
+/// FPS IS NOT MEASURABLE HERE AT ALL. NFR6 stays vehicle-bound; a software rasteriser's frame
+/// time says nothing about the machine that will run this.
+#[derive(Resource, Clone)]
+pub struct HeadlessTarget(pub Handle<Image>);
+
+/// Set by `--headless` before startup, so `setup_camera` knows to build an offscreen target.
+#[derive(Resource)]
+pub struct HeadlessRequested;
+
+/// The capture resolution, matched to the vehicle's committed PNGs (`boot7.png` and every other
+/// signoff frame are 1280x720) so a headless frame and a vehicle frame are the same shape and the
+/// pixel-region instruments read the same way on both.
+const HEADLESS_SIZE: (u32, u32) = (1280, 720);
 
 #[derive(Resource)]
 pub struct CaptureDistance(pub f32);
@@ -372,6 +439,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut cursor = None;
     let mut at_tick = None;
     let mut drag = None;
+    let mut headless = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -387,6 +455,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             );
         } else if arg == "--expect-work" {
             expect_work = true;
+        } else if arg == "--headless" {
+            headless = true;
         } else if arg == "--z" {
             let value = args.next().context("--z requires a level")?;
             slice_level = Some(
@@ -463,6 +533,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         cursor,
         at_tick,
         drag,
+        headless,
     })
 }
 
@@ -603,35 +674,66 @@ fn insert_capture_resources(app: &mut App, args: &Args) {
     }
 }
 
-fn setup_camera(mut commands: Commands, distance: Option<Res<CaptureDistance>>) {
+fn setup_camera(
+    mut commands: Commands,
+    distance: Option<Res<CaptureDistance>>,
+    headless: Option<Res<HeadlessRequested>>,
+    images: Option<ResMut<Assets<Image>>>,
+) {
+    // Built BEFORE the spawn so the camera can be pointed at it in the same system, and so a
+    // headless run that cannot allocate the texture fails here rather than rendering to nowhere.
+    let headless_target = match (headless.is_some(), images) {
+        (true, Some(mut images)) => {
+            let mut image = Image::new_target_texture(
+                HEADLESS_SIZE.0,
+                HEADLESS_SIZE.1,
+                TextureFormat::Rgba8UnormSrgb,
+                None,
+            );
+            // COPY_SRC is what makes the frame readable back to the CPU; without it the
+            // screenshot silently has nothing to copy.
+            image.texture_descriptor.usage |= TextureUsages::COPY_SRC;
+            Some(images.add(image))
+        }
+        _ => None,
+    };
     let mut rig = CameraRig::new([64, 64, 9]);
     if let Some(distance) = distance {
         rig.distance = distance.0.clamp(4.0, 500.0);
     }
     let (fog_start, fog_end) = fog_falloff(rig.distance);
-    commands.spawn((
-        Camera3d::default(),
-        Projection::Perspective(PerspectiveProjection {
-            fov: BOOT_VERTICAL_FOV,
-            ..Default::default()
-        }),
-        rig.transform(),
-        rig,
-        AmbientLight {
-            color: night_lighting().ambient,
-            brightness: night_lighting().ambient_brightness,
-            ..Default::default()
-        },
-        DistanceFog {
-            color: night_lighting().sky,
-            falloff: FogFalloff::Linear {
-                start: fog_start,
-                end: fog_end,
+    let camera = commands
+        .spawn((
+            Camera3d::default(),
+            Projection::Perspective(PerspectiveProjection {
+                fov: BOOT_VERTICAL_FOV,
+                ..Default::default()
+            }),
+            rig.transform(),
+            rig,
+            AmbientLight {
+                color: night_lighting().ambient,
+                brightness: night_lighting().ambient_brightness,
+                ..Default::default()
             },
-            ..Default::default()
-        },
-        ClientLocal,
-    ));
+            DistanceFog {
+                color: night_lighting().sky,
+                falloff: FogFalloff::Linear {
+                    start: fog_start,
+                    end: fog_end,
+                },
+                ..Default::default()
+            },
+            ClientLocal,
+        ))
+        .id();
+    if let Some(handle) = headless_target {
+        // In Bevy 0.19 the render target is its own COMPONENT, not a field on Camera.
+        commands
+            .entity(camera)
+            .insert(RenderTarget::Image(handle.clone().into()));
+        commands.insert_resource(HeadlessTarget(handle));
+    }
 }
 
 fn setup_night_lighting(mut commands: Commands) {
@@ -1355,6 +1457,69 @@ mod tests {
         // And the pin is clamped by the same rule as every other level change.
         assert_eq!(super::initial_slice(dims, Some(999)).level(), 31);
         assert_eq!(super::initial_slice(dims, Some(-5)).level(), 0);
+    }
+
+    /// The devpods this project builds on have no display server, so winit panics and every
+    /// pixel AC has been vehicle-bound since 2026-08-11. They DO have a CPU Vulkan device
+    /// (lavapipe), and rendering needs a device rather than a window — `--headless` is what turns
+    /// that into a measurement. Verified live: the headless client reproduced the draw-set oracle
+    /// on both the pre-9.4 world (53,365) and the current one (44,984).
+    #[test]
+    fn headless_is_off_by_default_and_on_only_when_asked() {
+        let interactive = super::parse_args_from([std::ffi::OsString::from("7451")])
+            .expect("a bare port must parse");
+        assert!(
+            !interactive.headless,
+            "a client asked for nothing special must still open a window"
+        );
+        let headless = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--headless"),
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("boot.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("220"),
+        ])
+        .expect("a headless capture must parse");
+        assert!(headless.headless);
+        assert_eq!(headless.capture, Some(std::path::PathBuf::from("boot.png")));
+    }
+
+    /// The camera must actually be pointed somewhere. A headless run whose camera still targets a
+    /// window renders nothing and the screenshot is empty — silently, which is the failure shape
+    /// this project keeps meeting.
+    #[test]
+    fn a_headless_camera_draws_into_an_offscreen_target_and_a_windowed_one_does_not() {
+        use bevy::prelude::World as BevyWorld;
+
+        for headless in [false, true] {
+            let mut world = BevyWorld::new();
+            world.init_resource::<bevy::asset::Assets<bevy::image::Image>>();
+            if headless {
+                world.insert_resource(super::HeadlessRequested);
+            }
+            world
+                .run_system_once(super::setup_camera)
+                .expect("setup_camera must run");
+
+            // Count IMAGE targets specifically. A camera always carries a RenderTarget — the
+            // default one points at a window — so counting the component discriminates nothing.
+            // The first draft of this test did exactly that and passed for the wrong reason.
+            let targets = world
+                .query::<&bevy::camera::RenderTarget>()
+                .iter(&world)
+                .filter(|target| matches!(target, bevy::camera::RenderTarget::Image(_)))
+                .count();
+            let resource = world.get_resource::<super::HeadlessTarget>().is_some();
+            assert_eq!(
+                targets, headless as usize,
+                "headless={headless}: expected the offscreen render target only when headless"
+            );
+            assert_eq!(
+                resource, headless,
+                "headless={headless}: the capture reads HeadlessTarget to know what to screenshot"
+            );
+        }
     }
 
     #[test]

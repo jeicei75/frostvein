@@ -434,8 +434,122 @@ pub const GROUND_LUMINANCE_FLOOR: u8 = 70;
 /// "Night snow stays midtone" needs a ceiling as much as a floor.
 pub const GROUND_LUMINANCE_CEILING: u8 = 180;
 
+/// `boot7.png`, the 5.4 Bevy frame Wolf approved, measures a 0.6651% largest region at this
+/// luminance. The star shell (192.9 luma) stays below it, so the measure follows the pool.
+pub const BLOWN_POOL_LUMINANCE_THRESHOLD: u8 = 200;
+
+/// `boot7.png`, the 5.4 Bevy frame Wolf approved, measures a 0.6651% largest near-white pool.
+pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651_476;
+
+/// Fraction of the frame at or above [`BLOWN_POOL_LUMINANCE_THRESHOLD`], **counted rather than
+/// connected**. Calibrated the same way as the pool ceiling — on `boot7.png`, the frame Wolf
+/// approved, which measures 1.5630426 % (14,405 of 921,600 pixels) against the rejected `7-2-marks-vista.png` at
+/// 1.8395 %. Like the pool ceiling it is boot7's own figure to the digit, so the approved frame
+/// sits exactly AT the bar with no tolerance — deliberate, and the same rule the pool follows.
+///
+/// WHY THIS EXISTS, measured 2026-08-29 while closing 9.1's AC13. `largest_blown_pool_fraction`
+/// measures a CONNECTED component, and connectivity has a cliff: a near-white region fragments at
+/// some threshold, and the largest surviving piece then halves. On the frames this project renders
+/// on the vehicle that cliff is nowhere near 200 — `boot7.png` runs 0.7122 / 0.6651 / 0.5704 across
+/// 190 / 200 / 215, perfectly smooth — so the pool metric is sound THERE and its 49 % finding
+/// against the rejected frame holds at every threshold (ratios 1.50 / 1.49 / 1.48).
+///
+/// It is NOT sound on software-rendered frames. Under llvmpipe the cliff lands between 196 and
+/// 208, straddling the shipped threshold, and a controlled shadows-off/on pair read 0.70 % vs
+/// 0.94 % — an apparent 35 % regression that is pure artefact: at t=192 and t=212 the two
+/// conditions are indistinguishable. Area, on the same frames, is smooth, monotone and
+/// physically right — shadows REDUCE it (1.47 % vs 1.58–1.73 %), agreeing with the 15.7 % drop in
+/// warm-lit pixels that shadows are supposed to cause.
+///
+/// So: **area is what is asserted**, because it survives both renderers; the pool stays as a
+/// reported diagnostic and must not be read off a headless frame.
+pub const NEAR_WHITE_AREA_CEILING: f32 = 0.015_630_426;
+
 fn luminance(pixel: [u8; 4]) -> f32 {
     0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32
+}
+
+/// Fraction of the frame occupied by its largest four-connected near-white region.
+pub fn largest_blown_pool_fraction(
+    pixels: &[[u8; 4]],
+    width: u32,
+    height: u32,
+    threshold: u8,
+) -> f32 {
+    assert_eq!(
+        pixels.len(),
+        (width as usize) * (height as usize),
+        "capture dimensions must describe every pixel"
+    );
+    if pixels.is_empty() {
+        return 0.0;
+    }
+
+    let mut visited = vec![false; pixels.len()];
+    let mut largest = 0;
+    for start in 0..pixels.len() {
+        if visited[start] || luminance(pixels[start]) < threshold as f32 {
+            continue;
+        }
+
+        let mut region = 0;
+        let mut pending = vec![start];
+        visited[start] = true;
+        while let Some(index) = pending.pop() {
+            region += 1;
+            let row = index / width as usize;
+            let column = index % width as usize;
+            let mut visit = |neighbour: usize| {
+                if !visited[neighbour] && luminance(pixels[neighbour]) >= threshold as f32 {
+                    visited[neighbour] = true;
+                    pending.push(neighbour);
+                }
+            };
+            if column > 0 {
+                visit(index - 1);
+            }
+            if column + 1 < width as usize {
+                visit(index + 1);
+            }
+            if row > 0 {
+                visit(index - width as usize);
+            }
+            if row + 1 < height as usize {
+                visit(index + width as usize);
+            }
+        }
+        largest = largest.max(region);
+    }
+
+    largest as f32 / pixels.len() as f32
+}
+
+/// Fraction of the frame at or above `threshold`, counted rather than connected. The stable
+/// companion to [`largest_blown_pool_fraction`] — see [`NEAR_WHITE_AREA_CEILING`] for why
+/// connectivity is the fragile part and area is not.
+pub fn near_white_area_fraction(pixels: &[[u8; 4]], threshold: u8) -> f32 {
+    if pixels.is_empty() {
+        return 0.0;
+    }
+    let above = pixels
+        .iter()
+        .filter(|pixel| luminance(**pixel) >= threshold as f32)
+        .count();
+    above as f32 / pixels.len() as f32
+}
+
+/// The 99th percentile of frame luminance, using the nearest sample in sorted pixel order.
+pub fn p99_luminance(pixels: &[[u8; 4]]) -> f32 {
+    if pixels.is_empty() {
+        return 0.0;
+    }
+    let mut values = pixels.iter().copied().map(luminance).collect::<Vec<_>>();
+    values.sort_by(f32::total_cmp);
+    // NOTE: the index is computed in f64. At f32, 225,210 of the first 3M possible pixel
+    // counts round to the neighbouring sample; no resolution this repo produces is among them
+    // today, but a printed instrument that is silently off by one sample is exactly the class
+    // this project keeps getting bitten by.
+    values[((values.len() - 1) as f64 * 0.99).round() as usize]
 }
 
 /// Median luminance of the valley floor. Median, not mean, so a handful of blown-out emitter
@@ -615,6 +729,7 @@ pub fn capture_after_frames(
     drag: Option<Res<ScriptedDrag>>,
     cameras: Query<&CameraRig, With<Camera3d>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    headless: Option<Res<crate::ingest::HeadlessTarget>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if capture.requested || capture.failed {
@@ -756,8 +871,16 @@ pub fn capture_after_frames(
             None => capture.motion.assert_valid(capture.expect_work),
         }
         capture.requested = true;
+        // Headless runs have no window to screenshot; they draw into an offscreen texture and the
+        // shot is taken from that instead. Everything downstream -- save_to_disk, the range checks
+        // and the pixel instruments -- is identical, which is the point: the instrument does not
+        // change when the surface does.
+        let shot = match headless.as_deref() {
+            Some(target) => Screenshot::image(target.0.clone()),
+            None => Screenshot::primary_window(),
+        };
         commands
-            .spawn(Screenshot::primary_window())
+            .spawn(shot)
             .observe(save_then_validate(capture.path.clone(), *slice))
             .observe(exit_after_capture);
     }
@@ -982,7 +1105,7 @@ fn range_band_applies(slice: SliceLevel) -> bool {
     slice.level() >= slice.top()
 }
 
-fn validate_capture_ranges(
+pub fn validate_capture_ranges(
     bytes: &[u8],
     format: TextureFormat,
     width: u32,
@@ -990,7 +1113,39 @@ fn validate_capture_ranges(
     band_applies: bool,
     level: i32,
 ) {
+    validate_capture_ranges_with_report(
+        bytes,
+        format,
+        width,
+        height,
+        band_applies,
+        level,
+        |line| println!("{line}"),
+    );
+}
+
+fn validate_capture_ranges_with_report(
+    bytes: &[u8],
+    format: TextureFormat,
+    width: u32,
+    height: u32,
+    band_applies: bool,
+    level: i32,
+    mut report: impl FnMut(&str),
+) {
     let pixels = decode_rgba8(bytes, format);
+    let warm = warm_lit_pixels(&pixels);
+    let ground = median_ground_luminance(&pixels, width, height);
+    let blown_pool =
+        largest_blown_pool_fraction(&pixels, width, height, BLOWN_POOL_LUMINANCE_THRESHOLD);
+    let near_white = near_white_area_fraction(&pixels, BLOWN_POOL_LUMINANCE_THRESHOLD);
+    let p99 = p99_luminance(&pixels);
+    report(&format!(
+        "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \
+         near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1}",
+        near_white * 100.0,
+        blown_pool * 100.0
+    ));
     assert!(
         pixels.iter().any(|pixel| pixel[..3] != [0, 0, 0]),
         "capture is black"
@@ -999,15 +1154,12 @@ fn validate_capture_ranges(
         pixels.windows(2).any(|pair| pair[0] != pair[1]),
         "capture is uniform"
     );
-    let warm = warm_lit_pixels(&pixels);
-    let ground = median_ground_luminance(&pixels, width, height);
-    println!("capture range check: warm-lit pixels={warm} ground-median-luminance={ground}");
     // The numbers print either way. Only the calibrated band is conditional, and `capture is
     // black` / `capture is uniform` above are not — a slice capture is never left ungated.
     if !band_applies {
         println!(
             "capture range check: the cut at z {level} is below the world top, where 5.4's band \
-             was measured on sky-lit snow — warm and ground assertions skipped"
+             was measured on sky-lit snow — warm, ground, and blown-pool assertions skipped"
         );
         return;
     }
@@ -1025,6 +1177,15 @@ fn validate_capture_ranges(
         ground <= GROUND_LUMINANCE_CEILING,
         "the valley floor reads {ground}, above the {GROUND_LUMINANCE_CEILING} value ceiling — \
          night snow must stay midtone; only emissive approaches white"
+    );
+    // AREA IS THE ASSERTION, not the pool. The pool's connectivity has a threshold cliff that the
+    // vehicle's frames sit clear of but software-rendered ones do not; see NEAR_WHITE_AREA_CEILING.
+    // The pool is still printed above, so a vehicle run loses no diagnostic.
+    assert!(
+        near_white <= NEAR_WHITE_AREA_CEILING,
+        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
+        near_white * 100.0,
+        NEAR_WHITE_AREA_CEILING * 100.0
     );
 }
 
@@ -1143,6 +1304,94 @@ mod tests {
         assert!(median_ground_luminance(&blown, 8, 8) > GROUND_LUMINANCE_CEILING);
         let midtone = vec![[95u8, 112, 129, 255]; 64];
         assert!(median_ground_luminance(&midtone, 8, 8) <= GROUND_LUMINANCE_CEILING);
+    }
+
+    #[test]
+    fn blown_pool_uses_the_largest_four_connected_region_and_reports_p99() {
+        let mut pixels = vec![[20, 20, 20, 255]; 16];
+        for index in [0, 1, 4, 5, 15] {
+            pixels[index] = [220, 220, 220, 255];
+        }
+
+        assert_eq!(largest_blown_pool_fraction(&pixels, 4, 4, 200), 0.25);
+        assert_eq!(p99_luminance(&pixels), 220.0);
+    }
+
+    #[test]
+    fn blown_pool_ceiling_judges_the_boot_framing_and_stands_aside_at_a_cut() {
+        let mut bytes = vec![0; 64 * 64 * 4];
+        for pixel in bytes.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[195, 150, 130, 255]);
+        }
+        for row in 0..20 {
+            for column in 0..20 {
+                let start = (row * 64 + column) * 4;
+                bytes[start..start + 4].copy_from_slice(&[230, 230, 230, 255]);
+            }
+        }
+
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let at_top = std::panic::catch_unwind(|| {
+            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, true, 9);
+        });
+        let at_cut = std::panic::catch_unwind(|| {
+            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, false, 8);
+        });
+        std::panic::set_hook(previous);
+
+        assert!(
+            at_top.is_err(),
+            "a large near-white pool at the boot framing must fail its own ceiling"
+        );
+        assert!(
+            at_cut.is_ok(),
+            "the same frame at a cut must keep skipping the boot-vista range checks"
+        );
+    }
+
+    #[test]
+    fn capture_range_report_is_emitted_before_a_blown_pool_panic() {
+        let mut bytes = vec![0; 64 * 64 * 4];
+        for pixel in bytes.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[195, 150, 130, 255]);
+        }
+        for row in 0..20 {
+            for column in 0..20 {
+                let start = (row * 64 + column) * 4;
+                bytes[start..start + 4].copy_from_slice(&[230, 230, 230, 255]);
+            }
+        }
+
+        let reported = std::cell::Cell::new(false);
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            validate_capture_ranges_with_report(
+                &bytes,
+                TextureFormat::Rgba8Unorm,
+                64,
+                64,
+                true,
+                9,
+                |line| {
+                    // Latch, never assign: a second report line must not be able to clear this.
+                    if line.contains("blown-pool=") && line.contains("p99-luminance=") {
+                        reported.set(true);
+                    }
+                },
+            );
+        }));
+        std::panic::set_hook(previous);
+
+        assert!(
+            reported.get(),
+            "the metrics must be reported before the ceiling panics"
+        );
+        assert!(
+            outcome.is_err(),
+            "the ceiling must still make the observer panic"
+        );
     }
 
     fn mirror_with_dwarf_at(z: i32) -> Mirror {

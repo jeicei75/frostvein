@@ -1249,6 +1249,46 @@ fn flickered_light_survives_a_later_production_reconciliation() {
 }
 
 #[test]
+fn campfire_light_casts_shadows_and_is_not_rewritten_by_a_later_reconciliation() {
+    let id = 91;
+    let campfire = Entity {
+        id,
+        kind: EntityKind::Campfire,
+        pos: [0, 0, 0],
+        state: JobState::Idle,
+        light: Some(protocol::LightKind::Campfire),
+    };
+    let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![campfire]));
+    app.update();
+
+    let shadowed = app
+        .world_mut()
+        .query::<(&WorldProjected, &PointLight)>()
+        .iter(app.world())
+        .find_map(|(projected, light)| (projected.0 == id).then_some(light.shadow_maps_enabled))
+        .expect("the campfire must have a point light");
+    assert!(shadowed, "the campfire light must cast shadows");
+
+    app.world_mut()
+        .run_system_once(reconcile_projection)
+        .expect("production reconciliation must run");
+    let after_reconcile = app
+        .world_mut()
+        .query::<(&WorldProjected, &PointLight)>()
+        .iter(app.world())
+        .find_map(|(projected, light)| (projected.0 == id).then_some(light.shadow_maps_enabled))
+        .expect("reconciliation must retain the campfire point light");
+    // NOTE: this is a not-rewritten guard, not a re-insert guard. `reconcile_projection` only
+    // re-inserts when the light KIND changes (project.rs:587), and a campfire's kind is static,
+    // so the branch at :588-591 is unreachable from this fixture and the component read back is
+    // the one spawned above. That is the same property the flicker precedent guards.
+    assert!(
+        after_reconcile,
+        "a later reconciliation must leave campfire shadow casting alone"
+    );
+}
+
+#[test]
 fn snapshot_rebuild_reaches_reconcile_even_when_changes_are_empty() {
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], Vec::new()));
     app.update();

@@ -11,14 +11,21 @@ emitter faces. These choices live in `gui`'s appearance tables, not beside draw 
 Snow is a client-side settled cap: exposed snow, stone, and soil tops receive the distinct
 cap material, while
 ice keeps its blue surface and covered terrain retains its bare flank. Foliage receives
-no terrain-style snow slab: its dark, broken silhouette leaves the valley's snow landform
-visible instead of turning every ground-level tree skirt into a bright tile. Foliage cubes
+no terrain-style snow slab: its broken silhouette leaves the valley's snow landform
+visible instead of turning every ground-level tree skirt into a bright tile. **Foliage is green
+`(44,100,58)` since story 9.4** — it was `(55,73,84)`, only 9.9 from stone on the same measure the
+marks are held to at 40, so the base cubes were near-camouflage against the ground. Trees separate
+on GREEN, the axis the cool directional does not compress; every terrain material still keeps blue
+at or above red. Foliage cubes
 taper by their contiguous foliage above: ground skirts and crown tips scale to 0.72, the
 upper crown to 0.86, and the mid-crown stays full scale. Ramps follow the same material
 rules because the renderer presents them as full cubes.
 
 The **exposed crown** of a spruce — foliage with nothing solid above it — takes its own
-`(172, 186, 210)` snow-laden material, matching the approved artifact's `SPRUCE_SNOW`. This
+`(156, 170, 196)` snow-laden material. That started as the approved artifact's `SPRUCE_SNOW`
+`(172, 186, 210)` and was trimmed at round 7: the artifact shows that colour on thin sprite tops
+while our cubes show whole faces of it, and every tree glowing at near-cap brightness is what made
+the boot4 foreground read as clutter. This
 is a material swap and deliberately not a terrain cap: capping foliage puts a bright slab on
 every ground-level skirt tile and buries the landform, which is what the round-3 capture
 showed. Bare cube foliage without it reads as a dark clump in a lit field.
@@ -50,12 +57,12 @@ luminance of 22.5 against the artifact's 112.6 (~18x short in linear light); sca
 factor then measured 156 on the boot3 vehicle capture — 26% over — with shadows flooded (p05 87
 vs the artifact's 28) and a saturated blue-green cast. The overshoot taught the real rule:
 **the budget divides, it doesn't just scale.** A small desaturated ambient (`(120,140,165)` at
-6,000) lets shadow faces go genuinely dark; a desaturated cool directional (`(150,190,180)` at
-30,000) carries the lit faces. Both tints sit near neutral because light colour MULTIPLIES onto
+4,500) lets shadow faces go genuinely dark; a desaturated cool directional (`(150,190,180)` at
+22,000) carries the lit faces. Both tints sit near neutral because light colour MULTIPLIES onto
 already-blue materials — the boot3 cast came from lighting blue snow with saturated blue-green
-lights, not from the material table. Torches are 14M lm and the campfire 32M lm: the white-clip
-radius scales as sqrt(intensity), and 72M blew a ~9-tile pool to flat white where AC9 reserves
-white for emissive faces alone.
+lights, not from the material table. Torches are 14M lm and the campfire 25M lm (35M at its
+1.40 flicker peak): the white-clip radius scales as sqrt(intensity), and 72M blew a ~9-tile pool
+to flat white where AC9 reserves white for emissive faces alone.
 
 **Warm against cold is carried by hue, not by a large luminance ratio.** Measured on the
 approved artifact, the camp is only ~1.3x the field in luminance (135.9 vs 104.3) while its
@@ -99,8 +106,12 @@ nearest silhouette point would also erase the valley the frame exists to show. T
 sky colour over the outermost 10 tiles in five quantised steps, so the boundary fades out at
 every zoom and camera angle rather than at one tuned distance. Five shared steps per surface
 keep it to a handful of material handles; per-tile blending would mean one material per cube.
-The tiles are still drawn — the draw set is pinned by the 53,365-cube oracle and must never
-change to hide an edge.
+The tiles are still drawn — the draw set is watched by the cube oracle and must never shrink to
+hide an edge. **The oracle is a measurement of the shipped world, not a constant.** It reads
+**44,984** exposed cubes of 301,048 solid today. Story 9.4 moved it twice in one story: 53,365 of
+315,068 before it, 45,261 after the tree-density cut, 44,984 after the ground-level foliage ring was
+removed. It moves whenever world content moves; what must not change is that the rim dissolves by
+colour alone and removes no tiles.
 
 Per AC11's amendment the final choice is still Wolf's, at the vehicle. What is settled here is
 that fog-alone has been eliminated on evidence.
@@ -144,7 +155,9 @@ shared respawn height re-synchronizes the field into marching rows.
 Motion is presentation only: dynamic entities blend between the previous and current positions
 the wire delivered, clamped at the current position with no prediction or extrapolation. Torch
 and campfire point lights breathe inside their table-defined bands from a deterministic function
-of simulation id and client elapsed time; the emitter material remains static. When an `Empty`
+of simulation id and client elapsed time; the emitter material remains static. The campfire — and
+only the campfire — casts point-light shadows, so its light no longer passes through solid
+terrain; each additional shadow-casting emitter would cost six cube-map faces against NFR6. When an `Empty`
 tile arrives, four deterministic, client-local stone chips sit at the position until a snapshot
 rebuild clears them. They make digging read as work without inventing simulation state.
 

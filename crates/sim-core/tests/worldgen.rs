@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use sim_core::{Dims, Id, Material, Pos, Tile, World};
+use sim_core::{DEFAULT_SEED, Dims, Id, Material, Pos, Tile, World};
 
 fn surface_height(world: &World, x: i32, y: i32) -> i32 {
     (0..world.dims().z as i32)
@@ -27,6 +27,16 @@ fn is_standable(world: &World, pos: Pos) -> bool {
             }),
             Some(Tile::Solid(_) | Tile::Ramp(_))
         )
+}
+
+fn tree_trunk_columns(world: &World) -> usize {
+    (0..world.dims().y as i32)
+        .flat_map(|y| (0..world.dims().x as i32).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            (0..world.dims().z as i32)
+                .any(|z| world.tile(Pos { x, y, z }) == Some(Tile::Solid(Material::TreeTrunk)))
+        })
+        .count()
 }
 
 #[test]
@@ -173,6 +183,112 @@ fn pines_use_both_tree_materials_and_leave_the_camp_clear() {
 }
 
 #[test]
+fn tree_density_for_seed_42_is_deterministic_and_in_target_band() {
+    const SEED: u64 = 42;
+    const MIN_TREE_COLUMNS: usize = 230;
+    const MAX_TREE_COLUMNS: usize = 300;
+
+    let first = World::generate(SEED, Dims::DEFAULT);
+    let second = World::generate(SEED, Dims::DEFAULT);
+    let count = tree_trunk_columns(&first);
+
+    assert_eq!(
+        count,
+        tree_trunk_columns(&second),
+        "tree placement must be deterministic for seed {SEED}"
+    );
+    assert!(
+        (MIN_TREE_COLUMNS..=MAX_TREE_COLUMNS).contains(&count),
+        "seed {SEED} generated {count} distinct trunk columns, outside the \
+         {MIN_TREE_COLUMNS}..={MAX_TREE_COLUMNS} target band"
+    );
+}
+
+/// Wolf, on the vehicle at 9.4's review: *"some trees look like they don't have trunk at all"*, and
+/// *"I see green boxes on ground level next to some full trees"*. Both were the same cause — a
+/// foliage ring stamped at `surface + 1` that sat on the ground AND sealed the lower trunk on all
+/// four sides. Measured before the fix: 86 of 265 trees (every height-4 tree, 100% of them) had no
+/// exposed trunk cell anywhere; after, 265 of 265 do.
+///
+/// This asserts the OUTCOME rather than the deletion: a tree the player can see a trunk on. The
+/// exposure rule is the renderer's — a cube is drawn when at least one of its six neighbours is not
+/// solid — reproduced here because sim-core owns the geometry that has to satisfy it.
+#[test]
+fn every_tree_shows_a_trunk_and_no_foliage_sits_at_the_trunk_base() {
+    let world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+    let dims = world.dims();
+    let solid = |x: i32, y: i32, z: i32| {
+        matches!(
+            world.tile(Pos { x, y, z }),
+            Some(Tile::Solid(_) | Tile::Ramp(_))
+        )
+    };
+    let exposed = |x: i32, y: i32, z: i32| {
+        solid(x, y, z)
+            && [
+                [1, 0, 0],
+                [-1, 0, 0],
+                [0, 1, 0],
+                [0, -1, 0],
+                [0, 0, 1],
+                [0, 0, -1],
+            ]
+            .into_iter()
+            .any(|d: [i32; 3]| !solid(x + d[0], y + d[1], z + d[2]))
+    };
+
+    let mut trees = 0;
+    let mut trunkless = Vec::new();
+    let mut foliage_at_base = Vec::new();
+    for y in 0..dims.y as i32 {
+        for x in 0..dims.x as i32 {
+            let base = (0..dims.z as i32)
+                .find(|&z| world.tile(Pos { x, y, z }) == Some(Tile::Solid(Material::TreeTrunk)));
+            let Some(base) = base else { continue };
+            trees += 1;
+            if !(base..dims.z as i32)
+                .take_while(|&z| {
+                    world.tile(Pos { x, y, z }) == Some(Tile::Solid(Material::TreeTrunk))
+                })
+                .any(|z| exposed(x, y, z))
+            {
+                trunkless.push((x, y));
+            }
+            for fy in y - 1..=y + 1 {
+                for fx in x - 1..=x + 1 {
+                    if (fx, fy) != (x, y)
+                        && world.tile(Pos {
+                            x: fx,
+                            y: fy,
+                            z: base,
+                        }) == Some(Tile::Solid(Material::TreeFoliage))
+                    {
+                        foliage_at_base.push((fx, fy, base));
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        trees > 0,
+        "the default world must grow trees to test at all"
+    );
+    assert!(
+        trunkless.is_empty(),
+        "{} of {trees} trees draw no trunk: not one trunk cell is exposed. First few: {:?}",
+        trunkless.len(),
+        &trunkless[..trunkless.len().min(5)]
+    );
+    assert!(
+        foliage_at_base.is_empty(),
+        "{} foliage cells sit at a trunk's base level, back on the ground. First few: {:?}",
+        foliage_at_base.len(),
+        &foliage_at_base[..foliage_at_base.len().min(5)]
+    );
+}
+
+#[test]
 fn spawn_positions_for_seed_42_are_pinned() {
     let world = World::generate(42, Dims::DEFAULT);
     let positions: Vec<_> = world
@@ -232,7 +348,17 @@ fn spawn_positions_for_seed_42_are_pinned() {
             };
             (hash ^ code).wrapping_mul(0x0000_0100_0000_01b3)
         });
-    assert_eq!(terrain_fingerprint, 0xbd48_ac6b_7250_d2e9);
+    // Tree tiles are intentionally included: the dedicated tree stream changes tile contents
+    // without changing the independently pinned camp or dwarf spawn positions above.
+    //
+    // THIS PIN HAS MOVED TWICE IN STORY 9.4 AND BOTH MOVES ARE DELIBERATE. `0xbd48_ac6b_7250_d2e9`
+    // -> `0xcb7a_c31e_2faf_4b6c` when the density roll went 0..12 -> 0..48, and -> the value below
+    // when the ground-level foliage ring was removed. The dwarf and camp positions asserted above
+    // did NOT move on either occasion — that is the point of pinning them separately. Because this
+    // fingerprint folds every tile, it is the tightest tree-stream regression guard in the repo,
+    // far tighter than the 230-300 density band, which only discriminates roll denominators
+    // outside roughly 36..52. Re-pin it only alongside a stated, measured geometry change.
+    assert_eq!(terrain_fingerprint, 0x4337_57ca_d2ba_77bc);
 }
 
 #[test]

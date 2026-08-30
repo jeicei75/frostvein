@@ -616,10 +616,10 @@ below as "what one layer found", not as "what is wrong with 3.3".
   `sim-core`'s single `IdAllocator` never collides entity and item ids, but nothing in
   `gui`/`client-core`/`protocol` documents or asserts that invariant, and 5.4 widened the
   blast radius from position-only to full identity. `[edge/LOW]`
-- Point lights cast no shadows (`crates/gui/src/project.rs:118`, `..Default::default()` →
-  `shadow_maps_enabled: false`); AC4's "shadow" term is carried entirely by the single
-  250-lux directional. Perf-vs-look tradeoff for a vehicle session, not a headless call.
-  `[auditor/LOW]`
+- ~~Point lights cast no shadows~~ **CLOSED 2026-08-28 by Story 9.1:** the campfire's projected
+  `PointLight` now sets `shadow_maps_enabled: true`, pinned through a later reconciliation pass.
+  Torches and lanterns deliberately remain unshadowed: each extra point light costs six cube-map
+  faces, and the measured defect is the campfire. Vehicle performance remains Task 6 evidence.
 - Degenerate captures produce misleading diagnostics (`crates/gui/src/capture.rs:76`): an
   empty pixel buffer asserts "capture is black", a 1-pixel capture always asserts "capture
   is uniform". Unreachable through a real primary-window screenshot. `[edge/LOW]`
@@ -900,7 +900,16 @@ executed a single line of its production path.**
   `ViewVisibility` on its spawn frame. Not observable at 60 fps, but worth knowing before anyone
   chases a "one tile behind" report from the vehicle.
   `crates/gui/src/project.rs:214-240` `[feature/LOW]`
-- **The hover highlight is invisible on every tile with a drawn tile above it.** DEFERRED TO 8.2 by
+- ~~**The hover highlight is invisible on every tile with a drawn tile above it.**~~ **CLOSED
+  2026-08-26 by commit `8782a0d` "Preview mouse designations on picked faces"** — 8.2 took the
+  first of the three candidate fixes below, the hit-face slab: `sync_hover_highlight` now offsets
+  along the picked face normal and rotates to it (`project.rs:236-238`), guarded by
+  `a_vertical_hit_face_places_the_hover_slab_outside_the_cell_side` and four sabotage rows in
+  8.2's table. **This entry was left unstruck for two days and Epic 9's story 9.2 was then written
+  from it on 2026-08-28, copying the defect description and its three candidate fixes verbatim —
+  fabricating a story's worth of scope for work already shipped.** Only the LOOK question remains
+  and it is filed separately under 8.2's vehicle deferrals. Struck 2026-08-28. ORIGINAL ENTRY
+  BELOW, kept for the record: DEFERRED TO 8.2 by
   Wolf, 2026-08-25 — reason: waiting on final gfx, and the standing art rule (2026-08-22) is that a
   look change needs a concrete defect and the art pass is owed first. The defect is concrete and
   measured: `sync_hover_highlight` places the slab at `world_to_render(pos) + Y*0.55`, the cube above
@@ -915,10 +924,20 @@ executed a single line of its production path.**
   by pointing at exactly these vertical faces, so this lands before 8.2 ships, not after.**
   `crates/gui/src/project.rs:227,230` `[feature/HIGH]`
 - **The hover slab is not visible near the campfire.** Observed by Wolf at the 8.1 review, 2026-08-25.
-  Almost certainly downstream of the campfire's already-open blown-emitter item rather than a new
-  hover defect: `04e6de5` raised the campfire amplitude 0.11→0.40, peaking at 44.8M, ~40% above the
-  value 5.4 was sized against, and a cyan slab at `(80,220,210)` will not survive that exposure.
-  Recorded against that open item; no look-tuning now, per the art rule. `[wolf/MED]`
+  Story 9.1 enabled campfire shadows without changing intensity, range, flicker, or emissive; its
+  vehicle card requires a re-check at Epic 9's shared sitting to determine whether the campfire
+  was the cause. The rendered hover fix, if still needed, remains Story 9.2. `[wolf/MED]`
+  **RESTATED 2026-08-29 (9.1 AC15). CAUSATION ANSWERED: YES, and it is structural rather than
+  incidental.** The hover slab is `(80,220,210)`, luminance **189.5** — a LIGHT-ON-DARK marker,
+  +40.5 against night snow (149.0), which is why it reads everywhere else. It sits **10.5 BELOW
+  the 200 near-white threshold** that defines the campfire's blown pool, and that pool covers
+  0.65-1.0 % of the frame and saturates toward 255. Inside it the background is BRIGHTER than the
+  marker, so the contrast inverts and the slab disappears. Measured on 9.1's controlled pair: the
+  pool persists at every threshold in BOTH shadow states, so shadows do not recover it.
+  **WHAT 9.2 INHERITS:** a brighter slab cannot fix this — nothing beats a background that reaches
+  255 on luminance alone. The marker needs hue/saturation separation or an outline. **STILL OPEN:**
+  the rendered judgement, which is 9.2's, and which needs a window (the hover path reads
+  `windows.single()`, so it cannot be exercised headlessly).
 
 ## Deferred from: code review of 8-2-designate-with-the-mouse (2026-08-26)
 
@@ -977,11 +996,11 @@ executed a single line of its production path.**
   gfx... now it's too confusing still to understand what happens."* This is the standing art rule
   ([[art-gates-visual-judgement]]) applied to 8.2. REOPEN TRIGGER: real game art lands.
   `[wolf/MED]`
-- **The campfire is still blown out and is now measurably obstructing observation.**
-  Carried open since 6.2 and re-confirmed by Wolf on 2026-08-27 as a reason the client is hard to
-  read: *"campfire is still overblown so it hides stuff"*. This is no longer only a look
-  complaint — it is degrading the vehicle as an instrument, which is what makes it worth ranking
-  above ordinary look items when the gfx pass is planned. `[feature/MED]`
+- **The campfire's vehicle outcome remains open.** Story 9.1 added the discriminating blown-pool
+  instrument (boot7 ceiling 0.6651% at threshold 200) and enabled campfire-only shadow maps, while
+  preserving every withheld look lever. The required controlled shadows-off/on capture and Wolf's
+  judgement have not run outside gingerspice; record those numbers before closing or escalating
+  this item. `[feature/MED]`
 - **AC19's fps readings and AC18's `tui` cross-check are owed but NOT art-blocked.**
   Both are objective readouts that a short vehicle session closes regardless of how the client
   looks. Listed here so they are not swept up in the art deferral above. `[wolf/HIGH]`
@@ -1021,3 +1040,207 @@ executed a single line of its production path.**
   ([[silent-sim-filter-trap]]), so it is logged rather than dropped. REOPEN TRIGGER: caves,
   overhangs or multi-level interiors become reachable by a drag. `[feature/MED]`
 
+## Deferred from: code review of 9-1-the-frame-stops-blowing-out (2026-08-28)
+
+Four layers, all live, fresh context, **no coverage holes**. Six deferrals; the review's HIGH and
+MED findings were routed to patch, not here.
+
+- **AC5's "before ANY assertion" is only half-guarded** [crates/gui/src/capture.rs:1091-1103].
+  The source ordering is correct — the metrics line precedes `capture is black` and `capture is
+  uniform` — but `capture_range_report_is_emitted_before_a_blown_pool_panic` uses a frame that is
+  neither black nor uniform, so moving `report(...)` back below those two guards leaves every test
+  green and sabotage row (e) untouched. Closing it needs a new mutation row paired with a
+  black-or-uniform test frame. Raised by the acceptance layer.
+- **No sabotage row exercises AC7's second clause** [mutations/9-1-the-frame-stops-blowing-out.sh].
+  Row (d) kills the discrimination test through the pool clause only. Nothing proves the
+  `median_ground_luminance == 123` assertions at tests/capture.rs:193-200 are load-bearing — and
+  that clause is the entire reason AC7 is non-tautological rather than self-referential. The honest
+  guard is a row that moves the ground window so the median DOES separate the two frames. Raised by
+  the acceptance layer.
+- **The blown-pool ceiling carries ~1 ulp of headroom over boot7's own measurement**
+  [crates/gui/src/capture.rs:442]. Constant as f32 is `0.0066514760`; boot7's `6130/921600` is
+  `0.0066514756`. Difference ≈4.7e-10. This is deliberate — AC6 says "no larger than in boot7.png"
+  — but it means the vehicle frame must come in at or below boot7 to the pixel, with no tolerance.
+  Stated here so a one-pixel overshoot at the sitting is read as the intended bar and not as noise.
+  Raised by the acceptance layer.
+- **The cut-level skip line bypasses the injected reporter** [crates/gui/src/capture.rs:1107-1110].
+  It prints via `println!` rather than through `report`, so it is invisible to any
+  report-capturing test. Not an AC violation; the reporting seam is simply half-injected. Raised by
+  the acceptance layer.
+- **Panic-hook contamination between concurrent tests** [crates/gui/tests/capture.rs:216-221].
+  `std::panic::set_hook`/`take_hook` are process-global while `cargo test` runs this binary across
+  up to 32 worker threads, so a sibling test panicking inside the window loses its diagnostic
+  stderr. Diagnostics-only — the affected tests assert on the panic payload rather than stderr, and
+  the hook is restored before the test's own assertion can fail, so nothing leaks into later tests.
+  Three default-threaded runs showed no observed message loss. Raised by the edge layer.
+- **Story 9.1 carries ZERO self-gate coverage.** Codex's single `codex review --base main` pass was
+  harness-killed before producing any findings, against a cap of three. Disclosed honestly in the
+  story's own Dev Agent Record. Recorded here so that this code review is not later mistaken for
+  having backfilled that hole — four review layers are not a self-gate, and the two are counted
+  separately on this project. Raised by the acceptance layer.
+
+## Deferred from: code review of 9-4-trees-fewer-and-distinct-from-the-ground (2026-08-29)
+
+- **Ice and Snow are excluded from the foliage separation guard**
+  [crates/gui/src/appearance.rs:296]. The new loop checks foliage against stone and soil only. Of
+  the five other `Material` variants, three are silent implicit branches; margins are currently
+  large (Ice 130.1, Snow 159.3) so there is no live risk. Trunk was the one that mattered and is
+  being patched now. Raised by the edge layer.
+- **`MIN_MARK_SEPARATION` now backs two orthogonal constraints with no isolation between them**
+  [crates/gui/src/appearance.rs:530]. It was authored as a mark-vs-palette floor — its own docstring
+  says to raise it "if a mark is ever tuned toward the palette" — and this story added a second,
+  unrelated terrain-vs-terrain use with only ~8-9.6 units of headroom. Raising the constant for mark
+  reasons would break the terrain check as an unrelated side effect. Deferred because it fails
+  LOUDLY (a red test), not silently, which is the opposite of the class this project patches on
+  sight. Nothing documents that the two purposes now share one knob. Raised by the edge layer.
+- **No cross-client consistency check exists for TERRAIN colours, only for marks**
+  [crates/tui/src/palette.rs:198]. The gui↔tui cross-check at `appearance.rs:441-471` covers
+  designation marks and carries an explicit docstring on why marks may diverge. Terrain has no
+  equivalent and no documented ruling: the tui's `TreeTrunk (105,76,48)` is warm brown, red over
+  blue, which would violate the gui's own terrain invariant, while the tui's foliage `(54,106,78)`
+  converges with the gui's new green only by coincidence. 9.4's claim that "the two clients now
+  agree" is true of foliage's hue direction and of nothing else — the two foliage values are 23.2
+  apart. Leaving the tui alone was still correct. Raised by the edge and feature layers.
+- **The density band only discriminates roll denominators outside roughly `36..52`**
+  [crates/sim-core/tests/worldgen.rs:190]. Measured by sweeping the denominator on an out-of-repo
+  copy: `0..36` → 310 (fails high), `0..40` → 282, `0..44` → 265, `0..48` → 242 (shipped), `0..56` →
+  214 (fails low). So a future tuning nudge from 48 to 44 would pass unnoticed. Inherent to one-seed
+  banded testing rather than a defect in this diff, and mitigated: the re-pinned terrain fingerprint
+  in the same file catches ANY perturbation of the tree stream. Related: `DEFAULT_SEED`'s 265 — the
+  number the band was chosen from — is the one figure with no direct guard. Raised by the blind and
+  acceptance layers.
+- **Two shipped comments assert opposite things about the cool directional**
+  [crates/gui/src/appearance.rs:117]. `:117-119` says the directional "compresses exactly that axis"
+  (green) and gives that as the reason dig and channel were moved onto RED; 9.4's new comment at
+  `:214` says foliage separates on "GREEN, the axis the cool directional does not compress". One of
+  two load-bearing rationales is false and both are quoted by later stories. The feature layer
+  measured the pure green-axis pair from `:117-119` under the shipped directional and found it does
+  NOT collapse (30.7 / 41.0 / 54.7 / 64.7 at gains 0.5-3.0), which favours 9.4's reading — but
+  re-ruling another story's stated rationale on one layer's measurement is not this story's to take.
+  9.4's own comment is being narrowed to what it actually measured. Raised by the feature layer.
+- **AC9's third sabotage row as specified is unkillable and had to be substituted**
+  [_bmad-output/implementation-artifacts/mutations/9-4-trees-fewer-and-distinct-from-the-ground.sh].
+  The AC demands a row that lowers the separation floor so the old colour would pass; with foliage at
+  48.1 a floor lowered to 5.0 still passes, so the row can never go red. The dev found this by running
+  the table, replaced it with a brown-foliage production mutation, and documented why — the right
+  call, and the replacement genuinely kills at W2's invariant rather than at the equality pin.
+  Recorded because the AC text remains a trap for anyone reusing this story as a template: you cannot
+  sabotage an assertion and expect that same assertion to catch it. Raised by the acceptance and
+  feature layers.
+
+## Deferred from: 9.4 review — Wolf's vehicle observations, measured (2026-08-29)
+
+Both were reported by Wolf from a rendered frame during 9.4's review and then measured against the
+shipped world by direct computation. **Neither is caused by story 9.4** — both are pre-existing
+worldgen/projection geometry that the density cut merely made easier to see. Recorded here as
+concrete measured defects, which is what the standing art rule (2026-08-22) requires before any
+look change becomes a story.
+
+- ~~**A THIRD OF ALL TREES HAVE NO VISIBLE TRUNK, and it is deterministic rather than
+  incidental.**~~ **RESOLVED THE SAME DAY, 2026-08-29, commit `465f967`** — Wolf ruled it in rather
+  than deferring it, after a second look showed the same ring as "green boxes on ground level".
+  Removing the `surface + 1` foliage ring fixed both: trees showing a trunk **179 -> 265 of 265**,
+  foliage cells 6,329 -> 4,505, draw-set oracle 45,261 -> 44,984, trunk columns unchanged at 265.
+  "Underground" was measured and disproven — every trunk sits flush on its own ground. Pinned by
+  `every_tree_shows_a_trunk_and_no_foliage_sits_at_the_trunk_base` plus a sabotage row that restores
+  the ring. The finding as originally recorded follows, unedited:
+  **86 of 265 trees (32.5%) draw zero trunk cells** — and it is exactly the height-4 trees, 100% of
+  them; height 5 leaves one bare trunk level, height 6 leaves two.
+  [crates/sim-core/src/worldgen.rs:196-227]. **Cause, from the source:** the trunk spans
+  `surface+1 ..= surface+height-1`, while foliage rings are stamped at `surface+1` (the skirt),
+  `crown_top-2` and `crown_top-1`. `height` is `rng.random_range(4..=6)`. At height 4 those three
+  rings cover *every* trunk level, so each trunk cell has all six neighbours solid, `is_exposed`
+  returns false and the cell is never drawn. Wolf: *"some trees look like they don't have trunk at
+  all (are trunks under ground level) .. not too many of those"* — the trunks are not underground;
+  they are enclosed by their own foliage. Cheapest fix to weigh: raise the minimum height to 5, or
+  stop stamping the skirt ring at `surface+1`. Either changes every seeded world and needs its own
+  before/after numbers.
+- ~~**Most of the "snow-laden crown" is not on top — 68% of the ground-level skirt is bright.**~~
+  **RESOLVED THE SAME DAY, 2026-08-29, commit `a634235`** — Wolf ruled "fix also snow cover" at the
+  review rather than deferring it. `has_snow_laden_crown` now additionally requires the cell not to
+  rest on terrain. Measured on the shipped world: ground-resting bright cells **1,029 -> 0**, crown
+  cells 3,631 -> 2,602, and 9.4's new green reaches 3,727 of 6,329 foliage cells (58.9%) rather than
+  2,698 (42.6%). Pinned by `foliage_resting_on_the_ground_is_a_skirt_and_never_catches_snow`
+  [crates/gui/src/project.rs:1424] and by a sabotage row that deletes the clause. **The first
+  fixture was VACUOUS and the row caught it** — it stacked foliage above the skirt cell so the
+  pre-existing sky-exposure clause fired first and the new clause was never reached. The finding as
+  originally recorded follows, unedited:
+  [crates/gui/src/project.rs:933]. `has_snow_laden_crown` fires for ANY foliage cell with nothing
+  solid directly above it, which is the whole outward-facing surface, not the apex. Measured on the
+  shipped world: the tip ring is 265 cells, 100% crown-coloured (correct); the upper shoulder rings
+  are 4,240 cells, 50% crown; and **the skirt ring at ground level is 1,824 cells of which 1,246
+  (68%) take the bright `(156,170,196)` crown colour**. That is a bright ring sitting on the ground
+  around each trunk. The predicate's own comment at `project.rs:931` says the material-swap design
+  was chosen precisely so that capping foliage would not "put a bright slab on every ground-level
+  skirt tile and bury the landform" — **it does exactly that anyway.** Wolf asked at review whether
+  snow-on-top would look better if fixed; the measurement says most of the snow is not on top today,
+  so there is a real defect to fix rather than a taste question. Restricting the crown swap to the
+  tip and upper rings (or requiring the cell to be the topmost foliage in its column) would remove
+  the ground ring. Interacts with 9.4: only 42.6% of foliage takes 9.4's new green precisely because
+  the crown swap claims the other 57.4%.
+
+## Carried out of Epic 9's shared sitting (2026-08-29) — the next story candidate
+
+- **The withheld levers, plus AC13's ceiling reading.** Story 9.1 proved with a controlled pair that
+  campfire shadows are insufficient to close the blow-out — they help (warm-lit pixels −15.7 %,
+  near-white area −10 %) but nowhere near enough, and Wolf's eye agrees. Its standing rule then
+  stopped it rather than reaching further, which is what the rule is for. **Opening intensity,
+  amplitude, range or emissive is a new ruling from Wolf and belongs in its own story with its own
+  before/after numbers.** **AC13's ceiling reading is DONE** — taken on the vehicle
+  2026-08-29: `near-white-area=2.0316%` against the 1.5630426 % ceiling, **over by 30 %**. The
+  ceiling is CONFIRMED, not corrected, and the frame fails it — consistent with Wolf's eye and with
+  9.1's conclusion that shadows are insufficient. The follow-up story inherits a measured bar rather
+  than an open question. `[wolf/MED]`
+- **9.2 inherits a measured constraint, not a preference.** The hover slab is `(80,220,210)`,
+  luminance **189.5**; the campfire's near-white pool exceeds **200** and saturates toward **255**,
+  in both shadow states and at every threshold swept. **A brighter slab cannot fix this** — nothing
+  beats a background reaching 255 on luminance alone. 9.2's fix needs hue/saturation separation or
+  an outline. `[measured 2026-08-29]`
+
+## Found while closing Epic 9 (2026-08-29)
+
+- **`--frames` is a wall-clock budget expressed in frames, and it inverts with machine speed.**
+  [crates/gui/src/ingest.rs:71] `DEFAULT_AT_TICK_FRAME_BUDGET = 1_500`. On the headless software
+  renderer (~2 fps) that is ~12 minutes and hundreds of daemon ticks; on the vehicle's RTX 4080
+  (~140 fps) it is ~11 seconds and **8 ticks**, which fails an `--at-tick 20` floor before any range
+  check prints. **The faster the machine, the shorter the budget in real time** — the opposite of
+  what an operator expects, and it cost the first vehicle attempt at 9.1's AC13 reading. This only
+  became a trap once headless rendering existed and the same recipe started running on machines two
+  orders of magnitude apart in frame rate. Fix shape: express the budget in ticks or seconds, or
+  derive the frame budget from the requested tick count and the observed tick rate. Vehicle cards
+  now carry an explicit `--frames 200000`, which is a workaround, not the fix.
+  **Measured on the vehicle, 2026-08-29:** the daemon ticks every 100 ms (`TICK_PERIOD`), so
+  `--at-tick 20` needs 2 SECONDS. The RTX 4080 ran 1,500 frames in under a second (8 ticks) and
+  6,000 in about a second (11 ticks) — the update loop is unthrottled, so the cap expires long
+  before the sim advances. Note the cap is only ever a cut-off: with `--at-tick` the run ends when
+  the tick arrives, so a huge cap costs nothing and a small one silently truncates. An operator has
+  no way to convert "frames" into "will this reach tick 20 on my machine" without knowing their own
+  frame rate, which is exactly the calculation a recipe should not require. `[measured]`
+
+- **`--at-tick`'s floor counts SAMPLED ticks, not ticks the world advanced — and a startup burst
+  breaks it on any fast machine.** [crates/gui/src/capture.rs:302, crates/gui/src/ingest.rs:911]
+  `ingest_messages` drains the socket in a `loop`, applying every queued delta in ONE frame, while
+  `accumulate_motion` runs once per frame and records at most one tick per frame. During startup
+  (window creation, ~45k cubes) the client stalls for a second or two; the daemon keeps ticking at
+  10/s (`TICK_PERIOD` 100 ms), those deltas queue, and the first drain leaps the mirror ~15 ticks in
+  a single frame. **Measured on the vehicle 2026-08-29, three runs: the mirror reached the target
+  tick — the capture fired, and no budget message printed — while only 8, 11 and 11 distinct ticks
+  had been sampled, against a floor of 20.** `--at-tick 20` is therefore unusable on the RTX 4080
+  vehicle and cost three attempts at 9.1's AC13 ceiling reading.
+  **Why it never showed up before:** on the headless software renderer (~2 fps) the client is always
+  the slower party, so no backlog forms and sampled ticks track real ones — the bug needs a machine
+  fast enough to stall at startup and then outrun the daemon.
+  **Fix shape:** assert on `mirror.tick() - start_tick` (what the world actually advanced), which is
+  what the AC means, and keep the sampled count as a separate diagnostic. The plain `--frames` path
+  is unaffected in kind but shares the sampling weakness. `[measured]`
+
+- **llvmpipe UNDER-READS near-white area by ~16 %, and that is the metric now used as the gate.**
+  Measured 2026-08-29 by running the same tree headlessly and on the vehicle. Four of five metrics
+  agree closely — ground median **exact** (117 vs 117), warm-lit pixels, p99 and the blown-pool
+  diagnostic all inside the headless range — so the software renderer is a faithful proxy for
+  luminance-distribution work. Near-white area is the exception: headless 1.738-1.753 % against the
+  vehicle's 2.0316 %. **A headless area figure is therefore OPTIMISTIC and must never be judged
+  against `NEAR_WHITE_AREA_CEILING`, which is calibrated on a GPU frame.** Read headless area only
+  as a delta between two headless runs — which is how AC7 and AC13's controlled pair were read, so
+  neither conclusion is affected. If headless area is ever wanted as a gate, it needs its own
+  renderer-specific ceiling calibrated the same way boot7's was. `[measured]`

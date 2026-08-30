@@ -43,7 +43,375 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-28  # STORY 8.2 DONE -- MERGED, PR #35 (a949835). M2 at 10/11. AC18 met on all
+last_updated: 2026-08-29  # EPIC 9 IS CLOSED OUT: 9.1 and 9.4 DONE, 9.2 and 9.3 DROPPED.
+                          # 9.2 AND 9.3 HAD NO BUILDABLE WORK LEFT, and both premises were
+                          # RE-VERIFIED against source before dropping rather than trusted (this
+                          # epic has already had two stale premises). 9.2's geometric half shipped
+                          # 2026-08-26 in 8782a0d and is pinned by a test that does exist -- in
+                          # crates/gui/tests/headless.rs:2246, not project.rs as the epic text
+                          # said; that reference is corrected. 9.3's AC is already met by
+                          # mark_colours_are_distinct_cold_literals (appearance.rs:418), and its
+                          # "four modes" framing was unmeetable: there are THREE persistent marks,
+                          # because Clear commits nothing and its preview deliberately IS the
+                          # hover. What remained in each was ONE JUDGEMENT BY EYE, deferred under
+                          # the standing art rule until real art lands -- and that trigger is Epic
+                          # 10. A story whose entire content is "Wolf looks at it after Epic 10"
+                          # is not a story, so both eye-checks are folded into Epic 10 as
+                          # acceptance conditions (epics.md, "Inherited eye-checks"). Nothing is
+                          # lost and the measured evidence stays on the record.
+                          # 9.2's eye-check CARRIES A MEASURED CONSTRAINT: the hover slab is
+                          # luminance 189.5 against a pool that saturates to 255, so a BRIGHTER
+                          # slab cannot fix it -- hue/saturation separation or an outline. AND AN
+                          # ORDERING NOTE: the vehicle capture measured the frame 30% over the
+                          # ceiling, so the washout may be a SYMPTOM of the over-bright emitter.
+                          # The withheld-levers story runs FIRST; it may close this for free.
+                          # NEXT: the withheld-levers story (intensity / amplitude / range /
+                          # emissive), which has the strongest evidence on the record -- a
+                          # controlled pair proving shadows insufficient, and a vehicle reading
+                          # 30% over the ceiling. Not yet created; it needs Wolf's ruling on WHICH
+                          # lever opens, which is the whole point of it being a new story.
+                          # PRIOR: STORIES 9.1 AND 9.4 ARE BOTH DONE. Wolf ran the shared sitting and
+                          # reported "did it already .. I think it's fine" on the current build --
+                          # after the snow fix and the ground-ring removal, which is what made a
+                          # re-look necessary. That closes 9.4's AC10 and confirms 9.1's AC14 and
+                          # AC15 re-check.
+                          # AC13's CEILING HALF IS CLOSED -- Wolf took the vehicle reading on
+                          # 2026-08-29 after four attempts defeated by a capture-recipe defect
+                          # (see deferred-work): near-white-area=2.0316% against the 1.5630426%
+                          # ceiling, OVER BY 30%. The ceiling is CONFIRMED, not corrected, and the
+                          # frame fails it -- consistent with Wolf's eye and with 9.1's conclusion
+                          # that shadows are insufficient. The frame carries 9.4's trees too, so
+                          # the breach belongs to the pair.
+                          # AND IT CALIBRATED THE HEADLESS PATH, which is worth more than the AC:
+                          # against the same tree, ground median matched EXACTLY (117 vs 117), and
+                          # warm-lit pixels, p99 and the blown-pool diagnostic all landed inside
+                          # the headless range. Four of five agree. THE ONE DIVERGENCE IS THE
+                          # METRIC NOW USED AS THE GATE: llvmpipe under-reads near-white area by
+                          # ~16% (1.74% vs 2.03%), so a headless area figure is OPTIMISTIC and must
+                          # never be judged against the GPU-calibrated ceiling. Read it as a delta
+                          # between two headless runs -- which is how AC7 and AC13's pair were
+                          # read, so neither conclusion moves.
+                          # SUPERSEDED: ONE HALF WAS CARRIED, NOT CLAIMED: AC13's CEILING READING. A visual
+                          # judgement contains no near-white-area figure, so the ceiling is neither
+                          # confirmed nor corrected ON THE VEHICLE and neither record pretends
+                          # otherwise. It carries to the withheld-levers follow-up, which must
+                          # recalibrate it there anyway -- the assertion changed from a connected
+                          # pool to near-white area on 2026-08-29, so NEAR_WHITE_AREA_CEILING is
+                          # calibrated on boot7.png (a GPU frame) while every figure behind it was
+                          # taken on llvmpipe. ONE capture settles it; card at
+                          # epic-9-shared-sitting-card.md section 1.
+                          # EPIC 9 IS NOW 2 OF 4: 9.2 and 9.3 remain backlog. 9.2 inherits a hard
+                          # constraint measured here -- the hover slab is luminance 189.5 and the
+                          # campfire pool exceeds 200 and saturates to 255, so a BRIGHTER slab
+                          # cannot fix it; it needs hue/saturation separation or an outline.
+                          # NEXT STORY CANDIDATE, filed but not yet created: the withheld levers
+                          # (intensity, amplitude, range, emissive) plus AC13's ceiling reading.
+                          # 9.1 proved shadows insufficient WITH NUMBERS and stopped rather than
+                          # reaching for those levers, which is exactly what its standing rule
+                          # required. Opening them is a new ruling from Wolf and needs its own
+                          # before/after.
+                          # PRIOR: STORY 9.1's ACs 12-15 CLOSED, AND 9.1's OWN INSTRUMENT WAS FOUND
+                          # DEFECTIVE. AC12 MET: Wolf read ~140 fps with shadows on, so both NFR6
+                          # bars clear at 2.3x/4.7x and the story's stated NFR6 risk is FALSIFIED.
+                          # AC13's controlled pair finally ran -- headlessly, on 9.1's own tree,
+                          # only the shadow flag differing, 4 runs on / 3 off. SHADOWS WORK:
+                          # warm-lit pixels -15.7%, near-white area -10%. But the shipped pool
+                          # metric read +34.8% THE WRONG WAY, and that number is an ARTEFACT:
+                          # largest_blown_pool_fraction measures a CONNECTED component and
+                          # connectivity has a threshold cliff. Swept across thresholds,
+                          # shadows-on frames shatter at 204-208 and shadows-off at 196-200, so
+                          # the shipped threshold of 200 sits inside the band; at t=192 and t=212
+                          # the two conditions OVERLAP. All shadows do is move the shatter point
+                          # 4-8 levels -- physically right, since the pool around the fire is
+                          # unoccluded either way.
+                          # THE FOUNDING FINDING SURVIVES, checked rather than assumed: on the GPU
+                          # frames it was calibrated on, boot7 is smooth (0.7122 / 0.6651 / 0.5704
+                          # at 190/200/215) and the ratio against the rejected frame holds at
+                          # 1.50/1.49/1.48 across thresholds. The 49% is REAL. The fragility
+                          # belongs to software-rendered frames, not to the finding.
+                          # FIXED: near_white_area_fraction counts instead of connecting -- smooth
+                          # on both renderers and physically correct. AREA is now what production
+                          # asserts, ceiling calibrated on boot7's own figure exactly as the
+                          # pool's was (14,405 of 921,600 px = 1.5630426%). The pool stays a
+                          # printed diagnostic and must NOT be read off a headless frame. TWO 9.1
+                          # MUTATION ROWS RETARGETED -- they quoted production text this changed
+                          # and would have APPLY-FAILED; one was caught only by RUNNING the table
+                          # after a partial fix.
+                          # AC14 unchanged (NO, blow-out not closed) but its DIRECTION corrected:
+                          # shadows moved the frame the RIGHT way, just nowhere near far enough.
+                          # 9.1 did what it set out to do -- proved shadows insufficient with an
+                          # instrument that did not exist before. AC15 partially answered (the
+                          # campfire IS the cause; the slab's rendered judgement is 9.2's, and the
+                          # hover path needs a window so it cannot close headlessly).
+                          # STILL VEHICLE-BOUND: AC13's ceiling half, AC15's rendered half, and
+                          # any decision to open the withheld levers. Those stay withheld.
+                          # 9.1 table 7/7 KILLED, audit clean at 408, full gate GREEN.
+                          #
+                          # RECORD DEFECT REPAIRED IN THIS SAME EDIT: the `last_updated:` KEY was
+                          # lost on 2026-08-29 when the AC7 block was written -- the replacement
+                          # swapped the whole prefix instead of just the comment, leaving a bare
+                          # `STORY 9.4: AC7 IS MEASURED...` line. YAML then parsed that as a KEY
+                          # and the file still loaded, so nothing complained; the post-edit check
+                          # printed development_status and never looked at last_updated. A silent
+                          # schema loss that a green parse hid -- this project's signature shape.
+                          # PRIOR: STORY 9.4: AC7 IS MEASURED, AND THE PREMISE THAT
+                          # BLOCKED IT FOR THE WHOLE OF M2 WAS FALSE. The devpods cannot open a
+                          # WINDOW -- true, measured 2026-08-11 -- and that got generalised into
+                          # "cannot render". RENDERING NEEDS A DEVICE, NOT A WINDOW, and one is
+                          # here: Mesa lavapipe, llvmpipe (LLVM 19.1.7), Vulkan 1.4, and wgpu 29
+                          # (Bevy 0.19's own version) creates a device on it. `--headless` swaps
+                          # winit for ScheduleRunnerPlugin and points the camera at a 1280x720
+                          # offscreen texture -- the vehicle's own capture resolution. Every
+                          # instrument downstream is untouched, which is the point.
+                          # THE CONTROL RAN FIRST: the headless client rendered the PRE-9.4 world
+                          # and printed `projected 53365 terrain cubes`, reproducing story 5.3's
+                          # recorded oracle exactly, then the current world at 44,984. The
+                          # instrument recovers a historical figure nobody told it.
+                          # AC7, llvmpipe vs llvmpipe (baseline = 815cd6c with the same --headless
+                          # patch cherry-picked on, so the builds differ ONLY by this story),
+                          # 4 baseline runs vs 3 HEAD runs at --frames 220:
+                          #   ground median  123 -> 117   INSIDE 70-180, NO BREACH
+                          #   blown pool     0.9408-0.9475% -> 0.9605-1.0666%  up, sets disjoint
+                          #   p99 luminance  217.5-217.8 -> 230.3-233.2        up ~13, disjoint
+                          #   warm-lit px    21816-22795 -> 20227-20367        down
+                          # THE STORY PREDICTED THE MEDIAN WOULD RISE; IT FELL. The prediction was
+                          # reasoning, this is measurement, and the band holds either way. The
+                          # blown pool DID grow as predicted, so 9.4 did not help 9.1's blow-out
+                          # and marginally worsened it. 9.1's 0.6651% ceiling CANNOT be judged on
+                          # this renderer -- the BASELINE already reads 0.94% here, 41% above the
+                          # ceiling before 9.4 touched anything -- so that ceiling stays a vehicle
+                          # measurement and only the DELTA is claimed. Both frames committed to
+                          # 9-4-signoff/ as evidence.
+                          # NOT CLAIMED AND STILL VEHICLE-BOUND: AC10 (Wolf's eye) and NFR6 (fps).
+                          # A software rasteriser's frame time says nothing about the real machine.
+                          # WHAT THIS UNBLOCKS BEYOND 9.4: 9.1's ACs 12-15 and the pixel half of
+                          # every gui story in Epics 9 and 10. The eye and fps still need the
+                          # vehicle; the NUMBERS no longer do.
+                          # Table now 8 rows, 8/8 KILLED, audit clean at 406, full gate GREEN.
+                          # PRIOR: STORY 9.4 CODE-REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE,
+                          # all reporting, no coverage holes, no time-outs -- the third clean
+                          # four-layer full house. Edge Case Hunter was REASSIGNED off its R1 shell
+                          # territory (simd/tui/protocol), which this diff does not touch at all,
+                          # onto crates/gui. Diff taken over the story's own baseline_commit range.
+                          # THE CODE WAS SOUND AND EVERY MEASURED FIGURE REPRODUCED EXACTLY -- two
+                          # layers plus the orchestrator independently rebuilt worldgen and got
+                          # 704->265 / 696->242 / 709->258 and 48.08 / 49.64. 1 decision, 6 patched,
+                          # 6 deferred, 1 dismissed. ALMOST EVERY FINDING WAS OUTSIDE THE DIFF.
+                          # HIGH 1 -- THE DRAW-SET ORACLE WAS STALE BY 8,104 CUBES. The world
+                          # reports 45,261 exposed cubes, not the 53,365 that FOUR documents call an
+                          # oracle that "must never change" -- including the LIVE vehicle runbook,
+                          # which would have told Wolf to expect the old figure at the very sitting
+                          # that judges AC10, and read a 15.2% drop as a regression. NO TEST COULD
+                          # HAVE CAUGHT IT: the only 53_365 in the crates is hand-written sample
+                          # data in a test about empty cut faces (capture.rs:1460), so the oracle
+                          # exists solely as a println read by eye. Corrected in all four places and
+                          # REWORDED AS A MEASUREMENT that tracks world content, not a constant --
+                          # which is what it always was. Confirmed independently by the orchestrator.
+                          # HIGH 2 -- THE RECORD SAID A PIN WAS "NOT AT RISK" WHEN IT HAD MOVED.
+                          # spawn_positions_for_seed_42_are_pinned had its terrain fingerprint
+                          # re-pinned; no Debug Log, Completion Note or Change Log said so. The
+                          # positions genuinely did not move, so the reasoning was right and the
+                          # conclusion wrong. Aggravating: that fingerprint is now the TIGHTEST
+                          # tree-stream guard in the repo -- the 230-300 band only discriminates
+                          # roll denominators outside ~36..52 -- and the record hid it.
+                          # WOLF LOOKED AT A FRAME DURING THE REVIEW AND REPORTED TWO THINGS. Both
+                          # were then MEASURED rather than left as impressions, and both are
+                          # pre-existing geometry that 9.4 did not cause.
+                          # (a) "fix also snow cover" -- RULED AND FIXED HERE (a634235).
+                          # has_snow_laden_crown tested sky exposure ALONE, which did exactly what
+                          # its own doc comment says the material swap exists to avoid: place_trees
+                          # stamps a foliage ring at surface+1 whose cells have open sky beside the
+                          # trunk, so 1,246 of 1,824 ground-level skirt cells (68%) rendered at the
+                          # bright crown colour -- a lit ring ON THE GROUND around every trunk. Snow
+                          # now also requires the cell not to rest on terrain. Ground-resting bright
+                          # cells 1,029 -> 0. Side effect that closes a review finding: 9.4's green
+                          # now reaches 3,727 of 6,329 foliage cells (58.9%) instead of 2,698
+                          # (42.6%), because the crown swap had been claiming the rest.
+                          # (b) "some trees look like they don't have trunk at all" -- MEASURED AND
+                          # THEN RULED IN, not deferred. 86 of 265 trees (32.5%) drew NO trunk, and
+                          # it was exactly the height-4 trees, 100% of them. The trunk spans
+                          # surface+1..=surface+height-1 while foliage rings sit at surface+1,
+                          # crown_top-2 and crown_top-1, so at height 4 every trunk level is
+                          # enclosed and is_exposed never fires. The trunks are not underground --
+                          # they were buried in their own foliage.
+                          # (c) WOLF LOOKED A THIRD TIME, AFTER THE SNOW FIX: "I see green boxes on
+                          # ground level next to some full trees .. some trees are still partially
+                          # even more now underground". THE SNOW FIX HAD NOT CAUSED IT, IT HAD
+                          # REVEALED IT -- those cubes were previously painted with the bright crown
+                          # colour and read as snow; correctly green, the ring showed for what it
+                          # was. ONE CAUSE BEHIND (b) AND (c): place_trees stamped a foliage ring at
+                          # surface+1, ON THE GROUND, around every trunk. It read as foliage lying
+                          # on terrain (which is what this story is NAMED for), it sealed the lower
+                          # trunk on four sides so a third of trees drew none, and it broke on
+                          # slopes -- stamped at the TRUNK's surface across all eight neighbours
+                          # regardless of their own terrain, so 285 cubes hung in the air and 296
+                          # were dropped, on 110 of 265 trees. RING REMOVED (465f967): trees showing
+                          # a trunk 179 -> 265 of 265, foliage 6,329 -> 4,505, foliage resting on
+                          # terrain 1,649 -> 110, oracle 45,261 -> 44,984, trunk columns unchanged
+                          # at 265 so the density band still holds. "UNDERGROUND" WAS MEASURED AND
+                          # DISPROVEN: every trunk sits flush on its own column's ground and no tree
+                          # cell is below its column's top terrain -- the trees read as sunk because
+                          # their base ring was broken, not because anything was buried.
+                          # THE FINGERPRINT IS RE-PINNED A SECOND TIME and it is disclosed this
+                          # time, in the commit, beside the pin and in the story -- not disclosing
+                          # the first re-pin was this review's second HIGH finding. THE ORACLE MOVED
+                          # TWICE IN ONE STORY (53,365 -> 45,261 -> 44,984), which is the whole
+                          # argument for rewording it as a measurement rather than a constant.
+                          # Table now 6 rows, 6/6 KILLED, audit clean at 404, full gate GREEN.
+                          # THE SABOTAGE ROW CAUGHT THE REVIEW'S OWN BAD TEST, which is the third
+                          # time in this story that RUNNING the table beat reading it: the first
+                          # fixture for the snow fix stacked foliage above the skirt cell, so the
+                          # pre-existing sky-exposure clause fired first and the new clause was
+                          # never reached -- the assertion passed for the wrong reason and the row
+                          # SURVIVED. Rebuilt; 5/5 KILLED. Kill lines MOVED with the patches
+                          # (appearance.rs :298->:316, :338->:356), which the record now says.
+                          # ALSO PATCHED: the separation guard compared against hardcoded stone/soil
+                          # literals untied to the table -- a stale-reference trap that would keep
+                          # the guard GREEN while validating foliage against a colour nothing
+                          # renders; now read from material_color(). TreeTrunk added to that loop:
+                          # trunk and foliage are the two materials of ONE drawn object and the OLD
+                          # foliage sat 38.7 from trunk, already inside the 40.0 floor, with no
+                          # terrain-vs-terrain test in existence to notice. Two Task 5 subtasks were
+                          # UNTICKED -- they were ticked for a median that was never recorded; the
+                          # prose had been honest while the checkboxes were not.
+                          # STILL UNMET AND UNCHANGED BY ANY OF THIS: AC7 (the 9.1 x 9.4 luminance
+                          # interaction) and AC10 (Wolf's eye). The acceptance layer confirmed
+                          # independently that NO part of AC7 was headlessly checkable and skipped
+                          # -- the only rendering capture test is #[ignore]d, "requires a real
+                          # render surface". Verification: full gate GREEN, audit clean at 403 rows,
+                          # whole table re-run 5/5 KILLED. Reaped 107.2 GB of layer caches.
+                          # PRIOR: STORY 9.4 -> REVIEW. Dev complete, metrics recorded.
+                          # THIS BLOCK AND THE TWO BELOW IT ARE BACKFILLED on 2026-08-29: 9.4's
+                          # create, in-progress and review transitions each moved the status line
+                          # only, so this header sat four events stale and still led with 9.1's
+                          # review. The stories' own files carry the detail; this restores the
+                          # narrative anyone reads first.
+                          # Density roll `0..12` -> `0..48`: 704 -> 265 trees on the default seed
+                          # (242 / 258 on seeds 42 / 7451), all inside Wolf's ruled 230-300 band,
+                          # guarded by a deterministic named-seed test that counts trunk COLUMNS
+                          # rather than cells (trunk height is 4..=6, so cells are the wrong
+                          # oracle). Foliage (55,73,84) -> (44,100,58): clears stone by 48.1 and
+                          # soil by 49.6 against the shipped MIN_MARK_SEPARATION of 40.0 it sat
+                          # 9.9 from, blue >= red so W2's terrain invariant stands.
+                          # THE TUI NEEDED NO CHANGE, and the reason is the find: palette.rs:199
+                          # has rendered foliage green at (54,106,78) since it was written, so the
+                          # 3D client was the odd one out and this brings the two into agreement.
+                          # No test forced it -- the gui<->tui cross-check covers MARKS only.
+                          # DELEGATED RUN HARNESS-KILLED mid-Task-3, the 9.1 failure mode again.
+                          # NOT auth: the wrapper's 401 warning fired 7 times, all false positives
+                          # (a source line number, git blob hashes, the echoed prompt); quota was
+                          # probed healthy and the banner read gpt-5.6-terra / high, no drift. The
+                          # commit-cadence floor paid for itself -- Codex had committed Tasks 1-2
+                          # rather than squashing, so work resumed from a green commit, and the
+                          # kill landed in Task 3's RED phase, which is correct TDD caught
+                          # mid-cycle. Its committed half was re-verified, not trusted.
+                          # THE SABOTAGE TABLE TOOK TWO CORRECTIONS, both caught only by running
+                          # it and READING THE KILL LINE. (1) A row lowering MIN_MARK_SEPARATION
+                          # itself SURVIVED, correctly: you cannot sabotage an assertion and
+                          # expect that same assertion to catch it. (2) Its production replacement
+                          # (foliage -> brown) then killed at the equality pin rather than at the
+                          # invariant -- the exact weak-kill shape 9.1's review found, one story
+                          # later, in a table written after it. Final 4/4 KILLED at worldgen.rs
+                          # :200/:201 and appearance.rs:298/:338, audit clean at 402 rows, cold
+                          # full gate GREEN after `cargo clean -p gui -p sim-core`.
+                          # tech-art-guidelines carried a THIRD stale figure, found while doing
+                          # the Task 8 check: the exposed crown was documented at the ARTIFACT's
+                          # (172,186,210) against a shipped (156,170,196), trimmed at round 7.
+                          # CARRIED INTO REVIEW UNMET, NOT PAPERED OVER: AC7, the 9.1 x 9.4
+                          # luminance interaction. The capture tests decode static COMMITTED PNGs,
+                          # which cannot see a tree-density change, and no devpod can open a
+                          # window -- so neither the 70-180 band nor 9.1's 0.6651 % blown-pool
+                          # ceiling was re-measured. Direction is known (fewer dark tree skirts
+                          # can only raise the valley floor and only enlarge the pool); the
+                          # numbers are not. AC10 is Wolf's eye and is unmet. The vehicle card
+                          # takes the BASELINE reading first, because 9.1's blow-out is still open
+                          # and a capture may exit 101 before trees are the cause.
+                          # PRIOR SAME DAY, AND IT IS THE HIGHEST-SIGNAL OPEN FACT IN EPIC 9:
+                          # 9.1's VEHICLE OBSERVATION -- Wolf, on the vehicle: "9.1 lights are
+                          # still blown out .. shadows are not strong enough or light is still too
+                          # strong." THE BLOW-OUT IS NOT CLOSED; shadows were not enough. This is
+                          # the story's PREDICTED outcome, stated at creation and expected
+                          # independently by both Opus review layers: shadows remove light passing
+                          # THROUGH geometry and cannot dim the unoccluded pool around the fire.
+                          # So AC14 is answered NO and 9.1 has done its job -- it proved with a
+                          # new instrument that shadows are insufficient. STILL OWED before 9.1
+                          # closes or escalates: the NUMBERS -- AC13's controlled shadows-off/on
+                          # pair and AC12's fps -- because "still blown out" is a judgement and
+                          # the ceiling is a measurement. WHAT MUST NOT HAPPEN NEXT: a quiet
+                          # intensity / amplitude / range / emissive change to force the ceiling
+                          # green. Those levers are withheld pending a NEW ruling from Wolf and
+                          # belong in a follow-up story with its own before/after numbers.
+                          # PRIOR SAME DAY: STORY 9.4 CREATED (ready-for-dev), premises verified
+                          # against source rather than inherited. TWO EPIC CLAIMS FALSIFIED: trees
+                          # draw from a dedicated STREAM_TREES, so terrain heights, camp origin
+                          # and spawns do NOT move, and no mutation row anchors on the density
+                          # literal -- the epic's blast-radius paragraph is overstated and the
+                          # radius is tile contents only. The density curve was MEASURED, not
+                          # estimated (704 / 531 / 400 / 265 at rolls 12/20/30/48), revealing that
+                          # the 2-cell spacing exclusion damps the knob so a 2.5x cut in the roll
+                          # removes only 43 % of trees. Two rulings taken: (W1) band 230-300 at
+                          # `0..48`; (W2) GREEN, not brown -- the epic's "brown/green" collides
+                          # with the shipped rgb[2] >= rgb[0] invariant, which brown cannot
+                          # satisfy, so the invariant stands and green carries the separation.
+                          # SAME COMMIT, A RECORD DEFECT REPAIRED: deferred-work's buried-
+                          # highlight entry went unstruck for two days after 8.2 fixed it, and
+                          # 9.2 was written FROM it -- fabricating scope for shipped work. Entry
+                          # struck with its closing commit named, 9.2 and 9.3's epic text
+                          # corrected. 9.3's AC1 was additionally unmeetable: it asks for four
+                          # mark colours when only three persistent marks exist and Clear's
+                          # preview IS the hover by design.
+                          # PRIOR: STORY 9.1 CODE-REVIEWED -> in-progress. 4 layers, all live, fresh
+                          # context, NO coverage holes -- the second clean four-layer full house.
+                          # 17 findings: 1 decision (Wolf: the blown-pool ceiling stays HARD for
+                          # Epic 9's shared sitting; the PNG is written before validation so
+                          # evidence survives every abort), 8 PATCHED, 6 deferred, 2 dismissed.
+                          # THE HIGH WAS NOT IN THE CODE -- it was the vehicle card: its own
+                          # "-dirty" stop rule halted the shadows-off half of AC13's only
+                          # controlled pair (that half NEEDS an uncommitted edit), it never named
+                          # the edit that disables shadows, and it carried no --capture command at
+                          # all while that run is EXPECTED to exit 101. AC13 was unexecutable as
+                          # written, independent of the devpod limit. Card rewritten; the feature
+                          # layer proved the -dirty trap by rebuilding a modified clone.
+                          # THE PATCH PASS FOUND ITS OWN DEFECT: pointing the straddle asserts at
+                          # the shipped constant was NOT enough -- the equality pin sat ahead of
+                          # them and fired first, so row (c) was still a pin-kill and the
+                          # strengthened test looked identical from outside. Assertion ORDER was
+                          # load-bearing and no layer had said so. Reversed; row (c) now dies at
+                          # tests/capture.rs:194 on current_pool > BLOWN_POOL_FRACTION_CEILING.
+                          # Also patched: p99's index was f32 (wrong sample for 225,210 of the
+                          # first 3M pixel counts -- dormant at every resolution this repo makes,
+                          # and the exact broken-instrument class); the reconcile guard is a
+                          # NOT-REWRITTEN guard, not a re-insert guard, because project.rs:587
+                          # only re-inserts on a light-KIND change and a campfire's kind is static
+                          # -- Task 4's premise was falsified and the test renamed; AC8 recorded
+                          # PARTIALLY MET (panic->101 traced through three resume_unwind sites AND
+                          # measured live, but no test spawns the binary and the observer needs a
+                          # render surface, so it closes only on the vehicle); tech-art-guidelines
+                          # ambient/directional still said 6,000/30,000 against a shipped
+                          # 4,500/22,000. Verification: full gate GREEN, audit clean at 398 rows,
+                          # whole table re-run 5/5 KILLED with the p99 figures byte-identical.
+                          # NOT PROVEN BY ANY OF THIS: ACs 12-15 and AC6's on-vehicle half. No
+                          # frame has been looked at. Story 9.1 also still carries ZERO self-gate
+                          # coverage (Codex's single pass was harness-killed) -- four review
+                          # layers are not a self-gate and the two are counted separately.
+                          # PRIOR: STORY 9.1 -> REVIEW. Tasks 1-5 + 7 done: blown-pool instrument calibrated
+                          # on committed pixels (boot7 0.6651% vs today 0.9883%, ground median 123.4
+                          # on BOTH), campfire-only shadow maps, cold full gate GREEN, 5/5 sabotage
+                          # rows KILLED. TWO HOLES CARRIED INTO REVIEW: the Codex self-gate produced
+                          # ZERO passes (harness-killed), and Task 6's vehicle ACs 12-15 are unmet --
+                          # they need Epic 9's shared gingerspice sitting and cannot run in a devpod.
+                          # PRIOR: delegated to Codex (gpt-5.6-terra/high) on
+                          # baseline 15b3635. Quota probed before handoff: weekly window 8%,
+                          # 5h window 27% -- the 8.2 exhaustion window has reset.
+                          # PRIOR SAME DAY: STORY 9.1 CREATED (ready-for-dev), epic-9 in-progress. Two spec
+                          # defects found at creation in the epic's own 9.1 text: the 44.8M
+                          # premise is stale (fixed 2026-08-22, the defect survived it) and
+                          # the epic's AC1 is VACUOUS -- the median band reads 123.4 on every
+                          # frame ever approved AND every frame ever rejected. Three rulings
+                          # taken from Wolf; instrument calibrated on committed pixels.
+                          # PRIOR SAME DAY: THE GFX PASS IS PLANNED AND TRACKED: epics 9 + 10 enter this file at
+                          # `backlog`, 9 stories, no story files yet. Order ruled 9 -> 10 -> 8.3.
+                          # PRIOR SAME DAY: STORY 8.2 DONE -- MERGED, PR #35 (a949835). M2 at 10/11. AC18 met on all
                           # four modes on the vehicle, read back by a second client; NFR6 ~140 fps
                           # against floors of 60/30. AC13's rendered half and AC19's reads-clearly
                           # half carried to the gfx pass UNCLAIMED. A channel that worked read as a
@@ -707,6 +1075,82 @@ development_status:
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.
   8-3-master-of-time-and-the-skeleton-walks-in-3d: backlog
   epic-8-retrospective: optional
+
+  # ---- the gfx pass (epics 9 + 10, added to epics.md 2026-08-28) ----
+  # EXECUTION ORDER IS NOT NUMERIC ORDER. RULED 2026-08-28 (Wolf): Epic 9, then Epic 10,
+  # THEN 8.3 closes the milestone. 8.3 asks Wolf to sign off all six anti-requirement bars,
+  # a judgement he has twice refused to make against placeholder material -- so the look work
+  # runs first and 8.3 stays `backlog` behind it, not because it is blocked by code.
+  # SCOPE, STATED HONESTLY: M2 was planned at 10-14 stories and sits at 11. These nine are
+  # added scope ruled by Wolf, not cap slippage -- the cap governed the path to the walking
+  # skeleton, which 8.1-8.2 delivered.
+  epic-9: in-progress
+  # Every story here is gated by a CONCRETE MEASURED DEFECT already on the record (deferred-work.md
+  # or named by Wolf at the 8.2 vehicle sessions) -- this is what the standing art rule (2026-08-22)
+  # requires, and none of it is taste-driven tuning. Closes the visual halves of FR31/FR34 via
+  # UX-DR15-UX-DR20, plus 8.2's deferred AC13-rendered and AC19-reads-clearly halves.
+  # UX-DR22 applies to every story, BOTH halves; the four closing halves share ONE vehicle session.
+  # 9.1 goes first -- nothing else can be judged with an emitter that bright in frame. 9.2-9.4 are
+  # order-free after it.
+  # STORY CREATED 2026-08-28 (ready-for-dev). TWO SPEC DEFECTS FOUND AT CREATION, both in the epic's
+  # own 9.1 text, both falsified against source.
+  # (1) THE PREMISE IS STALE: the epic says the campfire peaks at 44.8M, ~40% over what 5.4 sized
+  #     against. It has not since 2026-08-22 -- commit 57e468e applied Wolf's ruling (d) (base
+  #     32M -> 25M, amplitude kept) landing the peak at 35.0M, UNDER the APPROVED_PEAK = 35_520_000.0
+  #     pin that now guards it. Wolf then re-confirmed the blow-out on 2026-08-27, FIVE DAYS LATER,
+  #     on a binary carrying the 25M base. The decision stands and the REASON is wrong -- the cause
+  #     is somewhere ruling (d) could not reach.
+  # (2) THE EPIC'S AC1 IS VACUOUS, and this was MEASURED rather than inferred: it names the 70-180
+  #     valley-floor median band as 9.1's instrument, and 6.2 recorded that band reading 123 -- the
+  #     approved artifact's own figure to the digit -- ON THE VERY FRAME Wolf called too blown out,
+  #     with the note "no range check can see that". Re-measured at creation: the ground median is
+  #     123.4 on 5.4's approved frame, on 6.1's, AND on today's. Constant across every frame anyone
+  #     has approved and every frame anyone has rejected. AC1 passes today, unchanged.
+  # WOLF RULED THREE THINGS AT CREATION so the dev pass inherits them: (W1) add a local blow-out
+  # measure the median cannot see, band demoted to a non-regression guard; (W2) the ONLY lever this
+  # story may open is PointLight shadows -- project.rs:416-424 sets colour/intensity/range and
+  # nothing else, so shadows_enabled defaults FALSE and the campfire lights straight through solid
+  # terrain, the one structural cause the peak ruling never touched (filed at 5.4's review,
+  # deferred-work.md:619-622, never acted on). No intensity, amplitude, range or emissive change;
+  # (W3) NO Task 0 -- UX-DR22's opening half is met by the approved 5.4 artifact.
+  # THE INSTRUMENT WAS CALIBRATED AT CREATION on committed pixels, and the first draft was WRONG and
+  # corrected before saving: calibrating against the approved artifact would have measured the
+  # RENDERER, since that artifact is a software mock -- whiter than every Bevy frame at threshold 250
+  # and darker at 200. The bar is Bevy against Bevy. Measure = largest connected near-white region:
+  # 0.6651% on boot7.png (the frame Wolf approved) against 0.9883% today, up 49%, while whole-frame
+  # near-white area moved only 18% and the median moved not at all. RED at baseline.
+  # STATED TENSION, deliberately not hidden: shadows and the blown-pool ceiling may not be coupled --
+  # shadows remove light passing THROUGH geometry, not the unoccluded pool. If the ceiling stays red
+  # with shadows correct and NFR6 met, the story STOPS AND REPORTS. Opening another lever silently is
+  # forbidden. A story that proves shadows insufficient, with numbers, has done its job.
+  # NFR6 IS THE REAL RISK: shadow-casting point lights are the one M2 change with a real chance of
+  # spending the ~140 fps headroom. No figure may be fabricated.
+  # Baseline 15b3635 after a rebase onto the merged PR #38 (build-cache reaper); created against
+  # b1cd5f9 and full gate GREEN on both (run, not claimed). The rebase crossed NO crate source --
+  # `git diff b1cd5f9 15b3635 -- crates/` is empty -- so every figure measured at creation stands.
+  # Vehicle-bound: ACs 12-15.
+  9-1-the-frame-stops-blowing-out: done
+  9-2-the-cell-under-the-cursor-is-visible-on-every-face: dropped
+  9-3-the-four-modes-read-apart: dropped
+  9-4-trees-fewer-and-distinct-from-the-ground: done
+  # 9.4 IS THE ONE STORY IN THIS EPIC THAT TOUCHES sim-core (worldgen density): every seeded world
+  # changes, terrain-dependent tests and capture recipes need re-checking, and mutation rows anchored
+  # near worldgen literals may APPLY-FAIL. It also pushes valley-floor luminance UP while 9.1 pushes
+  # it DOWN -- the 70-180 band watches both.
+  epic-9-retrospective: optional
+  epic-10: backlog
+  # The PRD's asset-pipeline trigger has fired -- it held authored assets until "a concrete case
+  # forces the decision -- dwarves are the expected first case", and the PRD predicted right.
+  # RULED 2026-08-28 (Wolf): the pipeline is Blender -> glTF via Bevy's NATIVE loader, SUPERSEDING
+  # the addendum's MagicaVoxel/`bevy_vox_scene` path. Not a present incompatibility (bevy_vox_scene
+  # 0.22 does match Bevy 0.19 today) -- the supersession is about iteration cost and maintenance
+  # surface. Dated note lives in the addendum. Game first; the pipeline is an outcome, not the goal.
+  10-1-the-headless-bench: backlog
+  10-2-the-live-seat-blendermcp-on-gingerspice-spike: backlog
+  10-3-the-rules-of-the-look: backlog
+  10-4-the-trees-look-right-the-pilot: backlog
+  10-5-dwarves-worth-looking-at: backlog
+  epic-10-retrospective: optional
 
 # Appended by the Epic 1 retrospective (2026-08-03).
 # Full context: epic-1-retro-2026-08-03.md

@@ -419,6 +419,9 @@ fn point_light(kind: protocol::LightKind) -> PointLight {
         color: properties.color,
         intensity: properties.intensity,
         range: properties.range,
+        // NOTE: only the campfire casts point-light shadows; each additional emitter costs six
+        // cube-map faces, and this story's measured defect is confined to the campfire.
+        shadow_maps_enabled: matches!(kind, protocol::LightKind::Campfire),
         ..Default::default()
     }
 }
@@ -463,7 +466,10 @@ pub fn reconcile(
             commands.entity(entity).despawn();
         }
         let positions = terrain_positions_at(mirror, slice.level());
-        // The draw-set oracle instrument: the shipped seed must report 53,365 (AC13).
+        // The draw-set oracle instrument (AC13). The shipped seed reports 44,984 after story
+        // 9.4; it was 53,365 before it, 45,261 between its two halves. This number tracks world
+        // CONTENT -- read it as "did the rim or a slice silently drop tiles?", never as a fixed
+        // constant. It moved twice in one story, which is the whole argument.
         println!(
             "projected {} terrain cubes at z {}",
             positions.len(),
@@ -927,12 +933,29 @@ pub const RIM_WIDTH: i32 = 26;
 
 /// An exposed spruce crown catches snow light. This is a MATERIAL swap, not a terrain cap:
 /// capping foliage puts a bright slab on every ground-level skirt tile and buries the landform.
+///
+/// RULED 2026-08-29 (Wolf, at 9.4's review): the sky-exposure test ALONE did exactly what the line
+/// above says it was chosen to avoid. `place_trees` stamps a foliage ring at `surface + 1`, and
+/// those skirt cells have open sky beside the trunk, so 1,246 of 1,824 ground-level skirt cells
+/// (68 %) were taking the bright crown colour — a lit ring sitting ON the ground around every
+/// trunk, which is what "snow cover" read wrong as. Snow now additionally requires the cell NOT to
+/// rest directly on the ground: a crown sits on more tree, never on terrain.
 pub fn has_snow_laden_crown(mirror: &Mirror, position: [i32; 3]) -> bool {
     terrain_material_at(mirror, position) == Some(Material::TreeFoliage)
         && !matches!(
             mirror.tile([position[0], position[1], position[2] + 1]),
             Some(Tile::Solid(_) | Tile::Ramp(_))
         )
+        && !rests_on_the_ground(mirror, position)
+}
+
+/// Whether the cell directly below is terrain rather than tree. Foliage resting on the ground is a
+/// SKIRT, not a crown — see `has_snow_laden_crown`.
+fn rests_on_the_ground(mirror: &Mirror, position: [i32; 3]) -> bool {
+    matches!(
+        terrain_material_at(mirror, [position[0], position[1], position[2] - 1]),
+        Some(Material::Stone | Material::Soil | Material::Ice | Material::Snow)
+    )
 }
 
 /// Foliage is DRAWN at 0.62-0.95 of its cell (`foliage_scale`) so a crown reads as sparse
@@ -1362,6 +1385,52 @@ mod tests {
         assert!(
             !has_snow_cap(&spruce, [0, 0, 1]),
             "a snow-laden crown is a material, never a terrain slab"
+        );
+    }
+
+    /// Wolf's ruling at 9.4's review: sky exposure alone put snow on the SKIRT. `place_trees`
+    /// stamps a foliage ring at `surface + 1` whose cells have open sky beside the trunk, so
+    /// 1,246 of 1,824 ground-level skirt cells were rendering at the bright crown colour — a lit
+    /// ring around the base of every tree, which is the "bright slab on every ground-level skirt
+    /// tile" the predicate's own doc comment says the material swap exists to avoid. Measured on
+    /// the shipped world after this fix: ground-resting bright cells 1,029 -> 0.
+    #[test]
+    fn foliage_resting_on_the_ground_is_a_skirt_and_never_catches_snow() {
+        // THE SKIRT CELL MUST HAVE OPEN SKY. A first draft of this fixture stacked foliage
+        // directly above it, so the pre-existing sky-exposure clause returned false first and the
+        // assertion passed without ever reaching the ground-rest clause — vacuous, and the
+        // sabotage row caught it. Column x=0 is the skirt (on terrain, open sky); column x=1 is a
+        // real crown (on foliage, open sky).
+        let sapling = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 4 },
+            tiles: vec![
+                Tile::Solid(Material::Snow),
+                Tile::Solid(Material::Snow),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Empty,
+                Tile::Solid(Material::TreeFoliage),
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+
+        assert!(
+            !has_snow_laden_crown(&sapling, [0, 0, 1]),
+            "foliage sitting directly on terrain is a skirt, not a crown, however open the sky \
+             beside it"
+        );
+        assert!(
+            has_snow_laden_crown(&sapling, [1, 0, 2]),
+            "foliage standing on more foliage with open sky above it is still a crown"
         );
     }
 }
