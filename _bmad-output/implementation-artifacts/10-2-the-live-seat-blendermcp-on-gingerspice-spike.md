@@ -251,9 +251,14 @@ nothing here is verifiable agent-side until the captured files land in this repo
 
 **Setup (once):**
 
-1. **Install Blender 4.x** (any current stable) from blender.org. The devpod's reference is
-   4.3.2 — if the vehicle lands a wildly newer major, write the version into
-   `what-was-found.md` as a known difference; it is not a blocker.
+1. **Install Blender — prefer 4.3.2 to match the devpod exactly** (blender.org keeps prior
+   releases at download.blender.org/release/). Current newest is 5.2 (Wolf, 2026-08-30), a
+   major ahead of the devpod's 4.3.2 receiving end; the spike measures the handoff, and a
+   major-version gap confounds it three ways: `.blend` files are not backward-compatible
+   across majors (candidate (b) would need glTF instead), `bpy` API drift can break a
+   re-emitted script (candidate (a)), and the BlenderMCP addon on 5.x is unverified.
+   If 5.2 is installed anyway, that's allowed — use glTF as the data artifact and name the
+   version pair in `what-was-found.md` as a known difference.
 2. **Install `uv` from its official installer** (upstream is explicit: not via pip).
    - Windows (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
    - Linux/macOS: `curl -LsSf https://astral.sh/uv/install.sh | sh`
