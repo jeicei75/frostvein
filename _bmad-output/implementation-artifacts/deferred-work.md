@@ -1244,3 +1244,56 @@ look change becomes a story.
   as a delta between two headless runs — which is how AC7 and AC13's controlled pair were read, so
   neither conclusion is affected. If headless area is ever wanted as a gate, it needs its own
   renderer-specific ceiling calibrated the same way boot7's was. `[measured]`
+
+## Deferred from: code review of 10-1-the-headless-bench (2026-08-29)
+
+Four layers, zero coverage holes. Three items deferred as real-but-not-now; the two LOW
+latent-silent-failure items (`audit-mutations.py`'s Rust-only orphan wording and `mutate.sh`'s
+backup set missing `_bmad/scripts/*.py`) were NOT deferred — they were patched under the standing
+frostvein exception for instruments that report a wrong value nobody will ever see.
+
+- **No `timeout=` anywhere in the new Blender-spawning chain.**
+  `scripts/tests/test_valley_bench.py:81-101` calls `subprocess.run([...blender...])` with no
+  `timeout=`; `scripts/mutate.sh:69-70` and `scripts/gate.sh:117` both call into it unwrapped.
+  These are the first subprocesses in this repo that can hang the gate or a mutation run
+  indefinitely with no recovery. `mutate.sh`'s own comments treat exactly this class as
+  first-class for cargo (the NO-COMPILE false-green history) but nothing covers the new tier.
+  No hang has been observed; deferred on that basis.
+
+- **`export_world.py` ignores `CARGO_TARGET_DIR`.**
+  `scripts/bench/export_world.py:18` derives `<repo>/target/debug/simd` from `__file__`, which is
+  exactly what AC5 required (runs from either devpod mount) and is met. But a user who builds with
+  a target-dir override gets a stale or missing binary — the "stale-binary trap" the story records
+  as having fired six times, in a seventh shape. Deferred: correct for both real mount paths today.
+
+- **THE BENCH'S FIRST FINDING, and it points at the CLIENT, not the bench — Wolf, 2026-08-30.**
+  Shown the pair, Wolf's verdict was that **the bench looks MORE like what we are targeting than
+  `gui-capture.png` does** (noise aside). This inverts the story's premise, so it is worth stating
+  precisely. It is NOT the terrain: that is calibrated to the client (mean band luma 103.6 vs
+  105.7). The difference he is responding to is the **camp pool** — the client's campfire runs at
+  25,000,000 lm and blows its centre to flat white, where the bench's Cycles 1,500 keeps detail.
+  **This is the same complaint as 6.2's carried-open "camp is too blown out", and the 2026-08-22
+  ruling that closed it explicitly did NOT treat this case.** That ruling's own comment
+  [`appearance.rs:66-76`] says the blow-out "is in the PEAK", drops the base so the peak lands on
+  5.4's approved ceiling, and records that "this still frame never moved". `gui-capture.png` is a
+  still frame. So the still-frame blow-out was ruled out of scope, not ruled acceptable.
+  **For the art pass (10.4) to decide, not this story:** whether the client's still-frame camp
+  should come down toward what the bench shows. Do not change `light_properties()` on the strength
+  of one observation — but this is the first time the bench has been used for the thing it was
+  built for, judging a look before anyone builds it, and the answer it gave was about the client.
+
+- **AC9 guards the light table's colours but not its intensities.**
+  `crates/gui/src/appearance.rs:45,48` carries `ambient_brightness: 4_500.0` and
+  `directional_illuminance: 22_000.0`; the bench uses `sun_data.energy = 3.0`
+  (`scripts/bench/valley_bench.py:352`) and point energies `750/1500/300` against the client's
+  `14M/25M/5M` (`appearance.rs:52-86`). Blender and Bevy units genuinely differ, so the AC's
+  "literal-equal" cannot apply to intensities and the delivered guard silently covers only the
+  colour half. An interpretation question for 10.3's contract work, not a defect.
+
+- **Ramp tiles render as full cubes; the bench has no sloped geometry.**
+  `scripts/bench/valley_bench.py:215-218` treats a `{"ramp": ...}` tile as solid for exposure
+  (correct — it matches `project.rs:429-442`, and `Ramp(_)` must occlude), but `FACE_CORNERS`
+  defines only axis-aligned cube faces, so a ramp draws as an ordinary cube. The script names its
+  other known divergence in a `// NOTE:` (the client's top-slice layer) and does not name this one.
+  Deferred as a simplification; folded into `what-you-will-see.md` so Wolf is not asked to
+  rediscover it.

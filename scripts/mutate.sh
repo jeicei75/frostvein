@@ -43,7 +43,10 @@ trap 'restore_all; rm -rf "$BACKUP"' EXIT
 # `cargo test -p simd` failed 1 of 18 with crates/ git-clean; `touch`ing the sources rebuilt and
 # it passed 18/18, same flags, same binary name. `-m` (--touch) stamps extraction time as NOW,
 # so the restored source always postdates the artifacts and cargo always rebuilds.
-backup_all() { tar -cf "$BACKUP/tree.tar" $(git ls-files 'crates/*'); }
+# The backup set must cover every tracked file a sabotage can reach, or the mutation survives the
+# run ON DISK. `crates/*` alone missed `scripts/*`; `scripts/*` alone still missed `_bmad/scripts/*`,
+# whose `session_tokens.py` the gate itself exercises and which the generic `py` tier can target.
+backup_all() { tar -cf "$BACKUP/tree.tar" $(git ls-files 'crates/*' 'scripts/*' '_bmad/scripts/*'); }
 restore_all() { [ -f "$BACKUP/tree.tar" ] && tar -xmf "$BACKUP/tree.tar"; }
 
 # Initialized empty, not merely declared: under `set -u`, `${#NAMES[@]}` on a declared-but-unset
@@ -53,11 +56,22 @@ NAMES=()
 RESULTS=()
 survivors=0
 
+# Valid tiers, resolved once. A tier is either "py" or a workspace package name; anything else is
+# a TYPO, and a typo used to report a clean KILL: `cargo test -p <typo>` exits 101 with
+# "did not match any packages", which is non-zero, is not "could not compile", and so fell
+# straight through to the KILLED branch having run no test at all.
+PACKAGES=$(rg -N '^name = "' crates/*/Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+
 mutation() {
-  local name="$1" pkg="$2" test="$3"
+  local name="$1" tier="$2" test="$3"
   local script; script=$(cat)
 
   printf '\n=== %s ===\n' "$name"
+  if [ "$tier" != "py" ] && ! printf '%s\n' "$PACKAGES" | rg -qxN -- "$tier"; then
+    echo "  UNKNOWN TIER '$tier' — not \"py\" and not a workspace package; proves nothing"
+    NAMES+=("$name"); RESULTS+=("BAD-TIER"); survivors=$((survivors + 1))
+    return
+  fi
   if ! printf '%s' "$script" | python3 -; then
     echo "  mutation script FAILED to apply — treating as a survivor"
     NAMES+=("$name"); RESULTS+=("APPLY-FAILED"); survivors=$((survivors + 1))
@@ -66,7 +80,11 @@ mutation() {
   fi
 
   local out rc
-  out=$(cargo test --offline -p "$pkg" "$test" 2>&1); rc=$?
+  if [ "$tier" = "py" ]; then
+    out=$(python3 -m unittest "$test" 2>&1); rc=$?
+  else
+    out=$(cargo test --offline -p "$tier" "$test" 2>&1); rc=$?
+  fi
   restore_all
 
   NAMES+=("$name")
@@ -84,13 +102,29 @@ mutation() {
     survivors=$((survivors + 1))
     echo "  mutation does NOT COMPILE — proves nothing, treating as a survivor"
     printf '%s\n' "$out" | rg -N '^error(\[|:)' | head -3
+  elif [ "$tier" = "py" ] && printf '%s' "$out" | rg -qN 'SyntaxError|ImportError|ModuleNotFoundError|Failed to import test module|ERROR:.*_FailedTest'; then
+    RESULTS+=("NO-COLLECT")
+    survivors=$((survivors + 1))
+    echo "  Python collection/import error — proves nothing, treating as a survivor"
+    printf '%s\n' "$out" | rg -N 'SyntaxError|ImportError|ModuleNotFoundError|Failed to import test module|ERROR:' | head -3
+  elif [ "$tier" = "py" ] && printf '%s' "$out" | rg -qN 'Ran 0 tests|OK \(skipped='; then
+    # A SKIPPED test has judged nothing. Three rows in this repo target Blender-spawning tests
+    # guarded by skipUnless(which("blender")); on a Blender-less machine those exit 0, miss every
+    # guard above, and used to land in SURVIVED — reporting "your test is not pinning what it
+    # claims" when the truth is "your test never ran". That is the false-KILL class inverted.
+    RESULTS+=("NOT-RUN")
+    survivors=$((survivors + 1))
+    echo "  test SKIPPED or not collected — proves nothing, treating as a survivor"
+    printf '%s\n' "$out" | rg -N 'skipped|Ran 0 tests' | head -3
   elif [ "$rc" -ne 0 ]; then
     RESULTS+=("KILLED")
-    printf '%s\n' "$out" | rg -N 'panicked at|assertion|test result: FAILED' | head -4
+    printf '%s\n' "$out" | rg -N 'panicked at|AssertionError|assertion|test result: FAILED' | head -4
   else
     RESULTS+=("SURVIVED")
     survivors=$((survivors + 1))
-    printf '%s\n' "$out" | rg -N 'test result' | head -2
+    # `test result` is cargo's summary line and never appears in unittest output, so a py-tier
+    # survivor used to print nothing at all under its banner.
+    printf '%s\n' "$out" | rg -N 'test result|^Ran [0-9]+ test|^OK|^FAILED' | head -2
   fi
 }
 
@@ -114,7 +148,7 @@ done
 
 if [ "$survivors" -ne 0 ]; then
   printf '\n%d mutation(s) did not KILL. SURVIVED = the test is not pinning what it claims.\n' "$survivors"
-  printf 'NO-COMPILE / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.\n'
+  printf 'NO-COMPILE / NO-COLLECT / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.\n'
   exit 1
 fi
 printf '\nAll mutations killed.\n'
