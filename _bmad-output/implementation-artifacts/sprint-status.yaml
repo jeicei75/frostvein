@@ -1256,7 +1256,27 @@ development_status:
   # defaults to HORIZONTAL fov against Bevy's vertical; and the promoted exporter carried a
   # hardcoded absolute path that fails on the second devpod mount.
   10-1-the-headless-bench: done
-  10-2-the-live-seat-blendermcp-on-gingerspice-spike: backlog
+  # STORY CREATED 2026-08-30 (ready-for-dev). A SPIKE: the output is a recorded DECISION (what
+  # the MCP-to-script handoff is, what it costs, whether MCP joins the standing workflow), not a
+  # pipeline. Premises re-verified at creation: BlenderMCP's live-GUI requirement CONFIRMED
+  # against upstream (addon socket server inside a running Blender, localhost:9876; Claude side
+  # is `uvx blender-mcp`; upstream's own arbitrary-code caveat and the Windows GUI-PATH trap are
+  # on the story's record). Blender-on-gingerspice is UNVERIFIABLE from the devpod -- budgeted
+  # as Task 0, Wolf-side, per the epic. The receiving end was proven live by a CONTROL RUN at
+  # creation (export -> valley_bench: range-check all non-zero, 44,984 cells, 4.7 s whole
+  # process). Handoff candidates named for testing (script re-emission / data-file artifact /
+  # hand re-expression), deliberately NOT decided. No gate wiring and no mutation table for the
+  # spike script -- a STATED EXCEPTION to the tested-instrument rule: spike output that may be
+  # superseded by its own decision; the executed two-run recipe with recorded figures stands in,
+  # and if the decision keeps the script, hardening it is the follow-up's first task. Most of
+  # this story is Wolf-side by construction; poor Codex-delegation fit, runs orchestrator-side.
+  # STACKED on 10.1's tip d02f959 (PR #40 open at creation). An adversarial fresh-context
+  # checklist review at creation found 3 criticals, all fixed before save: a FABRICATED
+  # explanation for a luma discrepancy that does not exist (the control matches 10.1's recorded
+  # range-check line exactly -- any future drift is real change, not sampling noise); an
+  # AC2-vs-Task-3 contradiction on which artifacts land in 10-2-signoff/; and a deferral aimed
+  # at 10.4 for bench-hardening work 10.4's text never contains.
+  10-2-the-live-seat-blendermcp-on-gingerspice-spike: ready-for-dev
   10-3-the-rules-of-the-look: backlog
   10-4-the-trees-look-right-the-pilot: backlog
   10-5-dwarves-worth-looking-at: backlog
