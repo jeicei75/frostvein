@@ -328,6 +328,81 @@ working tree on either devpod mount, e.g. drop them under
 `_bmad-output/implementation-artifacts/10-2-signoff/`. Any transfer route you prefer; the agent
 takes it from there (commits, handoff script, two-run evidence, decision record).
 
+### Spike output — the two templates (DRAFT, not yet standing machinery)
+
+These are **recorded here as the spike's product**, proven against exactly one asset
+(`SM_VoxelPine_Tree02`, 2026-08-31). They are deliberately NOT installed as a workflow, per this
+story's scope guardrail: if AC5(c) rules that MCP joins the standing workflow, promoting these into
+`docs/` with a runbook is that follow-up's first task. Every figure below was measured, not
+proposed.
+
+**BLOCKING BEFORE ASSET #2 — the scale constant is UNSET, and it is not per-asset.** This tree was
+built at **0.2 m voxels off a 1.2 m dwarf**, giving a 7.6 m tree, 38 voxels tall. At that same voxel
+size the DWARF is 6 voxels tall, and the reference sheet gives him a beard, belt, tunic panel and
+lantern — none of which survive 6 voxels. Pick metres-per-voxel from the DWARF's detail needs
+(~0.1 m or finer), fix it once, and let every other asset follow. If each asset picks its own
+anchor they will not compose in one scene, and the correction is a re-export of everything rather
+than a tweak. Related: the client's cell is a unit cube (`Cuboid::default()`) and `worldgen.rs`
+grows trees 4–6 cells, so the cells-per-asset conversion is a second decision that belongs with
+this one.
+
+#### A. The standing asset contract — does not change per asset
+
+1. **Scale.** Voxel size and the dwarf-height anchor come from the project constant above, never
+   from the asset. State metres-per-voxel and the asset's height in voxels AND in world cells.
+2. **Geometry and transform.** Transforms applied, identity. Origin at base centre, sitting on
+   zero. **Centred in BOTH horizontal axes** — this tree shipped 0.5 voxels off in X while Z was
+   exact, so the check is `bbox centre X == 0.000 and Z == 0.000`, not "looks centred".
+3. **Material.** One material, one primitive, one draw call. Flat shading, single-sided
+   (`doubleSided: false`). Texture filter NEAREST, wrap CLAMP_TO_EDGE. One palette atlas, colours
+   inset in their cells so no mip level bleeds. Palette hexes come from the reference sheet and are
+   named constants at the top of the generator.
+4. **Export.** GLB, `extensionsUsed: []`, plain metal-rough, all UVs inside 0–1.
+5. **Topology may be unwelded, but must be declared.** A greedy voxel mesher produces disconnected
+   quads — this asset is 2,565 quads, 2,565 × 4 = 10,260 verts, no vertex sharing, V−E+F = 2565.
+   That is correct and should not be "fixed" by welding. It does mean smooth normals, subdivision,
+   auto-LOD and adjacency-based collision will not work as-is, so the asset notes must say so.
+6. **Self-verification, in this order: print the figures, THEN assert on them, then exit non-zero
+   on failure.** Minimum figures: verts, tris, bbox size, bbox centre X and Z, signed mesh volume
+   against the voxel count. **Exit 0 with no output is not a result** — the 10.1 lesson, paid for
+   already. Signed volume is the right closure oracle here precisely because the mesh is
+   non-manifold and a conventional manifold check would fail a perfectly good asset.
+7. **Deliverables, all three:** the `.blend`, one GLB per variant, and **a standalone headless
+   generator script** that reproduces every variant with no MCP, no live session and no manual
+   step — `blender --background --python <gen>.py -- <variant> <out.glb>`, stdlib + `bpy` only
+   (Blender resolves its own Python; numpy is not visible), deterministic, explicit seed if
+   anything is random. The script is the durable record; the session is not.
+8. **Known differences.** The asset notes state anything a consumer would otherwise discover the
+   hard way: unwelded topology, T-junctions, any axis asymmetry, any deviation from this contract
+   and why.
+
+#### B. The per-asset brief — the only part that changes, and it doubles as the prompt
+
+Drop this beside the reference image in the session's `references/` folder and paste it in:
+
+```
+Build a game-ready voxel asset from the reference in this folder.
+
+REFERENCE : <file>, <which section / which subject>
+ASSET NAME: SM_<Subject>_<Variant>
+VARIANTS  : <list, with the parameter that differs — e.g. tier count and radius>
+SCALE     : <metres per voxel> from the project constant; <subject> is <N> voxels tall
+PALETTE   : the reference sheet's hex values, verbatim, as named constants
+
+Follow the standing asset contract in this folder (contract.md) in full. Where the
+reference and the contract disagree, the contract wins on structure and the reference
+wins on look — and say which you followed.
+
+Deliver: the .blend, a GLB per variant, and the standalone headless generator script,
+and print the generator in full in your reply as well as writing it to disk.
+```
+
+**Why the last line is not optional.** This session's transcript lives only inside Claude Code on
+gingerspice — one `/clear`, one crash or one retention window from gone, and it is currently the
+only record of how the asset was made. The emitted script is what replaces "the transcript is the
+record" with "the committed script is the record", which is the exact question this spike exists to
+answer.
+
 ### Debug Log References
 
 - 2026-08-31, **RESOLVED: the pin is `blender-mcp@1.9.0`** (measured on gingerspice). "1.5" was
