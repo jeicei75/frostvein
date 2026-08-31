@@ -11,6 +11,7 @@ _bmad/custom/*
 !_bmad/custom/bmad-create-story.toml
 !_bmad/custom/bmad-dev-story.toml
 !_bmad/custom/bmad-code-review.toml
+!_bmad/custom/bmad-sprint-status.toml
 .claude/
 .agents/
 .codex/

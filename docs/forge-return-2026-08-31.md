@@ -1,9 +1,9 @@
 # Forge return — 2026-08-31
 
-Frostvein is at **forge-process 1.3.2**, up from 1.2.0. Both FILE entries pulled clean, the three
-changed TEMPLATEs hand-merged and `ack`ed. `check` is **not** `in sync`, and deliberately so: one
-new TEMPLATE is held pending Wolf's decision (§4). Everything else below is measured here, in
-frostvein's own copies, not read off the forge.
+Frostvein is at **forge-process 1.3.2**, up from 1.2.0, and `check` reports **in sync**. Both FILE
+entries pulled clean; the three changed TEMPLATEs hand-merged and `ack`ed; the one new TEMPLATE
+adopted on Wolf's ruling, in a scoped form, with the action items migrated to GitHub issues (§4).
+Everything below is measured here, in frostvein's own copies, not read off the forge.
 
 ## 1. The `gpt-5.6-terra` price row — the same trap as `PRICES`, caught earlier this time
 
@@ -84,26 +84,50 @@ the instances are not, so each was rewritten against frostvein's own scars.
 
 All three parse (`tomllib`), and the gate's own metrics-tests row covers the FILE half.
 
-## 4. HELD, not installed — `bmad-sprint-status.toml` (action items become GitHub issues)
+## 4. Action items moved to GitHub issues — adopted, scoped (Wolf, 2026-08-31)
 
-1.3.0 adds a TEMPLATE that moves action items out of `sprint-status.yaml` and into GitHub issues,
-removing the `action_items:` block entirely. **`install` copied it; it was removed again on purpose**,
-so `check` reports it MISSING rather than reporting frostvein as in-sync with a file that is currently
-false here. Frostvein's action items live in `sprint-status.yaml` today (19 items, 12 open), and the
-template's first activation step tells the agent they are *not* there.
+1.3.0's `bmad-sprint-status.toml` moves action items out of `sprint-status.yaml` and into GitHub
+issues. Frostvein adopts it, in the scoped form: **state on the issue, reasoning in the repo.**
 
-Wolf decides, and it is two decisions, not one:
-1. Does frostvein want action items as GitHub issues at all? The forge's argument is that a mirror
-   goes stale the moment an issue is closed from a phone. Against it: frostvein has no
-   `action-items.md` prose archive, so the reasoning half would need a home too.
-2. If yes — the `gh` token here is a fine-grained PAT, and the manifest's own warning is that the
-   Issues permission is granted **separately** from push/admin. Prove `createIssue` with a throwaway
-   issue before migrating anything; do not migrate on the assumption that `gh auth status` being green
-   means issues can be written.
+**The efficiency question was measured, not guessed, and it points the other way.** The
+`action_items:` block was **27,193 tokens — 48% of a 56,528-token file**; `gh issue list --json`
+over the live items is **~330 tokens**. `sprint-status.yaml` is now 226k → 119k chars and still
+parses with all 52 stories. The block was also where items went to rot: every open item dated from
+Epic 5 and was still open at Epic 10, visible on the board the whole time — which is the forge's
+own argument for the routing labels, and it lands here exactly.
 
-Until one of those is answered, `check` exits non-zero on this one line. That is the known cost of
-holding it, and it is on the record precisely because a permanently-red check is how the `PRICES` fix
-rotted for a month.
+**`createIssue` was proven before anything was migrated** (the manifest's own instruction; ep-15-a2,
+verify the instrument). Throwaway issue #42 created, read back, deleted. The fine-grained PAT does
+carry the Issues permission. Labels created: `action-item`, `route:skill-rule`, `route:story`,
+`route:forge-process`, `route:undecided`.
+
+**Twelve open items became nine issues, because they were re-verified against the tree first.**
+This is the migration's real finding — filing them verbatim would have fabricated roughly three
+items of scope:
+
+| verdict | items | evidence |
+|---|---|---|
+| already DONE, never struck | M2-6, M2-8, M2-9 | the review-teardown reaper is mandated in `bmad-code-review.toml` (added 2026-08-28); `audit-mutations.py` runs the anchor check in the gate; `mutate.sh` captures `rc` before the pipe, and commit-before-mutating became a standing fact today |
+| HALF done, framing stale | M2-7, M2-15 | `build.rs` stamps `GUI_BUILD_SHA` but nothing automates the `gui.exe` copy; `--at-tick` landed in `capture.rs` but the scenario session mode did not, and "fold into Epic 8" aims at a closed epic |
+| open as written | M2-2, M2-3, M2-5, M2-10, M2-11, M2-12, M2-18 | filed as #43–#51 |
+
+The two half-done items were filed with **only their remaining half**, and M2-15 re-aimed at the gfx
+pass rather than at Epic 8. M2-12 (decide the self-gate's future — the one item Wolf co-owns) is
+`route:undecided` on purpose: an item with no vehicle is a risk, not a backlog entry.
+
+`action-items.md` carries all 60 items verbatim — every `action` and `note` string was checked
+present after generation — plus the twelve verification notes above. `check` now reports **in sync**.
+
+**One trap found on the way, worth keeping:** `.gitignore` ignores `_bmad/custom/*` with a per-file
+allowlist, so the new `bmad-sprint-status.toml` was invisible to git — the adoption would have
+worked locally and never travelled. `.gitignore` now allowlists it. Any future TEMPLATE added to
+the manifest needs the same line, or `check` on a fresh clone reports MISSING for a file that
+exists.
+
+**Two rules were adapted rather than copied**, both where the forge's text is true for Asgard and
+false here: frostvein's issues and PRs live in the *same* repo, so `Closes #N` does work (the
+forge's cross-repo caveat is inverted for us), and the "re-verify before filing" rule is
+frostvein's own, written from today's three-of-twelve.
 
 ## 5. Owed back to the forge
 
@@ -116,13 +140,18 @@ KILLED while the new assertion has never run. Neither is Rust-specific.
 
 ```
 bash /workspace/scripts/forge-process.sh check /workspace/projects/frostvein
+  target : /workspace/projects/frostvein  @ 1.3.2
   FILE     _bmad/scripts/session_tokens.py                      ok
   FILE     _bmad/scripts/tests/test_session_tokens.py           ok
   TEMPLATE _bmad/custom/bmad-create-story.toml                  adapted
   TEMPLATE _bmad/custom/bmad-dev-story.toml                     adapted
   TEMPLATE _bmad/custom/bmad-code-review.toml                   adapted
-  TEMPLATE _bmad/custom/bmad-sprint-status.toml                 MISSING   ← held, §4
+  TEMPLATE _bmad/custom/bmad-sprint-status.toml                 adapted
   TEMPLATE scripts/codex-handoff.sh                             adapted
+  in sync.            (exit 0)
+
+gh issue list --label action-item --state open   → 9 issues, #43-#51, every one route-labelled
+sprint-status.yaml                               → 226,114 -> 118,714 chars, parses, 52 stories
 
 python3 -m unittest discover -s _bmad/scripts/tests   → Ran 62 tests, OK   (frostvein's copy)
 PRICES_VERSION 2026-08-31, gpt-5.6-terra {'input': 2.0, 'cache_write': 2.5, 'cache_read': 0.2, 'output': 12.0}
