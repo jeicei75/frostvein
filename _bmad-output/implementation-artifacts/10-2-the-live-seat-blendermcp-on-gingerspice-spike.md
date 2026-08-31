@@ -322,6 +322,20 @@ takes it from there (commits, handoff script, two-run evidence, decision record)
 
 ### Debug Log References
 
+- 2026-08-31, the version pin is NOT closed — "1.5" does not identify the server that ran.
+  Wolf reported the MCP version as **1.5**; checked before writing it into the recipe, because a
+  wrong pin downgrades a seat that currently works. Three facts disagree with it. (a) PyPI has no
+  `1.5` — the line is `1.5.0` (2026-01-08) through `1.5.6` (2026-03-18), and **`1.9.0` shipped
+  2026-08-30**, the same evening the seat went live. (b) `uvx blender-mcp` with no pin resolves to
+  the newest release, so a fresh setup that night got 1.9.0, not a January build, unless a stale uv
+  cache intervened. (c) Upstream's `addon.py` carries its OWN number — `bl_info["version"] = (1, 6)`
+  on main today — so the addon and the PyPI package are numbered separately, and Blender's Add-ons
+  panel shows the ADDON's version. "1.5" is most likely read from there.
+  **Owed:** the server package version, from the machine that ran it —
+  `uvx --from blender-mcp python -c "import importlib.metadata as m; print(m.version('blender-mcp'))"`.
+  Pinning `blender-mcp@1.5` on today's evidence would roll the server back eight months against a
+  1.6-era addon; not written.
+
 - 2026-08-31 checkpoint (agent-side, nothing to unblock): no `10-2-signoff/` and no untracked
   files anywhere in the tree — the session capture has not landed, so Tasks 1–3 remain blocked
   exactly where they were. Branch trap re-checked: `origin/main` (09f24ae) still an ancestor of
