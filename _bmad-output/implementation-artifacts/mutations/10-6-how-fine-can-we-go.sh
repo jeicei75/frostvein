@@ -9,7 +9,7 @@ PY
 mutation "detail rule removal fails subdivided geometry" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_detail_rule_increases_subdivided_quads_but_not_the_k_one_control <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
-old = '                    if detail and k > 1:'
+old = '                    if detail and k > 1 and axis == 2 and sign > 0:'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    if False:'))
 PY
