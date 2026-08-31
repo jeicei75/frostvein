@@ -284,6 +284,14 @@ Codex (GPT-5.6)
 
 ### Verification output (verbatim)
 
+**RE-MEASURED BY THE ORCHESTRATOR, 2026-08-31.** The dev run was killed by the harness while
+re-running its tests, so the block it had pasted here was left STALE: it predated commit
+`5bb884a` ("Model closed resolution detail surfaces"), which changed the detail rule and
+therefore every k > 1 figure. The stale block reported k=2 at 184,385 quads and k=8 as
+COMPLETED; the committed `10-6-signoff/axis-a-geometry.md` reported k=2 at 77,540 quads and k=8
+as FAILED. The sweep below is the orchestrator's own re-run on the current tree and it
+reproduces the committed artifact exactly, so the ARTIFACT was right and the record was stale.
+
 ```
 $ python3 scripts/bench/resolution_bench.py --k 16 --no-detail
 tick: 21 entities: 10 dims: {'x': 128, 'y': 128, 'z': 32}
@@ -295,11 +303,10 @@ k=1 exposed_faces=61142 greedy_quads=19264 triangles=38528 chunks=64 mesh_build_
 
 $ python3 scripts/bench/resolution_bench.py --sweep
 tick: 21 entities: 10 dims: {'x': 128, 'y': 128, 'z': 32}
-k=1 exposed_faces=61142 greedy_quads=19264 triangles=38528 chunks=64 mesh_build_seconds=0.724 peak_memory_bytes=112365568
-k=2 exposed_faces=244568 greedy_quads=184385 triangles=368770 chunks=64 mesh_build_seconds=0.912 peak_memory_bytes=118132736
-k=4 exposed_faces=978272 greedy_quads=713723 triangles=1427446 chunks=64 mesh_build_seconds=1.661 peak_memory_bytes=156983296
-k=8 exposed_faces=3913088 greedy_quads=2807546 triangles=5615092 chunks=64 mesh_build_seconds=5.132 peak_memory_bytes=326963200
-wall: hard face limit at k=16: 15652352 fine faces exceeds 4000000; last_completed_k=8
+k=1 exposed_faces=61142 greedy_quads=19264 triangles=38528 chunks=64 mesh_build_seconds=0.721 peak_memory_bytes=112791552
+k=2 exposed_faces=285490 greedy_quads=77540 triangles=155080 chunks=64 mesh_build_seconds=0.905 peak_memory_bytes=124723200
+k=4 exposed_faces=1417777 greedy_quads=498714 triangles=997428 chunks=64 mesh_build_seconds=1.885 peak_memory_bytes=188735488
+wall: hard face limit at k=8: up to 11739264 detailed faces exceeds 4000000; last_completed_k=4
 ```
 
 ```
@@ -330,6 +337,20 @@ All mutations killed.
 - Task 6: handed Wolf the exact gingerspice commands and an intentionally empty fps table; no
   devpod fps was observed or claimed. Decision: retain 1.6 m/cell, use visual k=4 (0.4 m/voxel),
   keep sim k=1.
+- **Orchestrator verification, 2026-08-31 (independent of the dev run).** `scripts/gate.sh`
+  re-run from scratch: **GATE GREEN**, including `mutation tables still apply ok`. The mutation
+  table re-run by the orchestrator: all three rows **KILLED** with real assertion diffs. AC4's
+  oracle re-run: k=1 gives **61,142 faces / 19,264 quads**, matching the control to the digit.
+  The story's RED control re-run: `--k 16 --no-detail` collapses to exactly **19,264** quads,
+  proving the detail rule drives the k > 1 numbers. No 401/auth failure in the run log.
+- **OPEN CONCERN for review — the wall is a guard, not a resource limit.** The sweep stops at
+  k=8 because a hand-chosen `4,000,000` detailed-face ceiling refuses it, not because anything
+  ran out: k=4 completed in 1.9 s at 189 MB peak. The pre-fix sweep in this same run actually
+  COMPLETED k=8 (3,913,088 faces, 5.1 s, 327 MB) — so k=8 is measurable on this devpod. AC3 asks
+  for the sweep to run until it breaks and warns that stopping at a comfortable number does not
+  satisfy it. `decision.md` then reasons "k=8 is the first guarded failure, so k=4 is the only
+  vehicle candidate", which rests on the guard rather than on a measurement. The adopted k=4 may
+  still be right, but the *reason* given for excluding k=8 is not yet evidence.
 - Task 3 / AC5 is not implemented. I stopped at the story's named split line rather than ship a
   partial `--subdiv` flag: a compliant path needs chunk meshes separated by existing terrain
   material/rim levels while preserving snow caps, slice/pick/draw-set behaviour, and byte-identical
