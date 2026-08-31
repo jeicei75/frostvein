@@ -34,6 +34,7 @@ import math
 import os
 import struct
 import sys
+import traceback
 import zlib
 
 import bpy
@@ -596,6 +597,12 @@ def parse_args(argv):
             voxel = float(rest.pop(0))
         else:
             raise SystemExit("error: unknown option %r\n%s" % (flag, USAGE))
+    # Voxel size must be positive. Zero is the dangerous one: it collapses the mesh to a point
+    # AND scales expected_h/expected_volume by the same zero, so every closure check passes
+    # vacuously and the script reports OK on nothing. The oracle has to be independent of the
+    # input it is checking. (Negative values already fail the checks, on sign.)
+    if not voxel > 0.0:
+        raise SystemExit("error: --voxel must be greater than 0 (got %r)\n%s" % (voxel, USAGE))
     return ttype, os.path.abspath(out), seed, voxel
 
 
@@ -695,4 +702,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        # main() and parse_args already exit with a meaningful code; assert-style failures use 1.
+        raise
+    except Exception as error:
+        # Blender's --background runner prints a traceback for ANY uncaught exception and still
+        # exits 0, so a bad --seed/--voxel value, an unwritable output path, or an export failure
+        # would report success having written nothing. This is the same guard valley_bench.py and
+        # spike_pine_render.py carry, and the asset contract's clause 6 ("Exit 0 with no output is
+        # not a result") requires it of the generator too.
+        traceback.print_exc()
+        raise SystemExit("generator failed: %s: %s" % (type(error).__name__, error)) from error
