@@ -43,7 +43,29 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-31  # 10.2 CODE REVIEWED -> done (see the story's block below).
+last_updated: 2026-08-31  # 10.6 CODE-REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE, NO COVERAGE HOLES;
+                          # full gate GREEN on a review layer. 6 HIGH / 11 MED / 7 LOW, 23 patch items,
+                          # 2 deferred, 0 dismissed. THE FINDING THAT MATTERS: the story's deliverable is
+                          # a set of numbers, and THREE INDEPENDENT defects make every k>1 figure wrong
+                          # while the k=1 control stays green -- AC4's oracle is hardwired to k=1 and is
+                          # structurally blind to all three. (1) the subdiv mesher culls against the DRAWN
+                          # set, not solidity, so 44% of submitted faces are buried in rock; (2) the bench's
+                          # analytic baseline never carves side faces, inflating every k>1 row; (3) the
+                          # `--no-detail` RED control early-returns k=1's quads, so the guard on the WHOLE
+                          # k>1 dataset CANNOT FAIL -- it still reports 19,264 with detail_depth replaced by
+                          # a raising function. decision.md adopts k=4 at 997,428 tri; the live renderer
+                          # submits 1,527,754 (+53%). Wolf ruled: BACK TO DEV for a full re-measurement
+                          # rather than a review patch pass -- a review regenerating the numbers would be
+                          # verifying its own output. 10.3 BLOCKS on the corrected k=4 figure.
+                          # Also HIGH: --subdiv>1 panics the --capture draw-set oracle, and the vehicle card's
+                          # `--subdiv 4 --distance 500` cannot run (--distance requires --capture), so AC7's
+                          # full-vista bar is unobtainable as written. Guardrails that HELD: sim-core diff is
+                          # entirely #[cfg(test)] (costed-not-built honoured), AC4/AC5/AC6 controls reproduced
+                          # independently, all 4 mutation anchors match exactly once, none absorbed.
+                          # PRIOR: 10.6 -> review (dev done, gate green on orchestrator re-run). Earlier today: 10.3 STORY CREATED -> ready-for-dev (see its block below). The
+                          # execution-order ruling bit for the first time: numeric order says 8.3,
+                          # the record says the gfx pass runs first, and Wolf confirmed 10.3.
+                          # PRIOR: 10.2 CODE REVIEWED -> done (see the story's block below).
                           # PRIOR: 10.2 DEV DONE -> review. The handoff proved BIT-EXACT: the session's
                           # emitted generator reproduces all four GLBs byte-identically on the
                           # devpod, from a different machine, with no MCP and no manual step.
@@ -1338,7 +1360,52 @@ development_status:
   # deferred (the spike bench's floors, the AC2-conditional binaries, 3.7 MB of next-story dwarf
   # assets, two pre-existing tracked Zone.Identifier files).
   10-2-the-live-seat-blendermcp-on-gingerspice-spike: done
-  10-3-the-rules-of-the-look: backlog
+  # ---- EXECUTION ORDER IN EPIC 10 IS NOT NUMERIC ORDER (ruled 2026-08-31, Wolf) ----
+  # 10.6 -> 10.3 -> 10.4 -> 10.5. The resolution bench measures what we can serve, THEN the
+  # contract writes it down, THEN assets are authored against it. 10-6 is placed HERE, ahead of
+  # 10-3, deliberately: this board's next-story rule reads top to bottom, and leaving 10-6 in
+  # numeric position would reproduce exactly the ordering bug that put 8.3 up first today.
+  #
+  # STORY CREATED 2026-08-31 (ready-for-dev). Baseline 0b8b673, gate GREEN at creation.
+  # WHY IT EXISTS: 10.3 was authored with its grid-scale clause picked from three UNMEASURED
+  # options, and 10.4/10.5 author assets against whatever it picks. Wolf caught it. Measured at
+  # creation on the real world: 44,984 exposed cubes but only 61,142 faces are actually on the
+  # surface against 269,904 submitted as whole cubes -- 77% of the geometry we draw is interior
+  # and invisible, and greedy meshing takes 539,808 triangles to 38,528. There is a 14x triangle
+  # headroom BEFORE any resolution increase, which is why "can we go finer" was never obviously
+  # a no. The suspected real bottleneck is the ~63k per-cell ECS entities, not the triangles.
+  # The sweep must run to the WALL, not to a comfortable number, and report per class -- terrain
+  # (44,984), trees (~265) and dwarves (5) do not share one budget. fps is Wolf-side: lavapipe
+  # renders here but does not clock.
+  # DEV DONE 2026-08-31, delegated to Codex across TWO runs (the first was killed by the harness
+  # mid-verification; Task 3 was resumed separately on the same branch, 18 commits total).
+  # Gate GREEN and all four mutation rows KILLED on the ORCHESTRATOR's own re-runs -- the dev run
+  # never achieved a green gate itself and never completed a self-gate pass. Open for review:
+  # AC7 (fps) is Wolf-side on gingerspice by construction; the sweep's k=8 wall is a DEFERRED
+  # venue constraint, not a measured limit (Wolf, shared WSL host); and the bench and the gui
+  # disagree on k=2 triangles (155,080 vs 218,832), unexplained.
+  10-6-how-fine-can-we-go: in-progress
+  #
+  # GATED ON 10.6 -- do not start it first even though it is numerically earlier.
+  # STORY CREATED 2026-08-31 (ready-for-dev). Baseline 0b8b673, gate GREEN at creation.
+  # THE BOARD'S NUMERIC ORDER WOULD HAVE PICKED 8.3 HERE and Wolf caught it: the 2026-08-28
+  # ruling twelve lines above puts the gfx pass FIRST, so 10.3 is next and 8.3 stays parked.
+  # Two of the epic's premises were WRONG at re-verification and are corrected in the story.
+  # GRID SCALE, corrected twice in one session: the first draft called it a three-way divergence
+  # (1.600 / 1.767 / 1.846 m per cell). Wolf pointed at the reference sheet and it collapses --
+  # Section A labels the dwarf "12 Voxels", Section B labels trees in cells, and at a 1.20 m
+  # dwarf that is 0.1 m/voxel, 1.6 m/cell, 16 voxels/cell, consistently. It was never three
+  # numbers fighting; it is ONE stale constant, `scale: 0.65` -> 0.75, owed to 10.5. What the
+  # sheet cannot say is what we can RENDER -- that is 10.6's job, hence the gate.
+  # Second premise: the 1.20 m dwarf anchor every 10.2 asset was built against is ratified
+  # NOWHERE outside that story's ASSET_NOTES.
+  # Vehicle for issue #57 (M2-20) -- `Closes #57` goes in the PR body. Explicitly NOT taking
+  # #58 (handover runbook) or #59 (spike-bench hardening); review already found 10.3 does not
+  # pick those up on its own. Instrument is a NEW `scripts/bench/check_asset.py`; its RED
+  # specimen is the already-committed stale `tree.glb`, measured at creation as genuinely red
+  # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
+  # clause passes on it, so origin centring is the only discriminating one.
+  10-3-the-rules-of-the-look: ready-for-dev
   10-4-the-trees-look-right-the-pilot: backlog
   10-5-dwarves-worth-looking-at: backlog
   epic-10-retrospective: optional

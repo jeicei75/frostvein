@@ -408,6 +408,32 @@
     "quota_last": null,
     "turns": 57
   },
+  "335571e0-212e-4677-a75a-efcb8624e8ad.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 1117988,
+        "cache_read": 29538676,
+        "input": 656,
+        "output": 230941
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 471704,
+        "cache_read": 14527123,
+        "input": 342,
+        "output": 33364
+      }
+    },
+    "cache_creation": 1589692,
+    "cache_read": 44065799,
+    "input": 998,
+    "last_ts": "2026-08-31T16:40:23.054Z",
+    "marked_at": null,
+    "output": 264305,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 499
+  },
   "3b01e100-20e0-495e-9cd1-73c58b8fb4ac.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -826,6 +852,26 @@
     "quota_last": null,
     "schema": 2,
     "turns": 677
+  },
+  "c8e1e263-1947-4edc-8493-6da318ed94e3.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 419113,
+        "cache_read": 22627932,
+        "input": 334,
+        "output": 183920
+      }
+    },
+    "cache_creation": 419113,
+    "cache_read": 22627932,
+    "input": 334,
+    "last_ts": "2026-08-31T14:10:18.450Z",
+    "marked_at": null,
+    "output": 183920,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 167
   },
   "d56b7c28-c33e-408a-98b6-916cf652e5b7.jsonl": {
     "by_model": {
@@ -1590,5 +1636,45 @@
     "quota_last": 62.0,
     "schema": 2,
     "turns": 15
+  },
+  "rollout-2026-08-31T14-30-51-01a0583a-ec01-71b2-a1c2-c272c5c05471.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 20376576,
+        "input": 445537,
+        "output": 64333
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 20376576,
+    "input": 445537,
+    "last_ts": "2026-08-31T15:03:21.347Z",
+    "marked_at": null,
+    "output": 64333,
+    "primary_only": false,
+    "quota_last": 52.0,
+    "schema": 2,
+    "turns": 172
+  },
+  "rollout-2026-08-31T15-17-02-01a05865-333f-7ba1-b5ea-b64401805e72.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 12908288,
+        "input": 290135,
+        "output": 37273
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 12908288,
+    "input": 290135,
+    "last_ts": "2026-08-31T15:38:37.088Z",
+    "marked_at": null,
+    "output": 37273,
+    "primary_only": false,
+    "quota_last": 86.0,
+    "schema": 2,
+    "turns": 105
   }
 }

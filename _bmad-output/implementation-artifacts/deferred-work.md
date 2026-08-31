@@ -1385,3 +1385,17 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
    `MIN_SUBJECT_LUMA` floor does not catch a total lighting failure (34.578 against a floor of 20.0,
    ~1.7x and coincidental), and the other three floors are decoration for anything short of "nothing
    rendered".
+
+## Deferred from: code review of 10-6-how-fine-can-we-go (2026-08-31)
+
+- **`--subdiv` is discoverable nowhere and `gui --help` fails** [crates/gui/src/ingest.rs:509].
+  Unknown arguments fall through to the port parse, so `gui --help` exits with "invalid digit
+  found in string" rather than printing usage. Nothing in `docs/` or `README.md` mentions
+  `--subdiv`, and the vehicle card says "read the frame-time overlay" without saying the overlay
+  is off by default and toggled with F3 (`ingest.rs:912`). The missing `--help` is pre-existing
+  and larger than this story; only the undocumented new flag belongs to 10.6. Raised by the
+  Feature Auditor.
+- **No test covers `--subdiv 0` or `--subdiv` with a missing value.** The parser rejects both
+  correctly at runtime (`ingest.rs:466-478`), so this is a test-coverage gap in CLI parsing
+  rather than a defect in this story's code, and it matches the existing coverage level of the
+  sibling flags. Raised by the Acceptance Auditor.

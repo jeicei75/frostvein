@@ -4,7 +4,7 @@ baseline_commit: 0b8b6735f04b282e2d75b82e426346be49590082
 
 # Story 10.6: How Fine Can We Go — the resolution bench
 
-Status: review
+Status: in-progress
 
 **EXECUTION ORDER: this story runs BEFORE 10.3.** Numerically last, first in sequence — the same
 shape as the gfx pass running before 8.3. 10.3 writes the grid scale into a contract that 10.4
@@ -264,6 +264,7 @@ working zoom and ≥30 at full vista. A k that misses them is a result, not a fa
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Control geometry measured on the real world; reference-sheet grid derived. |
 | 2026-08-31 | Added and verified the offline resolution instrument, Axis A/B signoff tables, vehicle command card, and mutation proof. Task 3 remains deliberately unstarted at the named split line. |
 | 2026-08-31 | Added the opt-in GUI subdivision path, headless control/wiring proof, live lavapipe geometry measurements, and the Task 3 mutation proof. |
+| 2026-08-31 | Code-reviewed, 4 live layers, no coverage holes: 6 HIGH, 11 MED, 7 LOW. Gate green, AC4/AC5/AC6 controls reproduced, `sim-core` guardrail holds. Three independent defects make every k>1 figure wrong while the k=1 control stays green. Returned to in-progress for re-measurement; 23 patch items and 2 deferrals recorded. |
 
 ## Dev Agent Record
 
@@ -425,3 +426,76 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 101 filtered out
 - `crates/gui/src/ingest.rs` (updated)
 - `crates/gui/src/project.rs` (updated)
 - `crates/gui/src/transform.rs` (updated)
+
+### Review Findings
+
+Code review 2026-08-31 — fresh context, 4 layers (Blind Hunter, Edge Case Hunter, Acceptance
+Auditor, Feature Auditor), all live, no coverage holes. Full `scripts/gate.sh` run GREEN by the
+Acceptance Auditor. Layer attribution and severity recorded per the review-cost discipline.
+
+**The shape of this review:** the story's deliverable is a set of numbers, and three independent
+defects make the k>1 numbers wrong while leaving the k=1 control green. AC4's control oracle is
+blind to all three by construction, because it is hardwired to k=1.
+
+- [x] [Review][Decision] **RULED 2026-08-31 by Wolf: 10.6 returns to dev for a full re-measurement.** The three defects below are fixed as dev work, the sweep and vehicle re-run, and the sign-off tables and `decision.md` rewritten from the new numbers, behind a full gate and a fresh mutation round. Not patched in the review session: the deliverable is a measurement that must be re-taken end to end, and a review that regenerated it would be verifying its own output. 10.3 blocks on the corrected k=4 figure. Original finding: **every committed k>1 figure must be regenerated, or the record must say it is provisional** — HIGH [acceptance+feature]. `decision.md`'s adopted k=4 budget (997,428 tri) is not what the renderer serves (live 1,527,754, +53%; k=2 +41%). Three separate causes below (buried faces, analytic overcount, inert RED control) each move the numbers. 10.3 copies this figure into an asset contract 10.4/10.5 author against. Wolf's call: regenerate now in a patch pass, or send 10.6 back to dev for a re-measurement.
+
+- [ ] [Review][Patch] **Subdiv mesher culls against the drawn set, not solidity — 44% of submitted faces are buried inside rock** [crates/gui/src/project.rs:538] — HIGH [acceptance+feature]. `visible` is the 44,984 exposed cells; a solid-but-unexposed neighbour is absent, so a face is emitted inside the rock. Bench rule 61,142 coarse faces vs GUI rule 110,094 = 48,952 buried. Defeats the story's own premise in the path built to demonstrate it. Correct rule: neighbour solid AND at/below the slice.
+- [ ] [Review][Patch] **The RED control that validates every k>1 figure cannot fail** [scripts/bench/resolution_bench.py:137-146] — HIGH [feature]. `--no-detail` at k>1 early-returns `geometry_summary(k=1)`'s quads verbatim. Identical greedy-mesher invocation count to k=1 (559), and still reports 19,264 with `detail_depth` replaced by a raising function. A structurally guaranteed observation is not evidence.
+- [ ] [Review][Patch] **Analytic baseline overcounts exposed faces at every k>1** [scripts/bench/resolution_bench.py:136] — HIGH [blind]. `coarse_faces * k * k` assumes every coarse face yields k² fine faces, but a top pit also carves the cell's side faces; that reduction is never applied. Independent brute-force voxel oracle on the repo's own 2-cell fixture: k=1 10/10 match, k=2 36 vs 42, k=4 170 vs 202. Docstring at :129 ("the measured surface is closed") is false for every slope, cliff and edge.
+- [ ] [Review][Patch] **`--subdiv N>1` breaks `--capture`, the project's own headless verification oracle** [crates/gui/capture.rs:94, root cause crates/gui/src/project.rs:505-517] — HIGH [edge]. Live panic: "capture drew a hollow cut at z 15: the mirror has 11325 solid tiles but 198 were drawn". `--subdiv 1` at the same z passes 11325/11325. The oracle queries `TerrainTile`, which subdiv>1 terrain no longer carries; the foliage carve-out partially wires it in, which is why the z=31 slice accidentally passes.
+- [ ] [Review][Patch] **The vehicle command card's second command cannot run — AC7's full-vista bar is unobtainable as written** [_bmad-output/implementation-artifacts/10-6-signoff/vehicle-fps.md:9, crates/gui/src/ingest.rs:522] — HIGH [feature]. `gui --subdiv 4 --distance 500` exits with "--distance requires --capture". Interactive zoom exists (E/Q, `ingest.rs:856`, distance clamped 4.0-500.0), so the card should say "hold E to full vista, F3 for the overlay" rather than pass `--distance`. Note `ingest.rs:270` records 7.2's review finding the same flag inert.
+
+- [ ] [Review][Patch] **Two divergent detail rules, and the code claims they are one** [crates/gui/src/project.rs:612 vs scripts/bench/resolution_bench.py:37] — MED [orchestrator+acceptance+feature, 3-layer convergence]. Python never masks the first three multiplies to 32 bits; Rust `wrapping_mul`s all of them. Raw offset agreement 20.4% over 73,960 points = exactly chance for a 5-outcome function. Clamped-depth disagreement 30.1% at k=2, 59.9% at k=4; 0.0% at k=1, which is why AC4 cannot see it. Aggregate quad impact is small (+0.01%), so this is not the cause of the bench-vehicle gap — but the "Hash-compatible" comment is false and will misdirect anyone reconciling the two. AC2 asks for one rule.
+- [ ] [Review][Patch] **AC4's independent oracle has no automatic caller** [scripts/bench/resolution_bench.py:200, scripts/gate.sh:118] — MED [feature]. `assert_control` is reachable only from `main()`/`_sweep`; every gate-run test uses a synthetic 2-cell world and none meshes the real exported world. If worldgen or the exposure rule moves, 61,142/19,264 goes stale and nothing goes red — the "documented constant was a measurement" trap.
+- [ ] [Review][Patch] **`axis-a-geometry.md`'s Chunks column is arithmetic dressed as measurement** [scripts/bench/resolution_bench.py:273] — MED [acceptance+feature]. `_chunks()` = ceil(dx/16)*ceil(dy/16) = 64 at every k, 2-D, ignores z, never touches the mesher, ignores empty chunks. The live vehicle reports 121. AC3 requires chunk count per sweep step.
+- [ ] [Review][Patch] **AC3a's tree budget models a tree as one cube — understated ~21x** [_bmad-output/implementation-artifacts/10-6-signoff/axis-a-geometry.md:26-30] — MED [feature]. The bench emits nothing per class (`grep -c "tree\|dwarf\|class"` = 0); the table is hand arithmetic over 265 isolated six-face cubes. The real world has 1,077 tree_trunk + 4,505 tree_foliage cells (~21 cells/tree).
+- [ ] [Review][Patch] **The "Correct the 10.6 record" pass (55b0898) fixed one document and missed two** [10-6-how-fine-can-we-go.md:373, 10-6-signoff/vehicle-fps.md:14] — MED [acceptance+feature]. Story file still says "wall is k=16; k=8 is last complete" (artifact and re-runs say wall k=8, last complete k=4). `vehicle-fps.md` still says k=8 "is not a vehicle candidate" with no venue caveat, contradicting `axis-a-geometry.md`/`decision.md` — and live `gui --subdiv 8` builds today (6,451,916 tri, 19,324 ms), so AC7 should carry a k=8 row.
+- [ ] [Review][Patch] **`detail-rule.md`'s seed provenance is false** [_bmad-output/implementation-artifacts/10-6-signoff/detail-rule.md:3, crates/gui/src/project.rs:126, scripts/bench/resolution_bench.py:20] — MED [orchestrator+acceptance]. Nothing reads a seed: `protocol` carries no seed field and `export_world.py` emits none. Both sides hardcode a literal copy of `sim_core::DEFAULT_SEED`. `gui` cannot import it (no sim-core edge, by policy) and no test ties either literal to it. Task 1's "seeded from the world seed (NFR3)" is met only by coincidence of literals.
+- [ ] [Review][Patch] **~420 new lines of GUI mesher have no numeric oracle** [crates/gui/src/ingest.rs:1369-1453] — MED [acceptance]. The only test asserts entity presence/absence and handle equality; nothing anywhere asserts a face, quad, triangle or vertex count from `project.rs`. The single Task 3 mutation row proves the flag is not inert and nothing more. This is why the buried-face, hash and connector defects were all shippable.
+- [ ] [Review][Patch] **Out-of-range `--subdiv` panics after passing CLI validation** [crates/gui/src/project.rs:499, crates/gui/src/ingest.rs:466-478] — MED [orchestrator+edge]. Parser rejects only 0; `gui --headless --subdiv 3000000000` panics on `i32::try_from(...).expect(...)`.
+- [ ] [Review][Patch] **No ceiling on `--subdiv` growth in the client, though the bench has one** [crates/gui/src/project.rs:544-546] — MED [edge]. O(subdiv²) per exposed face, unbounded. Measured k=8 = 6,451,916 tri / 17,334 ms mesh build with no warning; the bench guards at MAX_FINE_FACES=4,000,000 and names which resource ran out.
+- [ ] [Review][Patch] **Cross-cell detail connectors are skipped, so the fine surface has cracks** [crates/gui/src/project.rs:641] — MED [edge+acceptance]. The guard discards exactly the sample that crosses a cell boundary, and nothing inserts the neighbour's connector. At subdiv=2 roughly half of adjacent sub-cell pairs sit on a boundary. Bites hardest at k=2-4 — the range `decision.md` adopts. The bench does emit these connectors; `detail-rule.md`'s "valid voxel surface" holds for the bench only.
+- [ ] [Review][Patch] **Entity collapse is 3.8x, not "hundreds", and the files 10.3 copies carry no entity counts at all** [crates/gui/src/project.rs:594-599, :504-518] — MED [feature]. Live 53,129 -> 14,113 entities; snow caps and tree foliage stay one entity per cell, so ~12.6k survive and only ~1.5k chunk entities replace 44,984 cubes. The story names entity count as the suspected bottleneck, yet neither `axis-a-geometry.md` nor `decision.md` records it.
+
+- [ ] [Review][Patch] **Early `return` aborts the whole of `reconcile` mid-rebuild** [crates/gui/src/project.rs:818-820] — LOW, patched as a latent silent-failure trap [edge+acceptance+feature]. All terrain is despawned before the assets check; on failure it returns with nothing respawned, no diagnostic, and also skips dynamic-entity, item, designation and zone reconciliation. Dormant only via an implicit Startup-before-Update guarantee nothing asserts.
+- [ ] [Review][Patch] **Sweep "Peak memory" is cumulative process max-RSS** [scripts/bench/resolution_bench.py:288] — LOW, latent trap [acceptance]. Each `--sweep` row carries every prior k's peak; k=1's 112 MB is the export/parse baseline. AC3 asks for peak memory at each step.
+- [ ] [Review][Patch] **The capture-time slice instrument reports a meaningless count at subdiv>1** — LOW, latent trap [feature]. Prints `slice: z 31 projected 4501 terrain cubes` (leftover foliage) where subdiv 1 prints 44,984, reading as a 90% terrain loss in any subdiv capture log.
+- [ ] [Review][Patch] **Derived and measured triangle counts are presented side by side unlabelled** [crates/gui/src/project.rs:862] — LOW, latent trap [acceptance+feature]. The Completion Notes put k=1's 637,548 (derived, `(positions+snow_caps)*12`, cubes plus snow caps) beside k=2's 218,832 (measured), against a spec control of 539,808 (cubes only). AC6 forbids blending the two for Axis B; the same rule should hold here.
+- [ ] [Review][Patch] **Axis B's "measured" A* seconds are not reproducible to better than ~2x** [crates/sim-core/src/lib.rs A* instrument] — LOW, latent trap [feature]. Recorded 0.0536/0.1819/0.1843 vs a re-run's 0.0852/0.3380/0.3487. The path-found column reproduces exactly and is the real finding; the seconds must not be read as a budget.
+- [ ] [Review][Patch] **The k>1 detail test's oracle is an inequality** [scripts/tests/test_resolution_bench.py:24-27] — LOW, in a function already being edited [blind]. Only assertion on `geometry_summary(k=4, detail=True)` is `greater than 6`; any exact-count regression in either direction passes. This is the concrete reason the analytic overcount shipped.
+- [ ] [Review][Patch] **Project Structure drift** — LOW, trivial record fix [orchestrator+acceptance+feature]. Lists `crates/gui/src/main.rs | UPDATE` (untouched — the flag lives in `ingest.rs`) and omits `crates/gui/src/transform.rs`, which was updated.
+
+- [x] [Review][Defer] **`--subdiv` is discoverable nowhere and `gui --help` fails** [crates/gui/src/ingest.rs:509] — deferred, pre-existing. Unknown args fall through to the port parse ("invalid digit found in string"). The missing `--help` is pre-existing; only the undocumented new flag belongs to this story.
+- [x] [Review][Defer] **No test covers `--subdiv 0` or `--subdiv` with a missing value** — deferred, pre-existing pattern. CLI validation rejects both correctly at runtime; the gap is test coverage of the parser, not a defect in this story's code.
+
+**What this review proved by running, and what it did not.** PROVEN: the full gate green (exit 0, nine named checks ok); AC4's control reproduced independently twice from a fresh export (61,142 faces / 19,264 quads / 7,180,286 bytes); AC5's control half at pixel level (`--subdiv 1` vs no flag 7.09% differing pixels against a 7.37% noise floor, `--subdiv 2` 22.13%); AC6's sim-cost table digit-for-digit; the `sim-core` diff confined to `#[cfg(test)]`, so the "costed, not built" guardrail HOLDS; all four mutation anchors matching exactly once with no earlier assertion absorbing them. NOT PROVEN: AC7 in full — no fps is measurable on this venue by construction, and the command card is broken; the true `--subdiv` wall on the live client (Edge stopped at k=8 on shared-host grounds and named it a hole); and no visual inspection of a `--subdiv 2` render, so the cross-cell cracks rest on traced arithmetic, not observed pixels.
+
+**Review cost and housekeeping.** 499 turns, 45,920,794 tokens processed, **$34.16** (opus $27.53
+/ sonnet $6.63). The four review layers account for 35,030,380 tokens — 76.3% of the session — and
+cache reads are 44.1M of the total, ~96%, matching this project's standing finding that review is
+expensive because it RE-READS, not because it thinks. Against Epic 3's baseline of 862 turns and
+$45.52 per story, this review ran at 499 turns and $34.16 with four live layers and no coverage
+holes. Build isolation cost was paid back at the end: `scripts/reap-build-caches.sh --tmp-only
+--force` reaped 8 directories totalling 93.0 GB, reclaiming 46.5 GB of free space.
+
+**VEHICLE OBSERVATION — Wolf, gingerspice, 2026-08-31 evening.** Ran the subdivided path on the
+real vehicle. Two results, and the second is a review finding CONFIRMED BY EYE.
+
+1. **~140 fps.** Comfortably above NFR6 (60 fps boot framing, 30 fps full vista). *Not yet
+   attributed: which k, and boot framing vs full vista. Confirm before this fills any AC7 cell.*
+   The fps axis is not where this story's problem is.
+2. **"Huge amount of holes in scene."** This is the **visual confirmation of the cross-cell
+   connector gap** [crates/gui/src/project.rs:641], which the Edge Case Hunter and Acceptance
+   Auditor both derived from the arithmetic and both explicitly recorded as UNCONFIRMABLE here
+   (no devpod has a window). It is now observed. The finding moves from reasoning-only MED to a
+   CONFIRMED visible defect, and it lands in the k=2-4 band `decision.md` adopts — so k=4 is not
+   shippable as it stands, independently of the numbers being wrong.
+
+**Two candidate causes for the holes, to separate first thing:** (a) the cross-cell connector
+guard at :641 skipping every sample that crosses a cell boundary, so differing pit depths emit no
+connecting wall — the predicted cause; (b) the cull rule at :538 — `if visible.contains(&neighbour)`
+skips the face whenever the neighbour is a DRAWN cell, including **tree foliage**, which is sparse
+presentation geometry you can see straight through. A terrain face culled against a foliage
+neighbour is a hole you can look into. (b) is the same line as the buried-face defect but the
+opposite error, so fixing that line must address both directions. Cheapest discriminator: run
+`--subdiv 4` and check whether the holes cluster at cell boundaries (a) or around trees (b).
