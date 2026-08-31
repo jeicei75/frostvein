@@ -303,6 +303,26 @@
     "schema": 2,
     "turns": 426
   },
+  "27a6ff6c-3c78-4639-8ff2-bac96751b283.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 827289,
+        "cache_read": 110744833,
+        "input": 946,
+        "output": 438239
+      }
+    },
+    "cache_creation": 827289,
+    "cache_read": 110744833,
+    "input": 946,
+    "last_ts": "2026-08-31T09:58:40.475Z",
+    "marked_at": null,
+    "output": 438239,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 473
+  },
   "282b7e6e-af14-475f-b2e6-1de13aefe9c3.jsonl": {
     "cache_creation": 685065,
     "cache_read": 5622908,
@@ -387,6 +407,32 @@
     "output": 178314,
     "quota_last": null,
     "turns": 57
+  },
+  "3b01e100-20e0-495e-9cd1-73c58b8fb4ac.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 1056077,
+        "cache_read": 29176432,
+        "input": 576,
+        "output": 266906
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 289033,
+        "cache_read": 6773863,
+        "input": 222,
+        "output": 13071
+      }
+    },
+    "cache_creation": 1345110,
+    "cache_read": 35950295,
+    "input": 798,
+    "last_ts": "2026-08-31T11:10:52.357Z",
+    "marked_at": null,
+    "output": 279977,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 399
   },
   "3ed651a0-620d-49b4-a3fd-e4b21c793153.jsonl": {
     "cache_creation": 355333,
@@ -701,6 +747,26 @@
     "quota_last": null,
     "schema": 2,
     "turns": 81
+  },
+  "bae20bdf-ee48-4c97-b7f9-83b90b612736.jsonl": {
+    "by_model": {
+      "claude-fable-5": {
+        "cache_creation": 765604,
+        "cache_read": 11365625,
+        "input": 242,
+        "output": 77163
+      }
+    },
+    "cache_creation": 765604,
+    "cache_read": 11365625,
+    "input": 242,
+    "last_ts": "2026-08-30T11:10:40.003Z",
+    "marked_at": null,
+    "output": 77163,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 121
   },
   "bb7aef73-12e3-4304-9761-ecf0e9437260.jsonl": {
     "cache_creation": 418931,

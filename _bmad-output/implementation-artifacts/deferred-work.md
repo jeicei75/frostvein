@@ -1297,3 +1297,86 @@ frostvein exception for instruments that report a wrong value nobody will ever s
   other known divergence in a `// NOTE:` (the client's top-slice layer) and does not name this one.
   Deferred as a simplification; folded into `what-you-will-see.md` so Wolf is not asked to
   rediscover it.
+
+## Deferred from: code review of story 10-2-the-live-seat-blendermcp-on-gingerspice-spike (2026-08-31)
+
+Four-layer fresh-context review, no coverage holes; baseline `311e169..HEAD` (the story's own commit
+range — the frontmatter `baseline_commit` was stale by three merged PRs). The spike's bit-exact
+claim was independently reproduced by three layers and holds.
+
+- **`MIN_SUBJECT_LUMA` does not catch a total lighting failure.**
+  `scripts/bench/spike_pine_render.py:45`. Both suns at energy 0 still renders
+  `subject_luma=34.578` against the 20.0 floor and exits 0, because Cycles treats the world
+  backdrop colour as an environment light — the subject stays lit with no key and no fill. Only
+  ~1.7x headroom, and it is a side effect of Cycles physics rather than a designed margin. The
+  floor's comment ("the asset renders too dark") implies it guards a lighting regression; it does
+  not. Belongs to the already-owed "harden `spike_pine_render.py`" item (story 10.2's decision
+  record, owed item 3), which currently has no home — see the action-item finding in that story.
+
+- **The other three floors in the spike render bench are decoration for anything short of
+  "nothing rendered".** `scripts/bench/spike_pine_render.py:43-46`. Measured headroom against the
+  four real assets: `MIN_SUBJECT_FRACTION` (0.02) 3.9-7.8x; `MIN_DISTINCT_COLORS` (32) 325-353x,
+  and still 74x with both lights off. `MAX_SUBJECT_FRACTION` (0.90) is untestable by any normal
+  content change (real fractions sit at 0.08-0.16) and exists purely as the sRGB/linear trip-wire —
+  which it does correctly: reintroducing the documented bug drives it to 0.999770 and exits 1. Not
+  a defect, but the guard set should be recalibrated when the script is hardened.
+
+- **Binary data artifacts committed against AC2's own condition.** AC2 and Task 3 commit the
+  `.blend`/glTF **iff** handoff candidate (b) wins. Candidate (a) won, and the record calls the
+  GLBs "committed as convenience" — the exact thing the condition excludes. The four
+  `export/*.glb` are pure redundancy (byte-reproducible from `voxel_pine.py` in ~2.5 s each);
+  `tree.glb` earns its place on other grounds, as the evidence for the AC4 revision-mismatch
+  finding. Deferred rather than patched: labelling the stale artifact addresses the real harm, and
+  deleting committed assets is a call for Wolf, not a review.
+
+- **3.7 MB of next-story assets committed into 10.2's signoff folder.**
+  `10-2-signoff/dwarf.mp4` (3.4 MB), `dwarf-animation-reference.jpg`, `dwarf-contact-sheet.jpg`.
+  `what-was-found.md:12` states plainly: "Input for a later story; nothing in this one consumes
+  it." Outside the story's declared file list and git-permanent. Relevant to 10.5 (dwarves), which
+  will want them — so the question is placement, not whether to keep them.
+
+- **The `*:Zone.Identifier` gitignore rule leaves two already-tracked files behind.**
+  `.gitignore:39-41`. `_bmad-output/implementation-artifacts/6-1-signoff/6-1-motion-after.png:Zone.Identifier`
+  and `...-before.png:Zone.Identifier` are tracked; gitignore never untracks. Pre-existing from 6.1,
+  not 10.2's mess, and explicitly left alone per CLAUDE.md ss3. The new rule itself was verified
+  correct at every depth and does not disturb the `!_bmad/scripts/session_tokens.py` re-include
+  immediately above it.
+
+- **`ASSET_NOTES.md`'s "Generating" block uses relative paths without stating a working
+  directory.** `10-2-signoff/ASSET_NOTES.md:10-17` gives `blender --background --python
+  voxel_pine.py -- <type> <out.glb>` and `export/SM_VoxelPine_Tree01.glb` with no cwd stated. Folded
+  into the `tree.glb` labelling patch if that is taken; recorded here in case it is not.
+
+### Story 10.2's three OWED items — recorded here because they had no durable home
+
+Found at review: `sprint-status.yaml` rules that action-item state lives on GitHub issues labelled
+`action-item` "**and nowhere else**". Verified with `gh issue list --label action-item --state all`
+— 10 issues, newest #53, **none** of them 10.2's. `action-items.md` has no 10.2 entry either. All
+three items below lived only in one story's prose, which is how a deferral gets lost. Wolf's ruling
+at review (2026-08-31): the handover process and mechanism are real work but **not 10.2's scope**,
+so they are recorded, not built. **Issues are NOT opened — that is Wolf's call to make.**
+
+1. **The handover runbook.** Wolf: *"just need to think about handover process at start"* /
+   *"templates are first step .. that is not urgent now"*. The content already exists, proven on one
+   asset: the standing asset contract and the per-asset brief, both drafted in 10.2's Dev Agent
+   Record and applied in `10-2-signoff/ASSET_NOTES.md`. **Caveat found at review:** the story names
+   10.3 as its "natural home", but 10.3's epic text is about `docs/tech-art-guidelines.md` contracts,
+   not a session handover procedure — so 10.3 will not pick this up on its own.
+
+2. **The metres-per-voxel project constant. BLOCKS ASSET #2.** Currently unset. The tree was built
+   at 0.2 m voxels off a 1.2 m dwarf; at that same voxel size the DWARF is 6 voxels tall, which
+   cannot carry the beard, belt, tunic panel and lantern the reference sheet draws. Pick it from the
+   dwarf's detail needs (~0.1 m or finer), fix it once, let every other asset follow. Second,
+   coupled decision: the client's cell is a unit cube (`Cuboid::default()`) while `worldgen.rs`
+   grows trees 4–6 cells, against this asset's ~6.3 — so cells-per-asset belongs with it.
+   **Caveat found at review:** `epics.md:1505-1506` does name grid scale as blocking 10.4/10.5, but
+   that text predates the spike and contains none of the measured finding above. The sprint board's
+   claim that 10.3's blocker text "is already right" overstates what 10.3 will actually read.
+
+3. **Hardening `scripts/bench/spike_pine_render.py`** — a test plus a sabotage row, per Task 3's
+   stated exception ("if the decision keeps the script, hardening it is the follow-up's first
+   task"). The decision keeps it. **This one had no home at all** — no issue, no deferred entry, and
+   10.3 is a docs story. Two concrete inputs from this review, both already deferred above: the
+   `MIN_SUBJECT_LUMA` floor does not catch a total lighting failure (34.578 against a floor of 20.0,
+   ~1.7x and coincidental), and the other three floors are decoration for anything short of "nothing
+   rendered".

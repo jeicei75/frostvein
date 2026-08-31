@@ -36,3 +36,6 @@ __pycache__/
 # --- re-includes that must come AFTER the secret patterns (*token* matches these) ---
 !_bmad/scripts/session_tokens.py
 !_bmad/scripts/tests/test_session_tokens.py
+
+# Windows Mark-of-the-Web streams, created by every file copied from the vehicle.
+*:Zone.Identifier
