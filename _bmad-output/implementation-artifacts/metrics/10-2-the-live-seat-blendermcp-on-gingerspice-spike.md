@@ -11,3 +11,21 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-fable-5 | 121 | 242 | 765,604 | 11,365,625 | 77,163 | 12,208,634 | $24.80 | `bae20bdf-ee48-4c97-b7f9-83b90b612736.jsonl` | 2026-08-30 11:11 UTC · rates 2026-08-01 | 13 | — |
+| dev | claude | claude-opus-5 | 473 | 946 | 827,289 | 110,744,833 | 438,239 | 112,011,307 | $71.50 | `27a6ff6c-3c78-4639-8ff2-bac96751b283.jsonl` | 2026-08-31 09:58 UTC · rates 2026-08-31 | 293 | — |
+
+> **ATTRIBUTION NOTE (2026-08-31) — the `dev` row above is a CEILING, not 10.2's cost.** The window
+> is one session and it carried four separate pieces of work, three of which shipped as their own
+> PRs and have nothing to do with this story:
+>
+> - **PR #52** — forge-process 1.2.0 → 1.3.2: two FILE pulls, three TEMPLATE hand-merges, and the
+>   action-item migration to GitHub issues (60 items archived, 12 re-verified, 9 filed).
+> - **PR #54** — the Blender venue move to 5.2.1 and the version stamp in the range-check line.
+> - **PR #55** — the `gpt-5.6-terra` re-price across 25 rows in 12 ledgers.
+> - **This story**, whose own share is the vehicle recipe, the session capture, the receiving-end
+>   verification, the render script and the decision record.
+>
+> No `--mark` was taken at any of those boundaries, so the split cannot be recovered from the
+> cursor. **Read the $71.50 as an upper bound on 10.2 and do not compare it against a single-story
+> row from another epic.** The lesson is the one 10.1 already recorded and this session repeated:
+> take the phase row when the phase ends, not when the next one does — and `--mark` a boundary the
+> moment the work turns to something else, even when the turn feels temporary.

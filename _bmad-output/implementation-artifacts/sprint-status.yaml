@@ -43,11 +43,19 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-30  # 10.2 DEV STARTED -> in-progress (orchestrator-side, NOT delegated: the story
-                          # names itself a poor Codex fit — interactive, Wolf-gated). Branch verified
+last_updated: 2026-08-31  # 10.2 DEV DONE -> review. The handoff proved BIT-EXACT: the session's
+                          # emitted generator reproduces all four GLBs byte-identically on the
+                          # devpod, from a different machine, with no MCP and no manual step.
+                          # AC5 ruled by Wolf: MCP JOINS as the authoring seat, the committed
+                          # generator is the deliverable. Three items named as owed, not built:
+                          # the handover runbook (deferred by Wolf, "not urgent now"), the
+                          # metres-per-voxel project constant (UNSET, blocks asset #2), and
+                          # hardening spike_pine_render.py. 10.3 is the named next story and its
+                          # blocker text is already right: no asset is authored against an
+                          # undefined target.
+                          # PRIOR (dev start, 2026-08-30): orchestrator-side, NOT delegated — the story
+                          # names itself a poor Codex fit, interactive and Wolf-gated. Branch verified
                           # stacked cleanly: PR #41 (10.1) merged, origin/main is ancestor of HEAD.
-                          # Vehicle recipe written into the story record; Tasks 1-2 are Wolf-side on
-                          # gingerspice and block Task 3 until captured files land in this tree.
                           # PRIOR: 10.1 DONE. AC15 CLOSED BY WOLF on the RE-RENDERED pair: "geometrically
                           # it's correct and overall looks the same" -- the bench PREDICTS THE BUILD, which
                           # is the story's real bar and the only AC no agent could close. The two differences
@@ -1281,7 +1289,7 @@ development_status:
   # range-check line exactly -- any future drift is real change, not sampling noise); an
   # AC2-vs-Task-3 contradiction on which artifacts land in 10-2-signoff/; and a deferral aimed
   # at 10.4 for bench-hardening work 10.4's text never contains.
-  10-2-the-live-seat-blendermcp-on-gingerspice-spike: in-progress
+  10-2-the-live-seat-blendermcp-on-gingerspice-spike: review
   10-3-the-rules-of-the-look: backlog
   10-4-the-trees-look-right-the-pilot: backlog
   10-5-dwarves-worth-looking-at: backlog
