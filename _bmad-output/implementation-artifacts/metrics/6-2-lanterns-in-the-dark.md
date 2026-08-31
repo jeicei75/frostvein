@@ -40,3 +40,21 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 > three `scripts/gate.sh` runs are all inside this one delta. Do not compare it against a review-only
 > row from an earlier epic. The four review subagents are 21,415,763 tokens — **32.0% of the
 > session** — which is the fan-out that ledger rows before 2026-08-08 silently omitted.
+
+**The `gpt-5.6-terra` rows above are UNDER-stated — read them as gpt-5-rate equivalents
+(rates 2026-08-01).** Terra had no entry in `PRICES` until 2026-08-31, so it fell through to the
+`gpt-5` row ($1.25 in / $1.25 cache-write / $0.125 cache-read / $10 out) instead of its own
+($2 / $2.50 / $0.20 / $12). forge-process 1.3.2 added the row; recomputed from the same token
+counts at the correct rates:
+
+| phase | recorded | as recorded | corrected |
+|---|---|---|---|
+| dev | 2026-08-18 14:19 UTC | $3.97 | **$6.16** |
+| dev | 2026-08-18 14:20 UTC | $4.25 | **$6.58** |
+| **terra subtotal** | | **$8.22** | **$12.75** (+$4.53, 1.55x) |
+
+Not rewritten in place, matching this repo's `PRICES` precedent (`2-1-the-world-runs-on-its-
+own-clock.md`): `--rollup` reads the `est_usd` already written, so a silent edit would make the
+rollup disagree with itself. Claude rows on this story are unaffected. **No literal dollars were
+spent on any of these rows** — Codex runs on a subscription, and `est_usd` weights tokens purely
+as a cross-tool benchmark; `quota_pp` is the axis that binds.

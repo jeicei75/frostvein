@@ -24,3 +24,26 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | review-patch | claude | claude-fable-5, claude-opus-5 | 95 | 190 | 679,014 | 28,283,492 | 123,098 | 29,085,794 | $39.75 | `1ebe48f2-c70b-43fb-b9aa-9a757b0bf99e.jsonl` | 2026-08-16 07:06 UTC · rates 2026-08-01 | 35 | — |
 | review-patch | claude | claude-fable-5, claude-opus-5 | 541 | 1,080 | 1,988,748 | 130,336,628 | 606,634 | 132,933,090 | $126.92 | `5248232a-b6d8-482e-9bae-1b42ce4b3a9a.jsonl` | 2026-08-16 07:41 UTC · rates 2026-08-01 | 136 | — |
 | review-patch | claude | claude-fable-5, claude-opus-5 | 68 | 136 | 845,938 | 25,965,907 | 106,125 | 26,918,106 | $41.85 | `5248232a-b6d8-482e-9bae-1b42ce4b3a9a.jsonl` | 2026-08-16 10:24 UTC · rates 2026-08-01 | 163 | — |
+
+**The `gpt-5.6-terra` rows above are UNDER-stated — read them as gpt-5-rate equivalents
+(rates 2026-08-01).** Terra had no entry in `PRICES` until 2026-08-31, so it fell through to the
+`gpt-5` row ($1.25 in / $1.25 cache-write / $0.125 cache-read / $10 out) instead of its own
+($2 / $2.50 / $0.20 / $12). forge-process 1.3.2 added the row; recomputed from the same token
+counts at the correct rates:
+
+| phase | recorded | as recorded | corrected |
+|---|---|---|---|
+| dev | 2026-08-15 11:30 UTC | $2.58 | **$3.96** |
+| dev | 2026-08-15 11:30 UTC | $0.06 | **$0.09** |
+| dev | 2026-08-15 11:30 UTC | $2.00 | **$3.05** |
+| review-patch | 2026-08-15 16:41 UTC | $2.34 | **$3.62** |
+| review-patch | 2026-08-15 16:41 UTC | $1.29 | **$1.97** |
+| review-patch | 2026-08-15 19:38 UTC | $3.01 | **$4.64** |
+| review-patch | 2026-08-15 19:38 UTC | $4.15 | **$6.40** |
+| **terra subtotal** | | **$15.43** | **$23.74** (+$8.31, 1.54x) |
+
+Not rewritten in place, matching this repo's `PRICES` precedent (`2-1-the-world-runs-on-its-
+own-clock.md`): `--rollup` reads the `est_usd` already written, so a silent edit would make the
+rollup disagree with itself. Claude rows on this story are unaffected. **No literal dollars were
+spent on any of these rows** — Codex runs on a subscription, and `est_usd` weights tokens purely
+as a cross-tool benchmark; `quota_pp` is the axis that binds.
