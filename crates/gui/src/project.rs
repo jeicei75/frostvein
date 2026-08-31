@@ -567,8 +567,10 @@ fn spawn_subdivided_terrain(
         }
     }
 
-    let mut stats = SubdividedTerrainStats::default();
-    stats.entities = foliage_entities;
+    let mut stats = SubdividedTerrainStats {
+        entities: foliage_entities,
+        ..Default::default()
+    };
     for (chunk, chunk_mesh) in chunks {
         let mut material_meshes = BTreeMap::<(usize, usize), MeshBuilder>::new();
         for (key, mask) in chunk_mesh.masks {
