@@ -23,3 +23,11 @@ old = 'CONTROL_QUADS = 19_264'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'CONTROL_QUADS = 19_263'))
 PY
+
+mutation "subdiv flag reaches chunk mesh instead of parsing inertly" gui ingest::tests::subdiv_flag_reaches_the_rendered_terrain_and_one_keeps_the_shipped_scene <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        if subdiv > 1 {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if false {\n'))
+PY

@@ -58,9 +58,10 @@ use crate::{
     pick::{PickedTile, update_pick},
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
-        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery, TerrainTile,
-        WorldProjected, blend_entities, flicker_lights, has_terrain_above, reconcile,
-        setup_projection_assets, sync_drag_preview, sync_hover_highlight,
+        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery,
+        TerrainSubdivision, TerrainTile, WorldProjected, blend_entities, flicker_lights,
+        has_terrain_above, reconcile, setup_projection_assets, sync_drag_preview,
+        sync_hover_highlight,
     },
     slice::SliceLevel,
 };
@@ -198,6 +199,9 @@ fn configure_client_app(
         .insert_resource(ClearColor(night_lighting().sky));
     if args.headless {
         app.insert_resource(HeadlessRequested);
+    }
+    if let Some(subdiv) = args.subdiv {
+        app.insert_resource(TerrainSubdivision(subdiv));
     }
     insert_capture_resources(app, &args);
     client_systems(app);
@@ -362,6 +366,7 @@ struct Args {
     at_tick: Option<u64>,
     drag: Option<ScriptedDragSpec>,
     headless: bool,
+    subdiv: Option<u32>,
 }
 
 /// Present only under `--headless`: the offscreen texture the camera draws into, and which the
@@ -440,6 +445,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut at_tick = None;
     let mut drag = None;
     let mut headless = false;
+    let mut subdiv = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -457,6 +463,18 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             expect_work = true;
         } else if arg == "--headless" {
             headless = true;
+        } else if arg == "--subdiv" {
+            let value = args
+                .next()
+                .context("--subdiv requires a positive integer")?;
+            let parsed: u32 = value
+                .to_string_lossy()
+                .parse()
+                .context("invalid --subdiv")?;
+            if parsed == 0 {
+                bail!("--subdiv must be positive");
+            }
+            subdiv = Some(parsed);
         } else if arg == "--z" {
             let value = args.next().context("--z requires a level")?;
             slice_level = Some(
@@ -534,6 +552,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         at_tick,
         drag,
         headless,
+        subdiv,
     })
 }
 
@@ -975,11 +994,16 @@ pub fn reconcile_projection(
     terrain: TerrainQuery,
     chips: DigChipQuery,
     assets: Option<Res<ProjectionAssets>>,
+    mut meshes: Option<ResMut<Assets<bevy::prelude::Mesh>>>,
+    subdiv: Option<Res<TerrainSubdivision>>,
 ) {
-    let rebuild = std::mem::take(&mut work.snapshot);
+    let mut rebuild = std::mem::take(&mut work.snapshot);
     let changes = std::mem::take(&mut work.dirty_tiles)
         .into_iter()
         .collect::<Vec<_>>();
+    // Chunk meshes are whole surfaces, not mutable per-cell entities. Rebuild them on a terrain
+    // delta so a newly-open neighbour cannot leave an old face welded into a chunk.
+    rebuild |= subdiv.as_ref().is_some_and(|subdivision| subdivision.0 > 1) && !changes.is_empty();
     reconcile(
         &mut commands,
         &mirror.0,
@@ -992,6 +1016,8 @@ pub fn reconcile_projection(
         &terrain,
         &chips,
         assets.as_deref(),
+        meshes.as_deref_mut(),
+        subdiv.as_deref(),
     );
 }
 
@@ -1086,7 +1112,7 @@ mod tests {
     };
     use crate::blend::TickClock;
     use crate::camera::CameraRig;
-    use crate::project::WorldProjected;
+    use crate::project::{SnowCap, TerrainChunk, TerrainSubdivision, TerrainTile, WorldProjected};
     use bevy::ecs::system::RunSystemOnce;
 
     #[test]
@@ -1339,6 +1365,76 @@ mod tests {
         assert!(
             spawned.iter().all(|text| !text.contains("N ?")),
             "the compass must resolve a real camera on the production path, not report unknown"
+        );
+    }
+
+    #[test]
+    fn subdiv_flag_reaches_the_rendered_terrain_and_one_keeps_the_shipped_scene() {
+        let (mut default, _, _) = configured_app(&[]);
+        let (mut one, _, _) = configured_app(&["--subdiv", "1"]);
+        let (mut two, _, _) = configured_app(&["--subdiv", "2"]);
+        default.update();
+        one.update();
+        two.update();
+
+        let terrain_tiles = |app: &mut App| {
+            let mut tiles = app
+                .world_mut()
+                .query::<(&TerrainTile, &bevy::prelude::Transform)>()
+                .iter(app.world())
+                .map(|(tile, transform)| (tile.0, *transform))
+                .collect::<Vec<_>>();
+            tiles.sort_by_key(|(tile, _)| *tile);
+            tiles
+        };
+        let snow_caps = |app: &mut App| {
+            let mut caps = app
+                .world_mut()
+                .query::<(&SnowCap, &bevy::prelude::Transform)>()
+                .iter(app.world())
+                .map(|(cap, transform)| (cap.0, *transform))
+                .collect::<Vec<_>>();
+            caps.sort_by_key(|(cap, _)| *cap);
+            caps
+        };
+        assert_eq!(
+            terrain_tiles(&mut one),
+            terrain_tiles(&mut default),
+            "--subdiv 1 must retain the hand-written per-cell scene byte-for-byte"
+        );
+        assert_eq!(
+            snow_caps(&mut one),
+            snow_caps(&mut default),
+            "--subdiv 1 must retain the snow-cap scene byte-for-byte"
+        );
+        assert!(
+            default
+                .world()
+                .get_resource::<TerrainSubdivision>()
+                .is_none(),
+            "no flag must not even install the opt-in terrain resource"
+        );
+        assert_eq!(
+            one.world().resource::<TerrainSubdivision>().0,
+            1,
+            "the parsed control must reach the projection resource"
+        );
+        assert_eq!(
+            two.world().resource::<TerrainSubdivision>().0,
+            2,
+            "the parsed fine setting must reach the projection resource"
+        );
+        assert!(
+            terrain_tiles(&mut two).is_empty(),
+            "--subdiv 2 must replace the drawn cube entities, not merely accept an inert flag"
+        );
+        assert!(
+            two.world_mut()
+                .query::<&TerrainChunk>()
+                .iter(two.world())
+                .count()
+                > 0,
+            "--subdiv 2 must produce chunk mesh render entities"
         );
     }
 

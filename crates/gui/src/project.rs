@@ -1,9 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Instant,
+};
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
     MeshMaterial3d, Or, PointLight, Query, Res, ResMut, Resource, StandardMaterial, Transform,
     Vec3, With, Without,
+};
+use bevy::{
+    asset::RenderAssetUsages,
+    mesh::{Indices, PrimitiveTopology},
 };
 use client_core::Mirror;
 use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
@@ -18,7 +25,7 @@ use crate::{
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
     pick::{PickedCell, PickedTile},
     slice::SliceLevel,
-    transform::world_to_render,
+    transform::{world_point_to_render, world_to_render, world_vector_to_render},
 };
 
 const NEIGHBOURS: [[i32; 3]; 6] = [
@@ -41,6 +48,16 @@ pub struct ClientLocal;
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerrainTile(pub [i32; 3]);
 
+/// A material/rim partition of one 16-cell terrain chunk, present only for `--subdiv N` where
+/// N is greater than one. The default and `--subdiv 1` retain `TerrainTile` exactly.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerrainChunk(pub [i32; 3]);
+
+/// An opt-in visual terrain subdivision. The client mirror remains authoritative; this only
+/// changes how its terrain is drawn.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerrainSubdivision(pub u32);
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SnowCap(pub [i32; 3]);
 
@@ -52,7 +69,7 @@ pub type TerrainQuery<'w, 's> = Query<
         Option<&'static TerrainTile>,
         Option<&'static SnowCap>,
     ),
-    Or<(With<TerrainTile>, With<SnowCap>)>,
+    Or<(With<TerrainTile>, With<TerrainChunk>, With<SnowCap>)>,
 >;
 
 pub type DynamicProjectionQuery<'w, 's> = Query<
@@ -105,6 +122,8 @@ pub struct DragPreviewCells(Option<Vec<[i32; 3]>>);
 /// Whether that reads as separate tiles or as anti-aliasing noise is a human call, and it is on
 /// the list for Wolf's live viewing.
 const MARK_FOOTPRINT_SCALE: f32 = 0.94;
+const TERRAIN_CHUNK_EDGE: i32 = 16;
+const DETAIL_SEED: u32 = 0xF005_7E1A;
 
 /// The light kind delivered for a projected emitter. Reconciliation only changes this when the
 /// wire changes kind; presentation owns its animated intensity afterwards.
@@ -441,6 +460,322 @@ pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
     })
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct SubdividedTerrainStats {
+    entities: usize,
+    chunks: usize,
+    triangles: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct MeshKey {
+    chunk: [i32; 3],
+    slot: usize,
+    rim: usize,
+    axis: usize,
+    sign: i32,
+    plane: i32,
+}
+
+#[derive(Default)]
+struct ChunkMesh {
+    masks: BTreeMap<MeshKey, BTreeSet<(i32, i32)>>,
+}
+
+/// Builds the opt-in fine terrain from the client mirror. The coarse cells are still the only
+/// authority: every fine face begins with the same visible-cell set the shipped cube path uses.
+///
+/// NOTE: the small deterministic top pits are a measurement stand-in for 10.4's authored terrain
+/// look, not a visual decision. They make `--subdiv N` measure non-flat fine surfaces rather than
+/// merely tessellating an otherwise identical plane.
+fn spawn_subdivided_terrain(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    assets: &ProjectionAssets,
+    mirror: &Mirror,
+    positions: &[[i32; 3]],
+    subdiv: u32,
+) -> SubdividedTerrainStats {
+    let subdiv = i32::try_from(subdiv).expect("--subdiv fits signed mesh coordinates");
+    let visible = positions.iter().copied().collect::<BTreeSet<_>>();
+    let mut chunks = BTreeMap::<[i32; 3], ChunkMesh>::new();
+    for &position in positions {
+        if is_tree_foliage(mirror, position) {
+            // Foliage is intentionally non-cubic presentation geometry. Keep its shipped path
+            // rather than pretending a greedy cuboid preserves the sparse crown silhouette.
+            let entity = commands
+                .spawn((
+                    WorldProjected(terrain_id(position, mirror.dims())),
+                    TerrainTile(position),
+                    terrain_transform(mirror, position),
+                ))
+                .id();
+            commands.entity(entity).insert((
+                Mesh3d(assets.cube.clone()),
+                MeshMaterial3d(assets.terrain_material(mirror, position)),
+            ));
+            continue;
+        }
+        let chunk = [
+            position[0] / TERRAIN_CHUNK_EDGE,
+            position[1] / TERRAIN_CHUNK_EDGE,
+            position[2] / TERRAIN_CHUNK_EDGE,
+        ];
+        let slot = terrain_slot_at(mirror, position) as usize;
+        let rim = rim_level(position, mirror.dims());
+        for delta in NEIGHBOURS {
+            let axis = delta
+                .iter()
+                .position(|coordinate| *coordinate != 0)
+                .expect("each terrain neighbour changes one axis");
+            let neighbour = [
+                position[0] + delta[0],
+                position[1] + delta[1],
+                position[2] + delta[2],
+            ];
+            if visible.contains(&neighbour) {
+                continue;
+            }
+            let sign = delta[axis];
+            let plane = (position[axis] + i32::from(sign > 0)) * subdiv;
+            let mesh = chunks.entry(chunk).or_default();
+            for du in 0..subdiv {
+                for dv in 0..subdiv {
+                    let u = position[(axis + 1) % 3] * subdiv + du;
+                    let v = position[(axis + 2) % 3] * subdiv + dv;
+                    let top_depth = if axis == 2 && sign > 0 {
+                        detail_depth(plane, u, v, subdiv)
+                    } else {
+                        0
+                    };
+                    let key = MeshKey {
+                        chunk,
+                        slot,
+                        rim,
+                        axis,
+                        sign,
+                        plane: plane - top_depth,
+                    };
+                    mesh.masks.entry(key).or_default().insert((u, v));
+                    if axis == 2 && sign > 0 {
+                        add_detail_connectors(mesh, key, position, du, dv, subdiv);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut stats = SubdividedTerrainStats::default();
+    for (chunk, chunk_mesh) in chunks {
+        let mut material_meshes = BTreeMap::<(usize, usize), MeshBuilder>::new();
+        for (key, mask) in chunk_mesh.masks {
+            let builder = material_meshes.entry((key.slot, key.rim)).or_default();
+            greedy_mask_into_mesh(builder, key, &mask, subdiv);
+        }
+        for ((slot, rim), builder) in material_meshes {
+            if builder.indices.is_empty() {
+                continue;
+            }
+            stats.triangles += builder.indices.len() / 3;
+            stats.entities += 1;
+            let mesh = meshes.add(builder.finish());
+            commands.spawn((
+                TerrainChunk(chunk),
+                Mesh3d(mesh),
+                MeshMaterial3d(assets.slot(TERRAIN_SLOTS[slot], rim)),
+            ));
+        }
+        stats.chunks += 1;
+    }
+    for &position in positions {
+        if has_snow_cap(mirror, position) {
+            spawn_snow_cap(commands, assets, mirror, position);
+            stats.entities += 1;
+        }
+    }
+    stats
+}
+
+fn terrain_slot_at(mirror: &Mirror, position: [i32; 3]) -> TerrainSlot {
+    if has_snow_laden_crown(mirror, position) {
+        TerrainSlot::FoliageCrown
+    } else {
+        TerrainSlot::of(terrain_material(mirror, position))
+    }
+}
+
+/// Hash-compatible with the measurement instrument's small value-noise rule.
+fn detail_depth(plane: i32, u: i32, v: i32, subdiv: i32) -> i32 {
+    let mut value = DETAIL_SEED
+        ^ (plane as u32).wrapping_mul(0x9E37_79B1)
+        ^ (u as u32).wrapping_mul(0x85EB_CA77)
+        ^ (v as u32).wrapping_mul(0xC2B2_AE3D);
+    value ^= value >> 16;
+    value = value.wrapping_mul(0x7FEB_352D);
+    value ^= value >> 15;
+    let offset = (value % 5) as i32 - 2;
+    offset.abs().min(subdiv - 1)
+}
+
+fn add_detail_connectors(
+    mesh: &mut ChunkMesh,
+    material_key: MeshKey,
+    position: [i32; 3],
+    du: i32,
+    dv: i32,
+    subdiv: i32,
+) {
+    let plane = (position[2] + 1) * subdiv;
+    let depth = detail_depth(
+        plane,
+        position[0] * subdiv + du,
+        position[1] * subdiv + dv,
+        subdiv,
+    );
+    for (step_u, step_v, axis) in [(1, 0, 0), (0, 1, 1)] {
+        if du + step_u >= subdiv || dv + step_v >= subdiv {
+            continue;
+        }
+        let other = detail_depth(
+            plane,
+            position[0] * subdiv + du + step_u,
+            position[1] * subdiv + dv + step_v,
+            subdiv,
+        );
+        if depth == other {
+            continue;
+        }
+        let lower = plane - depth.max(other);
+        let higher = plane - depth.min(other);
+        let sign = if depth < other { 1 } else { -1 };
+        let face_plane = if axis == 0 {
+            position[0] * subdiv + du + 1
+        } else {
+            position[1] * subdiv + dv + 1
+        };
+        let (u, v) = if axis == 0 {
+            (position[1] * subdiv + dv, lower)
+        } else {
+            (lower, position[0] * subdiv + du)
+        };
+        for offset in 0..higher - lower {
+            let coordinate = if axis == 0 {
+                (u, v + offset)
+            } else {
+                (u + offset, v)
+            };
+            mesh.masks
+                .entry(MeshKey {
+                    chunk: material_key.chunk,
+                    slot: material_key.slot,
+                    rim: material_key.rim,
+                    axis,
+                    sign,
+                    plane: face_plane,
+                })
+                .or_default()
+                .insert(coordinate);
+        }
+    }
+}
+
+#[derive(Default)]
+struct MeshBuilder {
+    positions: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    indices: Vec<u32>,
+}
+
+impl MeshBuilder {
+    fn finish(self) -> Mesh {
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals)
+        .with_inserted_indices(Indices::U32(self.indices))
+    }
+}
+
+fn greedy_mask_into_mesh(
+    builder: &mut MeshBuilder,
+    key: MeshKey,
+    mask: &BTreeSet<(i32, i32)>,
+    subdiv: i32,
+) {
+    let mut used = BTreeSet::new();
+    for &(u, v) in mask {
+        if used.contains(&(u, v)) {
+            continue;
+        }
+        let mut width = 1;
+        while mask.contains(&(u + width, v)) && !used.contains(&(u + width, v)) {
+            width += 1;
+        }
+        let mut height = 1;
+        while (0..width).all(|offset| {
+            mask.contains(&(u + offset, v + height)) && !used.contains(&(u + offset, v + height))
+        }) {
+            height += 1;
+        }
+        for du in 0..width {
+            for dv in 0..height {
+                used.insert((u + du, v + dv));
+            }
+        }
+        append_quad(builder, key, u, v, width, height, subdiv);
+    }
+}
+
+fn append_quad(
+    builder: &mut MeshBuilder,
+    key: MeshKey,
+    u: i32,
+    v: i32,
+    width: i32,
+    height: i32,
+    subdiv: i32,
+) {
+    let point = |u, v| {
+        let mut coordinate = [0; 3];
+        coordinate[key.axis] = key.plane;
+        coordinate[(key.axis + 1) % 3] = u;
+        coordinate[(key.axis + 2) % 3] = v;
+        world_point_to_render(Vec3::new(
+            coordinate[0] as f32 / subdiv as f32 - 0.5,
+            coordinate[1] as f32 / subdiv as f32 - 0.5,
+            coordinate[2] as f32 / subdiv as f32 - 0.5,
+        ))
+    };
+    let corners = [
+        point(u, v),
+        point(u + width, v),
+        point(u + width, v + height),
+        point(u, v + height),
+    ];
+    let normal_world = match key.axis {
+        0 => Vec3::X,
+        1 => Vec3::Y,
+        2 => Vec3::Z,
+        _ => unreachable!("mesh axes are limited to x, y, z"),
+    } * key.sign as f32;
+    let normal = world_vector_to_render(normal_world).to_array();
+    let base = u32::try_from(builder.positions.len()).expect("terrain mesh index fits u32");
+    let order = if key.sign > 0 {
+        [0, 3, 2, 1]
+    } else {
+        [0, 1, 2, 3]
+    };
+    for index in order {
+        builder.positions.push(corners[index].to_array());
+        builder.normals.push(normal);
+    }
+    builder
+        .indices
+        .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+}
+
 /// Reconciles the small dynamic set by simulation `Id`; terrain is rebuilt after a snapshot.
 // The three query parameters are kept explicit: they are distinct ECS partitions, and bundling
 // them solely to satisfy this lint would obscure the `ClientLocal` / `WorldProjected` boundary.
@@ -457,6 +792,8 @@ pub fn reconcile(
     terrain: &TerrainQuery,
     chips: &DigChipQuery,
     assets: Option<&ProjectionAssets>,
+    meshes: Option<&mut Assets<Mesh>>,
+    subdivision: Option<&TerrainSubdivision>,
 ) {
     if rebuild_terrain {
         for (entity, _) in chips.iter() {
@@ -470,26 +807,45 @@ pub fn reconcile(
         // 9.4; it was 53,365 before it, 45,261 between its two halves. This number tracks world
         // CONTENT -- read it as "did the rim or a slice silently drop tiles?", never as a fixed
         // constant. It moved twice in one story, which is the whole argument.
-        println!(
-            "projected {} terrain cubes at z {}",
-            positions.len(),
-            slice.level()
-        );
-        for position in positions {
-            let entity = commands
-                .spawn((
-                    WorldProjected(terrain_id(position, mirror.dims())),
-                    TerrainTile(position),
-                    terrain_transform(mirror, position),
-                ))
-                .id();
-            if let Some(assets) = assets {
-                commands.entity(entity).insert((
-                    Mesh3d(assets.cube.clone()),
-                    MeshMaterial3d(assets.terrain_material(mirror, position)),
-                ));
-                if has_snow_cap(mirror, position) {
-                    spawn_snow_cap(commands, assets, mirror, position);
+        let started = Instant::now();
+        let subdiv = subdivision.map_or(1, |subdivision| subdivision.0);
+        if subdiv > 1 {
+            let Some((assets, meshes)) = assets.zip(meshes) else {
+                return;
+            };
+            let stats =
+                spawn_subdivided_terrain(commands, meshes, assets, mirror, &positions, subdiv);
+            println!(
+                "subdiv {subdiv}: entities={} chunks={} triangles={} mesh_build_ms={}",
+                stats.entities,
+                stats.chunks,
+                stats.triangles,
+                started.elapsed().as_millis()
+            );
+        } else {
+            // The control path is deliberately kept verbatim: no flag and `--subdiv 1` retain
+            // the shipped one-entity-per-cell scene, including its snow caps and pick markers.
+            println!(
+                "projected {} terrain cubes at z {}",
+                positions.len(),
+                slice.level()
+            );
+            for position in positions {
+                let entity = commands
+                    .spawn((
+                        WorldProjected(terrain_id(position, mirror.dims())),
+                        TerrainTile(position),
+                        terrain_transform(mirror, position),
+                    ))
+                    .id();
+                if let Some(assets) = assets {
+                    commands.entity(entity).insert((
+                        Mesh3d(assets.cube.clone()),
+                        MeshMaterial3d(assets.terrain_material(mirror, position)),
+                    ));
+                    if has_snow_cap(mirror, position) {
+                        spawn_snow_cap(commands, assets, mirror, position);
+                    }
                 }
             }
         }
