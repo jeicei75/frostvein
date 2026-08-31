@@ -830,7 +830,7 @@ pub fn reconcile(
                 positions.len(),
                 slice.level()
             );
-            for position in positions {
+            for position in positions.iter().copied() {
                 let entity = commands
                     .spawn((
                         WorldProjected(terrain_id(position, mirror.dims())),
@@ -847,6 +847,18 @@ pub fn reconcile(
                         spawn_snow_cap(commands, assets, mirror, position);
                     }
                 }
+            }
+            if subdivision.is_some() {
+                let snow_caps = positions
+                    .iter()
+                    .filter(|position| has_snow_cap(mirror, **position))
+                    .count();
+                println!(
+                    "subdiv 1: entities={} chunks=0 triangles={} mesh_build_ms={}",
+                    positions.len() + snow_caps,
+                    (positions.len() + snow_caps) * 12,
+                    started.elapsed().as_millis()
+                );
             }
         }
     } else {
