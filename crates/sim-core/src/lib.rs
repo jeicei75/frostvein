@@ -2792,7 +2792,11 @@ mod tests {
             );
             // The simulated dwarf's existing aggregate node budget stops this diagonal query at
             // k=2 and k=4; that is the cost finding, not a reason to weaken the benchmark grid.
-            assert_eq!(path.is_some(), expected_found, "sim_k={k} node-budget result drifted");
+            assert_eq!(
+                path.is_some(),
+                expected_found,
+                "sim_k={k} node-budget result drifted"
+            );
         }
     }
 
