@@ -166,6 +166,34 @@ def assert_control(summary):
         )
 
 
+def sim_axis_cost(raw_snapshot, sim_k):
+    """Scale the actual tile JSON payload for an unbuilt finer simulation grid.
+
+    This deliberately repeats every encoded real tile value, including its exact punctuation,
+    instead of multiplying an average byte count. Snapshot framing and dynamic entities remain
+    one copy; only the terrain tile array changes.
+    """
+    if sim_k not in (1, 2, 4):
+        raise ValueError("sim_k must be one of 1, 2, or 4")
+    marker = '"tiles":'
+    start = raw_snapshot.index(marker) + len(marker)
+    _, end = json.JSONDecoder().raw_decode(raw_snapshot[start:])
+    encoded_tiles = raw_snapshot[start : start + end]
+    tiles = json.loads(encoded_tiles)
+    cells = len(tiles) * sim_k**3
+    # `encoded_tiles` is `[` + values separated by commas + `]`. Values are copied verbatim;
+    # commas are deterministic one-byte separators in the daemon's compact wire JSON.
+    value_bytes = len(encoded_tiles) - 2 - max(0, len(tiles) - 1)
+    tile_bytes = len(marker) + 2 + value_bytes * sim_k**3 + max(0, cells - 1)
+    original_tile_bytes = len(marker) + len(encoded_tiles)
+    return {
+        "sim_k": sim_k,
+        "cells": cells,
+        "tile_bytes": tile_bytes,
+        "snapshot_bytes": len(raw_snapshot) - original_tile_bytes + tile_bytes,
+    }
+
+
 def _chunks(snapshot):
     dx, dy, _ = _dims(snapshot)
     return ((dx + CHUNK_EDGE_CELLS - 1) // CHUNK_EDGE_CELLS) * (
@@ -205,7 +233,7 @@ def _export_snapshot():
         cwd=repo,
         check=True,
     )
-    return temporary, _load_snapshot(path)
+    return temporary, path, _load_snapshot(path)
 
 
 def _print_row(row):
@@ -248,15 +276,21 @@ def main():
     parser.add_argument("--k", type=int, default=1, help="visual subdivision (default: 1)")
     parser.add_argument("--no-detail", action="store_true", help="flat-surface control")
     parser.add_argument("--sweep", action="store_true", help="double k until the guarded wall")
+    parser.add_argument("--sim-costs", action="store_true", help="print derived sim-grid wire costs")
     parser.add_argument("--snapshot", type=Path, help="existing exported snapshot (otherwise export one)")
     args = parser.parse_args()
     temporary = None
     try:
         if args.snapshot:
-            snapshot = _load_snapshot(args.snapshot)
+            snapshot_path = args.snapshot
+            snapshot = _load_snapshot(snapshot_path)
         else:
-            temporary, snapshot = _export_snapshot()
-        if args.sweep:
+            temporary, snapshot_path, snapshot = _export_snapshot()
+        if args.sim_costs:
+            raw = snapshot_path.read_text(encoding="utf-8")
+            for sim_k in (1, 2, 4):
+                print("sim " + " ".join(f"{key}={value}" for key, value in sim_axis_cost(raw, sim_k).items()))
+        elif args.sweep:
             _sweep(snapshot)
         else:
             row = measure(snapshot, args.k, detail=not args.no_detail)

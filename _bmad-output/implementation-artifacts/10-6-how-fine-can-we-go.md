@@ -120,13 +120,13 @@ gear needs, not the ceiling.
   - [ ] Print entities, chunks, triangles and mesh build time so the devpod can read everything
         except fps.
 
-- [ ] **Task 4 — Cost the sim axis** (AC: 6)
-  - [ ] Snapshot bytes are directly measurable: the shipped world is 7,180,286 bytes. Scale by
+- [x] **Task 4 — Cost the sim axis** (AC: 6)
+  - [x] Snapshot bytes are directly measurable: the shipped world is 7,180,286 bytes. Scale by
         the real tile encoding, do not estimate it.
-  - [ ] A* time at finer grids: synthesise a subdivided grid in a bench test and time the
+  - [x] A* time at finer grids: synthesise a subdivided grid in a bench test and time the
         existing pathfinder on it. If a k proves untimeable in a sane budget, that IS the result —
         record it rather than extrapolating.
-  - [ ] Label every figure measured or derived. Do not blend the two in one table.
+  - [x] Label every figure measured or derived. Do not blend the two in one table.
 
 - [ ] **Task 5 — Tests, sabotage, verification** (AC: 1, 9)
   - [ ] Tests in `scripts/tests/` (auto-discovered by [scripts/gate.sh:117]) plus any `gui`

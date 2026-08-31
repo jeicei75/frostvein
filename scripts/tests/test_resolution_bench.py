@@ -51,5 +51,14 @@ class ResolutionGeometryTests(unittest.TestCase):
             resolution_bench.assert_control({"exposed_faces": 61141, "greedy_quads": 19264})
 
 
+class ResolutionSimCostTests(unittest.TestCase):
+    def test_wire_snapshot_scaling_repeats_the_real_tile_encoding_not_an_average(self):
+        raw = '{"type":"snapshot","tiles":["empty",{"solid":"stone"}],"tick":0}'
+        self.assertEqual(
+            resolution_bench.sim_axis_cost(raw, 2),
+            {"sim_k": 2, "cells": 16, "tile_bytes": 217, "snapshot_bytes": 246},
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
