@@ -43,7 +43,8 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-31  # 10.2 DEV DONE -> review. The handoff proved BIT-EXACT: the session's
+last_updated: 2026-08-31  # 10.2 CODE REVIEWED -> done (see the story's block below).
+                          # PRIOR: 10.2 DEV DONE -> review. The handoff proved BIT-EXACT: the session's
                           # emitted generator reproduces all four GLBs byte-identically on the
                           # devpod, from a different machine, with no MCP and no manual step.
                           # AC5 ruled by Wolf: MCP JOINS as the authoring seat, the committed
@@ -1289,7 +1290,54 @@ development_status:
   # range-check line exactly -- any future drift is real change, not sampling noise); an
   # AC2-vs-Task-3 contradiction on which artifacts land in 10-2-signoff/; and a deferral aimed
   # at 10.4 for bench-hardening work 10.4's text never contains.
-  10-2-the-live-seat-blendermcp-on-gingerspice-spike: review
+  # CODE REVIEWED 2026-08-31 (fresh context, four layers, NO coverage holes) -> done. Baseline was
+  # the story's OWN commit range 311e169..HEAD; the frontmatter baseline_commit was stale by three
+  # merged PRs and would have dragged in ~1,342 lines of other branches' work. Both hunters'
+  # chartered crates/ territories were EMPTY (zero Rust files changed) and were reassigned.
+  # THE SPIKE'S CENTRAL CLAIM IS CONFIRMED: three layers independently regenerated all four
+  # variants to SHA-256 byte-identical matches against the committed exports -- stable on repeat,
+  # invariant under PYTHONHASHSEED and under a different cwd, no undocumented argument. Gate run
+  # green independently by two layers, and again after patching.
+  # ONE REAL CODE DEFECT, the project's signature shape: voxel_pine.py -- the declared artifact of
+  # record -- exited 0 on EVERY failure but its own range check. Bad --seed/--voxel values, an
+  # unwritable output dir, an output path that is a directory, and the devpod's OTHER Blender
+  # (/usr/bin/blender = 4.3.2) all printed a traceback and reported SUCCESS having written nothing.
+  # valley_bench.py documents that exact trap and spike_pine_render.py carries the guard; the
+  # generator was the one file without it, while its own asset contract clause 6 says "Exit 0 with
+  # no output is not a result". Plus --voxel 0 SELF-CERTIFIED: it collapsed the mesh to a point and
+  # every closure check passed vacuously because expected_volume scaled by the same zero -- the
+  # oracle was not independent of the input. Both fixed; seven failure paths re-verified at exit 1;
+  # the four exports re-verified byte-identical afterwards (both-sides closure).
+  # BIGGEST RECORD DEFECT: "Fidelity loss: zero, bit-exact" was FALSE AS STATED. The proven
+  # bit-exactness is generator->generator across machines (a determinism result), not the
+  # session->script fidelity AC5(b) asks about. tree.glb (the 08:59 hand export, 5,130 tris,
+  # 7.6 m, centre X -0.100) and export/SM_VoxelPine_Tree02.glb (5,894 tris, 8.0 m, centre X
+  # +0.000) carry THE SAME glTF mesh AND node name but are different assets -- 14.3% of pixels
+  # differ. NOT handoff loss: three deliberate corrections made THROUGH CLAUDE sit between them
+  # (off-centre canopy, double-sRGB dark texture, thick 5x5 trunks). The defect was pointing Wolf
+  # at revision N's screenshot beside revision N+1's render and calling the delta zero. There is
+  # no committed session-side image of the delivered revision.
+  # tree.glb was the one stale artifact actually committed and was marked stale NOWHERE, while
+  # ASSET_NOTES' "Repo state" listed three stale .blend files that exist only on the vehicle.
+  # Also corrected: a circular "no viewport edits" proof (the GLBs it reproduces were the
+  # generator's own output, so it proved determinism, not the absence of mouse edits -- now
+  # recorded as Wolf's assertion, which is sufficient); the falsified Blender-4.3.2 receiving-end
+  # premise (PR #54 moved the venue to 5.2.1 inside this same range); bit-exactness now named as
+  # bound to Blender 5.2.1 / exporter v5.2.40; a "MEASURED on Tree02" bench comment matching NO
+  # committed asset; an unreproducible 1.75 s figure; and empty File List / Completion Notes /
+  # 15 unchecked task boxes.
+  # THREE AC DEVIATIONS, all ruled by Wolf at review and RECORDED AS DEVIATIONS, not filed as met:
+  # AC2's transcript clause (the transcript is gone; the screenshots are the record), AC3's
+  # scripts/bench/ location (voxel_pine.py STAYS in 10-2-signoff/ -- spike output, deliberate
+  # split), and AC4 (CLOSED ON THE DOCUMENTED DIFFERENCE rather than an eye comparison, which AC4
+  # explicitly sanctions).
+  # THE THREE OWED ITEMS HAD NO DURABLE HOME -- action-item state lives on GitHub issues "and
+  # nowhere else" and none of the 10 existing issues is 10.2's. Now recorded in deferred-work.md.
+  # Wolf's ruling: the handover process/mechanism is real work but NOT this story's scope, so it is
+  # recorded and NOT built, and NO issues were opened -- that call is his. Six further findings
+  # deferred (the spike bench's floors, the AC2-conditional binaries, 3.7 MB of next-story dwarf
+  # assets, two pre-existing tracked Zone.Identifier files).
+  10-2-the-live-seat-blendermcp-on-gingerspice-spike: done
   10-3-the-rules-of-the-look: backlog
   10-4-the-trees-look-right-the-pilot: backlog
   10-5-dwarves-worth-looking-at: backlog

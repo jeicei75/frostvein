@@ -5,7 +5,7 @@ baseline_commit: d02f9595a9e137c4dac8873b593fdc8a9886c7cf
 
 # Story 10.2: The Live Seat — BlenderMCP on Gingerspice (SPIKE)
 
-Status: review
+Status: done
 
 ## Story
 
@@ -93,7 +93,7 @@ unverifiable from here and is story work by design.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — The vehicle recipe (agent writes it into this file's record; Wolf executes on
+- [x] **Task 0 — The vehicle recipe (agent writes it into this file's record; Wolf executes on
       gingerspice)** (AC: 2)
   - [x] Install Blender 4.x (any current stable; the devpod's 4.3.2 is the reference point — a
         wildly newer major on the vehicle is a known-difference to write down, not a blocker).
@@ -107,19 +107,19 @@ unverifiable from here and is story work by design.
         if the tool fails to spawn, use the full path to `uvx.exe` or `cmd /c uvx blender-mcp`.
   - [x] In Blender: N-panel → BlenderMCP → Start MCP Server (localhost:9876). Smoke-test with one
         scene-info request from Claude before doing anything creative.
-  - [ ] **Hygiene, both from upstream's own warning:** save the `.blend` before any
+  - [x] **Hygiene, both from upstream's own warning:** save the `.blend` before any
         `execute_blender_code` use, and leave the addon socket on localhost.
-- [ ] **Task 1 — The session (Wolf + Claude, on gingerspice)** (AC: 2)
-  - [ ] One real exploration: a tree or dwarf blockout — whichever Wolf reaches for. One is
+- [x] **Task 1 — The session (Wolf + Claude, on gingerspice)** (AC: 2)
+  - [x] One real exploration: a tree or dwarf blockout — whichever Wolf reaches for. One is
         enough; the spike measures the handoff, not the catalogue.
-  - [ ] Capture as the session ends, before closing anything: save the `.blend`; export one
+  - [x] Capture as the session ends, before closing anything: save the `.blend`; export one
         viewport image of the found look; keep the Claude transcript reachable (it is the record
         of what was *asked for*, which the decision's fidelity judgement needs).
-  - [ ] **Land the captured files where the agent can commit them** (this repo's working tree on
+  - [x] **Land the captured files where the agent can commit them** (this repo's working tree on
         either devpod mount, by whatever transfer Wolf prefers) — the devpod has no path to
         gingerspice, so without this step Task 3 cannot start.
-- [ ] **Task 2 — The handoff (the open question; test, don't predict)** (AC: 3, 4)
-  - [ ] Candidates, named so the session can try the cheap one first — the spike proves **one**
+- [x] **Task 2 — The handoff (the open question; test, don't predict)** (AC: 3, 4)
+  - [x] Candidates, named so the session can try the cheap one first — the spike proves **one**
         end to end and records why that one:
         **(a) Claude re-emits the construction as a script** — the session's own
         `execute_blender_code` actions consolidated into one self-contained headless script.
@@ -131,19 +131,19 @@ unverifiable from here and is story work by design.
         is the reviewable half.
         **(c) Hand re-expression from parameters** — most portable, most lossy, most expensive;
         the fallback if (a) and (b) both fail.
-  - [ ] Whichever carries: the committed script follows the bench conventions it will live
+  - [x] Whichever carries: the committed script follows the bench conventions it will live
         beside — **stdlib only** (Blender resolves the uv CPython; numpy is invisible — 10.1
         measured this), `bpy` import guarded, `scene.cycles.use_denoising = False` with the
         hard-failure comment, Cycles CPU, range-check-then-assert, non-zero exit on empty output.
         Copy the shape from `scripts/bench/valley_bench.py`; do **not** modify `valley_bench.py`.
-- [ ] **Task 3 — The receiving end (agent, devpod)** (AC: 1, 3, 4)
-  - [ ] Commit the script under `scripts/bench/` (name it for its content, e.g.
+- [x] **Task 3 — The receiving end (agent, devpod)** (AC: 1, 3, 4)
+  - [x] Commit the script under `scripts/bench/` (name it for its content, e.g.
         `spike_tree_blockout.py`); commit the artifacts into `10-2-signoff/` — script's PNG, the
         session viewport image, a `what-was-found.md` naming the known differences and where the
         transcript lives (10-1-signoff precedent), plus the `.blend`/glTF iff candidate (b) won.
-  - [ ] Run the script twice; record both range-check lines and the pixel-diff figure in the Dev
+  - [x] Run the script twice; record both range-check lines and the pixel-diff figure in the Dev
         Agent Record.
-  - [ ] **No gate wiring and no mutation table for the spike script** — it is spike *output*,
+  - [x] **No gate wiring and no mutation table for the spike script** — it is spike *output*,
         not machinery, and may be superseded the moment the decision is recorded. This is a
         stated exception to the tested-instrument rule (technical-preferences.md): the script's
         evidence is the executed two-run recipe below, recorded with its figures, in place of a
@@ -151,9 +151,222 @@ unverifiable from here and is story work by design.
         (test + sabotage row) is that follow-up's first task — name this in the decision record.
         `// NOTE:` the limitation at the top of the script so review reads it as decided, not
         forgotten. The gate still runs (AC1).
-- [ ] **Task 4 — The decision, recorded** (AC: 5)
-  - [ ] Write all three parts into the Dev Agent Record, costs measured not estimated, Wolf's
+- [x] **Task 4 — The decision, recorded** (AC: 5)
+  - [x] Write all three parts into the Dev Agent Record, costs measured not estimated, Wolf's
         ruling verbatim; mirror the essentials into the sprint-status note at close.
+
+### Review Findings — 2026-08-31 (fresh-context code review, four layers, no coverage holes)
+
+Layers: Blind Hunter (Sonnet, `spike_pine_render.py`), Edge Case Hunter (Sonnet, `voxel_pine.py`
++ `.gitignore`), Acceptance Auditor (Opus, whole diff), Feature Auditor (Opus, whole diff), plus an
+orchestrator inline pass. Baseline `311e169..HEAD` — the story's OWN commit range; the frontmatter's
+`baseline_commit: d02f9595` is stale by three merged PRs and would have dragged in ~1,342 lines of
+other branches' work. Every layer verified `cargo 1.97.1` and `Blender 5.2.1 LTS` and executed real
+binaries. **Two layers independently ran `scripts/gate.sh`: GATE GREEN, nine rows, exit 0 — AC1 is
+closed on a run, not a claim.** Both hunters' chartered `crates/` territories were empty (zero Rust
+files changed, verified) and were reassigned rather than left idle.
+
+**The spike's central claim is CONFIRMED, three times over.** Edge Case Hunter, Feature Auditor and
+the Acceptance Auditor each independently regenerated all four variants and got SHA-256
+byte-identical matches to the committed `export/*.glb`, stable across repeat runs, invariant under
+`PYTHONHASHSEED` and under a different working directory, with no undocumented argument. The
+determinism result is real and stronger than the AC asked for.
+
+#### Decision needed — ALL THREE RULED BY WOLF, 2026-08-31 (see Completion Notes → AC deviations)
+
+- [x] [Review][Decision] **AC4's pair compares two different revisions of the tree, and the record
+      does not say so** — `session-final-2026-08-31T1157-tree.png` captures the interactive first
+      pass (`tree.glb`: 5,130 tris / 10,260 verts / 5.2 × 5.4 × **7.6 m** / bbox centre X
+      **−0.100000**), while `render-SM_VoxelPine_Tree02.png` renders the generator's output
+      (`export/SM_VoxelPine_Tree02.glb`: 5,894 tris / 11,788 verts / 5.0 × 5.4 × **8.0 m** / centre
+      X **+0.000000**). Rendered through the same instrument the two differ by **131,623 of 921,600
+      pixels (14.3%)**, and the palettes differ (`#09130D` vs `#364D3F` — the first pass carried the
+      double-sRGB "too dark" bug). **This is NOT handoff loss.** The generator is a deliberately
+      *better* later revision: the off-centre canopy, the dark texture and the thick 5×5 trunks were
+      all corrected through Claude between the 08:58 capture and the 09:30 emit. The defect is that
+      Wolf is pointed at revision N's screenshot beside revision N+1's render and told fidelity loss
+      is zero. **There is no committed session-side image of the asset actually delivered.**
+      Options: (a) judge the pair as-is once the delta is documented; (b) re-capture a viewport
+      image of the delivered tree on gingerspice; (c) close AC4 on the documented difference as a
+      valid spike result, which AC4 explicitly sanctions. Raised by: acceptance + feature +
+      orchestrator (3-way convergence).
+
+- [x] [Review][Decision] **AC3 names `scripts/bench/` and the deliverable is not in it** — the
+      record calls `voxel_pine.py` "the artifact of record" / "the deliverable", but it sits in
+      `10-2-signoff/`, prints `FIGURES` not `range-check:`, and has an **unguarded `import bpy`**
+      (line 39), which Task 2 required of "whichever carries". `scripts/bench/spike_pine_render.py`
+      meets every convention clause but carries no look — it renders a GLB it did not author. The
+      split may be the right call for spike output that the decision may supersede; it is recorded
+      as a decision nowhere. Options: move the generator under `scripts/bench/`, or record the split
+      as a deliberate, reasoned deviation. Raised by: acceptance + feature.
+
+- [x] [Review][Decision] **AC2's transcript clause is not met and needs your explicit acceptance**
+      — AC2 requires `what-was-found.md` to name where the Claude transcript lives; it instead
+      records that the transcript was destroyed, on your ruling. The note argues persuasively that
+      this is itself a spike finding, and a fragment survives inside the session screenshot's
+      right-hand pane. But it should be filed as an accepted AC2 **deviation**, not as AC2 met.
+      Raised by: acceptance.
+
+#### Patch — ALL 16 APPLIED AND VERIFIED, 2026-08-31 (gate green; four exports re-verified byte-identical after the code fixes)
+
+- [x] [Review][Patch] **`voxel_pine.py` exits 0 on any uncaught exception — the false green its own
+      contract forbids** [`10-2-signoff/voxel_pine.py:576-611`] — seven reproductions across two
+      layers and the orchestrator: `--seed` with no value → `IndexError`, **exit 0**; `--seed abc`
+      and `--voxel abc` → `ValueError`, **exit 0**; unwritable output dir → `PermissionError` at
+      `os.makedirs`, **exit 0**; output path is a directory → `IsADirectoryError`, **exit 0**; and
+      under the second Blender on this box (`/usr/bin/blender` = **4.3.2**, verified present)
+      → `ModuleNotFoundError`, **exit 0, no file written**. `main()` has no `try/except`.
+      `valley_bench.py:556-563` documents this exact trap, `spike_pine_render.py:191-194` copies the
+      guard, and the asset contract's clause 6 says "Exit 0 with no output is not a result — the
+      10.1 lesson, paid for already". AC3 requires non-zero on empty output. The recorded sabotage
+      exercised only the *check* path (`--voxel -0.2` → exit 1, confirmed working); the *crash* path
+      was never probed. Fix: wrap `main()` in the sibling scripts' existing guard. Raised by:
+      edge + feature + orchestrator.
+
+- [x] [Review][Patch] **`--voxel 0` self-certifies a degenerate mesh** [`10-2-signoff/voxel_pine.py:590-596,642-691`]
+      — `--voxel 0` produces a mesh collapsed to a point and exits **0** with `OK Tree01 ...
+      bbox=0.000x0.000x0.000 volume=0.000000 expected_volume=0.000000`. Every check passes vacuously
+      because `expected_volume` and `expected_h` are derived from the same zero: the oracle is not
+      independent of the degenerate input. (Negative values ARE caught.) Fix: positivity guard on
+      `--voxel`. Raised by: edge.
+
+- [x] [Review][Patch] **"Fidelity loss: zero, bit-exact" is false as stated** [story `:462`] — the
+      bit-exactness proven is *generator → generator across two machines*, which is a determinism
+      result, not the session-to-script fidelity AC5(b) asks about. Replace with the two figures
+      that are actually true: byte-identical regeneration across machines, **and** a measured
+      session-capture-to-deliverable delta of +764 tris / +0.4 m / palette corrected, itself the
+      product of three deliberate post-capture fixes. Raised by: acceptance + feature + orchestrator.
+
+- [x] [Review][Patch] **The "no by-hand viewport edits" proof does not prove what it claims**
+      [`10-2-signoff/what-was-found.md:66-70`] — "The bit-exact reproduction is the independent
+      proof, since a mouse edit could not have reached the script" is circular: the four GLBs the
+      generator reproduces were themselves emitted **by the generator** (mtime 09:30, same minute as
+      `voxel_pine.py`), not hand-exported from the session. The one artifact that *was* hand-exported
+      (`tree.glb`, 08:59) is precisely the one the generator does not reproduce. Wolf's assertion is
+      legitimate and sufficient — it should be recorded as an assertion, not as "PROVEN,
+      bit-exactly". Raised by: acceptance.
+
+- [x] [Review][Patch] **Bit-exactness is silently conditioned on Blender 5.2.1 / exporter
+      `v5.2.40`** [story `:450`] — every committed GLB carries `"generator": "Khronos glTF Blender
+      I/O v5.2.40"` in its JSON chunk, so byte-identity cannot survive a Blender version change, and
+      under 4.3.2 the generator does not run at all. `spike_pine_render.py` stamps `blender=5.2.1`
+      into its range-check line; `voxel_pine.py`'s FIGURES line has no version field. Name the
+      version as a condition of the result. Raised by: feature.
+
+- [x] [Review][Patch] **The story record still asserts the receiving end is Blender 4.3.2**
+      [story `:98`, `:258`] — contradicted by `what-was-found.md:53-55`, by PR #54 (the venue move,
+      landed in this same range) and by `blender --version` → **5.2.1 LTS**. Not cosmetic: the
+      recipe's step-1 rationale ("the data artifact is glTF, not `.blend`"; "a candidate-(a)
+      re-emitted script may hit 5.x→4.3 `bpy` API drift") hangs off a version gap that no longer
+      exists, so a future reader inherits a falsified premise as a live constraint. Raised by:
+      acceptance + feature.
+
+- [x] [Review][Patch] **The bench script's "MEASURED on Tree02" comment matches neither committed
+      asset** [`scripts/bench/spike_pine_render.py:41`] — the comment claims `fraction 0.207,
+      colours 6,432, luma 96.4`. Measured: the deliverable `export/…Tree02.glb` gives
+      `0.127873 / 11,288 / 112.625`; the superseded `tree.glb` gives `0.135638 / 7,002 / 99.687`.
+      On colours and luma it sits far closer to the superseded asset, so it reads as a real
+      measurement of an earlier state left unupdated — the documented-constant-was-a-measurement
+      shape this repo keeps paying for. The floors themselves are unaffected; the harm is a stale
+      calibration claim presented as ground truth. Fix: replace with the real figures and name which
+      asset they came from. Raised by: blind + orchestrator.
+
+- [x] [Review][Patch] **`tree.glb` is a superseded artifact committed under the deliverable's exact
+      name, flagged as stale nowhere** [`10-2-signoff/tree.glb`] — it carries the same glTF mesh AND
+      node name (`SM_VoxelPine_Tree02`) as the generator's export but is different geometry.
+      `what-was-found.md:16` presents it as "The exported asset, `SM_VoxelPine_Tree02`";
+      `ASSET_NOTES.md` never mentions it, while its "Repo state" section lists `trees.blend`,
+      `tree.blend` and `tree.blend1` as the stale set — **none of which exist in this repo** (they
+      are vehicle-side). So the one stale artifact actually committed here is the one nothing marks
+      as stale, and it sits at the signoff root. Fix: label it in both notes; correct "Repo state"
+      to describe this repo. Raised by: feature + orchestrator.
+
+- [x] [Review][Patch] **`what-was-found.md`'s deep receiving-end verification is performed on the
+      superseded artifact** [`10-2-signoff/what-was-found.md:18-31`] — "Every claim the session made
+      holds" quotes 10,260 verts / 5,130 tris / 5.2 × 5.4 × 7.6 m, which are `tree.glb`'s figures.
+      The four committed exports never receive that stdlib-parser verification, and the render table
+      20 lines later reports Tree02 at 5,894 tris — two different meshes under one name in one
+      document. The asset contract's worked example (story `:365`: "2,565 quads … 10,260 verts …
+      V−E+F = 2565") is likewise the superseded asset, and that contract is meant to govern asset #2.
+      Raised by: orchestrator + acceptance.
+
+- [x] [Review][Patch] **"Known differences" #1 describes a defect the deliverable does not have**
+      [`10-2-signoff/what-was-found.md:34-37`] — "the trunk is half a voxel off-centre in X … Every
+      tree placed from this asset leans the same way", filed under "the things a consumer would
+      otherwise learn the hard way". All four exports measure centre X = **+0.000000** exactly. The
+      file contradicts itself 50 lines later (`:83-85`, the fix "is not merely applied but guarded").
+      A consumer will correct for an offset that is already fixed. Raised by: orchestrator.
+
+- [x] [Review][Patch] **Tasks 1–4 are entirely unchecked while the record claims them complete**
+      [story `:112-156`] — 15 unchecked boxes covering the session, the handoff, the receiving end
+      and the decision, all of which three layers independently verified were done. Status is
+      `review`. A reader trusting the checkboxes would conclude the story never got past setup.
+      Raised by: acceptance + orchestrator.
+
+- [x] [Review][Patch] **`Completion Notes List` and `File List` are empty; the Change Log has no
+      dev-work entries** [story `:444`, `:489`, `:236`] — 24 files were added or modified. A File
+      List is exactly the artifact that would have caught the `tree.glb` name collision. The Change
+      Log's newest entry is 2026-08-30 (story creation / dev start). Raised by: acceptance + blind +
+      feature + orchestrator (4-way convergence).
+
+- [x] [Review][Patch] **The three owed items have no durable home** [story `:478-482`] —
+      sprint-status `:1298-1313` rules that action-item state lives on GitHub issues labelled
+      `action-item` "**and nowhere else**". Verified: `gh issue list --label action-item --state all`
+      returns 10 issues (newest #53), **none** matching the runbook, the scale constant, or the
+      hardening item; `deferred-work.md` and `action-items.md` have no 10.2 entry. Per item: the
+      **scale constant** is partially safe (`epics.md:1505-1506` names grid scale as blocking
+      10.4/10.5) but that text predates the spike and carries none of the measured finding (0.2 m ⇒
+      dwarf 6 voxels; unit-cube cell vs `worldgen.rs` 4–6 cells), so the board's claim that 10.3's
+      blocker text "is already right" overstates what 10.3 will read; the **handover runbook** is
+      pointed at 10.3, whose epic text is about `docs/tech-art-guidelines.md` contracts, not a
+      session handover; **hardening `spike_pine_render.py`** has **no home at all**. Note: opening
+      the issues is an outward-facing action and needs Wolf's explicit go-ahead. Raised by: feature
+      + orchestrator.
+
+- [x] [Review][Patch] **"1.75 s per variant" is not reproducible as stated** [story `:463`] —
+      measured whole-process wall, cold: 2,298 / 2,895 / 2,831 / 2,321 ms. No Blender-reported
+      timing appears in the logs, so the figure has no visible provenance — probably a warm run or
+      an inner timer. Flagged only because the record insists "Every figure below was measured, not
+      proposed". Raised by: acceptance.
+
+#### Deferred (recorded in `deferred-work.md`, not patched)
+
+- [x] [Review][Defer] **`MIN_SUBJECT_LUMA` does not catch a total lighting failure**
+      [`scripts/bench/spike_pine_render.py:45`] — both suns set to energy 0 still yields
+      `subject_luma=34.578` against the 20.0 floor and **exits 0**, because Cycles treats the world
+      backdrop as an environment light. Only ~1.7× headroom, and it is coincidental rather than
+      designed. Belongs to the already-owed "harden `spike_pine_render.py`" item. Raised by: blind.
+- [x] [Review][Defer] **The other three floors are decoration for anything short of "nothing
+      rendered"** [`scripts/bench/spike_pine_render.py:43-46`] — `MIN_SUBJECT_FRACTION` has 3.9–7.8×
+      headroom, `MIN_DISTINCT_COLORS` 325–353× (still 74× with the lights off), and
+      `MAX_SUBJECT_FRACTION` is untestable by normal content — it exists purely as the sRGB/linear
+      trip-wire and does that one job correctly (proven: reintroducing the bug → exit 1). Same
+      hardening item. Raised by: blind.
+- [x] [Review][Defer] **Binaries committed against AC2's "only if candidate (b) wins"** —
+      candidate (a) won; the record calls the GLBs "committed as convenience", which is the thing
+      AC2 conditions. The four `export/*.glb` are pure redundancy (byte-reproducible in ~2.5 s
+      each); `tree.glb` earns its place on different grounds — it is the evidence for the AC4
+      finding above. Deferred rather than patched: the labelling fix addresses the actual harm, and
+      deleting committed assets is not obviously right. Raised by: acceptance.
+- [x] [Review][Defer] **3.7 MB of next-story assets in this story's signoff folder** —
+      `dwarf.mp4` (3.4 MB), `dwarf-animation-reference.jpg`, `dwarf-contact-sheet.jpg`.
+      `what-was-found.md:12` states "Input for a later story; nothing in this one consumes it."
+      Outside the story's declared file list and git-permanent. Raised by: acceptance.
+- [x] [Review][Defer] **The new `.gitignore` rule leaves two already-tracked `Zone.Identifier`
+      files** [`.gitignore:39-41`] — `6-1-signoff/6-1-motion-{after,before}.png:Zone.Identifier` are
+      tracked; gitignore does not untrack. Pre-existing, not this story's mess. The rule itself was
+      verified correct at every depth and does not disturb the `!_bmad/scripts/session_tokens.py`
+      re-include above it. Raised by: acceptance.
+- [x] [Review][Defer] **`ASSET_NOTES.md`'s "Generating" block uses relative paths without stating a
+      working directory** [`10-2-signoff/ASSET_NOTES.md:10-17`] — folded into the `tree.glb`
+      labelling patch above if that is taken. Raised by: feature.
+
+#### Dismissed as noise
+
+- Neither script is wired to the gate, a runbook or a doc. That is the story's **stated exception**
+  (Task 3), not a defect — spike output that the decision may supersede, with hardening named as the
+  follow-up's first task.
+
 
 ## Dev Notes
 
@@ -237,6 +450,8 @@ Wolf's judgement (AC4) compares `10-2-signoff/` pair by eye — no agent closes 
 
 | date | change |
 | --- | --- |
+| 2026-08-31 | **Code review (fresh context, four layers, no coverage holes; baseline = the story's own commit range `311e169..HEAD`, the frontmatter `baseline_commit` being stale by three merged PRs).** Gate re-run green by two layers independently. The spike's bit-exact claim independently reproduced by three layers and CONFIRMED. 16 patches applied: two code fixes to `voxel_pine.py` (non-zero exit on any uncaught exception; `--voxel` positivity guard — it previously self-certified a degenerate mesh), and fourteen record corrections, the largest being the AC5(b) fidelity claim (the proven bit-exactness is generator→generator, not session→generator; the session capture and the deliverable are two revisions 30 minutes apart, differing by 14.3% of pixels — deliberate improvement, previously reported as zero), the `tree.glb` name collision (superseded artifact committed under the deliverable's own glTF mesh/node name, marked stale nowhere), the falsified Blender-4.3.2 receiving-end premise, a circular "no viewport edits" proof, and the empty File List / Completion Notes / task checkboxes. Three AC deviations (AC2 transcript, AC3 location, AC4 judged pair) ruled by Wolf and recorded as deviations rather than filed as met. Six findings deferred to `deferred-work.md`. |
+| 2026-08-31 | Dev complete → review. The live session ran on gingerspice (Blender 5.2.1 + BlenderMCP 1.9.0, Claude Code driving); the found look was re-emitted as `voxel_pine.py`, which reproduces all four GLBs byte-identically on the devpod. Four variants exported, rendered headless through the new `scripts/bench/spike_pine_render.py`, and committed with `ASSET_NOTES.md` + `what-was-found.md`. AC5 decision recorded: MCP joins as the authoring seat, the committed generator is the deliverable. Three items named as owed, not built. |
 | 2026-08-30 | Dev started (orchestrator-side; no Codex delegation per Dev Notes). Status → in-progress, sprint-status updated. Branch trap checked: PR #41 merged, origin/main is ancestor of HEAD, no rebase needed. Task 0 vehicle recipe written into the Dev Agent Record for Wolf to execute on gingerspice. Tasks 1–3 blocked until the session's captured files land in this tree. |
 | 2026-08-30 | Story created. Epic premises re-verified: BlenderMCP's live-GUI requirement CONFIRMED against upstream (addon socket server in a running Blender, localhost:9876; `uvx blender-mcp` on the Claude side; arbitrary-code caveat now on our record; Windows PATH trap noted). Blender-on-gingerspice is unverifiable from the devpod and budgeted as Task 0, Wolf-side. The receiving end was proven live by a control run at creation that reproduced 10.1's recorded range-check line exactly (4.7 s whole process). Handoff candidates named for testing, not decided. No gate wiring and no mutation table for the spike script — a stated exception to the tested-instrument rule, with the two-run recipe standing in and hardening named as the follow-up's first task if the script survives its own decision. Stacked on 10.1's tip `d02f959` (PR #40 open); post-merge rebase noted. Revised after an adversarial fresh-context checklist review found 3 criticals before save: a fabricated explanation for a luma discrepancy that does not exist, an AC2-vs-Task-3 artifact-list contradiction, and a deferral aimed at 10.4 for hardening work 10.4's text never contains — plus a missing Wolf-side transfer step without which Task 3 could not start. |
 
@@ -254,9 +469,15 @@ nothing here is verifiable agent-side until the captured files land in this repo
 **Setup (once):**
 
 1. **Blender version: 5.2 — DECIDED** (Wolf, 2026-08-30: already installed, "not going to
-   uninstall and tired of having different versions around"). The receiving end stays the
-   devpod's 4.3.2 (the 10.1 bench venue is calibrated there and is not touched by a spike),
-   so the major-version gap is now a **named condition of the spike**, with three
+   uninstall and tired of having different versions around"). **SUPERSEDED AT REVIEW
+   (2026-08-31): there is no longer a version gap.** PR #54 moved the devpod venue to 5.2.1 inside
+   this same commit range, so both ends now run **Blender 5.2.1** (`what-was-found.md` note 5 says
+   so; `blender --version` confirms it). The text below is kept because its three consequences were
+   real when written and two still bind, but the gap they hang off is closed — do not inherit it as
+   a live constraint. Note the devpod still carries a second Blender at `/usr/bin/blender` (4.3.2);
+   `/usr/local/bin/blender` is 5.2.1 and is what a bare `blender` resolves to. Original text:
+   the receiving end stays the devpod's 4.3.2 (the 10.1 bench venue is calibrated there and is not
+   touched by a spike), so the major-version gap is a **named condition of the spike**, with three
    consequences carried below: the data artifact is **glTF, not `.blend`** (`.blend` files
    are not backward-compatible across majors — the `.blend` is still saved on the vehicle,
    never committed); a candidate-(a) re-emitted script may hit 5.x→4.3 `bpy` API drift,
@@ -443,13 +664,57 @@ answer.
 
 ### Completion Notes List
 
+- **The spike answered its question, and the answer is stronger than the AC asked for.** A look
+  found in a live Blender+MCP session was carried out of that session as a standalone headless
+  generator that reproduces its output **byte-identically on another machine, with no MCP, no live
+  session and no manual step**. Three independent review layers reproduced all four exports.
+- **The enabling condition, and the thing that would break it:** every geometry change went through
+  tool calls rather than the viewport, which is what let the construction be re-emitted at all. A
+  by-hand viewport edit is invisible to the transcript and would break the property silently.
+- **Bit-exactness is a property of the pair, not the script** — bound to Blender 5.2.1 / glTF
+  exporter `v5.2.40`. A version move may shift the bytes with nothing wrong.
+- **Three AC deviations, each ruled by Wolf at review and recorded rather than filed as met** —
+  AC2's transcript clause, AC3's `scripts/bench/` location, AC4's judged pair. See the AC deviation
+  notes below.
+- **Review found and fixed the one real code defect:** the generator exited **0** on every failure
+  except its own range check — bad flag values, unwritable output paths, and the devpod's other
+  Blender (4.3.2) all reported success having written nothing; `--voxel 0` additionally
+  self-certified a mesh collapsed to a point. Both fixed, all seven failure paths re-verified at
+  exit 1, and the four exports re-verified byte-identical afterwards.
+
+#### AC deviations — accepted by Wolf at review, 2026-08-31
+
+1. **AC2 (transcript).** AC2 requires `what-was-found.md` to name where the Claude transcript
+   lives. It cannot: the transcript existed only inside Claude Code on gingerspice and is gone.
+   Wolf's ruling stands — the two screenshots are the record and losing the rest is accepted.
+   **Filed as an accepted deviation, not as AC2 met**, deliberately: the story's own argument is
+   that a live session is not a durable artifact, and burying that inside a green AC is the one way
+   to lose the finding. A fragment survives in the session screenshot's right-hand pane.
+2. **AC3 (location).** AC3 names `scripts/bench/` for the committed headless script. The
+   deliverable, `voxel_pine.py`, **stays in `10-2-signoff/`** — Wolf's ruling at review. The split
+   is deliberate: `scripts/bench/spike_pine_render.py` is the instrument and meets every bench
+   convention; `voxel_pine.py` is spike OUTPUT that the decision may supersede, and Task 3's stated
+   exception already exempts it from gate wiring and a mutation table. Recorded here so a later
+   reader reads a decision, not an oversight. Its `import bpy` is unguarded, which the bench
+   conventions would have required had it lived under `scripts/bench/`; left as-is with the file's
+   placement.
+3. **AC4 (the judged pair).** Closed **on the documented difference** rather than on an eye
+   comparison — Wolf's ruling, and AC4 explicitly sanctions it. The committed pair straddles two
+   revisions 30 minutes apart (14.3% of pixels differ); the delta is three deliberate corrections
+   made through Claude, not handoff loss. There is no committed session-side image of the delivered
+   revision. Full measurement in `10-2-signoff/what-was-found.md`.
+
 ### The Decision (AC5)
 
 - **The handoff is: candidate (a) — the session re-emits its construction as a standalone headless
   generator — and it carried BIT-EXACTLY, which is stronger than the AC asked for.**
   `voxel_pine.py` was written by the session, committed, and re-run on the devpod: it reproduces
   all four GLBs **byte-identically** to the files exported on gingerspice, from a different
-  machine, with no MCP, no live Blender session and no manual step. Candidate (b) (ship the data
+  machine, with no MCP, no live Blender session and no manual step. **Condition of that result,
+  named at review:** byte-identity is bound to **Blender 5.2.1 / glTF exporter `v5.2.40`** — the
+  string every committed GLB carries in its JSON chunk. A Blender upgrade may move the bytes
+  without anything being wrong, and under this devpod's other Blender (`/usr/bin/blender`, 4.3.2)
+  the generator does not run at all. Bit-exactness is a property of the pair, not of the script. Candidate (b) (ship the data
   file) is superseded — the GLBs are committed as convenience, but the script is the artifact of
   record. Candidate (c) (hand re-expression) was never needed. The enabling condition was that
   every geometry change went through tool calls rather than the viewport, which is what let the
@@ -459,9 +724,24 @@ answer.
   Measured, not estimated. Session (Wolf + Claude on gingerspice): reference sheet landed 07:33,
   exploration finished 08:58 — and inside that, the WIP-to-final look pass took **five minutes**
   (08:53 → 08:58). The generator was emitted on request and delivered by 09:30, ~30 minutes,
-  including two real defect fixes. Regeneration on the devpod: **1.75 s per variant**. Fidelity
-  loss: **zero, bit-exact**. Manual steps in the handoff: **none** — the script takes a type and
-  an output path and reads nothing else. Round trip idea → four verified game-ready assets:
+  including two real defect fixes. Regeneration on the devpod: **~2.3–2.9 s per variant**
+  (whole-process wall, cold, measured at review: 2,298 / 2,895 / 2,831 / 2,321 ms for types 1–4;
+  the "1.75 s" this record carried before review had no visible provenance — probably a warm run or
+  an inner timer). Manual steps in the handoff: **none** — the script takes a type and an output
+  path and reads nothing else; three review layers reproduced all four exports first try, from an
+  arbitrary working directory, with no undocumented argument.
+
+  **Fidelity, stated in two figures rather than one — corrected at review.** The old single figure
+  ("zero, bit-exact") conflated two different things. (i) *Generator → generator, across machines:*
+  **bit-exact, zero loss** — the devpod reproduces all four gingerspice exports byte-identically,
+  independently confirmed by three review layers. (ii) *Session capture → delivered asset:* **not
+  zero, and not loss.** The captured look (`session-final-…png` / `tree.glb`: 5,130 tris, 5.2 × 5.4
+  × 7.6 m, bbox centre X −0.100) is the interactive FIRST PASS. The generator emitted 30 minutes
+  later encodes three deliberate corrections made *through Claude* — the off-centre canopy, the
+  double-sRGB dark texture and the thick 5×5 trunks — giving 5,894 tris, 5.0 × 5.4 × 8.0 m, centre
+  X +0.000. Rendered through the same instrument the two differ by **131,623 of 921,600 pixels
+  (14.3%)**, with a corrected palette (`#09130D` → `#364D3F`). That delta is improvement, not
+  handoff loss; but it is real, it was previously reported as zero, and AC4's pair straddles it. Round trip idea → four verified game-ready assets:
   **2 h 10 min**, with the boss doing other work alongside.
   Not free, and worth naming: the handoff only holds while authoring stays inside tool calls. A
   by-hand viewport edit is invisible to the transcript and would break the property silently.
@@ -487,3 +767,28 @@ answer.
      The decision keeps it.
 
 ### File List
+
+**Added — `_bmad-output/implementation-artifacts/10-2-signoff/`**
+- `voxel_pine.py` — the generator; the deliverable and the artifact of record
+- `export/SM_VoxelPine_Tree0{1,2,3,4}.glb` — the four deliverable assets
+- `tree.glb` — **superseded** hand export of the interactive first pass; evidence only
+- `ASSET_NOTES.md` — the asset contract as applied, and the repo/vehicle file split
+- `what-was-found.md` — the durable session record, known differences, AC4 measurement
+- `render-SM_VoxelPine_Tree0{1,2,3,4}.png` — the bench's renders of the four deliverables
+- `session-wip-2026-08-31T1153-tree.png`, `session-final-2026-08-31T1157-tree.png` — session captures
+- `reference-sheet.jpg` — the modeling reference (AI-generated, unlicensed)
+- `dwarf.mp4`, `dwarf-contact-sheet.jpg`, `dwarf-animation-reference.jpg` — **inputs for a later
+  story; nothing in 10.2 consumes them** (flagged at review, deferred)
+
+**Added — repo**
+- `scripts/bench/spike_pine_render.py` — the headless render instrument (AC3/AC4)
+
+**Modified**
+- `.gitignore` — ignore Windows `*:Zone.Identifier` sidecars
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — status and close note
+- this story file; `_bmad-output/implementation-artifacts/metrics/10-2-*.md` and
+  `metrics/.session-cursors.json`
+
+**Not touched, as the guardrails require:** the Rust workspace (`crates/` — zero changed files,
+verified), `scripts/bench/valley_bench.py`, `scripts/bench/export_world.py`, the forge's
+`_bmad-output/`.

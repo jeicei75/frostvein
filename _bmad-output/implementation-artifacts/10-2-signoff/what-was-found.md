@@ -13,12 +13,21 @@ it and what a later reader must not assume.
 | `dwarf.mp4` + `dwarf-contact-sheet.jpg` | Motion and look target. **Generated video** — the camera moves and geometry is not consistent frame to frame, so it is a feel reference, never a spec. The contact sheet is every 10th frame, because a video is the one artifact neither review nor the gate can open. |
 | `session-wip-2026-08-31T1153-tree.png` | Mid-session: snow too heavy, greens near-black, tiers not yet reading. |
 | `session-final-2026-08-31T1157-tree.png` | The found look, with the session's own game-ready spec table visible. |
-| `tree.glb` | The exported asset, `SM_VoxelPine_Tree02`. |
+| `tree.glb` | **SUPERSEDED — the interactive FIRST PASS, hand-exported at 08:59.** It carries the glTF mesh/node name `SM_VoxelPine_Tree02`, the same name as `export/SM_VoxelPine_Tree02.glb`, but it is a DIFFERENT asset: 5,130 tris / 10,260 verts / 5.2 x 5.4 x 7.6 m / bbox centre X -0.100, against the deliverable's 5,894 / 11,788 / 5.0 x 5.4 x 8.0 m / centre X +0.000. Kept as the evidence behind AC4's revision delta. **Do not consume it — `export/*.glb` are the deliverables.** |
+| `export/SM_VoxelPine_Tree0{1..4}.glb` | **The deliverables.** Generator output, reproduced byte-identically on the devpod by three independent review layers. |
 
 ## The asset, verified at the receiving end rather than trusted
 
+**Which asset: `tree.glb`, the superseded first pass** — clarified at review, because every figure
+in this section is its, not the deliverable's, and the render table further down reports the
+DELIVERABLE (Tree02, 5,894 tris). Two different meshes share one name; this section is about the
+one that is no longer shipped. The four `export/*.glb` have not had this same stdlib-parser pass —
+what they DO have is stronger for the spike's own question: byte-identical regeneration, verified
+independently three times, plus the generator's own closure checks (bbox centre, height, signed
+volume against voxel count) asserted on every run.
+
 Checked on the devpod with a stdlib GLB parser and a headless Blender 5.2.1 import. **Every claim
-the session made holds:**
+the session made about THAT asset holds:**
 
 - 1 node / 1 mesh / 1 material / 1 texture / 1 image, `extensionsUsed: []`, plain metal-rough.
 - `doubleSided: false`; `magFilter 9728` (NEAREST), wrap `CLAMP_TO_EDGE`.
@@ -31,10 +40,13 @@ the session made holds:**
 
 ## Known differences — the things a consumer would otherwise learn the hard way
 
-1. **The trunk is half a voxel off-centre in X.** X spans -2.700..+2.500, centre **-0.100 m**, which
-   is exactly -0.5 voxels; Z is centred exactly. Every tree placed from this asset leans the same
-   way. It is an even/odd voxel-count asymmetry and belongs in the generator, not in a per-instance
-   offset.
+1. **~~The trunk is half a voxel off-centre in X.~~ FIXED IN THE DELIVERABLE — applies to
+   `tree.glb` ONLY.** In `tree.glb`, X spans -2.700..+2.500, centre **-0.100 m**, exactly -0.5
+   voxels (Z was centred exactly): an even/odd voxel-count asymmetry. It was fixed in the
+   generator, not with a per-instance offset, and is now GUARDED (`centre_x` asserted < 1e-6, so
+   a regression fails the build rather than shipping). **All four `export/*.glb` measure bbox
+   centre X = +0.000000 exactly** — verified at review. Kept on the record because the sabotage
+   that proves the guard works is this defect, and because `tree.glb` is still committed.
 2. **The mesh is not manifold — it is 2,565 disconnected quads.** 2,565 x 4 = 10,260 verts, no
    vertex sharing, V-E+F = 2565. This is CORRECT for a greedy voxel mesher and must not be "fixed"
    by welding. It does mean smooth normals, subdivision, auto-LOD and adjacency-based collision
@@ -63,11 +75,18 @@ The session ran in Claude Code on gingerspice and its transcript lives nowhere e
 session is not a durable artifact — which is precisely why the handoff has to terminate in a
 committed script rather than in a transcript someone might still have.
 
-**No by-hand viewport edits were made** (Wolf, 2026-08-31). Confirmed against the one tweak that
-happened: the trunks came out too thick and were corrected **through Claude, not the viewport**
-— which is why the correction survived into the generator. The bit-exact reproduction is the
-independent proof, since a mouse edit could not have reached the script. So the entire
-construction lived in tool calls — and handoff candidate (a) is now not merely viable but **PROVEN, bit-exactly**.
+**No by-hand viewport edits were made** — **Wolf's assertion, 2026-08-31, and it is recorded as an
+assertion rather than as a proof.** Corrected at review: this note previously argued that "the
+bit-exact reproduction is the independent proof, since a mouse edit could not have reached the
+script". That argument is circular. The four GLBs the generator reproduces were themselves
+emitted BY the generator on gingerspice (mtime 09:30, the same minute as `voxel_pine.py`) — so
+reproducing them proves determinism, not the absence of viewport edits in the session that
+preceded them. The one artifact that WAS hand-exported from the live session, `tree.glb` (08:59),
+is precisely the one the generator does not reproduce. The transcript, which Task 2 named as the
+real check for hand edits, is gone. Wolf's assertion is sufficient and is corroborated by the one
+tweak we can trace — the too-thick trunks were corrected **through Claude, not the viewport**,
+which is why that correction survived into the generator. What is PROVEN bit-exactly is candidate
+(a)'s mechanism: a re-emitted script reproduces its own output on another machine, exactly.
 
 ## The handoff, proven at the receiving end
 
@@ -75,10 +94,11 @@ construction lived in tool calls — and handoff candidate (a) is now not merely
 
 | check | result |
 | --- | --- |
-| runs headless on the devpod | 1.75 s per variant; reads nothing but its two arguments |
-| reproduces the session's exports | **byte-identical to all four** GLBs exported on gingerspice |
+| runs headless on the devpod | ~2.3-2.9 s per variant, whole-process wall, cold (2,298 / 2,895 / 2,831 / 2,321 ms for types 1-4, re-measured at review; the earlier "1.75 s" had no visible provenance). Reads nothing but its two arguments |
+| reproduces the session's exports | **byte-identical to all four** `export/*.glb` from gingerspice. Independently reproduced by three review layers, from an arbitrary cwd, invariant under `PYTHONHASHSEED`. Bound to Blender 5.2.1 / exporter `v5.2.40`. NOTE it does NOT reproduce `tree.glb`, which is the earlier hand export, not generator output |
 | deterministic | two local runs byte-identical (SHA-256) |
-| fails when it should | voxels shifted +1 in X → `FAIL: bbox centre X is +0.200000`, exit 1 |
+| fails when it should (checks) | voxels shifted +1 in X → `FAIL: bbox centre X is +0.200000`, exit 1 |
+| fails when it should (crashes) | **Added at review.** The check path exited 1, but every OTHER failure exited **0** having written nothing — a bad `--seed`/`--voxel` value, an unwritable output dir, an output path that is a directory, and running under the devpod's other Blender (4.3.2). `main()` had no `try/except`, the guard `valley_bench.py` and `spike_pine_render.py` both carry. Now fixed and re-verified: all seven paths exit 1, and `--voxel 0` (which used to self-certify a mesh collapsed to a point, since `expected_volume` scaled by the same zero) is rejected. The four exports still regenerate byte-identically after the fix |
 
 The sabotage matters: the check that fired is exactly the defect the hand-exported `tree.glb`
 shipped with (known difference 1 above). The fix is not merely applied but **guarded** —
@@ -99,9 +119,27 @@ look of the ASSET", not "how does it sit in the world".
 
 Failure path observed, not assumed: a malformed GLB and a missing file both exit **1**.
 
-**Wolf judges the pair:** `render-SM_VoxelPine_Tree02.png` against
-`session-final-2026-08-31T1157-tree.png`. The renders are lit differently by design, so the
-question is whether the SHAPE and PALETTE survived the handoff, not whether the two frames match.
+**AC4 — CLOSED ON THE DOCUMENTED DIFFERENCE (Wolf's ruling at review, 2026-08-31), not on an eye
+comparison.** AC4 explicitly allows this: a handoff whose look shifts "is recorded as such, and is
+itself a valid spike result". The difference, measured rather than eyeballed:
+
+`session-final-2026-08-31T1157-tree.png` captures `tree.glb`, the interactive FIRST PASS.
+`render-SM_VoxelPine_Tree02.png` renders `export/SM_VoxelPine_Tree02.glb`, the deliverable. They are
+**two revisions of the same tree, 30 minutes apart**, and they differ by **131,623 of 921,600 pixels
+(14.3%)** through the same instrument (`tree.glb` renders at fraction 0.135638 / 7,002 colours /
+luma 99.687, against the deliverable's 0.127873 / 11,288 / 112.625). Three deliberate corrections
+sit between them, all made THROUGH CLAUDE: the off-centre canopy (centre X -0.100 -> +0.000), the
+double-sRGB dark texture (`#09130D` -> `#364D3F`), and the thick 5x5 trunks. Shape and palette did
+not merely survive the handoff — they were **improved inside it**, and the generator carried every
+correction.
+
+**What this means for the spike's question, stated plainly:** the honest answer is not "the script
+reproduces what the session found" but something better — the script reproduces what the session
+CONVERGED ON, including corrections made after the screenshot was taken. **There is no committed
+session-side image of the delivered revision**, so an eye comparison of the committed pair could
+only ever measure the deliberate delta. That is the gap; it is recorded rather than papered over,
+and re-capturing a viewport image of the delivered tree on gingerspice would close it if it is ever
+wanted.
 
 ## A defect in the render instrument, found by looking at its output
 

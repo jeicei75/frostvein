@@ -12,6 +12,7 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-fable-5 | 121 | 242 | 765,604 | 11,365,625 | 77,163 | 12,208,634 | $24.80 | `bae20bdf-ee48-4c97-b7f9-83b90b612736.jsonl` | 2026-08-30 11:11 UTC · rates 2026-08-01 | 13 | — |
 | dev | claude | claude-opus-5 | 473 | 946 | 827,289 | 110,744,833 | 438,239 | 112,011,307 | $71.50 | `27a6ff6c-3c78-4639-8ff2-bac96751b283.jsonl` | 2026-08-31 09:58 UTC · rates 2026-08-31 | 293 | — |
+| review | claude | claude-opus-5, claude-sonnet-5 | 399 | 798 | 1,345,110 | 35,950,295 | 279,977 | 37,576,180 | $31.18 | `3b01e100-20e0-495e-9cd1-73c58b8fb4ac.jsonl` | 2026-08-31 11:10 UTC · rates 2026-08-31 | 63 | — |
 
 > **ATTRIBUTION NOTE (2026-08-31) — the `dev` row above is a CEILING, not 10.2's cost.** The window
 > is one session and it carried four separate pieces of work, three of which shipped as their own

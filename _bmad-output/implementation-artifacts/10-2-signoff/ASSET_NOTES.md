@@ -7,6 +7,9 @@ step and no hand-authored `.blend` in the pipeline.
 ## Generating
 
 ```
+# run from this directory (_bmad-output/implementation-artifacts/10-2-signoff/);
+# paths below are relative to it. Use the Blender that IS 5.2.1 -- this devpod also has
+# 4.3.2 at /usr/bin/blender, under which the generator does not run.
 blender --background --python voxel_pine.py -- <type> <out.glb> [--seed N] [--voxel M]
 ```
 
@@ -142,15 +145,29 @@ Printed as one `FIGURES` line, then asserted; any failure exits 1.
 
 ## Repo state
 
+**Committed in this repo** (`10-2-signoff/`):
+
 - `voxel_pine.py` — the generator; the only source of truth for these assets.
-- `export/*.glb` — the four current builds.
-- `trees.blend` — working file holding the current set.
+- `export/*.glb` — the four current builds, byte-reproducible from the generator
+  under Blender 5.2.1 / exporter `v5.2.40`.
+- `tree.glb` — **STALE, and it is the one stale file that IS committed here.**
+  The interactive first pass, hand-exported at 08:59, carrying the glTF mesh and
+  node name `SM_VoxelPine_Tree02` — the same name as the deliverable, but 5,130
+  tris / 5.2 × 5.4 × 7.6 m / bbox centre X −0.100 against the deliverable's
+  5,894 / 5.0 × 5.4 × 8.0 m / centre X +0.000. It has the off-centre canopy and
+  the too-dark texture. Kept only as the evidence behind AC4's revision delta.
+  **Do not consume it.**
+
+**On the vehicle (gingerspice) — NOT committed here.** Listed so a reader in this
+repo does not hunt for files that were never transferred:
+
+- `trees.blend` — working file holding the current set. Saved before the trunk
+  pass, so its meshes are one revision behind `export/`; re-import the GLBs (or
+  regenerate) before building on it.
 - `tree.blend` / `tree.blend1` — **stale.** They hold the interactive first
   pass, with the off-centre canopy, the too-dark texture and the thick 5×5
   trunks, and are not used by the pipeline. `tree.blend` also overwrote the
   file that was in the project before this work, and `tree.blend1` is a backup
   of that same session rather than the original. Safe to delete.
 
-Note that `trees.blend` was saved before the trunk pass, so its meshes are one
-revision behind `export/`. Re-import the GLBs (or regenerate) before building
-on it.
+(The `trees.blend` revision caveat is folded into the vehicle list above.)

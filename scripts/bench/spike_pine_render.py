@@ -38,7 +38,12 @@ RENDER_HEIGHT = 960
 
 # Floors, not equalities -- the same reasoning as the valley bench: a later look change should
 # move these, and a floor separates "rendered something" from "rendered nothing" without pinning
-# a number no one intends to hold. MEASURED on Tree02: fraction 0.207, colours 6,432, luma 96.4.
+# a number no one intends to hold.
+# MEASURED on the DELIVERABLE `export/SM_VoxelPine_Tree02.glb` (2026-08-31, Blender 5.2.1):
+# fraction 0.127873, colours 11,288, luma 112.625. Named with its asset on purpose -- the figures
+# this comment carried before review (0.207 / 6,432 / 96.4) matched no committed asset: they were
+# nearest the SUPERSEDED hand export `tree.glb` (0.135638 / 7,002 / 99.687), left unupdated when
+# the generator replaced it. A calibration figure is worthless without the artifact it was taken on.
 MIN_SUBJECT_FRACTION = 0.02
 MAX_SUBJECT_FRACTION = 0.90
 MIN_DISTINCT_COLORS = 32
