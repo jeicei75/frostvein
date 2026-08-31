@@ -4,7 +4,7 @@ baseline_commit: 0b8b6735f04b282e2d75b82e426346be49590082
 
 # Story 10.6: How Fine Can We Go — the resolution bench
 
-Status: in-progress
+Status: review
 
 **EXECUTION ORDER: this story runs BEFORE 10.3.** Numerically last, first in sequence — the same
 shape as the gfx pass running before 8.3. 10.3 writes the grid scale into a contract that 10.4
@@ -109,15 +109,15 @@ gear needs, not the ceiling.
   - [x] Report the per-class budgets (AC3a): terrain at 44,984 instances, trees at ~265, dwarves
         at 5.
 
-- [ ] **Task 3 — `gui --subdiv N`** (AC: 5)
-  - [ ] Additive flag alongside the existing `--headless / --capture / --frames / --z /
+- [x] **Task 3 — `gui --subdiv N`** (AC: 5)
+  - [x] Additive flag alongside the existing `--headless / --capture / --frames / --z /
         --at-tick / --distance` set in `crates/gui/src/main.rs`.
-  - [ ] Chunked mesh built from the `client-core` mirror, through the existing
+  - [x] Chunked mesh built from the `client-core` mirror, through the existing
         `world_to_render` transform — **no system does its own axis math** (M2 convention).
-  - [ ] The control that matters: `--subdiv 1` produces the same scene as no flag. The draw-set
+  - [x] The control that matters: `--subdiv 1` produces the same scene as no flag. The draw-set
         oracle, the five rim levels, snow caps, the hover slab and picking all assume one entity
         per cell; at subdiv 1 nothing may move.
-  - [ ] Print entities, chunks, triangles and mesh build time so the devpod can read everything
+  - [x] Print entities, chunks, triangles and mesh build time so the devpod can read everything
         except fps.
 
 - [x] **Task 4 — Cost the sim axis** (AC: 6)
@@ -263,6 +263,7 @@ working zoom and ≥30 at full vista. A k that misses them is a result, not a fa
 |---|---|
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Control geometry measured on the real world; reference-sheet grid derived. |
 | 2026-08-31 | Added and verified the offline resolution instrument, Axis A/B signoff tables, vehicle command card, and mutation proof. Task 3 remains deliberately unstarted at the named split line. |
+| 2026-08-31 | Added the opt-in GUI subdivision path, headless control/wiring proof, live lavapipe geometry measurements, and the Task 3 mutation proof. |
 
 ## Dev Agent Record
 
@@ -281,6 +282,10 @@ Codex (GPT-5.6)
   showed 246 bytes. The hand-written expected value was corrected before GREEN.
 - Manual A* instrument: k=1 completed the diagonal; the existing node budget returned no path at
   k=2 and k=4. That is recorded as the Axis B result, not worked around.
+- RED, Task 3: the new minimal-plugin wiring test first panicked in `project.rs:535` with
+  `index out of bounds: the len is 3 but the index is 3`; the mesh loop had enumerated six
+  neighbour directions as though they were axes. Selecting the non-zero axis fixed it before
+  GREEN.
 
 ### Verification output (verbatim)
 
@@ -323,6 +328,15 @@ k one control drift fails control assertion                  KILLED
 All mutations killed.
 ```
 
+```
+$ scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh
+subdiv flag reaches chunk mesh instead of parsing inertly    KILLED
+
+thread 'ingest::tests::subdiv_flag_reaches_the_rendered_terrain_and_one_keeps_the_shipped_scene'
+panicked at crates/gui/src/ingest.rs:1427:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 101 filtered out
+```
+
 ### Completion Notes List
 
 - Task 1: added a deterministic ±2 fine-voxel seeded displacement rule, explicitly documented as
@@ -358,10 +372,15 @@ All mutations killed.
   constraint, deliberately accepted**, not a measurement — record it that way and do not let
   10.3's contract read it as one. The follow-up owed is: re-sweep with the ceiling raised on a
   quiet host, and revisit the adopted k if k=8 proves servable.
-- Task 3 / AC5 is not implemented. I stopped at the story's named split line rather than ship a
-  partial `--subdiv` flag: a compliant path needs chunk meshes separated by existing terrain
-  material/rim levels while preserving snow caps, slice/pick/draw-set behaviour, and byte-identical
-  default/k=1 rendering. No GUI code was changed.
+- Task 3: `--subdiv` now reaches an opt-in chunked greedy mesh built solely from the `client-core`
+  mirror. The default and `--subdiv 1` retain the shipped cube/snow-cap entities; the minimal
+  plugin test compares their tile, transform, mesh and material handles exactly and proves
+  `--subdiv 2` instead creates `TerrainChunk` render entities. Real lavapipe runs reported k=1:
+  53,129 entities / 0 chunks / 637,548 triangles / 23 ms, and k=2: 14,113 entities / 121 chunks /
+  218,832 triangles / 782 ms. These are geometry timings only, never fps.
+- Task 3 mutation: `subdiv flag reaches chunk mesh instead of parsing inertly` replaced the lone
+  `if subdiv > 1` branch with `if false`; its named headless test went RED and the mutation was
+  KILLED. Stale Python bytecode was deleted after the mutation run before the GUI suite was rerun.
 
 ### File List
 
@@ -375,3 +394,6 @@ All mutations killed.
 - `_bmad-output/implementation-artifacts/10-6-signoff/vehicle-fps.md` (new)
 - `_bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh` (new)
 - `_bmad-output/implementation-artifacts/10-6-how-fine-can-we-go.md` (updated)
+- `crates/gui/src/ingest.rs` (updated)
+- `crates/gui/src/project.rs` (updated)
+- `crates/gui/src/transform.rs` (updated)
