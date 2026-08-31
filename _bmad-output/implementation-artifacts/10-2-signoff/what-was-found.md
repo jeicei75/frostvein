@@ -63,8 +63,11 @@ The session ran in Claude Code on gingerspice and its transcript lives nowhere e
 session is not a durable artifact — which is precisely why the handoff has to terminate in a
 committed script rather than in a transcript someone might still have.
 
-**No by-hand viewport edits were made** (Wolf, 2026-08-31), so the entire construction lived in
-tool calls — and handoff candidate (a) is now not merely viable but **PROVEN, bit-exactly**.
+**No by-hand viewport edits were made** (Wolf, 2026-08-31). Confirmed against the one tweak that
+happened: the trunks came out too thick and were corrected **through Claude, not the viewport**
+— which is why the correction survived into the generator. The bit-exact reproduction is the
+independent proof, since a mouse edit could not have reached the script. So the entire
+construction lived in tool calls — and handoff candidate (a) is now not merely viable but **PROVEN, bit-exactly**.
 
 ## The handoff, proven at the receiving end
 
