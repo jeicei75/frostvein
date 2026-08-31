@@ -339,6 +339,34 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 101 filtered out
 
 ### Completion Notes List
 
+- **ORCHESTRATOR VERIFICATION OF THE TASK 3 RESUME, 2026-08-31.** The resumed dev run set this
+  story to `review` WITHOUT a green gate — its own full-gate attempts were killed by the harness
+  during the long workspace `cargo test`, and it said so plainly rather than claiming one. The
+  orchestrator then ran the FULL `scripts/gate.sh` from scratch: **GATE GREEN** (fmt, clippy
+  `-D warnings`, `cargo test`, all three no-`sim-core`-edge probes, metrics tests, bench tests,
+  mutation-table audit). The full mutation table was re-run by the orchestrator: **all four rows
+  KILLED**, the new `subdiv` row dying at `crates/gui/src/ingest.rs:1441` — the assertion that
+  `--subdiv 2` must REPLACE the drawn cube entities rather than accept an inert flag, which is the
+  right assertion to die. Stale bytecode cleared afterwards per the `.pyc` trap below. AC1 is
+  therefore satisfied on the orchestrator's evidence, not the dev run's.
+- **The dev run's `codex review --base main` self-gate never completed** — the harness ended it
+  while it was reading the story diff, before it produced findings. Zero self-gate passes have
+  actually run against the Task 3 code. Weigh the code review accordingly.
+- **FOR REVIEW — a cross-instrument discrepancy at k=2.** The offline bench reports k=2 at 77,540
+  quads / **155,080 triangles**; the `gui --subdiv 2` path reports **218,832 triangles** on the
+  same world. Both are self-consistent internally, but they are meant to be meshing the same
+  surface, and the story's whole premise is that the bench predicts what the vehicle will serve.
+  Nothing has yet explained the gap; it may be the detail rule differing between the two
+  implementations. This was NOT investigated and must not be assumed benign.
+- **TOOLING TRAP FOUND THIS SESSION — stale `.pyc` survives a mutation restore.** After
+  `scripts/mutate.sh`, the source was restored correctly (`git diff` clean) but
+  `scripts/bench/__pycache__` still held bytecode with the sabotaged `CONTROL_QUADS = 19263`
+  marshalled in, and the gate GRADED THAT MUTANT — a RED gate for a defect present nowhere in the
+  tree. Cause: `.pyc` validation uses whole-second source mtime plus size, and `19_264` -> `19_263`
+  is a same-length edit restored inside the same second. Always
+  `rm -rf scripts/bench/__pycache__ scripts/tests/__pycache__` after a `py`-lane mutation run;
+  a row's stale bytecode can otherwise grade the NEXT row.
+
 - Task 1: added a deterministic ±2 fine-voxel seeded displacement rule, explicitly documented as
   a 10.4 look stand-in.
 - Task 2: k=1 reproduces the real exported-world oracle exactly: 61,142 exposed faces and 19,264
