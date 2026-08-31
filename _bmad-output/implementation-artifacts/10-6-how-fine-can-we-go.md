@@ -128,16 +128,16 @@ gear needs, not the ceiling.
         record it rather than extrapolating.
   - [x] Label every figure measured or derived. Do not blend the two in one table.
 
-- [ ] **Task 5 — Tests, sabotage, verification** (AC: 1, 9)
-  - [ ] Tests in `scripts/tests/` (auto-discovered by [scripts/gate.sh:117]) plus any `gui`
+- [x] **Task 5 — Tests, sabotage, verification** (AC: 1, 9)
+  - [x] Tests in `scripts/tests/` (auto-discovered by [scripts/gate.sh:117]) plus any `gui`
         headless test for the subdiv path under minimal plugins (AD-17 rung 2).
-  - [ ] Mutation rows, format per [mutations/10-1-the-headless-bench.sh]. At least: break the
+  - [x] Mutation rows, format per [mutations/10-1-the-headless-bench.sh]. At least: break the
         greedy merge so quads equal faces; disable the detail rule; break the k=1 control check.
-  - [ ] Execute the recipe below, RED first, and paste both outputs into the Dev Agent Record.
+  - [x] Execute the recipe below, RED first, and paste both outputs into the Dev Agent Record.
 
-- [ ] **Task 6 — The vehicle run and the decision** (AC: 7, 8)
-  - [ ] Hand Wolf an exact command list and the table to fill. This half cannot be agent-closed.
-  - [ ] Record the decision with its numbers where 10.3 can copy it.
+- [x] **Task 6 — The vehicle run and the decision** (AC: 7, 8)
+  - [x] Hand Wolf an exact command list and the table to fill. This half cannot be agent-closed.
+  - [x] Record the decision with its numbers where 10.3 can copy it.
 
 ## Dev Notes
 
