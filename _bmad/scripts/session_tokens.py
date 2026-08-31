@@ -84,7 +84,7 @@ from datetime import datetime, timezone
 # the retired Opus-4.1 $15/$75 and reads ~3x high, which was not discovered until the
 # ep-11 retro re-priced the epic by hand. A row that cannot say which rate table
 # produced it cannot be trusted against its neighbours.
-PRICES_VERSION = "2026-08-01"
+PRICES_VERSION = "2026-08-31"
 
 PRICES: dict[str, dict[str, float]] = {
     # model-substring: {input, cache_write, cache_read, output} $/Mtok
@@ -106,12 +106,19 @@ PRICES: dict[str, dict[str, float]] = {
     "opus": {"input": 5.0, "cache_write": 6.25, "cache_read": 0.50, "output": 25.0},
     "sonnet": {"input": 3.0, "cache_write": 3.75, "cache_read": 0.30, "output": 15.0},
     "haiku": {"input": 1.0, "cache_write": 1.25, "cache_read": 0.10, "output": 5.0},
-    # gpt-5.6 Sol (Codex dev model since 2026-08-01): $5 in / $30 out, cache read at
-    # a 90% discount and cache writes at 1.25x input.
-    # NOTE: the other 5.6 tiers are cheaper (Terra ~$2.50 in) and are NOT listed, so
-    # they would fall through to the "gpt-5" row and be over-priced. Add them here if
-    # a court is ever moved onto one.
+    # gpt-5.6 Sol (Codex dev model 2026-08-01 .. 2026-08-28): $5 in / $30 out, cache read
+    # at a 90% discount and cache writes at 1.25x input.
     "gpt-5.6-sol": {"input": 5.0, "cache_write": 6.25, "cache_read": 0.50, "output": 30.0},
+    # gpt-5.6 Terra (the ACTUAL Codex dev model since ~2026-08-10; every `dev` and
+    # `review-patch` row in the ledger names it): $2 in / $12 out, cache read 0.1x,
+    # cache write 1.25x per file convention. Added 2026-08-31.
+    # It had NO row until now, so it fell through to "gpt-5" ($1.25 in / $10 out) and
+    # every Codex dev/review-patch figure recorded before 2026-08-31 is UNDER-stated
+    # (~1.6x on input, 1.2x on output). Those historical rows are NOT retro-corrected —
+    # read them as gpt-5-rate equivalents, same convention as the "gpt-5.5" row below.
+    # (A prior comment here claimed the fall-through would OVER-price Terra. That was
+    # backwards — gpt-5 is the cheaper row — and it is why this sat unfixed.)
+    "gpt-5.6-terra": {"input": 2.0, "cache_write": 2.50, "cache_read": 0.20, "output": 12.0},
     # gpt-5.5 (the Codex dev model up to and including ep-11-us-03) is priced the
     # SAME as 5.6 Sol: $5 in / $0.50 cached / $30 out. It had no row, so it fell
     # through to "gpt-5" and every Codex dev figure recorded before 2026-08-01 is
@@ -765,8 +772,20 @@ def append_ledger(metrics_file: str, story: str, phase: str, tool: str, s: dict,
         f"{when} · rates {PRICES_VERSION} | {'—' if mins is None else f'{mins:.0f}'} | "
         f"{_fmt_pp(s.get('quota_pp'))} |\n"
     )
-    with open(metrics_file, "a", encoding="utf-8") as fh:
-        fh.write(row)
+    # Insert after the LAST table line, not at EOF: a ledger legitimately grows prose
+    # below its table (closure notes, caveats), and an EOF append lands the row under
+    # that prose, where markdown renders it as literal text — it corrupted a real
+    # ledger twice in one session (2026-08-28), silently, since nothing validates the
+    # table. The header always ends with the table header + separator, so a fresh file
+    # still appends at the end.
+    with open(metrics_file, encoding="utf-8") as fh:
+        lines = fh.readlines()
+    last = max((i for i, line in enumerate(lines) if line.startswith("|")), default=len(lines) - 1)
+    if not lines[last].endswith("\n"):
+        lines[last] += "\n"
+    lines.insert(last + 1, row)
+    with open(metrics_file, "w", encoding="utf-8") as fh:
+        fh.writelines(lines)
 
 
 # --- rollup -----------------------------------------------------------------

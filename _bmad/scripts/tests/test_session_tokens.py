@@ -820,6 +820,30 @@ class DurationTests(unittest.TestCase):
         delta, _ = st.delta_since_cursor(cumulative, legacy)
         self.assertIsNone(st._minutes_between(delta["first_ts"], delta["last_ts"]))
 
+    def test_append_inserts_after_last_table_row_not_at_eof(self):
+        """A ledger legitimately grows prose BELOW its table (closure notes, caveats).
+        An EOF append lands the new row under that prose, where markdown renders it as
+        literal text — it corrupted a real ledger twice in one session on 2026-08-28."""
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "led.md")
+            s = st._as_summary(
+                3, ["claude-opus-4-8"], {"input": 1, "cache_creation": 2, "cache_read": 3, "output": 4},
+            )
+            st.append_ledger(path, "ep-09-us-01-demo", "create", "claude", s, "t.jsonl")
+            prose = "\nStory total $1.23 across 1 row. The dev row excludes the reverted spike.\n"
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(prose)
+            st.append_ledger(path, "ep-09-us-01-demo", "review", "claude", s, "t.jsonl")
+            text = Path(path).read_text(encoding="utf-8")
+            self.assertTrue(text.endswith(prose), "prose below the table must stay last")
+            lines = text.splitlines()
+            review_idx = next(i for i, ln in enumerate(lines) if ln.startswith("| review |"))
+            self.assertTrue(
+                lines[review_idx - 1].startswith("| create |"),
+                "new row must land directly under the last table row",
+            )
+            self.assertEqual([r["phase"] for r in st.parse_ledger_rows(path)], ["create", "review"])
+
     def test_ledger_row_round_trips_minutes(self):
         with tempfile.TemporaryDirectory() as d:
             path = str(Path(d) / "led.md")
