@@ -322,6 +322,13 @@ takes it from there (commits, handoff script, two-run evidence, decision record)
 
 ### Debug Log References
 
+- 2026-08-31 checkpoint (agent-side, nothing to unblock): no `10-2-signoff/` and no untracked
+  files anywhere in the tree — the session capture has not landed, so Tasks 1–3 remain blocked
+  exactly where they were. Branch trap re-checked: `origin/main` (09f24ae) still an ancestor of
+  HEAD, no rebase needed. `scripts/gate.sh` run at this state: **GATE GREEN** (all nine rows,
+  including bench tests and the mutation-table probe) — AC1 holds for the doc-only state and is
+  owed again once the spike script lands.
+
 - 2026-08-30 evening, Wolf reports from gingerspice: **"MCP setup with Blender works now"** —
   the seat is live on Blender 5.2. That verifies the one premise unverifiable from any devpod:
   the BlenderMCP addon registers and round-trips on a 5.x major. Task 0's setup boxes checked;
