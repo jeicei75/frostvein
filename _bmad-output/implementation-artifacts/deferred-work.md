@@ -1352,7 +1352,12 @@ claim was independently reproduced by three layers and holds.
 Found at review: `sprint-status.yaml` rules that action-item state lives on GitHub issues labelled
 `action-item` "**and nowhere else**". Verified with `gh issue list --label action-item --state all`
 — 10 issues, newest #53, **none** of them 10.2's. `action-items.md` has no 10.2 entry either. All
-three items below lived only in one story's prose, which is how a deferral gets lost. Wolf's ruling
+three items below lived only in one story's prose, which is how a deferral gets lost.
+**RESOLVED 2026-08-31: issues opened — M2-20 (#57, route:story, the scale constant),
+M2-21 (#58, route:undecided, the handover runbook), M2-22 (#59, route:story, hardening the
+spike bench). STATUS NOW LIVES ON THOSE ISSUES; the prose below is reasoning only.**
+Numbered M2-, not M3-: epics 9 and 10 are ADDED SCOPE INSIDE M2 (Wolf, 2026-08-28), and 8.3
+is still the milestone gate. Wolf's ruling
 at review (2026-08-31): the handover process and mechanism are real work but **not 10.2's scope**,
 so they are recorded, not built. **Issues are NOT opened — that is Wolf's call to make.**
 
