@@ -521,6 +521,15 @@ def render(args):
     check = range_check(summary, figures)
     print(
         "range-check:"
+        # THE VENUE IS PART OF THE EVIDENCE. Two Blenders live on this machine since 2026-08-31
+        # (apt 4.3.2 at /usr/bin, the vehicle-matching 5.2.1 at /opt/blender-5.2, bare `blender`
+        # resolving to 5.2.1), and the figures below are NOT comparable across them: measured on
+        # the same snapshot, non_sky_fraction moved 0.686815 -> 0.686736, distinct_colors
+        # 58993 -> 59191, terrain_luma 106.260 -> 105.853, with 64.72% of pixels differing by at
+        # most 2/255. Each version is still bit-deterministic with itself (0 of 518,400 pixels
+        # across two runs). Without this field a recorded line cannot say which venue produced
+        # it, and a PATH change would re-baseline the bench silently.
+        f" blender={'.'.join(str(part) for part in bpy.app.version)}"
         f" exposed_cells={check['exposed_cells']}"
         f" non_sky_fraction={check['non_sky_fraction']:.6f}"
         f" distinct_colors={check['distinct_colors']}"

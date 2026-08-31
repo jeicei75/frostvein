@@ -112,3 +112,11 @@ old = '        raise SystemExit(f"bench failed: {type(error).__name__}: {error}"
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        pass'))
 PY
+
+mutation "a hardcoded venue fails the blender-stamp test" py scripts.tests.test_valley_bench.ValleyBlenderTests.test_the_range_check_names_the_blender_that_produced_it <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/valley_bench.py'); s = p.read_text()
+old = """        f" blender={'.'.join(str(part) for part in bpy.app.version)}\""""
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        f" blender=4.3.2"'))
+PY

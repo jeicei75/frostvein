@@ -228,7 +228,9 @@ class ValleyBlenderTests(unittest.TestCase):
     def test_empty_export_exits_nonzero(self):
         result = self.run_bench(snapshot((1, 1, 1), ["empty"]))
         self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn("range-check: exposed_cells=0", result.stdout)
+        line = next(l for l in result.stdout.splitlines() if l.startswith("range-check:"))
+        reported = line[len("range-check:") :].split("floors(")[0]
+        self.assertEqual(dict(f.split("=") for f in reported.split())["exposed_cells"], "0")
 
     def test_pixel_figures_differ_between_a_populated_and_an_empty_real_render(self):
         # AC7's pixel half, on the REAL renderer. The AC originally asked for a one-cell world
@@ -249,6 +251,26 @@ class ValleyBlenderTests(unittest.TestCase):
         self.assertGreater(float(figures["populated"]["non_sky_fraction"]), 0.0)
         self.assertEqual(float(figures["empty"]["non_sky_fraction"]), 0.0)
         self.assertGreater(float(figures["populated"]["terrain_luma"]), float(figures["empty"]["terrain_luma"]))
+
+    def test_the_range_check_names_the_blender_that_produced_it(self):
+        # Two Blenders live on this machine since 2026-08-31 and their figures are NOT
+        # comparable: the same snapshot renders non_sky_fraction 0.686815 under 4.3.2 and
+        # 0.686736 under 5.2.1. Each is bit-deterministic with itself, so a drifting figure is
+        # supposed to mean a real change -- which is only true while the line says which venue
+        # produced it. A PATH change would otherwise re-baseline the bench in silence.
+        # The oracle is INDEPENDENT: `blender --version` is a different code path in the same
+        # binary, so this cannot pass by the bench agreeing with itself.
+        banner = subprocess.run(
+            ["blender", "--version"], text=True, stdout=subprocess.PIPE, check=True
+        ).stdout.split()
+        expected = banner[banner.index("Blender") + 1]
+
+        result = self.run_bench(populated_world())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        line = next(l for l in result.stdout.splitlines() if l.startswith("range-check:"))
+        reported = line[len("range-check:") :].split("floors(")[0]
+        fields = dict(field.split("=") for field in reported.split())
+        self.assertEqual(fields["blender"], expected, line)
 
     def test_a_broken_export_exits_nonzero_instead_of_reporting_success(self):
         # Blender's --background runner prints a traceback for an uncaught exception and STILL

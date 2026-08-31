@@ -846,6 +846,28 @@ the populated test world it reads **124.3 wired against 0.456 unwired**.
 - Cycles internal **1.42 s / 1.41 s**; whole `blender --background` process **4.34 s / 4.35 s**.
 - Pixel determinism: **0 of 2,073,600 RGBA values differ**. PNG bytes still differ (tEXt).
 
+**VENUE RE-BASELINED 2026-08-31 — every figure above is the Blender 4.3.2 era.** The devpod now
+carries Blender **5.2.1 LTS** at `/opt/blender-5.2` to match the vehicle, and bare `blender`
+resolves to it; the apt 4.3.2 stays reachable at `/usr/bin/blender`. Measured on the same
+snapshot, both versions, same session:
+
+| | 4.3.2 | 5.2.1 |
+| --- | --- | --- |
+| `exposed_cells` / `faces` | 44984 / 61142 | 44984 / 61142 — identical, geometry is not rendered |
+| `non_sky_fraction` | 0.686815 | 0.686736 |
+| `distinct_colors` | 58993 | 59191 |
+| `terrain_luma` | 106.260 | 105.853 |
+| whole process | 4.42 s | 4.55 s |
+
+**Determinism survived the move, which is the property that mattered:** 0 of 518,400 pixels differ
+between two runs of 4.3.2, and 0 between two runs of 5.2.1. Across versions 335,501 pixels differ
+(64.72%) with a worst channel delta of **2/255** and a mean of 0.80 — a sub-1% numerical nudge, not
+a visible change. Nothing pinned the old numbers: the bench asserts FLOORS by design, and 5.2.1
+clears all three. **The current baseline is therefore
+`blender=5.2.1 exposed_cells=44984 non_sky_fraction=0.686736 distinct_colors=59191 terrain_luma=105.853`**,
+and the line now names its own venue (see below) so a recorded figure can never again be read
+against the wrong Blender.
+
 **Harness: three false verdicts, all reproduced before being fixed.**
 - A py row whose test SKIPPED (Blender absent) exited 0, missed every guard and landed in
   **SURVIVED** — "your test is not pinning what it claims", when the test never ran. Now `NOT-RUN`.
