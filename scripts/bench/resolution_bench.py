@@ -26,6 +26,7 @@ NEIGHBOURS = ((0, -1), (0, 1), (1, -1), (1, 1), (2, -1), (2, 1))
 MAX_FINE_FACES = 4_000_000
 BUILD_TIME_BUDGET_SECONDS = 120.0
 CHUNK_EDGE_CELLS = 16
+MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
 
 
 def detail_offset(seed, x, y, z):
@@ -127,6 +128,7 @@ def geometry_summary(snapshot, k=1, detail=True):
     groups = _face_groups(snapshot)
     coarse_faces = sum(len(group) for group in groups.values())
     exposed_faces = coarse_faces * k * k
+    assert_workload_limit(exposed_faces, k, detail)
     if not detail and k > 1:
         # A flat fine surface is exactly the k=1 greedy control scaled in tessellation only.
         # Returning this invariant avoids allocating k² identical Python cells for the RED run.
@@ -163,6 +165,20 @@ def assert_control(summary):
             f"k=1 control mismatch: exposed_faces={summary.get('exposed_faces')} "
             f"(expected {CONTROL_FACES}), greedy_quads={summary.get('greedy_quads')} "
             f"(expected {CONTROL_QUADS})"
+        )
+
+
+def assert_workload_limit(fine_faces, k, detail):
+    if detail and fine_faces > MAX_FINE_FACES:
+        raise ValueError(
+            f"k={k} needs {fine_faces:,} fine faces, exceeding the {MAX_FINE_FACES:,} hard limit"
+        )
+
+
+def assert_snapshot_size(size):
+    if size > MAX_SNAPSHOT_BYTES:
+        raise ValueError(
+            f"snapshot is too large: {size:,} bytes exceeds {MAX_SNAPSHOT_BYTES:,}-byte limit"
         )
 
 
@@ -220,6 +236,7 @@ def measure(snapshot, k, detail):
 
 
 def _load_snapshot(path):
+    assert_snapshot_size(path.stat().st_size)
     with path.open(encoding="utf-8") as source:
         return json.load(source)
 

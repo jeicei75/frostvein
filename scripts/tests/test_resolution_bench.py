@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -58,6 +59,22 @@ class ResolutionSimCostTests(unittest.TestCase):
             resolution_bench.sim_axis_cost(raw, 2),
             {"sim_k": 2, "cells": 16, "tile_bytes": 217, "snapshot_bytes": 246},
         )
+
+
+class ResolutionSafetyTests(unittest.TestCase):
+    def test_detailed_workload_guard_rejects_a_hand_written_over_limit_count(self):
+        resolution_bench.assert_workload_limit(4_000_000, 1, True)
+        with self.assertRaisesRegex(ValueError, "4,000,001"):
+            resolution_bench.assert_workload_limit(4_000_001, 1, True)
+        resolution_bench.assert_workload_limit(4_000_001, 1, False)
+
+    def test_snapshot_size_guard_uses_the_explicit_wire_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "snapshot.json"
+            path.write_text('{"dims":{"x":1,"y":1,"z":1},"tiles":["empty"]}')
+            self.assertEqual(resolution_bench._load_snapshot(path)["tiles"], ["empty"])
+        with self.assertRaisesRegex(ValueError, "too large"):
+            resolution_bench.assert_snapshot_size(resolution_bench.MAX_SNAPSHOT_BYTES + 1)
 
 
 if __name__ == "__main__":
