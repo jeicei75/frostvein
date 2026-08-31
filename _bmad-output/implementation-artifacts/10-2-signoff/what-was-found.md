@@ -63,8 +63,53 @@ The session ran in Claude Code on gingerspice and its transcript lives nowhere e
 session is not a durable artifact — which is precisely why the handoff has to terminate in a
 committed script rather than in a transcript someone might still have.
 
-**No by-hand viewport edits were made** (Wolf, 2026-08-31). The entire construction happened through
-MCP tool calls, so handoff candidate (a) — re-emitting the construction as a headless script — is
-viable in principle for this asset. It is not yet PROVEN: the generator script does not exist at the
-time of writing, and until it runs on the devpod and its render is compared against
-`session-final-2026-08-31T1157-tree.png`, AC3 and AC4 remain open.
+**No by-hand viewport edits were made** (Wolf, 2026-08-31), so the entire construction lived in
+tool calls — and handoff candidate (a) is now not merely viable but **PROVEN, bit-exactly**.
+
+## The handoff, proven at the receiving end
+
+`voxel_pine.py` was emitted by the session and re-run here. Four checks, all executed:
+
+| check | result |
+| --- | --- |
+| runs headless on the devpod | 1.75 s per variant; reads nothing but its two arguments |
+| reproduces the session's exports | **byte-identical to all four** GLBs exported on gingerspice |
+| deterministic | two local runs byte-identical (SHA-256) |
+| fails when it should | voxels shifted +1 in X → `FAIL: bbox centre X is +0.200000`, exit 1 |
+
+The sabotage matters: the check that fired is exactly the defect the hand-exported `tree.glb`
+shipped with (known difference 1 above). The fix is not merely applied but **guarded** —
+`centre_x` is asserted at `< 1e-6`, not merely printed.
+
+## The render pair (AC4)
+
+`scripts/bench/spike_pine_render.py` renders each GLB headless, Cycles CPU, on a neutral studio
+backdrop — deliberately NOT the client's sky, since this image answers "did the handoff keep the
+look of the ASSET", not "how does it sit in the world".
+
+| variant | tris | subject_fraction | distinct_colors | subject_luma | run a vs run b |
+| --- | --- | --- | --- | --- | --- |
+| Tree01 | 4,366 | 0.156535 | 10,955 | 119.576 | 0 of 921,600 pixels differ |
+| Tree02 | 5,894 | 0.127873 | 11,288 | 112.625 | 0 of 921,600 pixels differ |
+| Tree03 | 3,474 | 0.088167 | 10,421 | 115.656 | 0 of 921,600 pixels differ |
+| Tree04 | 5,280 | 0.077327 | 10,634 | 109.969 | 0 of 921,600 pixels differ |
+
+Failure path observed, not assumed: a malformed GLB and a missing file both exit **1**.
+
+**Wolf judges the pair:** `render-SM_VoxelPine_Tree02.png` against
+`session-final-2026-08-31T1157-tree.png`. The renders are lit differently by design, so the
+question is whether the SHAPE and PALETTE survived the handoff, not whether the two frames match.
+
+## A defect in the render instrument, found by looking at its output
+
+The first version of `spike_pine_render.py` rendered a frame of pure backdrop — the camera pointed
+away from the asset — and its range check reported **`subject_fraction=1.000000`**, i.e. "the frame
+is 100% subject", because the backdrop was held as a LINEAR triple while `image.pixels` reads back
+DISPLAY-referred sRGB. Only the `distinct_colors` floor caught it; a lower colour floor would have
+passed an empty picture.
+
+`valley_bench.pixel_figures` documents that exact trap in a comment, which was read and walked into
+anyway. Fixed two ways: the backdrop is now held as display-referred sRGB 0-255 and converted to
+linear only at the world shader, and the fraction check is now **two-sided** — an all-subject frame
+means the instrument is lying, not that the render is full. Recorded because the instrument was
+believed for one full run, which is the failure mode this project keeps paying for.
