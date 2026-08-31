@@ -1380,21 +1380,35 @@ mod tests {
         let terrain_tiles = |app: &mut App| {
             let mut tiles = app
                 .world_mut()
-                .query::<(&TerrainTile, &bevy::prelude::Transform)>()
+                .query::<(
+                    &TerrainTile,
+                    &bevy::prelude::Transform,
+                    &bevy::prelude::Mesh3d,
+                    &bevy::prelude::MeshMaterial3d<bevy::prelude::StandardMaterial>,
+                )>()
                 .iter(app.world())
-                .map(|(tile, transform)| (tile.0, *transform))
+                .map(|(tile, transform, mesh, material)| {
+                    (tile.0, *transform, mesh.0.clone(), material.0.clone())
+                })
                 .collect::<Vec<_>>();
-            tiles.sort_by_key(|(tile, _)| *tile);
+            tiles.sort_by_key(|(tile, _, _, _)| *tile);
             tiles
         };
         let snow_caps = |app: &mut App| {
             let mut caps = app
                 .world_mut()
-                .query::<(&SnowCap, &bevy::prelude::Transform)>()
+                .query::<(
+                    &SnowCap,
+                    &bevy::prelude::Transform,
+                    &bevy::prelude::Mesh3d,
+                    &bevy::prelude::MeshMaterial3d<bevy::prelude::StandardMaterial>,
+                )>()
                 .iter(app.world())
-                .map(|(cap, transform)| (cap.0, *transform))
+                .map(|(cap, transform, mesh, material)| {
+                    (cap.0, *transform, mesh.0.clone(), material.0.clone())
+                })
                 .collect::<Vec<_>>();
-            caps.sort_by_key(|(cap, _)| *cap);
+            caps.sort_by_key(|(cap, _, _, _)| *cap);
             caps
         };
         assert_eq!(

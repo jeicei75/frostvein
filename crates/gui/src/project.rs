@@ -499,6 +499,7 @@ fn spawn_subdivided_terrain(
     let subdiv = i32::try_from(subdiv).expect("--subdiv fits signed mesh coordinates");
     let visible = positions.iter().copied().collect::<BTreeSet<_>>();
     let mut chunks = BTreeMap::<[i32; 3], ChunkMesh>::new();
+    let mut foliage_entities = 0;
     for &position in positions {
         if is_tree_foliage(mirror, position) {
             // Foliage is intentionally non-cubic presentation geometry. Keep its shipped path
@@ -514,6 +515,7 @@ fn spawn_subdivided_terrain(
                 Mesh3d(assets.cube.clone()),
                 MeshMaterial3d(assets.terrain_material(mirror, position)),
             ));
+            foliage_entities += 1;
             continue;
         }
         let chunk = [
@@ -566,6 +568,7 @@ fn spawn_subdivided_terrain(
     }
 
     let mut stats = SubdividedTerrainStats::default();
+    stats.entities = foliage_entities;
     for (chunk, chunk_mesh) in chunks {
         let mut material_meshes = BTreeMap::<(usize, usize), MeshBuilder>::new();
         for (key, mask) in chunk_mesh.masks {
