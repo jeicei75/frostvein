@@ -42,6 +42,11 @@ def detail_offset(seed, x, y, z):
     return value % 5 - 2
 
 
+def detail_depth(seed, x, y, z, k):
+    """Return the depth of one closed top-surface pit, bounded by its fine cell height."""
+    return min(abs(detail_offset(seed, x, y, z)), k - 1)
+
+
 def _dims(snapshot):
     dims = snapshot["dims"]
     return dims["x"], dims["y"], dims["z"]
@@ -119,9 +124,10 @@ def _greedy_quads(mask):
 def geometry_summary(snapshot, k=1, detail=True):
     """Measure exposed fine faces and greedy quads for a snapshot.
 
-    At k=1 the exported world is meshed exactly as shipped.  At larger k each exposed face is
-    expanded to k² fine samples; detail moves samples between nearby slabs, preventing flat runs
-    from merging.  No-detail is the control that must collapse back to k=1's quads.
+    At k=1 the exported world is meshed exactly as shipped. At larger k every exposed face is
+    expanded to k² fine samples. Detail carves deterministic pits into top faces and emits the
+    connecting vertical faces between different pit depths, so the measured surface is closed.
+    No-detail is the control that must collapse back to k=1's quads.
     """
     if not isinstance(k, int) or k < 1:
         raise ValueError("k must be a positive integer")
@@ -139,20 +145,53 @@ def geometry_summary(snapshot, k=1, detail=True):
             "triangles": coarse["triangles"],
         }
     quads = 0
-    for (axis, _sign, slab), faces in groups.items():
+    connector_faces = 0
+    for (axis, sign, slab), faces in groups.items():
         masks = collections.defaultdict(dict)
+        top_planes = {}
         for base_u, base_v, material in faces:
             for du in range(k):
                 for dv in range(k):
                     u = base_u * k + du
                     v = base_v * k + dv
-                    displacement = 0
-                    if detail and k > 1:
-                        displacement = detail_offset(WORLD_SEED, axis * 1_000_003 + slab * k, u, v)
-                    masks[slab * k + displacement][(u, v)] = material
+                    plane = slab * k
+                    if detail and k > 1 and axis == 2 and sign > 0:
+                        # A pit removes top fine voxels; its bottom remains solid. This is a
+                        # voxel-valid downward displacement rather than a floating face patch.
+                        plane -= detail_depth(WORLD_SEED, slab * k, u, v, k)
+                    masks[plane][(u, v)] = material
+                    if detail and k > 1 and axis == 2 and sign > 0:
+                        top_planes[(u, v)] = (plane, material)
         quads += sum(_greedy_quads(mask) for mask in masks.values())
+        # Adjacent top samples at different heights expose vertical voxel faces. Compare only
+        # neighbours inside this same coarse top slab: cliffs between slabs are already supplied
+        # by their ordinary exposed side faces above.
+        connectors = collections.defaultdict(dict)
+        for (u, v), (plane, material) in top_planes.items():
+            for du, dv in ((1, 0), (0, 1)):
+                neighbour = top_planes.get((u + du, v + dv))
+                if neighbour is None or neighbour[0] == plane:
+                    continue
+                other_plane, other_material = neighbour
+                lower, higher = sorted((plane, other_plane))
+                if du:
+                    connector_axis = 0
+                    connector_sign = 1 if plane > other_plane else -1
+                    connector_plane = u + 1
+                    coordinates = ((v, z) for z in range(lower, higher))
+                else:
+                    connector_axis = 1
+                    connector_sign = 1 if plane > other_plane else -1
+                    connector_plane = v + 1
+                    coordinates = ((z, u) for z in range(lower, higher))
+                connector_material = material if plane > other_plane else other_material
+                mask = connectors[(connector_axis, connector_sign, connector_plane)]
+                for coordinate in coordinates:
+                    mask[coordinate] = connector_material
+        connector_faces += sum(len(mask) for mask in connectors.values())
+        quads += sum(_greedy_quads(mask) for mask in connectors.values())
     return {
-        "exposed_faces": exposed_faces,
+        "exposed_faces": exposed_faces + connector_faces,
         "greedy_quads": quads,
         "triangles": quads * 2,
     }
@@ -169,9 +208,13 @@ def assert_control(summary):
 
 
 def assert_workload_limit(fine_faces, k, detail):
-    if detail and fine_faces > MAX_FINE_FACES:
+    # A top pit can expose up to two runs of vertical connector faces in addition to its sampled
+    # top. Reserve a conservative 3× budget before allocating any masks.
+    estimated_faces = fine_faces * 3 if detail else fine_faces
+    if detail and estimated_faces > MAX_FINE_FACES:
         raise ValueError(
-            f"k={k} needs {fine_faces:,} fine faces, exceeding the {MAX_FINE_FACES:,} hard limit"
+            f"k={k} can need {estimated_faces:,} detailed faces, exceeding the "
+            f"{MAX_FINE_FACES:,} hard limit"
         )
 
 
@@ -201,12 +244,29 @@ def sim_axis_cost(raw_snapshot, sim_k):
     # commas are deterministic one-byte separators in the daemon's compact wire JSON.
     value_bytes = len(encoded_tiles) - 2 - max(0, len(tiles) - 1)
     tile_bytes = len(marker) + 2 + value_bytes * sim_k**3 + max(0, cells - 1)
-    original_tile_bytes = len(marker) + len(encoded_tiles)
+    # All non-tile fields are re-serialized after mapping their real coordinates to the finer
+    # grid. Dims and each wire position can gain digits, so retaining the old envelope would
+    # understate the real protocol size.
+    scaled = json.loads(raw_snapshot)
+    if "dims" in scaled:
+        scaled["dims"] = {axis: value * sim_k for axis, value in scaled["dims"].items()}
+    for collection in ("entities", "designations", "zones", "items"):
+        for entry in scaled.get(collection, []):
+            if "pos" in entry:
+                entry["pos"] = [coordinate * sim_k for coordinate in entry["pos"]]
+    scaled["tiles"] = []
+    encoded_scaled = json.dumps(scaled, separators=(",", ":"))
+    empty_tiles = '"tiles":[]'
+    if empty_tiles not in encoded_scaled:
+        raise ValueError("snapshot encoding did not retain an empty tiles field")
+    snapshot_bytes = len(encoded_scaled) - len(empty_tiles) + tile_bytes
+    if raw_snapshot.endswith("\n"):
+        snapshot_bytes += 1
     return {
         "sim_k": sim_k,
         "cells": cells,
         "tile_bytes": tile_bytes,
-        "snapshot_bytes": len(raw_snapshot) - original_tile_bytes + tile_bytes,
+        "snapshot_bytes": snapshot_bytes,
     }
 
 
@@ -270,9 +330,9 @@ def _sweep(snapshot):
     k = 2
     while True:
         estimated_faces = control["exposed_faces"] * k * k
-        if estimated_faces > MAX_FINE_FACES:
+        if estimated_faces * 3 > MAX_FINE_FACES:
             print(
-                f"wall: hard face limit at k={k}: {estimated_faces} fine faces exceeds "
+                f"wall: hard face limit at k={k}: up to {estimated_faces * 3} detailed faces exceeds "
                 f"{MAX_FINE_FACES}; last_completed_k={last['k']}"
             )
             return

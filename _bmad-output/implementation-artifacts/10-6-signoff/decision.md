@@ -3,11 +3,9 @@
 Adopt **1.6 metres per simulation cell**, **0.4 metres per terrain visual voxel**, and **visual
 subdivision k=4**. Keep the simulation grid at k=1.
 
-The real-world k=4 bench measured 978,272 exposed fine faces, 713,723 greedy quads, 1,427,446
-triangles, 64 chunks, 1.655 seconds mesh build time and 157,372,416 bytes peak RSS. k=8 remained
-measurable (5,615,092 triangles; 5.203 seconds; 327,237,632 bytes) but is a vehicle candidate,
-not the default contract, until gingerspice supplies the required fps readings. The offline bench
-wall is k=16 at its 4,000,000-fine-face safety limit.
+The real-world k=4 bench measured 1,417,777 exposed fine faces, 498,714 greedy quads, 997,428
+triangles, 64 chunks, 1.870 seconds mesh build time and 189,104,128 bytes peak RSS. k=8 is the
+first guarded failure (up to 11,739,264 detailed faces), so k=4 is the only vehicle candidate.
 
 This deliberately does **not** settle the reference sheet's 16 voxels/cell target. It gives 10.3 a
 served terrain number now while leaving trees and five dwarves much finer on their separate asset

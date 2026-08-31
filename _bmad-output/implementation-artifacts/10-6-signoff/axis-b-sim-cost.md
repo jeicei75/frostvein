@@ -8,8 +8,8 @@ below repeat each actual encoded tile value, preserving real value sizes and com
 | Sim k | Cells | Tile bytes | Snapshot bytes | Label |
 |---:|---:|---:|---:|---|
 | 1 | 524,288 | 7,179,427 | 7,180,286 | measured |
-| 2 | 4,194,304 | 57,435,353 | 57,436,212 | derived from real tile encoding |
-| 4 | 33,554,432 | 459,482,761 | 459,483,620 | derived from real tile encoding |
+| 2 | 4,194,304 | 57,435,353 | 57,436,242 | derived from real tile encoding and scaled wire fields |
+| 4 | 33,554,432 | 459,482,761 | 459,483,651 | derived from real tile encoding and scaled wire fields |
 
 ## Existing A* measurement
 

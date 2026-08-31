@@ -63,9 +63,9 @@ class ResolutionSimCostTests(unittest.TestCase):
 
 class ResolutionSafetyTests(unittest.TestCase):
     def test_detailed_workload_guard_rejects_a_hand_written_over_limit_count(self):
-        resolution_bench.assert_workload_limit(4_000_000, 1, True)
-        with self.assertRaisesRegex(ValueError, "4,000,001"):
-            resolution_bench.assert_workload_limit(4_000_001, 1, True)
+        resolution_bench.assert_workload_limit(1_000_000, 1, True)
+        with self.assertRaisesRegex(ValueError, "4,000,002"):
+            resolution_bench.assert_workload_limit(1_333_334, 1, True)
         resolution_bench.assert_workload_limit(4_000_001, 1, False)
 
     def test_snapshot_size_guard_uses_the_explicit_wire_limit(self):

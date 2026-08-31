@@ -6,13 +6,12 @@ not equal 61,142 exposed faces and 19,264 greedy quads.
 
 | k | Exposed fine faces | Greedy quads | Triangles | Chunks | Mesh build | Peak memory |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1 | 61,142 | 19,264 | 38,528 | 64 | 0.744 s | 112,308,224 B |
-| 2 | 244,568 | 184,385 | 368,770 | 64 | 0.918 s | 118,075,392 B |
-| 4 | 978,272 | 713,723 | 1,427,446 | 64 | 1.655 s | 157,372,416 B |
-| 8 | 3,913,088 | 2,807,546 | 5,615,092 | 64 | 5.203 s | 327,237,632 B |
-| 16 | **FAILED** | — | — | — | — | hard face limit: 15,652,352 > 4,000,000 |
+| 1 | 61,142 | 19,264 | 38,528 | 64 | 0.735 s | 112,787,456 B |
+| 2 | 285,490 | 77,540 | 155,080 | 64 | 0.902 s | 124,715,008 B |
+| 4 | 1,417,777 | 498,714 | 997,428 | 64 | 1.870 s | 189,104,128 B |
+| 8 | **FAILED** | — | — | — | — | conservative detailed-face limit: 11,739,264 > 4,000,000 |
 
-The sweep reaches a guarded hard limit at k=16; k=8 is the last completed measurement. It stops
+The sweep reaches a guarded hard limit at k=8; k=4 is the last completed measurement. It stops
 before constructing enough Python fine-face objects to destabilise the devpod. The limit is the
 offline instrument's safe ceiling, not a claim that a Rust renderer has the same ceiling.
 
@@ -20,7 +19,7 @@ offline instrument's safe ceiling, not a claim that a Rust renderer has the same
 
 | Class | Instances | Recommended bench scale | Geometry budget | Basis |
 |---|---:|---:|---:|---|
-| Terrain | 44,984 exposed cells | k=4 | 1,427,446 triangles / 64 chunks | measured whole exported world |
+| Terrain | 44,984 exposed cells | k=4 | 997,428 triangles / 64 chunks | measured whole exported world |
 | Trees | ~265 | up to k=16 per visible cube | ≤814,080 triangles for 265 isolated six-face cubes | derived: 265 × 6 × 16² × 2 |
 | Dwarves | 5 | 48 voxels tall (0.025 m) | asset-local; not terrain-bound | derived instance count, vehicle verification still required |
 
