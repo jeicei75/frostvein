@@ -5,7 +5,7 @@ baseline_commit: d02f9595a9e137c4dac8873b593fdc8a9886c7cf
 
 # Story 10.2: The Live Seat — BlenderMCP on Gingerspice (SPIKE)
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -443,10 +443,47 @@ answer.
 
 ### Completion Notes List
 
-### The Decision (AC5 — fill all three parts)
+### The Decision (AC5)
 
-- **The handoff is:**
-- **It costs:**
-- **MCP's place (Wolf, verbatim):**
+- **The handoff is: candidate (a) — the session re-emits its construction as a standalone headless
+  generator — and it carried BIT-EXACTLY, which is stronger than the AC asked for.**
+  `voxel_pine.py` was written by the session, committed, and re-run on the devpod: it reproduces
+  all four GLBs **byte-identically** to the files exported on gingerspice, from a different
+  machine, with no MCP, no live Blender session and no manual step. Candidate (b) (ship the data
+  file) is superseded — the GLBs are committed as convenience, but the script is the artifact of
+  record. Candidate (c) (hand re-expression) was never needed. The enabling condition was that
+  every geometry change went through tool calls rather than the viewport, which is what let the
+  construction be re-emitted at all.
+
+- **It costs: effectively nothing to carry, and about ten minutes to produce.**
+  Measured, not estimated. Session (Wolf + Claude on gingerspice): reference sheet landed 07:33,
+  exploration finished 08:58 — and inside that, the WIP-to-final look pass took **five minutes**
+  (08:53 → 08:58). The generator was emitted on request and delivered by 09:30, ~30 minutes,
+  including two real defect fixes. Regeneration on the devpod: **1.75 s per variant**. Fidelity
+  loss: **zero, bit-exact**. Manual steps in the handoff: **none** — the script takes a type and
+  an output path and reads nothing else. Round trip idea → four verified game-ready assets:
+  **2 h 10 min**, with the boss doing other work alongside.
+  Not free, and worth naming: the handoff only holds while authoring stays inside tool calls. A
+  by-hand viewport edit is invisible to the transcript and would break the property silently.
+
+- **MCP's place (Wolf, verbatim, 2026-08-31):** *"AC5 hmm.. yes I think there is great value with
+  MCP .. it will be much faster to tweak (actually I did for trunks because at first those were
+  too thick) ... so we will keep it...just need to think about handover process at start ..
+  templates are first step .. but ..that is not urgent now"*
+
+  **Reading: MCP JOINS the standing workflow as the AUTHORING SEAT; the committed generator is the
+  deliverable.** The trunk-thickness tweak is the ruling's own evidence — a look correction that
+  would have cost a script edit, a re-render and a re-look offline took one instruction live.
+
+- **OWED, named here and deliberately not built (this story's scope forbids it):**
+  1. **The handover runbook** — Wolf: *"just need to think about handover process at start"*, and
+     *"templates are first step .. that is not urgent now"*. The two drafts above (the asset
+     contract and the per-asset brief) are that runbook's content, proven on one asset. Story 10.3
+     is its natural home.
+  2. **The scale constant.** Metres-per-voxel is a PROJECT constant, not a per-asset choice, and
+     it is currently unset. 0.2 m gives the dwarf six voxels of height. **Blocks asset #2.**
+  3. **Hardening `scripts/bench/spike_pine_render.py`** — the stated exception in Task 3 says that
+     if the decision keeps the script, a test plus a sabotage row is the follow-up's first task.
+     The decision keeps it.
 
 ### File List
