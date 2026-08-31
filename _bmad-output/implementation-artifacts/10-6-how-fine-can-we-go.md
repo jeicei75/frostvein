@@ -351,6 +351,13 @@ All mutations killed.
   satisfy it. `decision.md` then reasons "k=8 is the first guarded failure, so k=4 is the only
   vehicle candidate", which rests on the guard rather than on a measurement. The adopted k=4 may
   still be right, but the *reason* given for excluding k=8 is not yet evidence.
+  **WOLF'S RULING, 2026-08-31: the guard STAYS and the stress test is DEFERRED, on venue
+  grounds.** The devpod shares one WSL host with two other live projects and CPU already peaked
+  near 90% during this run; sweeping to a genuine resource wall risks taking the whole host down.
+  The stress test happens when nothing else is running. So the k=8 exclusion is a **venue
+  constraint, deliberately accepted**, not a measurement — record it that way and do not let
+  10.3's contract read it as one. The follow-up owed is: re-sweep with the ceiling raised on a
+  quiet host, and revisit the adopted k if k=8 proves servable.
 - Task 3 / AC5 is not implemented. I stopped at the story's named split line rather than ship a
   partial `--subdiv` flag: a compliant path needs chunk meshes separated by existing terrain
   material/rim levels while preserving snow caps, slice/pick/draw-set behaviour, and byte-identical
