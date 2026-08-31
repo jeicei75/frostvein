@@ -101,7 +101,8 @@ unverifiable from here and is story work by design.
   - [x] Install `uv` via its official installer; download `addon.py` from
         github.com/ahujasid/blender-mcp; Blender → Edit → Preferences → Add-ons → Install →
         enable "Interface: Blender MCP".
-  - [x] Connect Claude: `claude mcp add blender -- uvx blender-mcp` (Claude Code), or the
+  - [x] Connect Claude: `claude mcp add blender -- uvx blender-mcp@1.9.0` (Claude Code; pin
+        measured 2026-08-31, see the recipe's step 4), or the
         `claude_desktop_config.json` `mcpServers` entry for the Claude app. **Windows PATH trap:**
         if the tool fails to spawn, use the full path to `uvx.exe` or `cmd /c uvx blender-mcp`.
   - [x] In Blender: N-panel → BlenderMCP → Start MCP Server (localhost:9876). Smoke-test with one
@@ -277,9 +278,16 @@ nothing here is verifiable agent-side until the captured files land in this repo
    - **Windows PATH trap (premise 3):** GUI apps don't inherit the terminal PATH. If the tool
      fails to spawn, replace `uvx` with the full path to `uvx.exe`, or use
      `cmd /c uvx blender-mcp`.
-   - **Pin after first success (sandboxing ruled out as disproportionate, Wolf 2026-08-30):**
-     once the smoke test passes, note the blender-mcp version and change the config to
-     `uvx blender-mcp@<that-version>` — freezes supply-chain exposure to a release already
+   - **PIN: `blender-mcp@1.9.0` — MEASURED 2026-08-31, not guessed.** Read off gingerspice with
+     `uvx --from blender-mcp python -c "import importlib.metadata as m; print(m.version('blender-mcp'))"`
+     → `1.9.0`. Note that 1.9.0 shipped 2026-08-30, the same evening the seat went live, so the
+     smoke test ran against a day-old release; that is an argument for pinning BEFORE the session,
+     not after. Use `uvx blender-mcp@1.9.0` in whichever seat you run — Claude Code
+     `claude mcp add blender -- uvx blender-mcp@1.9.0`, or `"args": ["blender-mcp@1.9.0"]` in
+     `claude_desktop_config.json`. **The addon is numbered separately** (`bl_info` version, shown in
+     Blender's Add-ons panel — Wolf read 1.5 there; upstream main is (1, 6) today). Do not pin the
+     server to an addon number: `blender-mcp@1.5` would have rolled the server back eight months.
+     Sandboxing stays ruled out as disproportionate (Wolf 2026-08-30) — freezes supply-chain exposure to a release already
      run, and makes the session reproducible. No sandbox around uv: the arbitrary-code
      surface is `execute_blender_code` inside Blender itself, which a uv sandbox would not
      contain; revisit only if the AC5 decision is "joins the standing workflow".
@@ -322,6 +330,10 @@ takes it from there (commits, handoff script, two-run evidence, decision record)
 
 ### Debug Log References
 
+- 2026-08-31, **RESOLVED: the pin is `blender-mcp@1.9.0`** (measured on gingerspice). "1.5" was
+  the ADDON's number, as suspected below; the investigation that established this is kept because
+  it is the reusable half — the addon and the server are numbered separately, and the panel shows
+  the addon.
 - 2026-08-31, the version pin is NOT closed — "1.5" does not identify the server that ran.
   Wolf reported the MCP version as **1.5**; checked before writing it into the recipe, because a
   wrong pin downgrades a seat that currently works. Three facts disagree with it. (a) PyPI has no
@@ -348,7 +360,7 @@ takes it from there (commits, handoff script, two-run evidence, decision record)
   the BlenderMCP addon registers and round-trips on a 5.x major. Task 0's setup boxes checked;
   the hygiene subtask stays open (it is session-time behavior, exercised during Task 1). The
   exploration session (Task 1, sample assets) continues tomorrow, 2026-08-31. Blender-mcp
-  version pin per the recipe still owed once Wolf notes the version that worked.
+  version pin per the recipe CLOSED 2026-08-31: `blender-mcp@1.9.0`.
 - 2026-08-30 dev start: branch `10-2-the-live-seat-blendermcp-on-gingerspice-spike`, clean tree.
   Post-merge branch trap checked: PR #41 (10.1) merged; `origin/main` (09f24ae) verified an
   ancestor of HEAD — no rebase needed. No `10-2-signoff/` exists yet; Tasks 1–3 blocked on the
