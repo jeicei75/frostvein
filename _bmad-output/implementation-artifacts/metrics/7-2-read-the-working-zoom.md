@@ -37,3 +37,21 @@ foreign run, the 2.4 trap.
 **Story total: $241.07** across create $28.89, Codex dev $5.51 (2 runs, 13pp of the weekly quota),
 review $46.60, review-patch + live-gate $151.81, sign-off $8.26. Well above Epic 3's $45.52/story,
 and the vehicle half is where it went.
+
+**The `gpt-5.6-terra` rows above are UNDER-stated — read them as gpt-5-rate equivalents
+(rates 2026-08-01).** Terra had no entry in `PRICES` until 2026-08-31, so it fell through to the
+`gpt-5` row ($1.25 in / $1.25 cache-write / $0.125 cache-read / $10 out) instead of its own
+($2 / $2.50 / $0.20 / $12). forge-process 1.3.2 added the row; recomputed from the same token
+counts at the correct rates:
+
+| phase | recorded | as recorded | corrected |
+|---|---|---|---|
+| dev | 2026-08-21 08:18 UTC | $1.37 | **$2.09** |
+| dev | 2026-08-21 08:18 UTC | $4.14 | **$6.39** |
+| **terra subtotal** | | **$5.51** | **$8.48** (+$2.97, 1.54x) |
+
+Not rewritten in place, matching this repo's `PRICES` precedent (`2-1-the-world-runs-on-its-
+own-clock.md`): `--rollup` reads the `est_usd` already written, so a silent edit would make the
+rollup disagree with itself. Claude rows on this story are unaffected. **No literal dollars were
+spent on any of these rows** — Codex runs on a subscription, and `est_usd` weights tokens purely
+as a cross-tool benchmark; `quota_pp` is the axis that binds.

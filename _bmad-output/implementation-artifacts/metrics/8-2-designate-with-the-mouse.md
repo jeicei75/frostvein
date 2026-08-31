@@ -16,3 +16,23 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | dev | codex | gpt-5.6-terra | 16 | 99,880 | 0 | 1,072,128 | 13,641 | 1,185,649 | $0.40 | `rollout-2026-08-26T14-30-46-01a03e7b-0c4f-7b61-a98e-ec44cf3ceb28.jsonl` | 2026-08-26 15:27 UTC · rates 2026-08-01 | 4 | 6pp |
 | dev | codex | gpt-5.6-terra | 169 | 366,246 | 0 | 19,428,352 | 34,376 | 19,828,974 | $3.23 | `rollout-2026-08-26T14-48-29-01a03e8b-4599-7110-a4c8-53df00a68597.jsonl` | 2026-08-26 15:27 UTC · rates 2026-08-01 | 22 | 54pp |
 | review | claude | claude-opus-5, claude-sonnet-5 | 615 | 1,230 | 2,134,298 | 94,658,492 | 524,061 | 97,318,081 | $69.25 | `8ed0eed3-da40-447b-9f3a-ca242737c355.jsonl` | 2026-08-26 17:18 UTC · rates 2026-08-01 | 108 | — |
+
+**The `gpt-5.6-terra` rows above are UNDER-stated — read them as gpt-5-rate equivalents
+(rates 2026-08-01).** Terra had no entry in `PRICES` until 2026-08-31, so it fell through to the
+`gpt-5` row ($1.25 in / $1.25 cache-write / $0.125 cache-read / $10 out) instead of its own
+($2 / $2.50 / $0.20 / $12). forge-process 1.3.2 added the row; recomputed from the same token
+counts at the correct rates:
+
+| phase | recorded | as recorded | corrected |
+|---|---|---|---|
+| dev | 2026-08-26 15:27 UTC | $2.37 | **$3.64** |
+| dev | 2026-08-26 15:27 UTC | $0.37 | **$0.56** |
+| dev | 2026-08-26 15:27 UTC | $0.40 | **$0.58** |
+| dev | 2026-08-26 15:27 UTC | $3.23 | **$5.03** |
+| **terra subtotal** | | **$6.37** | **$9.82** (+$3.45, 1.54x) |
+
+Not rewritten in place, matching this repo's `PRICES` precedent (`2-1-the-world-runs-on-its-
+own-clock.md`): `--rollup` reads the `est_usd` already written, so a silent edit would make the
+rollup disagree with itself. Claude rows on this story are unaffected. **No literal dollars were
+spent on any of these rows** — Codex runs on a subscription, and `est_usd` weights tokens purely
+as a cross-tool benchmark; `quota_pp` is the axis that binds.
