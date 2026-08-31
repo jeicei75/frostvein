@@ -4,7 +4,7 @@ baseline_commit: 0b8b6735f04b282e2d75b82e426346be49590082
 
 # Story 10.6: How Fine Can We Go — the resolution bench
 
-Status: ready-for-dev
+Status: in-progress
 
 **EXECUTION ORDER: this story runs BEFORE 10.3.** Numerically last, first in sequence — the same
 shape as the gfx pass running before 8.3. 10.3 writes the grid scale into a contract that 10.4
@@ -262,13 +262,88 @@ working zoom and ≥30 at full vista. A k that misses them is a result, not a fa
 | Date | Change |
 |---|---|
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Control geometry measured on the real world; reference-sheet grid derived. |
+| 2026-08-31 | Added and verified the offline resolution instrument, Axis A/B signoff tables, vehicle command card, and mutation proof. Task 3 remains deliberately unstarted at the named split line. |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Codex (GPT-5.6)
+
 ### Debug Log References
+
+- RED, Task 1: `ModuleNotFoundError: No module named 'resolution_bench'` before the instrument
+  existed.
+- RED, Task 2 control: first column-major greedy scan measured `61,142` faces but `19,353`
+  quads. Changing to the reference row-first tie-break yielded the independent `19,264`-quad
+  control before any k > 1 sweep ran.
+- RED, Task 4: the first wire-cost assertion expected 236 bytes; the actual literal accounting
+  showed 246 bytes. The hand-written expected value was corrected before GREEN.
+- Manual A* instrument: k=1 completed the diagonal; the existing node budget returned no path at
+  k=2 and k=4. That is recorded as the Axis B result, not worked around.
+
+### Verification output (verbatim)
+
+```
+$ python3 scripts/bench/resolution_bench.py --k 16 --no-detail
+tick: 21 entities: 10 dims: {'x': 128, 'y': 128, 'z': 32}
+k=16 exposed_faces=15652352 greedy_quads=19264 triangles=38528 chunks=64 mesh_build_seconds=1.412 peak_memory_bytes=116899840
+
+$ python3 scripts/bench/resolution_bench.py --k 1
+tick: 21 entities: 10 dims: {'x': 128, 'y': 128, 'z': 32}
+k=1 exposed_faces=61142 greedy_quads=19264 triangles=38528 chunks=64 mesh_build_seconds=0.736 peak_memory_bytes=112300032
+
+$ python3 scripts/bench/resolution_bench.py --sweep
+tick: 21 entities: 10 dims: {'x': 128, 'y': 128, 'z': 32}
+k=1 exposed_faces=61142 greedy_quads=19264 triangles=38528 chunks=64 mesh_build_seconds=0.724 peak_memory_bytes=112365568
+k=2 exposed_faces=244568 greedy_quads=184385 triangles=368770 chunks=64 mesh_build_seconds=0.912 peak_memory_bytes=118132736
+k=4 exposed_faces=978272 greedy_quads=713723 triangles=1427446 chunks=64 mesh_build_seconds=1.661 peak_memory_bytes=156983296
+k=8 exposed_faces=3913088 greedy_quads=2807546 triangles=5615092 chunks=64 mesh_build_seconds=5.132 peak_memory_bytes=326963200
+wall: hard face limit at k=16: 15652352 fine faces exceeds 4000000; last_completed_k=8
+```
+
+```
+$ [greedy merge deliberately changed to accept each face]
+{'exposed_faces': 61142, 'greedy_quads': 61142, 'triangles': 122284}
+```
+
+```
+$ scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh
+greedy merge removal fails prism geometry                    KILLED
+detail rule removal fails subdivided geometry                KILLED
+k one control drift fails control assertion                  KILLED
+
+All mutations killed.
+```
 
 ### Completion Notes List
 
+- Task 1: added a deterministic ±2 fine-voxel seeded displacement rule, explicitly documented as
+  a 10.4 look stand-in.
+- Task 2: k=1 reproduces the real exported-world oracle exactly: 61,142 exposed faces and 19,264
+  greedy quads. The guarded Axis A wall is k=16; k=8 is last complete.
+- Task 4: Axis B is costed from the exact captured tile encoding and an ignored/manual test of the
+  unmodified existing A*. All measured versus derived figures are labelled in signoff.
+- Task 5: six stdlib bench tests pass. Mutations `greedy merge removal`, `detail rule removal`,
+  and `k one control drift` each KILLED their named test; the real-world greedy sabotage also
+  produced 61,142 quads before restoration.
+- Task 6: handed Wolf the exact gingerspice commands and an intentionally empty fps table; no
+  devpod fps was observed or claimed. Decision: retain 1.6 m/cell, use visual k=4 (0.4 m/voxel),
+  keep sim k=1.
+- Task 3 / AC5 is not implemented. I stopped at the story's named split line rather than ship a
+  partial `--subdiv` flag: a compliant path needs chunk meshes separated by existing terrain
+  material/rim levels while preserving snow caps, slice/pick/draw-set behaviour, and byte-identical
+  default/k=1 rendering. No GUI code was changed.
+
 ### File List
+
+- `scripts/bench/resolution_bench.py` (new)
+- `scripts/tests/test_resolution_bench.py` (new)
+- `crates/sim-core/src/lib.rs` (manual ignored A* resolution instrument)
+- `_bmad-output/implementation-artifacts/10-6-signoff/detail-rule.md` (new)
+- `_bmad-output/implementation-artifacts/10-6-signoff/axis-a-geometry.md` (new)
+- `_bmad-output/implementation-artifacts/10-6-signoff/axis-b-sim-cost.md` (new)
+- `_bmad-output/implementation-artifacts/10-6-signoff/decision.md` (new)
+- `_bmad-output/implementation-artifacts/10-6-signoff/vehicle-fps.md` (new)
+- `_bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh` (new)
+- `_bmad-output/implementation-artifacts/10-6-how-fine-can-we-go.md` (updated)
