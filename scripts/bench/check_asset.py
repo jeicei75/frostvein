@@ -281,7 +281,7 @@ def main(argv):
             return 1
         try:
             line, failure = figures(path)
-            print(line)
+            print(line, flush=True)
             if failure:
                 raise AssetError(failure)
         except AssetError as error:
