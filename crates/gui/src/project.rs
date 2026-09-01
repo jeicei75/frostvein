@@ -2386,11 +2386,22 @@ mod tests {
         // count can only ever be greater, never smaller, because partitioning splits rectangles
         // and never joins them. Both halves are asserted; the prism above has one rim level and
         // pins the triangle counts exactly.
-        for (subdiv, faces, bench_triangles) in [(1, 84, 36), (2, 334, 154), (4, 1608, 926)] {
+        // The triangle column is pinned EXACTLY, not by an inequality. `>= bench_triangles` let
+        // the greedy tie-break drift freely -- the row named for that drift SURVIVED against it,
+        // because reordering the merge changes which rectangles form and so the count, while
+        // still leaving it above the unpartitioned bench figure. An inequality that every
+        // plausible regression satisfies pins nothing.
+        for (subdiv, faces, bench_triangles, client_triangles) in
+            [(1, 84, 36, 60), (2, 334, 154, 174), (4, 1608, 926, 942)]
+        {
             let (drawn, triangles) = fine_geometry(&staircase(), subdiv);
             assert_eq!(
                 drawn, faces,
                 "fine surface disagrees with the bench at k={subdiv}"
+            );
+            assert_eq!(
+                triangles, client_triangles,
+                "k={subdiv}: the client's partitioned triangle count moved"
             );
             assert!(
                 triangles >= bench_triangles,

@@ -262,31 +262,37 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
 
 class ResolutionPerClassTests(unittest.TestCase):
     def test_the_census_counts_exposed_cells_not_whole_world_material_counts(self):
-        """The exact defect the round-2 review found, on a fixture small enough to count by hand.
+        """The exact defect the round-2 review found, on a fixture with a genuinely BURIED cell.
 
-        A 3x1x3 column of trunk with foliage on top, walled in by stone on one side: the buried
-        trunk cell must NOT appear in the census, which is what made the committed table wrong.
+        A 3x3x3 block of stone with one `tree_trunk` cell at the centre. The centre is enclosed on
+        all six sides, so it is NOT in the draw set and the census must report zero tree cells.
+        Counting whole-world material instead -- which is what the committed sign-off table did --
+        reports one. The first version of this test used a fixture where every cell was exposed,
+        so the mutation row SURVIVED: it pinned nothing, which is the same defect one level up.
         """
-        dims = {"x": 3, "y": 1, "z": 3}
-        # x=0 stone wall, x=1 trunk column, x=2 empty. Middle trunk cell is still exposed on
-        # +x, so build a fully enclosed one by walling both sides.
+        dims = {"x": 3, "y": 3, "z": 3}
         tiles = []
         for z in range(3):
-            for _ in range(1):
+            for y in range(3):
                 for x in range(3):
-                    if x in (0, 2):
-                        tiles.append({"solid": "stone"})
-                    else:
-                        tiles.append({"solid": "tree_trunk"})
+                    buried = (x, y, z) == (1, 1, 1)
+                    tiles.append({"solid": "tree_trunk" if buried else "stone"})
         world = {"dims": dims, "tiles": tiles}
         census = resolution_bench.per_class_census(world)
-        # Every trunk cell touches the y walls of the world, so all three are exposed here and
-        # the count is 3 -- what matters is that the class split is exact and the totals close.
-        self.assertEqual(census["tree_cells"] + census["terrain_cells"], 9)
+        # The buried trunk is the whole point: whole-world counts say 1 tree cell, the draw set
+        # says 0, and 26 of the 27 cells are exposed stone.
+        self.assertEqual(census["tree_cells"], 0)
+        self.assertEqual(census["tree_faces"], 0)
+        self.assertEqual(census["terrain_cells"], 26)
+        # A 3x3x3 cube's surface is 6 * 9 = 54 faces; the buried cell contributes none and hides
+        # none of its neighbours', so every one of the 54 is a boundary face.
+        self.assertEqual(census["terrain_faces"], 54)
+        # `trees` counts trunk COLUMNS and is deliberately material-based, not exposure-based:
+        # a tree whose every cell is buried is still a tree.
         self.assertEqual(census["trees"], 1)
-        self.assertEqual(census["tree_cells"], 3)
-        self.assertEqual(census["terrain_cells"], 6)
+        # The split must close against the surface it is a split OF.
         summary = resolution_bench.geometry_summary(world, k=1, detail=True)
+        self.assertEqual(census["tree_cells"] + census["terrain_cells"], summary["cells"])
         self.assertEqual(census["tree_faces"] + census["terrain_faces"], summary["exposed_faces"])
 
 
