@@ -1601,7 +1601,7 @@ development_status:
   # specimen is the already-committed stale `tree.glb`, measured at creation as genuinely red
   # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
   # clause passes on it, so origin centring is the only discriminating one.
-  10-3-the-rules-of-the-look: review
+  10-3-the-rules-of-the-look: done
   10-4-the-trees-look-right-the-pilot: backlog
   10-5-dwarves-worth-looking-at: backlog
   epic-10-retrospective: optional
