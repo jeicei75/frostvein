@@ -43,7 +43,35 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-01  # 10.6 DIG STALL FIXED on Wolf's second report ("when one dwarf digs all
+last_updated: 2026-09-01  # 10.6 SNOW PAINTED, NOT STACKED (Wolf ruled). The fine path gives a
+                          # capped cell's TOP FACES the SnowCap material and spawns no slab; sides
+                          # and bottom stay rock (painting walls would silver every trench --
+                          # asserted on the mask keys). ENTITIES 14,527 -> 6,826, a 7.8x collapse
+                          # from the shipped 53,129 where it was 3.66x; TRIANGLES UNCHANGED at
+                          # 928,884, because painting moves faces between material partitions
+                          # rather than adding any. Closes four complaints at once: caps floating
+                          # over a dug hole, caps hiding 17.9% of the very detail the path draws,
+                          # caps that cannot be dug (not tiles), and 8,145 entities. NOTE: the
+                          # floating was NEVER REPRODUCED here -- a live-delta test shows a dug tile
+                          # taking its cap at every subdiv -- but there is now no cap entity that
+                          # COULD float. --subdiv 1 untouched (shipped control, byte-for-byte test).
+                          # THE ROUGHNESS WOLF SAW IS THIS STORY'S PLACEHOLDER, NOT WORLDGEN. The
+                          # detail rule is white noise per FINE COLUMN, so adjacent sub-cell columns
+                          # are independent -- why it looks like gravel AND the worst possible input
+                          # for a greedy mesher. Measured with the new --detail-lattice knob at k=4:
+                          # flat 14,813 quads / whole-cell-coherent 40,060 / 2x2 127,699 / per-column
+                          # noise 460,251. DETAIL IS 96.8% OF THE COMMITTED FIGURE and the budget
+                          # moves 11.5x on this one property. decision.md now gives 10.3 a RANGE,
+                          # 80,120-928,884 triangles, not a number -- an asset contract fixing
+                          # 928,884 as "the cost of k=4" would be pricing a placeholder. The COARSE
+                          # LANDFORM is a separate question these screenshots say nothing about.
+                          # AC7 FIRST VALID READING: >140 fps at k=4, no halts (Wolf). Clears NFR6's
+                          # 60 bar. Recorded as a FLOOR not headroom -- a number that barely moved
+                          # across the winding fix (not-rasterised -> 928,884 drawn) is pinned to
+                          # something other than the scene, most likely a 144 Hz refresh. k=8 and the
+                          # full vista still unread.
+                          # 22/22 mutation rows KILLED, full gate GREEN.
+                          # PRIOR: 10.6 DIG STALL FIXED on Wolf's second report ("when one dwarf digs all
                           # other movement is in halt" -- a dwarf digs CONTINUOUSLY, so it was a
                           # full mesh build PER DUG TILE, not one hitch). `reconcile` now rebuilds
                           # only the chunks a changed cell can reach. LIVE at k=4, real dwarf, real

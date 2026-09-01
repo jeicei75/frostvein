@@ -275,6 +275,7 @@ interactive: `E` out, `Q` in, clamped 4.0-500.0. The k values wanted are **4 and
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Control geometry measured on the real world; reference-sheet grid derived. |
 | 2026-08-31 | Added and verified the offline resolution instrument, Axis A/B signoff tables, vehicle command card, and mutation proof. Task 3 remains deliberately unstarted at the named split line. |
 | 2026-08-31 | Added the opt-in GUI subdivision path, headless control/wiring proof, live lavapipe geometry measurements, and the Task 3 mutation proof. |
+| 2026-09-01 | **Snow is painted onto the fine terrain's top faces instead of spawning 8,145 cap slabs** (Wolf's ruling). Nothing left to float over a dug hole, 17.9% of the fine surface uncovered, entities 14,527 -> 6,826 (a 7.8x collapse from the shipped path, was 3.66x), triangles unchanged. Also: the k=4 budget is now recorded as a RANGE, 80,120-928,884 triangles — 96.8% of the committed figure is the placeholder's white noise, and the roughness Wolf saw is that stand-in, not worldgen. |
 | 2026-09-01 | **The dig stall is fixed: one changed tile now rebuilds 1 chunk instead of 121 — 55 ms against ~2,500 on a live dig at k=4.** Taken on Wolf's second report. Two safety properties asserted (a partial build equals a whole one; the dirty set covers every chunk a change can alter). A first cut ran the branch on every frame at ~130 ms each — worse than the stall — and every unit test passed; caught from the live log. Also: the big pale tiles Wolf asked about are the 8,145 snow caps, proved by rendering with them suppressed. |
 | 2026-09-01 | **Wolf's vehicle screenshots found the real cause of the holes: every chunk quad was wound against its own normal, so back-face culling deleted the whole terrain surface.** One-line fix, a winding test, and a mutation row. No count changes — faces, quads, triangles, cells and chunks are all winding-blind, which is why four review layers and every oracle in this story missed it. Both existing fps readings are void: they measured a scene with no terrain in it. |
 | 2026-09-01 | **Re-measured end to end after Wolf's return-to-dev ruling.** Both meshers rebuilt on one column heightfield and culled by solidity; every k>1 figure regenerated; all 23 patch items resolved; 14 mutation rows all KILLED; full gate green. Adopted k=4 is now **928,884 triangles** (was 997,428 against a renderer serving 1,527,754). The sweep reaches k=16 and walls at k=32. |
@@ -427,6 +428,43 @@ All mutations killed.
 ```
 
 ### Completion Notes List
+
+- **SNOW IS PAINTED, NOT STACKED, 2026-09-01 (Wolf's ruling).** The fine path gives a capped
+  cell's top faces the `SnowCap` material and spawns no slab. Sides and bottom stay rock — a cap
+  is settled snow lying on a surface, not a change of material, and painting the walls would
+  silver every trench; asserted on the mask keys. **Entities 14,527 → 6,826**, a 7.8× collapse
+  from the shipped 53,129 where it was 3.66×, with triangles unchanged at 928,884 because
+  painting moves faces between material partitions rather than adding any. `--subdiv 1` is
+  untouched and still spawns slabs; it is the shipped control and a test compares it byte-for-byte.
+
+  Four separate complaints closed by one change: caps floating over a dug hole, caps hiding 17.9%
+  of the very detail the path exists to draw, caps that cannot be dug because they are not tiles,
+  and 8,145 entities. **I could not reproduce the floating** — a live-delta test shows a dug tile
+  taking its cap at every subdivision — so that exact case is unexplained, but the fine path now
+  has no cap entity that *could* float.
+
+- **THE ROUGHNESS WOLF SAW IS THIS STORY'S PLACEHOLDER, NOT WORLDGEN.** "Terrain is quite rough
+  atm ... formed from small cubes that are not really forming meaningful terrain form" — correct,
+  and the cause is the measurement stand-in: **white noise sampled once per fine column**, so two
+  adjacent sub-cell columns have independent depths. That is both why it looks like gravel and
+  the worst possible input for a greedy mesher.
+
+  Measured with `--detail-lattice N`, which samples the same rule every N fine columns
+  (k=4, client-parity): flat 14,813 quads → whole-cell-coherent 40,060 → 2×2-coherent 127,699 →
+  per-column noise **460,251**. **Detail is 96.8% of the committed figure and the budget moves
+  11.5× on this one property.** So 928,884 is not "what k=4 costs"; it is what k=4 costs if the
+  sub-cell surface is uncorrelated noise, which no authored terrain will be. `decision.md` now
+  gives 10.3 the range **80,120–928,884** and the reason. Default is unchanged — lattice 1 is the
+  shipped rule and every other committed figure uses it, which a test pins.
+
+  **The coarse landform is a separate question and this measurement says nothing about it.** If
+  worldgen needs work that is a real story; it is just not what these screenshots showed.
+
+- **AC7's FIRST VALID READING.** Wolf, 2026-09-01: ">140 fps, no halts anymore" at k=4 with the
+  terrain actually drawn. Clears NFR6's 60 bar. Recorded as a **floor, not headroom**: a number
+  that barely moved across the winding fix — which took the terrain from not-rasterised to
+  928,884 drawn triangles — is pinned to something other than the scene, most likely a 144 Hz
+  refresh. k=8 and the full vista are still unread.
 
 - **THE DIG STALL, FIXED ON WOLF'S SECOND REPORT, 2026-09-01.** "When one dwarf digs all other
   movement is in halt" is the sharper symptom: a dwarf digs *continuously*, so the full-world

@@ -696,11 +696,31 @@ fn build_chunk_meshes(
 
         let above = [position[0], position[1], position[2] + 1];
         if !occludes(mirror, above, level) {
+            // Settled snow is PAINT on the top faces here, not the shipped path's separate slab.
+            // A slab is cell-scale: it sits at the coarse cell top while the fine surface is a
+            // pit deeper, it covers 102% of the cell so it hides 17.9% of the very detail this
+            // path exists to draw, and it is `ClientLocal`, so it is not a tile and cannot be
+            // dug -- which read as big plates lying on top of everything that nothing could
+            // touch. As a material on the real surface it follows every fine column exactly,
+            // hides nothing, adds no geometry, and costs 8,145 fewer entities.
+            let top = if has_snow_cap(mirror, position) {
+                FaceOwner {
+                    chunk: owner.chunk,
+                    slot: TerrainSlot::SnowCap as usize,
+                    rim: owner.rim,
+                }
+            } else {
+                FaceOwner {
+                    chunk: owner.chunk,
+                    slot: owner.slot,
+                    rim: owner.rim,
+                }
+            };
             for du in 0..subdiv {
                 for dv in 0..subdiv {
                     let plane = position[2] * subdiv + column_height(own.as_ref(), du, dv, subdiv);
                     let (u, v) = (position[0] * subdiv + du, position[1] * subdiv + dv);
-                    push_face(&mut chunks, &owner, position, 2, 1, plane, u, v, targets);
+                    push_face(&mut chunks, &top, position, 2, 1, plane, u, v, targets);
                 }
             }
         }
@@ -897,12 +917,6 @@ fn spawn_subdivided_terrain(
             TerrainChunk(chunk),
             TerrainChunkCells(chunk_mesh.cells.into_iter().collect()),
         ));
-    }
-    for &position in positions {
-        if has_snow_cap(mirror, position) && wanted(position) {
-            spawn_snow_cap(commands, assets, mirror, position);
-            stats.entities += 1;
-        }
     }
     stats
 }
@@ -2105,6 +2119,53 @@ mod tests {
              a whole one",
             chunks.len()
         );
+    }
+
+    /// Snow is painted on the top faces, and ONLY the top faces.
+    ///
+    /// The sides and bottom of a capped cell are still rock: a cap is settled snow lying on a
+    /// surface, not a change of material. Getting this wrong would silver the walls of every
+    /// trench. Asserted on the mask keys, which is where the material partition actually lives.
+    #[test]
+    fn a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else() {
+        let dims = Dims { x: 3, y: 3, z: 2 };
+        let mut tiles = vec![Tile::Empty; 18];
+        for y in 0..3 {
+            for x in 0..3 {
+                tiles[x + y * 3] = Tile::Solid(protocol::Material::Stone);
+            }
+        }
+        let mirror = world(dims, tiles);
+        let capped = [1, 1, 0];
+        assert!(
+            has_snow_cap(&mirror, capped),
+            "the fixture must cap {capped:?} or this proves nothing"
+        );
+        let positions = terrain_positions_at(&mirror, 1);
+        let snow = TerrainSlot::SnowCap as usize;
+        let rock = TerrainSlot::of(protocol::Material::Stone) as usize;
+        let mut tops = 0;
+        let mut sides = 0;
+        for (_, mesh) in build_chunk_meshes(&mirror, &positions, 2, 1, None) {
+            for (key, mask) in &mesh.masks {
+                if key.axis == 2 && key.sign > 0 {
+                    assert_eq!(
+                        key.slot, snow,
+                        "a top face of snow-capped rock must be snow"
+                    );
+                    tops += mask.len();
+                } else {
+                    assert_eq!(
+                        key.slot, rock,
+                        "axis {} sign {} was painted snow; only tops carry it",
+                        key.axis, key.sign
+                    );
+                    sides += mask.len();
+                }
+            }
+        }
+        assert_eq!(tops, 36, "9 cells x 2x2 fine columns of top face");
+        assert!(sides > 0, "the block must still have rock sides");
     }
 
     /// Every quad must be WOUND to face the way its own normal says it does.

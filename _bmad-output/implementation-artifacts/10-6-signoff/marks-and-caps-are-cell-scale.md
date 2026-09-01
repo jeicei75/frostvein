@@ -1,4 +1,10 @@
-# The big tiles on top of everything: they are the snow caps
+# The big tiles on top of everything: they were the snow caps
+
+> **FIXED 2026-09-01, on Wolf's ruling.** The fine path no longer spawns cap slabs at all: snow is
+> painted onto the terrain's own top faces. Nothing left to float over a hole, nothing hiding the
+> detail, and 8,145 fewer entities. The diagnosis below is kept because it is why.
+> Before / after at the same camera: `caps-a-subdiv4-with-snow-caps.png` and
+> `caps-c-subdiv4-snow-painted.png`.
 
 **Wolf's guess was right.** The large pale-blue slabs lying on top of everything, which cannot be
 dug, are `SnowCap` entities.
@@ -56,9 +62,31 @@ to be designated with no feedback. This world has **2,553 ice ramps and 2,534 sn
 tiles that will not dig are sometimes ordinary-looking terrain rather than the pale plates, that
 is why. Not this story's to fix; recorded because it is invisible from the client by construction.
 
+## What was done
+
+`--subdiv N > 1` gives a capped cell's **top faces** the `TerrainSlot::SnowCap` material and
+spawns no `SnowCap` entity. Sides and bottom stay rock — a cap is settled snow lying on a surface,
+not a change of material, and painting the walls would silver every trench. Asserted on the mask
+keys.
+
+| At k=4 | Before | After |
+|---|---:|---:|
+| Render entities | 14,527 | **6,826** |
+| Collapse from the shipped path (53,129) | 3.66× | **7.8×** |
+| Triangles | 928,884 | 928,884 |
+| Fine surface hidden under slabs | 17.9% | **0%** |
+
+The triangle count is unchanged: painting moves faces between material partitions rather than
+adding any. Wolf reported caps "floating over empty space" after digging; a live-delta test shows
+a dug tile taking its cap at every subdivision, so the exact case was never reproduced here — but
+the fine path now has no cap entity that *could* float, which closes it either way.
+
+`--subdiv 1` is untouched and still spawns slabs: it is the shipped control and a test compares it
+to the default scene byte-for-byte.
+
 ## The general point for 10.4
 
-Subdividing terrain silently orphans **every** cell-scale thing drawn on it: snow caps,
-designation marks, zone overlays, the hover slab, dig chips. Each keeps a resolution the terrain no
+Subdividing terrain silently orphans **every** cell-scale thing drawn on it. Snow caps are done;
+designation marks, zone overlays, the hover slab and dig chips are not. Each keeps a resolution the terrain no
 longer has. This is a real cost of adopting k > 1 that no triangle count shows, and it lands on
 whoever owns the look.

@@ -1509,10 +1509,21 @@ mod tests {
                     .map(|cap| cap.0)
                     .collect::<std::collections::BTreeSet<_>>()
             };
-            assert!(
-                caps(&mut app).contains(&dug),
-                "{args:?}: the fixture must cap {dug:?} before the dig, or this proves nothing"
-            );
+            let fine = args.contains(&"2");
+            if fine {
+                // The fine path paints snow onto the top faces instead of spawning slabs, so
+                // there is nothing to leave floating. That IS the fix; assert it rather than
+                // skipping the case.
+                assert!(
+                    caps(&mut app).is_empty(),
+                    "{args:?}: the fine path must spawn no snow-cap entities at all"
+                );
+            } else {
+                assert!(
+                    caps(&mut app).contains(&dug),
+                    "{args:?}: the fixture must cap {dug:?} before the dig, or this proves nothing"
+                );
+            }
             sender
                 .send(Ok(WireMessage::Delta(Box::new(protocol::Delta {
                     msg_type: MessageType::Delta,

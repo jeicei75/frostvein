@@ -171,3 +171,24 @@ old = "            WORLD_SEED, plane, u // lattice * lattice, v // lattice * lat
 assert s.count(old) == 1
 p.write_text(s.replace(old, "            WORLD_SEED, plane, u, v, k"))
 PY
+
+mutation "snow stops being painted and the fine surface loses its caps" gui project::tests::a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "            let top = if has_snow_cap(mirror, position) {"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "            let top = if false {"))
+PY
+
+mutation "snow paint leaks onto the sides of capped rock" gui project::tests::a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "        let owner = FaceOwner::new(mirror, position);\n        let own = column_heights(mirror, position, subdiv, level);"
+assert s.count(old) == 1
+p.write_text(s.replace(old, """        let owner = FaceOwner {
+            chunk: chunk_of(position),
+            slot: if has_snow_cap(mirror, position) { TerrainSlot::SnowCap as usize } else { terrain_slot_at(mirror, position) as usize },
+            rim: rim_level(position, mirror.dims()),
+        };
+        let own = column_heights(mirror, position, subdiv, level);"""))
+PY

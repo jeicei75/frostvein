@@ -114,9 +114,13 @@ numbers.** No devpod figure here is an fps claim.
 | Path | Entities | Composition |
 |---|---:|---|
 | `--subdiv 1` (shipped) | 53,129 | 44,984 terrain cubes + 8,145 snow caps |
-| `--subdiv 2..16` | 14,527 | 4,501 foliage cubes + 8,145 snow caps + 1,881 chunk meshes |
+| `--subdiv 2..16`, as first built | 14,527 | 4,501 foliage cubes + 8,145 snow caps + 1,881 chunk meshes |
+| `--subdiv 2..16`, snow painted | **6,826** | 4,501 foliage cubes + 2,325 chunk meshes |
 
-**3.66×, not "hundreds".** The story named entity count as the suspected bottleneck, so this is
+**7.8×.** It was 3.66× while the fine path still spawned a cap slab per exposed top; painting the
+snow onto the terrain's own top faces removed all 8,145 of them for no extra geometry (triangles
+are unchanged at 928,884). What is left is 4,501 foliage cubes — 66% of the surviving entities —
+so any further entity reduction has to come from foliage, not from terrain meshing. The story named entity count as the suspected bottleneck, so this is
 the number 10.3 needs and neither of the earlier documents carried it. Snow caps and foliage
 cubes are 87% of what survives: chunking the terrain does not touch either, and any further
 entity reduction has to come from them, not from finer terrain meshing. A further 121 non-
