@@ -1490,6 +1490,67 @@ mod tests {
         }
     }
 
+    /// A snow cap must never outlive the tile it caps.
+    ///
+    /// Wolf, from the vehicle: "after digging those big caps stay floating over empty space". A
+    /// cap is `ClientLocal` presentation pinned to a cell top, so if a dig empties the cell and
+    /// the cap is not despawned it hangs in the air over the hole. The invariant is the same at
+    /// every subdivision: every `SnowCap` sits on a solid or ramp cell with nothing solid above.
+    #[test]
+    fn a_dug_tile_takes_its_snow_cap_with_it() {
+        for args in [vec!["--subdiv", "1"], vec!["--subdiv", "2"], vec![]] {
+            let (mut app, sender, _server) = configured_app_with_snapshot(&args, wide_snapshot());
+            app.update();
+            let dug = [8, 1, 1];
+            let caps = |app: &mut App| {
+                app.world_mut()
+                    .query::<&crate::project::SnowCap>()
+                    .iter(app.world())
+                    .map(|cap| cap.0)
+                    .collect::<std::collections::BTreeSet<_>>()
+            };
+            assert!(
+                caps(&mut app).contains(&dug),
+                "{args:?}: the fixture must cap {dug:?} before the dig, or this proves nothing"
+            );
+            sender
+                .send(Ok(WireMessage::Delta(Box::new(protocol::Delta {
+                    msg_type: MessageType::Delta,
+                    tick: 1,
+                    tiles: vec![protocol::TileChange {
+                        pos: dug,
+                        tile: Tile::Empty,
+                    }],
+                    entities: Vec::new(),
+                    designations: Vec::new(),
+                    zones: Vec::new(),
+                    items: Vec::new(),
+                    speed: Speed::Normal,
+                }))))
+                .unwrap();
+            app.update();
+            app.update();
+
+            let after = caps(&mut app);
+            let mirror = &app.world().resource::<MirrorResource>().0;
+            let solid = |position: [i32; 3]| {
+                matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_)))
+            };
+            assert!(
+                !solid(dug),
+                "{args:?}: the delta must have emptied the tile"
+            );
+            let floating = after
+                .into_iter()
+                .filter(|cap| !solid(*cap))
+                .collect::<Vec<_>>();
+            assert!(
+                floating.is_empty(),
+                "{args:?}: {floating:?} still carry a snow cap over empty space"
+            );
+        }
+    }
+
     /// A frame with no terrain change must leave the fine terrain entities alone.
     ///
     /// The first cut of the incremental path ran on every frame — "not a full rebuild" is the

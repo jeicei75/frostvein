@@ -30,6 +30,19 @@ each moving the number, all invisible to a k=1 control:
 
 Both sides are now measured, and they agree on the cell set and the chunk count to the unit.
 
+## The budget is a RANGE, and the placeholder sets its ceiling
+
+**k=4 terrain is 80,120 to 928,884 triangles.** The 928,884 figure is what k=4 costs when the
+sub-cell surface is uncorrelated noise, which is exactly what this story's measurement stand-in
+is. Sampled coherently over a whole cell the same rule costs **80,120** — an 11.5× spread on one
+property of a placeholder that was never meant to be a look. Detail accounts for 96.8% of the
+committed figure. See "How much of the k=4 budget is the placeholder?" in [axis-a-geometry.md].
+
+**10.3 should carry the range and the reason, not the single number.** Where inside it the real
+budget lands is decided by 10.4's authored terrain, and an asset contract that fixes 928,884 as
+"the cost of k=4" would be pricing a placeholder. If a single number is needed to start work, use
+928,884 as a ceiling and expect to reclaim most of it.
+
 ## The cost that should decide this is not fps
 
 Every number above describes a **static** scene. At `--subdiv N > 1` any terrain change re-meshes

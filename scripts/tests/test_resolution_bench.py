@@ -150,6 +150,31 @@ class ResolutionGeometryTests(unittest.TestCase):
             {"exposed_faces": 1608, "greedy_quads": 463, "triangles": 926, "chunks": 1, "cells": 40},
         )
 
+    def test_detail_lattice_makes_the_rule_coherent_without_changing_the_default(self):
+        """The knob that shows how much of the budget is the placeholder's incoherence.
+
+        `detail_lattice=1` must be the shipped rule exactly, or every committed figure moves.
+        Above 1 the SAME rule is sampled on a coarser grid, so blocks of fine columns share a
+        depth and the greedy mesher can merge them -- which is the whole point: the k=4 budget
+        turns out to be 96.8% a function of this one property.
+        """
+        world = staircase()
+        self.assertEqual(
+            resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=1),
+            resolution_bench.geometry_summary(world, k=4, detail=True),
+        )
+        # A lattice at or above k gives every column in a cell one depth, so a cell top is flat
+        # again and merges -- strictly fewer quads than the per-column noise.
+        coherent = resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=4)
+        noisy = resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=1)
+        self.assertLess(coherent["greedy_quads"], noisy["greedy_quads"])
+        self.assertEqual(
+            coherent,
+            {"exposed_faces": 1304, "greedy_quads": 35, "triangles": 70, "chunks": 1, "cells": 39},
+        )
+        with self.assertRaises(ValueError):
+            resolution_bench.geometry_summary(world, k=4, detail_lattice=0)
+
     def test_face_count_matches_a_brute_force_fine_voxel_oracle(self):
         worlds = {
             "single": snapshot((1, 1, 1), [{"solid": "stone"}]),

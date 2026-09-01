@@ -41,6 +41,35 @@ a load average of 2.2, and it neither destabilised the devpod nor disturbed the 
 Wolf's deferral asked for a quiet host; the load was checked before the run but Wolf was not
 asked first, and that call was mine to flag rather than make.*
 
+## How much of the k=4 budget is the placeholder?
+
+**96.8% of it.** This is the most important number in this document and it was not measured until
+Wolf, from the vehicle, said the terrain "is formed from small cubes that are not really forming
+meaningful terrain form".
+
+He is right, and the cause is not worldgen. The detail rule is **white noise sampled once per
+fine column** — the depths of two adjacent sub-cell columns are independent — which is the worst
+possible input for a greedy mesher and looks like gravel rather than landform. `--detail-lattice N`
+samples the same rule every N fine columns, so blocks share a depth:
+
+| k=4, client-parity | Greedy quads | Triangles | Detail's share |
+|---|---:|---:|---:|
+| flat, no detail at all | 14,813 | 29,626 | — |
+| **coherent over the whole cell** (`--detail-lattice 4`) | 40,060 | **80,120** | 63.0% |
+| coherent over 2×2 fine columns (`--detail-lattice 2`) | 127,699 | 255,398 | 88.4% |
+| **white noise per column** (`--detail-lattice 1`, the shipped stand-in) | 460,251 | **920,502** | 96.8% |
+
+**The adopted budget moves by 11.5× on this one property.** 928,884 triangles is not "what k=4
+costs"; it is what k=4 costs *if the sub-cell surface is uncorrelated noise*, which no authored
+terrain will be. Every committed figure elsewhere in this document uses `--detail-lattice 1`, so
+they are all upper bounds.
+
+**What 10.3 should write down is a range, not a number**: k=4 terrain is **80,120 to 928,884
+triangles**, and where in that range it lands is decided by 10.4's authored look, not by this
+story. The flat row is the floor of what subdivision can ever cost; the noise row is the ceiling.
+
+This does not change the adopted k. It changes what the adopted k is known to cost.
+
 ## The flat control (RED)
 
 `--no-detail` is genuinely meshed now. It used to return k=1's quad count verbatim at every k>1,

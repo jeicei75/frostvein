@@ -133,7 +133,7 @@ def _coarse_faces(snapshot):
     return total
 
 
-def _cell_heights(x, y, z, k, carved):
+def _cell_heights(x, y, z, k, carved, lattice=1):
     """Fine column heights inside one solid coarse cell, in fine voxels.
 
     A cell whose top is exposed carries the detail pits and is a heightfield; every other
@@ -143,13 +143,20 @@ def _cell_heights(x, y, z, k, carved):
     if not carved:
         return None
     plane = (z + 1) * k
-    return [
-        [k - detail_depth(WORLD_SEED, plane, x * k + i, y * k + j, k) for j in range(k)]
-        for i in range(k)
-    ]
+    # `lattice` samples the SAME rule on a coarser grid, so blocks of `lattice` fine columns share
+    # a depth. It is a measurement knob, not a second rule: lattice=1 is the shipped stand-in and
+    # every committed figure uses it. It exists because the budget turns out to be almost entirely
+    # a function of this one property -- see "how much of the budget is the placeholder" in
+    # 10-6-signoff/axis-a-geometry.md.
+    def at(u, v):
+        return k - detail_depth(
+            WORLD_SEED, plane, u // lattice * lattice, v // lattice * lattice, k
+        )
+
+    return [[at(x * k + i, y * k + j) for j in range(k)] for i in range(k)]
 
 
-def geometry_summary(snapshot, k=1, detail=True, foliage_as_cubes=False):
+def geometry_summary(snapshot, k=1, detail=True, foliage_as_cubes=False, detail_lattice=1):
     """Measure exposed fine faces and greedy quads for a snapshot.
 
     Every reported face is EMITTED, never derived.  The earlier version multiplied the coarse
@@ -162,6 +169,8 @@ def geometry_summary(snapshot, k=1, detail=True, foliage_as_cubes=False):
     """
     if not isinstance(k, int) or k < 1:
         raise ValueError("k must be a positive integer")
+    if not isinstance(detail_lattice, int) or detail_lattice < 1:
+        raise ValueError("detail_lattice must be a positive integer")
     assert_workload_limit(_coarse_faces(snapshot) * k * k, k, detail)
     # `gui --subdiv N` keeps tree foliage on the shipped one-cube-per-cell path, because a
     # greedy cuboid does not preserve a sparse crown silhouette. Foliage still OCCLUDES either
@@ -191,7 +200,7 @@ def geometry_summary(snapshot, k=1, detail=True, foliage_as_cubes=False):
     def heights_at(x, y, z):
         key = (x, y, z)
         if key not in heights_cache:
-            heights_cache[key] = _cell_heights(x, y, z, k, carved_at(x, y, z))
+            heights_cache[key] = _cell_heights(x, y, z, k, carved_at(x, y, z), detail_lattice)
         return heights_cache[key]
 
     masks = collections.defaultdict(dict)
@@ -373,10 +382,16 @@ def sim_axis_cost(raw_snapshot, sim_k):
     }
 
 
-def measure(snapshot, k, detail, foliage_as_cubes=False):
+def measure(snapshot, k, detail, foliage_as_cubes=False, detail_lattice=1):
     """Return one geometry row, including real elapsed time and process peak RSS."""
     started = time.perf_counter()
-    summary = geometry_summary(snapshot, k=k, detail=detail, foliage_as_cubes=foliage_as_cubes)
+    summary = geometry_summary(
+        snapshot,
+        k=k,
+        detail=detail,
+        foliage_as_cubes=foliage_as_cubes,
+        detail_lattice=detail_lattice,
+    )
     elapsed = time.perf_counter() - started
     # Linux reports KiB, macOS bytes. The devpod is Linux; retain a usable POSIX fallback.
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -466,6 +481,12 @@ def main():
     parser.add_argument("--k", type=int, default=1, help="visual subdivision (default: 1)")
     parser.add_argument("--no-detail", action="store_true", help="flat-surface control")
     parser.add_argument(
+        "--detail-lattice",
+        type=int,
+        default=1,
+        help="sample the detail rule every N fine columns (1 = the shipped stand-in)",
+    )
+    parser.add_argument(
         "--client-parity",
         action="store_true",
         help="leave tree foliage to the client's cube path, so the row compares to gui --subdiv N",
@@ -494,8 +515,14 @@ def main():
                 args.k,
                 detail=not args.no_detail,
                 foliage_as_cubes=args.client_parity,
+                detail_lattice=args.detail_lattice,
             )
-            if args.k == 1 and not args.no_detail and not args.client_parity:
+            if (
+                args.k == 1
+                and not args.no_detail
+                and not args.client_parity
+                and args.detail_lattice == 1
+            ):
                 assert_control(row)
             if args.json:
                 print(json.dumps(row))

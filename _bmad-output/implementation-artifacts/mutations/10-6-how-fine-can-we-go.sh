@@ -163,3 +163,11 @@ old = "(chunk[axis] * TERRAIN_CHUNK_EDGE - 1).max(0)"
 assert s.count(old) == 1
 p.write_text(s.replace(old, "(chunk[axis] * TERRAIN_CHUNK_EDGE).max(0)"))
 PY
+
+mutation "detail lattice stops coarsening and the budget bracket collapses" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_detail_lattice_makes_the_rule_coherent_without_changing_the_default <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = "            WORLD_SEED, plane, u // lattice * lattice, v // lattice * lattice, k"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "            WORLD_SEED, plane, u, v, k"))
+PY

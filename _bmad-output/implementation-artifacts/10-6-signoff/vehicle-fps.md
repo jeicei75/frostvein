@@ -16,10 +16,24 @@ written. Zoom is interactive: `E` pulls out and `Q` comes in, clamped to 4.0–5
 
 | k | Triangles submitted | Boot framing fps (NFR6 ≥60) | Full vista fps (NFR6 ≥30) | Result |
 |---:|---:|---:|---:|---|
-| 4 | 928,884 | | | pending Wolf vehicle reading |
+| 4 | 928,884 | **>140** (2026-09-01) | | **PASSES NFR6's 60 bar** — but see the cap note below |
 | 8 | 3,539,074 | | | pending Wolf vehicle reading |
 
-## Both existing fps readings measured a scene with no terrain in it
+## The k=4 reading, 2026-09-01 — the first valid one
+
+Wolf: "still over 140fps, no halts anymore." This is the first reading taken of a scene that
+actually draws its terrain, and it clears NFR6's 60 fps working-zoom bar with room to spare.
+
+**It is still probably a display cap, so it is a floor and not a measurement of headroom.** 143.24
+was read before the winding fix, when the terrain was not rasterised at all; >140 is read after,
+with 928,884 triangles actually drawn. A number that barely moves across that change is pinned to
+something other than the scene — almost certainly a 144 Hz refresh. So the honest reading is
+"k=4 comfortably exceeds 60", not "k=4 has 2.4x headroom". **k=8 is what would show where the
+real ceiling is**, and it is still unread.
+
+Full vista at k=4 is also still unread (hold E).
+
+## Both earlier fps readings measured a scene with no terrain in it
 
 **Every `--subdiv N > 1` fps number taken so far is void**, including the ~140 fps of 2026-08-31
 and the 143.24 fps of 2026-09-01. The chunk mesher wound every quad to face opposite its own
