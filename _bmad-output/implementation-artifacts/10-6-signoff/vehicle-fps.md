@@ -19,7 +19,26 @@ written. Zoom is interactive: `E` pulls out and `Q` comes in, clamped to 4.0–5
 | 4 | 928,884 | **>140** (2026-09-01) | | **PASSES NFR6's 60 bar** — but see the cap note below |
 | 8 | 3,539,074 | | | pending Wolf vehicle reading |
 
-## The k=4 reading, 2026-09-01 — the first valid one
+## THE READING THAT SETTLES IT: k=16 holds 60–90 fps at 4K fullscreen
+
+Wolf, 2026-09-01, gingerspice, **fullscreen 4K, across zoom levels**: `--subdiv 16` runs at a
+steady **60–90 fps**, with small hiccups when digging.
+
+That is 13,873,064 triangles submitted, at 4K, clearing NFR6's 60 fps working-zoom bar and its
+≥30 full-vista bar **at the finest subdivision the client will build**. It also settles the k=4
+reading: >140 fps at k=4 and 60–90 at k=16 across a 15× change in geometry is a GPU that was
+sitting above the panel's refresh at k=4. The k=4 number was a cap; this one is a measurement.
+
+| k | Triangles | Boot framing (NFR6 ≥60) | Full vista (NFR6 ≥30) | Result |
+|---:|---:|---|---|---|
+| 4 | 928,884 | >140 | — | passes; pinned to the refresh rate, so a floor not a ceiling |
+| **16** | **13,873,064** | **60–90 at 4K, across zoom levels** | **60–90** | **PASSES BOTH BARS** |
+
+The hiccups on digging are the incremental rebuild: at k=16 one chunk of 121 is ~230 ms of mesh
+build on the devpod's debug build, and proportionally less on the vehicle. Wolf: "we can optimize
+later on". Named as owed, not taken.
+
+## The k=4 reading, 2026-09-01
 
 Wolf: "still over 140fps, no halts anymore." This is the first reading taken of a scene that
 actually draws its terrain, and it clears NFR6's 60 fps working-zoom bar with room to spare.

@@ -1,5 +1,15 @@
 # Resolution decision for 10.3
 
+> **THE ADOPTED k IS NOW OPEN, AND IT IS WOLF'S CALL.** This document adopts k=4. On 2026-09-01
+> Wolf measured `--subdiv 16` at a steady **60–90 fps at 4K fullscreen across zoom levels** —
+> 13,873,064 triangles, clearing both NFR6 bars at the finest subdivision the client will build.
+> k=4 was adopted when k=8 was believed unreachable and the only fps figure was a capped one.
+> Neither is true any more. **16 voxels per cell is exactly what the reference sheet asks for**
+> (Section A's "12 Voxels" dwarf at 1.20 m gives 0.1 m/voxel, 1.6 m/cell, 16 voxels/cell), and it
+> now appears affordable. The body below is left as written so the reasoning that produced k=4 is
+> still legible; read it knowing the ceiling moved.
+
+
 Adopt **1.6 metres per simulation cell**, **0.4 metres per terrain visual voxel**, and **visual
 subdivision k=4**. Keep the simulation grid at k=1.
 

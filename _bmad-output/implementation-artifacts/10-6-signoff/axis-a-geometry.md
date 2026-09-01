@@ -70,6 +70,22 @@ story. The flat row is the floor of what subdivision can ever cost; the noise ro
 
 This does not change the adopted k. It changes what the adopted k is known to cost.
 
+## The cost is set by the detail's WAVELENGTH, not by k
+
+The clearest way to read the bracket, once k=16 is on the table:
+
+| Configuration | Triangles |
+|---|---:|
+| k=4, white noise per fine column *(the shipped stand-in)* | 920,502 |
+| k=16, coherent over 4×4 fine columns | 920,660 |
+| **k=16, coherent over the whole cell** | **80,754** |
+| k=16, white noise per fine column | 13,849,802 |
+
+k=16 with cell-coherent detail costs **a ninth** of k=4 with per-column noise. Subdivision itself
+is nearly free; what costs is how fast the surface changes height. So "how fine can we go" is
+answered by the detail rule 10.4 authors, not by k — and the reference sheet's 16 voxels per cell
+is affordable at 80,754 triangles if the look is coherent, or 13.9M if it is gravel.
+
 ## The flat control (RED)
 
 `--no-detail` is genuinely meshed now. It used to return k=1's quad count verbatim at every k>1,

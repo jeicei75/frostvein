@@ -43,7 +43,26 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-01  # 10.6 SNOW PAINTED, NOT STACKED (Wolf ruled). The fine path gives a
+last_updated: 2026-09-01  # 10.6 AC7 SETTLED AND IT MOVES THE ANSWER. Wolf on gingerspice,
+                          # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
+                          # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
+                          # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
+                          # hiccups on digging, which Wolf named optimise-later.
+                          # This also settles the k=4 reading: >140 at k=4 and 60-90 at k=16 across
+                          # a 15x change in geometry is a GPU above the panel refresh at k=4. The
+                          # cap was real; k=16 is the first number that measures the SCENE.
+                          # >>> THE ADOPTED k=4 IS REOPENED AND IT IS WOLF'S CALL. <<< k=4 was
+                          # adopted when k=8 was believed unreachable (mis-sized guard) and the only
+                          # fps figure was capped. Neither holds. 16 VOXELS/CELL IS EXACTLY THE
+                          # REFERENCE SHEET'S TARGET (12-voxel dwarf at 1.20 m -> 0.1 m/voxel,
+                          # 1.6 m/cell, 16 voxels/cell) and it now looks affordable. decision.md
+                          # carries a banner; the k=4 reasoning is left intact beneath it.
+                          # AND THE KEY INSIGHT FOR 10.3/10.4: COST IS SET BY THE DETAIL'S
+                          # WAVELENGTH, NOT BY k. k=4 per-column noise = 920,502 tri; k=16 coherent
+                          # over the whole cell = 80,754 tri -- A NINTH. Subdivision is nearly free;
+                          # what costs is how fast the surface changes height. So "how fine can we
+                          # go" is answered by the detail rule 10.4 AUTHORS, not by k.
+                          # PRIOR: 10.6 SNOW PAINTED, NOT STACKED (Wolf ruled). The fine path gives a
                           # capped cell's TOP FACES the SnowCap material and spawns no slab; sides
                           # and bottom stay rock (painting walls would silver every trench --
                           # asserted on the mask keys). ENTITIES 14,527 -> 6,826, a 7.8x collapse

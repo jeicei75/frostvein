@@ -275,6 +275,7 @@ interactive: `E` out, `Q` in, clamped 4.0-500.0. The k values wanted are **4 and
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Control geometry measured on the real world; reference-sheet grid derived. |
 | 2026-08-31 | Added and verified the offline resolution instrument, Axis A/B signoff tables, vehicle command card, and mutation proof. Task 3 remains deliberately unstarted at the named split line. |
 | 2026-08-31 | Added the opt-in GUI subdivision path, headless control/wiring proof, live lavapipe geometry measurements, and the Task 3 mutation proof. |
+| 2026-09-01 | **AC7 SETTLED, and it moves the answer: Wolf measured `--subdiv 16` at a steady 60-90 fps, fullscreen 4K, across zoom levels** — 13,873,064 triangles clearing BOTH NFR6 bars at the finest subdivision the client builds. The k=4 >140 reading was a refresh-rate cap, now confirmed. The adopted k=4 is reopened for Wolf: 16 voxels/cell is exactly the reference sheet's target and now looks affordable. |
 | 2026-09-01 | **Snow is painted onto the fine terrain's top faces instead of spawning 8,145 cap slabs** (Wolf's ruling). Nothing left to float over a dug hole, 17.9% of the fine surface uncovered, entities 14,527 -> 6,826 (a 7.8x collapse from the shipped path, was 3.66x), triangles unchanged. Also: the k=4 budget is now recorded as a RANGE, 80,120-928,884 triangles — 96.8% of the committed figure is the placeholder's white noise, and the roughness Wolf saw is that stand-in, not worldgen. |
 | 2026-09-01 | **The dig stall is fixed: one changed tile now rebuilds 1 chunk instead of 121 — 55 ms against ~2,500 on a live dig at k=4.** Taken on Wolf's second report. Two safety properties asserted (a partial build equals a whole one; the dirty set covers every chunk a change can alter). A first cut ran the branch on every frame at ~130 ms each — worse than the stall — and every unit test passed; caught from the live log. Also: the big pale tiles Wolf asked about are the 8,145 snow caps, proved by rendering with them suppressed. |
 | 2026-09-01 | **Wolf's vehicle screenshots found the real cause of the holes: every chunk quad was wound against its own normal, so back-face culling deleted the whole terrain surface.** One-line fix, a winding test, and a mutation row. No count changes — faces, quads, triangles, cells and chunks are all winding-blind, which is why four review layers and every oracle in this story missed it. Both existing fps readings are void: they measured a scene with no terrain in it. |
@@ -428,6 +429,29 @@ All mutations killed.
 ```
 
 ### Completion Notes List
+
+- **AC7 IS SETTLED, AND IT CHANGES THE ANSWER. Wolf, 2026-09-01, gingerspice, fullscreen 4K,
+  across zoom levels: `--subdiv 16` holds a steady 60-90 fps.** That is 13,873,064 triangles at
+  4K, clearing NFR6's 60 working-zoom bar and its ≥30 full-vista bar **at the finest subdivision
+  the client will build**. Small hiccups on digging, which Wolf named as optimise-later.
+
+  It also settles the k=4 reading retrospectively: >140 at k=4 and 60-90 at k=16 across a 15×
+  change in submitted geometry is a GPU sitting above the panel refresh at k=4. The cap was real;
+  the k=16 figure is the first number here that measures the scene rather than the display.
+
+  **The adopted k=4 is therefore reopened, and it is Wolf's call.** k=4 was adopted when k=8 was
+  believed unreachable (a mis-sized guard) and the only fps figure was a capped one. Neither holds.
+  **16 voxels per cell is exactly what the reference sheet asks for** — Section A's "12 Voxels"
+  dwarf at 1.20 m gives 0.1 m/voxel, 1.6 m/cell, 16 voxels/cell — and it now appears affordable.
+  `decision.md` carries a banner saying so; the k=4 reasoning is left intact beneath it so the
+  argument that produced it stays legible.
+
+- **THE COST IS SET BY THE DETAIL'S WAVELENGTH, NOT BY k.** With k=16 on the table the bracket
+  reads plainly: k=4 with per-column noise is 920,502 triangles; k=16 coherent over 4×4 fine
+  columns is 920,660; **k=16 coherent over the whole cell is 80,754**; k=16 with per-column noise
+  is 13,849,802. So k=16 with cell-coherent detail costs a NINTH of k=4 with the placeholder's
+  noise. Subdivision is nearly free; what costs is how fast the surface changes height. "How fine
+  can we go" is answered by the detail rule 10.4 authors, not by k.
 
 - **SNOW IS PAINTED, NOT STACKED, 2026-09-01 (Wolf's ruling).** The fine path gives a capped
   cell's top faces the `SnowCap` material and spawns no slab. Sides and bottom stay rock — a cap
