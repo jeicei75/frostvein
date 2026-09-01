@@ -134,10 +134,32 @@ p.write_text(s.replace(old, """    let order = if key.sign > 0 {
     };"""))
 PY
 
-mutation "terrain delta stops forcing a chunk rebuild and welds stale faces in" gui ingest::tests::one_dirty_tile_rebuilds_every_chunk_at_subdiv_two_but_not_at_subdiv_one <<'PY'
+mutation "partial rebuild reach shrinks and drops boundary faces" gui project::tests::partial_rebuild_matches_the_whole_world_build <<'PY'
 import pathlib
-p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '    rebuild |= subdiv.as_ref().is_some_and(|subdivision| subdivision.0 > 1) && !changes.is_empty();'
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "    if targets.contains(&chunk_of(position)) {\n        return true;\n    }"
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    rebuild |= false;'))
+p.write_text(s.replace(old, "    if true {\n        return targets.contains(&chunk_of(position));\n    }"))
+PY
+
+mutation "dirty chunk set forgets the neighbours and leaves a chunk stale" gui project::tests::the_dirty_chunk_set_covers_every_chunk_a_change_can_alter <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "    for position in dirty_tiles {\n        targets.insert(chunk_of(*position));"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "    for position in dirty_tiles {\n        targets.insert(chunk_of(*position));\n        if true { continue; }"))
+PY
+
+# NO ROW for the `!dirty_tiles.is_empty()` guard on the incremental branch, deliberately.
+# Removing it costs a wasted `terrain.iter()` per frame and nothing else: the branch computes an
+# empty chunk set, despawns nothing and spawns nothing, so the ECS is byte-identical. A row here
+# SURVIVED when it was tried, which is the correct answer -- the guard is a cost optimisation with
+# no behavioural signature, and a green row asserting otherwise would be a lie.
+
+mutation "restricted draw-set scan loses the boundary cells" gui project::tests::partial_rebuild_matches_the_whole_world_build <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "(chunk[axis] * TERRAIN_CHUNK_EDGE - 1).max(0)"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "(chunk[axis] * TERRAIN_CHUNK_EDGE).max(0)"))
 PY

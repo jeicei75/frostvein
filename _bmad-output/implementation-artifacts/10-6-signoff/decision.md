@@ -39,10 +39,11 @@ the entire world, so one dug tile costs 540 ms at k=2, ~2,500 ms at k=4, 10,386 
 likely to be what decides the adopted k, and no measurement in this story existed for it until
 Wolf reported the client stopping dead on a dig.
 
-The fix is bounded — rebuild only the 1–8 affected chunks of 121, ~15–60× less work — but it is a
-renderer change and this story is scoped "measurements plus one decision, not a renderer". **10.3
-should not fix a k until Wolf has ruled on whether that fix happens**, because it moves the
-practical ceiling far more than any triangle count here does. Detail in [axis-a-geometry.md].
+**Fixed 2026-09-01 on Wolf's second report.** `reconcile` rebuilds only the chunks a changed cell
+can reach. Measured live at k=4 on a real dig: 1 chunk instead of 121, 13,554 triangles instead of
+928,884, **55 ms instead of ~2,500**. The saving grows with k (10.1× at k=2, 20.5× at k=4, 26.6× at
+k=8 offline), because the cost is one chunk either way — which also means the per-dig cost is no
+longer a reason to prefer a coarser k. Detail and the two safety proofs in [axis-a-geometry.md].
 
 ## k=8 is now a live candidate, not an excluded one
 

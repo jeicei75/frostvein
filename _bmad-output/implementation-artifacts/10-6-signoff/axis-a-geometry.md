@@ -146,7 +146,43 @@ and no frame is presented during the stall, so the only numbers legible to the e
 steady states either side of it. Wolf saw the client stop dead on a dig while the counter held
 ~143. Both observations were correct.
 
-**The obvious fix, not built here:** rebuild only the affected chunks. A changed cell dirties its
+## Fixed 2026-09-01: rebuild only the chunks the change can reach
+
+Wolf reported it twice, the second time as "when one dwarf digs all other movement is in halt" —
+which is the sharper symptom: a dwarf digs *continuously*, so it was a full mesh build per dug
+tile, not one hitch.
+
+`reconcile` now rebuilds only the chunks a changed cell can reach. Measured live on the real world
+at k=4, with a real dwarf digging a real tile:
+
+| | Chunks rebuilt | Triangles | Mesh build |
+|---|---:|---:|---:|
+| Before, per dug tile | 121 | 928,884 | ~2,500 ms |
+| After, per dug tile | **1** | **13,554** | **55 ms** |
+
+**~45× on the observed dig.** Offline, over the whole real world, the meshing alone goes 345→34 ms
+at k=2 (10.1×), 1,558→76 ms at k=4 (20.5×) and 6,262→235 ms at k=8 (26.6×) — the saving grows
+with k, because the constant is one chunk either way.
+
+Two things had to be true for this to be safe, and both are asserted rather than argued:
+
+- **A partial build must be indistinguishable from a whole one.** Not obvious: a cell's faces can
+  be attributed to a *neighbour's* chunk when its pit uncovers buried rock, so the cells feeding a
+  chunk extend one step past its boundary. `partial_rebuild_matches_the_whole_world_build` builds
+  each chunk both ways on two fixtures at k=1/2/4 and compares masks and cell records exactly.
+- **The dirty-chunk set must be large enough.** A faithful rebuild of too few chunks leaves a
+  stale one and is worse than useless. `the_dirty_chunk_set_covers_every_chunk_a_change_can_alter`
+  diffs two whole-world builds of worlds differing in one cell — including cells on a chunk
+  boundary — and requires every altered chunk to be covered.
+
+**A regression the tests could not see, caught by the live log.** The first cut ran the incremental
+branch on *every* frame, because "not a full rebuild" is the common case rather than the dig case,
+and each frame scanned the whole world for the draw set: ~130 ms per frame, 400 times in a
+two-minute run. Far worse than the stall it replaced, and every unit test passed, because the
+fixtures are one chunk wide and the ECS result was correct — only the cost was wrong. The draw-set
+scan is now bounded to the target chunks grown by one cell.
+
+**Superseded:** rebuild only the affected chunks. A changed cell dirties its
 own chunk plus any chunk holding a face that referenced it — bounded at 1–8 of 121, so roughly
 15–60× less work at any k. That is a renderer change, and this story's scope line is "measurements
 plus one decision, not a renderer", so it is recorded as owed rather than taken.

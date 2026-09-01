@@ -43,7 +43,43 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-01  # 10.6 THE STALL: ONE DUG TILE RE-MESHES THE WHOLE WORLD at subdiv>1.
+last_updated: 2026-09-01  # 10.6 DIG STALL FIXED on Wolf's second report ("when one dwarf digs all
+                          # other movement is in halt" -- a dwarf digs CONTINUOUSLY, so it was a
+                          # full mesh build PER DUG TILE, not one hitch). `reconcile` now rebuilds
+                          # only the chunks a changed cell can reach. LIVE at k=4, real dwarf, real
+                          # tile: 1 chunk / 13,554 tri / 55 ms against 121 / 928,884 / ~2,500 ms.
+                          # Offline over the whole world: 10.1x at k=2, 20.5x at k=4, 26.6x at k=8 --
+                          # the saving GROWS with k, so per-dig cost is no longer a reason to prefer
+                          # a coarser k. SCOPE: taken despite the story's "not a renderer" line
+                          # because Wolf reported it twice; flagging, not burying.
+                          # Two safety properties ASSERTED, not argued: (1) a partial build is
+                          # indistinguishable from a whole one -- non-obvious, a cell's faces can be
+                          # attributed to a NEIGHBOUR's chunk when its pit uncovers buried rock;
+                          # (2) the dirty-chunk set covers every chunk a change can alter, checked
+                          # by diffing two whole-world builds of worlds differing in one cell,
+                          # boundary cells included. A faithful rebuild of too FEW chunks leaves a
+                          # stale one and is worse than no fix.
+                          # MY OWN REGRESSION, invisible to every unit test: the first cut ran the
+                          # branch on EVERY frame (~130 ms whole-world scan each, 400x in a 2-min
+                          # run) -- worse than the stall. Fixtures were one chunk wide so the ECS
+                          # result was correct and only the cost was wrong. Caught from the LIVE LOG.
+                          # Fixtures are now 40 cells wide. One seam carries NO mutation row on
+                          # purpose (the empty-dirty guard): removing it leaves the ECS identical and
+                          # wastes only work, so a row SURVIVED -- the table says so rather than
+                          # carrying a green lie.
+                          # WOLF'S BLUE TILES = THE 8,145 SNOW CAPS (his guess was right). Not tiles
+                          # at all: ClientLocal presentation, absent from the mirror, and picking
+                          # raycasts the mirror -- so they cannot be dug, by construction. Proved by
+                          # rendering with has_snow_cap forced false (plates vanish, entities
+                          # 14,527 -> 6,382). MEASURABLE COST: 8,145 of 45,584 meshed cells (17.9%)
+                          # sit under an opaque cell-scale slab, so ~a fifth of the k=4 budget buys
+                          # geometry nobody can see. My first answer was WRONG -- I sampled the
+                          # dig/channel marks and answered a question Wolf had not asked.
+                          # ALSO: Tile::Ramp is silently rejected by dig designation and ramps are
+                          # drawn exactly like solids -- 5,087 ordinary-looking tiles in this world
+                          # refuse to be designated with no feedback. Not 10.6's to fix; recorded.
+                          # 19/19 mutation rows KILLED, full gate GREEN.
+                          # PRIOR: 10.6 THE STALL: ONE DUG TILE RE-MESHES THE WHOLE WORLD at subdiv>1.
                           # reconcile_projection promotes ANY non-empty dirty_tiles to a full
                           # rebuild (ingest.rs:1016) -- correct (a chunk is a whole surface, a
                           # newly-open neighbour must not weld an old face in) and UNBOUNDED. The

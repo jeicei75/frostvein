@@ -275,6 +275,7 @@ interactive: `E` out, `Q` in, clamped 4.0-500.0. The k values wanted are **4 and
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Control geometry measured on the real world; reference-sheet grid derived. |
 | 2026-08-31 | Added and verified the offline resolution instrument, Axis A/B signoff tables, vehicle command card, and mutation proof. Task 3 remains deliberately unstarted at the named split line. |
 | 2026-08-31 | Added the opt-in GUI subdivision path, headless control/wiring proof, live lavapipe geometry measurements, and the Task 3 mutation proof. |
+| 2026-09-01 | **The dig stall is fixed: one changed tile now rebuilds 1 chunk instead of 121 — 55 ms against ~2,500 on a live dig at k=4.** Taken on Wolf's second report. Two safety properties asserted (a partial build equals a whole one; the dirty set covers every chunk a change can alter). A first cut ran the branch on every frame at ~130 ms each — worse than the stall — and every unit test passed; caught from the live log. Also: the big pale tiles Wolf asked about are the 8,145 snow caps, proved by rendering with them suppressed. |
 | 2026-09-01 | **Wolf's vehicle screenshots found the real cause of the holes: every chunk quad was wound against its own normal, so back-face culling deleted the whole terrain surface.** One-line fix, a winding test, and a mutation row. No count changes — faces, quads, triangles, cells and chunks are all winding-blind, which is why four review layers and every oracle in this story missed it. Both existing fps readings are void: they measured a scene with no terrain in it. |
 | 2026-09-01 | **Re-measured end to end after Wolf's return-to-dev ruling.** Both meshers rebuilt on one column heightfield and culled by solidity; every k>1 figure regenerated; all 23 patch items resolved; 14 mutation rows all KILLED; full gate green. Adopted k=4 is now **928,884 triangles** (was 997,428 against a renderer serving 1,527,754). The sweep reaches k=16 and walls at k=32. |
 | 2026-08-31 | Code-reviewed, 4 live layers, no coverage holes: 6 HIGH, 11 MED, 7 LOW. Gate green, AC4/AC5/AC6 controls reproduced, `sim-core` guardrail holds. Three independent defects make every k>1 figure wrong while the k=1 control stays green. Returned to in-progress for re-measurement; 23 patch items and 2 deferrals recorded. |
@@ -426,6 +427,54 @@ All mutations killed.
 ```
 
 ### Completion Notes List
+
+- **THE DIG STALL, FIXED ON WOLF'S SECOND REPORT, 2026-09-01.** "When one dwarf digs all other
+  movement is in halt" is the sharper symptom: a dwarf digs *continuously*, so the full-world
+  rebuild fired per dug tile, not once. `reconcile` now rebuilds only the chunks a changed cell
+  can reach. **Observed live on the real world at k=4, a real dwarf digging a real tile: 1 chunk,
+  13,554 triangles, 55 ms — against 121 chunks, 928,884 triangles and ~2,500 ms.**
+
+  I took this despite the story's "not a renderer" scope line, because Wolf reported it twice and
+  the second report named it as blocking play. Flagging the scope call rather than burying it.
+
+  Two properties had to hold, and both are asserted rather than argued. A partial build must be
+  indistinguishable from a whole one — not obvious, because a cell's faces can be attributed to a
+  *neighbour's* chunk when its pit uncovers buried rock, so the feeding cells extend one step past
+  the chunk boundary. And the dirty-chunk set must be large enough: a faithful rebuild of too few
+  chunks leaves a stale one and is worse than no fix. The second is checked by diffing two
+  whole-world builds of worlds differing in one cell, including cells on a chunk boundary.
+
+  **A regression my own tests could not see.** The first cut ran the incremental branch on every
+  frame — "not a full rebuild" is the common case, not the dig case — scanning the whole world for
+  the draw set each time: ~130 ms per frame, 400 times in a two-minute run, far worse than the
+  stall it replaced. Every unit test passed: the fixtures are one chunk wide and the ECS result
+  was correct; only the cost was wrong. Caught by reading the live log. The scan is now bounded to
+  the target chunks grown by one cell, and the fixtures are 40 cells wide so a one-chunk world can
+  no longer hide a whole-world rebuild.
+
+  One seam deliberately carries **no** mutation row: the `!dirty_tiles.is_empty()` guard. Removing
+  it leaves the ECS byte-identical and wastes only work, so a row SURVIVED when tried — which is
+  the correct answer. The table says so rather than carrying a row that reads green.
+
+- **THE BIG PALE TILES ARE THE SNOW CAPS.** Wolf's guess was right. 8,145 `SnowCap` entities,
+  `Cuboid::new(1.02, 0.08, 1.02)` at the cell top, `snow_cap_color()` = (146,158,184). **They
+  cannot be dug because they are not tiles**: they are `ClientLocal` presentation, absent from the
+  mirror, and picking raycasts the mirror — so a cap is invisible to the cursor and you always
+  designate the tile under it. Proved by rendering the same frame with `has_snow_cap` forced
+  false: the plates vanish, entities fall 14,527 → 6,382, and the sub-cell detail is visible
+  across the whole surface.
+
+  The measurable part: **8,145 of 45,584 meshed cells — 17.9% of the fine surface — sit under an
+  opaque cell-scale slab**, so about a fifth of the k=4 triangle budget buys geometry nobody can
+  see. My first answer to this question was wrong: I sampled the saturated blue and violet slabs,
+  which are dig and channel marks, and answered a question Wolf had not asked. Both are the same
+  shape of problem — cell-scale UI on a sub-cell surface — and so are zone overlays, the hover
+  slab and dig chips. See `10-6-signoff/marks-and-caps-are-cell-scale.md`.
+
+  Separately: `Tile::Ramp` is silently rejected by dig designation (the filter takes
+  `Tile::Solid(_)` only, sim-core:1344) and ramps are drawn exactly like solids, so this world has
+  5,087 ordinary-looking tiles that refuse to be designated with no feedback. Not this story's to
+  fix; recorded because it is invisible from the client by construction.
 
 - **THE HOLES WERE A WINDING BUG, FOUND FROM WOLF'S SCREENSHOTS, 2026-09-01.** `append_quad` had
   its two vertex orders the wrong way round, so every quad on every axis and both signs was wound

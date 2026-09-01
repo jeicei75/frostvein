@@ -1006,13 +1006,15 @@ pub fn reconcile_projection(
     mut meshes: Option<ResMut<Assets<bevy::prelude::Mesh>>>,
     subdiv: Option<Res<TerrainSubdivision>>,
 ) {
-    let mut rebuild = std::mem::take(&mut work.snapshot);
+    let rebuild = std::mem::take(&mut work.snapshot);
     let changes = std::mem::take(&mut work.dirty_tiles)
         .into_iter()
         .collect::<Vec<_>>();
-    // Chunk meshes are whole surfaces, not mutable per-cell entities. Rebuild them on a terrain
-    // delta so a newly-open neighbour cannot leave an old face welded into a chunk.
-    rebuild |= subdiv.as_ref().is_some_and(|subdivision| subdivision.0 > 1) && !changes.is_empty();
+    // A chunk mesh is a whole surface, not a set of mutable per-cell entities, so a terrain delta
+    // cannot be edited in place the way a cube entity can -- but it does not need the WORLD
+    // rebuilt either. `reconcile` rebuilds only the chunks the changed cells can reach. This line
+    // used to promote every delta to a full rebuild, which cost a whole mesh build per dug tile
+    // and, because a dwarf digs continuously, froze every other dwarf for the length of the job.
     reconcile(
         &mut commands,
         &mirror.0,
@@ -1461,30 +1463,100 @@ mod tests {
         );
     }
 
-    /// ONE changed tile re-meshes the ENTIRE world at `--subdiv N > 1`.
+    /// A 40x4x4 stepped slab, wide enough to span three 16-cell chunks on x.
+    fn wide_snapshot() -> Snapshot {
+        let mut tiles = Vec::new();
+        for z in 0..4 {
+            for _ in 0..4 {
+                for x in 0..40 {
+                    tiles.push(if z <= (x / 8) % 4 {
+                        Tile::Solid(protocol::Material::Stone)
+                    } else {
+                        Tile::Empty
+                    });
+                }
+            }
+        }
+        Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 40, y: 4, z: 4 },
+            tiles,
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        }
+    }
+
+    /// A frame with no terrain change must leave the fine terrain entities alone.
     ///
-    /// `reconcile_projection` promotes any non-empty `dirty_tiles` to a full rebuild, because a
-    /// chunk mesh is a whole surface and a newly-open neighbour must not leave an old face welded
-    /// into it. That is correct and it is unbounded: the cost of one dug tile is the cost of the
-    /// whole terrain, which the boot rows measure at 540 ms (k=2), ~2,500 ms (k=4), 10,386 ms
-    /// (k=8) and 44,740 ms (k=16) on the devpod. `--subdiv 1` does not do this — it takes the
-    /// incremental dirty-tile path and respawns a handful of cube entities.
+    /// The first cut of the incremental path ran on every frame — "not a full rebuild" is the
+    /// common case, not the dig case — and scanned the whole world for the draw set each time:
+    /// ~130 ms per frame, 400 times in a two-minute run, far worse than the stall it was written
+    /// to remove. Caught by watching the live log, not by a test.
     ///
-    /// Wolf saw it from the vehicle as the client stopping dead for a moment on a dig. It does
-    /// not appear in the fps overlay, which reads a smoothed average and cannot present a frame
-    /// during the stall in any case.
+    /// **This test does not pin the guard that fixed it**, and the mutation table says so rather
+    /// than carrying a row that reads green. With the guard removed the branch still computes an
+    /// empty chunk set, despawns nothing and spawns nothing, so the ECS is identical and only the
+    /// wasted work differs — and a test cannot see wasted work. What this does pin is that a
+    /// quiet frame never *destroys* terrain, which is the failure mode that would be visible.
     #[test]
-    fn one_dirty_tile_rebuilds_every_chunk_at_subdiv_two_but_not_at_subdiv_one() {
+    fn quiet_frames_leave_the_fine_terrain_alone() {
+        let (mut two, _, _) = configured_app_with_snapshot(&["--subdiv", "2"], wide_snapshot());
+        two.update();
+        let before = two
+            .world_mut()
+            .query::<(bevy::prelude::Entity, &TerrainChunk)>()
+            .iter(two.world())
+            .map(|(entity, chunk)| (chunk.0, entity))
+            .collect::<Vec<_>>();
+        assert!(!before.is_empty());
+        for _ in 0..3 {
+            two.update();
+        }
+        let after = two
+            .world_mut()
+            .query::<(bevy::prelude::Entity, &TerrainChunk)>()
+            .iter(two.world())
+            .map(|(entity, chunk)| (chunk.0, entity))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            before, after,
+            "three quiet frames respawned terrain; the incremental path is running when nothing \
+             changed"
+        );
+    }
+
+    /// One changed tile must rebuild only the chunks it can reach — not the world.
+    ///
+    /// It used to rebuild the world: `reconcile_projection` promoted any terrain delta to a full
+    /// rebuild at `--subdiv N > 1`. That is one whole mesh build per dug tile, and because a dwarf
+    /// digs continuously it froze every other dwarf for the length of the job. Wolf reported it
+    /// twice from the vehicle, the second time as "when one dwarf digs all other movement is in
+    /// halt". `project::tests::partial_rebuild_matches_the_whole_world_build` carries the safety
+    /// half — that a partial rebuild is indistinguishable from a whole one.
+    #[test]
+    fn one_dirty_tile_rebuilds_only_the_chunks_it_can_reach() {
         let chunk_entities = |app: &mut App| {
             app.world_mut()
-                .query_filtered::<bevy::prelude::Entity, With<TerrainChunk>>()
+                .query::<(bevy::prelude::Entity, &TerrainChunk)>()
                 .iter(app.world())
-                .collect::<std::collections::BTreeSet<_>>()
+                .map(|(entity, chunk)| (chunk.0, entity))
+                .collect::<Vec<_>>()
         };
-        let (mut two, _, _) = configured_app(&["--subdiv", "2"]);
+        let (mut two, _, _) = configured_app_with_snapshot(&["--subdiv", "2"], wide_snapshot());
         two.update();
         let before = chunk_entities(&mut two);
-        assert!(!before.is_empty(), "the fine path must have built chunks");
+        let chunks_before = before
+            .iter()
+            .map(|(c, _)| *c)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            chunks_before.len() >= 3,
+            "the fixture must span several chunks or this test cannot fail; got {chunks_before:?}"
+        );
 
         two.world_mut()
             .resource_mut::<ProjectionWork>()
@@ -1492,36 +1564,27 @@ mod tests {
             .insert([2, 2, 1]);
         two.update();
         let after = chunk_entities(&mut two);
-        assert!(!after.is_empty(), "the rebuild must respawn the terrain");
-        assert!(
-            before.is_disjoint(&after),
-            "one dirty tile left {} of {} chunk entities alive -- the rebuild is not whole-world \
-             any more, and this test is pinning the wrong thing",
-            before.intersection(&after).count(),
-            before.len()
-        );
 
-        // The shipped path is untouched by this: it edits the affected cells in place.
-        let (mut one, _, _) = configured_app(&["--subdiv", "1"]);
-        one.update();
-        let tiles = |app: &mut App| {
-            app.world_mut()
-                .query_filtered::<bevy::prelude::Entity, With<TerrainTile>>()
-                .iter(app.world())
-                .collect::<std::collections::BTreeSet<_>>()
-        };
-        let before_tiles = tiles(&mut one);
-        one.world_mut()
-            .resource_mut::<ProjectionWork>()
-            .dirty_tiles
-            .insert([2, 2, 1]);
-        one.update();
-        let survivors = before_tiles.intersection(&tiles(&mut one)).count();
+        let survived = before
+            .iter()
+            .filter(|entry| after.contains(entry))
+            .map(|(chunk, _)| *chunk)
+            .collect::<std::collections::BTreeSet<_>>();
         assert!(
-            survivors * 2 > before_tiles.len(),
-            "--subdiv 1 kept only {survivors} of {} tile entities across a one-tile change; it \
-             is supposed to touch the affected cells, not rebuild the world",
-            before_tiles.len()
+            !survived.is_empty(),
+            "every chunk was rebuilt for one tile in chunk [0,0,0] — the whole-world rebuild is back"
+        );
+        assert!(
+            !survived.contains(&[0, 0, 0]),
+            "the chunk holding the changed tile must be rebuilt, not left stale"
+        );
+        assert_eq!(
+            after
+                .iter()
+                .map(|(c, _)| *c)
+                .collect::<std::collections::BTreeSet<_>>(),
+            chunks_before,
+            "the rebuild must leave the same set of chunks present"
         );
     }
 
