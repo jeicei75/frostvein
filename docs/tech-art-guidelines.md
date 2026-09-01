@@ -262,6 +262,11 @@ and other appearance values never become wire state (AD-16).
   **Mechanically-checkable:** `scripts/bench/check_asset.py` enforces the v1 count/filter/
   single-sided/extension clauses; the intended role read and future multi-material mapping are
   **eye-only** until a concrete second format exists.
+- **Topology.** V1 voxel assets are greedy-meshed, unwelded quad soup: triangles are pairs of
+  quads and `verts == tris/2 × 4`. They are flat-shaded and do not accept adjacency-based
+  smoothing, decimation or auto-LOD. **Mechanically-checkable:**
+  `scripts/bench/check_asset.py` checks the vertex/triangle relation; downstream-tool suitability
+  is **eye-only** at import review.
 - **Naming and locations.** A generator belongs under its story signoff directory until a runtime
   consumer is introduced; its generated runtime glTF belongs at `assets/gltf/<published-name>.glb`
   (created by story 10.5, not here); generated evidence, source notes and figures remain under

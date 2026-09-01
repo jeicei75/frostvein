@@ -4,7 +4,7 @@ baseline_commit: 0b8b6735f04b282e2d75b82e426346be49590082
 
 # Story 10.3: The Rules of the Look
 
-Status: in-progress
+Status: review
 
 **GATED ON STORY 10.6.** The grid-scale clause is the reason this story exists, and 10.6 measures
 what is actually servable. Do not start this story until 10.6's decision is recorded. Ruled by
@@ -96,18 +96,18 @@ against source; **two of them are wrong as written in `epics.md` and are correct
   - [x] Check only the mechanically-checkable clauses. Every clause the checker enforces must be
         one the contract states; every contract clause it cannot check stays marked eye-only.
 
-- [ ] **Task 5 — Test the instrument and the sabotage rows** (AC: 8)
-  - [ ] `scripts/tests/test_check_asset.py` — picked up automatically by
+- [x] **Task 5 — Test the instrument and the sabotage rows** (AC: 8)
+  - [x] `scripts/tests/test_check_asset.py` — picked up automatically by
         [scripts/gate.sh:117] (`unittest discover -s scripts/tests`); no gate edit needed.
-  - [ ] The test must assert the checker **fails** on `tree.glb` and **names the clause**, not
+  - [x] The test must assert the checker **fails** on `tree.glb` and **names the clause**, not
         merely that it exits non-zero. An exit code alone does not discriminate a working checker
         from one that rejects everything.
-  - [ ] Mutation table rows, format per [mutations/10-1-the-headless-bench.sh]. At least: remove
+  - [x] Mutation table rows, format per [mutations/10-1-the-headless-bench.sh]. At least: remove
         the origin-centring assertion; make the failure path exit 0; break a figure the `FIGURES`
         line reports. Run `scripts/mutate.sh` and record KILLED per row.
 
-- [ ] **Task 6 — Verification** (AC: 7)
-  - [ ] Execute the recipe below, RED first, and paste both outputs into the Dev Agent Record.
+- [x] **Task 6 — Verification** (AC: 7)
+  - [x] Execute the recipe below, RED first, and paste both outputs into the Dev Agent Record.
 
 ## Dev Notes
 
@@ -280,13 +280,72 @@ deliverable's.
 |---|---|
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Five GLBs measured; RED specimen confirmed. |
 | 2026-08-31 | Gated on new story 10.6. Grid-scale section rewritten: the reference sheet resolves metres-per-cell (16 voxels/cell, 0.1 m voxel, 1.6 m cell) and the three-way divergence was one stale constant, `scale: 0.65 → 0.75`, owed to 10.5. The servable half now comes from 10.6's measurements instead of being chosen from unmeasured options. |
+| 2026-09-01 | Added the procedural and authored-asset contracts, stdlib GLB contract checker, literal-output tests, and three killed mutation rows; full gate green. |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+GPT-5 (Codex)
+
 ### Debug Log References
+
+- RED: `python3 -m unittest scripts.tests.test_check_asset -v` failed before the checker existed
+  (`can't open file .../scripts/bench/check_asset.py`), then failed on the deliberately incorrect
+  quad-soup relation before the minimal correction. The same two tests passed after the correction.
+- `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/10-3-the-rules-of-the-look.sh`
+  ran the three recorded sabotages sequentially; `python3 scripts/audit-mutations.py` then reported
+  `449 rows, every literal still matches its target`.
+- Full gate: `export PATH="$HOME/.local/share/mise/installs/rust/1.97.1/bin:$PATH"; scripts/gate.sh`
+  completed with `GATE GREEN`.
 
 ### Completion Notes List
 
+- Recorded the 10.6 ruling without collapsing the two resolution axes: terrain is served at 0.4 m
+  (`k=4`), while authored assets retain the 0.1 m project voxel and declared integer multiples.
+  The 80,120–928,884 terrain range and its placeholder reason are explicit; 928,884 is the
+  chunk-mesh ceiling only, excluding about 54k tree-foliage triangles. `appearance.rs` 0.65 → 0.75
+  remains owed by story 10.5.
+- Added contracts for procedural presentation and authored assets, including AD-16's tile/entity
+  distinction and the measured `tree.glb` identity counterexample. No asset, client appearance,
+  renderer feature, or simulation code was changed.
+- The checker is stdlib-only, bounds GLB reads to 16 MiB, prints literal `FIGURES` for every
+  accepted path, and names the first violated contract clause.
+- Mutation `the stale off-centre asset is accepted`: **KILLED** — removing the origin-centre
+  condition made the stale file return 0 and the named-clause test failed.
+- Mutation `a failed contract returns success`: **KILLED** — changing the error return to 0 made
+  the named-clause test fail.
+- Mutation `reported triangle figures lie`: **KILLED** — changing the reported triangle value to
+  zero made the independent literal-figure test fail.
+
+Verification RED (observed before accepting the recipe GREEN):
+
+```text
+FAIL _bmad-output/implementation-artifacts/10-2-signoff/tree.glb: origin-centring clause: centre X/Z are -0.100000/0.000000, expected 0.000000/0.000000
+exit 1
+```
+
+Verification GREEN:
+
+```text
+FIGURES _bmad-output/implementation-artifacts/10-2-signoff/export/SM_VoxelPine_Tree01.glb size=5.0x6.4x5.0 min_y=0.000000 centre_x=0.000000 centre_z=0.000000 tris=4366 verts=8732
+FIGURES _bmad-output/implementation-artifacts/10-2-signoff/export/SM_VoxelPine_Tree02.glb size=5.0x8.0x5.4 min_y=0.000000 centre_x=0.000000 centre_z=0.000000 tris=5894 verts=11788
+FIGURES _bmad-output/implementation-artifacts/10-2-signoff/export/SM_VoxelPine_Tree03.glb size=3.8x8.0x3.4 min_y=0.000000 centre_x=0.000000 centre_z=0.000000 tris=3474 verts=6948
+FIGURES _bmad-output/implementation-artifacts/10-2-signoff/export/SM_VoxelPine_Tree04.glb size=4.6x10.6x4.6 min_y=0.000000 centre_x=0.000000 centre_z=0.000000 tris=5280 verts=10560
+exit 0
+```
+
+Second RED (the first mutation removes the origin-centre assertion; the checker then accepts the
+same stale file, proven by the targeted test's observed `0 != 1`):
+
+```text
+AssertionError: 0 != 1 : FIGURES /workspace/projects/frostvein/_bmad-output/implementation-artifacts/10-2-signoff/tree.glb size=5.2x7.6x5.4 min_y=0.000000 centre_x=-0.100000 centre_z=0.000000 tris=5130 verts=10260
+```
+
 ### File List
+
+- MODIFIED: `docs/tech-art-guidelines.md`
+- NEW: `scripts/bench/check_asset.py`
+- NEW: `scripts/tests/test_check_asset.py`
+- NEW: `_bmad-output/implementation-artifacts/mutations/10-3-the-rules-of-the-look.sh`
+- MODIFIED: `_bmad-output/implementation-artifacts/10-3-the-rules-of-the-look.md`
