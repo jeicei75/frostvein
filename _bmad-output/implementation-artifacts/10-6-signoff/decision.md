@@ -9,9 +9,11 @@
 > k=4 against 38–78 ms at k=8** — one frame versus a 3–5 frame hitch, on every dig, in a game that
 > digs constantly. k=4 is adopted for dig smoothness, not for triangles.
 >
-> The earlier reopening in favour of k=16 stays WITHDRAWN: the 60–90 fps that motivated it was
-> read on a build predating `bace455` and `c8675fc` and is void. k=16 remains proven only as
-> GEOMETRY. See [vehicle-fps.md].
+> The earlier reopening in favour of k=16 stays WITHDRAWN, and the dig cost now argues against
+> k=16 far more strongly than the triangle count ever did: measured live on a clean `23172f4`
+> build, **one dug tile costs 67–187 ms at k=16** (steady ~70–110) against 4–12 ms at k=4, and
+> the terrain takes **5.3 seconds** to build at boot. Its 60–90 fps reading remains void and
+> unreplaced. k=16 is proven as GEOMETRY only. See [vehicle-fps.md].
 
 Adopt **1.6 metres per simulation cell**, **0.4 metres per terrain visual voxel**, and **visual
 subdivision k=4**. Keep the simulation grid at k=1.
@@ -111,6 +113,12 @@ every quad against its own normal — so ~140 fps described snow caps and tree c
 (fixed 2026-09-01). The k=16 reading that replaced it predates `bace455` and `c8675fc` and is
 void in turn. A vehicle reading must from now on record the commit it was taken at; see the
 command card in [vehicle-fps.md].
+
+**The per-dig cost is the axis this decision actually turns on.** Measured live, per rebuilt
+chunk, steady state: **~5 ms at k=4, ~40 ms at k=8, ~70–110 ms at k=16** — under one frame, two
+to three frames, and four to seven frames at 60 fps, paid on every dig. Boot terrain build follows
+the same curve: 328 ms, 1,269 ms, 5,266 ms. Frame rate does not separate k=4 from k=8; this does,
+and it separates k=16 decisively.
 
 **k=8 is servable on frame rate and is not adopted anyway.** It clears both NFR6 bars at a 100 fps
 floor, so nothing about the renderer excludes it; what excludes it is the 38–78 ms per-dig hitch.

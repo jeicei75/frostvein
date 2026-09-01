@@ -905,7 +905,23 @@ multi-chunk case is the common case, not an edge — that is precisely the band 
 devpod on mesh build (404 ms against 2,477 ms at k=4), so every devpod build-time figure should be
 read as a devpod-debug ceiling.
 
-**Caveat, and it is the one this review just added a column for:** the binary self-reports
+**FOLLOW-UP RUNS ON A CLEAN BUILD, `23172f4` (2026-09-01 13:25).** k=4 re-run and k=16 read for
+the first time on a terrain-drawing build:
+
+| k | Boot mesh build | Chunks per dig | Per-dig mesh build | Boot triangles |
+|---:|---:|---|---:|---:|
+| 4 | 328 ms | 1–2 | 4–12 ms | 928,772 |
+| 16 | 5,266 ms | 1 | 67–187 ms (steady ~70–110) | 13,873,474 |
+
+The k=4 row reproduces the dirty-build run on a differently-dug world (928,772 vs 928,884 on
+50,113 vs 50,085 projected cubes) with entities 6,826 and chunks 121 identical, so these figures
+are reproducible rather than a single sample. **The per-dig curve is now measured across three
+subdivisions — ~5 ms / ~40 ms / ~70–110 ms per chunk at k=4/8/16** — which is the axis the adopted
+k actually turns on. k=16 also takes 5.3 s to build its terrain at boot. Its fps remains UNREAD;
+the old 60–90 reading stays void. Also observed: `rebuilt 1 of 1 chunks for 2 changed tiles`, so
+the set-based dirty tracking coalesces multi-tile deltas as intended.
+
+**Caveat RESOLVED on the follow-up runs.** The 13:06 runs self-reported
 `caa8689-dirty`. `caa8689` is the round-2 patch commit, but `-dirty` means uncommitted changes
 were present at build time, so the SHA does not identify the code that ran. The behavioural
 observations above are robust to that; the figures should not be quoted as pinned to a commit.

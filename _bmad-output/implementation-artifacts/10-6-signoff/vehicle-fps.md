@@ -52,7 +52,7 @@ Triangle figures are CHUNK MESHES ONLY and exclude the 4,501 foliage cube entiti
 |---:|---:|---|---:|---:|---|
 | 4 | 928,884 | `caa8689-dirty` | **>130** | **>130** | **PASSES BOTH BARS**; dig cost 5–13 ms |
 | 8 | 3,539,058 | `caa8689-dirty` | **100–140** | **100–140** | **PASSES BOTH BARS**; dig cost 38–78 ms |
-| 16 | 13,873,064 | — | *(unread)* | *(unread)* | previous 60–90 reading VOID (pre-`bace455`) |
+| 16 | 13,873,474 | `23172f4` | *(unread)* | *(unread)* | boots in 5,266 ms; digs cost 67–187 ms; previous 60–90 reading VOID |
 
 ## OBSERVED ON THE VEHICLE 2026-09-01 — the dig rebuild, live (build `caa8689-dirty`)
 
@@ -61,15 +61,27 @@ Vulkan). **This closes the coverage hole the round-2 review named**: the increme
 had never been observed on the live path by anyone but its author, and no review layer could fire
 it (`designations=0 of 0` over 200 ticks on the devpod).
 
-| k | Boot mesh build | Chunks rebuilt per dig | Per-dig mesh build | Boot triangles |
-|---:|---:|---|---:|---:|
-| 4 | 404 ms | 1–2 of 1–2 | **5–13 ms** | 928,884 |
-| 8 | 1,269 ms | 1–2 of 1–2 | **38–78 ms** | 3,539,058 |
+| k | Build | Boot mesh build | Chunks per dig | Per-dig mesh build | Boot triangles |
+|---:|---|---:|---|---:|---:|
+| 4 | `23172f4` (clean) | **328 ms** | 1–2 | **4–12 ms** | 928,772 |
+| 4 | `caa8689-dirty` | 404 ms | 1–2 | 5–13 ms | 928,884 |
+| 8 | `caa8689-dirty` | 1,269 ms | 1–2 | 38–78 ms | 3,539,058 |
+| 16 | `23172f4` (clean) | **5,266 ms** | 1 | **67–187 ms** (steady ~70–110) | 13,873,474 |
+
+The k=4 rows agree across two builds and two differently-dug worlds (928,772 against 928,884, on
+50,113 against 50,085 projected cubes), with entities 6,826 and chunks 121 identical in both — so
+the figures are reproducible, not a single lucky run.
 
 Never 121 chunks. Never a whole-world rebuild. Entities 6,826 and chunks 121 at both k, matching
 the devpod exactly.
 
-**THE PER-DIG COST IS NOW THE ONLY THING SEPARATING k=4 FROM k=8.** On frame rate both clear both
+**THE PER-DIG COST CURVE, measured live across three subdivisions.** Per rebuilt chunk, steady
+state: **~5 ms at k=4, ~40 ms at k=8, ~70–110 ms at k=16.** The first dig after boot is slower
+(186 ms at k=16) and then settles, so read the steady state, not the first sample. In frames at
+60 fps that is well under one, roughly two to three, and roughly four to seven — and it is paid on
+every dig.
+
+**THE PER-DIG COST IS THE ONLY THING SEPARATING k=4 FROM k=8.** On frame rate both clear both
 bars, so fps does not decide this. On digging they differ sharply: at k=4 a dig costs 5–13 ms —
 inside a single 60 fps frame, imperceptible. At k=8 it costs 38–78 ms, a 3–5 frame hitch on *every
 dig*, and a fortress digs constantly. This is the first evidence separating the two that is about
@@ -87,11 +99,13 @@ every devpod build-time figure in [axis-a-geometry.md] should be read as a devpo
 **The fps for this run was reported separately by Wolf** (>130 at k=4, 100–140 at k=8); the
 pasted logs themselves carry mesh-build times and chunk counts only.
 
-**The build tag says `-dirty`, which is the problem this card's SHA column exists to prevent.**
-`caa8689` is the round-2 patch commit, but `-dirty` means uncommitted changes were present when
-the binary was built, so the SHA does not identify the code that ran. The numbers above are
-recorded as observations of the incremental-rebuild BEHAVIOUR, which is robust to that; do not
-quote them as pinned to a commit.
+**The SHA column earned its keep on first use.** The 13:06 runs self-reported `caa8689-dirty`,
+so those figures were not pinned to any commit. The 13:25 runs report a clean `23172f4` and are.
+The k=4 figures agree across both, which is why the earlier pair is kept rather than discarded.
+
+**Also observed: the dirty set coalesces multi-tile deltas.** `rebuilt 1 of 1 chunks for 2 changed
+tiles` appears at k=4 — two cells changing in one frame still cost one chunk when they share it,
+which is what the set-based `dirty_chunks` is for.
 
 ## What to expect, and what would be suspicious
 
