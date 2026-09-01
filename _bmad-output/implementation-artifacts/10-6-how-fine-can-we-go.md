@@ -4,7 +4,7 @@ baseline_commit: 0b8b6735f04b282e2d75b82e426346be49590082
 
 # Story 10.6: How Fine Can We Go — the resolution bench
 
-Status: in-progress
+Status: done
 
 **EXECUTION ORDER: this story runs BEFORE 10.3.** Numerically last, first in sequence — the same
 shape as the gfx pass running before 8.3. 10.3 writes the grid scale into a contract that 10.4
