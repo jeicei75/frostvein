@@ -294,10 +294,13 @@ GPT-5 (Codex)
   (`can't open file .../scripts/bench/check_asset.py`), then failed on the deliberately incorrect
   quad-soup relation before the minimal correction. The same two tests passed after the correction.
 - `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/10-3-the-rules-of-the-look.sh`
-  ran the three recorded sabotages sequentially; `python3 scripts/audit-mutations.py` then reported
-  `449 rows, every literal still matches its target`.
+  ran the six recorded sabotages sequentially; `python3 scripts/audit-mutations.py` then reported
+  `452 rows, every literal still matches its target`.
 - Full gate: `export PATH="$HOME/.local/share/mise/installs/rust/1.97.1/bin:$PATH"; scripts/gate.sh`
   completed with `GATE GREEN`.
+- Self-review pass 1 (`codex review --base main`) found and this pass fixed: bounded PNG expansion,
+  `FIGURES` for an origin failure, 0.1 m position-grid validation, applied node transforms, and
+  explicit `doubleSided: false` acceptance.
 
 ### Completion Notes List
 
@@ -317,10 +320,17 @@ GPT-5 (Codex)
   the named-clause test fail.
 - Mutation `reported triangle figures lie`: **KILLED** — changing the reported triangle value to
   zero made the independent literal-figure test fail.
+- Mutation `a failed asset omits its figures`: **KILLED** — removing the `FIGURES` print made the
+  stale-asset test fail.
+- Mutation `off-grid positions are accepted`: **KILLED** — disabling the 0.1 m grid rejection made
+  the off-grid GLB fixture return 0.
+- Mutation `unapplied transforms are accepted`: **KILLED** — disabling transform rejection made
+  the translated GLB fixture return 0.
 
 Verification RED (observed before accepting the recipe GREEN):
 
 ```text
+FIGURES _bmad-output/implementation-artifacts/10-2-signoff/tree.glb size=5.2x7.6x5.4 min_y=0.000000 centre_x=-0.100000 centre_z=0.000000 tris=5130 verts=10260
 FAIL _bmad-output/implementation-artifacts/10-2-signoff/tree.glb: origin-centring clause: centre X/Z are -0.100000/0.000000, expected 0.000000/0.000000
 exit 1
 ```
