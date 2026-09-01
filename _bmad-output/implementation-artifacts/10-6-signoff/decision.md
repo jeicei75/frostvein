@@ -1,11 +1,17 @@
 # Resolution decision for 10.3
 
-> **ADOPTED, RULED BY WOLF 2026-09-01: k = 4.** This is the number 10.3 copies. The 2026-09-01
-> reopening in favour of k=16 is WITHDRAWN: the 60–90 fps reading that motivated it was taken on
-> a build predating `bace455` (painted snow, −8,145 entities) and `c8675fc` (the dig rebuild), so
-> it does not describe the shipped client and is void. **No valid vehicle fps reading exists for
-> any k.** k=16 remains proven only as GEOMETRY — it builds and sweeps — and a later story may
-> take it once a reading exists. See [vehicle-fps.md].
+> **ADOPTED, RULED BY WOLF 2026-09-01: k = 4.** This is the number 10.3 copies.
+>
+> **The ruling now has a better reason than the one it was made for.** It was taken when no valid
+> fps reading existed. One does now (gingerspice, build `caa8689-dirty`): **k=4 is >130 fps and
+> k=8 is 100–140 fps, both clearing NFR6's 60 and 30 bars comfortably.** So frame rate does NOT
+> decide between them. What does is the cost of a dig, measured live on the same run: **5–13 ms at
+> k=4 against 38–78 ms at k=8** — one frame versus a 3–5 frame hitch, on every dig, in a game that
+> digs constantly. k=4 is adopted for dig smoothness, not for triangles.
+>
+> The earlier reopening in favour of k=16 stays WITHDRAWN: the 60–90 fps that motivated it was
+> read on a build predating `bace455` and `c8675fc` and is void. k=16 remains proven only as
+> GEOMETRY. See [vehicle-fps.md].
 
 Adopt **1.6 metres per simulation cell**, **0.4 metres per terrain visual voxel**, and **visual
 subdivision k=4**. Keep the simulation grid at k=1.
@@ -93,17 +99,25 @@ stress test deferred. That guard was mis-sized: k=8 completes offline in 7.9 s, 
 `gui --subdiv 8` builds **3,539,074 triangles** on this devpod. So the reason given for excluding
 k=8 was never evidence, and it is withdrawn rather than carried forward.
 
-**No valid fps reading exists for any k, and this is the second time.** The first pair of
+**A valid reading now exists — but three earlier ones did not, and that is the durable lesson.**
+The 2026-09-01 run on build `caa8689-dirty` reads >130 fps at k=4 and 100–140 at k=8, on a client
+that draws its terrain and carries painted snow and the incremental rebuild. Treat the margin, not
+the absolute number, as the result: k=8 submits 3.8x the geometry and its range overlaps k=4's, so
+both are near the panel rather than near the GPU's limit.
+
+**The three earlier readings were void, each for a different reason.** The first pair of
 readings measured a scene whose terrain was entirely back-face culled — the chunk mesher wound
 every quad against its own normal — so ~140 fps described snow caps and tree cubes over a void
 (fixed 2026-09-01). The k=16 reading that replaced it predates `bace455` and `c8675fc` and is
 void in turn. A vehicle reading must from now on record the commit it was taken at; see the
 command card in [vehicle-fps.md].
 
-What is still owed is the only thing that can settle whether a finer k is servable: a vehicle fps
-reading, on a named build. Until one exists, **k=4 is the adopted number on geometry grounds**,
-k=8 is neither excluded nor assumed servable, and k=16 is a geometry result only. 10.3's contract
-should be written so that revisiting the adopted k is a change of one constant.
+**k=8 is servable on frame rate and is not adopted anyway.** It clears both NFR6 bars at a 100 fps
+floor, so nothing about the renderer excludes it; what excludes it is the 38–78 ms per-dig hitch.
+If a later story makes the rebuild cheaper — per-chunk k, a smaller chunk edge, or meshing off the
+main thread — k=8 becomes a live option again on this evidence. k=16 stays a geometry result only,
+with no valid reading. 10.3's contract should be written so that revisiting the adopted k is a
+change of one constant.
 
 This deliberately does **not** settle the reference sheet's 16 voxels/cell target. It gives 10.3 a
 served terrain number now, while trees and five dwarves stay much finer on their separate asset

@@ -877,6 +877,39 @@ both three-way convergences came from the two unterritorialised Opus auditors.
 principle hang the sweep — reasoned only, explicitly not scored by the layer that raised it, and
 bounded in practice by the pre-spawn face estimate.
 
+### AC7 READ, AND THE DIG REBUILD OBSERVED LIVE — Wolf, gingerspice, 2026-09-01
+
+Ran after the round-2 patch pass, on build `caa8689-dirty` (RTX 4080 Laptop, NVIDIA 616.56).
+**This closes the coverage hole this review named**: the incremental dig rebuild had never been
+observed on the live path by anyone but its author, and no review layer could fire it.
+
+| k | Boot mesh build | Chunks per dig | Per-dig mesh build | fps (NFR6 60 / 30) |
+|---:|---:|---|---:|---|
+| 4 | 404 ms | 1–2 | **5–13 ms** | **>130 — passes both** |
+| 8 | 1,269 ms | 1–2 | **38–78 ms** | **100–140 — passes both** |
+
+**AC7: both bars cleared at k=4 and k=8.** k=16 remains unread and its earlier reading void.
+
+**The finding is not the fps — it is that fps does NOT decide this.** k=8 submits 3.8x the
+triangles of k=4 and its range overlaps k=4's, which is the signature of a panel-bound reading
+rather than a GPU-bound one; the honest conclusion is "both clear both bars comfortably", not a
+headroom figure. What separates them is the dig: 5–13 ms at k=4 is one frame and imperceptible;
+38–78 ms at k=8 is a 3–5 frame hitch on every dig in a game that digs constantly. **Wolf's k=4
+ruling was taken before this measurement existed and is better supported by it than by the
+geometry argument it was actually made on.**
+
+**Corroborating the patch pass:** roughly half the observed digs rebuilt TWO chunks, so the
+multi-chunk case is the common case, not an edge — that is precisely the band the round-2 fix to
+`dirty_chunks` widened, and the band where the one-step reach could leave a stale chunk. Entities
+6,826 and chunks 121 at both k, matching the devpod exactly. The vehicle is ~6x faster than the
+devpod on mesh build (404 ms against 2,477 ms at k=4), so every devpod build-time figure should be
+read as a devpod-debug ceiling.
+
+**Caveat, and it is the one this review just added a column for:** the binary self-reports
+`caa8689-dirty`. `caa8689` is the round-2 patch commit, but `-dirty` means uncommitted changes
+were present at build time, so the SHA does not identify the code that ran. The behavioural
+observations above are robust to that; the figures should not be quoted as pinned to a commit.
+
 ### Round-2 patch pass — verification
 
 All 16 patch items applied in-session, then ONE verification pass rather than a re-gate per fix.

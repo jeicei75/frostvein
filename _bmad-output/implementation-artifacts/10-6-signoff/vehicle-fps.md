@@ -3,11 +3,22 @@
 The devpod renders but does not clock. Run each plausible visual subdivision on gingerspice and
 read sustained fps from the frame-time overlay; do not substitute a devpod frame rate.
 
-## AC7 IS OPEN. NO VALID READING EXISTS FOR ANY k.
+## AC7 — READ 2026-09-01 ON A TERRAIN-DRAWING BUILD. BOTH BARS CLEARED AT k=4 AND k=8.
 
-Three fps readings have been taken for this story and **all three are void**, each for a different
-reason, each discovered after the fact. That is the finding this card now exists to prevent
-repeating.
+Wolf, gingerspice, 2026-09-01, build `caa8689-dirty` (RTX 4080 Laptop): **k=4 is over 130 fps and
+k=8 varies between 100 and 140.** Both clear NFR6's 60 fps working-zoom bar and its 30 fps
+full-vista bar with a wide margin. This is the first reading taken on a build that draws its
+terrain AND carries painted snow and the incremental dig rebuild — the three changes that voided
+every earlier reading.
+
+**Read the margin, not the number.** k=8 submits 3.8x the triangles of k=4 (3,539,058 against
+928,884) and its range OVERLAPS k=4's. A frame rate that barely separates across a 3.8x geometry
+change is pinned to something other than the scene — almost certainly the panel. So the sound
+conclusion is "both k clear both bars comfortably", and NOT "k=8 has X% headroom". k=8's **100 fps
+floor** is the most informative single figure here, because it is the one number that moved.
+
+The three earlier readings remain **void**, each for a different reason, each discovered after the
+fact. Kept because the pattern is the lesson.
 
 | Reading | Taken | Voided by | Why |
 |---|---|---|---|
@@ -39,9 +50,48 @@ Triangle figures are CHUNK MESHES ONLY and exclude the 4,501 foliage cube entiti
 
 | k | Triangles submitted | Build (SHA) | Boot framing fps (NFR6 ≥60) | Full vista fps (NFR6 ≥30) | Result |
 |---:|---:|---|---:|---:|---|
-| 4 | 928,884 | | | | **adopted k — unread** |
-| 8 | 3,539,074 | | | | unread |
-| 16 | 13,873,064 | | | | unread; previous reading void |
+| 4 | 928,884 | `caa8689-dirty` | **>130** | **>130** | **PASSES BOTH BARS**; dig cost 5–13 ms |
+| 8 | 3,539,058 | `caa8689-dirty` | **100–140** | **100–140** | **PASSES BOTH BARS**; dig cost 38–78 ms |
+| 16 | 13,873,064 | — | *(unread)* | *(unread)* | previous 60–90 reading VOID (pre-`bace455`) |
+
+## OBSERVED ON THE VEHICLE 2026-09-01 — the dig rebuild, live (build `caa8689-dirty`)
+
+Wolf ran `gui.exe --subdiv 4` and `--subdiv 8` on gingerspice (RTX 4080 Laptop, NVIDIA 616.56,
+Vulkan). **This closes the coverage hole the round-2 review named**: the incremental dig rebuild
+had never been observed on the live path by anyone but its author, and no review layer could fire
+it (`designations=0 of 0` over 200 ticks on the devpod).
+
+| k | Boot mesh build | Chunks rebuilt per dig | Per-dig mesh build | Boot triangles |
+|---:|---:|---|---:|---:|
+| 4 | 404 ms | 1–2 of 1–2 | **5–13 ms** | 928,884 |
+| 8 | 1,269 ms | 1–2 of 1–2 | **38–78 ms** | 3,539,058 |
+
+Never 121 chunks. Never a whole-world rebuild. Entities 6,826 and chunks 121 at both k, matching
+the devpod exactly.
+
+**THE PER-DIG COST IS NOW THE ONLY THING SEPARATING k=4 FROM k=8.** On frame rate both clear both
+bars, so fps does not decide this. On digging they differ sharply: at k=4 a dig costs 5–13 ms —
+inside a single 60 fps frame, imperceptible. At k=8 it costs 38–78 ms, a 3–5 frame hitch on *every
+dig*, and a fortress digs constantly. This is the first evidence separating the two that is about
+playing the game rather than counting triangles, and it points the same way as Wolf's adoption
+ruling — which was taken before this measurement existed.
+
+**Roughly half the digs rebuild TWO chunks**, not one — the multi-chunk case is the common case,
+not an edge. That is the band the round-2 patch pass widened `dirty_chunks` to cover: before the
+fix the reach was one cell where a dig reaches two, so digs in exactly this band were the ones
+that could leave a stale chunk standing.
+
+**The vehicle is ~6x faster than the devpod on mesh build** (404 ms against 2,477 ms at k=4), so
+every devpod build-time figure in [axis-a-geometry.md] should be read as a devpod-debug ceiling.
+
+**The fps for this run was reported separately by Wolf** (>130 at k=4, 100–140 at k=8); the
+pasted logs themselves carry mesh-build times and chunk counts only.
+
+**The build tag says `-dirty`, which is the problem this card's SHA column exists to prevent.**
+`caa8689` is the round-2 patch commit, but `-dirty` means uncommitted changes were present when
+the binary was built, so the SHA does not identify the code that ran. The numbers above are
+recorded as observations of the incremental-rebuild BEHAVIOUR, which is robust to that; do not
+quote them as pinned to a commit.
 
 ## What to expect, and what would be suspicious
 
