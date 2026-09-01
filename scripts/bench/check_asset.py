@@ -5,6 +5,7 @@
 # deliverable imports bpy at module scope and cannot be imported outside Blender.
 
 import json
+import math
 import pathlib
 import struct
 import sys
@@ -15,6 +16,8 @@ MAX_GLB_BYTES = 16 * 1024 * 1024
 MAX_DECODED_PNG_BYTES = 16 * 1024 * 1024
 PROJECT_GRID_METRES = 0.1
 GRID_TOLERANCE = 0.000_01
+UV_TOLERANCE = 0.000_001
+CLAMP_TO_EDGE = 33071
 JSON_CHUNK = 0x4E4F534A
 BIN_CHUNK = 0x004E4942
 COMPONENT_SIZE = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
@@ -140,7 +143,7 @@ def palette_from_glb(document, binary):
         raise AssetError("palette/material clause: embedded image is malformed") from error
     width, height, channels, pixels = decode_png_rgb(png)
     if width != ATLAS or height != ATLAS:
-        raise AssetError("palette/material clause: expected a 64x64 atlas")
+        raise AssetError(f"palette/material clause: expected a {ATLAS}x{ATLAS} V1 atlas")
     values = []
     for index in range(len(PALETTE_HEX)):
         column, row = index % 4, index // 4
@@ -186,18 +189,57 @@ def has_applied_transform(node):
     )
 
 
+def ancestor_nodes(document, index):
+    """Yield each node between the mesh node and the scene root, innermost first."""
+    parent_of = {}
+    for position, node in enumerate(document.get("nodes", [])):
+        for child in node.get("children", []):
+            parent_of[child] = position
+    seen = set()
+    while index in parent_of:
+        index = parent_of[index]
+        if index in seen:
+            raise AssetError("file clause: node hierarchy contains a cycle")
+        seen.add(index)
+        yield document["nodes"][index]
+
+
+def check_uv_and_wrap(document, binary, primitive, sampler):
+    """The two 10.2 clauses the v1 port dropped: CLAMP_TO_EDGE wrap and UVs inside 0-1."""
+    if sampler.get("wrapS") != CLAMP_TO_EDGE or sampler.get("wrapT") != CLAMP_TO_EDGE:
+        raise AssetError("palette/material clause: atlas sampler must wrap CLAMP_TO_EDGE")
+    try:
+        uv_index = primitive["attributes"]["TEXCOORD_0"]
+    except (KeyError, TypeError) as error:
+        raise AssetError("palette/material clause: primitive needs TEXCOORD_0") from error
+    item, start, stride, _component_size, _components = accessor(document, binary, uv_index)
+    if item["componentType"] != 5126 or item["type"] != "VEC2":
+        raise AssetError("palette/material clause: TEXCOORD_0 must be float VEC2")
+    for row in range(item["count"]):
+        u, v = struct.unpack_from("<ff", binary, start + row * stride)
+        if not all(-UV_TOLERANCE <= value <= 1 + UV_TOLERANCE for value in (u, v)):
+            raise AssetError(
+                f"palette/material clause: UV ({u:.6f}, {v:.6f}) lies outside the 0-1 atlas"
+            )
+
+
 def contract_data(document, binary):
     """Read the contract figures after validating the common v1 GLB shape."""
     meshes = document.get("meshes", [])
     materials = document.get("materials", [])
     images = document.get("images", [])
     if len(meshes) != 1 or len(materials) != 1 or len(images) != 1:
-        raise AssetError("one-mesh/material/image clause: expected exactly one of each")
+        raise AssetError(
+            "one-mesh/material/image clause (V1 voxel assets only): "
+            "expected exactly one of each"
+        )
     primitives = meshes[0].get("primitives", [])
     if len(primitives) != 1:
         raise AssetError("one-primitive clause: expected exactly one primitive")
-    if document.get("extensionsUsed"):
-        raise AssetError("no-extensions clause: extensionsUsed must be absent")
+    if document.get("extensionsUsed") or document.get("extensionsRequired"):
+        raise AssetError(
+            "no-extensions clause: extensionsUsed/extensionsRequired must be absent"
+        )
     if materials[0].get("doubleSided", False) is not False:
         raise AssetError("single-sided clause: doubleSided must be false")
 
@@ -213,9 +255,11 @@ def contract_data(document, binary):
         # The standing contract verifies the atlas exists and is nearest-filtered. Its declared
         # colour-to-role map remains a signoff comparison, so a different valid asset family is
         # not rejected by the pine palette literals above.
-        palette_from_glb(document, binary)
+        palette = palette_from_glb(document, binary)
+        check_uv_and_wrap(document, binary, primitive, sampler)
         mesh_name = meshes[0]["name"]
-        node = next(node for node in document["nodes"] if node.get("mesh") == 0)
+        node_index = next(i for i, item in enumerate(document["nodes"]) if item.get("mesh") == 0)
+        node = document["nodes"][node_index]
         node_name = node["name"]
     except (IndexError, KeyError, StopIteration, TypeError) as error:
         raise AssetError("palette/material clause: malformed material mapping") from error
@@ -223,6 +267,12 @@ def contract_data(document, binary):
         raise AssetError("naming clause: mesh and node names must agree")
     if not has_applied_transform(node):
         raise AssetError("transform clause: mesh node must have an applied identity transform")
+    for ancestor in ancestor_nodes(document, node_index):
+        if not has_applied_transform(ancestor):
+            raise AssetError(
+                "transform clause: ancestor node "
+                f"{ancestor.get('name', '<unnamed>')!r} must have an applied identity transform"
+            )
 
     try:
         position_index = primitive["attributes"]["POSITION"]
@@ -233,6 +283,8 @@ def contract_data(document, binary):
     index_data, *_ = accessor(document, binary, index_accessor)
     if not point_data or index_data["count"] % 3:
         raise AssetError("geometry clause: requires non-empty triangle indices")
+    if any(not math.isfinite(value) for point in point_data for value in point):
+        raise AssetError("geometry clause: POSITION values must be finite")
     if any(
         abs(value / PROJECT_GRID_METRES - round(value / PROJECT_GRID_METRES)) > GRID_TOLERANCE
         for point in point_data for value in point
@@ -244,18 +296,19 @@ def contract_data(document, binary):
     verts = len(point_data)
     if verts != tris * 2:
         raise AssetError("quad-soup clause: verts must equal tris/2 × 4")
-    return minimum, maximum, tris, verts
+    return minimum, maximum, tris, verts, palette, mesh_name
 
 
 def figures(path):
     document, binary = load_glb(path)
-    minimum, maximum, tris, verts = contract_data(document, binary)
+    minimum, maximum, tris, verts, palette, mesh_name = contract_data(document, binary)
     size = tuple(maximum[axis] - minimum[axis] for axis in range(3))
     centre_x = (minimum[0] + maximum[0]) / 2
     centre_z = (minimum[2] + maximum[2]) / 2
     line = (
-        f"FIGURES {path} size={size[0]:.1f}x{size[1]:.1f}x{size[2]:.1f} "
-        f"min_y={minimum[1]:.6f} centre_x={centre_x:.6f} centre_z={centre_z:.6f} "
+        f"FIGURES {path} size_m={size[0]:.1f}x{size[1]:.1f}x{size[2]:.1f} "
+        f"min_y_m={minimum[1]:.6f} centre_x_m={centre_x:.6f} centre_z_m={centre_z:.6f} "
+        f"palette={','.join(palette)} "
         f"tris={tris} verts={verts}"
     )
     if abs(minimum[1]) > 0.000_001:
@@ -264,6 +317,11 @@ def figures(path):
         failure = (
             "origin-centring clause: centre X/Z are "
             f"{centre_x:.6f}/{centre_z:.6f}, expected 0.000000/0.000000"
+        )
+    elif path.stem != mesh_name:
+        failure = (
+            f"naming clause: file basename {path.stem!r} and published mesh/node name "
+            f"{mesh_name!r} must match"
         )
     else:
         failure = None

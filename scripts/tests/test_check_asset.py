@@ -56,23 +56,23 @@ class CheckAssetTests(unittest.TestCase):
         figures = [line for line in result.stdout.splitlines() if line.startswith("FIGURES ")]
         self.assertEqual(len(figures), 4, result.stdout)
         self.assertIn(
-            "size=5.0x6.4x5.0 min_y=0.000000 centre_x=0.000000 "
-            "centre_z=0.000000 tris=4366 verts=8732",
+            "size_m=5.0x6.4x5.0 min_y_m=0.000000 centre_x_m=0.000000 "
+            "centre_z_m=0.000000 palette=#4A3B2E,#6B5B49,#2A3E34,#364D3F,#52715B,#FFFFFF,#D8E4EC tris=4366 verts=8732",
             figures[0],
         )
         self.assertIn(
-            "size=5.0x8.0x5.4 min_y=0.000000 centre_x=0.000000 "
-            "centre_z=0.000000 tris=5894 verts=11788",
+            "size_m=5.0x8.0x5.4 min_y_m=0.000000 centre_x_m=0.000000 "
+            "centre_z_m=0.000000 palette=#4A3B2E,#6B5B49,#2A3E34,#364D3F,#52715B,#FFFFFF,#D8E4EC tris=5894 verts=11788",
             figures[1],
         )
         self.assertIn(
-            "size=3.8x8.0x3.4 min_y=0.000000 centre_x=0.000000 "
-            "centre_z=0.000000 tris=3474 verts=6948",
+            "size_m=3.8x8.0x3.4 min_y_m=0.000000 centre_x_m=0.000000 "
+            "centre_z_m=0.000000 palette=#4A3B2E,#6B5B49,#2A3E34,#364D3F,#52715B,#FFFFFF,#D8E4EC tris=3474 verts=6948",
             figures[2],
         )
         self.assertIn(
-            "size=4.6x10.6x4.6 min_y=0.000000 centre_x=0.000000 "
-            "centre_z=0.000000 tris=5280 verts=10560",
+            "size_m=4.6x10.6x4.6 min_y_m=0.000000 centre_x_m=0.000000 "
+            "centre_z_m=0.000000 palette=#4A3B2E,#6B5B49,#2A3E34,#364D3F,#52715B,#FFFFFF,#D8E4EC tris=5280 verts=10560",
             figures[3],
         )
 
@@ -83,6 +83,9 @@ class CheckAssetTests(unittest.TestCase):
         self.assertIn("FIGURES ", result.stdout)
         self.assertIn("origin-centring", result.stderr)
         self.assertIn("-0.100000", result.stderr)
+        # AC5's identity clause, made visible: same published NAME, different published figures.
+        self.assertIn("tris=5130", result.stdout)
+        self.assertNotIn("palette=#4A3B2E", result.stdout)
 
     def test_off_grid_positions_and_unapplied_transforms_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -103,6 +106,80 @@ class CheckAssetTests(unittest.TestCase):
             result = check(transformed)
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("transform clause", result.stderr)
+
+    def test_a_parent_node_cannot_hide_an_unapplied_transform(self):
+        """A wrapper empty is the shape a Blender or MCP export arrives in."""
+        with tempfile.TemporaryDirectory() as directory:
+            wrapped = pathlib.Path(directory) / "SM_VoxelPine_Tree02.glb"
+
+            def wrap(document, binary, start):
+                mesh_node = next(
+                    index for index, node in enumerate(document["nodes"]) if node.get("mesh") == 0
+                )
+                document["nodes"].append(
+                    {"name": "Wrapper", "translation": [3.0, 5.0, -2.0], "children": [mesh_node]}
+                )
+                for scene in document.get("scenes", []):
+                    scene["nodes"] = [len(document["nodes"]) - 1]
+
+            write_tree02_mutant(wrapped, wrap)
+            result = check(wrapped)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("transform clause", result.stderr)
+            self.assertIn("Wrapper", result.stderr)
+
+    def test_a_mismatched_file_basename_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            renamed = pathlib.Path(directory) / "not-the-published-name.glb"
+            renamed.write_bytes((SIGNOFF / "export/SM_VoxelPine_Tree02.glb").read_bytes())
+            result = check(renamed)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("naming clause", result.stderr)
+            self.assertIn("SM_VoxelPine_Tree02", result.stderr)
+
+    def test_non_finite_positions_name_a_clause_instead_of_crashing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            broken = pathlib.Path(directory) / "SM_VoxelPine_Tree02.glb"
+            write_tree02_mutant(
+                broken,
+                lambda document, binary, start: struct.pack_into(
+                    "<f", binary, start, float("nan")
+                ),
+            )
+            result = check(broken)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("geometry clause", result.stderr)
+            self.assertIn("finite", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_a_required_extension_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            extended = pathlib.Path(directory) / "SM_VoxelPine_Tree02.glb"
+            write_tree02_mutant(
+                extended,
+                lambda document, binary, start: document.update(
+                    extensionsRequired=["KHR_materials_unlit"]
+                ),
+            )
+            result = check(extended)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("no-extensions clause", result.stderr)
+
+    def test_a_uv_outside_the_atlas_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stretched = pathlib.Path(directory) / "SM_VoxelPine_Tree02.glb"
+
+            def push_uv(document, binary, start):
+                primitive = document["meshes"][0]["primitives"][0]
+                item = document["accessors"][primitive["attributes"]["TEXCOORD_0"]]
+                view = document["bufferViews"][item["bufferView"]]
+                offset = view.get("byteOffset", 0) + item.get("byteOffset", 0)
+                struct.pack_into("<f", binary, offset, 1.5)
+
+            write_tree02_mutant(stretched, push_uv)
+            result = check(stretched)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("outside the 0-1 atlas", result.stderr)
 
 
 if __name__ == "__main__":
