@@ -1,8 +1,11 @@
 """Black-box checks for the asset-contract instrument."""
 
+import json
 import pathlib
 import subprocess
+import struct
 import sys
+import tempfile
 import unittest
 
 
@@ -18,6 +21,29 @@ def check(*paths):
         capture_output=True,
         text=True,
         check=False,
+    )
+
+
+def write_tree02_mutant(target, change):
+    """Write a tiny, real GLB mutant without changing its source artifact."""
+    data = (SIGNOFF / "export/SM_VoxelPine_Tree02.glb").read_bytes()
+    offset, chunks = 12, []
+    while offset < len(data):
+        length, kind = struct.unpack_from("<II", data, offset)
+        chunks.append((kind, data[offset + 8:offset + 8 + length]))
+        offset += 8 + length
+    document = json.loads(next(chunk for kind, chunk in chunks if kind == 0x4E4F534A))
+    binary = bytearray(next(chunk for kind, chunk in chunks if kind == 0x004E4942))
+    position = document["accessors"][document["meshes"][0]["primitives"][0]["attributes"]["POSITION"]]
+    view = document["bufferViews"][position["bufferView"]]
+    change(document, binary, view.get("byteOffset", 0) + position.get("byteOffset", 0))
+    encoded = json.dumps(document, separators=(",", ":")).encode()
+    encoded += b" " * (-len(encoded) % 4)
+    binary += b"\0" * (-len(binary) % 4)
+    target.write_bytes(
+        struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(encoded) + 8 + len(binary))
+        + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
+        + struct.pack("<II", len(binary), 0x004E4942) + binary
     )
 
 
@@ -54,8 +80,29 @@ class CheckAssetTests(unittest.TestCase):
         result = check(SIGNOFF / "tree.glb")
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FIGURES ", result.stdout)
         self.assertIn("origin-centring", result.stderr)
         self.assertIn("-0.100000", result.stderr)
+
+    def test_off_grid_positions_and_unapplied_transforms_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            off_grid = pathlib.Path(directory) / "off-grid.glb"
+            write_tree02_mutant(
+                off_grid,
+                lambda document, binary, start: struct.pack_into("<f", binary, start, -2.05),
+            )
+            result = check(off_grid)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("grid clause", result.stderr)
+
+            transformed = pathlib.Path(directory) / "translated.glb"
+            write_tree02_mutant(
+                transformed,
+                lambda document, binary, start: document["nodes"][0].update(translation=[0, 1, 0]),
+            )
+            result = check(transformed)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("transform clause", result.stderr)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,9 @@ import zlib
 
 
 MAX_GLB_BYTES = 16 * 1024 * 1024
+MAX_DECODED_PNG_BYTES = 16 * 1024 * 1024
+PROJECT_GRID_METRES = 0.1
+GRID_TOLERANCE = 0.000_01
 JSON_CHUNK = 0x4E4F534A
 BIN_CHUNK = 0x004E4942
 COMPONENT_SIZE = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
@@ -86,8 +89,16 @@ def decode_png_rgb(png):
         raise AssetError("palette/material clause: expected 8-bit RGB/RGBA PNG")
     channels = 3 if colour == 2 else 4
     stride = width * channels
-    raw = zlib.decompress(idat)
-    if len(raw) != height * (stride + 1):
+    raw_length = height * (stride + 1)
+    if not width or not height or raw_length > MAX_DECODED_PNG_BYTES:
+        raise AssetError("palette/material clause: PNG decoded size exceeds limit")
+    try:
+        decoder = zlib.decompressobj()
+        raw = decoder.decompress(idat, raw_length + 1)
+        raw += decoder.flush(raw_length + 1 - len(raw))
+    except zlib.error as error:
+        raise AssetError("palette/material clause: invalid PNG compression") from error
+    if len(raw) != raw_length or decoder.unconsumed_tail:
         raise AssetError("palette/material clause: PNG scanline length is invalid")
     output, previous, offset = bytearray(height * stride), bytearray(stride), 0
     for row in range(height):
@@ -166,6 +177,15 @@ def positions(document, binary, index):
     return [struct.unpack_from("<fff", binary, start + row * stride) for row in range(item["count"])]
 
 
+def has_applied_transform(node):
+    return (
+        node.get("translation", [0, 0, 0]) == [0, 0, 0]
+        and node.get("rotation", [0, 0, 0, 1]) == [0, 0, 0, 1]
+        and node.get("scale", [1, 1, 1]) == [1, 1, 1]
+        and node.get("matrix") in (None, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    )
+
+
 def contract_data(document, binary):
     """Read the contract figures after validating the common v1 GLB shape."""
     meshes = document.get("meshes", [])
@@ -178,8 +198,8 @@ def contract_data(document, binary):
         raise AssetError("one-primitive clause: expected exactly one primitive")
     if document.get("extensionsUsed"):
         raise AssetError("no-extensions clause: extensionsUsed must be absent")
-    if "doubleSided" in materials[0]:
-        raise AssetError("single-sided clause: doubleSided must be absent")
+    if materials[0].get("doubleSided", False) is not False:
+        raise AssetError("single-sided clause: doubleSided must be false")
 
     primitive = primitives[0]
     if primitive.get("material") != 0:
@@ -195,11 +215,14 @@ def contract_data(document, binary):
         # not rejected by the pine palette literals above.
         palette_from_glb(document, binary)
         mesh_name = meshes[0]["name"]
-        node_name = next(node["name"] for node in document["nodes"] if node.get("mesh") == 0)
+        node = next(node for node in document["nodes"] if node.get("mesh") == 0)
+        node_name = node["name"]
     except (IndexError, KeyError, StopIteration, TypeError) as error:
         raise AssetError("palette/material clause: malformed material mapping") from error
     if mesh_name != node_name:
         raise AssetError("naming clause: mesh and node names must agree")
+    if not has_applied_transform(node):
+        raise AssetError("transform clause: mesh node must have an applied identity transform")
 
     try:
         position_index = primitive["attributes"]["POSITION"]
@@ -210,6 +233,11 @@ def contract_data(document, binary):
     index_data, *_ = accessor(document, binary, index_accessor)
     if not point_data or index_data["count"] % 3:
         raise AssetError("geometry clause: requires non-empty triangle indices")
+    if any(
+        abs(value / PROJECT_GRID_METRES - round(value / PROJECT_GRID_METRES)) > GRID_TOLERANCE
+        for point in point_data for value in point
+    ):
+        raise AssetError("grid clause: POSITION values must use the 0.1 m project grid")
     minimum = tuple(min(point[axis] for point in point_data) for axis in range(3))
     maximum = tuple(max(point[axis] for point in point_data) for axis in range(3))
     tris = index_data["count"] // 3
@@ -231,13 +259,15 @@ def figures(path):
         f"tris={tris} verts={verts}"
     )
     if abs(minimum[1]) > 0.000_001:
-        raise AssetError(f"origin-centring clause: min Y is {minimum[1]:.6f}, expected 0.000000")
-    if abs(centre_x) > 0.000_001 or abs(centre_z) > 0.000_001:
-        raise AssetError(
+        failure = f"origin-centring clause: min Y is {minimum[1]:.6f}, expected 0.000000"
+    elif abs(centre_x) > 0.000_001 or abs(centre_z) > 0.000_001:
+        failure = (
             "origin-centring clause: centre X/Z are "
             f"{centre_x:.6f}/{centre_z:.6f}, expected 0.000000/0.000000"
         )
-    return line
+    else:
+        failure = None
+    return line, failure
 
 
 def main(argv):
@@ -250,7 +280,10 @@ def main(argv):
             print(f"FAIL {path}: file clause: expected a .glb path", file=sys.stderr)
             return 1
         try:
-            print(figures(path))
+            line, failure = figures(path)
+            print(line)
+            if failure:
+                raise AssetError(failure)
         except AssetError as error:
             print(f"FAIL {path}: {error}", file=sys.stderr)
             return 1

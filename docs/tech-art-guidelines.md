@@ -258,7 +258,8 @@ and other appearance values never become wire state (AD-16).
   `scripts/bench/check_asset.py` reports and enforces these bounds.
 - **Palette and material mapping.** The asset publishes its palette-cell-to-role map with its
   signoff figures. V1 trees use one embedded atlas image, one material and one primitive, with
-  `magFilter = NEAREST`, flat, single-sided metallic-roughness material and no glTF extensions.
+  `magFilter = NEAREST`, flat, single-sided (`doubleSided` absent or false) metallic-roughness
+  material and no glTF extensions.
   **Mechanically-checkable:** `scripts/bench/check_asset.py` enforces the v1 count/filter/
   single-sided/extension clauses; the intended role read and future multi-material mapping are
   **eye-only** until a concrete second format exists.
