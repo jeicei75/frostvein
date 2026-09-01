@@ -43,7 +43,33 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-01  # 10.6 WINDING BUG FOUND AND FIXED from Wolf's vehicle screenshots.
+last_updated: 2026-09-01  # 10.6 THE STALL: ONE DUG TILE RE-MESHES THE WHOLE WORLD at subdiv>1.
+                          # reconcile_projection promotes ANY non-empty dirty_tiles to a full
+                          # rebuild (ingest.rs:1016) -- correct (a chunk is a whole surface, a
+                          # newly-open neighbour must not weld an old face in) and UNBOUNDED. The
+                          # "Mesh build" column was never a boot cost: it is the price of every dig.
+                          # 540ms at k=2, ~2,500 at k=4, 10,386 at k=8, 44,740 at k=16 (devpod,
+                          # debug, lavapipe; ~4.3x per doubling). subdiv 1 does NOT do this -- it
+                          # takes the incremental dirty-tile branch, which is why the shipped client
+                          # never hitches. Pinned by a test on both paths + a mutation row.
+                          # It CANNOT show in the overlay: Bevy prints fps.smoothed() on a 100ms
+                          # refresh and no frame is presented during the stall -- verified in
+                          # bevy_dev_tools-0.19.0/src/fps_overlay.rs, not assumed.
+                          # THIS IS PROBABLY WHAT DECIDES THE ADOPTED k, not fps -- a fortress digs
+                          # constantly, and every static number in this story is blind to it.
+                          # decision.md now says 10.3 MUST NOT fix a k until Wolf rules on whether
+                          # the fix happens. Fix is bounded (rebuild the 1-8 affected chunks of 121,
+                          # ~15-60x less work) but it IS a renderer change and the story is scoped
+                          # "measurements plus one decision, not a renderer" -- recorded as owed,
+                          # NOT taken. WOLF'S CALL.
+                          # Also identified the big blue tiles Wolf asked about: dig marks
+                          # (56,132,250) and channel marks (150,96,230), sampled from the frame.
+                          # Not new, not a mesher defect -- they are cell-scale UI on a sub-cell
+                          # surface, as are the 8,145 snow caps. That is a general cost of adopting
+                          # k>1 that no triangle count shows; belongs to 10.4. See
+                          # 10-6-signoff/marks-and-caps-are-cell-scale.md.
+                          # 16/16 mutation rows KILLED, full gate GREEN.
+                          # PRIOR: 10.6 WINDING BUG FOUND AND FIXED from Wolf's vehicle screenshots.
                           # THE HOLES WERE NEVER THE CONNECTORS. `append_quad` had its two vertex
                           # orders the wrong way round, so every chunk quad on every axis and both
                           # signs was wound to face OPPOSITE its own normal; StandardMaterial's
