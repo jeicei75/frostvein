@@ -73,11 +73,11 @@ against source; **two of them are wrong as written in `epics.md` and are correct
   - [x] Record `appearance.rs`'s `scale: 0.65 → 0.75` in the contract as **owed by 10.5**, with
         the arithmetic. **Do not make the change here.**
 
-- [ ] **Task 2 — Write the procedural-content contract** (AC: 2)
-  - [ ] Extract the implied rules from the existing sections of `docs/tech-art-guidelines.md`.
+- [x] **Task 2 — Write the procedural-content contract** (AC: 2)
+  - [x] Extract the implied rules from the existing sections of `docs/tech-art-guidelines.md`.
         The candidates, with their enforcement, are listed in Dev Notes; verify each citation
         before writing it down.
-  - [ ] Mark each clause with its enforcement or with **eye-only**. A clause with neither is not
+  - [x] Mark each clause with its enforcement or with **eye-only**. A clause with neither is not
         a contract clause — cut it or make enforcing it an owed item.
 
 - [ ] **Task 3 — Write the asset contract** (AC: 4, 5)

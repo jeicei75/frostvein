@@ -202,3 +202,40 @@ but is not adopted because every dig hitches 38–78 ms versus k=4's 5–13 ms. 
 without a valid fps reading. **Mechanically-checkable:**
 `scripts/tests/test_resolution_bench.py:ResolutionDetailRuleTests` pins the k>1 detail rule;
 the choice of `k=4`, the bracket, and the per-class budgets are recorded measured decisions.
+
+## Procedural-content contract
+
+Procedural presentation is a client-side interpretation of `Material`, `EntityKind`, exposure and
+the delivered world mirror; it must never add presentation fields to the wire. The following are
+the standing rules implied by this guide. A cited test or instrument is a mechanical check; an
+**eye-only** item is deliberate human vehicle review rather than an untestable claim of automation.
+
+- Night terrain colours, brighter settled snow, green foliage and the cold-snow channel ordering
+  come only from the appearance tables. **Mechanically-checkable:**
+  `crates/gui/src/appearance.rs:300`.
+- Foliage is smaller than its tile according to the crown rule, without changing the six-neighbour
+  exposed-face set. **Mechanically-checkable:** `scripts/tests/test_valley_bench.py:62-104`.
+- Light is table-driven by `LightKind`; warm emitters remain chromatically distinct from cold fill,
+  and flicker is deterministic, bounded presentation. **Mechanically-checkable:**
+  `crates/gui/src/appearance.rs:158-204` and `:323-344`.
+- The camp and valley retain the measured value ladder: capture's terrain window must be 70–180
+  median sRGB, not merely non-black. **Mechanically-checkable:**
+  `scripts/bench/valley_bench.py:terrain_luma` via `scripts/tests/test_valley_bench.py:125-159`.
+- The boot camera keeps its approved camp and skyline placement, and its composition offset stays
+  in the view plane rather than sliding along camera-right. **Mechanically-checkable:**
+  `crates/gui/src/camera.rs:220-263`.
+- Aurora is a camera-enclosing curtain ring with transparent top and bottom edges; stars sit on a
+  larger shell, and both lie outside terrain fog. **Mechanically-checkable:**
+  `crates/gui/src/atmosphere.rs:320-425`. Its particular colour and fold character are **eye-only**.
+- Snowfall uses independent low-discrepancy placement, varied speeds and phase-preserving respawn;
+  it must not form marching rows. **Mechanically-checkable:** `crates/gui/src/atmosphere.rs:511-581`.
+- Fog supplies aerial perspective only. The world edge dissolves by five-step rim colour toward the
+  exact sky colour and never by omitting draw-set tiles. **Mechanically-checkable:**
+  `crates/gui/src/appearance.rs:596-617`; the draw-set number itself is a moving measurement,
+  checked by the cube oracle rather than a fixed contract constant.
+- Delivered entity motion may interpolate between the two received states but must never predict;
+  local sky, flakes, flicker and dig chips carry no simulation meaning. **Mechanically-checkable:**
+  `ARCHITECTURE-SPINE.md:107-119`. The perceived readability of interpolation is **eye-only**.
+- Mountain slicing is a client-local filter: expose below the selected level, retain the selected
+  solid cut face, and add neither hatch nor simulation state. **Mechanically-checkable:**
+  `crates/gui/src/slice.rs:90-153`.
