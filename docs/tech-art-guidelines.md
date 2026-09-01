@@ -184,10 +184,18 @@ same grid. This resolves the three apparently divergent values: the reference sh
 `scale: 0.65` is simply stale. Story 10.5 owes the one-line correction to `scale: 0.75`, because
 1.20 m / 1.6 m per cell = 0.75. It is not a change made by this contract.
 
-Terrain has a separate served resolution and budget from authored assets. The renderer uses
-**0.4 m terrain visual voxels**: visual subdivision **`k = 4`** of one 1.6 m simulation cell,
-while the simulation remains `k = 1`. Put the adopted `k` in one constant so a future evidence-led
-revision changes one constant, not a new grid convention. The terrain budget is **80,120–928,884
+Terrain has a separate served resolution and budget from authored assets. The **adopted decision**
+is **0.4 m terrain visual voxels**: visual subdivision **`k = 4`** of one 1.6 m simulation cell,
+while the simulation remains `k = 1`.
+
+**This is a decision, not yet a property of the shipped client.** The default build serves terrain
+at `k = 1` (1.6 m): `TerrainSubdivision` is inserted only when `--subdiv` is passed
+[`crates/gui/src/ingest.rs:203`], and every consumer falls back through `subdivision.map_or(1, ..)`
+[`crates/gui/src/project.rs:1108`, `:1184`, `:1196`]. Reaching the adopted resolution today
+requires `--subdiv 4`. Making `k = 4` the default — putting the adopted `k` in one constant so a
+future evidence-led revision changes one constant rather than a grid convention — is **owed work
+with no owner yet**; it is recorded in `deferred-work.md` and belongs to whichever story next
+takes terrain rendering. Do not read this paragraph as a description of what the client does. The terrain budget is **80,120–928,884
 chunk-mesh triangles at k=4**. The noisy measurement stand-in reaches the 928,884 ceiling; coherent
 detail reaches 80,120, so the 11.5× bracket is not a look budget. Detail contributes 96.8% of that
 ceiling and story 10.4's authored terrain decides where a real look lands. The ceiling excludes
@@ -212,7 +220,7 @@ the standing rules implied by this guide. A cited test or instrument is a mechan
 
 - Night terrain colours, brighter settled snow, green foliage and the cold-snow channel ordering
   come only from the appearance tables. **Mechanically-checkable:**
-  `crates/gui/src/appearance.rs:300`.
+  `crates/gui/src/appearance.rs:303-390` (`appearance_tables_pin_the_cold_boot_palette`).
 - Foliage is smaller than its tile according to the crown rule, without changing the six-neighbour
   exposed-face set. **Mechanically-checkable:** `scripts/tests/test_valley_bench.py:62-104`.
 - Light is table-driven by `LightKind`; warm emitters remain chromatically distinct from cold fill,
@@ -220,7 +228,12 @@ the standing rules implied by this guide. A cited test or instrument is a mechan
   `crates/gui/src/appearance.rs:158-204` and `:323-344`.
 - The camp and valley retain the measured value ladder: capture's terrain window must be 70–180
   median sRGB, not merely non-black. **Mechanically-checkable:**
-  `scripts/bench/valley_bench.py:terrain_luma` via `scripts/tests/test_valley_bench.py:125-159`.
+  `crates/gui/src/capture.rs:459` (`GROUND_LUMINANCE_FLOOR`) and `:464`
+  (`GROUND_LUMINANCE_CEILING`), tested at `crates/gui/src/capture.rs:1329-1343`. This is the
+  `--capture` instrument described under "The value floor" above, NOT a headless bench check:
+  `scripts/bench/valley_bench.py:terrain_luma` computes a **mean** over non-sky pixels against a
+  one-sided `MIN_TERRAIN_LUMA = 20.0` [`scripts/bench/valley_bench.py:110`, `:370`] and can see
+  neither the 70 floor, the 180 ceiling, nor the median this clause requires.
 - The boot camera keeps its approved camp and skyline placement, and its composition offset stays
   in the view plane rather than sliding along camera-right. **Mechanically-checkable:**
   `crates/gui/src/camera.rs:220-263`.
@@ -229,16 +242,22 @@ the standing rules implied by this guide. A cited test or instrument is a mechan
   `crates/gui/src/atmosphere.rs:320-425`. Its particular colour and fold character are **eye-only**.
 - Snowfall uses independent low-discrepancy placement, varied speeds and phase-preserving respawn;
   it must not form marching rows. **Mechanically-checkable:** `crates/gui/src/atmosphere.rs:511-581`.
-- Fog supplies aerial perspective only. The world edge dissolves by five-step rim colour toward the
+- Fog supplies aerial perspective only. The world edge dissolves by a **13-level** rim ramp
+  (`RIM_LEVELS` [`crates/gui/src/appearance.rs:251`]; the original linear 5-step ramp was replaced
+  after it read as a hard band — see [`crates/gui/src/project.rs:1669`]) toward the
   exact sky colour and never by omitting draw-set tiles. **Mechanically-checkable:**
   `crates/gui/src/appearance.rs:596-617`; the draw-set number itself is a moving measurement,
   checked by the cube oracle rather than a fixed contract constant.
 - Delivered entity motion may interpolate between the two received states but must never predict;
   local sky, flakes, flicker and dig chips carry no simulation meaning. **Mechanically-checkable:**
-  `ARCHITECTURE-SPINE.md:107-119`. The perceived readability of interpolation is **eye-only**.
+  `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md:107-119`. The perceived readability of interpolation is **eye-only**.
 - Mountain slicing is a client-local filter: expose below the selected level, retain the selected
   solid cut face, and add neither hatch nor simulation state. **Mechanically-checkable:**
-  `crates/gui/src/slice.rs:90-153`.
+  the selected level is clamped and read out by `SliceLevel`
+  [`crates/gui/src/slice.rs:90-153`]. The exposure filter itself is `is_visible_at_slice`
+  [`crates/gui/src/project.rs:1851-1856`], which has **no dedicated test**; that the cut face
+  stays solid and that slicing adds neither hatch nor simulation state are **eye-only** until
+  one exists.
 
 ## Asset contract
 
@@ -257,12 +276,22 @@ and other appearance values never become wire state (AD-16).
   (within the published six-decimal tolerance). **Mechanically-checkable:**
   `scripts/bench/check_asset.py` reports and enforces these bounds.
 - **Palette and material mapping.** The asset publishes its palette-cell-to-role map with its
-  signoff figures. V1 trees use one embedded atlas image, one material and one primitive, with
-  `magFilter = NEAREST`, flat, single-sided (`doubleSided` absent or false) metallic-roughness
-  material and no glTF extensions.
-  **Mechanically-checkable:** `scripts/bench/check_asset.py` enforces the v1 count/filter/
-  single-sided/extension clauses; the intended role read and future multi-material mapping are
-  **eye-only** until a concrete second format exists.
+  signoff figures. V1 trees use one embedded atlas image of exactly **64×64** texels, one material
+  and one primitive, with `magFilter = NEAREST`, `wrapS`/`wrapT` = `CLAMP_TO_EDGE`, all
+  `TEXCOORD_0` values inside 0–1, flat, single-sided (`doubleSided` absent or false)
+  metallic-roughness material and neither `extensionsUsed` nor `extensionsRequired`.
+  **Mechanically-checkable:** `scripts/bench/check_asset.py` enforces the count, atlas dimension,
+  filter, wrap, UV-range, single-sided and extension clauses, and **publishes the seven sampled
+  palette cells on the `FIGURES` line** so the role comparison below has something to read
+  against. The intended role read and future multi-material mapping are **eye-only** until a
+  concrete second format exists.
+
+  **Scope, and it is load-bearing:** every clause in this bullet is **V1-voxel-asset only**, and
+  `check_asset.py` applies them to any `.glb` it is handed. An asset class with two materials, no
+  texture, or a different atlas size — an authored dwarf, for instance — will be REJECTED with
+  `one-mesh/material/image clause (V1 voxel assets only)`. That is a **scope mismatch, not a
+  contract violation**: story 10.5 introduces the second asset family and owns generalising these
+  clauses. Do not "fix" a conforming asset to satisfy a pine rule.
 - **Topology.** V1 voxel assets are greedy-meshed, unwelded quad soup: triangles are pairs of
   quads and `verts == tris/2 × 4`. They are flat-shaded and do not accept adjacency-based
   smoothing, decimation or auto-LOD. **Mechanically-checkable:**
@@ -273,8 +302,19 @@ and other appearance values never become wire state (AD-16).
   (created by story 10.5, not here); generated evidence, source notes and figures remain under
   `_bmad-output/implementation-artifacts/<story>-signoff/`. The file basename, mesh name and node
   name use the same published name. **Mechanically-checkable:** `scripts/bench/check_asset.py`
-  checks the internal names agree; path placement and source ownership are **eye-only** repository
-  review.
+  checks that the mesh name, the node name AND the file basename all agree; path placement and
+  source ownership are **eye-only** repository review.
+- **Deliverables, and what counts as the record.** An asset ships three things: the editable
+  source (`.blend` or equivalent), the exported per-variant glTF, and a **standalone headless
+  generator script** that reproduces it. **The script is the durable record; the session is not** —
+  a live MCP or interactive session that produced an asset without leaving a runnable script has
+  not delivered one. Ported from story 10.2's standing contract (clause 7), which is the clause
+  that makes the MCP path in this document's own opening sentence reproducible.
+  **Mechanically-checkable:** nothing enforces this today; it is **eye-only** at signoff.
+  (10.2's clauses 6 — self-verification order, "Exit 0 with no output is not a result" — and 8 —
+  declaring known deviations — are recorded as deferred, see `deferred-work.md`. Note
+  `_bmad-output/implementation-artifacts/10-2-signoff/voxel_pine.py:714` still cites "the asset
+  contract's clause 6" and that reference does not resolve here.)
 - **Identity and published figures.** An asset's identity is its published name **and** its
   published figures (size XYZ, min Y, centre X/Z, triangles and vertices), never its internal
   glTF name alone. The measured counterexample is
@@ -282,5 +322,8 @@ and other appearance values never become wire state (AD-16).
   5.2 × 7.6 × 5.4 m and centre X −0.100000; the deliverable of that name is 5,894 tris,
   5.0 × 8.0 × 5.4 m and centre X +0.000000. **Mechanically-checkable:**
   `scripts/bench/check_asset.py` prints the figures and rejects the off-centre file by the named
-  origin-centring clause; comparing a new asset's published figures to its signoff record is
-  **eye-only** until a second asset family establishes a manifest format.
+  origin-centring clause, and a mismatched file basename by the naming clause. The published
+  palette makes the collision visible too: the four deliverables publish
+  `palette=#4A3B2E,...` while `tree.glb` publishes `palette=#110B07,...`. Comparing a new asset's
+  published figures to its signoff record is **eye-only** until a second asset family establishes
+  a manifest format.
