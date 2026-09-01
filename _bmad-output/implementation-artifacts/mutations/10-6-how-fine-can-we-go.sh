@@ -9,13 +9,13 @@ PY
 mutation "detail rule removal fails subdivided geometry" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_detail_rule_changes_subdivided_counts_exactly_and_leaves_k_one_alone <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
-old = '''    def carved_at(x, y, z):
-        return (
-            detailed'''
+old = '''        return (
+            detailed
+            and material_at(x, y, z) is not None'''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''    def carved_at(x, y, z):
-        return (
-            False'''))
+p.write_text(s.replace(old, '''        return (
+            False
+            and material_at(x, y, z) is not None'''))
 PY
 
 mutation "side-face carve removal re-inflates every k>1 row" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_face_count_matches_a_brute_force_fine_voxel_oracle <<'PY'
@@ -66,4 +66,54 @@ p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '        if subdiv > 1 {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        if false {\n'))
+PY
+
+mutation "drawn-set culling redraws faces buried in rock" gui project::tests::buried_rock_contributes_no_faces_from_either_side <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    position[2] <= level && matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_)))'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    position[2] <= level && false'))
+PY
+
+mutation "side faces ignore the pit that carved them away" gui project::tests::the_fine_mesher_reproduces_the_benchs_face_and_triangle_counts <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                let top = column_height(own.as_ref(), du, dv, subdiv);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let top = subdiv;'))
+PY
+
+mutation "cross-cell connectors are dropped and the fine surface cracks" gui project::tests::the_fine_mesher_reproduces_the_benchs_face_and_triangle_counts <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = """            let other = solid
+                .then(|| column_heights(mirror, neighbour, subdiv, level))
+                .flatten();"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let other = None;'))
+PY
+
+mutation "greedy tie-break drifts away from the bench's row order" gui project::tests::the_fine_mesher_reproduces_the_benchs_face_and_triangle_counts <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    ordered.sort_by_key(|&(u, v)| (v, u));'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    ordered.sort_by_key(|&(u, v)| (u, v));'))
+PY
+
+mutation "the client detail rule drifts off the bench's pinned vector" gui project::tests::the_detail_rule_matches_the_benchs_pinned_vector <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        ^ (u as u32).wrapping_mul(0x85EB_CA77)'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        ^ (u as u32).wrapping_mul(0x85EB_CA78)'))
+PY
+
+mutation "chunk cells go unrecorded and the capture oracle blinds again" gui project::tests::every_drawn_cell_is_recorded_on_exactly_one_chunk <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    mesh.cells.insert(cell);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = cell;'))
 PY

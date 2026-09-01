@@ -31,6 +31,7 @@ SIDE_DELTAS = ((-1, 0), (1, 0), (0, -1), (0, 1))
 MAX_FINE_FACES = 48_000_000
 BUILD_TIME_BUDGET_SECONDS = 120.0
 CHUNK_EDGE_CELLS = 16
+FOLIAGE_MATERIAL = "tree_foliage"
 MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
 
 
@@ -148,7 +149,7 @@ def _cell_heights(x, y, z, k, carved):
     ]
 
 
-def geometry_summary(snapshot, k=1, detail=True):
+def geometry_summary(snapshot, k=1, detail=True, foliage_as_cubes=False):
     """Measure exposed fine faces and greedy quads for a snapshot.
 
     Every reported face is EMITTED, never derived.  The earlier version multiplied the coarse
@@ -162,6 +163,10 @@ def geometry_summary(snapshot, k=1, detail=True):
     if not isinstance(k, int) or k < 1:
         raise ValueError("k must be a positive integer")
     assert_workload_limit(_coarse_faces(snapshot) * k * k, k, detail)
+    # `gui --subdiv N` keeps tree foliage on the shipped one-cube-per-cell path, because a
+    # greedy cuboid does not preserve a sparse crown silhouette. Foliage still OCCLUDES either
+    # way; it just contributes no chunk geometry. Without this the offline and live triangle
+    # counts cannot be compared at all, which is how a 53% gap went unexplained.
     dx, dy, dz, materials = _grid(snapshot)
     detailed = detail and k > 1
 
@@ -171,10 +176,14 @@ def geometry_summary(snapshot, k=1, detail=True):
         return materials[x + y * dx + z * dx * dy]
 
     def carved_at(x, y, z):
+        # Foliage on the client's cube path is drawn whole, so it carries no pit and uncovers
+        # no neighbour. Modelling it as carved here made the two sides disagree by 9 enclosed
+        # tree trunks and 5 chunks.
         return (
             detailed
             and material_at(x, y, z) is not None
             and material_at(x, y, z + 1) is None
+            and not (foliage_as_cubes and material_at(x, y, z) == FOLIAGE_MATERIAL)
         )
 
     heights_cache = {}
@@ -187,11 +196,14 @@ def geometry_summary(snapshot, k=1, detail=True):
 
     masks = collections.defaultdict(dict)
     chunks = set()
+    meshed_cells = 0
     for z in range(dz):
         for y in range(dy):
             for x in range(dx):
                 material = material_at(x, y, z)
                 if material is None:
+                    continue
+                if foliage_as_cubes and material == FOLIAGE_MATERIAL:
                     continue
                 above = material_at(x, y, z + 1) is None
                 below = material_at(x, y, z - 1) is None
@@ -267,6 +279,7 @@ def geometry_summary(snapshot, k=1, detail=True):
                                 wrote = True
 
                 if wrote:
+                    meshed_cells += 1
                     chunks.add(
                         (
                             x // CHUNK_EDGE_CELLS,
@@ -281,6 +294,7 @@ def geometry_summary(snapshot, k=1, detail=True):
         "greedy_quads": quads,
         "triangles": quads * 2,
         "chunks": len(chunks),
+        "cells": meshed_cells,
     }
 
 
@@ -359,10 +373,10 @@ def sim_axis_cost(raw_snapshot, sim_k):
     }
 
 
-def measure(snapshot, k, detail):
+def measure(snapshot, k, detail, foliage_as_cubes=False):
     """Return one geometry row, including real elapsed time and process peak RSS."""
     started = time.perf_counter()
-    summary = geometry_summary(snapshot, k=k, detail=detail)
+    summary = geometry_summary(snapshot, k=k, detail=detail, foliage_as_cubes=foliage_as_cubes)
     elapsed = time.perf_counter() - started
     # Linux reports KiB, macOS bytes. The devpod is Linux; retain a usable POSIX fallback.
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -396,8 +410,9 @@ def _export_snapshot():
 
 def _print_row(row):
     print(
-        "k={k} exposed_faces={exposed_faces} greedy_quads={greedy_quads} triangles={triangles} "
-        "chunks={chunks} mesh_build_seconds={mesh_build_seconds:.3f} peak_memory_bytes={peak_memory_bytes}".format(
+        "k={k} cells={cells} exposed_faces={exposed_faces} greedy_quads={greedy_quads} "
+        "triangles={triangles} chunks={chunks} mesh_build_seconds={mesh_build_seconds:.3f} "
+        "peak_memory_bytes={peak_memory_bytes}".format(
             **row
         )
     )
@@ -450,6 +465,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--k", type=int, default=1, help="visual subdivision (default: 1)")
     parser.add_argument("--no-detail", action="store_true", help="flat-surface control")
+    parser.add_argument(
+        "--client-parity",
+        action="store_true",
+        help="leave tree foliage to the client's cube path, so the row compares to gui --subdiv N",
+    )
     parser.add_argument("--sweep", action="store_true", help="double k until the guarded wall")
     parser.add_argument("--json", action="store_true", help="emit one row as JSON (used by --sweep)")
     parser.add_argument("--sim-costs", action="store_true", help="print derived sim-grid wire costs")
@@ -469,8 +489,13 @@ def main():
         elif args.sweep:
             _sweep(snapshot, snapshot_path)
         else:
-            row = measure(snapshot, args.k, detail=not args.no_detail)
-            if args.k == 1 and not args.no_detail:
+            row = measure(
+                snapshot,
+                args.k,
+                detail=not args.no_detail,
+                foliage_as_cubes=args.client_parity,
+            )
+            if args.k == 1 and not args.no_detail and not args.client_parity:
                 assert_control(row)
             if args.json:
                 print(json.dumps(row))

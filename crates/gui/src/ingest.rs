@@ -474,6 +474,15 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             if parsed == 0 {
                 bail!("--subdiv must be positive");
             }
+            // The parser rejected only 0, so `--subdiv 3000000000` passed validation and then
+            // panicked inside the mesher on `i32::try_from`. The ceiling is the render-side
+            // twin of the bench's face limit; see `project::MAX_SUBDIV`.
+            if parsed > crate::project::MAX_SUBDIV {
+                bail!(
+                    "--subdiv must be at most {}, got {parsed}",
+                    crate::project::MAX_SUBDIV
+                );
+            }
             subdiv = Some(parsed);
         } else if arg == "--z" {
             let value = args.next().context("--z requires a level")?;

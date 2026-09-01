@@ -108,14 +108,14 @@ class ResolutionGeometryTests(unittest.TestCase):
         world = snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}])
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=1, detail=True),
-            {"exposed_faces": 10, "greedy_quads": 6, "triangles": 12, "chunks": 1},
+            {"exposed_faces": 10, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 2},
         )
 
     def test_subdivided_flat_prism_keeps_the_same_six_quads_without_detail(self):
         world = snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}])
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=16, detail=False),
-            {"exposed_faces": 2560, "greedy_quads": 6, "triangles": 12, "chunks": 1},
+            {"exposed_faces": 2560, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 2},
         )
 
     def test_detail_rule_changes_subdivided_counts_exactly_and_leaves_k_one_alone(self):
@@ -125,11 +125,11 @@ class ResolutionGeometryTests(unittest.TestCase):
         # reduction the analytic `coarse_faces * k * k` baseline could never express.
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=2, detail=True),
-            {"exposed_faces": 32, "greedy_quads": 12, "triangles": 24, "chunks": 1},
+            {"exposed_faces": 32, "greedy_quads": 12, "triangles": 24, "chunks": 1, "cells": 2},
         )
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=4, detail=True),
-            {"exposed_faces": 176, "greedy_quads": 72, "triangles": 144, "chunks": 1},
+            {"exposed_faces": 176, "greedy_quads": 72, "triangles": 144, "chunks": 1, "cells": 2},
         )
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=1, detail=True)["greedy_quads"], 6
@@ -139,15 +139,15 @@ class ResolutionGeometryTests(unittest.TestCase):
         # Cliffs, coplanar tops across cells, and cells buried at the coarse scale.
         self.assertEqual(
             resolution_bench.geometry_summary(staircase(), k=1, detail=True),
-            {"exposed_faces": 84, "greedy_quads": 18, "triangles": 36, "chunks": 1},
+            {"exposed_faces": 84, "greedy_quads": 18, "triangles": 36, "chunks": 1, "cells": 38},
         )
         self.assertEqual(
             resolution_bench.geometry_summary(staircase(), k=2, detail=True),
-            {"exposed_faces": 334, "greedy_quads": 77, "triangles": 154, "chunks": 1},
+            {"exposed_faces": 334, "greedy_quads": 77, "triangles": 154, "chunks": 1, "cells": 40},
         )
         self.assertEqual(
             resolution_bench.geometry_summary(staircase(), k=4, detail=True),
-            {"exposed_faces": 1608, "greedy_quads": 463, "triangles": 926, "chunks": 1},
+            {"exposed_faces": 1608, "greedy_quads": 463, "triangles": 926, "chunks": 1, "cells": 40},
         )
 
     def test_face_count_matches_a_brute_force_fine_voxel_oracle(self):
