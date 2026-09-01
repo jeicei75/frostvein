@@ -307,6 +307,51 @@ def geometry_summary(snapshot, k=1, detail=True, foliage_as_cubes=False, detail_
     }
 
 
+def per_class_census(snapshot):
+    """Split the EXPOSED draw set by class: terrain, trees, and the trunk-column tree count.
+
+    AC3a asks the bench to report what each class can afford separately, and it used to report
+    nothing per class at all -- the sign-off table was hand arithmetic that subtracted a
+    WHOLE-WORLD tree population (every buried canopy and trunk cell) from the EXPOSED cell set.
+    Two different populations, so trees came out 534 cells too large. Everything here is counted
+    over the same exposure rule `_coarse_faces` uses, and the totals are asserted against the
+    AC4 control by `ResolutionRealWorldControlTests`, so the split cannot drift from the surface
+    it is a split OF.
+    """
+    dx, dy, dz = _dims(snapshot)
+    _, _, _, materials = _grid(snapshot)
+    census = {
+        "tree_cells": 0, "tree_faces": 0,
+        "terrain_cells": 0, "terrain_faces": 0,
+        "trees": 0,
+    }
+    trunk_columns = set()
+    for z in range(dz):
+        for y in range(dy):
+            for x in range(dx):
+                material = materials[x + y * dx + z * dx * dy]
+                if material is None:
+                    continue
+                if material == "tree_trunk":
+                    trunk_columns.add((x, y))
+                exposed = 0
+                for axis, sign in NEIGHBOURS:
+                    neighbour = [x, y, z]
+                    neighbour[axis] += sign
+                    nx, ny, nz = neighbour
+                    if not (0 <= nx < dx and 0 <= ny < dy and 0 <= nz < dz):
+                        exposed += 1
+                    elif materials[nx + ny * dx + nz * dx * dy] is None:
+                        exposed += 1
+                if not exposed:
+                    continue
+                kind = "tree" if str(material).startswith("tree_") else "terrain"
+                census[f"{kind}_cells"] += 1
+                census[f"{kind}_faces"] += exposed
+    census["trees"] = len(trunk_columns)
+    return census
+
+
 def assert_control(summary):
     """Reject a sweep unless its k=1 geometry is the independently measured real-world oracle."""
     if summary.get("exposed_faces") != CONTROL_FACES or summary.get("greedy_quads") != CONTROL_QUADS:
@@ -433,27 +478,53 @@ def _print_row(row):
     )
 
 
-def _measure_in_child(snapshot_path, k):
+def _measure_in_child(snapshot_path, k, args):
     """Measure one row in a FRESH process, so its peak RSS is that row's own.
 
     `getrusage` reports the high-water mark for the LIFE of a process. Measuring every k in one
     process made each row carry every earlier k's peak, and made k=1's number the export/parse
     baseline rather than anything about k=1. AC3 asks for peak memory at each step.
+
+    The measurement flags are FORWARDED. They used not to be, so `--sweep --no-detail`,
+    `--sweep --client-parity` and `--sweep --detail-lattice N` each silently produced the plain
+    default sweep -- the project's own "accepted and discarded" defect class, landing on the
+    story's own numbers. `_sweep_forwarded_flags` is the single list, so a new measurement flag
+    cannot be added to `measure()` and forgotten here.
     """
-    result = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), "--k", str(k), "--json",
-         "--snapshot", str(snapshot_path)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    argv = [sys.executable, str(Path(__file__).resolve()), "--k", str(k), "--json",
+            "--snapshot", str(snapshot_path)]
+    argv += _sweep_forwarded_flags(args)
+    result = subprocess.run(argv, capture_output=True, text=True, check=True)
     return json.loads(result.stdout)
 
 
-def _sweep(snapshot, snapshot_path):
-    control = _measure_in_child(snapshot_path, 1)
-    assert_control(control)
-    _print_row(control)
+def _sweep_forwarded_flags(args):
+    """Every flag that changes what `measure()` measures, as child argv."""
+    flags = []
+    if args.no_detail:
+        flags.append("--no-detail")
+    if args.client_parity:
+        flags.append("--client-parity")
+    if args.detail_lattice != 1:
+        flags += ["--detail-lattice", str(args.detail_lattice)]
+    return flags
+
+
+def _sweep(snapshot, snapshot_path, args):
+    emit = (lambda row: print(json.dumps(row))) if args.json else _print_row
+    control = _measure_in_child(snapshot_path, 1, args)
+    # The control values describe the DEFAULT measurement. A sweep asked for a different one
+    # (flat control, client parity, a coarser lattice) is not a k=1 control run and must not be
+    # graded against 61,142/19,264 -- but it must still say so rather than quietly skip.
+    if not (args.no_detail or args.client_parity or args.detail_lattice != 1):
+        assert_control(control)
+    else:
+        print(
+            "note: sweep run with "
+            + " ".join(_sweep_forwarded_flags(args))
+            + " -- k=1 control assertion not applicable to this configuration"
+        )
+    emit(control)
     last = control
     k = 2
     while True:
@@ -464,8 +535,8 @@ def _sweep(snapshot, snapshot_path):
                 f"{MAX_FINE_FACES}; last_completed_k={last['k']}"
             )
             return
-        row = _measure_in_child(snapshot_path, k)
-        _print_row(row)
+        row = _measure_in_child(snapshot_path, k, args)
+        emit(row)
         if row["mesh_build_seconds"] > BUILD_TIME_BUDGET_SECONDS:
             print(
                 f"wall: build-time budget at k={k}: {row['mesh_build_seconds']:.3f}s exceeds "
@@ -494,6 +565,7 @@ def main():
     parser.add_argument("--sweep", action="store_true", help="double k until the guarded wall")
     parser.add_argument("--json", action="store_true", help="emit one row as JSON (used by --sweep)")
     parser.add_argument("--sim-costs", action="store_true", help="print derived sim-grid wire costs")
+    parser.add_argument("--per-class", action="store_true", help="split the exposed surface by class (AC3a)")
     parser.add_argument("--snapshot", type=Path, help="existing exported snapshot (otherwise export one)")
     args = parser.parse_args()
     temporary = None
@@ -503,13 +575,18 @@ def main():
             snapshot = _load_snapshot(snapshot_path)
         else:
             temporary, snapshot_path, snapshot = _export_snapshot()
+        # NOT elif: `--sweep --sim-costs` used to run --sim-costs ONLY and drop the sweep with
+        # no error. Both are outputs, so both run.
         if args.sim_costs:
             raw = snapshot_path.read_text(encoding="utf-8")
             for sim_k in (1, 2, 4):
                 print("sim " + " ".join(f"{key}={value}" for key, value in sim_axis_cost(raw, sim_k).items()))
-        elif args.sweep:
-            _sweep(snapshot, snapshot_path)
-        else:
+        if args.per_class:
+            census = per_class_census(snapshot)
+            print("per-class " + " ".join(f"{key}={value}" for key, value in census.items()))
+        if args.sweep:
+            _sweep(snapshot, snapshot_path, args)
+        elif not (args.sim_costs or args.per_class):
             row = measure(
                 snapshot,
                 args.k,

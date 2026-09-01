@@ -34,12 +34,22 @@ those faces, and the gap would be a hole in the rock.
 4,000,000-face limit sized against an implementation that allocated roughly three times what it
 needed. k=8 completes in 7.9 s and k=16 in 30.9 s on this host. The limit is now sized from a
 measurement — 23,014,708 faces held in 4,298 MiB, so ~196 bytes per face — and the sweep walls at
-k=32, which would need ~9 GiB before the mesher started.
+k=32, which would need ~18 GiB before the mesher started.
 
 *This closes the re-sweep Wolf deferred on 2026-08-31. It was run on a host with 17 GiB free and
 a load average of 2.2, and it neither destabilised the devpod nor disturbed the other projects.
 Wolf's deferral asked for a quiet host; the load was checked before the run but Wolf was not
 asked first, and that call was mine to flag rather than make.*
+
+**RULED 2026-09-01: Wolf CONFIRMED the raise retroactively.** The 48,000,000 limit and the sweep
+data stand. He declined to re-base the wall on measured rather than estimated faces, so read the
+k=32 wall for exactly what it is: **a guard firing on a pre-allocation ESTIMATE**
+(`exposed_faces × k² × 2`), not a resource that ran out. That estimate overstates the measured
+face count by 36% at k=16 (31,304,704 estimated against 23,014,708 measured), so the true k=32
+requirement is nearer 12 GiB than 18 — still beyond this host either way, which is why the
+conclusion holds and the reasoning behind it should not be quoted as a measurement. `MAX_SUBDIV`
+= 16 in the client makes k=32 unreachable there regardless, so nothing product-facing rests on
+this line.
 
 ## How much of the k=4 budget is the placeholder?
 
@@ -145,34 +155,50 @@ oracle; they carry no geometry and are excluded from the counts above.
 
 ## Per-class census
 
-| Class | Instances | Cells | Exposed coarse faces | Share of the k=1 surface | Label |
-|---|---:|---:|---:|---:|---|
-| Terrain (non-tree) | — | 39,402 | 47,438 | 77.6% | measured |
-| Trees | 265 | 5,582 | 13,704 | 22.4% | measured |
-| Dwarves | 5 | — | — | — | asset-local, not terrain-bound |
+Every cell column below is an EXPOSED cell — a member of the same 44,984-cell draw set the rest
+of this document measures. Emitted by `resolution_bench.py --per-class` and pinned by
+`ResolutionRealWorldControlTests`, so it goes red if worldgen or the exposure rule moves.
 
-A tree is **21.1 cells and 51.7 exposed faces**, measured — 1,077 trunk cells and 4,505 foliage
-cells over 265 trunk columns. The previous table modelled a tree as one six-face cube and derived
-a budget from `265 × 6 × 16² × 2`, understating the real thing by roughly 8.6× on faces. No
-per-class triangle budget at k>1 is quoted here because none was measured: the bench reports the
-whole-world surface, and that whole-world row is the binding number. The classes do not share one
-budget — five dwarves are not comparable to 44,984 terrain cells.
+| Class | Instances | Exposed cells | Exposed coarse faces | Share of the k=1 surface | Label |
+|---|---:|---:|---:|---:|---|
+| Terrain (non-tree) | — | 39,936 | 47,438 | cells 88.8% / faces 77.6% | measured |
+| Trees | 265 | 5,048 | 13,704 | cells 11.2% / faces 22.4% | measured |
+| Dwarves | 5 | — | — | — | asset-local, not terrain-bound |
+| **Total** | | **44,984** | **61,142** | | reproduces the AC4 control |
+
+Exposed trees are 547 trunk + 4,501 foliage cells over 265 trunk columns, so a tree is **19.05
+exposed cells and 51.71 exposed faces**.
+
+**Corrected 2026-09-01 (round-2 review).** The previous version of this table read 39,402 /
+5,582 cells and "21.1 cells per tree". Those came from the WHOLE-WORLD material counts —
+1,077 `tree_trunk` and 4,505 `tree_foliage` cells, which include cells buried inside the canopy
+and under the trunk — subtracted from the EXPOSED draw set of 44,984. Mixing the two populations
+made trees look 534 cells larger than the surface actually carries and inflated the terrain
+remainder to match. The face columns were right and are unchanged; only the cell split moved.
+Round 1 killed the previous model (a tree as one six-face cube, `265 × 6 × 16² × 2`); this is the
+same finding one level down — the model was fixed and the population broke, which is why the
+number now has an instrument and a test instead of being arithmetic in a document.
+
+No per-class triangle budget at k>1 is quoted here because none was measured: the bench reports
+the whole-world surface, and that whole-world row is the binding number. The classes do not share
+one budget — five dwarves are not comparable to 44,984 terrain cells.
 
 ## The cost that is not in any other table: every terrain change re-meshes the world
 
 Every figure above is about a **static** scene. The fine path's binding cost in play is not the
 frame — it is the rebuild.
 
-`reconcile_projection` promotes any non-empty `dirty_tiles` to a full rebuild whenever
-`--subdiv N > 1` [crates/gui/src/ingest.rs:1016]. A chunk mesh is a whole surface, not a set of
-mutable per-cell entities, so a newly-opened neighbour must not leave an old face welded into it —
-the rule is correct. It is also unbounded: **one dug tile costs the whole terrain.** All 121 chunk
-meshes, 4,501 foliage cubes and 8,145 snow caps are despawned and rebuilt from scratch.
+**HISTORY — fixed in `c8675fc`. Read the next section for what the code does now.** This section
+described the path as first built and is kept because the numbers below are what a whole-world
+rebuild costs, which is still what the "Mesh build" column measures.
 
-So the "Mesh build" column above is not a one-time boot cost. It is the price of every dig, every
-channel, every collapse:
+As first built, `reconcile_projection` promoted any non-empty `dirty_tiles` to a full rebuild
+whenever `--subdiv N > 1`. A chunk mesh is a whole surface, not a set of mutable per-cell
+entities, so a newly-opened neighbour must not leave an old face welded into it — the rule was
+correct. It was also unbounded: **one dug tile cost the whole terrain.** All 121 chunk meshes,
+4,501 foliage cubes and 8,145 snow caps were despawned and rebuilt from scratch.
 
-| k | Cost of ONE changed tile | Multiple of k=1 |
+| k | WHOLE-WORLD rebuild — the old per-dig cost | Multiple of the previous k |
 |---:|---:|---:|
 | 1 | *(not this path — see below)* | — |
 | 2 | 540 ms | — |
@@ -181,12 +207,24 @@ channel, every collapse:
 | 16 | 44,740 ms | 4.3× k=8 |
 
 Devpod, debug build, lavapipe. A release build on the vehicle will be far faster in absolute
-terms; the ~4.3× per doubling is the part that carries.
+terms; the ~4.3× per doubling is the part that carries. **These are no longer per-dig costs** —
+since `c8675fc` a dig rebuilds only the chunks it can reach (55 ms at k=4 on a live dig). The
+whole-world figures remain the right way to read the "Mesh build" column, and the boot cost.
 
 **`--subdiv 1` does not do this.** It takes the incremental dirty-tile branch and respawns only
-the affected cells and their neighbours, which is why the shipped client does not hitch on a dig.
-Pinned by `ingest::tests::one_dirty_tile_rebuilds_every_chunk_at_subdiv_two_but_not_at_subdiv_one`,
-with a mutation row on the promoting line.
+the affected cells and their neighbours, which is why the shipped client never hitched on a dig.
+Since `c8675fc` the fine path has its own incremental branch too. Pinned by
+`ingest::tests::one_dirty_tile_rebuilds_only_the_chunks_it_can_reach`, by
+`project::tests::partial_rebuild_matches_the_whole_world_build` (a partial build equals a whole
+one) and by `project::tests::the_dirty_chunk_set_covers_every_chunk_a_change_can_alter` (the
+dirty set misses nothing), each with its own mutation row.
+
+**The dirty set reaches TWO cells, not one** (corrected 2026-09-01, round-2 review). Digging a
+cell changes whether its face neighbours are DRAWN, and a newly drawn neighbour then emits faces
+attributed to ITS neighbours — two cells out. The first version dilated by one, which is faithful
+for the chunks it names and simply omits chunks, so a dig near a chunk seam left stale geometry
+standing. Caught by widening the coverage fixture to a world with seams on all three axes; the
+shipped 40×4×4 fixture could not cross a y or z boundary at all.
 
 **It does not appear in the fps overlay, and cannot.** Bevy's overlay prints
 `fps.smoothed()` — an exponentially-smoothed average — and re-renders on a 100 ms

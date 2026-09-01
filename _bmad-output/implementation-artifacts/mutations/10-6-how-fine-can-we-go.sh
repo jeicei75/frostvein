@@ -76,7 +76,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    position[2] <= level && false'))
 PY
 
-mutation "side faces ignore the pit that carved them away" gui project::tests::the_fine_mesher_reproduces_the_benchs_face_and_triangle_counts <<'PY'
+mutation "side faces ignore the pit that carved them away" gui project::tests::the_fine_mesher_reproduces_the_benchs_staircase_counts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '                let top = column_height(own.as_ref(), du, dv, subdiv);'
@@ -84,7 +84,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                let top = subdiv;'))
 PY
 
-mutation "cross-cell connectors are dropped and the fine surface cracks" gui project::tests::the_fine_mesher_reproduces_the_benchs_face_and_triangle_counts <<'PY'
+mutation "cross-cell connectors are dropped and the fine surface cracks" gui project::tests::the_fine_mesher_reproduces_the_benchs_staircase_counts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = """            let other = solid
@@ -94,7 +94,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            let other = None;'))
 PY
 
-mutation "greedy tie-break drifts away from the bench's row order" gui project::tests::the_fine_mesher_reproduces_the_benchs_face_and_triangle_counts <<'PY'
+mutation "greedy tie-break drifts away from the bench's row order" gui project::tests::the_fine_mesher_reproduces_the_benchs_staircase_counts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '    ordered.sort_by_key(|&(u, v)| (v, u));'
@@ -145,9 +145,25 @@ PY
 mutation "dirty chunk set forgets the neighbours and leaves a chunk stale" gui project::tests::the_dirty_chunk_set_covers_every_chunk_a_change_can_alter <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = "    for position in dirty_tiles {\n        targets.insert(chunk_of(*position));"
+old = "    let mut targets = BTreeSet::new();\n    for position in &cells {\n        targets.insert(chunk_of(*position));"
 assert s.count(old) == 1
-p.write_text(s.replace(old, "    for position in dirty_tiles {\n        targets.insert(chunk_of(*position));\n        if true { continue; }"))
+p.write_text(s.replace(old, "    let mut targets = BTreeSet::new();\n    for position in &cells {\n        targets.insert(chunk_of(*position));\n        if true { continue; }"))
+PY
+
+mutation "dirty chunk reach collapses to one cell and a dug tile leaves stale chunks" gui project::tests::the_dirty_chunk_set_covers_every_chunk_a_change_can_alter <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "    for position in &cells {\n        targets.insert(chunk_of(*position));"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "    for position in dirty_tiles {\n        targets.insert(chunk_of(*position));"))
+PY
+
+mutation "per-class census counts buried cells and the class split inflates" py scripts.tests.test_resolution_bench.ResolutionPerClassTests.test_the_census_counts_exposed_cells_not_whole_world_material_counts <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = "                if not exposed:\n                    continue"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "                if False:\n                    continue"))
 PY
 
 # NO ROW for the `!dirty_tiles.is_empty()` guard on the incremental branch, deliberately.

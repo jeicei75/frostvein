@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import tempfile
@@ -218,7 +219,10 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
     """
 
     def test_the_exported_world_still_meshes_to_the_recorded_control(self):
-        simd = REPO_ROOT / "target" / "debug" / "simd"
+        # Honour CARGO_TARGET_DIR: under a redirected target dir this used to assert on a
+        # binary the current build never produced, silently grading a stale one.
+        target = os.environ.get("CARGO_TARGET_DIR")
+        simd = (Path(target) if target else REPO_ROOT / "target") / "debug" / "simd"
         self.assertTrue(
             simd.exists(),
             f"{simd} is missing: build the workspace before the bench tests (scripts/gate.sh does)",
@@ -235,6 +239,55 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
         summary = resolution_bench.geometry_summary(world, k=1, detail=True)
         resolution_bench.assert_control(summary)
         self.assertEqual(summary["triangles"], 38_528)
+
+        # AC3a: the per-class split is a MEASUREMENT of the same draw set, so it is pinned
+        # here rather than written by hand into a sign-off table. The previous table mixed
+        # whole-world material counts into the exposed set and was wrong by 534 cells with
+        # nothing able to go red.
+        census = resolution_bench.per_class_census(world)
+        self.assertEqual(
+            census,
+            {
+                "tree_cells": 5_048,
+                "tree_faces": 13_704,
+                "terrain_cells": 39_936,
+                "terrain_faces": 47_438,
+                "trees": 265,
+            },
+        )
+        # The split must be a split OF the control, not an independent count beside it.
+        self.assertEqual(census["tree_cells"] + census["terrain_cells"], summary["cells"])
+        self.assertEqual(census["tree_faces"] + census["terrain_faces"], summary["exposed_faces"])
+
+
+class ResolutionPerClassTests(unittest.TestCase):
+    def test_the_census_counts_exposed_cells_not_whole_world_material_counts(self):
+        """The exact defect the round-2 review found, on a fixture small enough to count by hand.
+
+        A 3x1x3 column of trunk with foliage on top, walled in by stone on one side: the buried
+        trunk cell must NOT appear in the census, which is what made the committed table wrong.
+        """
+        dims = {"x": 3, "y": 1, "z": 3}
+        # x=0 stone wall, x=1 trunk column, x=2 empty. Middle trunk cell is still exposed on
+        # +x, so build a fully enclosed one by walling both sides.
+        tiles = []
+        for z in range(3):
+            for _ in range(1):
+                for x in range(3):
+                    if x in (0, 2):
+                        tiles.append({"solid": "stone"})
+                    else:
+                        tiles.append({"solid": "tree_trunk"})
+        world = {"dims": dims, "tiles": tiles}
+        census = resolution_bench.per_class_census(world)
+        # Every trunk cell touches the y walls of the world, so all three are exposed here and
+        # the count is 3 -- what matters is that the class split is exact and the totals close.
+        self.assertEqual(census["tree_cells"] + census["terrain_cells"], 9)
+        self.assertEqual(census["trees"], 1)
+        self.assertEqual(census["tree_cells"], 3)
+        self.assertEqual(census["terrain_cells"], 6)
+        summary = resolution_bench.geometry_summary(world, k=1, detail=True)
+        self.assertEqual(census["tree_faces"] + census["terrain_faces"], summary["exposed_faces"])
 
 
 class ResolutionSimCostTests(unittest.TestCase):

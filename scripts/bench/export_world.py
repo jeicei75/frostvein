@@ -1,6 +1,7 @@
 """Export one wire snapshot from the local daemon for the headless bench."""
 
 import json
+import os
 import re
 import socket
 import subprocess
@@ -9,13 +10,26 @@ import time
 from pathlib import Path
 
 
+def simd_binary(repo_root):
+    """Resolve the `simd` binary, honouring CARGO_TARGET_DIR.
+
+    Hardcoding `<repo>/target/debug/simd` meant that under a redirected target dir -- which the
+    code-review protocol and the two-devpod build-cache workflow both use -- this graded whatever
+    stale binary happened to sit in the repo's own `target/`, not the one the current build
+    produced. That is exactly the stale-measurement trap the caller exists to prevent.
+    """
+    target = os.environ.get("CARGO_TARGET_DIR")
+    root = Path(target) if target else repo_root / "target"
+    return root / "debug" / "simd"
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: export_world.py <snapshot.json>")
 
     out_path = Path(sys.argv[1])
     repo_root = Path(__file__).resolve().parents[2]
-    simd = repo_root / "target" / "debug" / "simd"
+    simd = simd_binary(repo_root)
     proc = subprocess.Popen([simd, "0"], stdout=subprocess.PIPE, text=True)
     try:
         assert proc.stdout is not None
