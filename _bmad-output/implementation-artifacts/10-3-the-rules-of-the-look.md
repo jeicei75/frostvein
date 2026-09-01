@@ -87,13 +87,13 @@ against source; **two of them are wrong as written in `epics.md` and are correct
         where signoff artifacts live. Naming a path is enough; **do not create `assets/`**.
   - [x] Write the identity clause (AC5) with `tree.glb`'s measured figures as the case.
 
-- [ ] **Task 4 — Build the checker** (AC: 6, 7)
-  - [ ] `scripts/bench/check_asset.py`, stdlib only. Lift the GLB reader from
+- [x] **Task 4 — Build the checker** (AC: 6, 7)
+  - [x] `scripts/bench/check_asset.py`, stdlib only. Lift the GLB reader from
         [10-2-signoff/voxel_pine.py:437-530] (`load_glb`, `read_accessor`, `decode_png_rgb`,
         `palette_from_glb`) rather than re-deriving it, and carry a `# NOTE:` saying why it is
         duplicated: that file imports `bpy` at module scope, so it is not importable outside
         Blender, and it is 10.2's frozen deliverable.
-  - [ ] Check only the mechanically-checkable clauses. Every clause the checker enforces must be
+  - [x] Check only the mechanically-checkable clauses. Every clause the checker enforces must be
         one the contract states; every contract clause it cannot check stays marked eye-only.
 
 - [ ] **Task 5 — Test the instrument and the sabotage rows** (AC: 8)
