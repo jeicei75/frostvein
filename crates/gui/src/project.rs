@@ -1,9 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Instant,
+};
 
 use bevy::prelude::{
     Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
     MeshMaterial3d, Or, PointLight, Query, Res, ResMut, Resource, StandardMaterial, Transform,
     Vec3, With, Without,
+};
+use bevy::{
+    asset::RenderAssetUsages,
+    mesh::{Indices, PrimitiveTopology},
 };
 use client_core::Mirror;
 use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
@@ -18,7 +25,7 @@ use crate::{
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
     pick::{PickedCell, PickedTile},
     slice::SliceLevel,
-    transform::world_to_render,
+    transform::{world_point_to_render, world_to_render, world_vector_to_render},
 };
 
 const NEIGHBOURS: [[i32; 3]; 6] = [
@@ -41,6 +48,27 @@ pub struct ClientLocal;
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerrainTile(pub [i32; 3]);
 
+/// A material/rim partition of one 16-cell terrain chunk, present only for `--subdiv N` where
+/// N is greater than one. The default and `--subdiv 1` retain `TerrainTile` exactly.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerrainChunk(pub [i32; 3]);
+
+/// The coarse cells one chunk's meshes actually carry geometry for.
+///
+/// `--subdiv N > 1` collapses tens of thousands of `TerrainTile` entities into a handful of
+/// chunk meshes, and the capture's draw-set oracle counts `TerrainTile`. It therefore saw 198
+/// tiles where the mirror held 11,325 and panicked on a cut it had drawn correctly. This
+/// records the same observation the oracle always made — which cells reached a mesh, taken
+/// from the meshing loop's own output rather than from the list it was handed — in the one
+/// place the fine path can still answer it.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct TerrainChunkCells(pub Vec<[i32; 3]>);
+
+/// An opt-in visual terrain subdivision. The client mirror remains authoritative; this only
+/// changes how its terrain is drawn.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerrainSubdivision(pub u32);
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SnowCap(pub [i32; 3]);
 
@@ -51,8 +79,14 @@ pub type TerrainQuery<'w, 's> = Query<
         BevyEntity,
         Option<&'static TerrainTile>,
         Option<&'static SnowCap>,
+        Option<&'static TerrainChunk>,
     ),
-    Or<(With<TerrainTile>, With<SnowCap>)>,
+    Or<(
+        With<TerrainTile>,
+        With<TerrainChunk>,
+        With<TerrainChunkCells>,
+        With<SnowCap>,
+    )>,
 >;
 
 pub type DynamicProjectionQuery<'w, 's> = Query<
@@ -105,6 +139,13 @@ pub struct DragPreviewCells(Option<Vec<[i32; 3]>>);
 /// Whether that reads as separate tiles or as anti-aliasing noise is a human call, and it is on
 /// the list for Wolf's live viewing.
 const MARK_FOOTPRINT_SCALE: f32 = 0.94;
+const TERRAIN_CHUNK_EDGE: i32 = 16;
+/// The largest `--subdiv` the client will attempt. Cost is O(N²) per exposed coarse face and
+/// nothing bounded it: `--subdiv 3000000000` passed CLI validation and then panicked inside the
+/// mesher, and `--subdiv 8` built silently for 17 seconds. The offline bench guards the same way
+/// and names which resource ran out; this is that guard on the render side.
+pub const MAX_SUBDIV: u32 = 16;
+const DETAIL_SEED: u32 = 0xF005_7E1A;
 
 /// The light kind delivered for a projected emitter. Reconciliation only changes this when the
 /// wire changes kind; presentation owns its animated intensity afterwards.
@@ -441,6 +482,597 @@ pub fn is_exposed(mirror: &Mirror, position: [i32; 3]) -> bool {
     })
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct SubdividedTerrainStats {
+    entities: usize,
+    chunks: usize,
+    triangles: usize,
+    /// Coarse cells that reached a mesh. This is the number the shipped path reports as
+    /// "projected N terrain cubes", kept comparable across both paths on purpose.
+    cells: usize,
+    /// Fine faces before the greedy merge. Triangles are partition-dependent -- chunk and rim
+    /// splits inflate them -- so they cannot answer "is this the same surface as the bench's".
+    /// The face count can: it is exactly what the offline oracle counts, and any hole in the
+    /// fine surface shows up here as a shortfall.
+    faces: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct MeshKey {
+    chunk: [i32; 3],
+    slot: usize,
+    rim: usize,
+    axis: usize,
+    sign: i32,
+    plane: i32,
+}
+
+#[derive(Default)]
+struct ChunkMesh {
+    masks: BTreeMap<MeshKey, BTreeSet<(i32, i32)>>,
+    cells: BTreeSet<[i32; 3]>,
+}
+
+/// The coarse cell a run of fine faces belongs to, resolved once rather than per face.
+struct FaceOwner {
+    chunk: [i32; 3],
+    slot: usize,
+    rim: usize,
+}
+
+impl FaceOwner {
+    fn new(mirror: &Mirror, position: [i32; 3]) -> Self {
+        Self {
+            chunk: chunk_of(position),
+            slot: terrain_slot_at(mirror, position) as usize,
+            rim: rim_level(position, mirror.dims()),
+        }
+    }
+}
+
+/// Whether a neighbouring cell hides the face that points at it.
+///
+/// The subdivided mesher asked the DRAWN set this question, which is a different question: a
+/// solid cell that nothing exposes is absent from the draw set, so its neighbour emitted a face
+/// buried inside the rock. On the real world that was 48,952 of 110,094 submitted faces — 44%,
+/// in the very path built to demonstrate that a fine surface is cheaper than whole cubes. The
+/// slice half matters too: nothing above the cut is drawn, so rock above it cannot occlude.
+fn occludes(mirror: &Mirror, position: [i32; 3], level: i32) -> bool {
+    position[2] <= level && matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_)))
+}
+
+/// Fine column heights inside one coarse cell, in fine voxels, or `None` for a full cube.
+///
+/// This is the same heightfield `scripts/bench/resolution_bench.py` measures: a cell whose top
+/// is drawn carries the detail pits, every other cell is solid to its ceiling. Both sides pin
+/// the same `detail_depth` vector, which is what makes "one rule" a test rather than a comment.
+fn column_heights(
+    mirror: &Mirror,
+    position: [i32; 3],
+    subdiv: i32,
+    level: i32,
+) -> Option<Vec<i32>> {
+    let above = [position[0], position[1], position[2] + 1];
+    // Foliage keeps the shipped whole-cube path, so it is never carved -- and therefore never
+    // uncovers a neighbour either. Carving it emitted faces on the rock behind an opaque cube,
+    // and made 9 tree trunks fully enclosed by their own crown look like exposed surface.
+    if subdiv == 1 || occludes(mirror, above, level) || is_tree_foliage(mirror, position) {
+        return None;
+    }
+    let plane = (position[2] + 1) * subdiv;
+    let mut heights = Vec::with_capacity((subdiv * subdiv) as usize);
+    for du in 0..subdiv {
+        for dv in 0..subdiv {
+            heights.push(
+                subdiv
+                    - detail_depth(
+                        plane,
+                        position[0] * subdiv + du,
+                        position[1] * subdiv + dv,
+                        subdiv,
+                    ),
+            );
+        }
+    }
+    Some(heights)
+}
+
+fn column_height(heights: Option<&Vec<i32>>, du: i32, dv: i32, subdiv: i32) -> i32 {
+    heights.map_or(subdiv, |heights| heights[(du * subdiv + dv) as usize])
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_face(
+    chunks: &mut BTreeMap<[i32; 3], ChunkMesh>,
+    owner: &FaceOwner,
+    cell: [i32; 3],
+    axis: usize,
+    sign: i32,
+    plane: i32,
+    u: i32,
+    v: i32,
+    targets: Option<&BTreeSet<[i32; 3]>>,
+) {
+    // A cell's faces can be attributed to a NEIGHBOUR's chunk (the carve-uncovered branch), so a
+    // partial rebuild has to process cells outside the chunks it is rebuilding and then discard
+    // what lands elsewhere. Dropping here rather than at the call site keeps that one rule in
+    // one place.
+    if targets.is_some_and(|targets| !targets.contains(&owner.chunk)) {
+        return;
+    }
+    let mesh = chunks.entry(owner.chunk).or_default();
+    mesh.masks
+        .entry(MeshKey {
+            chunk: owner.chunk,
+            slot: owner.slot,
+            rim: owner.rim,
+            axis,
+            sign,
+            plane,
+        })
+        .or_default()
+        .insert((u, v));
+    mesh.cells.insert(cell);
+}
+
+/// Builds the opt-in fine terrain from the client mirror. The coarse cells are still the only
+/// authority: every fine face begins with the same visible-cell set the shipped cube path uses.
+///
+/// NOTE: the small deterministic top pits are a measurement stand-in for 10.4's authored terrain
+/// look, not a visual decision. They make `--subdiv N` measure non-flat fine surfaces rather than
+/// merely tessellating an otherwise identical plane.
+/// The chunks a set of changed cells can alter.
+///
+/// A changed cell alters its own faces and those of its six neighbours — the neighbour's face
+/// toward it appears or disappears, and a change to its top exposure changes which of its
+/// neighbours its pit uncovers. Nothing further away can move.
+/// `the_dirty_chunk_set_covers_every_chunk_a_change_can_alter` checks that claim by diffing two
+/// whole-world builds rather than by re-deriving it.
+fn dirty_chunks(dirty_tiles: &[[i32; 3]]) -> BTreeSet<[i32; 3]> {
+    // TWO steps, not one, and the second step is not padding. Digging a cell changes whether its
+    // face NEIGHBOURS are drawn at all; a newly drawn neighbour then emits faces attributed to
+    // ITS neighbours, which is two cells from the dug one. A one-step set is faithful for the
+    // chunks it names (`partial_rebuild_matches_the_whole_world_build` still passed) and simply
+    // misses chunks, so the rebuild leaves stale geometry behind rather than building it wrong --
+    // invisible to any fixture too thin to put a chunk seam two cells from a dug cell.
+    let mut cells = BTreeSet::new();
+    for position in dirty_tiles {
+        cells.insert(*position);
+        for delta in NEIGHBOURS {
+            cells.insert([
+                position[0] + delta[0],
+                position[1] + delta[1],
+                position[2] + delta[2],
+            ]);
+        }
+    }
+    let mut targets = BTreeSet::new();
+    for position in &cells {
+        targets.insert(chunk_of(*position));
+        for delta in NEIGHBOURS {
+            targets.insert(chunk_of([
+                position[0] + delta[0],
+                position[1] + delta[1],
+                position[2] + delta[2],
+            ]));
+        }
+    }
+    targets
+}
+
+/// Whether processing this cell could put a face in any of `targets`.
+///
+/// A cell emits faces owned by itself and, where its pit uncovers one, by a side neighbour. So
+/// the cells that can contribute to a chunk are the ones in it plus the ones one step outside its
+/// boundary — no further. This is what makes a partial rebuild produce byte-identical chunks to a
+/// whole-world one, which `partial_rebuild_matches_the_whole_world_build` asserts directly.
+fn touches_chunks(position: [i32; 3], targets: &BTreeSet<[i32; 3]>) -> bool {
+    if targets.contains(&chunk_of(position)) {
+        return true;
+    }
+    NEIGHBOURS.into_iter().any(|delta| {
+        let neighbour = [
+            position[0] + delta[0],
+            position[1] + delta[1],
+            position[2] + delta[2],
+        ];
+        targets.contains(&chunk_of(neighbour))
+    })
+}
+
+fn chunk_of(position: [i32; 3]) -> [i32; 3] {
+    [
+        position[0] / TERRAIN_CHUNK_EDGE,
+        position[1] / TERRAIN_CHUNK_EDGE,
+        position[2] / TERRAIN_CHUNK_EDGE,
+    ]
+}
+
+/// Emits every fine face the drawn coarse cells produce, grouped by chunk.
+///
+/// Split out of the spawning pass so it can be counted without a renderer: the mesher shipped
+/// with no numeric oracle at all — the only test asserted entity presence and handle equality —
+/// which is why the buried-face, hash and cross-cell-connector defects were all shippable.
+fn build_chunk_meshes(
+    mirror: &Mirror,
+    positions: &[[i32; 3]],
+    subdiv: i32,
+    level: i32,
+    targets: Option<&BTreeSet<[i32; 3]>>,
+) -> BTreeMap<[i32; 3], ChunkMesh> {
+    let mut chunks = BTreeMap::<[i32; 3], ChunkMesh>::new();
+    for &position in positions {
+        if is_tree_foliage(mirror, position) {
+            continue;
+        }
+        if targets.is_some_and(|targets| !touches_chunks(position, targets)) {
+            continue;
+        }
+        let owner = FaceOwner::new(mirror, position);
+        let own = column_heights(mirror, position, subdiv, level);
+
+        let above = [position[0], position[1], position[2] + 1];
+        if !occludes(mirror, above, level) {
+            // Settled snow is PAINT on the top faces here, not the shipped path's separate slab.
+            // A slab is cell-scale: it sits at the coarse cell top while the fine surface is a
+            // pit deeper, it covers 102% of the cell so it hides 17.9% of the very detail this
+            // path exists to draw, and it is `ClientLocal`, so it is not a tile and cannot be
+            // dug -- which read as big plates lying on top of everything that nothing could
+            // touch. As a material on the real surface it follows every fine column exactly,
+            // hides nothing, adds no geometry, and costs 8,145 fewer entities.
+            let top = if has_snow_cap(mirror, position) {
+                FaceOwner {
+                    chunk: owner.chunk,
+                    slot: TerrainSlot::SnowCap as usize,
+                    rim: owner.rim,
+                }
+            } else {
+                FaceOwner {
+                    chunk: owner.chunk,
+                    slot: owner.slot,
+                    rim: owner.rim,
+                }
+            };
+            for du in 0..subdiv {
+                for dv in 0..subdiv {
+                    let plane = position[2] * subdiv + column_height(own.as_ref(), du, dv, subdiv);
+                    let (u, v) = (position[0] * subdiv + du, position[1] * subdiv + dv);
+                    push_face(&mut chunks, &top, position, 2, 1, plane, u, v, targets);
+                }
+            }
+        }
+        let under = [position[0], position[1], position[2] - 1];
+        if !occludes(mirror, under, level) {
+            let plane = position[2] * subdiv;
+            for du in 0..subdiv {
+                for dv in 0..subdiv {
+                    let (u, v) = (position[0] * subdiv + du, position[1] * subdiv + dv);
+                    push_face(&mut chunks, &owner, position, 2, -1, plane, u, v, targets);
+                }
+            }
+        }
+
+        for (axis, sign) in [(0usize, -1i32), (0, 1), (1, -1), (1, 1)] {
+            let mut neighbour = position;
+            neighbour[axis] += sign;
+            let solid = occludes(mirror, neighbour, level);
+            let other = solid
+                .then(|| column_heights(mirror, neighbour, subdiv, level))
+                .flatten();
+            // Only paid for when this cell's pit actually uncovers the neighbour.
+            let mut neighbour_owner = None;
+            let plane = (position[axis] + i32::from(sign > 0)) * subdiv;
+            let near = if sign > 0 { subdiv - 1 } else { 0 };
+            let far = if sign > 0 { 0 } else { subdiv - 1 };
+            for step in 0..subdiv {
+                let (du, dv) = if axis == 0 {
+                    (near, step)
+                } else {
+                    (step, near)
+                };
+                let top = column_height(own.as_ref(), du, dv, subdiv);
+                let floor = if solid {
+                    let (odu, odv) = if axis == 0 { (far, step) } else { (step, far) };
+                    column_height(other.as_ref(), odu, odv, subdiv)
+                } else {
+                    0
+                };
+                let (low, high, face_sign, cell) = if top > floor {
+                    (floor, top, sign, position)
+                } else if is_tree_foliage(mirror, neighbour) {
+                    // The neighbour already draws all six faces of a whole cube on the shipped
+                    // path; handing it chunk geometry as well would double-draw it.
+                    continue;
+                } else {
+                    // The NEIGHBOUR's face, uncovered by this cell's pit. It can be buried at
+                    // the coarse scale and so absent from `positions` altogether, in which case
+                    // nothing else in this pass would ever emit it.
+                    (top, floor, -sign, neighbour)
+                };
+                if low >= high {
+                    continue;
+                }
+                let owner = if cell == position {
+                    &owner
+                } else {
+                    neighbour_owner.get_or_insert_with(|| FaceOwner::new(mirror, neighbour))
+                };
+                for fine in low..high {
+                    let (u, v) = if axis == 0 {
+                        (position[1] * subdiv + step, position[2] * subdiv + fine)
+                    } else {
+                        (position[2] * subdiv + fine, position[0] * subdiv + step)
+                    };
+                    push_face(
+                        &mut chunks,
+                        owner,
+                        cell,
+                        axis,
+                        face_sign,
+                        plane,
+                        u,
+                        v,
+                        targets,
+                    );
+                }
+            }
+        }
+
+        if let Some(heights) = own.as_ref() {
+            for du in 0..subdiv {
+                for dv in 0..subdiv {
+                    let top = heights[(du * subdiv + dv) as usize];
+                    for (step_u, step_v, axis) in [(1, 0, 0usize), (0, 1, 1usize)] {
+                        let (nu, nv) = (du + step_u, dv + step_v);
+                        if nu >= subdiv || nv >= subdiv {
+                            continue;
+                        }
+                        let other = heights[(nu * subdiv + nv) as usize];
+                        if top == other {
+                            continue;
+                        }
+                        let sign = if top > other { 1 } else { -1 };
+                        let plane = if axis == 0 {
+                            position[0] * subdiv + du + 1
+                        } else {
+                            position[1] * subdiv + dv + 1
+                        };
+                        for fine in top.min(other)..top.max(other) {
+                            let (u, v) = if axis == 0 {
+                                (position[1] * subdiv + dv, position[2] * subdiv + fine)
+                            } else {
+                                (position[2] * subdiv + fine, position[0] * subdiv + du)
+                            };
+                            push_face(
+                                &mut chunks,
+                                &owner,
+                                position,
+                                axis,
+                                sign,
+                                plane,
+                                u,
+                                v,
+                                targets,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    chunks
+}
+
+/// Spawns the fine terrain, either whole or for just the chunks in `targets`.
+///
+/// `targets` is what keeps a dig cheap. Rebuilding the world for one changed tile is correct but
+/// unbounded, and it stopped the client dead for the length of a mesh build on every dug tile --
+/// which, since a dwarf digs continuously, meant every other dwarf froze for the whole job.
+#[allow(clippy::too_many_arguments)]
+fn spawn_subdivided_terrain(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    assets: &ProjectionAssets,
+    mirror: &Mirror,
+    positions: &[[i32; 3]],
+    subdiv: u32,
+    level: i32,
+    targets: Option<&BTreeSet<[i32; 3]>>,
+) -> SubdividedTerrainStats {
+    let subdiv = i32::from(u16::try_from(subdiv.min(MAX_SUBDIV)).expect("--subdiv is bounded"));
+    let wanted =
+        |position: [i32; 3]| targets.is_none_or(|targets| targets.contains(&chunk_of(position)));
+    let mut foliage_entities = 0;
+    for &position in positions {
+        if !is_tree_foliage(mirror, position) || !wanted(position) {
+            continue;
+        }
+        // Foliage is intentionally non-cubic presentation geometry. Keep its shipped path
+        // rather than pretending a greedy cuboid preserves the sparse crown silhouette.
+        let entity = commands
+            .spawn((
+                WorldProjected(terrain_id(position, mirror.dims())),
+                TerrainTile(position),
+                terrain_transform(mirror, position),
+            ))
+            .id();
+        commands.entity(entity).insert((
+            Mesh3d(assets.cube.clone()),
+            MeshMaterial3d(assets.terrain_material(mirror, position)),
+        ));
+        foliage_entities += 1;
+    }
+    let mut stats = SubdividedTerrainStats {
+        entities: foliage_entities,
+        cells: foliage_entities,
+        ..Default::default()
+    };
+    for (chunk, chunk_mesh) in build_chunk_meshes(mirror, positions, subdiv, level, targets) {
+        let mut material_meshes = BTreeMap::<(usize, usize), MeshBuilder>::new();
+        stats.faces += chunk_mesh.masks.values().map(BTreeSet::len).sum::<usize>();
+        for (key, mask) in chunk_mesh.masks {
+            let builder = material_meshes.entry((key.slot, key.rim)).or_default();
+            greedy_mask_into_mesh(builder, key, &mask, subdiv);
+        }
+        for ((slot, rim), builder) in material_meshes {
+            if builder.indices.is_empty() {
+                continue;
+            }
+            stats.triangles += builder.indices.len() / 3;
+            stats.entities += 1;
+            let mesh = meshes.add(builder.finish());
+            commands.spawn((
+                TerrainChunk(chunk),
+                Mesh3d(mesh),
+                MeshMaterial3d(assets.slot(TERRAIN_SLOTS[slot], rim)),
+            ));
+        }
+        stats.cells += chunk_mesh.cells.len();
+        stats.chunks += 1;
+        commands.spawn((
+            TerrainChunk(chunk),
+            TerrainChunkCells(chunk_mesh.cells.into_iter().collect()),
+        ));
+    }
+    stats
+}
+
+fn terrain_slot_at(mirror: &Mirror, position: [i32; 3]) -> TerrainSlot {
+    if has_snow_laden_crown(mirror, position) {
+        TerrainSlot::FoliageCrown
+    } else {
+        TerrainSlot::of(terrain_material(mirror, position))
+    }
+}
+
+/// Hash-compatible with the measurement instrument's small value-noise rule.
+///
+// NOTE: This is a MEASUREMENT STAND-IN for 10.4's authored terrain look, not a visual
+/// decision. It exists only so a flat cell top stops being one greedy quad and fineness
+/// becomes measurable; 10.4 owns the real look and this is the copy it will replace. The
+/// figure it drives is placeholder-dominated -- uncorrelated noise is 96.8% of the adopted
+/// k=4 triangle budget, and sampling the same rule coherently over a cell moves that budget
+/// 11.5x -- so no number derived from it may be read as the cost of authored terrain.
+fn detail_depth(plane: i32, u: i32, v: i32, subdiv: i32) -> i32 {
+    let mut value = DETAIL_SEED
+        ^ (plane as u32).wrapping_mul(0x9E37_79B1)
+        ^ (u as u32).wrapping_mul(0x85EB_CA77)
+        ^ (v as u32).wrapping_mul(0xC2B2_AE3D);
+    value ^= value >> 16;
+    value = value.wrapping_mul(0x7FEB_352D);
+    value ^= value >> 15;
+    let offset = (value % 5) as i32 - 2;
+    offset.abs().min(subdiv - 1)
+}
+
+#[derive(Default)]
+struct MeshBuilder {
+    positions: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    indices: Vec<u32>,
+}
+
+impl MeshBuilder {
+    fn finish(self) -> Mesh {
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals)
+        .with_inserted_indices(Indices::U32(self.indices))
+    }
+}
+
+fn greedy_mask_into_mesh(
+    builder: &mut MeshBuilder,
+    key: MeshKey,
+    mask: &BTreeSet<(i32, i32)>,
+    subdiv: i32,
+) {
+    let mut used = BTreeSet::new();
+    // Rows before columns, matching `scripts/bench/resolution_bench.py`. Rectangle choice is
+    // traversal-order dependent -- the bench measured 19,353 quads column-first against 19,264
+    // row-first on the same world -- and a `BTreeSet<(u, v)>` iterates columns first. The two
+    // meshers have to make the same choice or the offline number cannot predict this one.
+    let mut ordered = mask.iter().copied().collect::<Vec<_>>();
+    ordered.sort_by_key(|&(u, v)| (v, u));
+    for (u, v) in ordered {
+        if used.contains(&(u, v)) {
+            continue;
+        }
+        let mut width = 1;
+        while mask.contains(&(u + width, v)) && !used.contains(&(u + width, v)) {
+            width += 1;
+        }
+        let mut height = 1;
+        while (0..width).all(|offset| {
+            mask.contains(&(u + offset, v + height)) && !used.contains(&(u + offset, v + height))
+        }) {
+            height += 1;
+        }
+        for du in 0..width {
+            for dv in 0..height {
+                used.insert((u + du, v + dv));
+            }
+        }
+        append_quad(builder, key, u, v, width, height, subdiv);
+    }
+}
+
+fn append_quad(
+    builder: &mut MeshBuilder,
+    key: MeshKey,
+    u: i32,
+    v: i32,
+    width: i32,
+    height: i32,
+    subdiv: i32,
+) {
+    let point = |u, v| {
+        let mut coordinate = [0; 3];
+        coordinate[key.axis] = key.plane;
+        coordinate[(key.axis + 1) % 3] = u;
+        coordinate[(key.axis + 2) % 3] = v;
+        world_point_to_render(Vec3::new(
+            coordinate[0] as f32 / subdiv as f32 - 0.5,
+            coordinate[1] as f32 / subdiv as f32 - 0.5,
+            coordinate[2] as f32 / subdiv as f32 - 0.5,
+        ))
+    };
+    let corners = [
+        point(u, v),
+        point(u + width, v),
+        point(u + width, v + height),
+        point(u, v + height),
+    ];
+    let normal_world = match key.axis {
+        0 => Vec3::X,
+        1 => Vec3::Y,
+        2 => Vec3::Z,
+        _ => unreachable!("mesh axes are limited to x, y, z"),
+    } * key.sign as f32;
+    let normal = world_vector_to_render(normal_world).to_array();
+    let base = u32::try_from(builder.positions.len()).expect("terrain mesh index fits u32");
+    // The two orders were the wrong way round, on every axis and both signs, since the chunk
+    // mesher shipped: each quad was wound to face opposite its own normal, and the default
+    // `cull_mode: Some(Face::Back)` then deleted the entire terrain surface. `--subdiv N > 1`
+    // drew the world as snow caps and tree cubes floating over a void.
+    let order = if key.sign > 0 {
+        [0, 1, 2, 3]
+    } else {
+        [0, 3, 2, 1]
+    };
+    for index in order {
+        builder.positions.push(corners[index].to_array());
+        builder.normals.push(normal);
+    }
+    builder
+        .indices
+        .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+}
+
 /// Reconciles the small dynamic set by simulation `Id`; terrain is rebuilt after a snapshot.
 // The three query parameters are kept explicit: they are distinct ECS partitions, and bundling
 // them solely to satisfy this lint would obscure the `ClientLocal` / `WorldProjected` boundary.
@@ -457,12 +1089,14 @@ pub fn reconcile(
     terrain: &TerrainQuery,
     chips: &DigChipQuery,
     assets: Option<&ProjectionAssets>,
+    meshes: Option<&mut Assets<Mesh>>,
+    subdivision: Option<&TerrainSubdivision>,
 ) {
     if rebuild_terrain {
         for (entity, _) in chips.iter() {
             commands.entity(entity).despawn();
         }
-        for (entity, _, _) in terrain.iter() {
+        for (entity, _, _, _) in terrain.iter() {
             commands.entity(entity).despawn();
         }
         let positions = terrain_positions_at(mirror, slice.level());
@@ -470,28 +1104,140 @@ pub fn reconcile(
         // 9.4; it was 53,365 before it, 45,261 between its two halves. This number tracks world
         // CONTENT -- read it as "did the rim or a slice silently drop tiles?", never as a fixed
         // constant. It moved twice in one story, which is the whole argument.
-        println!(
-            "projected {} terrain cubes at z {}",
-            positions.len(),
-            slice.level()
-        );
-        for position in positions {
-            let entity = commands
-                .spawn((
-                    WorldProjected(terrain_id(position, mirror.dims())),
-                    TerrainTile(position),
-                    terrain_transform(mirror, position),
-                ))
-                .id();
-            if let Some(assets) = assets {
-                commands.entity(entity).insert((
-                    Mesh3d(assets.cube.clone()),
-                    MeshMaterial3d(assets.terrain_material(mirror, position)),
-                ));
-                if has_snow_cap(mirror, position) {
-                    spawn_snow_cap(commands, assets, mirror, position);
+        let started = Instant::now();
+        let subdiv = subdivision.map_or(1, |subdivision| subdivision.0);
+        if subdiv > 1 {
+            // This used to `return` when the render assets were absent, AFTER despawning all
+            // terrain — which also skipped dynamic-entity, item, designation and zone
+            // reconciliation, silently, for the rest of the frame.
+            if let Some((assets, meshes)) = assets.zip(meshes) {
+                let stats = spawn_subdivided_terrain(
+                    commands,
+                    meshes,
+                    assets,
+                    mirror,
+                    &positions,
+                    subdiv,
+                    slice.level(),
+                    None,
+                );
+                println!(
+                    "subdiv {subdiv}: projected {} terrain cubes at z {} entities={} chunks={} \
+                     faces={} triangles={} mesh_build_ms={}",
+                    stats.cells,
+                    slice.level(),
+                    stats.entities,
+                    stats.chunks,
+                    stats.faces,
+                    stats.triangles,
+                    started.elapsed().as_millis()
+                );
+            } else {
+                println!("subdiv {subdiv}: no render assets, terrain not respawned");
+            }
+        } else {
+            // The control path is deliberately kept verbatim: no flag and `--subdiv 1` retain
+            // the shipped one-entity-per-cell scene, including its snow caps and pick markers.
+            println!(
+                "projected {} terrain cubes at z {}",
+                positions.len(),
+                slice.level()
+            );
+            for position in positions.iter().copied() {
+                let entity = commands
+                    .spawn((
+                        WorldProjected(terrain_id(position, mirror.dims())),
+                        TerrainTile(position),
+                        terrain_transform(mirror, position),
+                    ))
+                    .id();
+                if let Some(assets) = assets {
+                    commands.entity(entity).insert((
+                        Mesh3d(assets.cube.clone()),
+                        MeshMaterial3d(assets.terrain_material(mirror, position)),
+                    ));
+                    if has_snow_cap(mirror, position) {
+                        spawn_snow_cap(commands, assets, mirror, position);
+                    }
                 }
             }
+            if subdivision.is_some() {
+                let snow_caps = positions
+                    .iter()
+                    .filter(|position| has_snow_cap(mirror, **position))
+                    .count();
+                // `triangles_derived`, not `triangles`: this path draws shared unit cuboids and
+                // snow-cap meshes, so its count is arithmetic over the entity list, while every
+                // k>1 row above is counted off the indices actually built. Putting the two under
+                // one name is exactly the blend AC6 forbids for Axis B.
+                println!(
+                    "subdiv 1: projected {} terrain cubes at z {} entities={} chunks=0 \
+                     triangles_derived={} mesh_build_ms={}",
+                    positions.len(),
+                    slice.level(),
+                    positions.len() + snow_caps,
+                    (positions.len() + snow_caps) * 12,
+                    started.elapsed().as_millis()
+                );
+            }
+        }
+    } else if subdivision.map_or(1, |subdivision| subdivision.0) > 1 && !dirty_tiles.is_empty() {
+        // The fine path's incremental branch. A chunk mesh is a whole surface, so a changed cell
+        // cannot be edited in place the way a per-cell cube entity can -- but only the chunks it
+        // can reach need rebuilding, not the world. One dug tile touched 121 chunks and every
+        // dwarf on screen stopped for the length of a full mesh build; it now touches at most a
+        // handful, and `partial_rebuild_matches_the_whole_world_build` pins that the result is
+        // identical either way.
+        // Falls THROUGH rather than `return`ing: an absent asset set must not skip the
+        // dig-chip, dynamic-entity, item, designation and zone reconciliation below. That is
+        // exactly the defect the full-rebuild branch above was fixed for, and it relocated into
+        // this branch because this branch did not exist when that fix was written.
+        if let Some((assets, meshes)) = assets.zip(meshes) {
+            let subdiv = subdivision.map_or(1, |subdivision| subdivision.0);
+            let targets = dirty_chunks(dirty_tiles);
+            for (entity, tile, cap, chunk) in terrain.iter() {
+                let owner = tile
+                    .map(|tile| tile.0)
+                    .or_else(|| cap.map(|cap| cap.0))
+                    .map(chunk_of);
+                // Chunk meshes and their cell records carry no cell of their own; they are matched
+                // by the chunk they were spawned for.
+                let hit = match owner {
+                    Some(chunk) => targets.contains(&chunk),
+                    None => chunk.is_some_and(|chunk| targets.contains(&chunk.0)),
+                };
+                if hit {
+                    commands.entity(entity).despawn();
+                }
+            }
+            let started = Instant::now();
+            // Scanning the whole world for the draw set costs ~130 ms here and dwarfs the meshing
+            // it feeds. Only cells in the target chunks, plus one step outside them, can contribute
+            // a face to those chunks -- the same rule `touches_chunks` applies.
+            let positions = terrain_positions_near(mirror, slice.level(), &targets);
+            let stats = spawn_subdivided_terrain(
+                commands,
+                meshes,
+                assets,
+                mirror,
+                &positions,
+                subdiv,
+                slice.level(),
+                Some(&targets),
+            );
+            println!(
+                "subdiv {subdiv}: rebuilt {} of {} chunks for {} changed tiles, entities={} \
+                 faces={} triangles={} mesh_build_ms={}",
+                stats.chunks,
+                targets.len(),
+                dirty_tiles.len(),
+                stats.entities,
+                stats.faces,
+                stats.triangles,
+                started.elapsed().as_millis()
+            );
+        } else {
+            println!("subdiv: no render assets, terrain not rebuilt");
         }
     } else {
         let mut affected = BTreeSet::new();
@@ -506,7 +1252,7 @@ pub fn reconcile(
             }
         }
         for position in affected {
-            for (entity, tile, cap) in terrain.iter() {
+            for (entity, tile, cap, _) in terrain.iter() {
                 if tile.is_some_and(|tile| tile.0 == position)
                     || cap.is_some_and(|cap| cap.0 == position)
                 {
@@ -1037,6 +1783,41 @@ pub fn terrain_positions(mirror: &Mirror) -> Vec<[i32; 3]> {
 /// The client-local draw set at a slice: retain full-depth exposure, then add the terrain floor
 /// at the selected z. The latter arm is what makes a cut a filled cross-section rather than a
 /// hollow shell; `is_exposed` remains the full-depth rule for ramps and the existing oracle.
+/// The draw set restricted to the cells that can feed `targets`.
+///
+/// A partial rebuild must not pay for a whole-world scan; that scan was ~130 ms on the real world
+/// against ~76 ms of meshing for the chunks it fed. The bounds are each target chunk's cell range
+/// grown by one, which is exactly the reach `touches_chunks` allows.
+fn terrain_positions_near(
+    mirror: &Mirror,
+    level: i32,
+    targets: &BTreeSet<[i32; 3]>,
+) -> Vec<[i32; 3]> {
+    let dims = mirror.dims();
+    let level = level.clamp(0, dims.z.saturating_sub(1) as i32);
+    let limit = [dims.x as i32, dims.y as i32, dims.z as i32];
+    let mut positions = Vec::new();
+    let mut visited = BTreeSet::new();
+    for chunk in targets {
+        let low: [i32; 3] =
+            std::array::from_fn(|axis| (chunk[axis] * TERRAIN_CHUNK_EDGE - 1).max(0));
+        let high: [i32; 3] = std::array::from_fn(|axis| {
+            ((chunk[axis] + 1) * TERRAIN_CHUNK_EDGE).min(limit[axis] - 1)
+        });
+        for z in low[2]..=high[2] {
+            for y in low[1]..=high[1] {
+                for x in low[0]..=high[0] {
+                    let position = [x, y, z];
+                    if visited.insert(position) && is_visible_at_slice(mirror, position, level) {
+                        positions.push(position);
+                    }
+                }
+            }
+        }
+    }
+    positions
+}
+
 pub fn terrain_positions_at(mirror: &Mirror, level: i32) -> Vec<[i32; 3]> {
     let level = level.clamp(0, mirror.dims().z.saturating_sub(1) as i32);
     let mut positions = Vec::new();
@@ -1128,6 +1909,569 @@ mod tests {
         assert!((item_translation(position).y - resting).abs() < 1e-6);
         assert_eq!(item_translation(position).x, world_to_render(position).x);
         assert_eq!(item_translation(position).z, world_to_render(position).z);
+    }
+
+    fn world(dims: Dims, tiles: Vec<Tile>) -> Mirror {
+        Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims,
+            tiles,
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap()
+    }
+
+    /// Stepped columns: cliffs, coplanar tops across a cell boundary, and cells that are buried
+    /// at the coarse scale until a neighbour's pit uncovers them.
+    fn staircase() -> Mirror {
+        let dims = Dims { x: 4, y: 4, z: 4 };
+        let mut tiles = Vec::new();
+        for z in 0..4 {
+            for _ in 0..4 {
+                for x in 0..4 {
+                    tiles.push(if z <= x {
+                        Tile::Solid(protocol::Material::Stone)
+                    } else {
+                        Tile::Empty
+                    });
+                }
+            }
+        }
+        world(dims, tiles)
+    }
+
+    fn fine_geometry(mirror: &Mirror, subdiv: i32) -> (usize, usize) {
+        let level = mirror.dims().z.saturating_sub(1) as i32;
+        let positions = terrain_positions_at(mirror, level);
+        let mut faces = 0;
+        let mut triangles = 0;
+        for (_, chunk_mesh) in build_chunk_meshes(mirror, &positions, subdiv, level, None) {
+            for (key, mask) in &chunk_mesh.masks {
+                faces += mask.len();
+                let mut builder = MeshBuilder::default();
+                greedy_mask_into_mesh(&mut builder, *key, mask, subdiv);
+                triangles += builder.indices.len() / 3;
+            }
+        }
+        (faces, triangles)
+    }
+
+    /// A 40x4x4 stepped slab: wide enough to span three 16-cell chunks on x.
+    fn wide_terrain() -> Mirror {
+        let dims = Dims { x: 40, y: 4, z: 4 };
+        let mut tiles = Vec::new();
+        for z in 0..4 {
+            for _ in 0..4 {
+                for x in 0..40 {
+                    tiles.push(if z <= (x / 8) % 4 {
+                        Tile::Solid(protocol::Material::Stone)
+                    } else {
+                        Tile::Empty
+                    });
+                }
+            }
+        }
+        world(dims, tiles)
+    }
+
+    /// What a dig actually costs, measured on the real exported world.
+    ///
+    /// Manual: needs `scripts/bench/export_world.py` to have written a snapshot first.
+    #[test]
+    #[ignore = "manual dig-cost measurement; run with --ignored --nocapture"]
+    fn resolution_bench_times_a_one_tile_rebuild_against_a_whole_one() {
+        let path = std::env::var("FROSTVEIN_WORLD").expect("set FROSTVEIN_WORLD to a snapshot");
+        let raw = std::fs::read_to_string(path).expect("snapshot readable");
+        let snapshot: protocol::Snapshot = serde_json::from_str(&raw).expect("snapshot parses");
+        let mirror = Mirror::from_snapshot(snapshot).expect("mirror builds");
+        let level = mirror.dims().z.saturating_sub(1) as i32;
+        let positions = terrain_positions_at(&mirror, level);
+        for subdiv in [2, 4, 8] {
+            let started = Instant::now();
+            let whole = build_chunk_meshes(&mirror, &positions, subdiv, level, None);
+            let whole_ms = started.elapsed().as_millis();
+            // One dug tile: its chunk plus the chunks its six neighbours fall in.
+            let dug = [64, 64, 8];
+            let mut targets = BTreeSet::from([chunk_of(dug)]);
+            for delta in NEIGHBOURS {
+                targets.insert(chunk_of([
+                    dug[0] + delta[0],
+                    dug[1] + delta[1],
+                    dug[2] + delta[2],
+                ]));
+            }
+            let started = Instant::now();
+            let partial = build_chunk_meshes(&mirror, &positions, subdiv, level, Some(&targets));
+            let partial_ms = started.elapsed().as_millis();
+            println!(
+                "dig-cost k={subdiv} whole={whole_ms}ms ({} chunks) partial={partial_ms}ms \
+                 ({} chunks) speedup={:.1}x",
+                whole.len(),
+                partial.len(),
+                whole_ms as f64 / partial_ms.max(1) as f64
+            );
+        }
+    }
+
+    fn wide_terrain_without(dug: [i32; 3]) -> Mirror {
+        let dims = Dims { x: 40, y: 4, z: 4 };
+        let mut tiles = Vec::new();
+        for z in 0..4 {
+            for y in 0..4 {
+                for x in 0..40 {
+                    let solid = z <= (x / 8) % 4 && [x, y, z] != dug;
+                    tiles.push(if solid {
+                        Tile::Solid(protocol::Material::Stone)
+                    } else {
+                        Tile::Empty
+                    });
+                }
+            }
+        }
+        world(dims, tiles)
+    }
+
+    /// A world that crosses a chunk boundary on ALL THREE axes.
+    ///
+    /// `wide_terrain` is 40x4x4, so only x ever crosses the 16-cell chunk grid; a neighbour-rule
+    /// omission on y or z is invisible to it. This is 20x20x20 with a diagonal surface, so
+    /// x = 15/16, y = 15/16 and z = 15/16 are all real chunk seams.
+    fn boxy_terrain() -> Mirror {
+        boxy_terrain_without([-1, -1, -1])
+    }
+
+    fn boxy_terrain_without(dug: [i32; 3]) -> Mirror {
+        let dims = Dims {
+            x: 20,
+            y: 20,
+            z: 20,
+        };
+        let mut tiles = Vec::new();
+        for z in 0..20 {
+            for y in 0..20 {
+                for x in 0..20 {
+                    // (x + y) / 2 reaches 19, so the surface genuinely spans the z = 16 seam.
+                    // A divisor that capped it lower would leave the z chunk boundary empty and
+                    // the seam cells below would silently test nothing.
+                    let solid = z <= (x + y) / 2 && [x, y, z] != dug;
+                    tiles.push(if solid {
+                        Tile::Solid(protocol::Material::Stone)
+                    } else {
+                        Tile::Empty
+                    });
+                }
+            }
+        }
+        world(dims, tiles)
+    }
+
+    /// Rebuilding SOME chunks must produce exactly what rebuilding all of them would.
+    ///
+    /// This is the whole safety argument for the incremental dig path. A chunk mesh is a whole
+    /// surface, so the old code rebuilt the world on any terrain delta rather than risk an old
+    /// face welded into a chunk — correct, and it cost a full mesh build per dug tile. A partial
+    /// build is only allowed to replace that if it is indistinguishable from the whole one, which
+    /// is not obvious: a cell's faces can be attributed to a NEIGHBOUR's chunk when its pit
+    /// uncovers buried rock, so the cells that feed a chunk extend one step past its boundary.
+    #[test]
+    fn partial_rebuild_matches_the_whole_world_build() {
+        for mirror in [wide_terrain(), staircase()] {
+            let level = mirror.dims().z.saturating_sub(1) as i32;
+            let positions = terrain_positions_at(&mirror, level);
+            for subdiv in [1, 2, 4] {
+                let whole = build_chunk_meshes(&mirror, &positions, subdiv, level, None);
+                assert!(!whole.is_empty(), "the fixture must produce chunks");
+                for chunk in whole.keys() {
+                    let targets = BTreeSet::from([*chunk]);
+                    // Fed by the RESTRICTED scan, exactly as `reconcile` feeds it. Using the
+                    // whole draw set here would leave the bounds of `terrain_positions_near`
+                    // untested, and a scan one cell too tight loses faces silently.
+                    let near = terrain_positions_near(&mirror, level, &targets);
+                    let partial = build_chunk_meshes(&mirror, &near, subdiv, level, Some(&targets));
+                    assert_eq!(
+                        partial.keys().collect::<Vec<_>>(),
+                        vec![chunk],
+                        "a targeted build must touch no other chunk"
+                    );
+                    assert_eq!(
+                        partial[chunk].masks, whole[chunk].masks,
+                        "k={subdiv} chunk {chunk:?}: partial faces differ from the whole build"
+                    );
+                    assert_eq!(
+                        partial[chunk].cells, whole[chunk].cells,
+                        "k={subdiv} chunk {chunk:?}: partial cell record differs"
+                    );
+                }
+                // And a multi-chunk subset, which is what a dig near a boundary actually asks for.
+                let pair = whole.keys().take(2).copied().collect::<BTreeSet<_>>();
+                let near = terrain_positions_near(&mirror, level, &pair);
+                let partial = build_chunk_meshes(&mirror, &near, subdiv, level, Some(&pair));
+                for chunk in &pair {
+                    assert_eq!(partial[chunk].masks, whole[chunk].masks);
+                }
+            }
+        }
+    }
+
+    /// The dirty-chunk set must contain every chunk a change can actually alter.
+    ///
+    /// `partial_rebuild_matches_the_whole_world_build` proves a targeted build is faithful FOR THE
+    /// CHUNKS IT IS GIVEN. That is only half the argument: if the set is too small, the rebuild is
+    /// perfectly faithful and the world still keeps a stale chunk. This is the other half, and it
+    /// is checked by diffing two whole-world builds of worlds that differ in one cell — not by
+    /// restating the neighbour rule.
+    #[test]
+    fn the_dirty_chunk_set_covers_every_chunk_a_change_can_alter() {
+        // x = 15 is the last cell of chunk 0 and x = 16 the first of chunk 1, so a change here
+        // must reach both. A rule that only took the cell's own chunk would pass on any interior
+        // cell and fail exactly here. `wide_terrain` is 40x4x4, so it can only ever exercise the
+        // X seam -- `boxy_terrain` is 20x20x20 and carries the Y and Z seams too, because a
+        // neighbour rule can be wrong on one axis and right on the others.
+        let wide = [[15, 2, 1], [16, 2, 1], [15, 2, 0], [8, 2, 1]]
+            .map(|dug| (dug, false))
+            .to_vec();
+        // The y and z seams, which `wide_terrain` is too thin to contain at all.
+        let boxy = [
+            [15, 15, 3],
+            [16, 15, 3],
+            [8, 15, 5],
+            [8, 16, 5],
+            [16, 16, 15],
+            [16, 16, 16],
+        ]
+        .map(|dug| (dug, true))
+        .to_vec();
+        // The fixture must actually STRADDLE all three seams, or the six cases above test the
+        // interior twice over and prove nothing about y or z. Assert it rather than trust the
+        // arithmetic: every dug cell must be solid before it is dug, and the boxy world's
+        // chunk set must span more than one index on each axis.
+        {
+            let boxy_world = boxy_terrain();
+            for (dug, boxed) in &boxy {
+                assert!(boxed);
+                assert!(
+                    matches!(boxy_world.tile(*dug), Some(Tile::Solid(_))),
+                    "seam fixture cell {dug:?} is not solid, so digging it changes nothing"
+                );
+            }
+            let chunks = build_chunk_meshes(
+                &boxy_world,
+                &terrain_positions_at(&boxy_world, boxy_world.dims().z.saturating_sub(1) as i32),
+                2,
+                boxy_world.dims().z.saturating_sub(1) as i32,
+                None,
+            );
+            for axis in 0..3 {
+                let spread = chunks
+                    .keys()
+                    .map(|chunk| chunk[axis])
+                    .collect::<BTreeSet<_>>();
+                assert!(
+                    spread.len() > 1,
+                    "boxy fixture occupies one chunk on axis {axis}: {spread:?}"
+                );
+            }
+        }
+        for (dug, boxed) in [wide, boxy].concat() {
+            let before = if boxed {
+                boxy_terrain()
+            } else {
+                wide_terrain()
+            };
+            let after = if boxed {
+                boxy_terrain_without(dug)
+            } else {
+                wide_terrain_without(dug)
+            };
+            let level = before.dims().z.saturating_sub(1) as i32;
+            for subdiv in [2, 4] {
+                let whole_before = build_chunk_meshes(
+                    &before,
+                    &terrain_positions_at(&before, level),
+                    subdiv,
+                    level,
+                    None,
+                );
+                let whole_after = build_chunk_meshes(
+                    &after,
+                    &terrain_positions_at(&after, level),
+                    subdiv,
+                    level,
+                    None,
+                );
+                let mut altered = BTreeSet::new();
+                for chunk in whole_before.keys().chain(whole_after.keys()) {
+                    let a = whole_before.get(chunk).map(|mesh| &mesh.masks);
+                    let b = whole_after.get(chunk).map(|mesh| &mesh.masks);
+                    if a != b {
+                        altered.insert(*chunk);
+                    }
+                }
+                let targets = dirty_chunks(&[dug]);
+                assert!(
+                    altered.is_subset(&targets),
+                    "k={subdiv} digging {dug:?} altered {:?}, which the dirty set {targets:?} \
+                     does not cover -- a stale chunk would survive the rebuild",
+                    altered.difference(&targets).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
+    /// The fixture has to actually span several chunks, or the test above proves nothing.
+    #[test]
+    fn the_partial_rebuild_fixture_spans_more_than_one_chunk() {
+        let mirror = wide_terrain();
+        let level = mirror.dims().z.saturating_sub(1) as i32;
+        let positions = terrain_positions_at(&mirror, level);
+        let chunks = build_chunk_meshes(&mirror, &positions, 2, level, None);
+        assert!(
+            chunks.len() >= 3,
+            "wide_terrain spans {} chunks; a one-chunk world cannot tell a partial rebuild from \
+             a whole one",
+            chunks.len()
+        );
+    }
+
+    /// Snow is painted on the top faces, and ONLY the top faces.
+    ///
+    /// The sides and bottom of a capped cell are still rock: a cap is settled snow lying on a
+    /// surface, not a change of material. Getting this wrong would silver the walls of every
+    /// trench. Asserted on the mask keys, which is where the material partition actually lives.
+    #[test]
+    fn a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else() {
+        let dims = Dims { x: 3, y: 3, z: 2 };
+        let mut tiles = vec![Tile::Empty; 18];
+        for y in 0..3 {
+            for x in 0..3 {
+                tiles[x + y * 3] = Tile::Solid(protocol::Material::Stone);
+            }
+        }
+        let mirror = world(dims, tiles);
+        let capped = [1, 1, 0];
+        assert!(
+            has_snow_cap(&mirror, capped),
+            "the fixture must cap {capped:?} or this proves nothing"
+        );
+        let positions = terrain_positions_at(&mirror, 1);
+        let snow = TerrainSlot::SnowCap as usize;
+        let rock = TerrainSlot::of(protocol::Material::Stone) as usize;
+        let mut tops = 0;
+        let mut sides = 0;
+        for (_, mesh) in build_chunk_meshes(&mirror, &positions, 2, 1, None) {
+            for (key, mask) in &mesh.masks {
+                if key.axis == 2 && key.sign > 0 {
+                    assert_eq!(
+                        key.slot, snow,
+                        "a top face of snow-capped rock must be snow"
+                    );
+                    tops += mask.len();
+                } else {
+                    assert_eq!(
+                        key.slot, rock,
+                        "axis {} sign {} was painted snow; only tops carry it",
+                        key.axis, key.sign
+                    );
+                    sides += mask.len();
+                }
+            }
+        }
+        assert_eq!(tops, 36, "9 cells x 2x2 fine columns of top face");
+        assert!(sides > 0, "the block must still have rock sides");
+    }
+
+    /// Every quad must be WOUND to face the way its own normal says it does.
+    ///
+    /// It was not, for every axis and both signs, since the chunk mesher shipped. The mesh is
+    /// drawn with `StandardMaterial`'s default `cull_mode: Some(Face::Back)`, so the whole
+    /// terrain surface was culled and `--subdiv N > 1` rendered the world as snow caps and tree
+    /// cubes floating over a void. Wolf saw it from the vehicle both times and called it holes.
+    ///
+    /// No count could see this. Faces, quads, triangles, cells and chunks are all winding-blind,
+    /// and the offline bench has no winding at all -- it counts a surface, it does not draw one.
+    /// This asserts the one property that is only about drawing: cross the first triangle's edges
+    /// and compare with the stored vertex normal.
+    #[test]
+    fn every_quad_is_wound_to_face_the_way_its_normal_points() {
+        for axis in 0..3 {
+            for sign in [-1, 1] {
+                let key = MeshKey {
+                    chunk: [0, 0, 0],
+                    slot: 0,
+                    rim: 0,
+                    axis,
+                    sign,
+                    plane: 3,
+                };
+                let mut builder = MeshBuilder::default();
+                let mask = BTreeSet::from([(1, 1)]);
+                greedy_mask_into_mesh(&mut builder, key, &mask, 1);
+                let corner = |index: usize| Vec3::from_array(builder.positions[index]);
+                let (a, b, c) = (
+                    corner(builder.indices[0] as usize),
+                    corner(builder.indices[1] as usize),
+                    corner(builder.indices[2] as usize),
+                );
+                let wound = (b - a).cross(c - b).normalize();
+                let declared = Vec3::from_array(builder.normals[0]);
+                assert!(
+                    wound.dot(declared) > 0.9,
+                    "axis {axis} sign {sign}: wound {wound:?} faces away from its own \
+                     normal {declared:?} -- back-face culling deletes this quad"
+                );
+            }
+        }
+    }
+
+    /// The detail rule is a MEASUREMENT STAND-IN shared with `scripts/bench/resolution_bench.py`,
+    /// and the two sides are only one rule if they agree bit for bit. They did not: this side
+    /// `wrapping_mul`s in u32 and the bench multiplied unbounded Python integers, so the two
+    /// agreed at chance for every k > 1 while k=1 — where the clamp forces every depth to zero —
+    /// stayed identical. The same vector is pinned in that file's test suite.
+    #[test]
+    fn the_detail_rule_matches_the_benchs_pinned_vector() {
+        let vector = [[0, 0, 0], [1, 2, 3], [8, 5, 1], [9, 9, 9], [64, 17, 5]];
+        let depths: Vec<i32> = vector
+            .iter()
+            .map(|point| detail_depth(point[0], point[1], point[2], 4))
+            .collect();
+        assert_eq!(depths, vec![1, 0, 1, 1, 2]);
+        for point in vector {
+            assert_eq!(
+                detail_depth(point[0], point[1], point[2], 1),
+                0,
+                "k=1 has no room for a pit, which is why the k=1 control cannot see this rule"
+            );
+        }
+    }
+
+    /// Hand-written counts for the whole fine surface, at k=1 and above.
+    ///
+    /// The mesher shipped with no count assertion anywhere: its only test compared entity
+    /// presence and mesh handles, so a face buried in rock, a missing cross-cell connector and a
+    /// diverged hash were all invisible. These literals come from the offline bench, which is in
+    /// turn checked against a brute-force fine-voxel oracle -- two independent implementations
+    /// have to agree before either is believed.
+    #[test]
+    fn the_fine_mesher_reproduces_the_benchs_face_and_triangle_counts() {
+        let prism = mirror(vec![
+            Tile::Solid(protocol::Material::Stone),
+            Tile::Solid(protocol::Material::Stone),
+        ]);
+        assert_eq!(fine_geometry(&prism, 1), (10, 12));
+        assert_eq!(fine_geometry(&prism, 2), (32, 24));
+        assert_eq!(fine_geometry(&prism, 4), (176, 144));
+    }
+
+    /// The client mesher agrees with the offline bench on a world with rim levels in it.
+    ///
+    /// SPLIT OUT of the prism test deliberately. Three mutation rows are named for this
+    /// bench-parity claim -- `side faces ignore the pit that carved them away`, `cross-cell
+    /// connectors are dropped and the fine surface cracks` and `greedy tie-break drifts away
+    /// from the bench's row order` -- and all three also move the prism counts, so with both
+    /// halves in one test every row died on the FIRST assertion and the staircase comparison
+    /// they name never ran. KILLED named the test, not the assertion. Keeping them apart is
+    /// what makes those rows evidence for the thing they claim.
+    #[test]
+    fn the_fine_mesher_reproduces_the_benchs_staircase_counts() {
+        // The staircase is 4 cells wide, so `rim_level` gives its cells three different
+        // world-edge dissolve levels and the client partitions the masks by material AND rim
+        // before merging. The bench has no rim, so it merges across all of it. The SURFACE is
+        // the same either way -- that is the geometry claim -- while the client's triangle
+        // count can only ever be greater, never smaller, because partitioning splits rectangles
+        // and never joins them. Both halves are asserted; the prism above has one rim level and
+        // pins the triangle counts exactly.
+        // The triangle column is pinned EXACTLY, not by an inequality. `>= bench_triangles` let
+        // the greedy tie-break drift freely -- the row named for that drift SURVIVED against it,
+        // because reordering the merge changes which rectangles form and so the count, while
+        // still leaving it above the unpartitioned bench figure. An inequality that every
+        // plausible regression satisfies pins nothing.
+        for (subdiv, faces, bench_triangles, client_triangles) in
+            [(1, 84, 36, 60), (2, 334, 154, 174), (4, 1608, 926, 942)]
+        {
+            let (drawn, triangles) = fine_geometry(&staircase(), subdiv);
+            assert_eq!(
+                drawn, faces,
+                "fine surface disagrees with the bench at k={subdiv}"
+            );
+            assert_eq!(
+                triangles, client_triangles,
+                "k={subdiv}: the client's partitioned triangle count moved"
+            );
+            assert!(
+                triangles >= bench_triangles,
+                "k={subdiv}: {triangles} triangles is FEWER than the unpartitioned \
+                 {bench_triangles}, which partitioning cannot produce"
+            );
+        }
+    }
+
+    /// The defect that made every k>1 figure wrong: the mesher culled against the DRAWN set, so
+    /// a solid cell nothing exposes was treated as air and its neighbour emitted a face sealed
+    /// inside the rock. A 3x1x1 prism has a fully-enclosed middle cell only once it is 3 wide in
+    /// every axis, so use a 3x3x3 block: exactly one cell is buried, and its six faces must not
+    /// be drawn from either side.
+    #[test]
+    fn buried_rock_contributes_no_faces_from_either_side() {
+        let dims = Dims { x: 3, y: 3, z: 3 };
+        let block = world(dims, vec![Tile::Solid(protocol::Material::Stone); 27]);
+        assert!(
+            !is_exposed(&block, [1, 1, 1]),
+            "the centre cell of a 3x3x3 block is enclosed"
+        );
+        // A cube's surface is 6 * 3 * 3 = 54 coarse faces. The enclosed cell adds none of its
+        // own and hides none of its neighbours': every one of the 54 is a boundary face.
+        assert_eq!(fine_geometry(&block, 1).0, 54);
+        // At k=2 the flat sides expand to 4 samples each; the top carries pits, so the total is
+        // measured rather than 54 * 4. What must NOT happen is the buried cell contributing.
+        let (faces, _) = fine_geometry(&block, 2);
+        assert!(
+            faces < 54 * 4 + 4 * 4,
+            "{faces} faces at k=2 is more than the outer surface can hold -- \
+             something inside the block is being drawn"
+        );
+    }
+
+    /// `--subdiv N > 1` draws no `TerrainTile`, which is what broke the capture's draw-set
+    /// oracle. Every drawn coarse cell must still be recorded on some chunk, and exactly once.
+    #[test]
+    fn every_drawn_cell_is_recorded_on_exactly_one_chunk() {
+        let mirror = staircase();
+        let level = mirror.dims().z.saturating_sub(1) as i32;
+        let positions = terrain_positions_at(&mirror, level);
+        let mut recorded = Vec::new();
+        for (_, chunk_mesh) in build_chunk_meshes(&mirror, &positions, 4, level, None) {
+            recorded.extend(chunk_mesh.cells);
+        }
+        let unique = recorded.iter().copied().collect::<BTreeSet<_>>();
+        assert_eq!(recorded.len(), unique.len(), "a cell was recorded twice");
+        let drawn = positions.iter().copied().collect::<BTreeSet<_>>();
+        assert!(
+            drawn.is_subset(&unique),
+            "a cell in the draw set reached no mesh at all"
+        );
+        // The fine mesher draws MORE coarse cells than the coarse draw set, and must: a pit
+        // carved into one cell's top uncovers the side of a neighbour that is fully buried at
+        // the coarse scale and so never appears in `positions`. Nothing else would emit those
+        // faces, and the gap would be a hole in the rock. Every extra must be exactly that.
+        for cell in unique.difference(&drawn) {
+            assert!(
+                !is_exposed(&mirror, *cell),
+                "{cell:?} is exposed, so it belongs in the draw set, not outside it"
+            );
+            assert!(
+                [[-1, 0], [1, 0], [0, -1], [0, 1]].iter().any(|[dx, dy]| {
+                    let side = [cell[0] + dx, cell[1] + dy, cell[2]];
+                    column_heights(&mirror, side, 4, level).is_some()
+                }),
+                "{cell:?} is buried and has no carved neighbour to uncover it"
+            );
+        }
     }
 
     fn mirror(tiles: Vec<Tile>) -> Mirror {

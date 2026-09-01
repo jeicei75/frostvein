@@ -1352,6 +1352,11 @@ into "here is what you will see" artifacts; BlenderMCP on gingerspice gives him 
 seat with Claude in the loop; the guidelines grow an asset contract; and the bench proves itself
 on the trees before the first authored assets — dwarves — go through it.
 
+**EXECUTION ORDER IS NOT NUMERIC ORDER (added 2026-08-31, Wolf).** The remainder of this epic runs
+**10.6 → 10.3 → 10.4 → 10.5**: the resolution bench measures what we can serve, then the contract
+writes it down, then the assets are authored against it. 10.6 is numerically last and first in
+sequence, the same shape as the gfx pass running before 8.3.
+
 **Added 2026-08-28. The PRD's asset-pipeline trigger has fired.** The PRD holds authored assets
 until "a concrete case forces the decision — dwarves are the expected first case." RULED
 2026-08-28 (Wolf): the case is here — he wants authored dwarves and better trees, and the PRD
@@ -1583,3 +1588,74 @@ after).
 **SPLIT LINE, named now:** if this overruns a dev session, "feature enablement + a stand-in glTF
 rendering on the seam" splits from "the authored dwarf itself" — the seam story first.
 
+
+### Story 10.6: How Fine Can We Go — the resolution bench
+
+**ADDED 2026-08-31 (Wolf). EXECUTION ORDER: 10.6 runs FIRST in this epic's remainder** — 10.6,
+then 10.3, then 10.4, then 10.5. Numerically last, first in sequence, the same shape as the gfx
+pass running before 8.3. The trigger: 10.3 was authored with its grid-scale clause picked from
+three unmeasured options, and 10.4/10.5 author assets against whatever it picks. A contract that
+fixes a resolution we have never measured is a guess with a citation.
+
+As the boss,
+I want to know what voxel resolution we can actually serve, on both the visual and the simulation
+axis,
+so that the asset contract fixes a number we can render rather than one we hope for.
+
+**The output is measurements plus one decision, not a renderer.** The shipped per-cube terrain
+path is untouched; the finer path lives behind a `--subdiv` flag so it can be compared. A finer
+*sim* grid is **costed, not built** — no change to `Dims`, worldgen, the protocol or pathfinding.
+
+**Measured at planning (2026-08-31), on the real exported world, not assumed:** 524,288 cells,
+301,048 solid, **44,984 exposed cubes** — but only **61,142 faces are actually on the surface**,
+against **269,904** submitted as whole cubes, so **77% of the geometry we draw is interior and
+invisible**. Greedy-meshed, the same world is **19,264 quads / 38,528 triangles** against the
+shipped **539,808** — a **14× triangle headroom available before any resolution increase**.
+Terrain is one ECS entity per exposed cell plus a snow cap per exposed top, ~63k entities; the
+entity count, not the triangle count, is the suspected bottleneck.
+
+**The reference sheet already fixes the target grid** and is self-consistent: Section A labels the
+dwarf "12 Voxels", Section B labels trees in cells, and at a 1.20 m dwarf that gives **0.1 m per
+voxel, 1.6 m per cell, 16 voxels per cell**. The client's `scale: 0.65` is the single constant
+that disagrees (it should be 0.75). What the sheet cannot say is what we can *render*.
+
+**Acceptance Criteria:**
+
+**Given** the real exported world,
+**When** the geometry bench runs at subdivision 1,
+**Then** it reproduces the control figures exactly — 61,142 exposed faces and 19,264 greedy quads
+— before any finer figure is reported (a bench that cannot reproduce the shipped world does not
+get to report on a finer one).
+
+**Given** a chosen, recorded sub-cell detail rule (fineness cannot be measured without saying what
+the extra fineness is made of),
+**When** k is swept doubling upward,
+**Then** faces, quads, triangles, chunks, build time and peak memory are recorded at each step and
+**the sweep stops at the first k that fails, with what failed named** — a sweep that stops at a
+comfortable number rather than a wall does not satisfy this.
+
+**Given** that terrain, trees and dwarves have instance counts four orders of magnitude apart,
+**Then** the servable resolution is reported **per class**, not as one project number.
+
+**Given** the flag,
+**When** `gui --subdiv N` runs,
+**Then** it renders chunked greedy-meshed terrain at subdivision N, and at `--subdiv 1` the scene
+is the one the shipped per-cube path produces — the draw-set oracle, the five rim levels, snow
+caps, the hover slab and picking all assume one entity per cell and none of them may move.
+
+**Given** the simulation axis,
+**Then** cells, tile bytes, snapshot bytes (7,180,286 today) and A* time at sim subdivision 1/2/4
+are **costed without being built**, each figure labelled measured or derived.
+
+**Given** NFR6,
+**Then** fps at boot framing and working zoom is read from the frame-time overlay **on
+gingerspice** for every k the devpod says is plausible — no devpod can measure fps (lavapipe
+renders but does not clock), so this half is Wolf-side by construction.
+
+**Given** the whole sweep,
+**Then** the adopted metres-per-cell, metres-per-voxel and per-class subdivision are recorded with
+the measurements behind them, in a form story 10.3 copies rather than re-derives.
+
+**SPLIT LINE, named now:** if this overruns a dev session, the `gui --subdiv` path and the vehicle
+fps run split into a second story; the offline bench lands first and is already enough to unblock
+10.3 on geometry grounds.

@@ -1385,3 +1385,28 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
    `MIN_SUBJECT_LUMA` floor does not catch a total lighting failure (34.578 against a floor of 20.0,
    ~1.7x and coincidental), and the other three floors are decoration for anything short of "nothing
    rendered".
+
+## Deferred from: code review of 10-6-how-fine-can-we-go (2026-08-31)
+
+- **`--subdiv` is discoverable nowhere and `gui --help` fails** [crates/gui/src/ingest.rs:509].
+  Unknown arguments fall through to the port parse, so `gui --help` exits with "invalid digit
+  found in string" rather than printing usage. Nothing in `docs/` or `README.md` mentions
+  `--subdiv`, and the vehicle card says "read the frame-time overlay" without saying the overlay
+  is off by default and toggled with F3 (`ingest.rs:912`). The missing `--help` is pre-existing
+  and larger than this story; only the undocumented new flag belongs to 10.6. Raised by the
+  Feature Auditor.
+- **No test covers `--subdiv 0` or `--subdiv` with a missing value.** The parser rejects both
+  correctly at runtime (`ingest.rs:466-478`), so this is a test-coverage gap in CLI parsing
+  rather than a defect in this story's code, and it matches the existing coverage level of the
+  sibling flags. Raised by the Acceptance Auditor.
+
+## Deferred from: code review of 10-6-how-fine-can-we-go (2026-09-01)
+
+- **Malformed or truncated snapshot raises a raw traceback instead of the bench's own diagnostic** [scripts/bench/resolution_bench.py:66-68, :105-112, :115-133, :531]. `KeyError`/`IndexError` are not in the `except (OSError, ValueError, subprocess.CalledProcessError)` tuple, so a snapshot missing `dims` or `tiles`, or carrying a `tiles` array shorter than `dims` implies, exits 1 with an unfiltered stack trace rather than `resolution bench failed: …`. Verified by running on three malformed fixtures. Deferred because it fails LOUDLY and produces no wrong number — it is not a silent-failure trap. [edge, round 2]
+- **AC6's A\* rows come from an `#[ignore]`d test** [crates/sim-core/src/lib.rs]. `resolution_bench_times_existing_astar_on_subdivided_flat_grids` never runs on the gate, so the axis-b path-found column — the reproducible half of that table, and its real finding — has no regression protection. Deferred: acceptable for a measurement instrument, and story 10.6's "costed, not built" guardrail argues against touching `sim-core` further. Revisit if a later story makes the sim grid finer for real. [feature, round 2]
+- **Vestigial `SnowCap` match arm in the incremental rebuild branch** [crates/gui/src/project.rs:1173-1183]. `spawn_snow_cap` is called only from the two subdiv ≤ 1 branches, so under `subdiv > 1` — the only condition the incremental loop runs under — the `cap` arm is permanently `None`. Harmless; falls through correctly to the `TerrainChunk` match. Left from before `bace455` moved snow from entities to paint. [blind, round 2]
+- **`terrain_positions_near` inherited `terrain_positions_at`'s doc comment** [crates/gui/src/project.rs:1755-1763]. The "client-local draw set at a slice: retain full-depth exposure…" paragraph now documents the restricted-scan function, and `terrain_positions_at` at :1791 has none. [acceptance, round 2]
+
+## Deferred from: 10.6 vehicle observation (2026-09-01)
+
+- **Re-benchmark the fine terrain path UNDER LOAD.** Every figure in 10.6 — fps, per-dig mesh build, boot build — was measured on a nearly-idle world: tick 21, ten entities, five dwarves, and digs issued one at a time by hand. A populated fortress adds dwarves, items, point lights, designations and zones, and digs far more often and in bursts. So 10.6's fps numbers are an UPPER BOUND and its dig frequency an under-count, and the adopted k=4 is chosen with that stated rather than hidden. Wolf, 2026-09-01: "might be of course when we have more things going on it starts to degrade performance so need to benchmark this later on." Owed once there is a fortress worth loading — likely after the M2 gameplay stories, not before. [vehicle, round 2]

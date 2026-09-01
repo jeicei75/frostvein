@@ -22,7 +22,9 @@ use crate::{
     ingest::MirrorResource,
     ingest::{ScriptedCursor, ScriptedDrag},
     pick::PickedTile,
-    project::{ProjectedDesignation, ProjectedZone, TerrainTile, WorldProjected},
+    project::{
+        ProjectedDesignation, ProjectedZone, TerrainChunkCells, TerrainTile, WorldProjected,
+    },
     slice::SliceLevel,
     transform::world_to_render,
 };
@@ -168,23 +170,50 @@ pub fn draw_stats(
     slice: Res<SliceLevel>,
     mirror: Res<MirrorResource>,
     terrain: Query<&TerrainTile>,
+    chunk_cells: Query<&TerrainChunkCells>,
     designations: Query<&ProjectedDesignation>,
     zones: Query<&ProjectedZone>,
 ) -> DrawStats {
-    collect_draw_stats(slice.level(), &mirror.0, &terrain, &designations, &zones)
+    collect_draw_stats(
+        slice.level(),
+        &mirror.0,
+        &terrain,
+        &chunk_cells,
+        &designations,
+        &zones,
+    )
+}
+
+/// The drawn coarse cells, from whichever path drew them.
+///
+/// `--subdiv N > 1` replaces per-cell `TerrainTile` entities with chunk meshes, so counting
+/// `TerrainTile` alone reported 198 drawn tiles against a mirror holding 11,325 and panicked on
+/// a cut that was in fact drawn. Both paths answer the same question; only the component
+/// carrying the answer changes.
+fn drawn_cells<'a>(
+    terrain: &'a Query<&TerrainTile>,
+    chunk_cells: &'a Query<&TerrainChunkCells>,
+) -> impl Iterator<Item = [i32; 3]> + 'a {
+    terrain
+        .iter()
+        .map(|tile| tile.0)
+        .chain(chunk_cells.iter().flat_map(|cells| cells.0.iter().copied()))
 }
 
 fn collect_draw_stats(
     level: i32,
     mirror: &Mirror,
     terrain: &Query<&TerrainTile>,
+    chunk_cells: &Query<&TerrainChunkCells>,
     designations: &Query<&ProjectedDesignation>,
     zones: &Query<&ProjectedZone>,
 ) -> DrawStats {
     DrawStats::new(
         level,
-        terrain.iter().count(),
-        terrain.iter().filter(|tile| tile.0[2] == level).count(),
+        drawn_cells(terrain, chunk_cells).count(),
+        drawn_cells(terrain, chunk_cells)
+            .filter(|cell| cell[2] == level)
+            .count(),
         expected_cut_face(mirror, level),
         designations.iter().count(),
         zones.iter().count(),
@@ -722,6 +751,7 @@ pub fn capture_after_frames(
     slice: Res<SliceLevel>,
     mirror: Res<MirrorResource>,
     terrain: Query<&TerrainTile>,
+    chunk_cells: Query<&TerrainChunkCells>,
     designations: Query<&ProjectedDesignation>,
     zones: Query<&ProjectedZone>,
     picked: Option<Res<PickedTile>>,
@@ -760,7 +790,14 @@ pub fn capture_after_frames(
     if capture_due {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
-        let draw = collect_draw_stats(slice.level(), &mirror.0, &terrain, &designations, &zones);
+        let draw = collect_draw_stats(
+            slice.level(),
+            &mirror.0,
+            &terrain,
+            &chunk_cells,
+            &designations,
+            &zones,
+        );
         if let Some(cursor) = cursor {
             let expected = cameras.single().ok().and_then(|rig| {
                 windows

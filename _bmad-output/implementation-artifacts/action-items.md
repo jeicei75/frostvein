@@ -759,3 +759,44 @@ live remainder became issues. Those verifications are recorded on each item belo
 
 **Note.** FOUND 2026-08-23 while closing M2-17; the last survivor in 3-1's table and deliberately NOT fixed in that session, to keep the scope Wolf set. THE ANALYSIS, so nobody re-derives it: designation_rect_clips_to_world_bounds designates rect (-1,-1,1)..(1,0,1) and asserts only the two in-bounds positions land. Removing the clip does not change that RESULT, because every out-of-bounds position is dropped downstream anyway -- a Channel needs is_standable, which needs a tile, and tile() is None out of bounds. So the clip is genuinely redundant for correctness. WHAT IT IS NOT REDUNDANT FOR IS TERMINATION: the clip is what bounds the ITERATION, so without it a rect with extreme coordinates iterates an astronomically large range instead of a no-op. The neighbouring test fully_out_of_bounds_rect_is_a_no_op uses coordinates near -3, far too small to expose that. THE DESIGN PROBLEM TO SOLVE, not just the fix: a test that catches this by actually hanging is a bad test -- it fails by timeout rather than by assertion. Prefer asserting the clipped bounds directly, or choosing a rect large enough to be measurably slow yet finite. Related history: Epic 3's most severe defect was a whole-world designate taking a delta from 378 bytes to 16,761,209 bytes, so unbounded rect handling has bitten this project before.
 
+
+### M2-19
+
+**Opened 2026-09-01** at the close of story 10.6, on Wolf's instruction.
+
+**Action.** Create a story for a proper frame-performance overlay, using **games-industry-standard
+metrics** rather than a single smoothed fps number. Wolf: "I want them to be gaming industry
+standard."
+
+**Owner.** Unassigned — story to be written before the work.
+
+**Status.** open
+
+**Success criterion.** The overlay makes a dig hitch visible AS IT HAPPENS, on the vehicle, without
+anyone reading a log afterwards.
+
+**Note — why this exists, so the story is not written from a blank page.** 10.6's binding finding
+is that the fine terrain path's real cost is a per-dig mesh rebuild (~5 ms at k=4, ~40 ms at k=8,
+~70–110 ms at k=16), and **the current overlay structurally cannot show it**: Bevy's
+`FpsOverlayPlugin` prints `fps.smoothed()`, an exponentially-smoothed average on a 100 ms refresh,
+so one 90 ms frame is averaged away. Wolf found k=16's halts BY EYE while the counter read fine —
+the same shape as the 2026-09-01 observation where the client stopped dead on a dig while the
+counter held ~143.
+
+The statistics to use, and the reasoning, since the obvious three are partly wrong for this job:
+median fps is a good steady-state readout and **cannot** show a hitch (one bad frame among a
+hundred does not move a median); max fps is noise; min fps is the right instinct in the wrong unit
+— it is max FRAME TIME, and "worst frame 91 ms" reads directly against the `mesh_build_ms` already
+in the log where "min 11 fps" does not. Industry practice is percentile FRAME TIMES: 1% low and
+0.1% low (i.e. 99th/99.9th percentile frame time), plus max, plus a count of frames over budget.
+Something like: `fps 138 median | 1% low 42 | worst frame 91 ms | 3 frames >16.7ms in last 5s`.
+The hitch COUNT is the most actionable part.
+
+**Implementation note.** `FrameTimeDiagnosticsPlugin` is already added [crates/gui/src/ingest.rs:127]
+and keeps a history, so the data exists — but its default history is ~20 samples (a third of a
+second at 60 fps), too short to summarise. The story needs a longer window or its own rolling
+buffer. Testable without a window by feeding synthetic frame times and asserting the percentiles.
+
+**Pairs with** the deferred "re-benchmark the fine terrain path UNDER LOAD" item in
+`deferred-work.md` — that run is where this instrument earns its keep, because "is it still
+smooth?" stops being answerable by eye once a fortress is busy.

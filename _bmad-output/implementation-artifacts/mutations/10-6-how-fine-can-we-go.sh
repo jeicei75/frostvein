@@ -1,0 +1,210 @@
+mutation "greedy merge removal fails prism geometry" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_greedy_mesher_merges_a_two_cell_prism_with_hand_written_counts <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = '    quads = sum(_greedy_quads(mask) for mask in masks.values())'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    quads = sum(len(mask) for mask in masks.values())'))
+PY
+
+mutation "detail rule removal fails subdivided geometry" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_detail_rule_changes_subdivided_counts_exactly_and_leaves_k_one_alone <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = '''        return (
+            detailed
+            and material_at(x, y, z) is not None'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''        return (
+            False
+            and material_at(x, y, z) is not None'''))
+PY
+
+mutation "side-face carve removal re-inflates every k>1 row" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_face_count_matches_a_brute_force_fine_voxel_oracle <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = '                        top = k if own is None else own[i][j]'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                        top = k'))
+PY
+
+mutation "cross-cell connector removal opens the fine surface" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_a_stepped_world_matches_hand_written_counts <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = '                    other = None if open_side else heights_at(x + sx, y + sy, z)'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                    if not open_side:
+                        continue
+                    other = None'''))
+PY
+
+mutation "unmasked multiply diverges from the client u32 rule" py scripts.tests.test_resolution_bench.ResolutionDetailRuleTests.test_detail_rule_is_seeded_and_has_a_hand_written_two_voxel_range <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = '    value ^= (y & mask) * 0x85EBCA77 & mask'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    value ^= (y & mask) * 0x85EBCA77'))
+PY
+
+mutation "chunk count collapses back to two dimensions" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_chunks_are_counted_in_three_dimensions_from_emitted_geometry <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = '                            z // CHUNK_EDGE_CELLS,'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                            0,'))
+PY
+
+mutation "k one control drift fails control assertion" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_control_check_requires_the_real_world_literals <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = 'CONTROL_QUADS = 19_264'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'CONTROL_QUADS = 19_263'))
+PY
+
+mutation "subdiv flag reaches chunk mesh instead of parsing inertly" gui ingest::tests::subdiv_flag_reaches_the_rendered_terrain_and_one_keeps_the_shipped_scene <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        if subdiv > 1 {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if false {\n'))
+PY
+
+mutation "drawn-set culling redraws faces buried in rock" gui project::tests::buried_rock_contributes_no_faces_from_either_side <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    position[2] <= level && matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_)))'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    position[2] <= level && false'))
+PY
+
+mutation "side faces ignore the pit that carved them away" gui project::tests::the_fine_mesher_reproduces_the_benchs_staircase_counts <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                let top = column_height(own.as_ref(), du, dv, subdiv);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let top = subdiv;'))
+PY
+
+mutation "cross-cell connectors are dropped and the fine surface cracks" gui project::tests::the_fine_mesher_reproduces_the_benchs_staircase_counts <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = """            let other = solid
+                .then(|| column_heights(mirror, neighbour, subdiv, level))
+                .flatten();"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let other = None;'))
+PY
+
+mutation "greedy tie-break drifts away from the bench's row order" gui project::tests::the_fine_mesher_reproduces_the_benchs_staircase_counts <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    ordered.sort_by_key(|&(u, v)| (v, u));'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    ordered.sort_by_key(|&(u, v)| (u, v));'))
+PY
+
+mutation "the client detail rule drifts off the bench's pinned vector" gui project::tests::the_detail_rule_matches_the_benchs_pinned_vector <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        ^ (u as u32).wrapping_mul(0x85EB_CA77)'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        ^ (u as u32).wrapping_mul(0x85EB_CA78)'))
+PY
+
+mutation "chunk cells go unrecorded and the capture oracle blinds again" gui project::tests::every_drawn_cell_is_recorded_on_exactly_one_chunk <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    mesh.cells.insert(cell);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = cell;'))
+PY
+
+mutation "quad winding inverts and back-face culling deletes the terrain" gui project::tests::every_quad_is_wound_to_face_the_way_its_normal_points <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = """    let order = if key.sign > 0 {
+        [0, 1, 2, 3]
+    } else {
+        [0, 3, 2, 1]
+    };"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, """    let order = if key.sign > 0 {
+        [0, 3, 2, 1]
+    } else {
+        [0, 1, 2, 3]
+    };"""))
+PY
+
+mutation "partial rebuild reach shrinks and drops boundary faces" gui project::tests::partial_rebuild_matches_the_whole_world_build <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "    if targets.contains(&chunk_of(position)) {\n        return true;\n    }"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "    if true {\n        return targets.contains(&chunk_of(position));\n    }"))
+PY
+
+mutation "dirty chunk set forgets the neighbours and leaves a chunk stale" gui project::tests::the_dirty_chunk_set_covers_every_chunk_a_change_can_alter <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "    let mut targets = BTreeSet::new();\n    for position in &cells {\n        targets.insert(chunk_of(*position));"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "    let mut targets = BTreeSet::new();\n    for position in &cells {\n        targets.insert(chunk_of(*position));\n        if true { continue; }"))
+PY
+
+mutation "dirty chunk reach collapses to one cell and a dug tile leaves stale chunks" gui project::tests::the_dirty_chunk_set_covers_every_chunk_a_change_can_alter <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "    for position in &cells {\n        targets.insert(chunk_of(*position));"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "    for position in dirty_tiles {\n        targets.insert(chunk_of(*position));"))
+PY
+
+mutation "per-class census counts buried cells and the class split inflates" py scripts.tests.test_resolution_bench.ResolutionPerClassTests.test_the_census_counts_exposed_cells_not_whole_world_material_counts <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = "                if not exposed:\n                    continue"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "                if False:\n                    continue"))
+PY
+
+# NO ROW for the `!dirty_tiles.is_empty()` guard on the incremental branch, deliberately.
+# Removing it costs a wasted `terrain.iter()` per frame and nothing else: the branch computes an
+# empty chunk set, despawns nothing and spawns nothing, so the ECS is byte-identical. A row here
+# SURVIVED when it was tried, which is the correct answer -- the guard is a cost optimisation with
+# no behavioural signature, and a green row asserting otherwise would be a lie.
+
+mutation "restricted draw-set scan loses the boundary cells" gui project::tests::partial_rebuild_matches_the_whole_world_build <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "(chunk[axis] * TERRAIN_CHUNK_EDGE - 1).max(0)"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "(chunk[axis] * TERRAIN_CHUNK_EDGE).max(0)"))
+PY
+
+mutation "detail lattice stops coarsening and the budget bracket collapses" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_detail_lattice_makes_the_rule_coherent_without_changing_the_default <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = "            WORLD_SEED, plane, u // lattice * lattice, v // lattice * lattice, k"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "            WORLD_SEED, plane, u, v, k"))
+PY
+
+mutation "snow stops being painted and the fine surface loses its caps" gui project::tests::a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "            let top = if has_snow_cap(mirror, position) {"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "            let top = if false {"))
+PY
+
+mutation "snow paint leaks onto the sides of capped rock" gui project::tests::a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "        let owner = FaceOwner::new(mirror, position);\n        let own = column_heights(mirror, position, subdiv, level);"
+assert s.count(old) == 1
+p.write_text(s.replace(old, """        let owner = FaceOwner {
+            chunk: chunk_of(position),
+            slot: if has_snow_cap(mirror, position) { TerrainSlot::SnowCap as usize } else { terrain_slot_at(mirror, position) as usize },
+            rim: rim_level(position, mirror.dims()),
+        };
+        let own = column_heights(mirror, position, subdiv, level);"""))
+PY

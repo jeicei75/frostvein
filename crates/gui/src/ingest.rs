@@ -58,9 +58,10 @@ use crate::{
     pick::{PickedTile, update_pick},
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
-        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery, TerrainTile,
-        WorldProjected, blend_entities, flicker_lights, has_terrain_above, reconcile,
-        setup_projection_assets, sync_drag_preview, sync_hover_highlight,
+        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery,
+        TerrainSubdivision, TerrainTile, WorldProjected, blend_entities, flicker_lights,
+        has_terrain_above, reconcile, setup_projection_assets, sync_drag_preview,
+        sync_hover_highlight,
     },
     slice::SliceLevel,
 };
@@ -198,6 +199,9 @@ fn configure_client_app(
         .insert_resource(ClearColor(night_lighting().sky));
     if args.headless {
         app.insert_resource(HeadlessRequested);
+    }
+    if let Some(subdiv) = args.subdiv {
+        app.insert_resource(TerrainSubdivision(subdiv));
     }
     insert_capture_resources(app, &args);
     client_systems(app);
@@ -362,6 +366,7 @@ struct Args {
     at_tick: Option<u64>,
     drag: Option<ScriptedDragSpec>,
     headless: bool,
+    subdiv: Option<u32>,
 }
 
 /// Present only under `--headless`: the offscreen texture the camera draws into, and which the
@@ -440,6 +445,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut at_tick = None;
     let mut drag = None;
     let mut headless = false;
+    let mut subdiv = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -457,6 +463,27 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             expect_work = true;
         } else if arg == "--headless" {
             headless = true;
+        } else if arg == "--subdiv" {
+            let value = args
+                .next()
+                .context("--subdiv requires a positive integer")?;
+            let parsed: u32 = value
+                .to_string_lossy()
+                .parse()
+                .context("invalid --subdiv")?;
+            if parsed == 0 {
+                bail!("--subdiv must be positive");
+            }
+            // The parser rejected only 0, so `--subdiv 3000000000` passed validation and then
+            // panicked inside the mesher on `i32::try_from`. The ceiling is the render-side
+            // twin of the bench's face limit; see `project::MAX_SUBDIV`.
+            if parsed > crate::project::MAX_SUBDIV {
+                bail!(
+                    "--subdiv must be at most {}, got {parsed}",
+                    crate::project::MAX_SUBDIV
+                );
+            }
+            subdiv = Some(parsed);
         } else if arg == "--z" {
             let value = args.next().context("--z requires a level")?;
             slice_level = Some(
@@ -534,6 +561,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         at_tick,
         drag,
         headless,
+        subdiv,
     })
 }
 
@@ -975,11 +1003,18 @@ pub fn reconcile_projection(
     terrain: TerrainQuery,
     chips: DigChipQuery,
     assets: Option<Res<ProjectionAssets>>,
+    mut meshes: Option<ResMut<Assets<bevy::prelude::Mesh>>>,
+    subdiv: Option<Res<TerrainSubdivision>>,
 ) {
     let rebuild = std::mem::take(&mut work.snapshot);
     let changes = std::mem::take(&mut work.dirty_tiles)
         .into_iter()
         .collect::<Vec<_>>();
+    // A chunk mesh is a whole surface, not a set of mutable per-cell entities, so a terrain delta
+    // cannot be edited in place the way a cube entity can -- but it does not need the WORLD
+    // rebuilt either. `reconcile` rebuilds only the chunks the changed cells can reach. This line
+    // used to promote every delta to a full rebuild, which cost a whole mesh build per dug tile
+    // and, because a dwarf digs continuously, froze every other dwarf for the length of the job.
     reconcile(
         &mut commands,
         &mirror.0,
@@ -992,6 +1027,8 @@ pub fn reconcile_projection(
         &terrain,
         &chips,
         assets.as_deref(),
+        meshes.as_deref_mut(),
+        subdiv.as_deref(),
     );
 }
 
@@ -1086,7 +1123,7 @@ mod tests {
     };
     use crate::blend::TickClock;
     use crate::camera::CameraRig;
-    use crate::project::WorldProjected;
+    use crate::project::{SnowCap, TerrainChunk, TerrainSubdivision, TerrainTile, WorldProjected};
     use bevy::ecs::system::RunSystemOnce;
 
     #[test]
@@ -1339,6 +1376,287 @@ mod tests {
         assert!(
             spawned.iter().all(|text| !text.contains("N ?")),
             "the compass must resolve a real camera on the production path, not report unknown"
+        );
+    }
+
+    #[test]
+    fn subdiv_flag_reaches_the_rendered_terrain_and_one_keeps_the_shipped_scene() {
+        let (mut default, _, _) = configured_app(&[]);
+        let (mut one, _, _) = configured_app(&["--subdiv", "1"]);
+        let (mut two, _, _) = configured_app(&["--subdiv", "2"]);
+        default.update();
+        one.update();
+        two.update();
+
+        let terrain_tiles = |app: &mut App| {
+            let mut tiles = app
+                .world_mut()
+                .query::<(
+                    &TerrainTile,
+                    &bevy::prelude::Transform,
+                    &bevy::prelude::Mesh3d,
+                    &bevy::prelude::MeshMaterial3d<bevy::prelude::StandardMaterial>,
+                )>()
+                .iter(app.world())
+                .map(|(tile, transform, mesh, material)| {
+                    (tile.0, *transform, mesh.0.clone(), material.0.clone())
+                })
+                .collect::<Vec<_>>();
+            tiles.sort_by_key(|(tile, _, _, _)| *tile);
+            tiles
+        };
+        let snow_caps = |app: &mut App| {
+            let mut caps = app
+                .world_mut()
+                .query::<(
+                    &SnowCap,
+                    &bevy::prelude::Transform,
+                    &bevy::prelude::Mesh3d,
+                    &bevy::prelude::MeshMaterial3d<bevy::prelude::StandardMaterial>,
+                )>()
+                .iter(app.world())
+                .map(|(cap, transform, mesh, material)| {
+                    (cap.0, *transform, mesh.0.clone(), material.0.clone())
+                })
+                .collect::<Vec<_>>();
+            caps.sort_by_key(|(cap, _, _, _)| *cap);
+            caps
+        };
+        assert_eq!(
+            terrain_tiles(&mut one),
+            terrain_tiles(&mut default),
+            "--subdiv 1 must retain the hand-written per-cell scene byte-for-byte"
+        );
+        assert_eq!(
+            snow_caps(&mut one),
+            snow_caps(&mut default),
+            "--subdiv 1 must retain the snow-cap scene byte-for-byte"
+        );
+        assert!(
+            default
+                .world()
+                .get_resource::<TerrainSubdivision>()
+                .is_none(),
+            "no flag must not even install the opt-in terrain resource"
+        );
+        assert_eq!(
+            one.world().resource::<TerrainSubdivision>().0,
+            1,
+            "the parsed control must reach the projection resource"
+        );
+        assert_eq!(
+            two.world().resource::<TerrainSubdivision>().0,
+            2,
+            "the parsed fine setting must reach the projection resource"
+        );
+        assert!(
+            terrain_tiles(&mut two).is_empty(),
+            "--subdiv 2 must replace the drawn cube entities, not merely accept an inert flag"
+        );
+        assert!(
+            two.world_mut()
+                .query::<&TerrainChunk>()
+                .iter(two.world())
+                .count()
+                > 0,
+            "--subdiv 2 must produce chunk mesh render entities"
+        );
+    }
+
+    /// A 40x4x4 stepped slab, wide enough to span three 16-cell chunks on x.
+    fn wide_snapshot() -> Snapshot {
+        let mut tiles = Vec::new();
+        for z in 0..4 {
+            for _ in 0..4 {
+                for x in 0..40 {
+                    tiles.push(if z <= (x / 8) % 4 {
+                        Tile::Solid(protocol::Material::Stone)
+                    } else {
+                        Tile::Empty
+                    });
+                }
+            }
+        }
+        Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 40, y: 4, z: 4 },
+            tiles,
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        }
+    }
+
+    /// A snow cap must never outlive the tile it caps.
+    ///
+    /// Wolf, from the vehicle: "after digging those big caps stay floating over empty space". A
+    /// cap is `ClientLocal` presentation pinned to a cell top, so if a dig empties the cell and
+    /// the cap is not despawned it hangs in the air over the hole. The invariant is the same at
+    /// every subdivision: every `SnowCap` sits on a solid or ramp cell with nothing solid above.
+    #[test]
+    fn a_dug_tile_takes_its_snow_cap_with_it() {
+        for args in [vec!["--subdiv", "1"], vec!["--subdiv", "2"], vec![]] {
+            let (mut app, sender, _server) = configured_app_with_snapshot(&args, wide_snapshot());
+            app.update();
+            let dug = [8, 1, 1];
+            let caps = |app: &mut App| {
+                app.world_mut()
+                    .query::<&crate::project::SnowCap>()
+                    .iter(app.world())
+                    .map(|cap| cap.0)
+                    .collect::<std::collections::BTreeSet<_>>()
+            };
+            let fine = args.contains(&"2");
+            if fine {
+                // The fine path paints snow onto the top faces instead of spawning slabs, so
+                // there is nothing to leave floating. That IS the fix; assert it rather than
+                // skipping the case.
+                assert!(
+                    caps(&mut app).is_empty(),
+                    "{args:?}: the fine path must spawn no snow-cap entities at all"
+                );
+            } else {
+                assert!(
+                    caps(&mut app).contains(&dug),
+                    "{args:?}: the fixture must cap {dug:?} before the dig, or this proves nothing"
+                );
+            }
+            sender
+                .send(Ok(WireMessage::Delta(Box::new(protocol::Delta {
+                    msg_type: MessageType::Delta,
+                    tick: 1,
+                    tiles: vec![protocol::TileChange {
+                        pos: dug,
+                        tile: Tile::Empty,
+                    }],
+                    entities: Vec::new(),
+                    designations: Vec::new(),
+                    zones: Vec::new(),
+                    items: Vec::new(),
+                    speed: Speed::Normal,
+                }))))
+                .unwrap();
+            app.update();
+            app.update();
+
+            let after = caps(&mut app);
+            let mirror = &app.world().resource::<MirrorResource>().0;
+            let solid = |position: [i32; 3]| {
+                matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_)))
+            };
+            assert!(
+                !solid(dug),
+                "{args:?}: the delta must have emptied the tile"
+            );
+            let floating = after
+                .into_iter()
+                .filter(|cap| !solid(*cap))
+                .collect::<Vec<_>>();
+            assert!(
+                floating.is_empty(),
+                "{args:?}: {floating:?} still carry a snow cap over empty space"
+            );
+        }
+    }
+
+    /// A frame with no terrain change must leave the fine terrain entities alone.
+    ///
+    /// The first cut of the incremental path ran on every frame — "not a full rebuild" is the
+    /// common case, not the dig case — and scanned the whole world for the draw set each time:
+    /// ~130 ms per frame, 400 times in a two-minute run, far worse than the stall it was written
+    /// to remove. Caught by watching the live log, not by a test.
+    ///
+    /// **This test does not pin the guard that fixed it**, and the mutation table says so rather
+    /// than carrying a row that reads green. With the guard removed the branch still computes an
+    /// empty chunk set, despawns nothing and spawns nothing, so the ECS is identical and only the
+    /// wasted work differs — and a test cannot see wasted work. What this does pin is that a
+    /// quiet frame never *destroys* terrain, which is the failure mode that would be visible.
+    #[test]
+    fn quiet_frames_leave_the_fine_terrain_alone() {
+        let (mut two, _, _) = configured_app_with_snapshot(&["--subdiv", "2"], wide_snapshot());
+        two.update();
+        let before = two
+            .world_mut()
+            .query::<(bevy::prelude::Entity, &TerrainChunk)>()
+            .iter(two.world())
+            .map(|(entity, chunk)| (chunk.0, entity))
+            .collect::<Vec<_>>();
+        assert!(!before.is_empty());
+        for _ in 0..3 {
+            two.update();
+        }
+        let after = two
+            .world_mut()
+            .query::<(bevy::prelude::Entity, &TerrainChunk)>()
+            .iter(two.world())
+            .map(|(entity, chunk)| (chunk.0, entity))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            before, after,
+            "three quiet frames respawned terrain; the incremental path is running when nothing \
+             changed"
+        );
+    }
+
+    /// One changed tile must rebuild only the chunks it can reach — not the world.
+    ///
+    /// It used to rebuild the world: `reconcile_projection` promoted any terrain delta to a full
+    /// rebuild at `--subdiv N > 1`. That is one whole mesh build per dug tile, and because a dwarf
+    /// digs continuously it froze every other dwarf for the length of the job. Wolf reported it
+    /// twice from the vehicle, the second time as "when one dwarf digs all other movement is in
+    /// halt". `project::tests::partial_rebuild_matches_the_whole_world_build` carries the safety
+    /// half — that a partial rebuild is indistinguishable from a whole one.
+    #[test]
+    fn one_dirty_tile_rebuilds_only_the_chunks_it_can_reach() {
+        let chunk_entities = |app: &mut App| {
+            app.world_mut()
+                .query::<(bevy::prelude::Entity, &TerrainChunk)>()
+                .iter(app.world())
+                .map(|(entity, chunk)| (chunk.0, entity))
+                .collect::<Vec<_>>()
+        };
+        let (mut two, _, _) = configured_app_with_snapshot(&["--subdiv", "2"], wide_snapshot());
+        two.update();
+        let before = chunk_entities(&mut two);
+        let chunks_before = before
+            .iter()
+            .map(|(c, _)| *c)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            chunks_before.len() >= 3,
+            "the fixture must span several chunks or this test cannot fail; got {chunks_before:?}"
+        );
+
+        two.world_mut()
+            .resource_mut::<ProjectionWork>()
+            .dirty_tiles
+            .insert([2, 2, 1]);
+        two.update();
+        let after = chunk_entities(&mut two);
+
+        let survived = before
+            .iter()
+            .filter(|entry| after.contains(entry))
+            .map(|(chunk, _)| *chunk)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            !survived.is_empty(),
+            "every chunk was rebuilt for one tile in chunk [0,0,0] — the whole-world rebuild is back"
+        );
+        assert!(
+            !survived.contains(&[0, 0, 0]),
+            "the chunk holding the changed tile must be rebuilt, not left stale"
+        );
+        assert_eq!(
+            after
+                .iter()
+                .map(|(c, _)| *c)
+                .collect::<std::collections::BTreeSet<_>>(),
+            chunks_before,
+            "the rebuild must leave the same set of chunks present"
         );
     }
 

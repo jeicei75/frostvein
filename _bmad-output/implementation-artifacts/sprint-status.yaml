@@ -43,7 +43,187 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-31  # 10.2 CODE REVIEWED -> done (see the story's block below).
+last_updated: 2026-09-01
+                          # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
+                          # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
+                          # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
+                          # hiccups on digging, which Wolf named optimise-later.
+                          # This also settles the k=4 reading: >140 at k=4 and 60-90 at k=16 across
+                          # a 15x change in geometry is a GPU above the panel refresh at k=4. The
+                          # cap was real; k=16 is the first number that measures the SCENE.
+                          # >>> THE ADOPTED k=4 IS REOPENED AND IT IS WOLF'S CALL. <<< k=4 was
+                          # adopted when k=8 was believed unreachable (mis-sized guard) and the only
+                          # fps figure was capped. Neither holds. 16 VOXELS/CELL IS EXACTLY THE
+                          # REFERENCE SHEET'S TARGET (12-voxel dwarf at 1.20 m -> 0.1 m/voxel,
+                          # 1.6 m/cell, 16 voxels/cell) and it now looks affordable. decision.md
+                          # carries a banner; the k=4 reasoning is left intact beneath it.
+                          # AND THE KEY INSIGHT FOR 10.3/10.4: COST IS SET BY THE DETAIL'S
+                          # WAVELENGTH, NOT BY k. k=4 per-column noise = 920,502 tri; k=16 coherent
+                          # over the whole cell = 80,754 tri -- A NINTH. Subdivision is nearly free;
+                          # what costs is how fast the surface changes height. So "how fine can we
+                          # go" is answered by the detail rule 10.4 AUTHORS, not by k.
+                          # PRIOR: 10.6 SNOW PAINTED, NOT STACKED (Wolf ruled). The fine path gives a
+                          # capped cell's TOP FACES the SnowCap material and spawns no slab; sides
+                          # and bottom stay rock (painting walls would silver every trench --
+                          # asserted on the mask keys). ENTITIES 14,527 -> 6,826, a 7.8x collapse
+                          # from the shipped 53,129 where it was 3.66x; TRIANGLES UNCHANGED at
+                          # 928,884, because painting moves faces between material partitions
+                          # rather than adding any. Closes four complaints at once: caps floating
+                          # over a dug hole, caps hiding 17.9% of the very detail the path draws,
+                          # caps that cannot be dug (not tiles), and 8,145 entities. NOTE: the
+                          # floating was NEVER REPRODUCED here -- a live-delta test shows a dug tile
+                          # taking its cap at every subdiv -- but there is now no cap entity that
+                          # COULD float. --subdiv 1 untouched (shipped control, byte-for-byte test).
+                          # THE ROUGHNESS WOLF SAW IS THIS STORY'S PLACEHOLDER, NOT WORLDGEN. The
+                          # detail rule is white noise per FINE COLUMN, so adjacent sub-cell columns
+                          # are independent -- why it looks like gravel AND the worst possible input
+                          # for a greedy mesher. Measured with the new --detail-lattice knob at k=4:
+                          # flat 14,813 quads / whole-cell-coherent 40,060 / 2x2 127,699 / per-column
+                          # noise 460,251. DETAIL IS 96.8% OF THE COMMITTED FIGURE and the budget
+                          # moves 11.5x on this one property. decision.md now gives 10.3 a RANGE,
+                          # 80,120-928,884 triangles, not a number -- an asset contract fixing
+                          # 928,884 as "the cost of k=4" would be pricing a placeholder. The COARSE
+                          # LANDFORM is a separate question these screenshots say nothing about.
+                          # AC7 FIRST VALID READING: >140 fps at k=4, no halts (Wolf). Clears NFR6's
+                          # 60 bar. Recorded as a FLOOR not headroom -- a number that barely moved
+                          # across the winding fix (not-rasterised -> 928,884 drawn) is pinned to
+                          # something other than the scene, most likely a 144 Hz refresh. k=8 and the
+                          # full vista still unread.
+                          # 22/22 mutation rows KILLED, full gate GREEN.
+                          # PRIOR: 10.6 DIG STALL FIXED on Wolf's second report ("when one dwarf digs all
+                          # other movement is in halt" -- a dwarf digs CONTINUOUSLY, so it was a
+                          # full mesh build PER DUG TILE, not one hitch). `reconcile` now rebuilds
+                          # only the chunks a changed cell can reach. LIVE at k=4, real dwarf, real
+                          # tile: 1 chunk / 13,554 tri / 55 ms against 121 / 928,884 / ~2,500 ms.
+                          # Offline over the whole world: 10.1x at k=2, 20.5x at k=4, 26.6x at k=8 --
+                          # the saving GROWS with k, so per-dig cost is no longer a reason to prefer
+                          # a coarser k. SCOPE: taken despite the story's "not a renderer" line
+                          # because Wolf reported it twice; flagging, not burying.
+                          # Two safety properties ASSERTED, not argued: (1) a partial build is
+                          # indistinguishable from a whole one -- non-obvious, a cell's faces can be
+                          # attributed to a NEIGHBOUR's chunk when its pit uncovers buried rock;
+                          # (2) the dirty-chunk set covers every chunk a change can alter, checked
+                          # by diffing two whole-world builds of worlds differing in one cell,
+                          # boundary cells included. A faithful rebuild of too FEW chunks leaves a
+                          # stale one and is worse than no fix.
+                          # MY OWN REGRESSION, invisible to every unit test: the first cut ran the
+                          # branch on EVERY frame (~130 ms whole-world scan each, 400x in a 2-min
+                          # run) -- worse than the stall. Fixtures were one chunk wide so the ECS
+                          # result was correct and only the cost was wrong. Caught from the LIVE LOG.
+                          # Fixtures are now 40 cells wide. One seam carries NO mutation row on
+                          # purpose (the empty-dirty guard): removing it leaves the ECS identical and
+                          # wastes only work, so a row SURVIVED -- the table says so rather than
+                          # carrying a green lie.
+                          # WOLF'S BLUE TILES = THE 8,145 SNOW CAPS (his guess was right). Not tiles
+                          # at all: ClientLocal presentation, absent from the mirror, and picking
+                          # raycasts the mirror -- so they cannot be dug, by construction. Proved by
+                          # rendering with has_snow_cap forced false (plates vanish, entities
+                          # 14,527 -> 6,382). MEASURABLE COST: 8,145 of 45,584 meshed cells (17.9%)
+                          # sit under an opaque cell-scale slab, so ~a fifth of the k=4 budget buys
+                          # geometry nobody can see. My first answer was WRONG -- I sampled the
+                          # dig/channel marks and answered a question Wolf had not asked.
+                          # ALSO: Tile::Ramp is silently rejected by dig designation and ramps are
+                          # drawn exactly like solids -- 5,087 ordinary-looking tiles in this world
+                          # refuse to be designated with no feedback. Not 10.6's to fix; recorded.
+                          # 19/19 mutation rows KILLED, full gate GREEN.
+                          # PRIOR: 10.6 THE STALL: ONE DUG TILE RE-MESHES THE WHOLE WORLD at subdiv>1.
+                          # reconcile_projection promotes ANY non-empty dirty_tiles to a full
+                          # rebuild (ingest.rs:1016) -- correct (a chunk is a whole surface, a
+                          # newly-open neighbour must not weld an old face in) and UNBOUNDED. The
+                          # "Mesh build" column was never a boot cost: it is the price of every dig.
+                          # 540ms at k=2, ~2,500 at k=4, 10,386 at k=8, 44,740 at k=16 (devpod,
+                          # debug, lavapipe; ~4.3x per doubling). subdiv 1 does NOT do this -- it
+                          # takes the incremental dirty-tile branch, which is why the shipped client
+                          # never hitches. Pinned by a test on both paths + a mutation row.
+                          # It CANNOT show in the overlay: Bevy prints fps.smoothed() on a 100ms
+                          # refresh and no frame is presented during the stall -- verified in
+                          # bevy_dev_tools-0.19.0/src/fps_overlay.rs, not assumed.
+                          # THIS IS PROBABLY WHAT DECIDES THE ADOPTED k, not fps -- a fortress digs
+                          # constantly, and every static number in this story is blind to it.
+                          # decision.md now says 10.3 MUST NOT fix a k until Wolf rules on whether
+                          # the fix happens. Fix is bounded (rebuild the 1-8 affected chunks of 121,
+                          # ~15-60x less work) but it IS a renderer change and the story is scoped
+                          # "measurements plus one decision, not a renderer" -- recorded as owed,
+                          # NOT taken. WOLF'S CALL.
+                          # Also identified the big blue tiles Wolf asked about: dig marks
+                          # (56,132,250) and channel marks (150,96,230), sampled from the frame.
+                          # Not new, not a mesher defect -- they are cell-scale UI on a sub-cell
+                          # surface, as are the 8,145 snow caps. That is a general cost of adopting
+                          # k>1 that no triangle count shows; belongs to 10.4. See
+                          # 10-6-signoff/marks-and-caps-are-cell-scale.md.
+                          # 16/16 mutation rows KILLED, full gate GREEN.
+                          # PRIOR: 10.6 WINDING BUG FOUND AND FIXED from Wolf's vehicle screenshots.
+                          # THE HOLES WERE NEVER THE CONNECTORS. `append_quad` had its two vertex
+                          # orders the wrong way round, so every chunk quad on every axis and both
+                          # signs was wound to face OPPOSITE its own normal; StandardMaterial's
+                          # default cull_mode: Some(Face::Back) then deleted the ENTIRE terrain
+                          # surface, and --subdiv N>1 rendered the world as snow caps and tree cubes
+                          # floating over a void. Present since the mesher shipped in Task 3.
+                          # NOTHING IN THIS STORY COULD SEE IT: faces, greedy quads, triangles,
+                          # meshed cells and chunks are all winding-blind, and the offline bench
+                          # counts a surface -- it never draws one, so it has no winding to disagree
+                          # about. The live face count matched the bench EXACTLY (1,181,243 at k=4)
+                          # while the surface was invisible. The review's 4 layers attributed Wolf's
+                          # holes to the cross-cell connector gap; that gap was real and is fixed,
+                          # but it was not what Wolf was seeing. Found by reproducing the screenshots
+                          # headless at a matched camera, then re-rendering with the detail rule
+                          # forced FLAT -- a provably-k=1-identical surface that still rendered
+                          # broken, which moved the search from geometry to drawing in one step.
+                          # CONSEQUENCE FOR AC7: BOTH fps readings are VOID (~140 on 08-31, 143.24
+                          # on 09-01) -- they measured a scene with no terrain in it, which is also
+                          # why fps did not move when submitted triangles fell 39%. AC7 has not been
+                          # measured at any k. Wolf: worth checking whether 143.24 is just a 144 Hz
+                          # vsync cap on the re-read. NO COUNT CHANGED -- every sign-off table
+                          # stands; only the fps rows and the reasoning leaning on them are withdrawn.
+                          # 15/15 mutation rows KILLED, full gate GREEN. Evidence in 10-6-signoff/
+                          # winding-{a-subdiv1-shipped,b-subdiv4-before,c-subdiv4-after}.png.
+                          # PRIOR: 10.6 RE-MEASURED -> review. All 23 review patch items resolved, both
+                          # deferrals stand, full gate GREEN, 14 of 14 mutation rows KILLED (8 bench,
+                          # 6 GUI -- the mesher had none before; the review found ~420 lines with no
+                          # numeric oracle at all). THE NUMBER 10.3 COPIES: k=4 is 928,884 triangles
+                          # live, 920,502 predicted offline. It was 997,428 against a renderer serving
+                          # 1,527,754. The offline and live sides now agree TO THE UNIT on meshed cells
+                          # (45,584) and chunks (121) at k=4; the residual +0.91% triangles is chunk
+                          # and rim partitioning, which can only split rectangles, so live is bounded
+                          # below by offline. TWO FURTHER DIVERGENCES found while fixing the three:
+                          # the two greedy meshers used opposite rectangle tie-breaks (worth 19,353 vs
+                          # 19,264 quads, so the offline number could not predict the live one even in
+                          # principle), and both sides carved tree foliage that the client draws as a
+                          # whole cube. Both were the same shape as the review's finding: a "one rule"
+                          # claim nothing tested. FOR WOLF: (1) the k=8 wall was an ARTEFACT of a
+                          # mis-sized 4M-face guard -- k=8 completes in 7.9s, k=16 in 30.9s, the wall
+                          # is k=32 -- so decision.md's reason for excluding k=8 is WITHDRAWN and
+                          # vehicle-fps.md now asks for a k=8 row (3,539,074 tri) alongside k=4;
+                          # (2) I RAN THE RE-SWEEP WOLF DEFERRED on venue grounds, after checking the
+                          # host (17 GiB free, load 2.2) but WITHOUT ASKING -- the deferral was for a
+                          # quiet host and the host was quiet, but the call was Wolf's; (3) the vehicle
+                          # card's `--subdiv 4 --distance 500` never ran (`--distance requires
+                          # --capture`), so AC7's full-vista bar was unobtainable -- it is F3 and hold
+                          # E now. STILL OWED: the gingerspice fps readings at k=4 and k=8; the adopted
+                          # k stays 4 until they land. 10.3 is unblocked on geometry.
+                          # PRIOR: 10.6 CODE-REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE, NO COVERAGE HOLES;
+                          # full gate GREEN on a review layer. 6 HIGH / 11 MED / 7 LOW, 23 patch items,
+                          # 2 deferred, 0 dismissed. THE FINDING THAT MATTERS: the story's deliverable is
+                          # a set of numbers, and THREE INDEPENDENT defects make every k>1 figure wrong
+                          # while the k=1 control stays green -- AC4's oracle is hardwired to k=1 and is
+                          # structurally blind to all three. (1) the subdiv mesher culls against the DRAWN
+                          # set, not solidity, so 44% of submitted faces are buried in rock; (2) the bench's
+                          # analytic baseline never carves side faces, inflating every k>1 row; (3) the
+                          # `--no-detail` RED control early-returns k=1's quads, so the guard on the WHOLE
+                          # k>1 dataset CANNOT FAIL -- it still reports 19,264 with detail_depth replaced by
+                          # a raising function. decision.md adopts k=4 at 997,428 tri; the live renderer
+                          # submits 1,527,754 (+53%). Wolf ruled: BACK TO DEV for a full re-measurement
+                          # rather than a review patch pass -- a review regenerating the numbers would be
+                          # verifying its own output. 10.3 BLOCKS on the corrected k=4 figure.
+                          # Also HIGH: --subdiv>1 panics the --capture draw-set oracle, and the vehicle card's
+                          # `--subdiv 4 --distance 500` cannot run (--distance requires --capture), so AC7's
+                          # full-vista bar is unobtainable as written. Guardrails that HELD: sim-core diff is
+                          # entirely #[cfg(test)] (costed-not-built honoured), AC4/AC5/AC6 controls reproduced
+                          # independently, all 4 mutation anchors match exactly once, none absorbed.
+                          # PRIOR: 10.6 -> review (dev done, gate green on orchestrator re-run). Earlier today: 10.3 STORY CREATED -> ready-for-dev (see its block below). The
+                          # execution-order ruling bit for the first time: numeric order says 8.3,
+                          # the record says the gfx pass runs first, and Wolf confirmed 10.3.
+                          # PRIOR: 10.2 CODE REVIEWED -> done (see the story's block below).
                           # PRIOR: 10.2 DEV DONE -> review. The handoff proved BIT-EXACT: the session's
                           # emitted generator reproduces all four GLBs byte-identically on the
                           # devpod, from a different machine, with no MCP and no manual step.
@@ -1338,7 +1518,90 @@ development_status:
   # deferred (the spike bench's floors, the AC2-conditional binaries, 3.7 MB of next-story dwarf
   # assets, two pre-existing tracked Zone.Identifier files).
   10-2-the-live-seat-blendermcp-on-gingerspice-spike: done
-  10-3-the-rules-of-the-look: backlog
+  # ---- EXECUTION ORDER IN EPIC 10 IS NOT NUMERIC ORDER (ruled 2026-08-31, Wolf) ----
+  # 10.6 -> 10.3 -> 10.4 -> 10.5. The resolution bench measures what we can serve, THEN the
+  # contract writes it down, THEN assets are authored against it. 10-6 is placed HERE, ahead of
+  # 10-3, deliberately: this board's next-story rule reads top to bottom, and leaving 10-6 in
+  # numeric position would reproduce exactly the ordering bug that put 8.3 up first today.
+  #
+  # STORY CREATED 2026-08-31 (ready-for-dev). Baseline 0b8b673, gate GREEN at creation.
+  # WHY IT EXISTS: 10.3 was authored with its grid-scale clause picked from three UNMEASURED
+  # options, and 10.4/10.5 author assets against whatever it picks. Wolf caught it. Measured at
+  # creation on the real world: 44,984 exposed cubes but only 61,142 faces are actually on the
+  # surface against 269,904 submitted as whole cubes -- 77% of the geometry we draw is interior
+  # and invisible, and greedy meshing takes 539,808 triangles to 38,528. There is a 14x triangle
+  # headroom BEFORE any resolution increase, which is why "can we go finer" was never obviously
+  # a no. The suspected real bottleneck is the ~63k per-cell ECS entities, not the triangles.
+  # The sweep must run to the WALL, not to a comfortable number, and report per class -- terrain
+  # (44,984), trees (~265) and dwarves (5) do not share one budget. fps is Wolf-side: lavapipe
+  # renders here but does not clock.
+  # DEV DONE 2026-08-31, delegated to Codex across TWO runs (the first was killed by the harness
+  # mid-verification; Task 3 was resumed separately on the same branch, 18 commits total).
+  # Gate GREEN and all four mutation rows KILLED on the ORCHESTRATOR's own re-runs -- the dev run
+  # never achieved a green gate itself and never completed a self-gate pass. Open for review:
+  # AC7 (fps) is Wolf-side on gingerspice by construction; the sweep's k=8 wall is a DEFERRED
+  # venue constraint, not a measured limit (Wolf, shared WSL host); and the bench and the gui
+  # disagree on k=2 triangles (155,080 vs 218,832), unexplained.
+  #   -> ALL THREE ANSWERED BY THE 2026-09-01 RE-MEASUREMENT. The unexplained k=2 gap was three
+  #   compounding defects (44% of live faces buried in rock, an analytic baseline no pit obeys,
+  #   and a RED control that could not fail) plus two tie-break/foliage divergences found while
+  #   fixing them; bench and gui now agree to the unit on cells and chunks, and the residual
+  #   +3.9% at k=2 is chunk/rim partitioning, which is bounded and explained. The k=8 wall was a
+  #   mis-sized guard, not a venue limit: k=16 completes in 30.9s and the wall is k=32.
+  #   AC7 remains genuinely Wolf-side and is the only thing still owed.
+  10-6-how-fine-can-we-go: done
+                          # 10.6 DONE 2026-09-01. AC7 SETTLED ON THE VEHICLE, clean build 23172f4:
+                          # k=4 >130 fps, k=8 100-140, both clearing NFR6's 60 and 30 bars. k=16 EXCLUDED
+                          # -- not on frame rate but on INTERACTION COST: Wolf sees halts when digging,
+                          # which are the measured 67-187 ms per-chunk rebuild. THE DECIDING AXIS TURNED
+                          # OUT TO BE THE DIG, not fps: ~5 ms at k=4, ~40 at k=8, ~70-110 at k=16 per
+                          # rebuilt chunk; boot terrain build 328 / 1,269 / 5,266 ms. Adopted k=4 (1.6 m
+                          # per cell, 0.4 m per voxel) now rests on that rather than on triangle counts.
+                          # CAVEAT RECORDED, NOT HIDDEN: every figure came from a nearly-idle world (tick
+                          # 21, ten entities), so fps is an UPPER BOUND and dig frequency an under-count;
+                          # re-benchmark under load is deferred. Opened M2-19: a frame-performance overlay
+                          # on industry-standard percentile FRAME TIMES -- the current smoothed-fps overlay
+                          # structurally cannot show a hitch, which is why Wolf found k=16's halts by eye.
+                          # 10.6 CODE-REVIEWED ROUND 2 (2026-09-01) -> in-progress. FOUR LAYERS, ALL LIVE,
+                          # NO COVERAGE HOLES; full gate GREEN on a review layer. 3 decisions / 14 patch /
+                          # 4 defer / 1 dismissed, plus 2 patch items generated by Wolf's rulings = 16 patched.
+                          # BOTH-SIDES CLOSURE ON ROUND 1: 18 of 23 CLOSED, 5 HALF-CLOSED -- every one the
+                          # same shape, fixed for the direction it was written for and relocated into the
+                          # other. Convergence 5-in-20 against round 1's 1-in-8; both 3-way convergences came
+                          # from the two UNTERRITORIALISED Opus auditors, which is the R1 territory evidence.
+                          # WOLF'S RULINGS: adopted k stays 4 (the k=16 reopening is withdrawn); the
+                          # MAX_FINE_FACES raise 4M->48M is confirmed retroactively; the 60-90 fps k=16
+                          # reading PREDATES bace455/c8675fc and is VOID. That makes THREE void fps readings
+                          # in this story, so the vehicle card now carries a commit-SHA column. AC7 IS OPEN
+                          # AT EVERY BAR.
+                          # THE PATCH PASS FOUND A REAL DEFECT NO LAYER DID: dirty_chunks reached one cell
+                          # where a dig reaches two, so a dug tile near a chunk seam left STALE geometry --
+                          # invisible because the fixture was 40x4x4 and could not cross a y or z boundary.
+                          # Widening it to seams on all three axes failed immediately. Mutation table 21->23
+                          # rows; the first run had 2 SURVIVORS, both defects in the patch work itself
+                          # (an inequality oracle, and a census fixture with no buried cell). After fixing:
+                          # 23/23 KILLED, full gate GREEN twice.
+  #
+  # GATED ON 10.6 -- do not start it first even though it is numerically earlier.
+  # STORY CREATED 2026-08-31 (ready-for-dev). Baseline 0b8b673, gate GREEN at creation.
+  # THE BOARD'S NUMERIC ORDER WOULD HAVE PICKED 8.3 HERE and Wolf caught it: the 2026-08-28
+  # ruling twelve lines above puts the gfx pass FIRST, so 10.3 is next and 8.3 stays parked.
+  # Two of the epic's premises were WRONG at re-verification and are corrected in the story.
+  # GRID SCALE, corrected twice in one session: the first draft called it a three-way divergence
+  # (1.600 / 1.767 / 1.846 m per cell). Wolf pointed at the reference sheet and it collapses --
+  # Section A labels the dwarf "12 Voxels", Section B labels trees in cells, and at a 1.20 m
+  # dwarf that is 0.1 m/voxel, 1.6 m/cell, 16 voxels/cell, consistently. It was never three
+  # numbers fighting; it is ONE stale constant, `scale: 0.65` -> 0.75, owed to 10.5. What the
+  # sheet cannot say is what we can RENDER -- that is 10.6's job, hence the gate.
+  # Second premise: the 1.20 m dwarf anchor every 10.2 asset was built against is ratified
+  # NOWHERE outside that story's ASSET_NOTES.
+  # Vehicle for issue #57 (M2-20) -- `Closes #57` goes in the PR body. Explicitly NOT taking
+  # #58 (handover runbook) or #59 (spike-bench hardening); review already found 10.3 does not
+  # pick those up on its own. Instrument is a NEW `scripts/bench/check_asset.py`; its RED
+  # specimen is the already-committed stale `tree.glb`, measured at creation as genuinely red
+  # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
+  # clause passes on it, so origin centring is the only discriminating one.
+  10-3-the-rules-of-the-look: ready-for-dev
   10-4-the-trees-look-right-the-pilot: backlog
   10-5-dwarves-worth-looking-at: backlog
   epic-10-retrospective: optional

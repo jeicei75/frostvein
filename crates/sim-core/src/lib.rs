@@ -1601,7 +1601,10 @@ fn camp_emitters(camp: Pos) -> [(Pos, LightKind); 5] {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        time::Instant,
+    };
 
     use super::{Dims, Job, JobId, JobKind, JobState, Jobs, Material, Pos, Terrain, Tile, World};
 
@@ -2765,6 +2768,36 @@ mod tests {
 
         assert_eq!(super::astar(&terrain, from, &goals), Some(expected.clone()));
         assert_eq!(super::astar(&terrain, from, &goals), Some(expected));
+    }
+
+    /// Manual resolution instrument for story 10.6.  It uses the existing private A* directly,
+    /// without making pathfinding a public benchmark API or changing its behaviour.
+    #[test]
+    #[ignore = "manual resolution-bench measurement; run with --ignored --nocapture"]
+    fn resolution_bench_times_existing_astar_on_subdivided_flat_grids() {
+        for (k, edge, expected_found) in [(1, 128, true), (2, 256, false), (4, 512, false)] {
+            let terrain = flat_terrain(edge, edge);
+            let from = Pos { x: 0, y: 0, z: 1 };
+            let goal = Pos {
+                x: edge as i32 - 1,
+                y: edge as i32 - 1,
+                z: 1,
+            };
+            let started = Instant::now();
+            let path = super::astar(&terrain, from, &BTreeSet::from([goal]));
+            println!(
+                "resolution-astar sim_k={k} edge={edge} path_found={} elapsed_seconds={:.6}",
+                path.is_some(),
+                started.elapsed().as_secs_f64(),
+            );
+            // The simulated dwarf's existing aggregate node budget stops this diagonal query at
+            // k=2 and k=4; that is the cost finding, not a reason to weaken the benchmark grid.
+            assert_eq!(
+                path.is_some(),
+                expected_found,
+                "sim_k={k} node-budget result drifted"
+            );
+        }
     }
 
     #[test]
