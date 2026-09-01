@@ -4,7 +4,7 @@ baseline_commit: 0b8b6735f04b282e2d75b82e426346be49590082
 
 # Story 10.3: The Rules of the Look
 
-Status: ready-for-dev
+Status: in-progress
 
 **GATED ON STORY 10.6.** The grid-scale clause is the reason this story exists, and 10.6 measures
 what is actually servable. Do not start this story until 10.6's decision is recorded. Ruled by
@@ -63,14 +63,14 @@ against source; **two of them are wrong as written in `epics.md` and are correct
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Settle the grid scale** (AC: 3)
-  - [ ] **Read story 10.6's recorded decision first** — it runs before this one and measures what
+- [x] **Task 1 — Settle the grid scale** (AC: 3)
+  - [x] **Read story 10.6's recorded decision first** — it runs before this one and measures what
         is servable. If 10.6 has not landed, stop: this task cannot be done from the sheet alone.
-  - [ ] Confirm the sheet's derivation in Dev Notes against the cited `file:line`, then write down
+  - [x] Confirm the sheet's derivation in Dev Notes against the cited `file:line`, then write down
         metres-per-cell, project voxel size, and the per-asset integer-multiple rule.
-  - [ ] Record the per-class resolutions 10.6 reports (terrain / trees / dwarves) rather than
+  - [x] Record the per-class resolutions 10.6 reports (terrain / trees / dwarves) rather than
         collapsing them to one project number.
-  - [ ] Record `appearance.rs`'s `scale: 0.65 → 0.75` in the contract as **owed by 10.5**, with
+  - [x] Record `appearance.rs`'s `scale: 0.65 → 0.75` in the contract as **owed by 10.5**, with
         the arithmetic. **Do not make the change here.**
 
 - [ ] **Task 2 — Write the procedural-content contract** (AC: 2)

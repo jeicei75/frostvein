@@ -173,3 +173,32 @@ Slicing is a client-local view filter over the existing full-depth exposure rule
 level, exposed terrain remains visible, while solid terrain at the selected level supplies the cut
 face. The cut face uses the normal terrain material—no hatching, shading variant, or simulation/wire
 state is introduced. The visible z-level is always shown as surface or underground in the client UI.
+
+## Resolution contract
+
+The simulation cell is **1.6 m**. The project/authored voxel is **0.1 m**, therefore there are
+**16 project voxels per cell**. A declared asset may use an integer multiple of the project voxel:
+for example the 10.2 pines use 0.2 m (= 2 project voxels) while retaining metre dimensions on the
+same grid. This resolves the three apparently divergent values: the reference sheet's dwarf is
+12 voxels = 1.20 m = 0.75 cells; its trees are measured in 1.6 m cells; and `gui`'s current
+`scale: 0.65` is simply stale. Story 10.5 owes the one-line correction to `scale: 0.75`, because
+1.20 m / 1.6 m per cell = 0.75. It is not a change made by this contract.
+
+Terrain has a separate served resolution and budget from authored assets. The renderer uses
+**0.4 m terrain visual voxels**: visual subdivision **`k = 4`** of one 1.6 m simulation cell,
+while the simulation remains `k = 1`. Put the adopted `k` in one constant so a future evidence-led
+revision changes one constant, not a new grid convention. The terrain budget is **80,120–928,884
+chunk-mesh triangles at k=4**. The noisy measurement stand-in reaches the 928,884 ceiling; coherent
+detail reaches 80,120, so the 11.5× bracket is not a look budget. Detail contributes 96.8% of that
+ceiling and story 10.4's authored terrain decides where a real look lands. The ceiling excludes
+about 54k triangles from the 4,501 tree-foliage cube entities, because it counts chunk meshes only.
+
+This split is deliberate: terrain appears in tens of thousands of cells, while tree and five-dwarf
+assets have instance counts roughly four orders of magnitude lower. Terrain is served at 0.4 m;
+trees remain authored at their declared 0.2 m (a 2× project-voxel multiple); dwarves target 0.1 m
+(12 voxels = 1.20 m = 0.75 cells). The reference sheet's 16 voxels/cell remains the authored-asset
+target, not a request to render terrain at that density. k=8 is frame-rate servable (100–140 fps)
+but is not adopted because every dig hitches 38–78 ms versus k=4's 5–13 ms. k=16 is geometry-only,
+without a valid fps reading. **Mechanically-checkable:**
+`scripts/tests/test_resolution_bench.py:ResolutionDetailRuleTests` pins the k>1 detail rule;
+the choice of `k=4`, the bracket, and the per-class budgets are recorded measured decisions.
