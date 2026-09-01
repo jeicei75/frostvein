@@ -43,7 +43,32 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-01  # 10.6 RE-MEASURED -> review. All 23 review patch items resolved, both
+last_updated: 2026-09-01  # 10.6 WINDING BUG FOUND AND FIXED from Wolf's vehicle screenshots.
+                          # THE HOLES WERE NEVER THE CONNECTORS. `append_quad` had its two vertex
+                          # orders the wrong way round, so every chunk quad on every axis and both
+                          # signs was wound to face OPPOSITE its own normal; StandardMaterial's
+                          # default cull_mode: Some(Face::Back) then deleted the ENTIRE terrain
+                          # surface, and --subdiv N>1 rendered the world as snow caps and tree cubes
+                          # floating over a void. Present since the mesher shipped in Task 3.
+                          # NOTHING IN THIS STORY COULD SEE IT: faces, greedy quads, triangles,
+                          # meshed cells and chunks are all winding-blind, and the offline bench
+                          # counts a surface -- it never draws one, so it has no winding to disagree
+                          # about. The live face count matched the bench EXACTLY (1,181,243 at k=4)
+                          # while the surface was invisible. The review's 4 layers attributed Wolf's
+                          # holes to the cross-cell connector gap; that gap was real and is fixed,
+                          # but it was not what Wolf was seeing. Found by reproducing the screenshots
+                          # headless at a matched camera, then re-rendering with the detail rule
+                          # forced FLAT -- a provably-k=1-identical surface that still rendered
+                          # broken, which moved the search from geometry to drawing in one step.
+                          # CONSEQUENCE FOR AC7: BOTH fps readings are VOID (~140 on 08-31, 143.24
+                          # on 09-01) -- they measured a scene with no terrain in it, which is also
+                          # why fps did not move when submitted triangles fell 39%. AC7 has not been
+                          # measured at any k. Wolf: worth checking whether 143.24 is just a 144 Hz
+                          # vsync cap on the re-read. NO COUNT CHANGED -- every sign-off table
+                          # stands; only the fps rows and the reasoning leaning on them are withdrawn.
+                          # 15/15 mutation rows KILLED, full gate GREEN. Evidence in 10-6-signoff/
+                          # winding-{a-subdiv1-shipped,b-subdiv4-before,c-subdiv4-after}.png.
+                          # PRIOR: 10.6 RE-MEASURED -> review. All 23 review patch items resolved, both
                           # deferrals stand, full gate GREEN, 14 of 14 mutation rows KILLED (8 bench,
                           # 6 GUI -- the mesher had none before; the review found ~420 lines with no
                           # numeric oracle at all). THE NUMBER 10.3 COPIES: k=4 is 928,884 triangles

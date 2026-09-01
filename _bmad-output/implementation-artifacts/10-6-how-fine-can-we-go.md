@@ -275,6 +275,7 @@ interactive: `E` out, `Q` in, clamped 4.0-500.0. The k values wanted are **4 and
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Control geometry measured on the real world; reference-sheet grid derived. |
 | 2026-08-31 | Added and verified the offline resolution instrument, Axis A/B signoff tables, vehicle command card, and mutation proof. Task 3 remains deliberately unstarted at the named split line. |
 | 2026-08-31 | Added the opt-in GUI subdivision path, headless control/wiring proof, live lavapipe geometry measurements, and the Task 3 mutation proof. |
+| 2026-09-01 | **Wolf's vehicle screenshots found the real cause of the holes: every chunk quad was wound against its own normal, so back-face culling deleted the whole terrain surface.** One-line fix, a winding test, and a mutation row. No count changes — faces, quads, triangles, cells and chunks are all winding-blind, which is why four review layers and every oracle in this story missed it. Both existing fps readings are void: they measured a scene with no terrain in it. |
 | 2026-09-01 | **Re-measured end to end after Wolf's return-to-dev ruling.** Both meshers rebuilt on one column heightfield and culled by solidity; every k>1 figure regenerated; all 23 patch items resolved; 14 mutation rows all KILLED; full gate green. Adopted k=4 is now **928,884 triangles** (was 997,428 against a renderer serving 1,527,754). The sweep reaches k=16 and walls at k=32. |
 | 2026-08-31 | Code-reviewed, 4 live layers, no coverage holes: 6 HIGH, 11 MED, 7 LOW. Gate green, AC4/AC5/AC6 controls reproduced, `sim-core` guardrail holds. Three independent defects make every k>1 figure wrong while the k=1 control stays green. Returned to in-progress for re-measurement; 23 patch items and 2 deferrals recorded. |
 
@@ -333,6 +334,11 @@ $ [greedy merge deliberately changed to accept each face]
 ```
 
 ```
+$ ./target/debug/gui --headless --subdiv 4 ...   # with detail_depth forced to 0, the decisive test
+subdiv 4: projected 44984 terrain cubes at z 31 entities=14113 chunks=121 faces=792032 triangles=33518
+# a provably-flat fine surface, identical to k=1's, STILL rendered as floating plates over a void
+# -- so the fault was never in what the mesher contained.
+
 $ scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh
 greedy merge removal fails prism geometry                    KILLED
 detail rule removal fails subdivided geometry                KILLED
@@ -394,6 +400,11 @@ frostvein gate
   mutation tables still apply ok
 GATE GREEN
 
+$ ./target/debug/gui --headless --subdiv 4 ...   # with detail_depth forced to 0, the decisive test
+subdiv 4: projected 44984 terrain cubes at z 31 entities=14113 chunks=121 faces=792032 triangles=33518
+# a provably-flat fine surface, identical to k=1's, STILL rendered as floating plates over a void
+# -- so the fault was never in what the mesher contained.
+
 $ scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh
 greedy merge removal fails prism geometry                    KILLED
 detail rule removal fails subdivided geometry                KILLED
@@ -409,11 +420,57 @@ cross-cell connectors are dropped and the fine surface cracks KILLED
 greedy tie-break drifts away from the bench's row order      KILLED
 the client detail rule drifts off the bench's pinned vector  KILLED
 chunk cells go unrecorded and the capture oracle blinds again KILLED
+quad winding inverts and back-face culling deletes the terrain KILLED
 
 All mutations killed.
 ```
 
 ### Completion Notes List
+
+- **THE HOLES WERE A WINDING BUG, FOUND FROM WOLF'S SCREENSHOTS, 2026-09-01.** `append_quad` had
+  its two vertex orders the wrong way round, so every quad on every axis and both signs was wound
+  to face OPPOSITE its own normal attribute. `StandardMaterial` defaults to
+  `cull_mode: Some(Face::Back)`, so the entire terrain surface was culled and `--subdiv N > 1`
+  rendered the world as snow caps, tree cubes and trunks floating over a void. Present since the
+  chunk mesher shipped in Task 3.
+
+  **Why nothing in this story caught it, including the re-measurement I had just declared done.**
+  Every oracle here counts a surface: faces, greedy quads, triangles, meshed cells, chunks. All
+  five are winding-blind. The offline bench cannot see it even in principle — it counts a surface,
+  it never draws one, so it has no winding to disagree about. The live client's face count matched
+  the bench's *exactly* (1,181,243 at k=4) while the surface was invisible. This is
+  [[verification-defect-relocates]] again: I closed the hole in the mesher's geometry and the same
+  defect was sitting one level further out, in how that geometry is handed to the renderer.
+
+  **The review's four layers attributed the holes Wolf reported to the cross-cell connector gap.**
+  That gap was real and is fixed, but it was not what Wolf was seeing. Two Opus layers derived a
+  connector defect from the code and reached for the observation that fit; without a window,
+  neither could tell that defect from this one.
+
+  **How it was actually found.** Wolf's two screenshots, then reproducing them headless on the
+  devpod at a matched camera (`--subdiv 1` clean, `--subdiv 4` shredded), then the decisive test:
+  re-render `--subdiv 4` with the detail rule forced flat. The flat fine surface is provably the
+  same surface as k=1's, so if it still rendered broken the fault could not be in what the mesher
+  contained. It still rendered broken. That moved the search from geometry to drawing in one step.
+
+  The new test crosses the first triangle's edges and compares with the stored vertex normal, for
+  all six (axis, sign) pairs — the one property that is only about drawing. Mutation row
+  `quad winding inverts and back-face culling deletes the terrain` KILLED.
+
+  Evidence, all three the same camera on the same world:
+  `10-6-signoff/winding-a-subdiv1-shipped.png`, `winding-b-subdiv4-before.png`,
+  `winding-c-subdiv4-after.png`.
+
+- **EVERY `--subdiv N > 1` FPS NUMBER TAKEN SO FAR IS VOID.** Both the ~140 fps of 2026-08-31 and
+  the 143.24 fps of 2026-09-01 measured a scene whose terrain was entirely culled. The triangles
+  were submitted and paid for vertex processing, but almost nothing shaded a fragment. It also
+  explains the reading that made no sense on its own: fps did not move when submitted triangles
+  fell 39%, because the reduction was in geometry that was never rasterised. AC7 has not been
+  measured at any k. Worth checking whether 143.24 is a 144 Hz vsync cap while re-reading.
+
+  **No count changed.** Faces, quads, triangles, cells, chunks and every table in the sign-off are
+  unaffected — winding does not alter any of them. Only the fps rows and the reasoning that leaned
+  on them are withdrawn.
 
 - **RE-MEASUREMENT AFTER THE RETURN-TO-DEV RULING, 2026-09-01.** All 23 review patch items are
   resolved, both deferrals stand, and every k>1 figure in every artifact is regenerated. Full

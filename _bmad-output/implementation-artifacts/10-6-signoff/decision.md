@@ -37,11 +37,15 @@ stress test deferred. That guard was mis-sized: k=8 completes offline in 7.9 s, 
 `gui --subdiv 8` builds **3,539,074 triangles** on this devpod. So the reason given for excluding
 k=8 was never evidence, and it is withdrawn rather than carried forward.
 
-What is still owed is the only thing that can settle it: a vehicle fps reading. Wolf's k=4 run
-measured ~140 fps against a scene submitting 1,527,754 triangles — 1.6× what corrected k=4 now
-submits, and 43% of what k=8 submits. That headroom makes k=8 worth reading rather than assuming.
+**No fps reading exists yet for either k.** Both runs so far measured a scene whose terrain was
+entirely back-face culled — the chunk mesher wound every quad against its own normal — so ~140 fps
+described snow caps and tree cubes over a void. Fixed 2026-09-01; see [vehicle-fps.md] and the
+three captures beside it.
 
-**k=4 is the number to build against today.** If the vehicle reading clears k=8 at the NFR6 bars,
+What is still owed is the only thing that can settle it: a vehicle fps reading. There is no measured headroom to reason from, so k=8 is
+neither excluded nor assumed servable: it is a row on the card.
+
+**k=4 is the number to build against today**, on geometry grounds. If the vehicle reading clears k=8 at the NFR6 bars,
 the adopted k is Wolf's to revisit, and 10.3's contract should be written so that revisiting it is
 a change of one constant.
 

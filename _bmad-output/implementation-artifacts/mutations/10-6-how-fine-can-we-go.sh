@@ -117,3 +117,19 @@ old = '    mesh.cells.insert(cell);'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let _ = cell;'))
 PY
+
+mutation "quad winding inverts and back-face culling deletes the terrain" gui project::tests::every_quad_is_wound_to_face_the_way_its_normal_points <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = """    let order = if key.sign > 0 {
+        [0, 1, 2, 3]
+    } else {
+        [0, 3, 2, 1]
+    };"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, """    let order = if key.sign > 0 {
+        [0, 3, 2, 1]
+    } else {
+        [0, 1, 2, 3]
+    };"""))
+PY

@@ -489,6 +489,11 @@ struct SubdividedTerrainStats {
     /// Coarse cells that reached a mesh. This is the number the shipped path reports as
     /// "projected N terrain cubes", kept comparable across both paths on purpose.
     cells: usize,
+    /// Fine faces before the greedy merge. Triangles are partition-dependent -- chunk and rim
+    /// splits inflate them -- so they cannot answer "is this the same surface as the bench's".
+    /// The face count can: it is exactly what the offline oracle counts, and any hole in the
+    /// fine surface shows up here as a shortfall.
+    faces: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -780,6 +785,7 @@ fn spawn_subdivided_terrain(
     };
     for (chunk, chunk_mesh) in build_chunk_meshes(mirror, positions, subdiv, level) {
         let mut material_meshes = BTreeMap::<(usize, usize), MeshBuilder>::new();
+        stats.faces += chunk_mesh.masks.values().map(BTreeSet::len).sum::<usize>();
         for (key, mask) in chunk_mesh.masks {
             let builder = material_meshes.entry((key.slot, key.rim)).or_default();
             greedy_mask_into_mesh(builder, key, &mask, subdiv);
@@ -920,10 +926,14 @@ fn append_quad(
     } * key.sign as f32;
     let normal = world_vector_to_render(normal_world).to_array();
     let base = u32::try_from(builder.positions.len()).expect("terrain mesh index fits u32");
+    // The two orders were the wrong way round, on every axis and both signs, since the chunk
+    // mesher shipped: each quad was wound to face opposite its own normal, and the default
+    // `cull_mode: Some(Face::Back)` then deleted the entire terrain surface. `--subdiv N > 1`
+    // drew the world as snow caps and tree cubes floating over a void.
     let order = if key.sign > 0 {
-        [0, 3, 2, 1]
-    } else {
         [0, 1, 2, 3]
+    } else {
+        [0, 3, 2, 1]
     };
     for index in order {
         builder.positions.push(corners[index].to_array());
@@ -983,11 +993,12 @@ pub fn reconcile(
                 );
                 println!(
                     "subdiv {subdiv}: projected {} terrain cubes at z {} entities={} chunks={} \
-                     triangles={} mesh_build_ms={}",
+                     faces={} triangles={} mesh_build_ms={}",
                     stats.cells,
                     slice.level(),
                     stats.entities,
                     stats.chunks,
+                    stats.faces,
                     stats.triangles,
                     started.elapsed().as_millis()
                 );
@@ -1725,6 +1736,49 @@ mod tests {
             }
         }
         (faces, triangles)
+    }
+
+    /// Every quad must be WOUND to face the way its own normal says it does.
+    ///
+    /// It was not, for every axis and both signs, since the chunk mesher shipped. The mesh is
+    /// drawn with `StandardMaterial`'s default `cull_mode: Some(Face::Back)`, so the whole
+    /// terrain surface was culled and `--subdiv N > 1` rendered the world as snow caps and tree
+    /// cubes floating over a void. Wolf saw it from the vehicle both times and called it holes.
+    ///
+    /// No count could see this. Faces, quads, triangles, cells and chunks are all winding-blind,
+    /// and the offline bench has no winding at all -- it counts a surface, it does not draw one.
+    /// This asserts the one property that is only about drawing: cross the first triangle's edges
+    /// and compare with the stored vertex normal.
+    #[test]
+    fn every_quad_is_wound_to_face_the_way_its_normal_points() {
+        for axis in 0..3 {
+            for sign in [-1, 1] {
+                let key = MeshKey {
+                    chunk: [0, 0, 0],
+                    slot: 0,
+                    rim: 0,
+                    axis,
+                    sign,
+                    plane: 3,
+                };
+                let mut builder = MeshBuilder::default();
+                let mask = BTreeSet::from([(1, 1)]);
+                greedy_mask_into_mesh(&mut builder, key, &mask, 1);
+                let corner = |index: usize| Vec3::from_array(builder.positions[index]);
+                let (a, b, c) = (
+                    corner(builder.indices[0] as usize),
+                    corner(builder.indices[1] as usize),
+                    corner(builder.indices[2] as usize),
+                );
+                let wound = (b - a).cross(c - b).normalize();
+                let declared = Vec3::from_array(builder.normals[0]);
+                assert!(
+                    wound.dot(declared) > 0.9,
+                    "axis {axis} sign {sign}: wound {wound:?} faces away from its own \
+                     normal {declared:?} -- back-face culling deletes this quad"
+                );
+            }
+        }
     }
 
     /// The detail rule is a MEASUREMENT STAND-IN shared with `scripts/bench/resolution_bench.py`,
