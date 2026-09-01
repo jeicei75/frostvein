@@ -52,7 +52,7 @@ Triangle figures are CHUNK MESHES ONLY and exclude the 4,501 foliage cube entiti
 |---:|---:|---|---:|---:|---|
 | 4 | 928,884 | `caa8689-dirty` | **>130** | **>130** | **PASSES BOTH BARS**; dig cost 5–13 ms |
 | 8 | 3,539,058 | `caa8689-dirty` | **100–140** | **100–140** | **PASSES BOTH BARS**; dig cost 38–78 ms |
-| 16 | 13,873,474 | `23172f4` | *(unread)* | *(unread)* | boots in 5,266 ms; digs cost 67–187 ms; previous 60–90 reading VOID |
+| 16 | 13,873,474 | `23172f4` | *(not read)* | *(not read)* | **EXCLUDED — visible halts on digging**; 5,266 ms boot |
 
 ## OBSERVED ON THE VEHICLE 2026-09-01 — the dig rebuild, live (build `caa8689-dirty`)
 
@@ -106,6 +106,24 @@ The k=4 figures agree across both, which is why the earlier pair is kept rather 
 **Also observed: the dirty set coalesces multi-tile deltas.** `rebuilt 1 of 1 chunks for 2 changed
 tiles` appears at k=4 — two cells changing in one frame still cost one chunk when they share it,
 which is what the set-based `dirty_chunks` is for.
+
+## WOLF'S VERDICT, 2026-09-01 — AC7 settled by eye where the counter cannot speak
+
+> "16 is in borderline ... some halt happening when digging. 8 and especially 4 are definitely no
+> issues ... might be of course when we have more things going on it starts to degrade
+> performance so need to benchmark this later on."
+
+**k=16 is EXCLUDED on interaction cost, not on frame rate.** The halts Wolf sees when digging are
+the 67–187 ms per-chunk rebuild measured in the log above, observed as a stutter rather than read
+off a counter — which is exactly what the smoothed overlay cannot show (see "It does not appear in
+the fps overlay, and cannot" in [axis-a-geometry.md]). **k=8 and k=4 are both clean, k=4 clearly
+so.** That confirms the adopted k=4 and the fallback ordering by direct observation.
+
+**A caveat Wolf raised and this story cannot answer:** every number here describes a nearly-idle
+world — tick 21, ten entities, five dwarves. A populated fortress adds dwarves, items, lights,
+designations and far more frequent digs, so the fps figures are an UPPER BOUND and the dig
+frequency is an under-count. Re-benchmarking under load is owed and is deliberately NOT claimed
+here. See `deferred-work.md`.
 
 ## What to expect, and what would be suspicious
 
