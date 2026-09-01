@@ -108,3 +108,45 @@ a budget from `265 × 6 × 16² × 2`, understating the real thing by roughly 8.
 per-class triangle budget at k>1 is quoted here because none was measured: the bench reports the
 whole-world surface, and that whole-world row is the binding number. The classes do not share one
 budget — five dwarves are not comparable to 44,984 terrain cells.
+
+## The cost that is not in any other table: every terrain change re-meshes the world
+
+Every figure above is about a **static** scene. The fine path's binding cost in play is not the
+frame — it is the rebuild.
+
+`reconcile_projection` promotes any non-empty `dirty_tiles` to a full rebuild whenever
+`--subdiv N > 1` [crates/gui/src/ingest.rs:1016]. A chunk mesh is a whole surface, not a set of
+mutable per-cell entities, so a newly-opened neighbour must not leave an old face welded into it —
+the rule is correct. It is also unbounded: **one dug tile costs the whole terrain.** All 121 chunk
+meshes, 4,501 foliage cubes and 8,145 snow caps are despawned and rebuilt from scratch.
+
+So the "Mesh build" column above is not a one-time boot cost. It is the price of every dig, every
+channel, every collapse:
+
+| k | Cost of ONE changed tile | Multiple of k=1 |
+|---:|---:|---:|
+| 1 | *(not this path — see below)* | — |
+| 2 | 540 ms | — |
+| 4 | ~2,500 ms | 4.6× k=2 |
+| 8 | 10,386 ms | 4.2× k=4 |
+| 16 | 44,740 ms | 4.3× k=8 |
+
+Devpod, debug build, lavapipe. A release build on the vehicle will be far faster in absolute
+terms; the ~4.3× per doubling is the part that carries.
+
+**`--subdiv 1` does not do this.** It takes the incremental dirty-tile branch and respawns only
+the affected cells and their neighbours, which is why the shipped client does not hitch on a dig.
+Pinned by `ingest::tests::one_dirty_tile_rebuilds_every_chunk_at_subdiv_two_but_not_at_subdiv_one`,
+with a mutation row on the promoting line.
+
+**It does not appear in the fps overlay, and cannot.** Bevy's overlay prints
+`fps.smoothed()` — an exponentially-smoothed average — and re-renders on a 100 ms
+`refresh_interval` [bevy_dev_tools-0.19.0/src/fps_overlay.rs]. One 2,500 ms frame is averaged away,
+and no frame is presented during the stall, so the only numbers legible to the eye are the
+steady states either side of it. Wolf saw the client stop dead on a dig while the counter held
+~143. Both observations were correct.
+
+**The obvious fix, not built here:** rebuild only the affected chunks. A changed cell dirties its
+own chunk plus any chunk holding a face that referenced it — bounded at 1–8 of 121, so roughly
+15–60× less work at any k. That is a renderer change, and this story's scope line is "measurements
+plus one decision, not a renderer", so it is recorded as owed rather than taken.

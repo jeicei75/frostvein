@@ -1461,6 +1461,70 @@ mod tests {
         );
     }
 
+    /// ONE changed tile re-meshes the ENTIRE world at `--subdiv N > 1`.
+    ///
+    /// `reconcile_projection` promotes any non-empty `dirty_tiles` to a full rebuild, because a
+    /// chunk mesh is a whole surface and a newly-open neighbour must not leave an old face welded
+    /// into it. That is correct and it is unbounded: the cost of one dug tile is the cost of the
+    /// whole terrain, which the boot rows measure at 540 ms (k=2), ~2,500 ms (k=4), 10,386 ms
+    /// (k=8) and 44,740 ms (k=16) on the devpod. `--subdiv 1` does not do this — it takes the
+    /// incremental dirty-tile path and respawns a handful of cube entities.
+    ///
+    /// Wolf saw it from the vehicle as the client stopping dead for a moment on a dig. It does
+    /// not appear in the fps overlay, which reads a smoothed average and cannot present a frame
+    /// during the stall in any case.
+    #[test]
+    fn one_dirty_tile_rebuilds_every_chunk_at_subdiv_two_but_not_at_subdiv_one() {
+        let chunk_entities = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<bevy::prelude::Entity, With<TerrainChunk>>()
+                .iter(app.world())
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+        let (mut two, _, _) = configured_app(&["--subdiv", "2"]);
+        two.update();
+        let before = chunk_entities(&mut two);
+        assert!(!before.is_empty(), "the fine path must have built chunks");
+
+        two.world_mut()
+            .resource_mut::<ProjectionWork>()
+            .dirty_tiles
+            .insert([2, 2, 1]);
+        two.update();
+        let after = chunk_entities(&mut two);
+        assert!(!after.is_empty(), "the rebuild must respawn the terrain");
+        assert!(
+            before.is_disjoint(&after),
+            "one dirty tile left {} of {} chunk entities alive -- the rebuild is not whole-world \
+             any more, and this test is pinning the wrong thing",
+            before.intersection(&after).count(),
+            before.len()
+        );
+
+        // The shipped path is untouched by this: it edits the affected cells in place.
+        let (mut one, _, _) = configured_app(&["--subdiv", "1"]);
+        one.update();
+        let tiles = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<bevy::prelude::Entity, With<TerrainTile>>()
+                .iter(app.world())
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+        let before_tiles = tiles(&mut one);
+        one.world_mut()
+            .resource_mut::<ProjectionWork>()
+            .dirty_tiles
+            .insert([2, 2, 1]);
+        one.update();
+        let survivors = before_tiles.intersection(&tiles(&mut one)).count();
+        assert!(
+            survivors * 2 > before_tiles.len(),
+            "--subdiv 1 kept only {survivors} of {} tile entities across a one-tile change; it \
+             is supposed to touch the affected cells, not rebuild the world",
+            before_tiles.len()
+        );
+    }
+
     #[test]
     fn configured_app_sends_a_real_mouse_drags_command_to_the_daemon_socket() {
         let (mut app, _sender, server) = configured_app(&[]);

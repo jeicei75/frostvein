@@ -133,3 +133,11 @@ p.write_text(s.replace(old, """    let order = if key.sign > 0 {
         [0, 1, 2, 3]
     };"""))
 PY
+
+mutation "terrain delta stops forcing a chunk rebuild and welds stale faces in" gui ingest::tests::one_dirty_tile_rebuilds_every_chunk_at_subdiv_two_but_not_at_subdiv_one <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    rebuild |= subdiv.as_ref().is_some_and(|subdivision| subdivision.0 > 1) && !changes.is_empty();'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    rebuild |= false;'))
+PY

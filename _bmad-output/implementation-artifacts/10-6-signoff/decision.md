@@ -30,6 +30,20 @@ each moving the number, all invisible to a k=1 control:
 
 Both sides are now measured, and they agree on the cell set and the chunk count to the unit.
 
+## The cost that should decide this is not fps
+
+Every number above describes a **static** scene. At `--subdiv N > 1` any terrain change re-meshes
+the entire world, so one dug tile costs 540 ms at k=2, ~2,500 ms at k=4, 10,386 ms at k=8 and
+44,740 ms at k=16 on the devpod — the "Mesh build" column is the per-dig price, not a boot cost.
+`--subdiv 1` does not do this. A fortress digs constantly, so this and not the frame rate is
+likely to be what decides the adopted k, and no measurement in this story existed for it until
+Wolf reported the client stopping dead on a dig.
+
+The fix is bounded — rebuild only the 1–8 affected chunks of 121, ~15–60× less work — but it is a
+renderer change and this story is scoped "measurements plus one decision, not a renderer". **10.3
+should not fix a k until Wolf has ruled on whether that fix happens**, because it moves the
+practical ceiling far more than any triangle count here does. Detail in [axis-a-geometry.md].
+
 ## k=8 is now a live candidate, not an excluded one
 
 The previous exclusion rested on the bench's own guard failing at k=8, on a shared host, with the
