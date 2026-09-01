@@ -21,9 +21,14 @@ WORLD_SEED = 0xF005_7E1A
 CONTROL_FACES = 61_142
 CONTROL_QUADS = 19_264
 NEIGHBOURS = ((0, -1), (0, 1), (1, -1), (1, 1), (2, -1), (2, 1))
-# Guard the process before Python object overhead can exhaust the devpod.  This is a deliberately
-# conservative benchmark hard limit, not a renderer limit.
-MAX_FINE_FACES = 4_000_000
+SIDE_DELTAS = ((-1, 0), (1, 0), (0, -1), (0, 1))
+# Guard the process before Python object overhead can exhaust the devpod.  This is a benchmark
+# limit, not a renderer limit -- `gui --subdiv N` is the authority on what can actually be drawn.
+# Sized from a measurement, not a guess: k=16 on the real world holds 23,014,708 faces in 4,298
+# MiB, so one face costs ~196 bytes and 48M faces is ~9.0 GiB. The devpod has ~17 GiB free.
+# It was 4,000,000, which reported a WALL AT k=8 that was an artefact of the old implementation:
+# k=8 completes in 7.6s and k=16 in 30.4s.
+MAX_FINE_FACES = 48_000_000
 BUILD_TIME_BUDGET_SECONDS = 120.0
 CHUNK_EDGE_CELLS = 16
 MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
@@ -34,10 +39,20 @@ def detail_offset(seed, x, y, z):
 
     // NOTE: This is a measurement stand-in for 10.4's authored terrain look, not a visual
     decision.  The small value-noise displacement deliberately breaks flat greedy runs.
+
+    Every step is masked to 32 bits because the client writes the same rule in u32
+    `wrapping_mul`.  Python integers are unbounded, so leaving the multiplies unmasked made
+    the two sides a DIFFERENT rule that agreed only at chance for k > 1 -- invisible at k=1,
+    where the depth clamp forces both to zero.  `scripts/tests/test_resolution_bench.py` and
+    `crates/gui/src/project.rs` pin the same vector so the claim is tested, not commented.
     """
-    value = seed ^ (x * 0x9E3779B1) ^ (y * 0x85EBCA77) ^ (z * 0xC2B2AE3D)
+    mask = 0xFFFFFFFF
+    value = seed
+    value ^= (x & mask) * 0x9E3779B1 & mask
+    value ^= (y & mask) * 0x85EBCA77 & mask
+    value ^= (z & mask) * 0xC2B2AE3D & mask
     value ^= value >> 16
-    value = (value * 0x7FEB352D) & 0xFFFFFFFF
+    value = value * 0x7FEB352D & mask
     value ^= value >> 15
     return value % 5 - 2
 
@@ -52,45 +67,10 @@ def _dims(snapshot):
     return dims["x"], dims["y"], dims["z"]
 
 
-def _tile(snapshot, x, y, z):
-    dx, dy, dz = _dims(snapshot)
-    if not (0 <= x < dx and 0 <= y < dy and 0 <= z < dz):
-        return "empty"
-    return snapshot["tiles"][x + y * dx + z * dx * dy]
-
-
 def _material(tile):
     if isinstance(tile, dict):
         return tile.get("solid", tile.get("ramp"))
     return None
-
-
-def _solid(snapshot, x, y, z):
-    return _material(_tile(snapshot, x, y, z)) is not None
-
-
-def _face_groups(snapshot):
-    """Collect actual exposed cell faces keyed by direction and physical coarse slab."""
-    groups = collections.defaultdict(list)
-    dx, dy, dz = _dims(snapshot)
-    for z in range(dz):
-        for y in range(dy):
-            for x in range(dx):
-                material = _material(_tile(snapshot, x, y, z))
-                if material is None:
-                    continue
-                coordinate = (x, y, z)
-                for axis, sign in NEIGHBOURS:
-                    neighbour = list(coordinate)
-                    neighbour[axis] += sign
-                    if _solid(snapshot, *neighbour):
-                        continue
-                    slab = coordinate[axis] + (1 if sign > 0 else 0)
-                    # Match the repository's reference greedy mesher: cyclic axes, rather than
-                    # merely "the other two". Rectangle choice is traversal-order dependent.
-                    u, v = (axis + 1) % 3, (axis + 2) % 3
-                    groups[(axis, sign, slab)].append((coordinate[u], coordinate[v], material))
-    return groups
 
 
 def _greedy_quads(mask):
@@ -121,79 +101,186 @@ def _greedy_quads(mask):
     return quads
 
 
+def _grid(snapshot):
+    """Flatten the wire tiles once into (dims, per-cell material).
+
+    The geometry pass touches every cell six to twelve times; re-decoding the wire tile dict
+    each time is what made the coarse-only version the whole runtime.
+    """
+    dx, dy, dz = _dims(snapshot)
+    return dx, dy, dz, [_material(tile) for tile in snapshot["tiles"]]
+
+
+def _coarse_faces(snapshot):
+    """Count exposed COARSE cell faces -- the k=1 surface, and the pre-allocation estimate."""
+    dx, dy, dz = _dims(snapshot)
+    _, _, _, materials = _grid(snapshot)
+    total = 0
+    for z in range(dz):
+        for y in range(dy):
+            for x in range(dx):
+                if materials[x + y * dx + z * dx * dy] is None:
+                    continue
+                for axis, sign in NEIGHBOURS:
+                    neighbour = [x, y, z]
+                    neighbour[axis] += sign
+                    nx, ny, nz = neighbour
+                    if not (0 <= nx < dx and 0 <= ny < dy and 0 <= nz < dz):
+                        total += 1
+                    elif materials[nx + ny * dx + nz * dx * dy] is None:
+                        total += 1
+    return total
+
+
+def _cell_heights(x, y, z, k, carved):
+    """Fine column heights inside one solid coarse cell, in fine voxels.
+
+    A cell whose top is exposed carries the detail pits and is a heightfield; every other
+    solid cell is a full k-cube.  `None` means "uniform k" and is what keeps the flat control
+    from allocating k² identical columns per cell.
+    """
+    if not carved:
+        return None
+    plane = (z + 1) * k
+    return [
+        [k - detail_depth(WORLD_SEED, plane, x * k + i, y * k + j, k) for j in range(k)]
+        for i in range(k)
+    ]
+
+
 def geometry_summary(snapshot, k=1, detail=True):
     """Measure exposed fine faces and greedy quads for a snapshot.
 
-    At k=1 the exported world is meshed exactly as shipped. At larger k every exposed face is
-    expanded to k² fine samples. Detail carves deterministic pits into top faces and emits the
-    connecting vertical faces between different pit depths, so the measured surface is closed.
-    No-detail is the control that must collapse back to k=1's quads.
+    Every reported face is EMITTED, never derived.  The earlier version multiplied the coarse
+    face count by k², which is wrong the moment a pit exists: carving the top of a cell also
+    removes the top fine voxels of that cell's SIDE faces, and exposes new faces on any solid
+    neighbour the carve uncovered.  A cell is modelled as a k×k heightfield of fine columns,
+    and a face is emitted wherever a solid fine voxel meets a non-solid one -- across the cell
+    boundary as readily as inside it.  At k=1 every column is 1 tall and the model collapses
+    to the shipped per-cube surface, which is why the k=1 control could not see the defect.
     """
     if not isinstance(k, int) or k < 1:
         raise ValueError("k must be a positive integer")
-    groups = _face_groups(snapshot)
-    coarse_faces = sum(len(group) for group in groups.values())
-    exposed_faces = coarse_faces * k * k
-    assert_workload_limit(exposed_faces, k, detail)
-    if not detail and k > 1:
-        # A flat fine surface is exactly the k=1 greedy control scaled in tessellation only.
-        # Returning this invariant avoids allocating k² identical Python cells for the RED run.
-        coarse = geometry_summary(snapshot, k=1, detail=True)
-        return {
-            "exposed_faces": exposed_faces,
-            "greedy_quads": coarse["greedy_quads"],
-            "triangles": coarse["triangles"],
-        }
-    quads = 0
-    connector_faces = 0
-    for (axis, sign, slab), faces in groups.items():
-        masks = collections.defaultdict(dict)
-        top_planes = {}
-        for base_u, base_v, material in faces:
-            for du in range(k):
-                for dv in range(k):
-                    u = base_u * k + du
-                    v = base_v * k + dv
-                    plane = slab * k
-                    if detail and k > 1 and axis == 2 and sign > 0:
-                        # A pit removes top fine voxels; its bottom remains solid. This is a
-                        # voxel-valid downward displacement rather than a floating face patch.
-                        plane -= detail_depth(WORLD_SEED, slab * k, u, v, k)
-                    masks[plane][(u, v)] = material
-                    if detail and k > 1 and axis == 2 and sign > 0:
-                        top_planes[(u, v)] = (plane, material)
-        quads += sum(_greedy_quads(mask) for mask in masks.values())
-        # Adjacent top samples at different heights expose vertical voxel faces. Compare only
-        # neighbours inside this same coarse top slab: cliffs between slabs are already supplied
-        # by their ordinary exposed side faces above.
-        connectors = collections.defaultdict(dict)
-        for (u, v), (plane, material) in top_planes.items():
-            for du, dv in ((1, 0), (0, 1)):
-                neighbour = top_planes.get((u + du, v + dv))
-                if neighbour is None or neighbour[0] == plane:
+    assert_workload_limit(_coarse_faces(snapshot) * k * k, k, detail)
+    dx, dy, dz, materials = _grid(snapshot)
+    detailed = detail and k > 1
+
+    def material_at(x, y, z):
+        if not (0 <= x < dx and 0 <= y < dy and 0 <= z < dz):
+            return None
+        return materials[x + y * dx + z * dx * dy]
+
+    def carved_at(x, y, z):
+        return (
+            detailed
+            and material_at(x, y, z) is not None
+            and material_at(x, y, z + 1) is None
+        )
+
+    heights_cache = {}
+
+    def heights_at(x, y, z):
+        key = (x, y, z)
+        if key not in heights_cache:
+            heights_cache[key] = _cell_heights(x, y, z, k, carved_at(x, y, z))
+        return heights_cache[key]
+
+    masks = collections.defaultdict(dict)
+    chunks = set()
+    for z in range(dz):
+        for y in range(dy):
+            for x in range(dx):
+                material = material_at(x, y, z)
+                if material is None:
                     continue
-                other_plane, other_material = neighbour
-                lower, higher = sorted((plane, other_plane))
-                if du:
-                    connector_axis = 0
-                    connector_sign = 1 if plane > other_plane else -1
-                    connector_plane = u + 1
-                    coordinates = ((v, z) for z in range(lower, higher))
-                else:
-                    connector_axis = 1
-                    connector_sign = 1 if plane > other_plane else -1
-                    connector_plane = v + 1
-                    coordinates = ((z, u) for z in range(lower, higher))
-                connector_material = material if plane > other_plane else other_material
-                mask = connectors[(connector_axis, connector_sign, connector_plane)]
-                for coordinate in coordinates:
-                    mask[coordinate] = connector_material
-        connector_faces += sum(len(mask) for mask in connectors.values())
-        quads += sum(_greedy_quads(mask) for mask in connectors.values())
+                above = material_at(x, y, z + 1) is None
+                below = material_at(x, y, z - 1) is None
+                sides = [material_at(x + sx, y + sy, z) is None for sx, sy in SIDE_DELTAS]
+                if not (above or below or any(sides)):
+                    # A cell buried at the COARSE scale still gains faces if a neighbour's pit
+                    # uncovered it. Everything else is interior rock and emits nothing.
+                    if not detailed or not any(
+                        carved_at(x + sx, y + sy, z) for sx, sy in SIDE_DELTAS
+                    ):
+                        continue
+                own = heights_at(x, y, z)
+                wrote = False
+
+                if above:
+                    for i in range(k):
+                        for j in range(k):
+                            plane = z * k + (k if own is None else own[i][j])
+                            masks[(2, 1, plane)][(x * k + i, y * k + j)] = material
+                    wrote = True
+                if below:
+                    plane = z * k
+                    for i in range(k):
+                        for j in range(k):
+                            masks[(2, -1, plane)][(x * k + i, y * k + j)] = material
+                    wrote = True
+
+                for (sx, sy), open_side in zip(SIDE_DELTAS, sides):
+                    axis = 0 if sx else 1
+                    sign = sx or sy
+                    other = None if open_side else heights_at(x + sx, y + sy, z)
+                    near = k - 1 if sign > 0 else 0
+                    far = 0 if sign > 0 else k - 1
+                    plane = ((x if axis == 0 else y) + (1 if sign > 0 else 0)) * k
+                    mask = masks[(axis, sign, plane)]
+                    for step in range(k):
+                        i, j = (near, step) if axis == 0 else (step, near)
+                        top = k if own is None else own[i][j]
+                        if open_side:
+                            floor = 0
+                        else:
+                            oi, oj = (far, step) if axis == 0 else (step, far)
+                            floor = k if other is None else other[oi][oj]
+                        if floor >= top:
+                            continue
+                        for level in range(floor, top):
+                            if axis == 0:
+                                mask[(y * k + step, z * k + level)] = material
+                            else:
+                                mask[(z * k + level, x * k + step)] = material
+                        wrote = True
+
+                if own is not None:
+                    for i in range(k):
+                        for j in range(k):
+                            for di, dj in ((1, 0), (0, 1)):
+                                ni, nj = i + di, j + dj
+                                if ni >= k or nj >= k:
+                                    continue
+                                top, neighbour = own[i][j], own[ni][nj]
+                                if top == neighbour:
+                                    continue
+                                axis = 0 if di else 1
+                                sign = 1 if top > neighbour else -1
+                                lower, upper = sorted((top, neighbour))
+                                plane = (x * k + i + 1) if di else (y * k + j + 1)
+                                mask = masks[(axis, sign, plane)]
+                                for level in range(lower, upper):
+                                    if axis == 0:
+                                        mask[(y * k + j, z * k + level)] = material
+                                    else:
+                                        mask[(z * k + level, x * k + i)] = material
+                                wrote = True
+
+                if wrote:
+                    chunks.add(
+                        (
+                            x // CHUNK_EDGE_CELLS,
+                            y // CHUNK_EDGE_CELLS,
+                            z // CHUNK_EDGE_CELLS,
+                        )
+                    )
+    exposed_faces = sum(len(mask) for mask in masks.values())
+    quads = sum(_greedy_quads(mask) for mask in masks.values())
     return {
-        "exposed_faces": exposed_faces + connector_faces,
+        "exposed_faces": exposed_faces,
         "greedy_quads": quads,
         "triangles": quads * 2,
+        "chunks": len(chunks),
     }
 
 
@@ -208,10 +295,12 @@ def assert_control(summary):
 
 
 def assert_workload_limit(fine_faces, k, detail):
-    # A top pit can expose up to two runs of vertical connector faces in addition to its sampled
-    # top. Reserve a conservative 3× budget before allocating any masks.
-    estimated_faces = fine_faces * 3 if detail else fine_faces
-    if detail and estimated_faces > MAX_FINE_FACES:
+    # Pits add connector faces on top of the sampled surface and remove carved side faces.
+    # Measured on the real world the detailed total is 1.44-1.47x the flat one at every k that
+    # runs; reserve 2x before allocating any masks. The flat control is now genuinely meshed
+    # rather than short-circuited, so it needs the same guard.
+    estimated_faces = fine_faces * 2 if detail else fine_faces
+    if estimated_faces > MAX_FINE_FACES:
         raise ValueError(
             f"k={k} can need {estimated_faces:,} detailed faces, exceeding the "
             f"{MAX_FINE_FACES:,} hard limit"
@@ -270,13 +359,6 @@ def sim_axis_cost(raw_snapshot, sim_k):
     }
 
 
-def _chunks(snapshot):
-    dx, dy, _ = _dims(snapshot)
-    return ((dx + CHUNK_EDGE_CELLS - 1) // CHUNK_EDGE_CELLS) * (
-        (dy + CHUNK_EDGE_CELLS - 1) // CHUNK_EDGE_CELLS
-    )
-
-
 def measure(snapshot, k, detail):
     """Return one geometry row, including real elapsed time and process peak RSS."""
     started = time.perf_counter()
@@ -289,7 +371,6 @@ def measure(snapshot, k, detail):
     return {
         "k": k,
         **summary,
-        "chunks": _chunks(snapshot),
         "mesh_build_seconds": elapsed,
         "peak_memory_bytes": peak,
     }
@@ -322,21 +403,38 @@ def _print_row(row):
     )
 
 
-def _sweep(snapshot):
-    control = measure(snapshot, 1, detail=True)
+def _measure_in_child(snapshot_path, k):
+    """Measure one row in a FRESH process, so its peak RSS is that row's own.
+
+    `getrusage` reports the high-water mark for the LIFE of a process. Measuring every k in one
+    process made each row carry every earlier k's peak, and made k=1's number the export/parse
+    baseline rather than anything about k=1. AC3 asks for peak memory at each step.
+    """
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--k", str(k), "--json",
+         "--snapshot", str(snapshot_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+
+def _sweep(snapshot, snapshot_path):
+    control = _measure_in_child(snapshot_path, 1)
     assert_control(control)
     _print_row(control)
     last = control
     k = 2
     while True:
-        estimated_faces = control["exposed_faces"] * k * k
-        if estimated_faces * 3 > MAX_FINE_FACES:
+        estimated_faces = control["exposed_faces"] * k * k * 2
+        if estimated_faces > MAX_FINE_FACES:
             print(
-                f"wall: hard face limit at k={k}: up to {estimated_faces * 3} detailed faces exceeds "
+                f"wall: hard face limit at k={k}: up to {estimated_faces} detailed faces exceeds "
                 f"{MAX_FINE_FACES}; last_completed_k={last['k']}"
             )
             return
-        row = measure(snapshot, k, detail=True)
+        row = _measure_in_child(snapshot_path, k)
         _print_row(row)
         if row["mesh_build_seconds"] > BUILD_TIME_BUDGET_SECONDS:
             print(
@@ -353,6 +451,7 @@ def main():
     parser.add_argument("--k", type=int, default=1, help="visual subdivision (default: 1)")
     parser.add_argument("--no-detail", action="store_true", help="flat-surface control")
     parser.add_argument("--sweep", action="store_true", help="double k until the guarded wall")
+    parser.add_argument("--json", action="store_true", help="emit one row as JSON (used by --sweep)")
     parser.add_argument("--sim-costs", action="store_true", help="print derived sim-grid wire costs")
     parser.add_argument("--snapshot", type=Path, help="existing exported snapshot (otherwise export one)")
     args = parser.parse_args()
@@ -368,12 +467,15 @@ def main():
             for sim_k in (1, 2, 4):
                 print("sim " + " ".join(f"{key}={value}" for key, value in sim_axis_cost(raw, sim_k).items()))
         elif args.sweep:
-            _sweep(snapshot)
+            _sweep(snapshot, snapshot_path)
         else:
             row = measure(snapshot, args.k, detail=not args.no_detail)
-            if args.k == 1:
+            if args.k == 1 and not args.no_detail:
                 assert_control(row)
-            _print_row(row)
+            if args.json:
+                print(json.dumps(row))
+            else:
+                _print_row(row)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         raise SystemExit(f"resolution bench failed: {type(error).__name__}: {error}") from error
     finally:
