@@ -280,13 +280,14 @@ deliverable's.
 |---|---|
 | 2026-08-31 | Story created. Baseline `0b8b673`, gate green at creation. Five GLBs measured; RED specimen confirmed. |
 | 2026-08-31 | Gated on new story 10.6. Grid-scale section rewritten: the reference sheet resolves metres-per-cell (16 voxels/cell, 0.1 m voxel, 1.6 m cell) and the three-way divergence was one stale constant, `scale: 0.65 → 0.75`, owed to 10.5. The servable half now comes from 10.6's measurements instead of being chosen from unmeasured options. |
-| 2026-09-01 | Added the procedural and authored-asset contracts, stdlib GLB contract checker, literal-output tests, and three killed mutation rows; full gate green. |
+| 2026-09-01 | Added the procedural and authored-asset contracts, stdlib GLB contract checker, literal-output tests, and six killed mutation rows; full gate green. |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-GPT-5 (Codex)
+`gpt-5.6-terra` (Codex CLI 0.146.0, reasoning effort `high`), delegated dev.
+Orchestration and verification: `claude-opus-5`.
 
 ### Debug Log References
 
@@ -351,6 +352,37 @@ same stale file, proven by the targeted test's observed `0 != 1`):
 ```text
 AssertionError: 0 != 1 : FIGURES /workspace/projects/frostvein/_bmad-output/implementation-artifacts/10-2-signoff/tree.glb size=5.2x7.6x5.4 min_y=0.000000 centre_x=-0.100000 centre_z=0.000000 tris=5130 verts=10260
 ```
+
+### Orchestrator verification — 2026-09-01
+
+The delegated dev run was **killed by the harness during its own final `scripts/gate.sh`**, so its
+green-gate claim was not self-evidenced. Everything below was re-run by the orchestrator on the
+branch tip and observed directly, not read off the dev transcript.
+
+- **Full `scripts/gate.sh`: GREEN**, exit 0 — the full `cargo test`, not the fast set.
+- **Mutation table re-run independently: 6/6 KILLED**, working tree restored clean afterwards.
+  Stale `__pycache__` cleared after the run and the RED/GREEN pair re-observed (exit 1 / exit 0),
+  guarding the `.pyc` shadow trap.
+- **Verification recipe re-run:** RED exits 1 naming the origin-centring clause and printing
+  `-0.100000`; GREEN exits 0 with four `FIGURES` lines. All figures match an independent stdlib
+  probe of the five GLBs taken before handoff.
+- **Scope verified structurally, not asserted:** `git diff a5d8acf..HEAD` touches **zero files
+  under `crates/`**; all five committed GLBs are byte-identical to main by sha256; no `assets/`
+  directory was created; `check_asset.py` imports only `json`, `pathlib`, `struct`, `sys`, `zlib`.
+- **Every contract citation resolved** against the current tree. `valley_bench.py:terrain_luma` is
+  a figure key rather than a `def`, enforced by `test_terrain_luma_averages_lit_pixels_only`
+  at the cited lines — substantively correct.
+- **8 commits, all authored `Völundr <jeicei75@gmail.com>`**, one per task, no squash.
+- Codex ran **1 of its 3 permitted `codex review --base main` self-gate passes**.
+
+**Recorded discrepancy, not corrected:** `baseline_commit` is `0b8b673` (the creation baseline),
+while the branch is cut from `a5d8acf`, 39 commits later — main moved when 10.6 merged. The
+workflow rule preserves an existing `baseline_commit`, so it was left alone; **review should diff
+against `a5d8acf`, not `0b8b673`.**
+
+**Two story citations drifted** and were corrected in the handoff rather than in the story text:
+the gate's python discovery is `scripts/gate.sh:124` (story says :117) and `import bpy` is
+`voxel_pine.py:40` (story says :38). Substance unaffected.
 
 ### File List
 
