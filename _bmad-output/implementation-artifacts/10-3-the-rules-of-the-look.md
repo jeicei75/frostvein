@@ -80,12 +80,12 @@ against source; **two of them are wrong as written in `epics.md` and are correct
   - [x] Mark each clause with its enforcement or with **eye-only**. A clause with neither is not
         a contract clause — cut it or make enforcing it an owed item.
 
-- [ ] **Task 3 — Write the asset contract** (AC: 4, 5)
-  - [ ] Generalise the standing rules out of [10-2-signoff/ASSET_NOTES.md] — that file is one
+- [x] **Task 3 — Write the asset contract** (AC: 4, 5)
+  - [x] Generalise the standing rules out of [10-2-signoff/ASSET_NOTES.md] — that file is one
         asset's brief; the contract is the family of rules it is an instance of.
-  - [ ] Decide and state file locations: where a generator lives, where a runtime glTF lives,
+  - [x] Decide and state file locations: where a generator lives, where a runtime glTF lives,
         where signoff artifacts live. Naming a path is enough; **do not create `assets/`**.
-  - [ ] Write the identity clause (AC5) with `tree.glb`'s measured figures as the case.
+  - [x] Write the identity clause (AC5) with `tree.glb`'s measured figures as the case.
 
 - [ ] **Task 4 — Build the checker** (AC: 6, 7)
   - [ ] `scripts/bench/check_asset.py`, stdlib only. Lift the GLB reader from

@@ -239,3 +239,42 @@ the standing rules implied by this guide. A cited test or instrument is a mechan
 - Mountain slicing is a client-local filter: expose below the selected level, retain the selected
   solid cut face, and add neither hatch nor simulation state. **Mechanically-checkable:**
   `crates/gui/src/slice.rs:90-153`.
+
+## Asset contract
+
+This section discharges the PRD's asset-contract obligation
+[`prd.md:150`](_bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-09/prd.md#L150).
+It applies to output from a generator, hand work, or an MCP session. An asset class must declare
+whether it replaces **tile** presentation (trees: `Material`/draw-set rules) or is an **entity**
+(dwarves: reconciliation rules). Presentation is keyed by kind or material; RGB, radius, geometry
+and other appearance values never become wire state (AD-16).
+
+- **Grid and orientation.** Geometry uses metres, +Y up and applied transforms. It is authored on
+  the 0.1 m project grid, or on an explicitly declared integer multiple (the existing pines are
+  0.2 m = 2×). **Mechanically-checkable:** `scripts/bench/check_asset.py` verifies the supplied
+  glTF's position bounds; the declared multiple and visual read are **eye-only**.
+- **Origin.** The trunk/foot base sits at `min Y = 0`; its placement origin is centred in X and Z
+  (within the published six-decimal tolerance). **Mechanically-checkable:**
+  `scripts/bench/check_asset.py` reports and enforces these bounds.
+- **Palette and material mapping.** The asset publishes its palette-cell-to-role map with its
+  signoff figures. V1 trees use one embedded atlas image, one material and one primitive, with
+  `magFilter = NEAREST`, flat, single-sided metallic-roughness material and no glTF extensions.
+  **Mechanically-checkable:** `scripts/bench/check_asset.py` enforces the v1 count/filter/
+  single-sided/extension clauses; the intended role read and future multi-material mapping are
+  **eye-only** until a concrete second format exists.
+- **Naming and locations.** A generator belongs under its story signoff directory until a runtime
+  consumer is introduced; its generated runtime glTF belongs at `assets/gltf/<published-name>.glb`
+  (created by story 10.5, not here); generated evidence, source notes and figures remain under
+  `_bmad-output/implementation-artifacts/<story>-signoff/`. The file basename, mesh name and node
+  name use the same published name. **Mechanically-checkable:** `scripts/bench/check_asset.py`
+  checks the internal names agree; path placement and source ownership are **eye-only** repository
+  review.
+- **Identity and published figures.** An asset's identity is its published name **and** its
+  published figures (size XYZ, min Y, centre X/Z, triangles and vertices), never its internal
+  glTF name alone. The measured counterexample is
+  `10-2-signoff/tree.glb`: its mesh and node name are `SM_VoxelPine_Tree02`, yet it is 5,130 tris,
+  5.2 × 7.6 × 5.4 m and centre X −0.100000; the deliverable of that name is 5,894 tris,
+  5.0 × 8.0 × 5.4 m and centre X +0.000000. **Mechanically-checkable:**
+  `scripts/bench/check_asset.py` prints the figures and rejects the off-centre file by the named
+  origin-centring clause; comparing a new asset's published figures to its signoff record is
+  **eye-only** until a second asset family establishes a manifest format.
