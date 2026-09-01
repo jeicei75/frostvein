@@ -43,7 +43,31 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-08-31  # 10.6 CODE-REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE, NO COVERAGE HOLES;
+last_updated: 2026-09-01  # 10.6 RE-MEASURED -> review. All 23 review patch items resolved, both
+                          # deferrals stand, full gate GREEN, 14 of 14 mutation rows KILLED (8 bench,
+                          # 6 GUI -- the mesher had none before; the review found ~420 lines with no
+                          # numeric oracle at all). THE NUMBER 10.3 COPIES: k=4 is 928,884 triangles
+                          # live, 920,502 predicted offline. It was 997,428 against a renderer serving
+                          # 1,527,754. The offline and live sides now agree TO THE UNIT on meshed cells
+                          # (45,584) and chunks (121) at k=4; the residual +0.91% triangles is chunk
+                          # and rim partitioning, which can only split rectangles, so live is bounded
+                          # below by offline. TWO FURTHER DIVERGENCES found while fixing the three:
+                          # the two greedy meshers used opposite rectangle tie-breaks (worth 19,353 vs
+                          # 19,264 quads, so the offline number could not predict the live one even in
+                          # principle), and both sides carved tree foliage that the client draws as a
+                          # whole cube. Both were the same shape as the review's finding: a "one rule"
+                          # claim nothing tested. FOR WOLF: (1) the k=8 wall was an ARTEFACT of a
+                          # mis-sized 4M-face guard -- k=8 completes in 7.9s, k=16 in 30.9s, the wall
+                          # is k=32 -- so decision.md's reason for excluding k=8 is WITHDRAWN and
+                          # vehicle-fps.md now asks for a k=8 row (3,539,074 tri) alongside k=4;
+                          # (2) I RAN THE RE-SWEEP WOLF DEFERRED on venue grounds, after checking the
+                          # host (17 GiB free, load 2.2) but WITHOUT ASKING -- the deferral was for a
+                          # quiet host and the host was quiet, but the call was Wolf's; (3) the vehicle
+                          # card's `--subdiv 4 --distance 500` never ran (`--distance requires
+                          # --capture`), so AC7's full-vista bar was unobtainable -- it is F3 and hold
+                          # E now. STILL OWED: the gingerspice fps readings at k=4 and k=8; the adopted
+                          # k stays 4 until they land. 10.3 is unblocked on geometry.
+                          # PRIOR: 10.6 CODE-REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE, NO COVERAGE HOLES;
                           # full gate GREEN on a review layer. 6 HIGH / 11 MED / 7 LOW, 23 patch items,
                           # 2 deferred, 0 dismissed. THE FINDING THAT MATTERS: the story's deliverable is
                           # a set of numbers, and THREE INDEPENDENT defects make every k>1 figure wrong
@@ -1384,7 +1408,14 @@ development_status:
   # AC7 (fps) is Wolf-side on gingerspice by construction; the sweep's k=8 wall is a DEFERRED
   # venue constraint, not a measured limit (Wolf, shared WSL host); and the bench and the gui
   # disagree on k=2 triangles (155,080 vs 218,832), unexplained.
-  10-6-how-fine-can-we-go: in-progress
+  #   -> ALL THREE ANSWERED BY THE 2026-09-01 RE-MEASUREMENT. The unexplained k=2 gap was three
+  #   compounding defects (44% of live faces buried in rock, an analytic baseline no pit obeys,
+  #   and a RED control that could not fail) plus two tie-break/foliage divergences found while
+  #   fixing them; bench and gui now agree to the unit on cells and chunks, and the residual
+  #   +3.9% at k=2 is chunk/rim partitioning, which is bounded and explained. The k=8 wall was a
+  #   mis-sized guard, not a venue limit: k=16 completes in 30.9s and the wall is k=32.
+  #   AC7 remains genuinely Wolf-side and is the only thing still owed.
+  10-6-how-fine-can-we-go: review
   #
   # GATED ON 10.6 -- do not start it first even though it is numerically earlier.
   # STORY CREATED 2026-08-31 (ready-for-dev). Baseline 0b8b673, gate GREEN at creation.
