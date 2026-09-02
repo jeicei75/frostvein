@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-01
+last_updated: 2026-09-02
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -1602,7 +1602,28 @@ development_status:
   # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
   # clause passes on it, so origin centring is the only discriminating one.
   10-3-the-rules-of-the-look: done
-  10-4-the-trees-look-right-the-pilot: backlog
+  10-4-the-trees-look-right-the-pilot: ready-for-dev
+                          # STORY CREATED 2026-09-02 on branch 10-4-..., baseline 2ef194d, full gate
+                          # GREEN at creation. THREE OF SIX EPIC PREMISES WERE WRONG: "Blender 4.3.2"
+                          # is stale (bare `blender` is 5.2.1 and figures are NOT comparable across
+                          # the two, which is why the bench stamps blender= into every line); "no
+                          # devpod can open a window" is HALF false (no window, but lavapipe renders
+                          # and `gui --headless --capture` produces real client pixels -- only fps is
+                          # unmeasurable); and Eevee's exclusion is right for the WRONG reason
+                          # (missing libegl1, not llvmpipe). The epic's AC also names `SPRUCE_SNOW`,
+                          # a value superseded at round 7.
+                          # A SEVENTH DEFECT WAS FOUND IN THE JUST-MERGED GUIDELINES: the foliage
+                          # taper reads 0.72/0.86/full where the client ships 0.62/0.78/0.95. Same
+                          # round-7 commit 10c06e1 moved the taper, the snow cap AND the crown, and
+                          # a later commit documented only the crown -- the third value the partial
+                          # update hid. Task 0 corrects it. Evidence for issue #62.
+                          # VERIFICATION RECIPE EXECUTED AT CREATION, RED FIRST: stripping all 5,582
+                          # tree cells moved every bench figure (exposed_cells 44,984->40,148,
+                          # distinct_colors 59,191->27,999, terrain_luma 105.853->125.883) -- AND THE
+                          # RED STILL EXITED 0 AND PASSED ITS RANGE CHECK, because the floors are far
+                          # too loose to fail a treeless world. Judgement rests on the printed
+                          # figures, never the exit code. Control + RED artifacts committed to
+                          # 10-4-signoff/.
   10-5-dwarves-worth-looking-at: backlog
   epic-10-retrospective: optional
 
