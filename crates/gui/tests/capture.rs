@@ -599,3 +599,88 @@ fn the_capture_fails_when_the_mirror_holds_marks_the_scene_does_not_draw() {
         "the oracle must name the mirror's count, not merely that something was zero: {message}"
     );
 }
+
+/// The lantern sweep must read BOTH draw paths, because `--subdiv N > 1` spawns no per-cell
+/// `TerrainTile` at all.
+///
+/// This is a REGRESSION guard with a measured history: 10.4 moved foliage to meshes, which
+/// removed the per-cell foliage cubes that were the only `TerrainTile` entities at subdiv>1. The
+/// sweep still queried that component alone, so `lit_tiles` became unconditionally empty and every
+/// subdiv-2 capture panicked BEFORE writing its PNG — measured across three builds: baseline
+/// `lit=145 moved=true` and a PNG, then `lit=0 moved=false` and no PNG at all. The story then
+/// filed that failure as pre-existing, because a different, genuinely pre-existing panic sat next
+/// to it. The fixture holds chunk cells and NO `TerrainTile`, which is exactly the shape the old
+/// query could not see.
+#[test]
+fn the_lantern_sweep_sees_terrain_that_exists_only_as_chunk_meshes() {
+    use bevy::prelude::{PointLight, Transform};
+    use gui::capture::accumulate_motion;
+    use gui::project::{TerrainChunkCells, WorldProjected};
+    use gui::transform::world_to_render;
+    use protocol::{EntityKind, JobState, LightKind, Material};
+
+    let dims = Dims { x: 4, y: 1, z: 2 };
+    let ground = (0..4)
+        .map(|_| Tile::Solid(Material::Stone))
+        .chain((0..4).map(|_| Tile::Empty))
+        .collect::<Vec<_>>();
+    let snapshot_at = |x: i32| Snapshot {
+        msg_type: MessageType::Snapshot,
+        dims,
+        tiles: ground.clone(),
+        entities: vec![protocol::Entity {
+            id: 7,
+            kind: EntityKind::Dwarf,
+            pos: [x, 0, 1],
+            state: JobState::Idle,
+            light: Some(LightKind::Lantern),
+        }],
+        designations: Vec::new(),
+        zones: Vec::new(),
+        items: Vec::new(),
+        speed: Speed::Normal,
+        tick: 0,
+    };
+
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(MirrorResource(
+            Mirror::from_snapshot(snapshot_at(0)).unwrap(),
+        ))
+        .insert_resource(CaptureState::new(PathBuf::from("unused.png"), 8, false));
+
+    // Terrain as CHUNK CELLS ONLY — no `TerrainTile` anywhere, the subdiv>1 shape.
+    app.world_mut().spawn(TerrainChunkCells(
+        (0..4).map(|x| [x, 0, 0]).collect::<Vec<_>>(),
+    ));
+    let dwarf = app
+        .world_mut()
+        .spawn((
+            WorldProjected(7),
+            Transform::from_translation(world_to_render([0, 0, 1])),
+            PointLight {
+                range: 64.0,
+                ..Default::default()
+            },
+        ))
+        .id();
+
+    app.world_mut().run_system_once(accumulate_motion).unwrap();
+    for x in 1..3 {
+        app.world_mut().insert_resource(MirrorResource(
+            Mirror::from_snapshot(snapshot_at(x)).unwrap(),
+        ));
+        let translation = world_to_render([x, 0, 1]);
+        app.world_mut()
+            .entity_mut(dwarf)
+            .insert(Transform::from_translation(translation));
+        app.world_mut().run_system_once(accumulate_motion).unwrap();
+    }
+
+    let lit = app.world().resource::<CaptureState>().lantern_lit_tiles();
+    assert!(
+        lit > 0,
+        "the lantern sweep lit {lit} tiles in a world whose terrain exists only as chunk meshes; \
+         querying TerrainTile alone reports zero here and panics every subdiv>1 capture"
+    );
+}

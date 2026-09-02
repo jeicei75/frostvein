@@ -129,6 +129,19 @@ pub const TREE_ASSETS: [(&str, &[u8]); 4] = [
     ),
 ];
 
+/// How many embedded pines actually carry glTF bytes, and how many bytes in total.
+///
+/// A blob is counted only if it is non-empty AND opens with the binary-glTF magic, so an emptied
+/// or truncated `include_bytes!` is visible on the first line of output rather than at the moment
+/// a scene silently fails to load.
+pub fn tree_asset_summary() -> (usize, usize) {
+    let embedded = TREE_ASSETS
+        .iter()
+        .filter(|(_, bytes)| bytes.starts_with(b"glTF"))
+        .count();
+    (embedded, TREE_ASSETS.iter().map(|(_, b)| b.len()).sum())
+}
+
 /// Publish the embedded pines into the `embedded://` source before anything loads them.
 ///
 /// `AssetPlugin::build` creates the registry and registers the source, so this must run AFTER
@@ -148,8 +161,13 @@ pub fn run() -> anyhow::Result<()> {
     // still learns which binary it is holding, and that is exactly the case where the answer
     // usually turns out to be "a stale one". See `crate::BUILD_SHA`.
     eprintln!("gui build {}", crate::BUILD_SHA);
+    // This line inspects the BLOBS, not `TREE_ASSETS.len()`. Printing the array length reported
+    // "4 embedded" identically with every blob emptied, with the registration deleted, or with
+    // `embedded://` resolution broken -- a confirmation step that could not observe the failure
+    // the runbook asks it to confirm. Decoding is still Bevy's; this only proves bytes are here.
+    let (embedded, bytes) = tree_asset_summary();
     eprintln!(
-        "gui tree assets: {} embedded in this binary",
+        "gui tree assets: {embedded} of {} embedded in this binary, {bytes} bytes",
         TREE_ASSETS.len()
     );
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
@@ -257,7 +275,11 @@ fn configure_client_app(
         app.insert_resource(TerrainSubdivision(subdiv));
     }
     insert_capture_resources(app, &args);
-    if args.headless && args.capture.is_some() {
+    // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
+    // without this resource the actual side never gains them and a WINDOWED capture asserts
+    // 0 == 265 and panics before the screenshot. That is the exact command the vehicle sitting
+    // card runs (`gui.exe <port> --capture <png> --frames N`, no `--headless`).
+    if args.capture.is_some() {
         app.insert_resource(TreeCaptureVerification::default());
     }
     client_systems(app);
@@ -296,6 +318,8 @@ pub fn projection_systems(app: &mut App) {
     // here rather than made `Option` in the system: a resource that is genuinely missing in
     // production should fail loudly, not quietly render "cursor -" forever.
     app.init_resource::<PickedTile>();
+    app.init_resource::<crate::project::TreeReportState>();
+    app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<TickClock>()
         .add_systems(Startup, setup_slice_readout)
         .add_systems(
@@ -1309,6 +1333,58 @@ mod tests {
             .init_resource::<FpsOverlayConfig>();
         super::configure_client_app(&mut app, mirror, receiver, writer, parsed);
         (app, sender, server)
+    }
+
+    #[test]
+    fn a_capture_carries_its_tree_accounting_whether_or_not_it_is_headless() {
+        // `expected_cut_face` adds the tree meshes unconditionally, so if this resource is
+        // missing the ACTUAL side never gains them and the cut-face assert reads 0 == 265. It
+        // was gated on `--headless`, which is exactly the flag the vehicle sitting card does NOT
+        // pass -- so the one run a human performs was the one run that could not capture.
+        for args in [
+            vec!["7451", "--capture", "/tmp/unused.png", "--frames", "1"],
+            vec![
+                "7451",
+                "--headless",
+                "--capture",
+                "/tmp/unused.png",
+                "--frames",
+                "1",
+            ],
+        ] {
+            let headless = args.contains(&"--headless");
+            let (app, _sender, _server) = configured_app(&args);
+            assert!(
+                app.world()
+                    .get_resource::<crate::capture::TreeCaptureVerification>()
+                    .is_some(),
+                "a capture must carry its tree accounting (headless={headless})"
+            );
+        }
+    }
+
+    #[test]
+    fn the_startup_asset_line_reads_the_blobs_rather_than_the_array_length() {
+        let (embedded, bytes) = super::tree_asset_summary();
+        assert_eq!(
+            embedded,
+            super::TREE_ASSETS.len(),
+            "every embedded pine must carry binary-glTF bytes"
+        );
+        assert!(
+            bytes > 1_000_000,
+            "the four pines are ~1.28 MB; {bytes} bytes means a blob is empty or truncated"
+        );
+        // The discriminator: the count must come from the BYTES, so an emptied blob moves it.
+        // Reading `TREE_ASSETS.len()` would report 4 with every blob emptied, which is what the
+        // startup line used to do and what made it unable to observe its own failure.
+        assert_eq!(
+            super::TREE_ASSETS
+                .iter()
+                .filter(|(_, blob)| blob.starts_with(b"glTF"))
+                .count(),
+            embedded
+        );
     }
 
     fn scripted_drag_line(start: [i32; 3], end: [i32; 3]) -> String {

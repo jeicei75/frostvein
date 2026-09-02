@@ -733,10 +733,11 @@ fn build_chunk_meshes(
     subdiv: i32,
     level: i32,
     targets: Option<&BTreeSet<[i32; 3]>>,
+    cover: &TreeCover,
 ) -> BTreeMap<[i32; 3], ChunkMesh> {
     let mut chunks = BTreeMap::<[i32; 3], ChunkMesh>::new();
     for &position in positions {
-        if is_tree(mirror, position) {
+        if is_mesh_drawn_tree(mirror, position, cover) {
             continue;
         }
         if targets.is_some_and(|targets| !touches_chunks(position, targets)) {
@@ -813,8 +814,10 @@ fn build_chunk_meshes(
                 };
                 let (low, high, face_sign, cell) = if top > floor {
                     (floor, top, sign, position)
-                } else if is_tree(mirror, neighbour) {
-                    // Tree cells are carried by their one mesh, never by the terrain mesher.
+                } else if is_mesh_drawn_tree(mirror, neighbour, cover) {
+                    // A MESHED tree cell is carried by its one mesh, never by the terrain mesher.
+                    // A tree cell no mesh carries is ordinary terrain here and must not be
+                    // skipped, or the fallback would be as invisible as the hole it closes.
                     continue;
                 } else {
                     // The NEIGHBOUR's face, uncovered by this cell's pit. It can be buried at
@@ -912,10 +915,12 @@ fn spawn_subdivided_terrain(
     subdiv: u32,
     level: i32,
     targets: Option<&BTreeSet<[i32; 3]>>,
+    cover: &TreeCover,
 ) -> SubdividedTerrainStats {
     let subdiv = i32::from(u16::try_from(subdiv.min(MAX_SUBDIV)).expect("--subdiv is bounded"));
     let mut stats = SubdividedTerrainStats::default();
-    for (chunk, chunk_mesh) in build_chunk_meshes(mirror, positions, subdiv, level, targets) {
+    for (chunk, chunk_mesh) in build_chunk_meshes(mirror, positions, subdiv, level, targets, cover)
+    {
         let mut material_meshes = BTreeMap::<(usize, usize), MeshBuilder>::new();
         stats.faces += chunk_mesh.masks.values().map(BTreeSet::len).sum::<usize>();
         for (key, mask) in chunk_mesh.masks {
@@ -1100,6 +1105,24 @@ pub fn reconcile(
     meshes: Option<&mut Assets<Mesh>>,
     subdivision: Option<&TerrainSubdivision>,
 ) {
+    // The cover both the terrain branches and the tree branch draw against, derived ONCE. It has
+    // to exist before the terrain branches: a tree that has just become unrepresentable must have
+    // its cube fallback spawned in the SAME pass that despawns its mesh, or it vanishes for a
+    // frame. On the incremental path this costs the dirty columns, not the world.
+    let live_tree_bases = trees.iter().map(|(_, tree)| tree.0).collect::<Vec<_>>();
+    let trees_now = if rebuild_terrain {
+        IncrementalTrees {
+            cover: tree_cover_at(mirror, slice.level()),
+            rederived: BTreeMap::new(),
+            fallback_cells: Vec::new(),
+        }
+    } else {
+        incremental_tree_cover(&live_tree_bases, mirror, slice.level(), dirty_tiles)
+    };
+    let tree_cover = &trees_now.cover;
+    let rederived_columns = &trees_now.rederived;
+    let tree_fallback_cells = &trees_now.fallback_cells;
+
     if rebuild_terrain {
         for (entity, _) in chips.iter() {
             commands.entity(entity).despawn();
@@ -1113,7 +1136,7 @@ pub fn reconcile(
         if let Some(assets) = assets {
             spawn_tree_meshes(commands, assets, mirror, slice.level());
         }
-        let positions = terrain_positions_at(mirror, slice.level());
+        let positions = terrain_positions_at_with_cover(mirror, slice.level(), tree_cover);
         // The draw-set oracle instrument (AC13). The shipped seed reports 39,936 terrain cubes
         // after 10.4 moved 5,048 tree cells to meshes; the simulation census remains 44,984
         // exposed cells. Read it as "did the rim, slice, or draw path silently drop terrain?",
@@ -1134,6 +1157,7 @@ pub fn reconcile(
                     subdiv,
                     slice.level(),
                     None,
+                    tree_cover,
                 );
                 println!(
                     "subdiv {subdiv}: projected {} terrain cubes at z {} entities={} chunks={} \
@@ -1208,7 +1232,9 @@ pub fn reconcile(
         // this branch because this branch did not exist when that fix was written.
         if let Some((assets, meshes)) = assets.zip(meshes) {
             let subdiv = subdivision.map_or(1, |subdivision| subdivision.0);
-            let targets = dirty_chunks(dirty_tiles);
+            let mut targets = dirty_chunks(dirty_tiles);
+            // A tree that swapped between mesh and cubes changes chunks no dirty TILE names.
+            targets.extend(dirty_chunks(tree_fallback_cells));
             for (entity, tile, cap, chunk) in terrain.iter() {
                 let owner = tile
                     .map(|tile| tile.0)
@@ -1238,6 +1264,7 @@ pub fn reconcile(
                 subdiv,
                 slice.level(),
                 Some(&targets),
+                tree_cover,
             );
             println!(
                 "subdiv {subdiv}: rebuilt {} of {} chunks for {} changed tiles, entities={} \
@@ -1255,6 +1282,7 @@ pub fn reconcile(
         }
     } else {
         let mut affected = BTreeSet::new();
+        affected.extend(tree_fallback_cells.iter().copied());
         for position in dirty_tiles {
             affected.insert(*position);
             for delta in NEIGHBOURS {
@@ -1273,7 +1301,9 @@ pub fn reconcile(
                     commands.entity(entity).despawn();
                 }
             }
-            if is_visible_at_slice(mirror, position, slice.level()) && !is_tree(mirror, position) {
+            if is_visible_at_slice(mirror, position, slice.level())
+                && !is_mesh_drawn_tree(mirror, position, tree_cover)
+            {
                 let entity = commands
                     .spawn((
                         WorldProjected(terrain_id(position, mirror.dims())),
@@ -1295,27 +1325,18 @@ pub fn reconcile(
     }
 
     if !rebuild_terrain && !dirty_tiles.is_empty() {
-        let changed_trees = trees
-            .iter()
-            .filter_map(|(_, tree)| {
-                dirty_tiles
-                    .iter()
-                    .any(|position| tree_mesh_might_cover(tree.0, *position))
-                    .then_some(tree.0)
-            })
-            .collect::<BTreeSet<_>>();
-        if !changed_trees.is_empty() {
-            for (entity, tree) in trees.iter() {
-                if changed_trees.contains(&tree.0) {
-                    commands.entity(entity).despawn();
-                }
+        // Every re-derived column is rebuilt whole: despawn whatever mesh it had, then spawn what
+        // the mirror now says it should have. `tree_meshes`' whole-world sweep used to run here on
+        // every tree-touching delta -- measured 43-63 ms on a 128x128x32 world, the same stall
+        // class the terrain path carries `targets` to avoid, and logged by nothing.
+        for (entity, tree) in trees.iter() {
+            if rederived_columns.contains_key(&[tree.0[0], tree.0[1]]) {
+                commands.entity(entity).despawn();
             }
-            if let Some(assets) = assets {
-                for (base, variant) in tree_meshes(mirror, slice.level()) {
-                    if changed_trees.contains(&base) {
-                        spawn_tree_mesh(commands, assets, base, variant);
-                    }
-                }
+        }
+        if let Some(assets) = assets {
+            for (base, variant) in rederived_columns.values().flatten() {
+                spawn_tree_mesh(commands, assets, *base, *variant);
             }
         }
     }
@@ -1848,44 +1869,238 @@ impl ProjectionAssets {
     }
 }
 
+/// The trunk columns a mesh actually carries, keyed by column so a cell can ask in O(1).
+///
+/// Every tree cell OUTSIDE this cover falls back to the cube path. That fallback is the point:
+/// `tree_meshes` REJECTS a column it cannot represent, and both spawn paths filter tree cells out
+/// of the terrain, so before this existed a rejected column was drawn by the mesh path and the
+/// cube path neither — the tree simply vanished, silently, with the cut-face oracle rejecting it
+/// on both sides at once and reporting a match.
+#[derive(Default)]
+pub(crate) struct TreeCover {
+    bases: BTreeMap<[i32; 2], i32>,
+}
+
+impl TreeCover {
+    pub(crate) fn from_meshes<'a>(meshes: impl IntoIterator<Item = &'a [i32; 3]>) -> Self {
+        Self {
+            bases: meshes
+                .into_iter()
+                .map(|base| ([base[0], base[1]], base[2]))
+                .collect(),
+        }
+    }
+
+    /// A cell is carried by a mesh when a meshed column inside the one-cell crown ring starts at
+    /// or below it — the same conservative footprint `tree_mesh_might_cover` uses for dirt, and
+    /// safe to reuse because `place_trees` keeps trunks three cells apart in Chebyshev, so two
+    /// rings never overlap.
+    ///
+    /// NOTE: this answers "does a mesh draw this cell", NOT "is this cell a tree". It is
+    /// deliberately conservative and returns true for the plain terrain inside a crown ring, so
+    /// it must only ever be consulted for cells that are already known to be tree cells.
+    pub(crate) fn covers(&self, position: [i32; 3]) -> bool {
+        (-1..=1).any(|dx| {
+            (-1..=1).any(|dy| {
+                let column = [position[0] + dx, position[1] + dy];
+                self.bases.get(&column).is_some_and(|base_z| {
+                    tree_mesh_might_cover([column[0], column[1], *base_z], position)
+                })
+            })
+        })
+    }
+}
+
+/// Whether a mesh draws this cell, and therefore the terrain path must not. Its complement over
+/// tree cells is the fallback: a tree cell no mesh carries is drawn as cubes, exactly as it was
+/// before mesh trees.
+fn is_mesh_drawn_tree(mirror: &Mirror, position: [i32; 3], cover: &TreeCover) -> bool {
+    is_tree(mirror, position) && cover.covers(position)
+}
+
+/// The single mesh rule, shared by the whole-world sweep and by the re-derivation of one changed
+/// column, so the incremental path can never classify a tree differently from a full rebuild.
+fn classify_trunk_column(
+    x: i32,
+    y: i32,
+    base_z: i32,
+    top_z: i32,
+    cells: i32,
+    slice_level: i32,
+) -> Option<([i32; 3], TreeVariant)> {
+    if base_z > slice_level {
+        return None;
+    }
+    // `TreeMesh`'s doc comment promised a CONTIGUOUS column and nothing checked it. A dwarf
+    // digging one mid-trunk cell leaves min and max untouched, so the client redrew an unbroken
+    // pine over a hole the sim had already stored — no panic, no log, no test. A gapped column is
+    // rejected here and falls back to cubes, which is exactly what drew it before mesh trees.
+    if top_z - base_z + 1 != cells {
+        return None;
+    }
+    let height = top_z - base_z + 2;
+    let variant = match height {
+        4 => TreeVariant::Tree01,
+        5 if tree_variant_hash(x, y).is_multiple_of(2) => TreeVariant::Tree02,
+        5 => TreeVariant::Tree03,
+        6 => TreeVariant::Tree04R,
+        // Worldgen has pinned this range since story 9.4. A malformed snapshot must
+        // not silently stretch a signed-off mesh into a new resolution contract.
+        _ => return None,
+    };
+    Some(([x, y, base_z], variant))
+}
+
+/// The trunk extent of one column: lowest cell, highest cell, and how many cells there actually
+/// are. The third value is what makes a gap visible — without it a dug column is indistinguishable
+/// from a whole one.
+fn trunk_column_extent(mirror: &Mirror, x: i32, y: i32) -> Option<(i32, i32, i32)> {
+    let mut extent: Option<(i32, i32, i32)> = None;
+    for z in 0..mirror.dims().z as i32 {
+        if terrain_material_at(mirror, [x, y, z]) == Some(Material::TreeTrunk) {
+            extent = Some(match extent {
+                Some((base, _, cells)) => (base, z, cells + 1),
+                None => (z, z, 1),
+            });
+        }
+    }
+    extent
+}
+
+/// Re-derives ONE column. The incremental path uses this instead of `tree_meshes` because a
+/// whole-world sweep on every tree-touching delta is the ~130 ms stall the terrain path already
+/// carries `targets` to avoid; measured at 43-63 ms here on a 128x128x32 world.
+fn tree_mesh_for_column(
+    mirror: &Mirror,
+    x: i32,
+    y: i32,
+    slice_level: i32,
+) -> Option<([i32; 3], TreeVariant)> {
+    let (base_z, top_z, cells) = trunk_column_extent(mirror, x, y)?;
+    classify_trunk_column(x, y, base_z, top_z, cells, slice_level)
+}
+
+/// The cover an incremental pass draws with, and the cells whose draw path that pass changes.
+///
+/// No whole-world sweep: live `TreeMesh` entities already name every meshed column, so only the
+/// columns the dirty tiles can reach are re-derived from the mirror. Returns the re-derivations
+/// too, so the tree branch respawns from the same answer the terrain branch drew against — if the
+/// two disagree, a tree is drawn twice or not at all.
+struct IncrementalTrees {
+    cover: TreeCover,
+    /// Every column the dirty tiles could reach, re-derived: `Some` is the mesh it should now
+    /// have, `None` means the mesh rule rejects it and the cube fallback owns it.
+    rederived: BTreeMap<[i32; 2], Option<([i32; 3], TreeVariant)>>,
+    /// The tree cells whose DRAW PATH changed, which the terrain branches must respawn.
+    fallback_cells: Vec<[i32; 3]>,
+}
+
+fn incremental_tree_cover(
+    live: &[[i32; 3]],
+    mirror: &Mirror,
+    slice_level: i32,
+    dirty_tiles: &[[i32; 3]],
+) -> IncrementalTrees {
+    let mut touched = BTreeSet::<[i32; 2]>::new();
+    for position in dirty_tiles {
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                touched.insert([position[0] + dx, position[1] + dy]);
+            }
+        }
+    }
+    let rederived = touched
+        .iter()
+        .map(|&[x, y]| ([x, y], tree_mesh_for_column(mirror, x, y, slice_level)))
+        .collect::<BTreeMap<_, _>>();
+    let mut bases = live
+        .iter()
+        .map(|base| ([base[0], base[1]], base[2]))
+        .collect::<BTreeMap<[i32; 2], i32>>();
+    // A column that gains or loses its mesh changes how EVERY cell of that tree is drawn, not
+    // only the cell that was dug: the mesh carried a whole 3x3 crown ring, so the cube fallback
+    // has to be spawned across all of it or the tree comes back as a fragment.
+    let mut fallback_cells = Vec::new();
+    for (column, result) in &rederived {
+        let was = bases.get(column).copied();
+        let now = result.map(|(base, _)| base[2]);
+        match now {
+            Some(base_z) => {
+                bases.insert(*column, base_z);
+            }
+            None => {
+                bases.remove(column);
+            }
+        }
+        if was == now {
+            continue;
+        }
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for z in 0..mirror.dims().z as i32 {
+                    let position = [column[0] + dx, column[1] + dy, z];
+                    if is_tree(mirror, position) {
+                        fallback_cells.push(position);
+                    }
+                }
+            }
+        }
+    }
+    IncrementalTrees {
+        cover: TreeCover { bases },
+        rederived,
+        fallback_cells,
+    }
+}
+
+/// The cover a full rebuild draws with. O(world), which is what a full rebuild already is.
+pub(crate) fn tree_cover_at(mirror: &Mirror, level: i32) -> TreeCover {
+    TreeCover::from_meshes(tree_meshes(mirror, level).iter().map(|(base, _)| base))
+}
+
 /// The sim sends tree tiles, not tree identities. Rebuild one mesh tree from every trunk column
 /// so presentation stays off the wire and BTreeMap's coordinate order fixes the result.
 fn tree_meshes(mirror: &Mirror, slice_level: i32) -> Vec<([i32; 3], TreeVariant)> {
-    let mut columns = BTreeMap::<[i32; 2], (i32, i32)>::new();
+    let mut columns = BTreeMap::<[i32; 2], (i32, i32, i32)>::new();
     for_each_position(mirror.dims(), |[x, y, z]| {
         if terrain_material_at(mirror, [x, y, z]) == Some(Material::TreeTrunk) {
             columns
                 .entry([x, y])
-                .and_modify(|(base, top)| {
+                .and_modify(|(base, top, cells)| {
                     *base = (*base).min(z);
                     *top = (*top).max(z);
+                    *cells += 1;
                 })
-                .or_insert((z, z));
+                .or_insert((z, z, 1));
         }
     });
     columns
         .into_iter()
-        .filter_map(|([x, y], (base_z, top_z))| {
-            if base_z > slice_level {
-                return None;
-            }
-            let height = top_z - base_z + 2;
-            let variant = match height {
-                4 => TreeVariant::Tree01,
-                5 if tree_variant_hash(x, y).is_multiple_of(2) => TreeVariant::Tree02,
-                5 => TreeVariant::Tree03,
-                6 => TreeVariant::Tree04R,
-                // Worldgen has pinned this range since story 9.4. A malformed snapshot must
-                // not silently stretch a signed-off mesh into a new resolution contract.
-                _ => return None,
-            };
-            Some(([x, y, base_z], variant))
+        .filter_map(|([x, y], (base_z, top_z, cells))| {
+            classify_trunk_column(x, y, base_z, top_z, cells, slice_level)
         })
         .collect()
 }
 
+/// NOTE: this shares `tree_meshes` with the spawn path, so it can only catch a despawn or
+/// incremental leak — never a defect INSIDE the mesh rule, which would move both sides together.
+/// The independent check is `assert_no_tree_is_undrawn`, which compares the MIRROR against what
+/// was actually drawn and routes through neither.
 pub fn expected_tree_mesh_count(mirror: &Mirror, slice_level: i32) -> usize {
     tree_meshes(mirror, slice_level).len()
+}
+
+/// Every tree cell at or below the cut, from the mirror alone. The capture oracle's independent
+/// side: it knows nothing about the mesh rule, so a column that stops being drawn by BOTH paths
+/// shows up here as a cell nothing accounts for.
+pub fn tree_cells_at_or_below(mirror: &Mirror, slice_level: i32) -> Vec<[i32; 3]> {
+    let mut cells = Vec::new();
+    for_each_position(mirror.dims(), |position| {
+        if position[2] <= slice_level && is_tree(mirror, position) {
+            cells.push(position);
+        }
+    });
+    cells
 }
 
 /// Stable across Rust releases, unlike `DefaultHasher`; only x/y shape the 5-cell tie-break.
@@ -1899,6 +2114,48 @@ fn tree_variant_hash(x: i32, y: i32) -> u32 {
     }
     hash
 }
+
+/// One-shot state for `report_tree_meshes_once`.
+#[derive(Resource, Default)]
+pub struct TreeReportState {
+    reported: bool,
+    frames: u32,
+}
+
+/// Reports what the client ACTUALLY drew, once, on EVERY run -- windowed included.
+///
+/// The startup line can only ever speak for bytes compiled in. This is the line that says the
+/// scenes decoded and the meshes reached the world, and until now that evidence was produced only
+/// under `--headless --capture` -- i.e. never in the windowed run the vehicle sitting actually
+/// does, which is the one run where a human is looking for it.
+pub fn report_tree_meshes_once(
+    mut state: ResMut<TreeReportState>,
+    trees: Query<&TreeMesh>,
+    assets: Option<Res<ProjectionAssets>>,
+    asset_server: Option<Res<AssetServer>>,
+) {
+    if state.reported {
+        return;
+    }
+    state.frames += 1;
+    let loaded = assets
+        .zip(asset_server)
+        .is_some_and(|(assets, asset_server)| assets.tree_scenes_loaded(&asset_server));
+    let spawned = trees.iter().count();
+    // Report on success, or give up and report the FAILURE rather than staying silent: a line
+    // that only ever appears when things worked is not an instrument.
+    if (loaded && spawned > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES {
+        state.reported = true;
+        eprintln!(
+            "gui trees: meshes={spawned} scenes_loaded={loaded} source=embedded frames={}",
+            state.frames
+        );
+    }
+}
+
+/// Long enough for the embedded scenes to decode on a software renderer, short enough that a
+/// human sees the verdict during a sitting.
+const TREE_REPORT_DEADLINE_FRAMES: u32 = 600;
 
 fn spawn_tree_meshes(
     commands: &mut Commands,
@@ -1970,10 +2227,22 @@ fn terrain_positions_near(
 }
 
 pub fn terrain_positions_at(mirror: &Mirror, level: i32) -> Vec<[i32; 3]> {
+    terrain_positions_at_with_cover(mirror, level, &tree_cover_at(mirror, level))
+}
+
+/// The same draw set against a cover the caller already has, so a rebuild derives it once rather
+/// than sweeping the world twice for the same answer.
+pub(crate) fn terrain_positions_at_with_cover(
+    mirror: &Mirror,
+    level: i32,
+    cover: &TreeCover,
+) -> Vec<[i32; 3]> {
     let level = level.clamp(0, mirror.dims().z.saturating_sub(1) as i32);
     let mut positions = Vec::new();
     for_each_position(mirror.dims(), |position| {
-        if is_visible_at_slice(mirror, position, level) && !is_tree(mirror, position) {
+        if is_visible_at_slice(mirror, position, level)
+            && !is_mesh_drawn_tree(mirror, position, cover)
+        {
             positions.push(position);
         }
     });
@@ -2101,7 +2370,14 @@ mod tests {
         let positions = terrain_positions_at(mirror, level);
         let mut faces = 0;
         let mut triangles = 0;
-        for (_, chunk_mesh) in build_chunk_meshes(mirror, &positions, subdiv, level, None) {
+        for (_, chunk_mesh) in build_chunk_meshes(
+            mirror,
+            &positions,
+            subdiv,
+            level,
+            None,
+            &tree_cover_at(mirror, level),
+        ) {
             for (key, mask) in &chunk_mesh.masks {
                 faces += mask.len();
                 let mut builder = MeshBuilder::default();
@@ -2144,7 +2420,14 @@ mod tests {
         let positions = terrain_positions_at(&mirror, level);
         for subdiv in [2, 4, 8] {
             let started = Instant::now();
-            let whole = build_chunk_meshes(&mirror, &positions, subdiv, level, None);
+            let whole = build_chunk_meshes(
+                &mirror,
+                &positions,
+                subdiv,
+                level,
+                None,
+                &tree_cover_at(&mirror, level),
+            );
             let whole_ms = started.elapsed().as_millis();
             // One dug tile: its chunk plus the chunks its six neighbours fall in.
             let dug = [64, 64, 8];
@@ -2157,7 +2440,14 @@ mod tests {
                 ]));
             }
             let started = Instant::now();
-            let partial = build_chunk_meshes(&mirror, &positions, subdiv, level, Some(&targets));
+            let partial = build_chunk_meshes(
+                &mirror,
+                &positions,
+                subdiv,
+                level,
+                Some(&targets),
+                &tree_cover_at(&mirror, level),
+            );
             let partial_ms = started.elapsed().as_millis();
             println!(
                 "dig-cost k={subdiv} whole={whole_ms}ms ({} chunks) partial={partial_ms}ms \
@@ -2235,7 +2525,14 @@ mod tests {
             let level = mirror.dims().z.saturating_sub(1) as i32;
             let positions = terrain_positions_at(&mirror, level);
             for subdiv in [1, 2, 4] {
-                let whole = build_chunk_meshes(&mirror, &positions, subdiv, level, None);
+                let whole = build_chunk_meshes(
+                    &mirror,
+                    &positions,
+                    subdiv,
+                    level,
+                    None,
+                    &tree_cover_at(&mirror, level),
+                );
                 assert!(!whole.is_empty(), "the fixture must produce chunks");
                 for chunk in whole.keys() {
                     let targets = BTreeSet::from([*chunk]);
@@ -2243,7 +2540,14 @@ mod tests {
                     // whole draw set here would leave the bounds of `terrain_positions_near`
                     // untested, and a scan one cell too tight loses faces silently.
                     let near = terrain_positions_near(&mirror, level, &targets);
-                    let partial = build_chunk_meshes(&mirror, &near, subdiv, level, Some(&targets));
+                    let partial = build_chunk_meshes(
+                        &mirror,
+                        &near,
+                        subdiv,
+                        level,
+                        Some(&targets),
+                        &tree_cover_at(&mirror, level),
+                    );
                     assert_eq!(
                         partial.keys().collect::<Vec<_>>(),
                         vec![chunk],
@@ -2261,7 +2565,14 @@ mod tests {
                 // And a multi-chunk subset, which is what a dig near a boundary actually asks for.
                 let pair = whole.keys().take(2).copied().collect::<BTreeSet<_>>();
                 let near = terrain_positions_near(&mirror, level, &pair);
-                let partial = build_chunk_meshes(&mirror, &near, subdiv, level, Some(&pair));
+                let partial = build_chunk_meshes(
+                    &mirror,
+                    &near,
+                    subdiv,
+                    level,
+                    Some(&pair),
+                    &tree_cover_at(&mirror, level),
+                );
                 for chunk in &pair {
                     assert_eq!(partial[chunk].masks, whole[chunk].masks);
                 }
@@ -2310,12 +2621,14 @@ mod tests {
                     "seam fixture cell {dug:?} is not solid, so digging it changes nothing"
                 );
             }
+            let boxy_level = boxy_world.dims().z.saturating_sub(1) as i32;
             let chunks = build_chunk_meshes(
                 &boxy_world,
-                &terrain_positions_at(&boxy_world, boxy_world.dims().z.saturating_sub(1) as i32),
+                &terrain_positions_at(&boxy_world, boxy_level),
                 2,
-                boxy_world.dims().z.saturating_sub(1) as i32,
+                boxy_level,
                 None,
+                &tree_cover_at(&boxy_world, boxy_level),
             );
             for axis in 0..3 {
                 let spread = chunks
@@ -2347,6 +2660,7 @@ mod tests {
                     subdiv,
                     level,
                     None,
+                    &tree_cover_at(&before, level),
                 );
                 let whole_after = build_chunk_meshes(
                     &after,
@@ -2354,6 +2668,7 @@ mod tests {
                     subdiv,
                     level,
                     None,
+                    &tree_cover_at(&after, level),
                 );
                 let mut altered = BTreeSet::new();
                 for chunk in whole_before.keys().chain(whole_after.keys()) {
@@ -2380,7 +2695,14 @@ mod tests {
         let mirror = wide_terrain();
         let level = mirror.dims().z.saturating_sub(1) as i32;
         let positions = terrain_positions_at(&mirror, level);
-        let chunks = build_chunk_meshes(&mirror, &positions, 2, level, None);
+        let chunks = build_chunk_meshes(
+            &mirror,
+            &positions,
+            2,
+            level,
+            None,
+            &tree_cover_at(&mirror, level),
+        );
         assert!(
             chunks.len() >= 3,
             "wide_terrain spans {} chunks; a one-chunk world cannot tell a partial rebuild from \
@@ -2414,7 +2736,9 @@ mod tests {
         let rock = TerrainSlot::of(protocol::Material::Stone) as usize;
         let mut tops = 0;
         let mut sides = 0;
-        for (_, mesh) in build_chunk_meshes(&mirror, &positions, 2, 1, None) {
+        for (_, mesh) in
+            build_chunk_meshes(&mirror, &positions, 2, 1, None, &tree_cover_at(&mirror, 1))
+        {
             for (key, mask) in &mesh.masks {
                 if key.axis == 2 && key.sign > 0 {
                     assert_eq!(
@@ -2596,7 +2920,14 @@ mod tests {
         let level = mirror.dims().z.saturating_sub(1) as i32;
         let positions = terrain_positions_at(&mirror, level);
         let mut recorded = Vec::new();
-        for (_, chunk_mesh) in build_chunk_meshes(&mirror, &positions, 4, level, None) {
+        for (_, chunk_mesh) in build_chunk_meshes(
+            &mirror,
+            &positions,
+            4,
+            level,
+            None,
+            &tree_cover_at(&mirror, level),
+        ) {
             recorded.extend(chunk_mesh.cells);
         }
         let unique = recorded.iter().copied().collect::<BTreeSet<_>>();
@@ -2789,6 +3120,74 @@ mod tests {
         assert_eq!(foliage_scale(&spruce, [0, 0, 2]), 0.95, "mid crown");
         assert_eq!(foliage_scale(&spruce, [0, 0, 3]), 0.78, "upper crown");
         assert_eq!(foliage_scale(&spruce, [0, 0, 4]), 0.62, "crown tip");
+    }
+
+    #[test]
+    fn a_gapped_trunk_column_is_rejected_and_falls_back_to_cubes() {
+        // The gap is PRE-EXISTING in the snapshot, never produced by digging through the new
+        // code. The fallback exists for a world that ALREADY holds a column the mesh rule cannot
+        // represent, and a fixture built by the new path would only prove that path agrees with
+        // itself. Columns sit 4 apart because `place_trees` keeps trunks 3 apart in Chebyshev and
+        // the cover's crown ring reaches one cell -- adjacent fixtures would overlap and the
+        // assertions below would be measuring the wrong thing.
+        let dims = Dims { x: 5, y: 1, z: 7 };
+        let mut tiles = vec![Tile::Empty; 5 * 7];
+        let at = |x: usize, z: usize| x + z * 5;
+        for z in 0..3 {
+            tiles[at(0, z)] = Tile::Solid(Material::TreeTrunk);
+        }
+        // Same base, same top, one cell missing in the middle: min and max are IDENTICAL to a
+        // whole four-cell column, so height alone reads 5 and the rule accepted it before.
+        for z in [0, 1, 3] {
+            tiles[at(4, z)] = Tile::Solid(Material::TreeTrunk);
+        }
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims,
+            tiles,
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+
+        let level = 6;
+        assert_eq!(
+            tree_meshes(&mirror, level)
+                .iter()
+                .map(|(base, _)| *base)
+                .collect::<Vec<_>>(),
+            vec![[0, 0, 0]],
+            "only the contiguous column may be meshed"
+        );
+        // Spelled out so the discriminator is visible: at the SAME extent, an ungapped column is
+        // accepted. The extent is not what rejects the gapped one -- the cell count is.
+        assert!(
+            classify_trunk_column(4, 0, 0, 3, 4, level).is_some(),
+            "a four-cell column spanning z0..z3 is representable, so extent is not the rejector"
+        );
+
+        let cover = tree_cover_at(&mirror, level);
+        let positions = terrain_positions_at(&mirror, level);
+        for z in [0, 1, 3] {
+            assert!(
+                !cover.covers([4, 0, z]),
+                "no mesh draws the gapped column at z {z}"
+            );
+            assert!(
+                positions.contains(&[4, 0, z]),
+                "a tree cell no mesh draws must fall back to the cube path, not vanish"
+            );
+        }
+        for z in 0..3 {
+            assert!(
+                !positions.contains(&[0, 0, z]),
+                "a meshed tree cell must not ALSO be drawn as a cube"
+            );
+        }
     }
 
     #[test]

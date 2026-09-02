@@ -9,7 +9,7 @@
 //!
 //! A stamp compiled INTO the binary cannot go stale: it is whatever the binary actually is.
 
-use std::{path::PathBuf, process::Command};
+use std::process::Command;
 
 fn main() {
     // Rerun when HEAD moves. Without these the stamp is frozen at whatever the first build saw,
@@ -18,17 +18,10 @@ fn main() {
     println!("cargo:rerun-if-changed=../../.git/index");
 
     println!("cargo:rustc-env=GUI_BUILD_SHA={}", sha());
-    println!(
-        "cargo:rustc-env=GUI_WORKSPACE_ROOT={}",
-        workspace_root().display()
-    );
-}
-
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("the gui crate must live under the workspace root")
+    // NOTE: `GUI_WORKSPACE_ROOT` used to be stamped here too. Its only consumer was
+    // `resolve_asset_root`, deleted when the pines were embedded -- and it stamped THIS machine's
+    // absolute Linux path into a binary that gets copied to Windows, which is the exact artefact
+    // the embedding fix existed to remove. Removed with its consumer.
 }
 
 /// The short SHA, suffixed `-dirty` when the working tree has uncommitted changes.
