@@ -514,9 +514,14 @@ because fixing it would change a value this pass is not authorised to change.
    still says "Production reads −0.95 deg", which back-solves to an eye height of 55, where the
    constants give −0.253°. Doc and code comment agreed with each other and both disagreed with the
    constants — which is why a doc-vs-code text guard would not have caught this one.
-4. **`RIM_LEVELS`'s own doc comment contradicts its value.** The comment above
-   `pub const RIM_LEVELS: usize = 13` still reads "five shared steps read as a gradient and cost
-   five handles per slot". Code-side only; not touched by this pass.
+4. **`RIM_LEVELS`'s doc comment contradicted its value — FIXED 2026-09-02.** The comment above
+   `pub const RIM_LEVELS: usize = 13` read "five shared steps"; it was written when the ramp was 5
+   and never moved. Fixed by **removing the restated count**, not by writing 13 — a copy of a value
+   beside the value is the defect, and this file's own history is the evidence. The same edit
+   removed the stale `"Production reads -0.95 deg"` from
+   `the_aurora_curtain_hugs_the_horizon_beyond_the_world`, which back-solved to the eye height of
+   55 that finding 3 retired.
+
 5. **Dangling reference, already recorded.** `voxel_pine.py`'s `__main__` guard cites "the asset
    contract's clause 6", which was never ported into this document. Already carried in
    `deferred-work.md`; the citation here now names the guard rather than a line number, but the
