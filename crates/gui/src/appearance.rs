@@ -247,7 +247,9 @@ pub fn foliage_snow_color() -> Color {
 }
 
 /// How many quantised steps the world-edge dissolve uses. Per-tile materials would mean one
-/// material per cube; five shared steps read as a gradient and cost five handles per slot.
+/// material per cube; a small shared set reads as a gradient and costs that many handles per
+/// slot. The count is this constant — do not restate it here, it was written as "five" and stayed
+/// that way through the move to 13.
 pub const RIM_LEVELS: usize = 13;
 
 /// Blends a terrain colour toward the night sky so the world's boundary fades out instead of

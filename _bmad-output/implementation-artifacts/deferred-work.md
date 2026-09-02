@@ -1410,3 +1410,58 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
 ## Deferred from: 10.6 vehicle observation (2026-09-01)
 
 - **Re-benchmark the fine terrain path UNDER LOAD.** Every figure in 10.6 — fps, per-dig mesh build, boot build — was measured on a nearly-idle world: tick 21, ten entities, five dwarves, and digs issued one at a time by hand. A populated fortress adds dwarves, items, point lights, designations and zones, and digs far more often and in bursts. So 10.6's fps numbers are an UPPER BOUND and its dig frequency an under-count, and the adopted k=4 is chosen with that stated rather than hidden. Wolf, 2026-09-01: "might be of course when we have more things going on it starts to degrade performance so need to benchmark this later on." Owed once there is a fortress worth loading — likely after the M2 gameplay stories, not before. [vehicle, round 2]
+
+## Deferred from: code review of 10-3-the-rules-of-the-look (2026-09-01)
+
+- **Nothing auto-checks any asset that does not already exist.**
+  `scripts/tests/test_check_asset.py:52` hardcodes the five committed `.glb` paths. The gate does
+  re-check those five on every run — better than assumed — but there is no glob, no discovery and
+  no CI (`.github/` does not exist in this repo). `assets/gltf/`, the runtime home the contract
+  names at `docs/tech-art-guidelines.md:272`, is created by story 10.5. **10.5 inherits this**: an
+  asset landing there is checked by nothing.
+- **Nothing hands the asset producer the contract.** Hops 1-2 of the feature path are unwired: no
+  generator, hand workflow or MCP session is given the rules at production time.
+  `voxel_pine.py:714` cites "the asset contract's clause 6", which resolves to nothing in `docs/`.
+  The MCP runbook is explicitly out of scope (issue #58).
+- **Batch runs abort at the first bad file.** `scripts/bench/check_asset.py:289` returns on the
+  first failure, so a user with ten assets fixes them one round-trip at a time. Spec-consistent
+  with AC6's "the first violated clause". Related: a structurally invalid GLB emits no `FIGURES`
+  line at all, though AC6 promises one per file.
+- **"Three divergent implied values" is two consistent halves plus one stale constant.**
+  `docs/tech-art-guidelines.md:181`. The sheet's dwarf reading (12 voxels = 1.20 m = 0.75 cells)
+  and its tree reading (measured in 1.6 m cells) are two halves of ONE self-consistent derivation,
+  not rival values; the only real divergence is `gui`'s stale `scale: 0.65`. The Dev Notes admit
+  this ("it is one stale constant") but the shipped contract text keeps the three-way framing.
+  AC3's letter is met. This is the project's recorded "check the upstream reference" pattern.
+- **Re-run the tech-art contracts against REAL art.** Wolf, 2026-09-02: "we need to go through
+  this again when we start to have real gfx in place." `docs/tech-art-guidelines.md` is written
+  against placeholder cubes and one approved concept artifact, and the clauses it marks **eye-only**
+  are precisely the ones only real art can settle — aurora colour and fold character, the declared
+  voxel multiple's visual read, the intended palette-role read, the solid cut face, downstream-tool
+  suitability, figures-vs-signoff comparison. Two measured reasons this is owed rather than
+  optional: 96.8% of 10.6's k=4 triangle ceiling is the placeholder detail rule (story 10.6), and
+  the round-7 albedo trims were decided by eye on placeholder geometry, so every value in the
+  Materials table is a placeholder-era reading. Revisit the whole document — values, budgets and
+  the eye-only marks — once 10.4/10.5 land authored terrain, trees and dwarves. Related: the
+  standing ruling that art gates visual judgement (Wolf, 2026-08-22).
+- **The adopted terrain `k = 4` has no constant and no owner.** `docs/tech-art-guidelines.md`
+  records 0.4 m terrain visual voxels as an ADOPTED DECISION, but the shipped default is `k = 1`
+  — `TerrainSubdivision` is inserted only under `--subdiv` [`crates/gui/src/ingest.rs:203`] and
+  consumers fall back via `subdivision.map_or(1, ..)` [`crates/gui/src/project.rs:1108`, `:1184`,
+  `:1196`]. Reaching the adopted resolution today requires `--subdiv 4`. Making k=4 the default —
+  putting the adopted `k` in one constant so a future evidence-led revision changes one constant
+  rather than a grid convention — is owed by whichever story next
+  takes terrain rendering; 10.4 (trees) and 10.5 (dwarves) are not natural owners.
+  `docs/tech-art-guidelines.md` now carries only a three-line normative note and points here. The
+  sentence it used to carry, verbatim, and the reason this entry exists: **"Do not read this
+  paragraph as a description of what the client does."** Wolf's ruling
+  at 10.6 fixed the adopted value at 4 (k=8 is servable at 100–140 fps but every dig hitches
+  38–78 ms against k=4's 5–13 ms). Related: `--subdiv` "is discoverable nowhere and `gui --help`
+  fails" (see the earlier entry in this file).
+- **10.2's standing-contract clauses 6 and 8 were not ported into the durable contract.**
+  Clause 6 (self-verification order; "Exit 0 with no output is not a result"; signed volume vs
+  voxel count) and clause 8 (declare known deviations) remain only in
+  `10-2-the-live-seat-blendermcp-on-gingerspice-spike.md:570-597`. Clause 7 WAS ported by the
+  2026-09-01 review. Consequence to close with them:
+  `_bmad-output/implementation-artifacts/10-2-signoff/voxel_pine.py:714` cites "the asset
+  contract's clause 6" and that reference now resolves to nothing under `docs/`.

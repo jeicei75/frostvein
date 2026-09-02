@@ -322,7 +322,9 @@ mod tests {
         // meaning anything once the ring radius changes. The bar is a quarter of the camera's
         // vertical half-FOV (22.5 deg), so the curtain can never claim the upper sky. A first
         // attempt used 10 deg, which at a 600-unit radius let a 140-unit top through at 8 deg
-        // — the sabotage caught it. Production reads -0.95 deg.
+        // — the sabotage caught it. What production reads is NOT restated here: it is derived
+        // from the boot camera, and the copy that used to sit on this line went stale when the
+        // camera moved. The assertion below names the measured angle when it matters.
         let ceiling = (BOOT_VERTICAL_FOV * 0.5).to_degrees() / 4.0;
         let elevation = ((AURORA_TOP - boot_eye_height()) / AURORA_RADIUS)
             .atan()
