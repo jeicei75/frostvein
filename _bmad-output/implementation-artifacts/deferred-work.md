@@ -1494,3 +1494,10 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
   `epic-9-shared-sitting-card.md:59` was updated to 39,936. Defensible as history — the shared card
   calls the 9.4 card history — but both are read at the same sitting, which is how a stale figure
   gets acted on.
+- **`build.rs`'s commit stamp went stale for one build.** After a commit, `cargo build` produced a
+  binary still stamping the PREVIOUS commit with `-dirty`, despite
+  `cargo:rerun-if-changed=../../.git/index`; touching `build.rs` fixed it. Found while regenerating
+  10.4's AC5 captures, which is why the capture had to be repeated. M2-7's entire claim is that a
+  stamp compiled into the binary cannot go stale — a stamp that silently lags is worse than none,
+  because it is trusted. Worth a look at whether the rerun triggers cover the files git actually
+  touches on commit. [`crates/gui/build.rs:17-18`]

@@ -857,7 +857,15 @@ and **no** `TerrainTile`, which is precisely the shape the old query could not s
   remains an unanswered fps question.
 - **`--at-tick` is unusable on this venue**, so a deterministic capture is not available here. Its
   tick floor demands as many OBSERVED ticks as requested, and software rendering observes roughly a
-  third of them. AC5 is therefore reported as a delta **against a measured noise floor**, below.
+  third of them. AC5 is therefore reported as a delta **against a measured noise floor**: baseline vs HEAD moves
+  261,952 pixels at delta>=4 against a worst-case same-code noise of 46,050 — 5.7x — and 200,839
+  against 8,876 at delta>=16, 22.6x. Full table and provenance in `10-4-signoff/README.md`. The
+  figures the story previously published (81,101 / 36,176 / 7,939) sat INSIDE that noise.
+- **A new one, found while regenerating AC5:** `build.rs`'s `rerun-if-changed=../../.git/index`
+  did NOT fire after a commit — the rebuilt binary still stamped the previous commit plus `-dirty`
+  until `build.rs` was touched by hand. M2-7's whole claim is that a stamp compiled into the binary
+  cannot go stale, and for one build it did. Deferred, and recorded because a stamp that silently
+  lags is worse than no stamp: it is trusted.
 - Five deferred items, in `deferred-work.md`. Two of them (`strip_trees`' ramp blindness, the
   height clamp) now sit in a script that is on the gate rather than in scratch; they stay deferred
   as Wolf ruled, but they are worth more now than when they were filed.
