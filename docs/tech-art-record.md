@@ -87,8 +87,9 @@ candidate walked to the end and found wanting, by arithmetic on the real framing
 
 Story 9.4 moved the draw-set oracle twice in one story: **53,365 of 315,068** **(superseded by
 9.4)** before it, **45,261** **(superseded by 9.4's second half)** after the tree-density cut,
-44,984 after the ground-level foliage ring was removed. It moves whenever world content moves; what
-must not change is that the rim dissolves by colour alone and removes no tiles.
+44,984 after the ground-level foliage ring was removed. Story 10.4 keeps that simulation census
+but moves its 5,048 tree cells out of the cube draw set, which now reports 39,936 terrain cubes.
+What must not change is that the rim dissolves by colour alone and removes no tiles.
 
 A lighter "horizon haze" would be more true to a real aurora-lit night — and the approved artifact
 has one — but with a uniform sky it would make far terrain *lighter* than the sky behind it and hand

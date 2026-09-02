@@ -65,13 +65,15 @@ as a warm lantern pixel, and it sits outside the ground-luminance sample region.
 **2. The startup draw-set line now names its level.** It reads
 
 ```
-projected 44984 terrain cubes at z 31
+projected 39936 terrain cubes at z 31
 ```
 
 **This figure changed on 2026-08-29 and older recipes quote the old one.** It read `53365` from
 story 5.3 until story 9.4, which moved it twice — to 45,261 when tree density was cut, then to
 44,984 when the ground-level foliage ring was removed. The shipped world now has 301,048 solid
-cells rather than 315,068, of which 44,984 are exposed. Verified by direct computation against the shipped seed.
+cells rather than 315,068, of which 44,984 are exposed; 10.4 renders its 5,048 tree cells as
+meshes, so the client startup line is 39,936 terrain cubes. Verified by direct computation against
+the shipped seed.
 Any recipe or runbook still telling you to expect `53365` predates 9.4 — **that is not a
 regression**. The oracle answers "did the rim or a slice silently drop tiles?", so what matters is
 that the number is stable ACROSS a session, not that it matches a figure written before the world

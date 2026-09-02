@@ -1897,7 +1897,7 @@ mod tests {
     /// pixel AC has been vehicle-bound since 2026-08-11. They DO have a CPU Vulkan device
     /// (lavapipe), and rendering needs a device rather than a window — `--headless` is what turns
     /// that into a measurement. Verified live: the headless client reproduced the draw-set oracle
-    /// on both the pre-9.4 world (53,365) and the current one (44,984).
+    /// on both the pre-9.4 world (53,365) and the mesh-tree draw set (39,936).
     #[test]
     fn headless_is_off_by_default_and_on_only_when_asked() {
         let interactive = super::parse_args_from([std::ffi::OsString::from("7451")])

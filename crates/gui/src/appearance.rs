@@ -260,6 +260,8 @@ pub const RIM_LEVELS: usize = 13;
 /// MEASUREMENT, NOT A CONSTANT: it counts exposed cubes in the shipped world, so it moves whenever
 /// world CONTENT moves. Story 9.4 moved it TWICE: the tree-density cut took it 53,365 -> 45,261,
 /// then removing the ground-level foliage ring took it -> 44,984 (of 315,068 -> 301,048 solid).
+/// Story 10.4 retires 5,048 tree cells from cube rendering, so the client draw set is now 39,936
+/// terrain cubes while the simulation census remains 44,984 exposed cells.
 /// What must never change is the rim's own behaviour — colour only, no tiles removed.
 pub fn rim_dissolved_color(base: Color, level: usize) -> Color {
     let steps = (RIM_LEVELS - 1) as f32;

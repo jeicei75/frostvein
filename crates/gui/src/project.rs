@@ -1108,10 +1108,10 @@ pub fn reconcile(
             spawn_tree_meshes(commands, assets, mirror, slice.level());
         }
         let positions = terrain_positions_at(mirror, slice.level());
-        // The draw-set oracle instrument (AC13). The shipped seed reports 44,984 after story
-        // 9.4; it was 53,365 before it, 45,261 between its two halves. This number tracks world
-        // CONTENT -- read it as "did the rim or a slice silently drop tiles?", never as a fixed
-        // constant. It moved twice in one story, which is the whole argument.
+        // The draw-set oracle instrument (AC13). The shipped seed reports 39,936 terrain cubes
+        // after 10.4 moved 5,048 tree cells to meshes; the simulation census remains 44,984
+        // exposed cells. Read it as "did the rim, slice, or draw path silently drop terrain?",
+        // never as a fixed constant.
         let started = Instant::now();
         let subdiv = subdivision.map_or(1, |subdivision| subdivision.0);
         if subdiv > 1 {

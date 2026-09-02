@@ -170,14 +170,14 @@ written**, and a seventh defect was found in `docs/tech-art-guidelines.md` while
         foliage is drawn sub-cell. A treatment that fills or overhangs the cell changes what the
         mouse can select.
 
-- [ ] **Task 4 — Update every pinned tree figure** (AC: 9)
-  - [ ] `CONTROL_FACES` / `CONTROL_QUADS` in `scripts/bench/resolution_bench.py` — 61,142 lives
+- [x] **Task 4 — Update every pinned tree figure** (AC: 9)
+  - [x] `CONTROL_FACES` / `CONTROL_QUADS` in `scripts/bench/resolution_bench.py` — 61,142 lives
         there, NOT in the test; editing the test alone produces a red from `assert_control`.
-  - [ ] `test_the_exported_world_still_meshes_to_the_recorded_control` pins
+  - [x] `test_the_exported_world_still_meshes_to_the_recorded_control` pins
         `{"tree_cells": 5048, "tree_faces": 13704, "terrain_cells": 39936, "terrain_faces": 47438,
         "trees": 265}` plus `exposed_faces = 61142`. The invariant `tree + terrain == total` must
         still hold, so this is a re-derivation, not a renumber.
-  - [ ] The draw-set oracle comment in `reconcile` (44,984 of 301,048) and the same number in
+  - [x] The draw-set oracle comment in `reconcile` (44,984 of 301,048) and the same number in
         `docs/tech-art-guidelines.md`.
 
 - [ ] **Task 5 — The instrument, a test of it, and the mutation rows** (AC: 3, 5, 11)
@@ -420,6 +420,16 @@ the cube path and their existing tests still pass, but they govern no mesh-tree 
 baked into the GLB palette. This is an open review question, not a clean pixel-witnessed AC.
 `Material::TreeFoliage` did not move.
 
+**Task 4 (AC9) — done.** The independent real-world bench test
+`ResolutionRealWorldControlTests.test_the_exported_world_still_meshes_to_the_recorded_control`
+remains GREEN without changing `CONTROL_FACES=61,142`, `CONTROL_QUADS=19,264`, or the census
+`tree_cells=5,048`, `tree_faces=13,704`, `terrain_cells=39,936`, `terrain_faces=47,438`,
+`trees=265`, `exposed_faces=61,142`. Worldgen and the simulation census did not move. What did
+move is the client draw set: `44,984 - 5,048 = 39,936` terrain cubes at z31. The project comment,
+appearance explanation, headless test note, two guideline references, tech-art record, epic plan,
+vehicle runbook, and Epic 9 sitting card now distinguish the unchanged simulation census from the
+new mesh-tree client count.
+
 ### File List
 
 - `docs/tech-art-guidelines.md` — UPDATE, Task 0 taper correction (two occurrences)
@@ -439,4 +449,9 @@ baked into the GLB palette. This is an open review question, not a clean pixel-w
 - `crates/gui/src/project.rs` — UPDATE, expose tree scene-load and expected-count checks
 - `crates/gui/src/capture.rs` — UPDATE, require loaded scenes and all tree meshes; count mesh cut units
 - `crates/gui/src/pick.rs` — UPDATE, correct obsolete cube-foliage rationale
+- `docs/tech-art-guidelines.md` — UPDATE, mesh-tree draw-set figure (two occurrences)
+- `docs/tech-art-record.md` — UPDATE, distinguish the unchanged census from the new draw set
+- `_bmad-output/planning-artifacts/epics.md` — UPDATE, name 44,984 as exposed cells
+- `_bmad-output/implementation-artifacts/vehicle-session-runbook.md` — UPDATE, startup count 39,936
+- `_bmad-output/implementation-artifacts/epic-9-shared-sitting-card.md` — UPDATE, startup count 39,936
 | 2026-09-02 | Tasks 0-2 complete. Task 0's taper correction and Task 1's three taper candidates delegated to Codex (two commits, per-task cadence held, authored Völundr); the run then exited 1 on 5-hour quota exhaustion mid-self-gate, losing nothing because of that cadence. Orchestrator re-ran the FULL gate independently: GREEN, nine checks, no skips. **Task 2 ruled by Wolf: the mesh path wins and 10.4 lands it in the client**, explicitly overriding Task 2's stop-if-authored instruction. The taper was rejected on measurement, not taste — the whole sweep moves the frame 5.27-5.76 mean pixel delta against 26.07 for deleting every tree, because `foliage_scale` can only shrink a cube inside its own cell and the crown's disc shape is fixed by `place_trees`. "Procedural vs authored" was found to be a false dichotomy: `voxel_pine.py` IS a deterministic seeded generator, so the difference is venue and resolution (1 cube per 1.6 m cell vs 0.2 m voxels baked offline; 103 vs 3,474-5,894 triangles per tree). Candidate D renders 10.2's pines in the valley at boot framing via a bench that IMPORTS `valley_bench` rather than forking it. Three defects recorded: the `0.95` taper arm renders on zero cells while `bench_contract.rs` pins it, 53% of foliage renders snow-grey, and the approved reference sheet self-contradicts on Type 4 (6 CELLS vs 8.8x dwarf height) — resolved to 6 cells, `SM_VoxelPine_Tree04R.glb` regenerated at exactly 9.6 m, overshooting placements 103 of 265 -> 0. |

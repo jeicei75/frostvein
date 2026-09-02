@@ -56,7 +56,8 @@ a GPU frame. That is the measurement, not a broken build — the PNG is written 
 the evidence survives. At or under the bar CONFIRMS the ceiling; over it IS the correction. Either
 answer closes AC13.
 
-Also expected at startup: `projected 44984 terrain cubes at z 31`. It read 53365 before 9.4.
+Also expected at startup: `projected 39936 terrain cubes at z 31`. It read 53365 before 9.4;
+the 44,984 simulation census includes the 5,048 tree cells now rendered as meshes.
 **Not a regression** — tree density changed, then the ground-level foliage ring was removed.
 
 ## 2. Your eye on the trees — closes 9.4's AC10

@@ -86,7 +86,7 @@ the horizon angle), [Sky and lights](#sky-and-lights) (curtain top and edge alph
 | Fog range at boot | opens 75, saturates 155 | eye-only |
 | Rim dissolve | 13 levels (`RIM_LEVELS`) over `RIM_WIDTH` | the rim dissolve test below |
 | Rim dissolve, before | linear 5 steps over 10 tiles **(superseded)** | read as a hard band |
-| Draw-set oracle | 44,984 of 301,048 — a measurement | the cube oracle |
+| Draw-set oracle | 39,936 terrain cubes of 301,048 solid — a measurement | the cube oracle |
 
 The boot composition tests are
 `boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third` and
@@ -235,8 +235,9 @@ Two mechanisms are in the build, and they do different jobs.
 - Shared steps per surface keep the dissolve to a handful of material handles; per-tile blending
   would mean one material per cube.
 - The rim tiles MUST still be drawn. The draw set is watched by the cube oracle and MUST never
-  shrink to hide an edge. **The oracle is a measurement of the shipped world, not a constant** — it
-  reads **44,984** exposed cubes of 301,048 solid today, and moves whenever world content moves.
+  shrink to hide an edge. **The oracle is a measurement of the shipped draw set, not a constant** —
+  it reads **39,936 terrain cubes** of 301,048 solid today. The simulation census remains 44,984
+  exposed cells: 5,048 tree cells now render as meshes rather than cubes.
 - **The fog colour and the rim's target colour MUST both be exactly the sky colour.** A haze colour
   only becomes available once the sky itself carries a vertical gradient; until then these three
   colours move together or not at all.
