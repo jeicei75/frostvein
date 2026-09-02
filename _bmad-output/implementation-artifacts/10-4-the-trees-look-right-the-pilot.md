@@ -180,15 +180,15 @@ written**, and a seventh defect was found in `docs/tech-art-guidelines.md` while
   - [x] The draw-set oracle comment in `reconcile` (44,984 of 301,048) and the same number in
         `docs/tech-art-guidelines.md`.
 
-- [ ] **Task 5 — The instrument, a test of it, and the mutation rows** (AC: 3, 5, 11)
-  - [ ] The instrument is `valley_bench.py`'s `range-check:` line for the artifact half and
+- [x] **Task 5 — The instrument, a test of it, and the mutation rows** (AC: 3, 5, 11)
+  - [x] The instrument is `valley_bench.py`'s `range-check:` line for the artifact half and
         `gui --headless --capture` for the client half. Both already exist; cite them rather than
         inventing a third.
-  - [ ] **The instrument must be shown to move.** The story-creation RED below proves
+  - [x] **The instrument must be shown to move.** The story-creation RED below proves
         `valley_bench.py` sees trees. Re-run an equivalent RED against the winning treatment: if
         the figures do not move between control and candidate, the artifact is not evidence of a
         tree change.
-  - [ ] Author `mutations/10-4-the-trees-look-right-the-pilot.sh`, ≥3 rows, format per
+  - [x] Author `mutations/10-4-the-trees-look-right-the-pilot.sh`, ≥3 rows, format per
         `mutations/10-1-the-headless-bench.sh`; run `scripts/mutate.sh` and record KILLED per row.
 
 - [ ] **Task 6 — Verification** (AC: 1, 11, 12)
@@ -430,6 +430,21 @@ appearance explanation, headless test note, two guideline references, tech-art r
 vehicle runbook, and Epic 9 sitting card now distinguish the unchanged simulation census from the
 new mesh-tree client count.
 
+**Task 5 (AC3, AC5, AC11) — done.** The existing artifact instrument remains
+`valley_bench.py`'s `range-check:` line; Task 1's `red-no-trees` treatment and its candidate D
+figures establish that it moves. The real-client instrument produced and committed
+`client-baseline-2ef194d-subdiv2.png` and `client-head-9eba31f-subdiv2.png`, both at 1280x720
+using `--headless --subdiv 2 --frames 112`. Baseline reports 44,984 cube trees; HEAD reports
+mesh trees. Their direct RGB comparison is **81,101 / 921,600 raw changed pixels**, with **36,176**
+pixels at max-channel delta >=4/255 and **7,939** at >=16/255. The subdivision was held equal;
+it was necessary in this lavapipe venue for the legacy 100-tick capture health floor to complete.
+
+Mutation run: `CARGO_BUILD_JOBS=8 scripts/mutate.sh
+_bmad-output/implementation-artifacts/mutations/10-4-the-trees-look-right-the-pilot.sh` —
+**KILLED**: `copied executable asset root wins over the build workspace`, `zero spawned meshes
+cannot pass a treed capture`, and `cut oracle includes whole tree meshes above their source tiles`.
+The actual failures name the expected tests and are retained in this run's log.
+
 ### File List
 
 - `docs/tech-art-guidelines.md` — UPDATE, Task 0 taper correction (two occurrences)
@@ -454,4 +469,7 @@ new mesh-tree client count.
 - `_bmad-output/planning-artifacts/epics.md` — UPDATE, name 44,984 as exposed cells
 - `_bmad-output/implementation-artifacts/vehicle-session-runbook.md` — UPDATE, startup count 39,936
 - `_bmad-output/implementation-artifacts/epic-9-shared-sitting-card.md` — UPDATE, startup count 39,936
+- `_bmad-output/implementation-artifacts/mutations/10-4-the-trees-look-right-the-pilot.sh` — NEW, three capture mutations
+- `_bmad-output/implementation-artifacts/10-4-signoff/client-baseline-2ef194d-subdiv2.png` — NEW, baseline client capture
+- `_bmad-output/implementation-artifacts/10-4-signoff/client-head-9eba31f-subdiv2.png` — NEW, mesh-tree client capture
 | 2026-09-02 | Tasks 0-2 complete. Task 0's taper correction and Task 1's three taper candidates delegated to Codex (two commits, per-task cadence held, authored Völundr); the run then exited 1 on 5-hour quota exhaustion mid-self-gate, losing nothing because of that cadence. Orchestrator re-ran the FULL gate independently: GREEN, nine checks, no skips. **Task 2 ruled by Wolf: the mesh path wins and 10.4 lands it in the client**, explicitly overriding Task 2's stop-if-authored instruction. The taper was rejected on measurement, not taste — the whole sweep moves the frame 5.27-5.76 mean pixel delta against 26.07 for deleting every tree, because `foliage_scale` can only shrink a cube inside its own cell and the crown's disc shape is fixed by `place_trees`. "Procedural vs authored" was found to be a false dichotomy: `voxel_pine.py` IS a deterministic seeded generator, so the difference is venue and resolution (1 cube per 1.6 m cell vs 0.2 m voxels baked offline; 103 vs 3,474-5,894 triangles per tree). Candidate D renders 10.2's pines in the valley at boot framing via a bench that IMPORTS `valley_bench` rather than forking it. Three defects recorded: the `0.95` taper arm renders on zero cells while `bench_contract.rs` pins it, 53% of foliage renders snow-grey, and the approved reference sheet self-contradicts on Type 4 (6 CELLS vs 8.8x dwarf height) — resolved to 6 cells, `SM_VoxelPine_Tree04R.glb` regenerated at exactly 9.6 m, overshooting placements 103 of 265 -> 0. |
