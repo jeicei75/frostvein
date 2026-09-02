@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use bevy::{
@@ -50,25 +50,12 @@ pub struct DrawStats {
 }
 
 /// The live state that a headless capture must report before it may save its PNG.
-#[derive(Resource, Debug, Clone)]
+#[derive(Resource, Debug, Clone, Default)]
 pub struct TreeCaptureVerification {
     expected: usize,
     spawned: usize,
     cut_face_meshes: usize,
     scenes_loaded: bool,
-    asset_root: PathBuf,
-}
-
-impl TreeCaptureVerification {
-    pub fn new(asset_root: PathBuf) -> Self {
-        Self {
-            expected: 0,
-            spawned: 0,
-            cut_face_meshes: 0,
-            scenes_loaded: false,
-            asset_root,
-        }
-    }
 }
 
 impl DrawStats {
@@ -231,17 +218,16 @@ pub fn update_tree_capture_verification(
         .is_some_and(|(assets, asset_server)| assets.tree_scenes_loaded(&asset_server));
 }
 
-fn assert_tree_capture(expected: usize, spawned: usize, scenes_loaded: bool, asset_root: &Path) {
+fn assert_tree_capture(expected: usize, spawned: usize, scenes_loaded: bool) {
     assert!(
         scenes_loaded,
-        "capture tree scenes failed to load from resolved asset root {}",
-        asset_root.display()
+        "capture tree scenes failed to load from the embedded asset source; the pines are \
+         compiled into this binary, so a failure here is a decode or registration fault, never \
+         a missing file"
     );
     assert_eq!(
-        spawned,
-        expected,
-        "capture spawned {spawned} tree meshes but the mirror requires {expected}; resolved asset root {}",
-        asset_root.display()
+        spawned, expected,
+        "capture spawned {spawned} tree meshes but the mirror requires {expected}"
     );
 }
 
@@ -903,17 +889,15 @@ pub fn capture_after_frames(
         );
         if let Some(tree_verification) = tree_verification {
             println!(
-                "trees: meshes={} of {} scenes_loaded={} asset_root={}",
+                "trees: meshes={} of {} scenes_loaded={} source=embedded",
                 tree_verification.spawned,
                 tree_verification.expected,
                 tree_verification.scenes_loaded,
-                tree_verification.asset_root.display()
             );
             assert_tree_capture(
                 tree_verification.expected,
                 tree_verification.spawned,
                 tree_verification.scenes_loaded,
-                &tree_verification.asset_root,
             );
         }
         println!(
@@ -1628,16 +1612,15 @@ mod tests {
 
     #[test]
     fn tree_capture_requires_loaded_scenes_and_every_rederived_mesh() {
-        let root = PathBuf::from("assets-under-test");
         assert!(
-            std::panic::catch_unwind(|| assert_tree_capture(1, 0, true, &root)).is_err(),
+            std::panic::catch_unwind(|| assert_tree_capture(1, 0, true)).is_err(),
             "a treed mirror with zero spawned meshes must not save a successful capture"
         );
         assert!(
-            std::panic::catch_unwind(|| assert_tree_capture(1, 1, false, &root)).is_err(),
+            std::panic::catch_unwind(|| assert_tree_capture(1, 1, false)).is_err(),
             "failed scene handles must not save a successful capture"
         );
-        assert_tree_capture(1, 1, true, &root);
+        assert_tree_capture(1, 1, true);
     }
 
     #[test]

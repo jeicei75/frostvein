@@ -16,7 +16,7 @@ use anyhow::{Context, bail};
 use bevy::{
     app::PluginGroup,
     app::ScheduleRunnerPlugin,
-    asset::{AssetPlugin, Assets, Handle},
+    asset::{Assets, Handle},
     camera::RenderTarget,
     image::Image,
     render::render_resource::{TextureFormat, TextureUsages},
@@ -97,17 +97,50 @@ pub struct ProjectionWork {
     pub dirty_tiles: BTreeSet<[i32; 3]>,
 }
 
-/// The asset directory selected for this running binary, retained so capture failures name the
-/// directory an operator can actually inspect.
-#[derive(Resource, Debug, Clone)]
-pub struct TreeAssetRoot(pub PathBuf);
-
-const TREE_ASSET_FILES: [&str; 4] = [
-    "trees/SM_VoxelPine_Tree01.glb",
-    "trees/SM_VoxelPine_Tree02.glb",
-    "trees/SM_VoxelPine_Tree03.glb",
-    "trees/SM_VoxelPine_Tree04R.glb",
+/// The four pines, compiled INTO the binary and served from the `embedded://` asset source.
+///
+/// WHY EMBEDDED RATHER THAN SHIPPED BESIDE THE EXECUTABLE. `build.rs` stamps the commit SHA into
+/// this binary because "every previous guard was a procedure, and a procedure is exactly what a
+/// stale binary defeats". "Remember to copy `assets/` next to `gui.exe`" is that same shape of
+/// procedure, and it failed the first time the vehicle used it: the fallback it lands on is a
+/// path stamped at COMPILE time on the build machine, so on Windows it resolves to a Linux path
+/// that cannot exist. Embedding removes the copy step instead of documenting it — the assets
+/// cannot be left behind, and they cannot go stale against the binary that draws them.
+///
+/// ORDER IS LOAD-BEARING: these are indexed by `TreeVariant` in `project.rs::tree_scene`, so the
+/// table and that match arm are one mapping in two places. `tree_asset_paths_match_the_loader`
+/// asserts they agree rather than trusting them to.
+pub const TREE_ASSETS: [(&str, &[u8]); 4] = [
+    (
+        "trees/SM_VoxelPine_Tree01.glb",
+        include_bytes!("../../../assets/trees/SM_VoxelPine_Tree01.glb"),
+    ),
+    (
+        "trees/SM_VoxelPine_Tree02.glb",
+        include_bytes!("../../../assets/trees/SM_VoxelPine_Tree02.glb"),
+    ),
+    (
+        "trees/SM_VoxelPine_Tree03.glb",
+        include_bytes!("../../../assets/trees/SM_VoxelPine_Tree03.glb"),
+    ),
+    (
+        "trees/SM_VoxelPine_Tree04R.glb",
+        include_bytes!("../../../assets/trees/SM_VoxelPine_Tree04R.glb"),
+    ),
 ];
+
+/// Publish the embedded pines into the `embedded://` source before anything loads them.
+///
+/// `AssetPlugin::build` creates the registry and registers the source, so this must run AFTER
+/// `DefaultPlugins` and before the startup system that loads the scenes.
+fn register_tree_assets(app: &mut App) {
+    let registry = app
+        .world_mut()
+        .resource_mut::<bevy::asset::io::embedded::EmbeddedAssetRegistry>();
+    for (path, bytes) in TREE_ASSETS {
+        registry.insert_asset(PathBuf::new(), Path::new(path), bytes);
+    }
+}
 
 pub fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
@@ -115,11 +148,10 @@ pub fn run() -> anyhow::Result<()> {
     // still learns which binary it is holding, and that is exactly the case where the answer
     // usually turns out to be "a stale one". See `crate::BUILD_SHA`.
     eprintln!("gui build {}", crate::BUILD_SHA);
-    let asset_root = resolve_asset_root()?;
-    if args.capture.is_some() {
-        verify_tree_assets(&asset_root)?;
-    }
-    eprintln!("gui asset root {}", asset_root.display());
+    eprintln!(
+        "gui tree assets: {} embedded in this binary",
+        TREE_ASSETS.len()
+    );
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
     if args.headless {
@@ -137,26 +169,19 @@ pub fn run() -> anyhow::Result<()> {
                     exit_condition: ExitCondition::DontExit,
                     ..Default::default()
                 })
-                .set(AssetPlugin {
-                    file_path: asset_root.display().to_string(),
-                    ..Default::default()
-                })
                 .disable::<WinitPlugin>(),
         )
         .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO))
         // The overlay plugin wants a window; its config resource is all the client systems read.
         .init_resource::<FpsOverlayConfig>();
     } else {
-        app.add_plugins(DefaultPlugins.set(AssetPlugin {
-            file_path: asset_root.display().to_string(),
-            ..Default::default()
-        }))
-        .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        .add_plugins(FpsOverlayPlugin {
-            config: overlay_config_off(),
-        });
+        app.add_plugins(DefaultPlugins)
+            .add_plugins(FrameTimeDiagnosticsPlugin::default())
+            .add_plugins(FpsOverlayPlugin {
+                config: overlay_config_off(),
+            });
     }
-    app.insert_resource(TreeAssetRoot(asset_root));
+    register_tree_assets(&mut app);
     configure_client_app(&mut app, mirror, receiver, writer, args);
     // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
     // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
@@ -166,51 +191,6 @@ pub fn run() -> anyhow::Result<()> {
         std::process::exit(code.get().into());
     }
     Ok(())
-}
-
-/// Select the copied executable's sibling assets first, then the build workspace.
-///
-/// NOTE: this covers the devpod and the copied Windows vehicle only; packaging assets with a
-/// future installer needs a real distribution layout rather than another fallback.
-fn resolve_asset_root() -> anyhow::Result<PathBuf> {
-    let executable = std::env::current_exe().context("could not resolve gui executable path")?;
-    Ok(resolve_asset_root_at(
-        &executable,
-        Path::new(env!("GUI_WORKSPACE_ROOT")),
-    ))
-}
-
-fn resolve_asset_root_at(executable: &Path, workspace_root: &Path) -> PathBuf {
-    let beside_executable = executable
-        .parent()
-        .expect("an executable path always has a parent")
-        .join("assets");
-    if beside_executable.is_dir() {
-        beside_executable
-    } else {
-        workspace_root.join("assets")
-    }
-}
-
-fn verify_tree_assets(asset_root: &Path) -> anyhow::Result<()> {
-    let missing = TREE_ASSET_FILES
-        .iter()
-        .map(|file| asset_root.join(file))
-        .filter(|path| !path.is_file())
-        .collect::<Vec<_>>();
-    if missing.is_empty() {
-        Ok(())
-    } else {
-        bail!(
-            "tree assets missing under resolved asset root {}: {}",
-            asset_root.display(),
-            missing
-                .iter()
-                .map(|path| path.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    }
 }
 
 /// Opens the daemon socket, reads the opening snapshot, and leaves a reader thread feeding the
@@ -277,11 +257,8 @@ fn configure_client_app(
         app.insert_resource(TerrainSubdivision(subdiv));
     }
     insert_capture_resources(app, &args);
-    if args.headless
-        && args.capture.is_some()
-        && let Some(asset_root) = app.world().get_resource::<TreeAssetRoot>()
-    {
-        app.insert_resource(TreeCaptureVerification::new(asset_root.0.clone()));
+    if args.headless && args.capture.is_some() {
+        app.insert_resource(TreeCaptureVerification::default());
     }
     client_systems(app);
     projection_systems(app);
@@ -1211,35 +1188,46 @@ mod tests {
     use crate::project::{SnowCap, TerrainChunk, TerrainSubdivision, TerrainTile, WorldProjected};
     use bevy::ecs::system::RunSystemOnce;
 
+    /// Every pine must actually be INSIDE the binary, and be a real GLB.
+    ///
+    /// A length check alone would pass on four empty files, which is the shape of this project's
+    /// recorded silent failures: the previous filesystem loader failed on the vehicle with a
+    /// green suite behind it. The glTF magic is the independent oracle — it comes from the file
+    /// content, not from anything this module asserts about itself.
     #[test]
-    fn asset_root_prefers_a_copied_executables_assets_then_the_stamped_workspace() {
-        let root =
-            std::env::temp_dir().join(format!("frostvein-gui-assets-{}", std::process::id()));
-        let copied_executable = root.join("vehicle/gui.exe");
-        let sibling_assets = copied_executable.parent().unwrap().join("assets");
-        std::fs::create_dir_all(&sibling_assets)
-            .expect("the copied vehicle layout must be creatable");
+    fn every_tree_variant_is_embedded_in_the_binary_as_a_real_glb() {
         assert_eq!(
-            super::resolve_asset_root_at(&copied_executable, std::path::Path::new("workspace")),
-            sibling_assets,
-            "a copied gui.exe must use assets beside itself before any build-machine path"
+            super::TREE_ASSETS.len(),
+            4,
+            "one embedded pine per TreeVariant"
         );
-        std::fs::remove_dir_all(&root).expect("the test layout must be removable");
-        assert_eq!(
-            super::resolve_asset_root_at(&copied_executable, std::path::Path::new("workspace")),
-            std::path::PathBuf::from("workspace/assets"),
-            "the devpod executable has no sibling assets and must fall back to the stamped workspace"
-        );
+        for (path, bytes) in super::TREE_ASSETS {
+            assert!(
+                bytes.len() > 100_000,
+                "{path} is {} bytes — too small to be a shipped pine",
+                bytes.len()
+            );
+            assert_eq!(
+                &bytes[0..4],
+                b"glTF",
+                "{path} does not carry the glTF magic, so it is not a GLB"
+            );
+        }
     }
 
+    /// The embedded table and the loader's paths are ONE mapping written in two places.
+    ///
+    /// `project.rs::tree_scene` indexes `ProjectionAssets::trees` by `TreeVariant`, and that array
+    /// is built from these paths in order. If the two ever disagree, every tree draws as the wrong
+    /// species and nothing else goes red.
     #[test]
-    fn stamped_asset_root_contains_every_shipped_tree_scene() {
-        let root = super::resolve_asset_root_at(
-            std::path::Path::new("no-copied-gui-executable"),
-            std::path::Path::new(env!("GUI_WORKSPACE_ROOT")),
+    fn tree_asset_paths_match_the_loader() {
+        let embedded = super::TREE_ASSETS.map(|(path, _)| path);
+        assert_eq!(
+            embedded,
+            crate::project::TREE_SCENE_PATHS,
+            "the embedded table and the loader disagree about which pine is which"
         );
-        super::verify_tree_assets(&root)
-            .expect("the capture asset check needs all four GLBs under the resolved root");
     }
 
     #[test]

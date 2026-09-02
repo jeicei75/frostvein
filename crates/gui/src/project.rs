@@ -243,6 +243,17 @@ pub struct ProjectionAssets {
     trees: [Handle<WorldAsset>; 4],
 }
 
+/// Scene paths in `TreeVariant` order, served from the `embedded://` source.
+///
+/// The bytes live in `ingest::TREE_ASSETS`; this is the order `tree_scene` indexes by, and
+/// `ingest::tree_asset_paths_match_the_loader` pins the two together.
+pub const TREE_SCENE_PATHS: [&str; 4] = [
+    "trees/SM_VoxelPine_Tree01.glb",
+    "trees/SM_VoxelPine_Tree02.glb",
+    "trees/SM_VoxelPine_Tree03.glb",
+    "trees/SM_VoxelPine_Tree04R.glb",
+];
+
 pub fn setup_projection_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -280,12 +291,7 @@ pub fn setup_projection_assets(
         trees: asset_server.map_or_else(
             || std::array::from_fn(|_| Handle::default()),
             |asset_server| {
-                [
-                    asset_server.load("trees/SM_VoxelPine_Tree01.glb#Scene0"),
-                    asset_server.load("trees/SM_VoxelPine_Tree02.glb#Scene0"),
-                    asset_server.load("trees/SM_VoxelPine_Tree03.glb#Scene0"),
-                    asset_server.load("trees/SM_VoxelPine_Tree04R.glb#Scene0"),
-                ]
+                TREE_SCENE_PATHS.map(|path| asset_server.load(format!("embedded://{path}#Scene0")))
             },
         ),
     });
