@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.4: The Trees Look Right (the pilot)
 
-Status: ready-for-dev
+Status: in-progress
 
 **Runs after 10.6 and 10.3** (epic execution order 10.6 → 10.3 → 10.4 → 10.5, ruled by Wolf
 2026-08-31). Both have landed: the resolution contract fixes 1.6 m/cell and the asset contract is
@@ -130,31 +130,31 @@ written**, and a seventh defect was found in `docs/tech-art-guidelines.md` while
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — Correct the taper the guidelines get wrong** (AC: 10)
-  - [ ] `docs/tech-art-guidelines.md`: Materials table row and the "Value and materials" bullet
+- [x] **Task 0 — Correct the taper the guidelines get wrong** (AC: 10)
+  - [x] `docs/tech-art-guidelines.md`: Materials table row and the "Value and materials" bullet
         both read `0.62 / 0.78 / 0.95`, mapped **skirts and tips / upper crown / mid-crown** —
         0.62 covers the crown tip as well as the skirt. Note in
         `docs/tech-art-record.md` that round-7 commit `10c06e1` moved it with the snow cap and the
         crown, and that only the crown was documented at the time.
-  - [ ] Do **not** touch `foliage_scale` itself. This task changes documentation only.
+  - [x] Do **not** touch `foliage_scale` itself. This task changes documentation only.
 
-- [ ] **Task 1 — Bench the control and at least one candidate** (AC: 2, 3)
-  - [ ] Control first: `python3 scripts/bench/export_world.py <snapshot.json>` then
+- [x] **Task 1 — Bench the control and at least one candidate** (AC: 2, 3)
+  - [x] Control first: `python3 scripts/bench/export_world.py <snapshot.json>` then
         `blender --background --python scripts/bench/valley_bench.py -- <snapshot.json> <out.png>`.
         Paste the `range-check:` line into the Dev Agent Record.
-  - [ ] Candidate treatments are produced by editing the **snapshot** or the bench's tree
+  - [x] Candidate treatments are produced by editing the **snapshot** or the bench's tree
         drawing, not by editing the client first. The bench exists so the client change is made
         once, after the decision.
-  - [ ] **Candidate bench edits stay uncommitted**, or live in a scratch copy of `valley_bench.py`
+  - [x] **Candidate bench edits stay uncommitted**, or live in a scratch copy of `valley_bench.py`
         under `10-4-signoff/`. `bench_contract.rs` forbids a committed bench taper the client does
         not carry, so a committed candidate turns AC1 red and pushes the dev into exactly the
         client-first change the line above forbids. The lockstep edit happens once, in Task 3.
-  - [ ] Artifacts land in `_bmad-output/implementation-artifacts/10-4-signoff/`.
+  - [x] Artifacts land in `_bmad-output/implementation-artifacts/10-4-signoff/`.
 
-- [ ] **Task 2 — Wolf judges, and the decision is recorded** (AC: 4, 12 opening half)
-  - [ ] Present control and candidates side by side. Record the decision, the date, and the
+- [x] **Task 2 — Wolf judges, and the decision is recorded** (AC: 4, 12 opening half)
+  - [x] Present control and candidates side by side. Record the decision, the date, and the
         artifact filename it rests on.
-  - [ ] **Stop here if the decision is authored.** An authored tree is a different story shape —
+  - [x] **Stop here if the decision is authored.** An authored tree is a different story shape —
         see Scope guardrails — and needs its scope agreed before any client work.
 
 - [ ] **Task 3 — Land the winning treatment in the client** (AC: 5, 6, 7, 8)
@@ -328,8 +328,90 @@ Full gate at creation: **GREEN**, all 9 checks `ok`.
 
 ### Agent Model Used
 
+- **Orchestrator / verifier:** Claude Opus 5 (1M context), `claude-opus-5[1m]`.
+- **Tasks 0-1 implementation:** Codex `gpt-5.6-terra`, reasoning effort `high`, via
+  `scripts/codex-handoff.sh`. The run **exited 1 on quota exhaustion** mid-way through its
+  self-gate ("You've hit your usage limit ... try again at 10:36 AM" — the 5-hour window, which
+  stood at 65% used before the handoff). Both task commits had already landed, because the
+  per-task commit cadence is the recovery mechanism; nothing was lost and nothing was re-run.
+- **Task 2 evidence (`authored_bench.py`, `pine_6cell.py`, candidate D):** produced by the
+  orchestrator directly, with Wolf told first that Codex was out of quota. Bench scratch
+  evidence under `10-4-signoff/`, no production code.
+
 ### Debug Log References
+
+**The wrapper's `401` warning is a FALSE POSITIVE, for the third recorded time.**
+`scripts/codex-handoff.sh` greps the run log for `401`; it matched **232** times and every single
+match is the substring inside `40148` — the RED artifact's own `exposed_cells` figure. There were
+zero `Unauthorized` and zero `Missing bearer` lines. A bench figure now trips the auth alarm.
+
+**Two silent-failure traps hit while building `authored_bench.py`**, both recorded because each
+would have produced a confident-looking wrong artifact rather than an error:
+
+1. Blender's glTF importer leaves `rotation_mode` on `QUATERNION`. Assigning `rotation_euler`
+   while it is `QUATERNION` is **ignored with no error** — the pines rendered unrotated and
+   nothing complained.
+2. The first orientation guard read `obj.dimensions`, which is the **local** bounding box and
+   ignores rotation entirely, so it would have passed a mis-oriented tree. It now measures the
+   **world** bounding box and additionally asserts the base sits at `Y=0`. This is the
+   leaf-only-check defect from 10.3 in a new costume.
 
 ### Completion Notes List
 
+**Task 0 (AC10) — done, verified independently.** Both occurrences corrected in
+`docs/tech-art-guidelines.md` (Materials table row 45, Value-and-materials bullet 159) to
+`0.62 / 0.78 / 0.95`, mapped skirts-and-tips / upper-crown / mid-crown; `docs/tech-art-record.md`
+records that round-7 commit `10c06e1` moved the taper with the snow cap and crown and documented
+only the crown. Verified by search: no surviving `0.72 / 0.86` taper claim.
+
+**Task 1 (AC2, AC3) — done.** Control reproduced exactly on today's tree
+(`exposed_cells=44984 non_sky_fraction=0.686736 distinct_colors=59191 terrain_luma=105.853`).
+Three tuned-procedural taper candidates plus one mesh candidate; all figures and artifacts are
+tabulated in `10-4-signoff/README.md` and `10-4-signoff/decision.md`. Candidate benching used a
+scratch copy (`10-4-signoff/candidate_bench.py`, a 20-line diff from `valley_bench.py`) so the
+committed bench was never edited and `bench_contract.rs` was never at risk.
+
+**AC3's expected non-move, stated so it is not read as a defect:** every taper candidate reports
+`exposed_cells=44984`, unchanged. The taper changes where a face is DRAWN, never which faces are
+exposed. `distinct_colors`, `non_sky_fraction` and `terrain_luma` all moved.
+
+**Task 2 (AC4, AC12 opening half) — done. Ruling: the mesh path wins, and Wolf directed that
+10.4 land it rather than defer it**, explicitly overriding Task 2's "stop here if the decision is
+authored". Full reasoning, figures and the artifact it rests on: `10-4-signoff/decision.md`.
+UX-DR22's opening half is satisfied and was verified rather than asserted —
+`git diff 8f5d0c1..6d737e8 -- crates/` and `-- scripts/` are both **empty**, so Wolf approved a
+bench artifact with no client change in existence.
+
+**Three defects found while judging, none of them fixed by this story's client change:**
+
+1. **The `_ => 0.95` taper arm renders on ZERO cells.** Counted from the exported snapshot by an
+   independent oracle: `above=0` -> 2,385 foliage cells, `above=1` -> 2,120, `above=2` -> **0**.
+   Provable from `place_trees`: trunk rejection forces trees >=3 apart in Chebyshev while a crown
+   ring spans radius 1, so no column ever receives foliage from two trees and a ring column holds
+   exactly two consecutive foliage cells. The shipped taper is two-step, not three.
+   `foliage_tapers_from_wide_mid_crown_to_narrow_tip_and_skirt` passes only because its fixture is
+   a synthetic 1x1x6 column with three stacked foliage cells — a shape worldgen cannot generate.
+   `bench_contract.rs` pins `0.95` in both Rust and Python: a guard holding a value nothing draws.
+2. **53% of foliage renders as snow, not green** — 2,385 of 4,505 cells are snow-laden crowns and
+   they are exactly the top-of-column set, so the shipped tree reads as a grey platter over a thin
+   green band.
+3. **The approved reference sheet contradicts itself on Type 4.** `reference-sheet.jpg` labels it
+   both "6 CELLS" and "8.8x dwarf height"; at the 1.20 m dwarf anchor those are 9.6 m and 10.56 m.
+   Types 1-3 agree on both labels, only Type 4 does not. Resolved in favour of the cell label,
+   which is the half `place_trees` can honour.
+
 ### File List
+
+- `docs/tech-art-guidelines.md` — UPDATE, Task 0 taper correction (two occurrences)
+- `docs/tech-art-record.md` — UPDATE, why the taper was wrong
+- `_bmad-output/implementation-artifacts/10-4-signoff/README.md` — UPDATE, candidate table
+- `_bmad-output/implementation-artifacts/10-4-signoff/candidate_bench.py` — NEW, taper scratch bench
+- `_bmad-output/implementation-artifacts/10-4-signoff/authored_bench.py` — NEW, mesh-tree scratch bench
+- `_bmad-output/implementation-artifacts/10-4-signoff/pine_6cell.py` — NEW, 6-cell pine generator
+- `_bmad-output/implementation-artifacts/10-4-signoff/SM_VoxelPine_Tree04R.glb` — NEW, height-exact Tree04
+- `_bmad-output/implementation-artifacts/10-4-signoff/decision.md` — NEW, Task 2 decision record
+- `_bmad-output/implementation-artifacts/10-4-signoff/candidate-A-0.50-0.72-0.98-blender-5.2.1.png` — NEW
+- `_bmad-output/implementation-artifacts/10-4-signoff/candidate-B-0.72-0.88-0.98-blender-5.2.1.png` — NEW
+- `_bmad-output/implementation-artifacts/10-4-signoff/candidate-C-0.52-0.68-0.86-blender-5.2.1.png` — NEW
+- `_bmad-output/implementation-artifacts/10-4-signoff/candidate-D-authored-pines-blender-5.2.1.png` — NEW
+| 2026-09-02 | Tasks 0-2 complete. Task 0's taper correction and Task 1's three taper candidates delegated to Codex (two commits, per-task cadence held, authored Völundr); the run then exited 1 on 5-hour quota exhaustion mid-self-gate, losing nothing because of that cadence. Orchestrator re-ran the FULL gate independently: GREEN, nine checks, no skips. **Task 2 ruled by Wolf: the mesh path wins and 10.4 lands it in the client**, explicitly overriding Task 2's stop-if-authored instruction. The taper was rejected on measurement, not taste — the whole sweep moves the frame 5.27-5.76 mean pixel delta against 26.07 for deleting every tree, because `foliage_scale` can only shrink a cube inside its own cell and the crown's disc shape is fixed by `place_trees`. "Procedural vs authored" was found to be a false dichotomy: `voxel_pine.py` IS a deterministic seeded generator, so the difference is venue and resolution (1 cube per 1.6 m cell vs 0.2 m voxels baked offline; 103 vs 3,474-5,894 triangles per tree). Candidate D renders 10.2's pines in the valley at boot framing via a bench that IMPORTS `valley_bench` rather than forking it. Three defects recorded: the `0.95` taper arm renders on zero cells while `bench_contract.rs` pins it, 53% of foliage renders snow-grey, and the approved reference sheet self-contradicts on Type 4 (6 CELLS vs 8.8x dwarf height) — resolved to 6 cells, `SM_VoxelPine_Tree04R.glb` regenerated at exactly 9.6 m, overshooting placements 103 of 265 -> 0. |
