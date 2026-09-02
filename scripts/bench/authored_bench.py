@@ -1,9 +1,13 @@
 """Render the valley with 10.2's authored voxel pines in place of the cube trees.
 
-SCRATCH EVIDENCE SCRIPT for story 10.4 Task 2 — not part of the shipped bench, not read by
-`bench_contract.rs`. It exists to answer one question the isolated grey-background asset
-renders cannot: *does an authored pine read as a tree IN SITU*, at boot framing, in our
-valley, against the same terrain and lights as the control.
+THE SHIPPED MESH BENCH. Promoted out of `10-4-signoff/` scratch at 10.4's code review, on Wolf's
+ruling: this is the instrument the Task 2 decision actually rests on, and `valley_bench.py` — which
+still draws cube trees — models only the FALLBACK path the client takes for a column the mesh rule
+rejects. Leaving the approved instrument as scratch is how an instrument goes unverified.
+
+It answers the question the isolated grey-background asset renders cannot: *does an authored pine
+read as a tree IN SITU*, at boot framing, in our valley, against the same terrain and lights as
+the control.
 
     blender --background --python authored_bench.py -- <snapshot.json> <out.png>
 
@@ -37,14 +41,21 @@ import math
 import os
 import sys
 
-import bpy
-from mathutils import Vector
+try:
+    import bpy
+    from mathutils import Vector
+except ImportError:  # importable without Blender so the gate can test the pure halves
+    bpy = None
+    Vector = None
 
-sys.path.insert(0, "/workspace/projects/frostvein/scripts/bench")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import valley_bench as vb  # noqa: E402
 
-SIGNOFF = "/workspace/projects/frostvein/_bmad-output/implementation-artifacts/10-4-signoff"
-EXPORT = "/workspace/projects/frostvein/_bmad-output/implementation-artifacts/10-2-signoff/export"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# The bench reads the SAME four GLBs the client compiles in (`assets/trees/`), never a signoff
+# copy. Two copies of an asset is exactly how a bench and a client come to draw different trees,
+# and this bench exists to be the client's mirror.
+ASSET_DIR = os.path.join(REPO_ROOT, "assets", "trees")
 METRES_PER_CELL = 1.6
 
 # Authored height in metres, parsed from check_asset.py FIGURES at the time of writing and
@@ -60,8 +71,7 @@ VARIANTS = {
     "SM_VoxelPine_Tree04R": 9.6,
 }
 
-# Tree04R lives beside this script; the other three are 10.2's shipped deliverables.
-VARIANT_DIR = {name: (SIGNOFF if name.endswith("R") else EXPORT) for name in VARIANTS}
+VARIANT_DIR = {name: ASSET_DIR for name in VARIANTS}
 
 
 def stable_hash(*parts):
