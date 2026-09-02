@@ -3,7 +3,7 @@ use std::{
     ffi::OsString,
     io::{BufRead, BufReader, Read},
     net::TcpStream,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Mutex,
         mpsc::{self, Receiver, SyncSender, TryRecvError},
@@ -16,7 +16,7 @@ use anyhow::{Context, bail};
 use bevy::{
     app::PluginGroup,
     app::ScheduleRunnerPlugin,
-    asset::{Assets, Handle},
+    asset::{AssetPlugin, Assets, Handle},
     camera::RenderTarget,
     image::Image,
     render::render_resource::{TextureFormat, TextureUsages},
@@ -49,7 +49,10 @@ use crate::{
     atmosphere::{aurora_light_transform, fall_snow, setup_atmosphere},
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
-    capture::{CaptureState, accumulate_motion, capture_after_frames},
+    capture::{
+        CaptureState, TreeCaptureVerification, accumulate_motion, capture_after_frames,
+        update_tree_capture_verification,
+    },
     command::send_commands,
     designate::{
         DesignateMode, DragAnchor, DragMode, designation_input, setup_designate_hint,
@@ -94,12 +97,29 @@ pub struct ProjectionWork {
     pub dirty_tiles: BTreeSet<[i32; 3]>,
 }
 
+/// The asset directory selected for this running binary, retained so capture failures name the
+/// directory an operator can actually inspect.
+#[derive(Resource, Debug, Clone)]
+pub struct TreeAssetRoot(pub PathBuf);
+
+const TREE_ASSET_FILES: [&str; 4] = [
+    "trees/SM_VoxelPine_Tree01.glb",
+    "trees/SM_VoxelPine_Tree02.glb",
+    "trees/SM_VoxelPine_Tree03.glb",
+    "trees/SM_VoxelPine_Tree04R.glb",
+];
+
 pub fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
     // M2-7. FIRST line out, before the connect can fail: a session that cannot reach the daemon
     // still learns which binary it is holding, and that is exactly the case where the answer
     // usually turns out to be "a stale one". See `crate::BUILD_SHA`.
     eprintln!("gui build {}", crate::BUILD_SHA);
+    let asset_root = resolve_asset_root()?;
+    if args.capture.is_some() {
+        verify_tree_assets(&asset_root)?;
+    }
+    eprintln!("gui asset root {}", asset_root.display());
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
     if args.headless {
@@ -117,18 +137,26 @@ pub fn run() -> anyhow::Result<()> {
                     exit_condition: ExitCondition::DontExit,
                     ..Default::default()
                 })
+                .set(AssetPlugin {
+                    file_path: asset_root.display().to_string(),
+                    ..Default::default()
+                })
                 .disable::<WinitPlugin>(),
         )
         .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO))
         // The overlay plugin wants a window; its config resource is all the client systems read.
         .init_resource::<FpsOverlayConfig>();
     } else {
-        app.add_plugins(DefaultPlugins)
-            .add_plugins(FrameTimeDiagnosticsPlugin::default())
-            .add_plugins(FpsOverlayPlugin {
-                config: overlay_config_off(),
-            });
+        app.add_plugins(DefaultPlugins.set(AssetPlugin {
+            file_path: asset_root.display().to_string(),
+            ..Default::default()
+        }))
+        .add_plugins(FrameTimeDiagnosticsPlugin::default())
+        .add_plugins(FpsOverlayPlugin {
+            config: overlay_config_off(),
+        });
     }
+    app.insert_resource(TreeAssetRoot(asset_root));
     configure_client_app(&mut app, mirror, receiver, writer, args);
     // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
     // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
@@ -138,6 +166,51 @@ pub fn run() -> anyhow::Result<()> {
         std::process::exit(code.get().into());
     }
     Ok(())
+}
+
+/// Select the copied executable's sibling assets first, then the build workspace.
+///
+/// NOTE: this covers the devpod and the copied Windows vehicle only; packaging assets with a
+/// future installer needs a real distribution layout rather than another fallback.
+fn resolve_asset_root() -> anyhow::Result<PathBuf> {
+    let executable = std::env::current_exe().context("could not resolve gui executable path")?;
+    Ok(resolve_asset_root_at(
+        &executable,
+        Path::new(env!("GUI_WORKSPACE_ROOT")),
+    ))
+}
+
+fn resolve_asset_root_at(executable: &Path, workspace_root: &Path) -> PathBuf {
+    let beside_executable = executable
+        .parent()
+        .expect("an executable path always has a parent")
+        .join("assets");
+    if beside_executable.is_dir() {
+        beside_executable
+    } else {
+        workspace_root.join("assets")
+    }
+}
+
+fn verify_tree_assets(asset_root: &Path) -> anyhow::Result<()> {
+    let missing = TREE_ASSET_FILES
+        .iter()
+        .map(|file| asset_root.join(file))
+        .filter(|path| !path.is_file())
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        bail!(
+            "tree assets missing under resolved asset root {}: {}",
+            asset_root.display(),
+            missing
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
 }
 
 /// Opens the daemon socket, reads the opening snapshot, and leaves a reader thread feeding the
@@ -204,6 +277,12 @@ fn configure_client_app(
         app.insert_resource(TerrainSubdivision(subdiv));
     }
     insert_capture_resources(app, &args);
+    if args.headless
+        && args.capture.is_some()
+        && let Some(asset_root) = app.world().get_resource::<TreeAssetRoot>()
+    {
+        app.insert_resource(TreeCaptureVerification::new(asset_root.0.clone()));
+    }
     client_systems(app);
     projection_systems(app);
     if let Some(capture) = args.capture {
@@ -325,7 +404,11 @@ pub fn client_systems(app: &mut App) {
 pub fn capture_systems(app: &mut App) {
     app.add_systems(
         Update,
-        (accumulate_motion, capture_after_frames)
+        (
+            update_tree_capture_verification,
+            accumulate_motion,
+            capture_after_frames,
+        )
             .chain()
             .after(ProjectionSet),
     );
@@ -1127,6 +1210,37 @@ mod tests {
     use crate::camera::CameraRig;
     use crate::project::{SnowCap, TerrainChunk, TerrainSubdivision, TerrainTile, WorldProjected};
     use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn asset_root_prefers_a_copied_executables_assets_then_the_stamped_workspace() {
+        let root =
+            std::env::temp_dir().join(format!("frostvein-gui-assets-{}", std::process::id()));
+        let copied_executable = root.join("vehicle/gui.exe");
+        let sibling_assets = copied_executable.parent().unwrap().join("assets");
+        std::fs::create_dir_all(&sibling_assets)
+            .expect("the copied vehicle layout must be creatable");
+        assert_eq!(
+            super::resolve_asset_root_at(&copied_executable, std::path::Path::new("workspace")),
+            sibling_assets,
+            "a copied gui.exe must use assets beside itself before any build-machine path"
+        );
+        std::fs::remove_dir_all(&root).expect("the test layout must be removable");
+        assert_eq!(
+            super::resolve_asset_root_at(&copied_executable, std::path::Path::new("workspace")),
+            std::path::PathBuf::from("workspace/assets"),
+            "the devpod executable has no sibling assets and must fall back to the stamped workspace"
+        );
+    }
+
+    #[test]
+    fn stamped_asset_root_contains_every_shipped_tree_scene() {
+        let root = super::resolve_asset_root_at(
+            std::path::Path::new("no-copied-gui-executable"),
+            std::path::Path::new(env!("GUI_WORKSPACE_ROOT")),
+        );
+        super::verify_tree_assets(&root)
+            .expect("the capture asset check needs all four GLBs under the resolved root");
+    }
 
     #[test]
     fn capture_forces_the_frame_time_overlay_off() {

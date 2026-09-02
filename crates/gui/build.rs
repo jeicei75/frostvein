@@ -9,7 +9,7 @@
 //!
 //! A stamp compiled INTO the binary cannot go stale: it is whatever the binary actually is.
 
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 
 fn main() {
     // Rerun when HEAD moves. Without these the stamp is frozen at whatever the first build saw,
@@ -18,6 +18,17 @@ fn main() {
     println!("cargo:rerun-if-changed=../../.git/index");
 
     println!("cargo:rustc-env=GUI_BUILD_SHA={}", sha());
+    println!(
+        "cargo:rustc-env=GUI_WORKSPACE_ROOT={}",
+        workspace_root().display()
+    );
+}
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the gui crate must live under the workspace root")
 }
 
 /// The short SHA, suffixed `-dirty` when the working tree has uncommitted changes.

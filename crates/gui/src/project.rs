@@ -1826,6 +1826,12 @@ impl ProjectionAssets {
         }]
         .clone()
     }
+
+    pub fn tree_scenes_loaded(&self, asset_server: &AssetServer) -> bool {
+        self.trees
+            .iter()
+            .all(|scene| asset_server.is_loaded_with_dependencies(scene.id()))
+    }
 }
 
 /// The sim sends tree tiles, not tree identities. Rebuild one mesh tree from every trunk column
@@ -1862,6 +1868,10 @@ fn tree_meshes(mirror: &Mirror, slice_level: i32) -> Vec<([i32; 3], TreeVariant)
             Some(([x, y, base_z], variant))
         })
         .collect()
+}
+
+pub fn expected_tree_mesh_count(mirror: &Mirror, slice_level: i32) -> usize {
+    tree_meshes(mirror, slice_level).len()
 }
 
 /// Stable across Rust releases, unlike `DefaultHasher`; only x/y shape the 5-cell tie-break.

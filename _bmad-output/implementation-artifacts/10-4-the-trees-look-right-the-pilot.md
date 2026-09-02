@@ -157,16 +157,16 @@ written**, and a seventh defect was found in `docs/tech-art-guidelines.md` while
   - [x] **Stop here if the decision is authored.** An authored tree is a different story shape —
         see Scope guardrails — and needs its scope agreed before any client work.
 
-- [ ] **Task 3 — Land the winning treatment in the client** (AC: 5, 6, 7, 8)
-  - [ ] Both render paths must agree. At `--subdiv 1` every cell is one `Cuboid` spawned in
+- [x] **Task 3 — Land the winning treatment in the client** (AC: 5, 6, 7, 8)
+  - [x] Both render paths must agree. At `--subdiv 1` every cell is one `Cuboid` spawned in
         `reconcile`; at `--subdiv > 1` **foliage stays per-cube while trunks go through the chunk
         mesher** (`build_chunk_meshes` opens with `if is_tree_foliage(..) { continue; }`). A change
         applied to one path only ships two different trees.
-  - [ ] If `foliage_scale`'s literal changes, `crates/gui/tests/bench_contract.rs` requires a
+  - [x] If `foliage_scale`'s literal changes, `crates/gui/tests/bench_contract.rs` requires a
         **coordinated Rust + Python edit**: it greps for the exact source text
         `match foliage_above { 0 => 0.62, 1 => 0.78, _ => 0.95, }` in `project.rs` and
         `return (0.62, 0.78, 0.95)[above]` in `valley_bench.py`, each matching **exactly once**.
-  - [ ] Re-check `foliage_is_never_picked_and_never_hides_the_trunk_beneath_it` — picking assumes
+  - [x] Re-check `foliage_is_never_picked_and_never_hides_the_trunk_beneath_it` — picking assumes
         foliage is drawn sub-cell. A treatment that fills or overhangs the cell changes what the
         mouse can select.
 
@@ -400,6 +400,26 @@ bench artifact with no client change in existence.
    Types 1-3 agree on both labels, only Type 4 does not. Resolved in favour of the cell label,
    which is the half `place_trees` can honour.
 
+**Task 3 (AC5-AC8) — done.** The client resolves its asset directory beside a copied executable
+first and then from the compile-stamped workspace root, checks all four GLBs before a headless
+capture, and requires every scene handle to load plus the complete re-derived mesh count before
+it can save success. The cut-face oracle still compares two independent counts; its units now
+include whole tree meshes when their bases are below the slice, matching the ruled all-or-nothing
+slice behavior. `pick.rs` retains its tile-grid behavior but no longer claims foliage is drawn as
+sub-cell cubes. `cargo test --offline -j 8 -p gui` passed: 120 passed, 1 documented ignored.
+
+Live proof: `target/debug/gui 7374 --headless --capture /tmp/frostvein-task3-head.png --frames 30`
+reached `projected 39936 terrain cubes at z 31` and `trees: meshes=265 of 265
+scenes_loaded=true`; its later motion floor (100 delivered ticks) intentionally made that short
+run non-zero. A longer live capture wrote `/tmp/frostvein-task3-head.png`; inspected visually, it
+shows dense snow-dusted pine meshes across the valley rather than cube trees. The live cut line is
+`265 of 265`, and the headless asset root was `/workspace/projects/frostvein/assets`.
+
+**AC6 is vestigial for mesh trees.** `foliage_snow_color()` and `has_snow_laden_crown` remain for
+the cube path and their existing tests still pass, but they govern no mesh-tree pixel: snow is
+baked into the GLB palette. This is an open review question, not a clean pixel-witnessed AC.
+`Material::TreeFoliage` did not move.
+
 ### File List
 
 - `docs/tech-art-guidelines.md` — UPDATE, Task 0 taper correction (two occurrences)
@@ -414,4 +434,9 @@ bench artifact with no client change in existence.
 - `_bmad-output/implementation-artifacts/10-4-signoff/candidate-B-0.72-0.88-0.98-blender-5.2.1.png` — NEW
 - `_bmad-output/implementation-artifacts/10-4-signoff/candidate-C-0.52-0.68-0.86-blender-5.2.1.png` — NEW
 - `_bmad-output/implementation-artifacts/10-4-signoff/candidate-D-authored-pines-blender-5.2.1.png` — NEW
+- `crates/gui/build.rs` — UPDATE, stamp workspace root for asset resolution
+- `crates/gui/src/ingest.rs` — UPDATE, resolve and validate the capture asset root
+- `crates/gui/src/project.rs` — UPDATE, expose tree scene-load and expected-count checks
+- `crates/gui/src/capture.rs` — UPDATE, require loaded scenes and all tree meshes; count mesh cut units
+- `crates/gui/src/pick.rs` — UPDATE, correct obsolete cube-foliage rationale
 | 2026-09-02 | Tasks 0-2 complete. Task 0's taper correction and Task 1's three taper candidates delegated to Codex (two commits, per-task cadence held, authored Völundr); the run then exited 1 on 5-hour quota exhaustion mid-self-gate, losing nothing because of that cadence. Orchestrator re-ran the FULL gate independently: GREEN, nine checks, no skips. **Task 2 ruled by Wolf: the mesh path wins and 10.4 lands it in the client**, explicitly overriding Task 2's stop-if-authored instruction. The taper was rejected on measurement, not taste — the whole sweep moves the frame 5.27-5.76 mean pixel delta against 26.07 for deleting every tree, because `foliage_scale` can only shrink a cube inside its own cell and the crown's disc shape is fixed by `place_trees`. "Procedural vs authored" was found to be a false dichotomy: `voxel_pine.py` IS a deterministic seeded generator, so the difference is venue and resolution (1 cube per 1.6 m cell vs 0.2 m voxels baked offline; 103 vs 3,474-5,894 triangles per tree). Candidate D renders 10.2's pines in the valley at boot framing via a bench that IMPORTS `valley_bench` rather than forking it. Three defects recorded: the `0.95` taper arm renders on zero cells while `bench_contract.rs` pins it, 53% of foliage renders snow-grey, and the approved reference sheet self-contradicts on Type 4 (6 CELLS vs 8.8x dwarf height) — resolved to 6 cells, `SM_VoxelPine_Tree04R.glb` regenerated at exactly 9.6 m, overshooting placements 103 of 265 -> 0. |

@@ -1,10 +1,11 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use bevy::{
     app::AppExit,
+    asset::AssetServer,
     ecs::message::MessageWriter,
     prelude::{
         Camera3d, Commands, On, PointLight, Query, Res, ResMut, Resource, Transform, Vec2, Window,
@@ -23,7 +24,8 @@ use crate::{
     ingest::{ScriptedCursor, ScriptedDrag},
     pick::PickedTile,
     project::{
-        ProjectedDesignation, ProjectedZone, TerrainChunkCells, TerrainTile, WorldProjected,
+        ProjectedDesignation, ProjectedZone, ProjectionAssets, TerrainChunkCells, TerrainTile,
+        TreeMesh, WorldProjected, expected_tree_mesh_count,
     },
     slice::SliceLevel,
     transform::world_to_render,
@@ -45,6 +47,28 @@ pub struct DrawStats {
     /// the draw set, on the same principle as `expected_cut_face` above.
     expected_designations: usize,
     expected_zones: usize,
+}
+
+/// The live state that a headless capture must report before it may save its PNG.
+#[derive(Resource, Debug, Clone)]
+pub struct TreeCaptureVerification {
+    expected: usize,
+    spawned: usize,
+    cut_face_meshes: usize,
+    scenes_loaded: bool,
+    asset_root: PathBuf,
+}
+
+impl TreeCaptureVerification {
+    pub fn new(asset_root: PathBuf) -> Self {
+        Self {
+            expected: 0,
+            spawned: 0,
+            cut_face_meshes: 0,
+            scenes_loaded: false,
+            asset_root,
+        }
+    }
 }
 
 impl DrawStats {
@@ -184,6 +208,43 @@ pub fn draw_stats(
     )
 }
 
+/// Samples the exact mesh entities and scene handles that a headless capture will judge.
+pub fn update_tree_capture_verification(
+    verification: Option<ResMut<TreeCaptureVerification>>,
+    mirror: Option<Res<MirrorResource>>,
+    slice: Option<Res<SliceLevel>>,
+    trees: Query<&TreeMesh>,
+    assets: Option<Res<ProjectionAssets>>,
+    asset_server: Option<Res<AssetServer>>,
+) {
+    let (Some(mut verification), Some(mirror), Some(slice)) = (verification, mirror, slice) else {
+        return;
+    };
+    verification.expected = expected_tree_mesh_count(&mirror.0, slice.level());
+    verification.spawned = trees.iter().count();
+    verification.cut_face_meshes = trees
+        .iter()
+        .filter(|tree| tree.0[2] <= slice.level())
+        .count();
+    verification.scenes_loaded = assets
+        .zip(asset_server)
+        .is_some_and(|(assets, asset_server)| assets.tree_scenes_loaded(&asset_server));
+}
+
+fn assert_tree_capture(expected: usize, spawned: usize, scenes_loaded: bool, asset_root: &Path) {
+    assert!(
+        scenes_loaded,
+        "capture tree scenes failed to load from resolved asset root {}",
+        asset_root.display()
+    );
+    assert_eq!(
+        spawned,
+        expected,
+        "capture spawned {spawned} tree meshes but the mirror requires {expected}; resolved asset root {}",
+        asset_root.display()
+    );
+}
+
 /// The drawn coarse cells, from whichever path drew them.
 ///
 /// `--subdiv N > 1` replaces per-cell `TerrainTile` entities with chunk meshes, so counting
@@ -248,7 +309,10 @@ fn lantern_assertions_apply(mirror: &Mirror, level: i32) -> bool {
         .any(|entity| entity.kind == EntityKind::Dwarf && entity.pos[2] <= level)
 }
 
-/// The tiles the mirror says the cut face must contain: solid or ramp, exactly at the cut.
+/// The draw units the mirror says the cut must contain: solid terrain exactly at the cut, plus
+/// each whole tree mesh whose base is at or below it. Trees no longer have one cube per tile and
+/// slices deliberately draw the whole mesh, so counting tree tiles here would compare unlike
+/// units and falsely call a correct mesh cut hollow.
 fn expected_cut_face(mirror: &Mirror, level: i32) -> usize {
     let dims = mirror.dims();
     let mut count = 0;
@@ -256,13 +320,14 @@ fn expected_cut_face(mirror: &Mirror, level: i32) -> usize {
         for x in 0..dims.x as i32 {
             if matches!(
                 mirror.tile([x, y, level]),
-                Some(Tile::Solid(_) | Tile::Ramp(_))
+                Some(Tile::Solid(material) | Tile::Ramp(material))
+                    if !matches!(material, protocol::Material::TreeTrunk | protocol::Material::TreeFoliage)
             ) {
                 count += 1;
             }
         }
     }
-    count
+    count + expected_tree_mesh_count(mirror, level)
 }
 
 #[derive(Resource)]
@@ -760,6 +825,7 @@ pub fn capture_after_frames(
     cameras: Query<&CameraRig, With<Camera3d>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     headless: Option<Res<crate::ingest::HeadlessTarget>>,
+    tree_verification: Option<Res<TreeCaptureVerification>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if capture.requested || capture.failed {
@@ -790,7 +856,7 @@ pub fn capture_after_frames(
     if capture_due {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
-        let draw = collect_draw_stats(
+        let mut draw = collect_draw_stats(
             slice.level(),
             &mirror.0,
             &terrain,
@@ -798,6 +864,9 @@ pub fn capture_after_frames(
             &designations,
             &zones,
         );
+        if let Some(tree_verification) = tree_verification.as_deref() {
+            draw.cut_face_tiles += tree_verification.cut_face_meshes;
+        }
         if let Some(cursor) = cursor {
             let expected = cameras.single().ok().and_then(|rig| {
                 windows
@@ -832,6 +901,21 @@ pub fn capture_after_frames(
             "slice: z {} projected {} terrain cubes ({} of {} cut-face tiles at z {})",
             draw.level, draw.terrain_tiles, draw.cut_face_tiles, draw.expected_cut_face, draw.level
         );
+        if let Some(tree_verification) = tree_verification {
+            println!(
+                "trees: meshes={} of {} scenes_loaded={} asset_root={}",
+                tree_verification.spawned,
+                tree_verification.expected,
+                tree_verification.scenes_loaded,
+                tree_verification.asset_root.display()
+            );
+            assert_tree_capture(
+                tree_verification.expected,
+                tree_verification.spawned,
+                tree_verification.scenes_loaded,
+                &tree_verification.asset_root,
+            );
+        }
         println!(
             "marks: z {} designations={} of {} zones={} of {}",
             draw.level,
@@ -1540,6 +1624,49 @@ mod tests {
             "a cut drawn with no floor is not a capture result, however many tiles it drew"
         );
         DrawStats::new(4, 258, 81, 81, 1, 1, 1, 1).assert_valid(true);
+    }
+
+    #[test]
+    fn tree_capture_requires_loaded_scenes_and_every_rederived_mesh() {
+        let root = PathBuf::from("assets-under-test");
+        assert!(
+            std::panic::catch_unwind(|| assert_tree_capture(1, 0, true, &root)).is_err(),
+            "a treed mirror with zero spawned meshes must not save a successful capture"
+        );
+        assert!(
+            std::panic::catch_unwind(|| assert_tree_capture(1, 1, false, &root)).is_err(),
+            "failed scene handles must not save a successful capture"
+        );
+        assert_tree_capture(1, 1, true, &root);
+    }
+
+    #[test]
+    fn cut_oracle_counts_a_whole_tree_mesh_above_its_last_tile() {
+        let mirror = Mirror::from_snapshot(protocol::Snapshot {
+            msg_type: protocol::MessageType::Snapshot,
+            dims: protocol::Dims { x: 1, y: 1, z: 5 },
+            tiles: vec![
+                Tile::Solid(protocol::Material::TreeTrunk),
+                Tile::Solid(protocol::Material::TreeTrunk),
+                Tile::Solid(protocol::Material::TreeTrunk),
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: protocol::Speed::Normal,
+            tick: 0,
+        })
+        .expect("a hand-built tree snapshot must load");
+
+        assert_eq!(
+            expected_cut_face(&mirror, 3),
+            1,
+            "the whole mesh remains visible above its final source tile; a tree tile count would \
+             wrongly read this cut as empty"
+        );
     }
 
     #[test]
