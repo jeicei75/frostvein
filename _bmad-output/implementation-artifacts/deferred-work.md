@@ -1518,6 +1518,23 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
     thing that used to break that silhouette line is gone and the mesh trees never had a
     replacement. A skirt, a slight sink into the cell, or a scattered base decoration are all
     candidates — none of them measured yet.
+  - **The ground foliage ring is the named candidate (Wolf, 2026-09-02) — but read 9.4 before
+    touching it.** 9.4 removed that ring on Wolf's OWN second vehicle ruling (*"I see green boxes
+    on ground level next to some full trees"*), for three measured reasons: it read as foliage
+    lying on the terrain rather than as a tree; it sealed the lower trunk on all four sides so
+    **86 of 265 trees — every height-4 tree — drew no trunk at all**; and it broke on slopes,
+    using the TRUNK's surface height for all eight neighbours, leaving **285 cubes hanging in the
+    air and 296 dropped** across 110 of 265 trees. Reverting that commit would re-import all three.
+    **What makes it worth revisiting anyway:** all three defects are artifacts of the ring being
+    SIM tiles stamped by `place_trees` at a fixed `surface + 1`. A PRESENTATION-side skirt on the
+    mesh is a different mechanism and dodges each by construction — it is not wire state (AD-16
+    holds), it cannot seal a trunk because a mesh tree draws one mesh rather than exposed trunk
+    cells, and it can read each neighbour column's own surface instead of the trunk's. That is an
+    argument for re-opening the question, NOT evidence that a skirt works; it has to be benched and
+    put in front of Wolf like any other look change. Also worth carrying forward from 9.4:
+    "underground" was measured and DISPROVEN there — all 265 trunks sit flush at
+    `base - surface = 1`. Trees READ as sunk when their base line is wrong, which is exactly the
+    symptom being reported again now.
   - Wolf named the uniform rotation as part of the same artificial read; that half IS fixed in
     10.4 (per-tree quarter-turn yaw, measured at 116,963 px at delta>=4 against a 46,050 noise
     floor). The root and the terrain blend remain.
