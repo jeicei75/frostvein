@@ -1433,6 +1433,17 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
   not rival values; the only real divergence is `gui`'s stale `scale: 0.65`. The Dev Notes admit
   this ("it is one stale constant") but the shipped contract text keeps the three-way framing.
   AC3's letter is met. This is the project's recorded "check the upstream reference" pattern.
+- **Re-run the tech-art contracts against REAL art.** Wolf, 2026-09-02: "we need to go through
+  this again when we start to have real gfx in place." `docs/tech-art-guidelines.md` is written
+  against placeholder cubes and one approved concept artifact, and the clauses it marks **eye-only**
+  are precisely the ones only real art can settle — aurora colour and fold character, the declared
+  voxel multiple's visual read, the intended palette-role read, the solid cut face, downstream-tool
+  suitability, figures-vs-signoff comparison. Two measured reasons this is owed rather than
+  optional: 96.8% of 10.6's k=4 triangle ceiling is the placeholder detail rule (story 10.6), and
+  the round-7 albedo trims were decided by eye on placeholder geometry, so every value in the
+  Materials table is a placeholder-era reading. Revisit the whole document — values, budgets and
+  the eye-only marks — once 10.4/10.5 land authored terrain, trees and dwarves. Related: the
+  standing ruling that art gates visual judgement (Wolf, 2026-08-22).
 - **The adopted terrain `k = 4` has no constant and no owner.** `docs/tech-art-guidelines.md`
   records 0.4 m terrain visual voxels as an ADOPTED DECISION, but the shipped default is `k = 1`
   — `TerrainSubdivision` is inserted only under `--subdiv` [`crates/gui/src/ingest.rs:203`] and

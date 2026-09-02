@@ -18,6 +18,12 @@ marks are held to at 40, so the base cubes were near-camouflage against the grou
 Foliage receives no terrain-style snow slab: its broken silhouette leaves the valley's snow
 landform visible instead of turning every ground-level tree skirt into a bright tile.
 
+The settled cap was trimmed in the same round-7 commit, `(158, 170, 196)` → `(146, 158, 184)`,
+~8%: at the boot pitch the caps dominate the visible area, so the field's measured brightness
+tracks THIS albedo more than the light table — boot4 proved the light lever weak, a 2.6x ambient
+cut moving the field only 7%. The guidelines carried the pre-trim value until 2026-09-02 because
+that commit's doc follow-up corrected only the crown.
+
 The exposed crown's colour started as the approved artifact's `SPRUCE_SNOW` `(172, 186, 210)` `#ACBAD2`
 **(superseded at round 7)** and was trimmed at round 7: the artifact shows that colour on thin
 sprite tops while our cubes show whole faces of it, and every tree glowing at near-cap brightness

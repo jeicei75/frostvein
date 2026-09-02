@@ -35,7 +35,8 @@ Ruled in [Value and materials](#value-and-materials), except the rim row. Every 
 | `Material::Soil` | `(56, 52, 62)` | `#38343E` | night palette |
 | `Material::Ice` | `(104, 128, 170)` | `#6880AA` | keeps its blue surface; never capped |
 | `Material::Snow` | `(136, 150, 178)` | `#8896B2` | terrain snow; night palette |
-| `snow_cap_color()` | `(158, 170, 196)` **(stale)** | `#9EAAC4` | settled cap — its own material, not a brighter snow |
+| `snow_cap_color()` | `(146, 158, 184)` | `#929EB8` | settled cap — its own material, not a brighter snow |
+| ↳ before round 7 | `(158, 170, 196)` **(superseded at round 7)** | `#9EAAC4` | trimmed ~8%: the caps dominate the visible area at boot pitch |
 | `Material::TreeFoliage` | `(44, 100, 58)` | `#2C643A` | green since 9.4 |
 | ↳ before 9.4 | `(55, 73, 84)` **(superseded by 9.4)** | `#374954` | 9.9 from stone — near-camouflage |
 | `foliage_snow_color()` | `(156, 170, 196)` | `#9CAAC4` | exposed spruce crown; a material swap, never a terrain cap |
@@ -43,9 +44,6 @@ Ruled in [Value and materials](#value-and-materials), except the rim row. Every 
 | `Material::TreeTrunk` | — | — | stated in the code table only |
 | foliage taper | 0.72 / 0.86 / full | — | skirts and tips / upper crown / mid-crown |
 | `rim_dissolved_color()` | exactly the sky colour | — | see [Edge treatment](#edge-treatment) |
-
-**(stale)** — the code ships `(146, 158, 184)` `#929EB8`; see
-[Found during restructure](#found-during-restructure).
 
 ### Lights
 
@@ -488,12 +486,17 @@ and other appearance values never become wire state (AD-16).
 Content that is wrong by inspection. **Nothing below was corrected** — each is listed for a ruling,
 because fixing it would change a value this pass is not authorised to change.
 
-1. **Settled snow cap: this document says `(158, 170, 196)` `#9EAAC4`; the code ships `(146, 158, 184)` `#929EB8`.**
-   `snow_cap_color` (`crates/gui/src/appearance.rs`) returns `(146, 158, 184)` `#929EB8` and
-   `appearance_tables_pin_the_cold_boot_palette` asserts exactly that. The doc's triple is ~8%
-   brighter on every channel, which matches the code's own note that the cap was "trimmed ~8% at
-   round 7" — so the document appears to carry the **pre-round-7** value. Marked `(stale …)` in
-   "Value and materials" and in the Materials table.
+1. **Settled snow cap — CORRECTED 2026-09-02, on Wolf's ruling that the code is right.** The doc
+   read `(158, 170, 196)`; `snow_cap_color` ships `(146, 158, 184)` and
+   `appearance_tables_pin_the_cold_boot_palette` has asserted it since round 7. **Traced:** commit
+   `10c06e1` (2026-08-16, "Trim the snow albedos, light budget, and spruce crowns") moved TWO
+   colours in the same function block — the cap `(158, 170, 196)` → `(146, 158, 184)` and the crown
+   `(172, 186, 210)` → `(156, 170, 196)` — and touched no doc. Twelve days later `094163c` updated
+   this document for the **crown**, writing out the full round-7 rationale, and left the **cap**
+   standing. Not a forgotten doc: **a partial update that reads as a complete one**, which is why
+   the value then survived a code review. The doc now carries the shipped value and the superseded
+   one beneath it. Wolf, 2026-09-02: the code has been verified visually.
+
 2. **The horizon angle rule said "≤ 10 degrees"; the test rejects 10 degrees. RESOLVED BY
    REMOVAL.** `the_aurora_curtain_hugs_the_horizon_beyond_the_world` computes its ceiling as
    `(BOOT_VERTICAL_FOV * 0.5).to_degrees() / 4.0`, and its comment records that "a first attempt
