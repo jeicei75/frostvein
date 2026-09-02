@@ -4,13 +4,14 @@ use std::{
 };
 
 use bevy::prelude::{
-    Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
+    AssetServer, Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
     MeshMaterial3d, Or, PointLight, Query, Res, ResMut, Resource, StandardMaterial, Transform,
     Vec3, With, Without,
 };
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
+    world_serialization::{WorldAsset, WorldAssetRoot},
 };
 use client_core::Mirror;
 use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
@@ -53,6 +54,10 @@ pub struct TerrainTile(pub [i32; 3]);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerrainChunk(pub [i32; 3]);
 
+/// One presentation mesh re-derived from a contiguous trunk column in the client mirror.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TreeMesh(pub [i32; 3]);
+
 /// The coarse cells one chunk's meshes actually carry geometry for.
 ///
 /// `--subdiv N > 1` collapses tens of thousands of `TerrainTile` entities into a handful of
@@ -88,6 +93,8 @@ pub type TerrainQuery<'w, 's> = Query<
         With<SnowCap>,
     )>,
 >;
+
+pub type TreeMeshQuery<'w, 's> = Query<'w, 's, (BevyEntity, &'static TreeMesh)>;
 
 pub type DynamicProjectionQuery<'w, 's> = Query<
     'w,
@@ -173,6 +180,14 @@ enum TerrainSlot {
     SnowCap,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TreeVariant {
+    Tree01,
+    Tree02,
+    Tree03,
+    Tree04R,
+}
+
 const TERRAIN_SLOTS: [TerrainSlot; 8] = [
     TerrainSlot::Stone,
     TerrainSlot::Soil,
@@ -225,12 +240,14 @@ pub struct ProjectionAssets {
     channel_mark: Handle<StandardMaterial>,
     zone_mark: Handle<StandardMaterial>,
     hover_highlight: Handle<StandardMaterial>,
+    trees: [Handle<WorldAsset>; 4],
 }
 
 pub fn setup_projection_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Option<Res<AssetServer>>,
 ) {
     let cube = meshes.add(Mesh::from(Cuboid::default()));
     let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
@@ -260,6 +277,17 @@ pub fn setup_projection_assets(
         ))),
         zone_mark: materials.add(terrain_standard_material(zone_color())),
         hover_highlight: materials.add(terrain_standard_material(hover_highlight_color())),
+        trees: asset_server.map_or_else(
+            || std::array::from_fn(|_| Handle::default()),
+            |asset_server| {
+                [
+                    asset_server.load("trees/SM_VoxelPine_Tree01.glb#Scene0"),
+                    asset_server.load("trees/SM_VoxelPine_Tree02.glb#Scene0"),
+                    asset_server.load("trees/SM_VoxelPine_Tree03.glb#Scene0"),
+                    asset_server.load("trees/SM_VoxelPine_Tree04R.glb#Scene0"),
+                ]
+            },
+        ),
     });
 }
 
@@ -702,7 +730,7 @@ fn build_chunk_meshes(
 ) -> BTreeMap<[i32; 3], ChunkMesh> {
     let mut chunks = BTreeMap::<[i32; 3], ChunkMesh>::new();
     for &position in positions {
-        if is_tree_foliage(mirror, position) {
+        if is_tree(mirror, position) {
             continue;
         }
         if targets.is_some_and(|targets| !touches_chunks(position, targets)) {
@@ -779,9 +807,8 @@ fn build_chunk_meshes(
                 };
                 let (low, high, face_sign, cell) = if top > floor {
                     (floor, top, sign, position)
-                } else if is_tree_foliage(mirror, neighbour) {
-                    // The neighbour already draws all six faces of a whole cube on the shipped
-                    // path; handing it chunk geometry as well would double-draw it.
+                } else if is_tree(mirror, neighbour) {
+                    // Tree cells are carried by their one mesh, never by the terrain mesher.
                     continue;
                 } else {
                     // The NEIGHBOUR's face, uncovered by this cell's pit. It can be buried at
@@ -881,33 +908,7 @@ fn spawn_subdivided_terrain(
     targets: Option<&BTreeSet<[i32; 3]>>,
 ) -> SubdividedTerrainStats {
     let subdiv = i32::from(u16::try_from(subdiv.min(MAX_SUBDIV)).expect("--subdiv is bounded"));
-    let wanted =
-        |position: [i32; 3]| targets.is_none_or(|targets| targets.contains(&chunk_of(position)));
-    let mut foliage_entities = 0;
-    for &position in positions {
-        if !is_tree_foliage(mirror, position) || !wanted(position) {
-            continue;
-        }
-        // Foliage is intentionally non-cubic presentation geometry. Keep its shipped path
-        // rather than pretending a greedy cuboid preserves the sparse crown silhouette.
-        let entity = commands
-            .spawn((
-                WorldProjected(terrain_id(position, mirror.dims())),
-                TerrainTile(position),
-                terrain_transform(mirror, position),
-            ))
-            .id();
-        commands.entity(entity).insert((
-            Mesh3d(assets.cube.clone()),
-            MeshMaterial3d(assets.terrain_material(mirror, position)),
-        ));
-        foliage_entities += 1;
-    }
-    let mut stats = SubdividedTerrainStats {
-        entities: foliage_entities,
-        cells: foliage_entities,
-        ..Default::default()
-    };
+    let mut stats = SubdividedTerrainStats::default();
     for (chunk, chunk_mesh) in build_chunk_meshes(mirror, positions, subdiv, level, targets) {
         let mut material_meshes = BTreeMap::<(usize, usize), MeshBuilder>::new();
         stats.faces += chunk_mesh.masks.values().map(BTreeSet::len).sum::<usize>();
@@ -1087,6 +1088,7 @@ pub fn reconcile(
     designations: &Query<(BevyEntity, &ProjectedDesignation, &ProjectedDesignationKind)>,
     zones: &Query<(BevyEntity, &ProjectedZone)>,
     terrain: &TerrainQuery,
+    trees: &TreeMeshQuery,
     chips: &DigChipQuery,
     assets: Option<&ProjectionAssets>,
     meshes: Option<&mut Assets<Mesh>>,
@@ -1098,6 +1100,12 @@ pub fn reconcile(
         }
         for (entity, _, _, _) in terrain.iter() {
             commands.entity(entity).despawn();
+        }
+        for (entity, _) in trees.iter() {
+            commands.entity(entity).despawn();
+        }
+        if let Some(assets) = assets {
+            spawn_tree_meshes(commands, assets, mirror, slice.level());
         }
         let positions = terrain_positions_at(mirror, slice.level());
         // The draw-set oracle instrument (AC13). The shipped seed reports 44,984 after story
@@ -1274,6 +1282,33 @@ pub fn reconcile(
                     ));
                     if has_snow_cap(mirror, position) {
                         spawn_snow_cap(commands, assets, mirror, position);
+                    }
+                }
+            }
+        }
+    }
+
+    if !rebuild_terrain && !dirty_tiles.is_empty() {
+        let changed_columns = dirty_tiles
+            .iter()
+            .map(|position| [position[0], position[1]])
+            .collect::<BTreeSet<_>>();
+        if trees
+            .iter()
+            .any(|(_, tree)| changed_columns.contains(&[tree.0[0], tree.0[1]]))
+            || dirty_tiles
+                .iter()
+                .any(|position| is_tree(mirror, *position))
+        {
+            for (entity, tree) in trees.iter() {
+                if changed_columns.contains(&[tree.0[0], tree.0[1]]) {
+                    commands.entity(entity).despawn();
+                }
+            }
+            if let Some(assets) = assets {
+                for (base, variant) in tree_meshes(mirror, slice.level()) {
+                    if changed_columns.contains(&[base[0], base[1]]) {
+                        spawn_tree_mesh(commands, assets, base, variant);
                     }
                 }
             }
@@ -1719,6 +1754,13 @@ pub(crate) fn is_tree_foliage(mirror: &Mirror, position: [i32; 3]) -> bool {
     )
 }
 
+fn is_tree(mirror: &Mirror, position: [i32; 3]) -> bool {
+    matches!(
+        terrain_material_at(mirror, position),
+        Some(Material::TreeTrunk | Material::TreeFoliage)
+    )
+}
+
 /// The material actually present, distinguishing air from the `terrain_material` fallback.
 fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> {
     match mirror.tile(position) {
@@ -1774,6 +1816,91 @@ impl ProjectionAssets {
             DesignationKind::Channel => self.channel_mark.clone(),
         }
     }
+
+    fn tree_scene(&self, variant: TreeVariant) -> Handle<WorldAsset> {
+        self.trees[match variant {
+            TreeVariant::Tree01 => 0,
+            TreeVariant::Tree02 => 1,
+            TreeVariant::Tree03 => 2,
+            TreeVariant::Tree04R => 3,
+        }]
+        .clone()
+    }
+}
+
+/// The sim sends tree tiles, not tree identities. Rebuild one mesh tree from every trunk column
+/// so presentation stays off the wire and BTreeMap's coordinate order fixes the result.
+fn tree_meshes(mirror: &Mirror, slice_level: i32) -> Vec<([i32; 3], TreeVariant)> {
+    let mut columns = BTreeMap::<[i32; 2], (i32, i32)>::new();
+    for_each_position(mirror.dims(), |[x, y, z]| {
+        if terrain_material_at(mirror, [x, y, z]) == Some(Material::TreeTrunk) {
+            columns
+                .entry([x, y])
+                .and_modify(|(base, top)| {
+                    *base = (*base).min(z);
+                    *top = (*top).max(z);
+                })
+                .or_insert((z, z));
+        }
+    });
+    columns
+        .into_iter()
+        .filter_map(|([x, y], (base_z, top_z))| {
+            if base_z > slice_level {
+                return None;
+            }
+            let height = top_z - base_z + 2;
+            let variant = match height {
+                4 => TreeVariant::Tree01,
+                5 if tree_variant_hash(x, y).is_multiple_of(2) => TreeVariant::Tree02,
+                5 => TreeVariant::Tree03,
+                6 => TreeVariant::Tree04R,
+                // Worldgen has pinned this range since story 9.4. A malformed snapshot must
+                // not silently stretch a signed-off mesh into a new resolution contract.
+                _ => return None,
+            };
+            Some(([x, y, base_z], variant))
+        })
+        .collect()
+}
+
+/// Stable across Rust releases, unlike `DefaultHasher`; only x/y shape the 5-cell tie-break.
+fn tree_variant_hash(x: i32, y: i32) -> u32 {
+    let mut hash = 0x811C_9DC5_u32;
+    for value in [x as u32, y as u32] {
+        for byte in value.to_le_bytes() {
+            hash ^= u32::from(byte);
+            hash = hash.wrapping_mul(0x0100_0193);
+        }
+    }
+    hash
+}
+
+fn spawn_tree_meshes(
+    commands: &mut Commands,
+    assets: &ProjectionAssets,
+    mirror: &Mirror,
+    slice_level: i32,
+) {
+    for (base, variant) in tree_meshes(mirror, slice_level) {
+        spawn_tree_mesh(commands, assets, base, variant);
+    }
+}
+
+fn spawn_tree_mesh(
+    commands: &mut Commands,
+    assets: &ProjectionAssets,
+    base: [i32; 3],
+    variant: TreeVariant,
+) {
+    // NOTE: slice rendering shows a whole tree once its base is at or below the cut; meshes
+    // are not clipped to the slice because mesh clipping has no second use yet.
+    commands.spawn((
+        TreeMesh(base),
+        WorldAssetRoot(assets.tree_scene(variant)),
+        Transform::from_translation(world_to_render(base) - Vec3::Y * 0.5)
+            .with_scale(Vec3::splat(0.625)),
+    ));
 }
 
 pub fn terrain_positions(mirror: &Mirror) -> Vec<[i32; 3]> {
@@ -1822,7 +1949,7 @@ pub fn terrain_positions_at(mirror: &Mirror, level: i32) -> Vec<[i32; 3]> {
     let level = level.clamp(0, mirror.dims().z.saturating_sub(1) as i32);
     let mut positions = Vec::new();
     for_each_position(mirror.dims(), |position| {
-        if is_visible_at_slice(mirror, position, level) {
+        if is_visible_at_slice(mirror, position, level) && !is_tree(mirror, position) {
             positions.push(position);
         }
     });
@@ -2638,6 +2765,82 @@ mod tests {
         assert_eq!(foliage_scale(&spruce, [0, 0, 2]), 0.95, "mid crown");
         assert_eq!(foliage_scale(&spruce, [0, 0, 3]), 0.78, "upper crown");
         assert_eq!(foliage_scale(&spruce, [0, 0, 4]), 0.62, "crown tip");
+    }
+
+    #[test]
+    fn trunk_columns_choose_the_height_matched_mesh_and_keep_the_base_below_the_slice() {
+        let trees = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 3, y: 1, z: 7 },
+            tiles: vec![
+                // z = 0
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeTrunk),
+                // z = 1
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeTrunk),
+                // z = 2
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeTrunk),
+                // z = 3
+                Tile::Empty,
+                Tile::Solid(Material::TreeTrunk),
+                Tile::Solid(Material::TreeTrunk),
+                // z = 4
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Solid(Material::TreeTrunk),
+                // z = 5
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+                // z = 6
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+
+        let fixture_heights = (0..3)
+            .map(|x| {
+                let trunk_levels = (0..7)
+                    .filter(|&z| {
+                        terrain_material_at(&trees, [x, 0, z]) == Some(Material::TreeTrunk)
+                    })
+                    .collect::<Vec<_>>();
+                trunk_levels.last().unwrap() - trunk_levels.first().unwrap() + 2
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            fixture_heights,
+            vec![4, 5, 6],
+            "fixture must express three mesh heights"
+        );
+        assert!(
+            tree_variant_hash(1, 0).is_multiple_of(2),
+            "the height-five fixture column selects Tree02 only when its verified hash is even"
+        );
+
+        let columns = tree_meshes(&trees, 4);
+        assert_eq!(
+            columns,
+            vec![
+                ([0, 0, 0], TreeVariant::Tree01),
+                ([1, 0, 0], TreeVariant::Tree02),
+                ([2, 0, 0], TreeVariant::Tree04R),
+            ],
+            "the literal trunk heights map to the three signed-off mesh heights"
+        );
     }
 
     #[test]
