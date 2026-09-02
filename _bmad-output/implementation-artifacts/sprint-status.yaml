@@ -1602,7 +1602,7 @@ development_status:
   # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
   # clause passes on it, so origin centring is the only discriminating one.
   10-3-the-rules-of-the-look: done
-  10-4-the-trees-look-right-the-pilot: in-progress
+  10-4-the-trees-look-right-the-pilot: review
                           # STORY CREATED 2026-09-02 on branch 10-4-..., baseline 2ef194d, full gate
                           # GREEN at creation. THREE OF SIX EPIC PREMISES WERE WRONG: "Blender 4.3.2"
                           # is stale (bare `blender` is 5.2.1 and figures are NOT comparable across

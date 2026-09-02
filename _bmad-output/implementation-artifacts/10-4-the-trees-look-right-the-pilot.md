@@ -317,6 +317,42 @@ Full gate at creation: **GREEN**, all 9 checks `ok`.
 - `_bmad-output/implementation-artifacts/deferred-work.md` (`opening_z`; the gfx-era revisit)
 - `CLAUDE.md`, `docs/technical-preferences.md`
 
+### Orchestrator verification of the delegated run (2026-09-02)
+
+Codex's `exit 0` was **not trusted**. Re-verified independently:
+
+- **FULL `scripts/gate.sh` re-run here: GREEN**, nine checks, no skips, no `--fast`.
+- **Authorship and cadence:** all five Phase B commits authored `Völundr`, one per task plus the
+  self-gate repair `6ed6410`. Working tree clean.
+- **The feature was RUN, not just tested.** `target/debug/gui --headless --capture … --frames 112`
+  against a live `simd` reports
+  `trees: meshes=265 of 265 scenes_loaded=true asset_root=/workspace/projects/frostvein/assets`
+  and `slice: z 31 projected 44885 terrain cubes (265 of 265 cut-face tiles at z 31)`. The written
+  PNG shows pine meshes in the real Bevy client. Both original defects are genuinely closed.
+- **All three mutation rows re-run here and independently KILLED** — not taken from the report.
+- **The `401` alarm is a false positive for the THIRD time, now recursively:** all five
+  `Unauthorized`/`Missing bearer` matches in the run log are this story's own Dev Agent Record
+  text *describing* the false positive. The sentence documenting the trap now trips it.
+
+**A REPORTING GAP THE REVIEW SHOULD SEE.** Codex reported "successful lavapipe captures used
+`--subdiv 2 --frames 112`" and recorded nothing further. In fact **the capture instrument writes
+its PNG and then PANICS**, so it does not exit 0 on this venue:
+
+- `--subdiv 1`: PNG saved, then `capture.rs:1305` — `near-white area is 1.8150%, above the
+  1.5630% ceiling calibrated on boot7.png`.
+- `--subdiv 2`: `capture.rs:487` — `capture observed no terrain lit by dwarf lanterns`.
+
+**Measured before attributing blame, and it is NOT this story's regression.** Near-white area on
+the two committed captures: baseline `2ef194d` **1.6709%**, HEAD `9eba31f` **1.6604%** — both
+above the 1.5630% ceiling, and the mesh trees are marginally *better* than the cube trees. This is
+the software-rendering condition `NEAR_WHITE_AREA_CEILING`'s own comment predicts ("the vehicle's
+frames sit clear of it, software-rendered ones do not"), not a blow-out introduced here. It is
+carried into review as a known instrument hole on this venue rather than papered over: a PNG
+produced by a process that then panicked is weaker evidence than a clean exit, and "exit 0 is not
+a result" cuts both ways.
+
+`sprint-status.yaml` was left at `in-progress` by the delegated run and moved to `review` here.
+
 ## Change Log
 
 | Date | Change |
