@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.4: The Trees Look Right (the pilot)
 
-Status: in-progress
+Status: review
 
 **Runs after 10.6 and 10.3** (epic execution order 10.6 → 10.3 → 10.4 → 10.5, ruled by Wolf
 2026-08-31). Both have landed: the resolution contract fixes 1.6 m/cell and the asset contract is
@@ -191,8 +191,8 @@ written**, and a seventh defect was found in `docs/tech-art-guidelines.md` while
   - [x] Author `mutations/10-4-the-trees-look-right-the-pilot.sh`, ≥3 rows, format per
         `mutations/10-1-the-headless-bench.sh`; run `scripts/mutate.sh` and record KILLED per row.
 
-- [ ] **Task 6 — Verification** (AC: 1, 11, 12)
-  - [ ] Execute the recipe below, RED first, and paste both outputs into the Dev Agent Record.
+- [x] **Task 6 — Verification** (AC: 1, 11, 12)
+  - [x] Execute the recipe below, RED first, and paste both outputs into the Dev Agent Record.
 
 ## Dev Notes
 
@@ -323,6 +323,7 @@ Full gate at creation: **GREEN**, all 9 checks `ok`.
 |---|---|
 | 2026-09-02 | Story created. Premises re-verified: 3 of 6 wrong, plus a stale taper found in the guidelines. Verification recipe executed RED-then-GREEN on `2ef194d`. |
 | 2026-09-02 | Fresh-context validation, 13 findings, all applied. Two were critical: premise 1 was FALSE (`bevy_gltf` is enabled via `3d_bevy_render`, already corrected at 10.6 and re-derived here anyway), and Task 1's method would have turned AC1 red through `bench_contract.rs`. AC5 and AC3 gained discriminators, AC7's two halves were split onto the two guards that can actually see them, AC9 now enumerates all seven homes of the draw-set oracle, and the taper correction and the mutation rows gained ACs of their own. |
+| 2026-09-02 | Tasks 3-6 completed: runtime asset resolution and observable capture checks, corrected mesh cut accounting, all draw-set references updated, two committed client captures and three killed mutations. Full gate GREEN; vehicle-only visual/FPS signoff remains open. |
 
 ## Dev Agent Record
 
@@ -444,6 +445,15 @@ _bmad-output/implementation-artifacts/mutations/10-4-the-trees-look-right-the-pi
 **KILLED**: `copied executable asset root wins over the build workspace`, `zero spawned meshes
 cannot pass a treed capture`, and `cut oracle includes whole tree meshes above their source tiles`.
 The actual failures name the expected tests and are retained in this run's log.
+
+**Task 6 (AC1, AC11, AC12) — done where this venue can verify it.** RED evidence first: before
+the asset-root fix, the live client logged four `Path not found` GLBs and rendered no trees; before
+the cut-oracle correction it panicked at z31 with `3 solid tiles ... but 0 were drawn`; and the
+literal `--frames 30` run after the fix reached `39936`, `265 of 265`, and all scenes loaded before
+its pre-existing 100-delivered-tick health floor failed. GREEN evidence: `CARGO_BUILD_JOBS=8
+scripts/gate.sh` completed **GATE GREEN** (full tier). The three mutation rows are KILLED by name
+above. AC12's closing vehicle review, including a live FPS reading, is **unmet**: this devpod has
+no window and lavapipe does not provide a meaningful frame-rate measurement.
 
 ### File List
 
