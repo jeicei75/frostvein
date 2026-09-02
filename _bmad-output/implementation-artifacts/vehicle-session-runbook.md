@@ -32,19 +32,30 @@ CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
   cargo build -p gui --release --target x86_64-pc-windows-gnu
 ```
 
-`gui.exe` lands at `target/x86_64-pc-windows-gnu/release/gui.exe`. Copy the executable **and the
-whole `assets/` directory beside it** on the Windows side — do not copy the `.exe` alone. The
-client resolves `<gui.exe directory>/assets` first; this is what keeps the tree GLBs available
-after the binary leaves its WSL build workspace. For example, the copied folder must end as:
+`gui.exe` lands at `target/x86_64-pc-windows-gnu/release/gui.exe`. **Copy that one file. There is
+nothing else to copy.**
+
+The four tree GLBs are compiled INTO the binary (`ingest::TREE_ASSETS`, served from Bevy's
+`embedded://` source), so the executable is self-contained and the assets cannot be left behind or
+go stale against the build that draws them.
+
+```powershell
+Copy-Item \\wsl$\<distro>\workspace\projects\frostvein\target\x86_64-pc-windows-gnu\release\gui.exe C:\frostvein\
+```
+
+Confirm on startup — the client prints this before it connects:
 
 ```
-frostvein-gui/
-  gui.exe
-  assets/
-    trees/
-      SM_VoxelPine_Tree01.glb
-      ...
+gui tree assets: 4 embedded in this binary
 ```
+
+**Superseded 2026-09-02, story 10.4.** This runbook previously said to copy the executable *and*
+the whole `assets/` directory beside it. That instruction was correct for the first mesh-tree
+build and failed the first time it was used: with the `.exe` alone, the client fell back to
+`GUI_WORKSPACE_ROOT`, a path stamped at COMPILE time on the WSL build machine, which on Windows
+resolves to a Linux path that cannot exist. The fix removed the copy step rather than restating
+it — the same reasoning `crates/gui/build.rs` gives for stamping the commit SHA into the binary:
+a procedure is exactly what a copied binary defeats.
 
 ## Start the daemon once (WSL, leave it running all session)
 

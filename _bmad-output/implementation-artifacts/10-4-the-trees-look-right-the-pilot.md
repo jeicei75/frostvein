@@ -353,6 +353,44 @@ a result" cuts both ways.
 
 `sprint-status.yaml` was left at `in-progress` by the delegated run and moved to `review` here.
 
+### Post-review change: the pines are compiled into the binary (2026-09-02)
+
+**Wolf hit the delivery defect on the vehicle immediately after the story reached `review`, and
+ruled that the fix lands in 10.4 rather than a follow-up.** The cost was stated first and accepted:
+this rewrites `crates/gui` after verification and invalidates a mutation row that had been
+independently confirmed.
+
+**The defect.** Copying `gui.exe` alone can never work. `resolve_asset_root` preferred
+`<exe dir>/assets` and otherwise fell back to `GUI_WORKSPACE_ROOT` — a path stamped at COMPILE
+time on the WSL build machine — so on Windows it resolved to a Linux path that cannot exist. The
+runbook's answer was "copy the whole `assets/` directory too", and that procedure failed the first
+time a human used it.
+
+**The fix, and why embedding rather than better instructions.** `crates/gui/build.rs` already
+stamps the commit SHA into the binary, and says why in its own words: *"every previous guard was a
+procedure ... and a procedure is exactly what a stale binary defeats."* "Remember to copy
+`assets/`" is that same shape. The four GLBs (1.28 MB total) are now `include_bytes!`-embedded and
+served from Bevy's `embedded://` source; `resolve_asset_root`, `verify_tree_assets`, the
+`TreeAssetRoot` resource and both `AssetPlugin.file_path` overrides are gone. Loader paths moved to
+`project::TREE_SCENE_PATHS` so the embedded table and the `TreeVariant` indexing are one mapping
+pinned by a test rather than trusted to agree.
+
+**Proven by running, not by testing.** A lone `gui` binary copied into an empty directory, run
+with its cwd there and no `assets/` anywhere on the path, reports
+`gui tree assets: 4 embedded in this binary` and
+`trees: meshes=265 of 265 scenes_loaded=true source=embedded`, and renders the same frame as the
+on-disk build. That is the check the old code could not pass.
+
+**Mutation table re-derived, and the gate caught what re-derivation missed.** Two rows were
+replaced (`every pine is embedded in the binary`, `embedded table and loader agree which pine is
+which`) and a THIRD — `zero spawned meshes cannot pass a treed capture` — was found BROKEN by
+`audit-mutations.py` on the gate, because narrowing `assert_tree_capture`'s signature let rustfmt
+collapse the anchor text it matched on. It was re-pointed, not deleted. **All four rows re-run and
+KILLED**, and the full gate is GREEN.
+
+Unchanged by this work: AC6 is still vestigial, AC12's closing half still needs the vehicle, and
+the capture instrument still writes its PNG and then panics on the pre-existing near-white ceiling.
+
 ## Change Log
 
 | Date | Change |
@@ -519,3 +557,4 @@ no window and lavapipe does not provide a meaningful frame-rate measurement.
 - `_bmad-output/implementation-artifacts/10-4-signoff/client-baseline-2ef194d-subdiv2.png` — NEW, baseline client capture
 - `_bmad-output/implementation-artifacts/10-4-signoff/client-head-9eba31f-subdiv2.png` — NEW, mesh-tree client capture
 | 2026-09-02 | Tasks 0-2 complete. Task 0's taper correction and Task 1's three taper candidates delegated to Codex (two commits, per-task cadence held, authored Völundr); the run then exited 1 on 5-hour quota exhaustion mid-self-gate, losing nothing because of that cadence. Orchestrator re-ran the FULL gate independently: GREEN, nine checks, no skips. **Task 2 ruled by Wolf: the mesh path wins and 10.4 lands it in the client**, explicitly overriding Task 2's stop-if-authored instruction. The taper was rejected on measurement, not taste — the whole sweep moves the frame 5.27-5.76 mean pixel delta against 26.07 for deleting every tree, because `foliage_scale` can only shrink a cube inside its own cell and the crown's disc shape is fixed by `place_trees`. "Procedural vs authored" was found to be a false dichotomy: `voxel_pine.py` IS a deterministic seeded generator, so the difference is venue and resolution (1 cube per 1.6 m cell vs 0.2 m voxels baked offline; 103 vs 3,474-5,894 triangles per tree). Candidate D renders 10.2's pines in the valley at boot framing via a bench that IMPORTS `valley_bench` rather than forking it. Three defects recorded: the `0.95` taper arm renders on zero cells while `bench_contract.rs` pins it, 53% of foliage renders snow-grey, and the approved reference sheet self-contradicts on Type 4 (6 CELLS vs 8.8x dwarf height) — resolved to 6 cells, `SM_VoxelPine_Tree04R.glb` regenerated at exactly 9.6 m, overshooting placements 103 of 265 -> 0. |
+| 2026-09-02 | **Post-review delivery fix, on Wolf's ruling.** The vehicle copy step failed on first use: `gui.exe` alone fell back to a compile-time WSL path that cannot exist on Windows. The four pines are now compiled into the binary via `include_bytes!` and Bevy's `embedded://` source, so delivery is one file and the assets cannot go stale against it — the same argument `build.rs` makes for stamping the SHA in. Verified by running a lone binary from an empty directory with no `assets/` on the path. Mutation table re-derived: two rows replaced, a third caught BROKEN by the gate's audit and re-pointed, all four KILLED, full gate GREEN.
