@@ -204,7 +204,7 @@ it.
 
 | Path | State | Note |
 |---|---|---|
-| `docs/tech-art-guidelines.md` | UPDATE | Two new sections appended; existing sections untouched |
+| `docs/tech-art-guidelines.md` | UPDATE | Two new sections appended. **Superseded 2026-09-02** by an editorial restructure that rewrote every section; see the note below the File List. |
 | `scripts/bench/check_asset.py` | NEW | Stdlib only |
 | `scripts/tests/test_check_asset.py` | NEW | Auto-discovered by the gate |
 | `_bmad-output/implementation-artifacts/mutations/10-3-the-rules-of-the-look.sh` | NEW | ≥3 rows |
@@ -402,6 +402,31 @@ the gate's python discovery is `scripts/gate.sh:124` (story says :117) and `impo
 - MODIFIED: `_bmad-output/implementation-artifacts/metrics/10-6-how-fine-can-we-go.md`
 - NEW: `_bmad-output/implementation-artifacts/metrics/10-4-the-trees-look-right-the-pilot.md`
 - MODIFIED (code review 2026-09-01): `_bmad-output/implementation-artifacts/deferred-work.md`
+- MODIFIED (editorial restructure 2026-09-02): `docs/tech-art-guidelines.md`
+- NEW (editorial restructure 2026-09-02): `docs/tech-art-record.md`
+
+#### Editorial restructure — 2026-09-02
+
+Wolf ordered an editorial pass over `docs/tech-art-guidelines.md` AFTER the review closed: **no
+decision, value or rationale changed**, but the file's shape did. Three consequences for this
+story's record, stated rather than left to rot:
+
+1. **"Existing sections untouched" is no longer true.** Every section was restructured into
+   MUST/MUST-NOT rules with a `Check:` line naming symbols. The two contract sections this story
+   shipped kept their bullets and their wording; only their citations changed.
+2. **AC4's literal citation moved.** AC4 requires the Asset contract to cite `[prd.md:150]`. Wolf
+   ruled that no line numbers remain in the document, so it now cites `prd.md` §
+   "Scope shape (agreed, pre-FR)" — the same bullet, addressed by a stable anchor instead of a
+   line that any PRD edit invalidates. **AC4's substance is met; its literal wording is not.**
+3. **The rationale moved out of the file.** Per `docs/dev-workflow.md`'s runbook-vs-record rule
+   ("never mix them"), the guidelines are now current-state only and the reasoning lives in the new
+   `docs/tech-art-record.md`, verbatim, under matching headings.
+
+The pass also found four values wrong by inspection — recorded in the guidelines' "Found during
+restructure" section, **not corrected**, because correcting them would change values this story's
+review had already closed. Two were derived numbers and were deleted rather than fixed (a copy of a
+computed value in prose rots while its test stays green); two remain open, one of them in a code
+comment. Full gate GREEN after every step.
 
 ### Review Findings — code review 2026-09-01
 

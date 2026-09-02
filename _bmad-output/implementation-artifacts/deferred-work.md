@@ -1437,8 +1437,13 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
   records 0.4 m terrain visual voxels as an ADOPTED DECISION, but the shipped default is `k = 1`
   — `TerrainSubdivision` is inserted only under `--subdiv` [`crates/gui/src/ingest.rs:203`] and
   consumers fall back via `subdivision.map_or(1, ..)` [`crates/gui/src/project.rs:1108`, `:1184`,
-  `:1196`]. Making k=4 the default, behind ONE named constant, is owed by whichever story next
-  takes terrain rendering; 10.4 (trees) and 10.5 (dwarves) are not natural owners. Wolf's ruling
+  `:1196`]. Reaching the adopted resolution today requires `--subdiv 4`. Making k=4 the default —
+  putting the adopted `k` in one constant so a future evidence-led revision changes one constant
+  rather than a grid convention — is owed by whichever story next
+  takes terrain rendering; 10.4 (trees) and 10.5 (dwarves) are not natural owners.
+  `docs/tech-art-guidelines.md` now carries only a three-line normative note and points here. The
+  sentence it used to carry, verbatim, and the reason this entry exists: **"Do not read this
+  paragraph as a description of what the client does."** Wolf's ruling
   at 10.6 fixed the adopted value at 4 (k=8 is servable at 100–140 fps but every dig hitches
   38–78 ms against k=4's 5–13 ms). Related: `--subdiv` "is discoverable nowhere and `gui --help`
   fails" (see the earlier entry in this file).
