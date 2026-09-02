@@ -26,6 +26,12 @@ gui.exe 7451 --capture 9-1-vista.png --frames 400000
 echo "exit=$?"
 ```
 
+NOTE (10.4 review, 2026-09-02): this command is WINDOWED — no `--headless` — and for a short
+window it could not have worked. The tree accounting the cut-face oracle needs was inserted only
+under `--headless`, so a windowed capture compared 0 drawn tree meshes against the 265 the mirror
+requires and panicked before the screenshot. Fixed; the resource now follows `--capture`, not the
+window. If this command ever panics on `capture drew a hollow cut`, that gate has regressed.
+
 Read the range-check line. **It gained a field on 2026-08-29** and now reads:
 `capture range check: warm-lit pixels=N ground-median-luminance=N near-white-area=X% blown-pool=Y% p99-luminance=Z`
 

@@ -46,8 +46,24 @@ Copy-Item \\wsl$\<distro>\workspace\projects\frostvein\target\x86_64-pc-windows-
 Confirm on startup — the client prints this before it connects:
 
 ```
-gui tree assets: 4 embedded in this binary
+gui tree assets: 4 of 4 embedded in this binary, 1277340 bytes
 ```
+
+That line reads the BLOBS: it counts only the pines that actually carry binary-glTF bytes, so an
+emptied or truncated asset reads `0 of 4` rather than passing. It still cannot speak for decoding,
+because Bevy has not started yet — so wait for the second line, which is the one that proves the
+pines reached the world and appears on EVERY run, windowed included:
+
+```
+gui trees: meshes=265 scenes_loaded=true source=embedded frames=2
+```
+
+**Both lines matter, and the review that added the second one is why.** The startup line used to
+print `TREE_ASSETS.len()` — a compile-time array length that would have read `4 embedded`
+identically with every blob emptied, with the registration deleted, or with `embedded://`
+resolution broken. A confirmation step that cannot observe its own failure is not a confirmation
+step. If `meshes=0` or `scenes_loaded=false`, the pines did not load; report it rather than
+looking for them on screen.
 
 **Superseded 2026-09-02, story 10.4.** This runbook previously said to copy the executable *and*
 the whole `assets/` directory beside it. That instruction was correct for the first mesh-tree

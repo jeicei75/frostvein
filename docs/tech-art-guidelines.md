@@ -39,10 +39,10 @@ Ruled in [Value and materials](#value-and-materials), except the rim row. Every 
 | ↳ before round 7 | `(158, 170, 196)` **(superseded at round 7)** | `#9EAAC4` | trimmed ~8%: the caps dominate the visible area at boot pitch |
 | `Material::TreeFoliage` | `(44, 100, 58)` | `#2C643A` | green since 9.4 |
 | ↳ before 9.4 | `(55, 73, 84)` **(superseded by 9.4)** | `#374954` | 9.9 from stone — near-camouflage |
-| `foliage_snow_color()` | `(156, 170, 196)` | `#9CAAC4` | exposed spruce crown; a material swap, never a terrain cap |
+| `foliage_snow_color()` | `(156, 170, 196)` | `#9CAAC4` | exposed spruce crown **on the cube fallback path**; a material swap, never a terrain cap. A GLB pine carries its snow in its own palette |
 | ↳ before round 7 | `(172, 186, 210)` **(superseded at round 7)** | `#ACBAD2` | the artifact's `SPRUCE_SNOW` |
 | `Material::TreeTrunk` | — | — | stated in the code table only |
-| foliage taper | 0.62 / 0.78 / 0.95 | — | skirts and tips / upper crown / mid-crown |
+| foliage taper | 0.62 / 0.78 / 0.95 | — | skirts and tips / upper crown / mid-crown — **cube fallback path only** |
 | `rim_dissolved_color()` | exactly the sky colour | — | see [Edge treatment](#edge-treatment) |
 
 ### Lights
@@ -155,11 +155,20 @@ The boot frame is a night scene.
 - Foliage is green since story 9.4. Trees separate on GREEN, the axis the cool directional does
   not compress.
 - Every terrain material MUST keep blue at or above red.
-- Foliage cubes taper by their contiguous foliage above: ground skirts and crown tips scale to
-  0.62, the upper crown to 0.78, and the mid-crown to 0.95. The taper MUST NOT change the
-  six-neighbour exposed-face set.
+- **The valley's trees are four authored GLB pines**, not cubes, since story 10.4:
+  `SM_VoxelPine_Tree0{1,2,3}` and `Tree04R`, embedded in the binary via `include_bytes!` and
+  served from `embedded://`. One mesh is re-derived per trunk column; the variant follows the
+  column's height in cells (4 / 5 / 5 / 6), tie-broken by a stable FNV hash of x,y. Snow is baked
+  into the GLB palette, so the two rules below do NOT govern a pine's pixels.
+- **The cube rules below are the FALLBACK path**, and they are live: a trunk column the mesh rule
+  cannot represent — a gap dug through it, or a height outside 4-6 — is drawn as cubes rather than
+  by nothing. That fallback is the only thing standing between a dug tree and an invisible one, so
+  these values still ship and are still pinned.
+- Foliage cubes on the fallback path taper by their contiguous foliage above: ground skirts and
+  crown tips scale to 0.62, the upper crown to 0.78, and the mid-crown to 0.95. The taper MUST NOT
+  change the six-neighbour exposed-face set.
 - Ramps follow the same material rules, because the renderer presents them as full cubes.
-- The **exposed crown** of a spruce — foliage with nothing solid above it — takes its own
+- The **exposed crown** of a fallback spruce — foliage with nothing solid above it — takes its own
   snow-laden material. This is a material swap and MUST NOT be a terrain cap.
 
 Check: `appearance_tables_pin_the_cold_boot_palette` (`crates/gui/src/appearance.rs`) pins the

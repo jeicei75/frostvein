@@ -135,3 +135,26 @@ five-dwarf assets have instance counts roughly four orders of magnitude lower. T
 16 voxels/cell remains the authored-asset target, not a request to render terrain at that density.
 `k=8` is frame-rate servable (100–140 fps) but is not adopted because every dig hitches 38–78 ms
 versus k=4's 5–13 ms. `k=16` is geometry-only, without a valid fps reading.
+
+## The cube foliage rules are a fallback, not dead code (10.4 review, 2026-09-02)
+
+Story 10.4 moved the valley's trees to four authored GLB pines and filtered every tree cell out of
+both terrain spawn paths. That left `foliage_scale`, `has_snow_laden_crown`, `foliage_snow_color()`
+and `TerrainSlot::FoliageCrown` unreachable in production while their tests stayed green — and it
+opened a hole nobody could see: `tree_meshes` REJECTS a column it cannot represent (a height
+outside 4-6), so a rejected column was drawn by the mesh path and the cube path neither. The tree
+simply vanished, and the cut-face oracle rejected it on both sides at once and reported a match.
+
+Wolf's ruling at the review: revive the cube path as the fallback rather than delete it. A column
+the mesh rule rejects renders as cubes, exactly as it did before mesh trees. That closes the hole,
+makes the taper and crown values live again rather than a guard over nothing, and answers the
+second half of the same defect — `tree_meshes` promised a *contiguous* trunk column and never
+checked it, so digging one mid-trunk cell left min and max untouched and the client redrew an
+unbroken pine over a hole the sim had already stored. The contiguity check now rejects that column
+into the same fallback.
+
+The documented taper was separately wrong before any of this: round-7 commit `10c06e1` moved the
+taper, the snow cap and the crown together and only the crown was documented, leaving
+`0.72 / 0.86 / full` in the guidelines against the shipped `0.62 / 0.78 / 0.95`. Corrected at 10.4
+Task 0; the surrounding text was then corrected AGAIN at the review, because Task 0 landed before
+the mesh ruling and left the cube rules reading as the shipped description of every tree.
