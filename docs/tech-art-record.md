@@ -32,6 +32,10 @@ terrain cap: capping foliage puts a bright slab on every ground-level skirt tile
 landform, which is what the round-3 capture showed. Bare cube foliage without it reads as a dark
 clump in a lit field.
 
+Round-7 commit `10c06e1` moved the foliage taper together with the snow cap and the crown. Its
+documentation follow-up recorded only the crown, leaving the guidelines' taper stale until story
+10.4 corrected both occurrences.
+
 ## Sky and lights
 
 The aurora was first built on a ring of **radius 220** **(superseded by

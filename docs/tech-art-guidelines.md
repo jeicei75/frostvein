@@ -42,7 +42,7 @@ Ruled in [Value and materials](#value-and-materials), except the rim row. Every 
 | `foliage_snow_color()` | `(156, 170, 196)` | `#9CAAC4` | exposed spruce crown; a material swap, never a terrain cap |
 | ↳ before round 7 | `(172, 186, 210)` **(superseded at round 7)** | `#ACBAD2` | the artifact's `SPRUCE_SNOW` |
 | `Material::TreeTrunk` | — | — | stated in the code table only |
-| foliage taper | 0.72 / 0.86 / full | — | skirts and tips / upper crown / mid-crown |
+| foliage taper | 0.62 / 0.78 / 0.95 | — | skirts and tips / upper crown / mid-crown |
 | `rim_dissolved_color()` | exactly the sky colour | — | see [Edge treatment](#edge-treatment) |
 
 ### Lights
@@ -156,7 +156,7 @@ The boot frame is a night scene.
   not compress.
 - Every terrain material MUST keep blue at or above red.
 - Foliage cubes taper by their contiguous foliage above: ground skirts and crown tips scale to
-  0.72, the upper crown to 0.86, and the mid-crown stays full scale. The taper MUST NOT change the
+  0.62, the upper crown to 0.78, and the mid-crown to 0.95. The taper MUST NOT change the
   six-neighbour exposed-face set.
 - Ramps follow the same material rules, because the renderer presents them as full cubes.
 - The **exposed crown** of a spruce — foliage with nothing solid above it — takes its own
