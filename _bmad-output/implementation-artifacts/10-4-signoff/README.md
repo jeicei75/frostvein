@@ -30,7 +30,7 @@ Replaced with captures from real builds, both `--headless --subdiv 2 --frames 16
 | artifact | build | terrain draw | trees |
 |---|---|---|---|
 | `client-baseline-2ef194d-subdiv2.png` | `2ef194d` via `git archive` (stamps `unknown`: the archive carries no `.git`) | 49,933 cubes at z31 | 5,048 cube-tree cells |
-| `client-head-daeb2c9-subdiv2.png` | `daeb2c9`, clean stamp, no `-dirty` | 44,885 cubes at z31 | `meshes=265 of 265 scenes_loaded=true source=embedded` |
+| `client-head-06471d7-subdiv2.png` | `06471d7`, clean stamp, no `-dirty` | 44,885 cubes at z31 | `meshes=265 of 265 scenes_loaded=true source=embedded` |
 
 `49,933 - 44,885 = 5,048`, exactly the tree-cell census — the two builds account for the same world.
 
@@ -41,7 +41,7 @@ assumed away:
 
 | comparison | raw | >=4 | >=16 |
 |---|---|---|---|
-| **baseline vs HEAD (the AC5 claim)** | **289,873** | **261,952** | **200,839** |
+| **baseline vs HEAD (the AC5 claim)** | **289,673** | **264,839** | **201,914** |
 | same code, two runs | 62,007 | 6,620 | 1,395 |
 | same code, another pair | 78,332 | 46,050 | 8,876 |
 
@@ -53,3 +53,28 @@ Both captures write their PNG and then panic on the pre-existing `NEAR_WHITE_ARE
 is the software-rendering condition that constant's own comment predicts. The subdiv-2 lantern
 failure that ALSO panicked here was this story's own regression and is fixed: `lit terrain tiles
 at dwarf positions=1870 moved=true`, where it read 0 before.
+
+### Per-tree yaw — added after the patch pass, on Wolf's call
+
+The client applied NO rotation to any pine, while `authored_bench.py` had always spun each one in
+quarter turns and said why in its own comment: *"so 265 copies of four meshes do not all face the
+camera identically."* So the frame approved as candidate D differed from the one the client draws.
+A bench/client divergence, and a concrete look defect rather than taste — which is the bar for a
+look change on this project.
+
+Yaw is a SEPARATE salted draw from the same stable FNV hash; the species assignment is untouched
+and pinned by its own mutation row, because FNV-1a mixes every byte and routing the variant through
+a zero-salted hash silently reshuffles which pine each column gets while reading as a tidy
+refactor. That nearly shipped.
+
+**Measured, not asserted** — the same noise floor applies:
+
+| comparison | raw | >=4 | >=16 |
+|---|---|---|---|
+| no-yaw `daeb2c9` vs yaw `06471d7` | 158,752 | **116,963** | **81,204** |
+| worst same-code noise | 78,332 | 46,050 | 8,876 |
+
+2.5x the worst noise at delta>=4 and 9.1x at delta>=16, so the quarter turns are genuinely visible
+rather than lost on a near-symmetric conifer — which was the open question worth checking before
+claiming the change does anything. Whether the forest READS better is Wolf's eye on the vehicle,
+not this measurement.

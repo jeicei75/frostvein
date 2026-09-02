@@ -859,7 +859,8 @@ and **no** `TerrainTile`, which is precisely the shape the old query could not s
   tick floor demands as many OBSERVED ticks as requested, and software rendering observes roughly a
   third of them. AC5 is therefore reported as a delta **against a measured noise floor**: baseline vs HEAD moves
   261,952 pixels at delta>=4 against a worst-case same-code noise of 46,050 — 5.7x — and 200,839
-  against 8,876 at delta>=16, 22.6x. Full table and provenance in `10-4-signoff/README.md`. The
+  against 8,876 at delta>=16, 22.6x. Full table and provenance in `10-4-signoff/README.md`, including the per-tree yaw added
+  after the patch pass (116,963 px at delta>=4 against 46,050 worst-case noise). The
   figures the story previously published (81,101 / 36,176 / 7,939) sat INSIDE that noise.
 - **A new one, found while regenerating AC5:** `build.rs`'s `rerun-if-changed=../../.git/index`
   did NOT fire after a commit — the rebuilt binary still stamped the previous commit plus `-dirty`
