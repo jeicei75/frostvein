@@ -279,7 +279,7 @@ written**, and a seventh defect was found in `docs/tech-art-guidelines.md` while
 RED first. The instrument must be shown to see trees before any green from it is believed.
 
 ```bash
-export PATH="$HOME/.local/share/mise/installs/rust/1.97.1/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"   # rustup shim dir; survives a toolchain bump
 python3 scripts/bench/export_world.py /tmp/world.json
 # RED: strip every tree cell from the snapshot, then render the same world
 python3 - <<'PY'
@@ -535,7 +535,8 @@ no window and lavapipe does not provide a meaningful frame-rate measurement.
 - `docs/tech-art-record.md` — UPDATE, why the taper was wrong
 - `_bmad-output/implementation-artifacts/10-4-signoff/README.md` — UPDATE, candidate table
 - `_bmad-output/implementation-artifacts/10-4-signoff/candidate_bench.py` — NEW, taper scratch bench
-- `_bmad-output/implementation-artifacts/10-4-signoff/authored_bench.py` — NEW, mesh-tree scratch bench
+- `scripts/bench/authored_bench.py` — NEW, the mesh-tree bench (promoted out of `10-4-signoff/`
+  scratch at the review, on Wolf's ruling), with `scripts/tests/test_authored_bench.py` on the gate
 - `_bmad-output/implementation-artifacts/10-4-signoff/pine_6cell.py` — NEW, 6-cell pine generator
 - `_bmad-output/implementation-artifacts/10-4-signoff/SM_VoxelPine_Tree04R.glb` — NEW, height-exact Tree04
 - `_bmad-output/implementation-artifacts/10-4-signoff/decision.md` — NEW, Task 2 decision record
@@ -543,7 +544,8 @@ no window and lavapipe does not provide a meaningful frame-rate measurement.
 - `_bmad-output/implementation-artifacts/10-4-signoff/candidate-B-0.72-0.88-0.98-blender-5.2.1.png` — NEW
 - `_bmad-output/implementation-artifacts/10-4-signoff/candidate-C-0.52-0.68-0.86-blender-5.2.1.png` — NEW
 - `_bmad-output/implementation-artifacts/10-4-signoff/candidate-D-authored-pines-blender-5.2.1.png` — NEW
-- `crates/gui/build.rs` — UPDATE, stamp workspace root for asset resolution
+- `crates/gui/build.rs` — UPDATE, stamp the commit SHA; the workspace-root stamp was added here
+  and REMOVED again at the review with its last consumer
 - `crates/gui/src/ingest.rs` — UPDATE, resolve and validate the capture asset root
 - `crates/gui/src/project.rs` — UPDATE, expose tree scene-load and expected-count checks
 - `crates/gui/src/capture.rs` — UPDATE, require loaded scenes and all tree meshes; count mesh cut units
@@ -553,8 +555,309 @@ no window and lavapipe does not provide a meaningful frame-rate measurement.
 - `_bmad-output/planning-artifacts/epics.md` — UPDATE, name 44,984 as exposed cells
 - `_bmad-output/implementation-artifacts/vehicle-session-runbook.md` — UPDATE, startup count 39,936
 - `_bmad-output/implementation-artifacts/epic-9-shared-sitting-card.md` — UPDATE, startup count 39,936
-- `_bmad-output/implementation-artifacts/mutations/10-4-the-trees-look-right-the-pilot.sh` — NEW, three capture mutations
+- `_bmad-output/implementation-artifacts/mutations/10-4-the-trees-look-right-the-pilot.sh` — NEW, four capture mutations
+- `assets/trees/SM_VoxelPine_Tree0{1,2,3}.glb`, `assets/trees/SM_VoxelPine_Tree04R.glb` — NEW,
+  1.28 MB of shipped pines, `include_bytes!`-embedded into `crates/gui` and read by the bench
 - `_bmad-output/implementation-artifacts/10-4-signoff/client-baseline-2ef194d-subdiv2.png` — NEW, baseline client capture
 - `_bmad-output/implementation-artifacts/10-4-signoff/client-head-9eba31f-subdiv2.png` — NEW, mesh-tree client capture
 | 2026-09-02 | Tasks 0-2 complete. Task 0's taper correction and Task 1's three taper candidates delegated to Codex (two commits, per-task cadence held, authored Völundr); the run then exited 1 on 5-hour quota exhaustion mid-self-gate, losing nothing because of that cadence. Orchestrator re-ran the FULL gate independently: GREEN, nine checks, no skips. **Task 2 ruled by Wolf: the mesh path wins and 10.4 lands it in the client**, explicitly overriding Task 2's stop-if-authored instruction. The taper was rejected on measurement, not taste — the whole sweep moves the frame 5.27-5.76 mean pixel delta against 26.07 for deleting every tree, because `foliage_scale` can only shrink a cube inside its own cell and the crown's disc shape is fixed by `place_trees`. "Procedural vs authored" was found to be a false dichotomy: `voxel_pine.py` IS a deterministic seeded generator, so the difference is venue and resolution (1 cube per 1.6 m cell vs 0.2 m voxels baked offline; 103 vs 3,474-5,894 triangles per tree). Candidate D renders 10.2's pines in the valley at boot framing via a bench that IMPORTS `valley_bench` rather than forking it. Three defects recorded: the `0.95` taper arm renders on zero cells while `bench_contract.rs` pins it, 53% of foliage renders snow-grey, and the approved reference sheet self-contradicts on Type 4 (6 CELLS vs 8.8x dwarf height) — resolved to 6 cells, `SM_VoxelPine_Tree04R.glb` regenerated at exactly 9.6 m, overshooting placements 103 of 265 -> 0. |
 | 2026-09-02 | **Post-review delivery fix, on Wolf's ruling.** The vehicle copy step failed on first use: `gui.exe` alone fell back to a compile-time WSL path that cannot exist on Windows. The four pines are now compiled into the binary via `include_bytes!` and Bevy's `embedded://` source, so delivery is one file and the assets cannot go stale against it — the same argument `build.rs` makes for stamping the SHA in. Verified by running a lone binary from an empty directory with no `assets/` on the path. Mutation table re-derived: two rows replaced, a third caught BROKEN by the gate's audit and re-pointed, all four KILLED, full gate GREEN.
+
+### Review Findings — code review 2026-09-02 (4 layers, all live, NO coverage holes)
+
+Fresh context, own session. Blind Hunter (Sonnet) took `project.rs` + `build.rs`; Edge Case Hunter
+(Sonnet) took `capture.rs`/`ingest.rs`/`pick.rs`/`appearance.rs` + the bench Python + the mutation
+table; both Opus auditors took the whole diff. **R1 note:** Blind Hunter's chartered territory
+(`crates/sim-core`) is empty in this story — zero sim-core lines — so it was reassigned to the core
+of `gui` rather than allowed to return findings-free silence that would read as a clean result.
+All four layers ran `cargo --version` successfully and executed the binaries; the Acceptance
+Auditor ran the full `scripts/gate.sh` (GREEN, nine checks, no skips).
+
+**The headline: the story's central claim is TRUE and its evidence for it is FALSE.** The embedding
+fix genuinely works — two layers independently ran a lone `gui` binary from an empty directory with
+no `assets/` on any path and got `4 embedded in this binary` / `meshes=265 of 265 source=embedded`,
+and the Feature Auditor looked at the resulting pixels and found a real snowy pine forest at correct
+scale. But **every committed artifact offered as proof of it is a capture of the pre-mesh build.**
+
+#### Decision needed — ALL THREE RULED by Wolf, 2026-09-02, during the review
+
+**The three were not independent and were not treated as such.** `tree_meshes` rejects any column
+whose height is not 4, 5 or 6, and both spawn paths filter `!is_tree(..)` — so a rejected column
+gets no mesh AND no terrain cubes, and the tree silently disappears. The only way a generated world
+produces an out-of-range height is a partially dug trunk, which is decision 3. The "dead" cube path
+and the dug-tree question were one hole seen from two ends, and the rulings close it as one:
+
+1. **Revive the cube path as the fallback.** A column `tree_meshes` rejects renders through the
+   existing cube path — trunk and foliage both — instead of drawing nothing. `foliage_scale`,
+   `has_snow_laden_crown`, `foliage_snow_color()` and `TerrainSlot::FoliageCrown` become live again,
+   AC6 stops being vestigial, and the invisible-tree hole closes.
+2. **Promote the mesh bench.** `authored_bench.py` moves from `10-4-signoff/` scratch into
+   `scripts/bench/` and onto the gate. It is the instrument the Task 2 ruling actually rests on;
+   leaving the approved instrument as scratch is how an instrument goes unverified.
+   `bench_contract.rs` is KEPT — ruling 1 made `foliage_scale` live, so it now guards real code.
+3. **Add the contiguity check `tree_meshes` already claims.** A gapped column is rejected and falls
+   back to cubes, so a dug-through trunk shows the actual hole exactly as it did before mesh trees.
+
+
+- [x] [Review][Decision] **AC6 and the whole cube-foliage machinery are now unreachable in
+      production while their tests stay green** — `foliage_scale` (`crates/gui/src/project.rs:1660`),
+      `has_snow_laden_crown`, `foliage_snow_color()`, `TerrainSlot::FoliageCrown`
+      (`project.rs:211`). Both spawn paths filter `!is_tree(..)` (`project.rs:1276`, `:1973`) and
+      `build_chunk_meshes` skips `is_tree` (`:739`), so no tree pixel reaches any of it; snow is
+      baked into the GLB palette. The story discloses this ("AC6 is vestigial"), so it is honest,
+      not hidden — but it is the inert-mechanism-with-a-green-suite pattern, and the epic's hard
+      constraint (`epics.md:1536`) says the exposed-crown rule holds "in whatever wins". Options:
+      (a) delete the dead path and its guards, (b) keep it and document it as bench/cube-path only,
+      (c) rule AC6 formally superseded. Raised independently by Feature Auditor and Acceptance
+      Auditor. **RULED: (a-modified) revive as the fallback — see ruling 1 above.**
+- [x] [Review][Decision] **The committed bench no longer models the client, and
+      `bench_contract.rs` still pins the two together** — `scripts/bench/valley_bench.py`,
+      `crates/gui/tests/bench_contract.rs`. `git diff 2ef194d..HEAD -- scripts/` is EMPTY: the
+      committed bench still draws procedural cube trees at 103 tri/tree, while the client ships
+      four GLB pines at 3,474–5,894 tri each. The contract's own rationale ("without it the bench
+      drew solid canopy slabs where the client draws sparse crowns") now enforces agreement between
+      dead client code and a bench rendering a different tree. `authored_bench.py` — the thing that
+      actually benches HEAD — is scratch under `10-4-signoff/` and is not on the gate. AC5 names
+      `valley_bench.py` as the instrument for future look work, so the next look story measures a
+      valley that does not exist. Options: (a) promote the mesh bench to `scripts/bench/`,
+      (b) retire the taper contract, (c) accept and record the limitation. **RULED: (a) promote — see ruling 2 above.**
+- [x] [Review][Decision] **What should a dug-through tree draw?** `tree_meshes`
+      (`crates/gui/src/project.rs:1853`) takes `min(z)`/`max(z)` over a column's `TreeTrunk` cells
+      and never checks contiguity, though `TreeMesh`'s own doc comment (`project.rs:57`) promises "a
+      contiguous trunk column". `JobKind::Dig` accepts any `Tile::Solid` including tree materials
+      (`sim-core/src/lib.rs:856-860`), and the client's own designation path lets a player select a
+      single mid-trunk cell. Blind Hunter verified: remove only the middle cell of a 4-cell trunk
+      and the re-derived count and variant are byte-identical — the mesh is despawned and respawned
+      at the same transform. The dwarf carves a hole through the trunk, the sim stores `Empty`, and
+      the client draws an unbroken pine, with no log, test or visible signal. Options: (a) truncate
+      the mesh at the first gap, (b) return `None` for a gapped column so it stops drawing,
+      (c) accept and drop the "contiguous" claim from the doc comment. **RULED: (b-modified) add the
+      contiguity check and let a rejected column fall back to cubes — see ruling 3 above.**
+
+#### Patch
+
+- [ ] [Review][Patch] **AC5's two committed captures are BOTH the pre-mesh build — the AC is not
+      met and its evidence is a treatment photographed twice**
+      [`_bmad-output/implementation-artifacts/10-4-signoff/client-head-9eba31f-subdiv2.png`].
+      Confirmed three independent ways: the Feature Auditor zoomed both 3× and found cube foliage
+      platters in each; the orchestrator viewed both full frames directly and confirms both show
+      cube trees on cube trunks, not pines; and the Acceptance Auditor rebuilt `9eba31f` from
+      `git archive` and re-ran the story's recorded recipe verbatim, which **exits 101 and writes no
+      PNG at all**. A `9eba31f` binary physically cannot draw a cube tree (`spawn_tree_meshes`
+      already runs there). This is exactly the failure AC3 was written to name — "identical figures
+      mean the two artifacts are one treatment photographed twice" — landing on AC5's PNGs instead.
+      Regenerate both captures from real builds.
+- [ ] [Review][Patch] **AC5's pixel-difference discriminator is inside the instrument's own noise
+      floor** [`crates/gui/src/capture.rs:842`]. The story's 81,101 raw / 36,176 at ≥4 / 7,939 at
+      ≥16 reproduces exactly, and means nothing: capture fires on a FRAME count, so each run
+      photographs a different sim tick. Same-build, same-world, fresh-daemon repeats measured
+      78,667 / 41,548 / 8,423 (Acceptance) and 65,937 / 38,087 / 7,740 (Feature) — the noise equals
+      or EXCEEDS the claimed signal at every threshold. AC5 borrowed 10.6's "0 of 2,073,600 differ",
+      but that was measured for `--at-tick N`, not `--frames N`. Re-measure with `--at-tick N` and
+      state the noise floor alongside the delta.
+- [ ] [Review][Patch] **This story BROKE the `--subdiv > 1` capture instrument and filed the
+      breakage as pre-existing** [`crates/gui/src/project.rs:914-921`]. Commit `dc79164` deleted the
+      `foliage_entities` block from `spawn_subdivided_terrain`; those foliage cubes were the only
+      `TerrainTile` entities at subdiv>1, and `accumulate_motion`'s lantern observer queries exactly
+      `Query<(&TerrainTile, &Transform)>` (`capture.rs:727`). So `lit_tiles` is now unconditionally
+      empty at subdiv>1 and `assert_valid` (`capture.rs:473`) always fires. Measured across three
+      builds: `2ef194d` → `lit tiles=145 moved=true`, **PNG written**; `9eba31f` and HEAD → `lit
+      tiles=0 moved=false`, **panic, no PNG**. The story measured the near-white ceiling on both
+      commits and correctly cleared it, then filed the *subdiv-2* failure under the same
+      "pre-existing" heading without measuring it. Orchestrator confirmed the deletion at
+      `dc79164`. The disclosure "the capture instrument writes its PNG and then PANICS" is false for
+      subdiv-2: nothing is written.
+- [ ] [Review][Patch] **A windowed `--capture` now always panics on the cut-face oracle — and that
+      is the exact command AC12's closing half needs** [`crates/gui/src/ingest.rs:260`].
+      `TreeCaptureVerification` is inserted only `if args.headless && args.capture.is_some()`, but
+      `expected_cut_face` (`capture.rs:317`) adds `expected_tree_mesh_count` unconditionally while
+      the actual side (`capture.rs:853`) adds the tree contribution only when that resource exists.
+      At boot the entire 265 comes from trees and the terrain contribution at z31 is zero, so the
+      windowed assert becomes `0 == 265` and panics before the screenshot.
+      `epic-9-shared-sitting-card.md:25` instructs Wolf to run `gui.exe 7451 --capture 9-1-vista.png
+      --frames 400000` — no `--headless`. Orchestrator confirmed that line. **The vehicle sitting
+      cannot produce a capture on this build.** Raised independently by Edge Case Hunter and
+      Acceptance Auditor.
+- [ ] [Review][Patch] **The cut-face oracle's tree half is not an independent count**
+      [`crates/gui/src/capture.rs:317`]. `expected_cut_face` → `expected_tree_mesh_count` →
+      `tree_meshes()`, and the actual side counts `TreeMesh` entities spawned from
+      `spawn_tree_meshes(tree_meshes(..))`. Same derivation on both sides, so a defect inside
+      `tree_meshes` — variant mapping, the `{4,5,6}` height window, the slice rule — is invisible to
+      it. Concretely, a trunk column with an out-of-range height is `filter_map`'d to `None` on both
+      sides at once and vanishes from the render with zero signal. At boot the terrain half is `0 of
+      0`, so this IS the whole oracle. The Dev Agent Record's claim that it "still compares two
+      independent counts" is wrong. Raised by Edge Case Hunter and Acceptance Auditor.
+- [ ] [Review][Patch] **Tree respawn re-introduces the whole-world scan the terrain path exists to
+      avoid** [`crates/gui/src/project.rs:1298-1320`]. `tree_meshes()` runs `for_each_position` over
+      every cell in the world, unconditionally, whenever any dirty tile falls inside any tree's
+      conservative footprint — and again from `update_tree_capture_verification` (`capture.rs:207`)
+      on EVERY Update frame during a capture. Blind Hunter built a standalone bench crate and
+      measured **43–63 ms** on a 128×128×32 world. The terrain branches log `mesh_build_ms`; the
+      tree branch logs nothing, and the file's only perf test is terrain-only. This is the same
+      stall class Wolf reported by hand at 10.6, silently re-created for trees, and no test can see
+      it. Raised by Blind Hunter (measured) and Acceptance Auditor (static).
+- [ ] [Review][Patch] **The startup line the runbook tells Wolf to trust cannot detect the failure
+      it advertises** [`crates/gui/src/ingest.rs:151-153`]. `gui tree assets: {} embedded in this
+      binary` prints `TREE_ASSETS.len()` — a compile-time array length, emitted before Bevy starts,
+      before the registry exists, before any GLB is decoded. It prints `4` identically if every blob
+      were empty, if `register_tree_assets` were deleted, or if `embedded://` resolution failed.
+      `vehicle-session-runbook.md:49` presents it as the confirmation step. The only line that is
+      real evidence — `trees: meshes=265 of 265 scenes_loaded=true source=embedded` — exists only
+      under `--headless --capture`, i.e. never in the windowed run Wolf actually does. A broken
+      observability instrument on the delivery path: patched regardless of severity per the standing
+      frostvein exception.
+- [ ] [Review][Patch] **`GUI_WORKSPACE_ROOT` survived the fix that deleted its only consumer**
+      [`crates/gui/build.rs:21-32`]. `resolve_asset_root`, `verify_tree_assets` and `TreeAssetRoot`
+      are correctly gone; `build.rs` still computes and stamps the value via `.canonicalize()
+      .expect(..)` — a build-failing call for a value nothing reads. It re-stamps the build
+      machine's absolute Linux path into `gui.exe`, which is precisely the artefact the delivery fix
+      existed to remove, and it sits next to the load-bearing `GUI_BUILD_SHA` with no signal that
+      only one is real. Violates CLAUDE.md §3 (remove what your own change orphaned). Found
+      independently by all three of Blind Hunter, Feature Auditor and Acceptance Auditor.
+- [ ] [Review][Patch] **The guidelines still present the retired cube-foliage taper as the live
+      shipped rule, and nothing documents that the valley's trees are four authored GLB pines**
+      [`docs/tech-art-guidelines.md:159`]. AC10's literal requirement is met — `:45` and `:159` both
+      read `0.62 / 0.78 / 0.95` — but `:159` states it as a MUST ("Foliage cubes taper by their
+      contiguous foliage above…") for code no tree pixel reaches, and `:41` still lists
+      `foliage_snow_color()` `(156, 170, 196)` as "exposed spruce crown". Task 0 landed before the
+      mesh ruling and was never revisited after it. Someone tuning the tree look will turn a knob
+      that renders nothing — the round-7 partial-doc-update defect this story was written to
+      correct, re-created one level up.
+- [ ] [Review][Patch] **Record accuracy: File List drift, a verification recipe that names a
+      nonexistent toolchain path, and a board that never learned the ruling.** (a) File List calls
+      `build.rs` "stamp workspace root for asset resolution" (no consumer remains), says "three
+      capture mutations" where the file carries four, and omits the four newly-tracked
+      `assets/trees/*.glb` (1.28 MB) entirely. (b) The Verification recipe exports
+      `$HOME/.local/share/mise/installs/rust/1.97.1/bin`, which **does not exist** — orchestrator
+      confirmed; the export silently no-ops because cargo is already on PATH, so the recipe "works"
+      while documenting a false instruction. `scripts/gate.sh:56` and `scripts/mutate.sh:29` both
+      use `$HOME/.cargo/bin`; match them. (c) `sprint-status.yaml:1605-1626` records only
+      creation-time state — the Task 2 mesh ruling, the client change and the embedding fix appear
+      nowhere on the board.
+- [ ] [Review][Patch] **The post-review embedding work is an unrecorded cost window**
+      [`_bmad-output/implementation-artifacts/metrics/.session-cursors.json`]. The dev transcript
+      `b3b54830-…` has its cursor parked at `12:09:09` while the file was still being written at
+      `12:51` — commits `6d8369b` and `ea587b0` land in that gap. That work rewrote `crates/gui`
+      after verification and re-derived the mutation table, and nothing in the remaining flow
+      reaches it: this review's `on_complete` records against a different transcript. Left alone it
+      is the metrics trap where a whole window is ABSENT from the cursors, so no row looks
+      anomalous because there is no row. Record it with `--phase review-patch` on that transcript.
+
+#### Deferred
+
+- [x] [Review][Defer] `authored_bench.py`'s `strip_trees` misses ramp-shaped tree tiles while
+      `trunk_columns` scans the unstripped snapshot, so a `Tile::Ramp(TreeTrunk)` cell would be
+      double-drawn (leftover cube + mesh pine)
+      [`_bmad-output/implementation-artifacts/10-4-signoff/authored_bench.py:93-100`] — deferred:
+      **orchestrator verified the input is unreachable in a generated world** — `place_ramps` runs
+      at `sim-core/src/lib.rs:1091`, BEFORE `place_trees` at `:1094`, and only converts existing
+      terrain surface solids, so worldgen produces no tree ramp. Real asymmetry, inert today,
+      scratch evidence script.
+- [x] [Review][Defer] `authored_bench.py` clamps an out-of-range trunk height to the nearest of
+      `{4,5,6}` instead of dropping it, diverging from `tree_meshes`' deliberate `_ => None`, so the
+      bench can draw a tree the shipped client would not
+      [`10-4-signoff/authored_bench.py:167-170`] — deferred, scratch evidence script, not gated.
+- [x] [Review][Defer] `pine_6cell.py --seed` with a missing value dies on an unhandled `IndexError`
+      rather than the clean `SystemExit` its sibling branch raises
+      [`10-4-signoff/pine_6cell.py:886-891`] — deferred, single-operator evidence script.
+- [x] [Review][Defer] Mesh crowns overhang the 3×3 cell footprint that `tree_mesh_might_cover` and
+      the foliage ring assume — Tree02 measures 3.125×3.375 cells at the shipped 0.625 scale, ~0.19
+      cell per side [`crates/gui/src/project.rs:1772`] — deferred, cosmetic; picking marches the
+      voxel grid so overhanging pixels select the terrain behind them, consistent with foliage
+      already being non-pickable.
+- [x] [Review][Defer] `9-4-signoff/task-7-vehicle-runbook.md:13` still reads `projected 44984
+      terrain cubes at z 31` while its companion `epic-9-shared-sitting-card.md:59` was updated to
+      39,936 — deferred, defensible as history, but the two are read at the same sitting.
+
+#### Dismissed as noise (1)
+
+- The `NEAR_WHITE_AREA_CEILING` panic at `--subdiv 1`. Genuinely pre-existing and honestly
+  disclosed: the story measured it on both commits (baseline 1.6709%, HEAD 1.6604%) and the mesh
+  trees are marginally BETTER than the cube trees. This is the software-rendering condition the
+  constant's own comment predicts. Not a finding. **Note it is a different failure from the
+  subdiv-2 one above, which IS this story's regression** — filing them together is what let the
+  regression hide.
+
+#### Coverage note
+
+One self-inflicted hole, recorded rather than buried: the Edge Case Hunter reported "no Blender
+available in this devpod" and therefore walked the bench Python statically instead of running it.
+**Blender 5.2.1 LTS is at `/usr/local/bin/blender`** (orchestrator verified). Its two Python
+findings are inspection-only and are deferred above on that basis. No layer timed out; no layer
+failed to run cargo; no territory went unreviewed.
+
+### Review patch pass — 2026-09-02, all 14 applied
+
+Wolf took every patch and ruled all three decisions in one pass. The three rulings turned out to
+close **one** defect seen from three sides, and that is the substantive result of this review.
+
+#### What was actually wrong
+
+`tree_meshes` rejects any trunk column it cannot represent, and both spawn paths filtered every
+tree cell out of the terrain. So a rejected column was drawn by the mesh path and the cube path
+**neither** — it vanished, silently, and the cut-face oracle rejected it on both sides at once and
+reported a match. The only way a generated world produces a rejectable column is a partially dug
+trunk, which was the third finding; and the "dead" cube-foliage machinery was the fourth. One hole.
+
+- **The cube path is the fallback now.** `TreeCover` names the columns a mesh actually carries;
+  every other tree cell is ordinary terrain again. `foliage_scale`, `has_snow_laden_crown`,
+  `foliage_snow_color()` and `TerrainSlot::FoliageCrown` are live code rather than a guard over
+  nothing, so **AC6 stops being vestigial**.
+- **The contiguity check `TreeMesh`'s doc comment always promised** now exists. A dug-through
+  trunk is rejected into the fallback and the hole is visible, instead of the client redrawing an
+  unbroken pine over it.
+
+#### Instruments repaired
+
+- **The subdiv-2 regression was ours, and it is fixed.** `dc79164` deleted the per-cell foliage
+  cubes that were the only `TerrainTile` entities at subdiv>1, and the lantern sweep queried that
+  component alone. Measured before: baseline `lit=145` and a PNG, HEAD `lit=0` and no PNG. Measured
+  now: **`lit terrain tiles at dwarf positions=1870 moved=true`, PNG written.** The remaining
+  panic is the genuinely pre-existing near-white ceiling, which is a different failure — filing
+  them together is what let this one hide.
+- **A windowed `--capture` works again**, so the sitting card's own command can produce a frame.
+- **An oracle that can actually fail.** `assert_no_tree_is_undrawn` compares the mirror's tree
+  cells against the meshes actually spawned and the terrain actually drawn — routing through
+  neither `tree_meshes` nor the spawn path.
+- **The startup line reads the blobs**, and a new `gui trees: meshes=N scenes_loaded=…` line
+  reports what reached the world on **every** run, windowed included.
+- **The whole-world sweep is gone from the incremental path** (43–63 ms per tree-touching delta)
+  and from the per-frame capture verification.
+- `GUI_WORKSPACE_ROOT` removed with the consumer the embedding fix deleted.
+
+#### The bench, the docs, the record
+
+`authored_bench.py` is promoted to `scripts/bench/` and onto the gate, reading the **same** four
+GLBs the client compiles in rather than the signoff copies, with `scripts/tests/test_authored_bench.py`
+pinning the height→variant mapping against `project.rs` itself. The guidelines now name the four
+pines and mark the cube rules as the fallback. The runbook stops presenting a compile-time array
+length as its confirmation step. The File List, the mutation count and the toolchain export in the
+Verification recipe are corrected — that recipe named
+`$HOME/.local/share/mise/installs/rust/1.97.1/bin`, which **does not exist**; it "worked" only
+because cargo is already on PATH, which is this project's signature silent-failure shape.
+
+#### Mutations — 10 rows, ALL KILLED
+
+Four pre-existing rows re-run plus six new ones, one per fix that closed a HIGH finding:
+`a gapped trunk column cannot be meshed`, `a tree no mesh draws falls back to cubes`,
+`the lantern sweep reads both draw paths`, `a windowed capture carries its tree accounting`,
+`the startup asset line counts bytes, not entries`, `the independent oracle can fail`.
+Every anchor survived `cargo fmt` — re-audited after formatting, because this story already lost a
+row to rustfmt collapsing the text it matched on.
+
+**Both-sides note.** The fallback is tested against a **pre-existing** gapped column built directly
+in a snapshot, never one produced by digging through the new code — a fixture shaped by the new
+path would only prove that path agrees with itself. The lantern guard's fixture holds chunk cells
+and **no** `TerrainTile`, which is precisely the shape the old query could not see.
+
+#### Still open
+
+- **AC12's closing half** — unchanged, and still needs the vehicle: a real window and a real frame
+  rate this devpod cannot produce. The ~1.2 M triangles of 265 pines against ~479 k for the terrain
+  remains an unanswered fps question.
+- **`--at-tick` is unusable on this venue**, so a deterministic capture is not available here. Its
+  tick floor demands as many OBSERVED ticks as requested, and software rendering observes roughly a
+  third of them. AC5 is therefore reported as a delta **against a measured noise floor**, below.
+- Five deferred items, in `deferred-work.md`. Two of them (`strip_trees`' ramp blindness, the
+  height clamp) now sit in a script that is on the gate rather than in scratch; they stay deferred
+  as Wolf ruled, but they are worth more now than when they were filed.

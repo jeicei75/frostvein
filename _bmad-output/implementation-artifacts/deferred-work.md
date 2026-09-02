@@ -1465,3 +1465,32 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
   2026-09-01 review. Consequence to close with them:
   `_bmad-output/implementation-artifacts/10-2-signoff/voxel_pine.py:714` cites "the asset
   contract's clause 6" and that reference now resolves to nothing under `docs/`.
+
+## Deferred from: code review of 10-4-the-trees-look-right-the-pilot (2026-09-02)
+
+- **`authored_bench.py`'s `strip_trees` misses ramp-shaped tree tiles.** It filters only on
+  `tile["solid"]`, while `trunk_columns` scans the *unstripped* snapshot through
+  `vb.terrain_material`, which checks both `solid` and `ramp` — so a `Tile::Ramp(TreeTrunk)` cell
+  would be left as terrain AND get a mesh pine placed over it. Verified unreachable in a generated
+  world: `place_ramps` (`crates/sim-core/src/lib.rs:1091`) runs BEFORE `place_trees` (`:1094`) and
+  only converts existing terrain surface solids. Real asymmetry, inert today, scratch script.
+  [`_bmad-output/implementation-artifacts/10-4-signoff/authored_bench.py:93-100`]
+- **`authored_bench.py` clamps out-of-range trunk heights instead of dropping them.**
+  `by_height.get(height) or by_height[min(..., key=abs difference)]` maps ANY height into `{4,5,6}`,
+  the opposite of `tree_meshes`' deliberate `_ => None`. The bench can therefore render a tree the
+  shipped client would draw nothing for. Scratch evidence script, not gated.
+  [`10-4-signoff/authored_bench.py:167-170`]
+- **`pine_6cell.py --seed` with no value raises an unhandled `IndexError`** where its sibling
+  `else` branch raises a clean `SystemExit`. Single-operator evidence script.
+  [`10-4-signoff/pine_6cell.py:886-891`]
+- **Mesh crowns overhang the 3×3 cell footprint** that `tree_mesh_might_cover` and the foliage ring
+  assume. Measured at the shipped 0.625 scale: Tree01 3.125×3.125, Tree02 **3.125×3.375**, Tree03
+  2.375×2.125, Tree04R 2.625×2.625 cells — Tree02 overhangs by ~0.19 cell per side. Cosmetic:
+  picking marches the voxel grid, so overhanging pixels select the terrain behind them, which is
+  consistent with foliage already being non-pickable. Revisit if a tree ever becomes pickable.
+  [`crates/gui/src/project.rs:1772`]
+- **9.4's vehicle runbook still carries the superseded draw-set figure.**
+  `9-4-signoff/task-7-vehicle-runbook.md:13` reads `projected 44984 terrain cubes at z 31` while
+  `epic-9-shared-sitting-card.md:59` was updated to 39,936. Defensible as history — the shared card
+  calls the 9.4 card history — but both are read at the same sitting, which is how a stale figure
+  gets acted on.
