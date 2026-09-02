@@ -1267,7 +1267,7 @@ pub fn reconcile(
                     commands.entity(entity).despawn();
                 }
             }
-            if is_visible_at_slice(mirror, position, slice.level()) {
+            if is_visible_at_slice(mirror, position, slice.level()) && !is_tree(mirror, position) {
                 let entity = commands
                     .spawn((
                         WorldProjected(terrain_id(position, mirror.dims())),
@@ -1289,25 +1289,24 @@ pub fn reconcile(
     }
 
     if !rebuild_terrain && !dirty_tiles.is_empty() {
-        let changed_columns = dirty_tiles
+        let changed_trees = trees
             .iter()
-            .map(|position| [position[0], position[1]])
+            .filter_map(|(_, tree)| {
+                dirty_tiles
+                    .iter()
+                    .any(|position| tree_mesh_might_cover(tree.0, *position))
+                    .then_some(tree.0)
+            })
             .collect::<BTreeSet<_>>();
-        if trees
-            .iter()
-            .any(|(_, tree)| changed_columns.contains(&[tree.0[0], tree.0[1]]))
-            || dirty_tiles
-                .iter()
-                .any(|position| is_tree(mirror, *position))
-        {
+        if !changed_trees.is_empty() {
             for (entity, tree) in trees.iter() {
-                if changed_columns.contains(&[tree.0[0], tree.0[1]]) {
+                if changed_trees.contains(&tree.0) {
                     commands.entity(entity).despawn();
                 }
             }
             if let Some(assets) = assets {
                 for (base, variant) in tree_meshes(mirror, slice.level()) {
-                    if changed_columns.contains(&[base[0], base[1]]) {
+                    if changed_trees.contains(&base) {
                         spawn_tree_mesh(commands, assets, base, variant);
                     }
                 }
@@ -1759,6 +1758,15 @@ fn is_tree(mirror: &Mirror, position: [i32; 3]) -> bool {
         terrain_material_at(mirror, position),
         Some(Material::TreeTrunk | Material::TreeFoliage)
     )
+}
+
+/// A tree's cells occupy its trunk column and the one-cell crown ring. A delta arrives after it
+/// has changed the mirror, so checking `is_tree` alone loses a just-dug foliage cell; retain the
+/// mesh root long enough to rebuild or retire it from this conservative footprint.
+fn tree_mesh_might_cover(base: [i32; 3], position: [i32; 3]) -> bool {
+    position[2] >= base[2]
+        && (position[0] - base[0]).abs() <= 1
+        && (position[1] - base[1]).abs() <= 1
 }
 
 /// The material actually present, distinguishing air from the `terrain_material` fallback.
@@ -2850,6 +2858,27 @@ mod tests {
                 ([2, 0, 0], TreeVariant::Tree04R),
             ],
             "the literal trunk heights map to the three signed-off mesh heights"
+        );
+    }
+
+    #[test]
+    fn a_dirty_crown_cell_retires_its_owning_tree_mesh() {
+        let base = [10, 20, 7];
+        assert!(
+            tree_mesh_might_cover(base, [9, 19, 11]),
+            "a diagonally offset crown cell must rebuild the mesh after it becomes empty"
+        );
+        assert!(
+            tree_mesh_might_cover(base, [10, 20, 7]),
+            "the trunk base remains part of its tree mesh"
+        );
+        assert!(
+            !tree_mesh_might_cover(base, [8, 20, 11]),
+            "a tile outside the literal one-cell crown ring must not rebuild this tree"
+        );
+        assert!(
+            !tree_mesh_might_cover(base, [10, 20, 6]),
+            "terrain below the trunk base belongs to the ground, not the tree mesh"
         );
     }
 

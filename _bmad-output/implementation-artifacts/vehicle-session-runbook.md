@@ -32,7 +32,19 @@ CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
   cargo build -p gui --release --target x86_64-pc-windows-gnu
 ```
 
-`gui.exe` lands at `target/x86_64-pc-windows-gnu/release/gui.exe`. Copy it to the Windows side.
+`gui.exe` lands at `target/x86_64-pc-windows-gnu/release/gui.exe`. Copy the executable **and the
+whole `assets/` directory beside it** on the Windows side — do not copy the `.exe` alone. The
+client resolves `<gui.exe directory>/assets` first; this is what keeps the tree GLBs available
+after the binary leaves its WSL build workspace. For example, the copied folder must end as:
+
+```
+frostvein-gui/
+  gui.exe
+  assets/
+    trees/
+      SM_VoxelPine_Tree01.glb
+      ...
+```
 
 ## Start the daemon once (WSL, leave it running all session)
 
