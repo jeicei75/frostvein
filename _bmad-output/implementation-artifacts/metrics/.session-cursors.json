@@ -1788,5 +1788,85 @@
     "quota_last": 47.0,
     "schema": 2,
     "turns": 77
+  },
+  "rollout-2026-09-02T08-31-58-01a0613f-121a-7d81-82dd-757c0b00fe01.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 14407680,
+        "input": 573563,
+        "output": 33653
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 14407680,
+    "input": 573563,
+    "last_ts": "2026-09-02T08:56:45.364Z",
+    "marked_at": null,
+    "output": 33653,
+    "primary_only": false,
+    "quota_last": 100.0,
+    "schema": 2,
+    "turns": 141
+  },
+  "rollout-2026-09-02T10-36-39-01a061b1-389a-79f1-8a84-044ea44d2257.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 2360064,
+        "input": 115093,
+        "output": 12481
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 2360064,
+    "input": 115093,
+    "last_ts": "2026-09-02T10:42:18.900Z",
+    "marked_at": null,
+    "output": 12481,
+    "primary_only": false,
+    "quota_last": 9.0,
+    "schema": 2,
+    "turns": 29
+  },
+  "rollout-2026-09-02T10-45-55-01a061b9-b641-7eb0-916d-33b663f23179.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 363264,
+        "input": 50424,
+        "output": 4163
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 363264,
+    "input": 50424,
+    "last_ts": "2026-09-02T10:47:43.358Z",
+    "marked_at": null,
+    "output": 4163,
+    "primary_only": false,
+    "quota_last": 11.0,
+    "schema": 2,
+    "turns": 9
+  },
+  "rollout-2026-09-02T11-04-05-01a061ca-57ab-7e80-b65e-d91131b5177c.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 33050368,
+        "input": 753208,
+        "output": 75799
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 33050368,
+    "input": 753208,
+    "last_ts": "2026-09-02T11:54:22.499Z",
+    "marked_at": null,
+    "output": 75799,
+    "primary_only": false,
+    "quota_last": 95.0,
+    "schema": 2,
+    "turns": 262
   }
 }
