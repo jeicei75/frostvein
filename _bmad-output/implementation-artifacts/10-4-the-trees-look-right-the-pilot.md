@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.4: The Trees Look Right (the pilot)
 
-Status: review
+Status: in-progress
 
 **Runs after 10.6 and 10.3** (epic execution order 10.6 → 10.3 → 10.4 → 10.5, ruled by Wolf
 2026-08-31). Both have landed: the resolution contract fixes 1.6 m/cell and the asset contract is

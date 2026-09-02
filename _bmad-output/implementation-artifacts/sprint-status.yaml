@@ -1602,7 +1602,43 @@ development_status:
   # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
   # clause passes on it, so origin centring is the only discriminating one.
   10-3-the-rules-of-the-look: done
-  10-4-the-trees-look-right-the-pilot: review
+  10-4-the-trees-look-right-the-pilot: in-progress
+                          # CODE-REVIEWED 2026-09-02 -> in-progress. FOUR LAYERS, ALL LIVE, NO
+                          # COVERAGE HOLES; full gate GREEN on a review layer and again after the
+                          # patch pass. 3 decisions / 14 patches / 5 deferrals / 1 dismissed.
+                          # THE HEADLINE: the story's central claim was TRUE and its evidence for it
+                          # was FALSE. The embedding fix works -- two layers ran a lone binary from
+                          # an empty dir and got 265 of 265 meshes from embedded:// -- but BOTH
+                          # committed AC5 captures were renders of the PRE-MESH build. One treatment
+                          # photographed twice, which is the failure AC3 was written to name,
+                          # landing on AC5's own artifacts. Confirmed 3 ways: by eye, by rebuilding
+                          # 9eba31f (exit 101, no PNG at all), and by measurement -- a real HEAD
+                          # capture differs from the committed one by 257,952 px at d>=4 against a
+                          # 6,620 noise floor. Regenerated from real builds: 261,952 at d>=4 vs a
+                          # WORST-CASE same-code noise of 46,050 (5.7x; 22.6x at d>=16).
+                          # THREE DECISIONS WERE ONE DEFECT. tree_meshes REJECTS a column it cannot
+                          # represent while both spawn paths filter every tree cell out of the
+                          # terrain -- so a rejected column was drawn by NEITHER path and vanished
+                          # silently, with the cut-face oracle rejecting it on both sides at once
+                          # and reporting a match. Wolf ruled: revive the cube path as the FALLBACK
+                          # (AC6 stops being vestigial), add the contiguity check TreeMesh's doc
+                          # comment always promised (a dug-through trunk now shows its hole instead
+                          # of redrawing an unbroken pine), and promote authored_bench.py onto the
+                          # gate reading the SAME GLBs the client embeds.
+                          # THE SUBDIV-2 BREAK WAS OURS, not pre-existing: dc79164 removed the only
+                          # TerrainTile entities at subdiv>1 and the lantern sweep queried that
+                          # component alone -- lit=0, panic BEFORE the PNG. Now lit=1870, PNG
+                          # written. It was filed as pre-existing because a genuinely pre-existing
+                          # panic (the near-white ceiling) sat next to it; filing them together is
+                          # what let it hide. A WINDOWED --capture also always panicked (0 == 265),
+                          # which is the exact command epic-9-shared-sitting-card.md tells Wolf to
+                          # run. 10 mutation rows, ALL KILLED, anchors re-audited after cargo fmt.
+                          # METRICS TRAP 4 AGAIN: the dev transcript's cursor sat at 12:09 while the
+                          # embedding work ran to 12:51 -- 86 turns / $20.80 belonged to no row.
+                          # OPEN: AC12's closing half (real window, real fps) still needs the
+                          # vehicle; ~1.2M triangles vs ~479k terrain is an unanswered fps question.
+                          # --at-tick is unusable on this venue (its floor wants as many OBSERVED
+                          # ticks as requested; software rendering observes ~a third).
                           # STORY CREATED 2026-09-02 on branch 10-4-..., baseline 2ef194d, full gate
                           # GREEN at creation. THREE OF SIX EPIC PREMISES WERE WRONG: "Blender 4.3.2"
                           # is stale (bare `blender` is 5.2.1 and figures are NOT comparable across
