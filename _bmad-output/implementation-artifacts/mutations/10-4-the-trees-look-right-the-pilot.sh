@@ -107,3 +107,24 @@ assert s.count(old) == 1
 # drawn by nothing at all -- which is the state it was written to detect.
 p.write_text(s.replace(old, '        .filter(|_| false)\n'))
 PY
+
+mutation "every pine does not face the same way" gui tree_yaw_varies_between_columns_without_disturbing_the_variant_draw <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    tree_hash(x, y, &[YAW_SALT])\n'
+assert s.count(old) == 1
+# One yaw for all 265 trees: exactly what the client shipped, and what made the forest read as
+# one repeated mesh against a bench frame that had always varied it.
+p.write_text(s.replace(old, '    0\n'))
+PY
+
+mutation "the yaw salt does not disturb the species draw" gui tree_yaw_varies_between_columns_without_disturbing_the_variant_draw <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    tree_hash(x, y, &[])\n'
+assert s.count(old) == 1
+# Route the VARIANT draw through a zero salt. FNV-1a mixes every byte, so this is not a no-op --
+# it silently reshuffles which pine each column gets while reading as a tidy refactor. Caught in
+# review before it shipped; this row is why it cannot come back.
+p.write_text(s.replace(old, '    tree_hash(x, y, &[0])\n'))
+PY

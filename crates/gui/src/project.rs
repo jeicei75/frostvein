@@ -2103,10 +2103,15 @@ pub fn tree_cells_at_or_below(mirror: &Mirror, slice_level: i32) -> Vec<[i32; 3]
     cells
 }
 
-/// Stable across Rust releases, unlike `DefaultHasher`; only x/y shape the 5-cell tie-break.
-fn tree_variant_hash(x: i32, y: i32) -> u32 {
+/// Stable across Rust releases, unlike `DefaultHasher`. FNV-1a over the column, then over each
+/// extra word.
+///
+/// NOTE: `extra` is EMPTY for the variant draw, not a zero word. FNV-1a mixes every byte, so
+/// appending a zero salt is not a no-op — it would have reshuffled which pine each column gets,
+/// a look change nobody asked for, while looking like a pure refactor.
+fn tree_hash(x: i32, y: i32, extra: &[u32]) -> u32 {
     let mut hash = 0x811C_9DC5_u32;
-    for value in [x as u32, y as u32] {
+    for value in [x as u32, y as u32].iter().chain(extra) {
         for byte in value.to_le_bytes() {
             hash ^= u32::from(byte);
             hash = hash.wrapping_mul(0x0100_0193);
@@ -2114,6 +2119,20 @@ fn tree_variant_hash(x: i32, y: i32) -> u32 {
     }
     hash
 }
+
+/// Only x/y shape the 5-cell tie-break. Unsalted, and it must stay that way: this is the shipped
+/// species assignment.
+fn tree_variant_hash(x: i32, y: i32) -> u32 {
+    tree_hash(x, y, &[])
+}
+
+/// A SEPARATE draw, so yaw does not correlate with variant. Keying both off one value would make
+/// every Tree02 face the same way, which is the repetition this exists to break.
+fn tree_yaw_hash(x: i32, y: i32) -> u32 {
+    tree_hash(x, y, &[YAW_SALT])
+}
+
+const YAW_SALT: u32 = 0x5941_5721;
 
 /// One-shot state for `report_tree_meshes_once`.
 #[derive(Resource, Default)]
@@ -2176,10 +2195,15 @@ fn spawn_tree_mesh(
 ) {
     // NOTE: slice rendering shows a whole tree once its base is at or below the cut; meshes
     // are not clipped to the slice because mesh clipping has no second use yet.
+    // Quarter turns about the vertical, so 265 copies of four meshes do not all face the camera
+    // identically. The bench has always done this and said why; the client did not, so the frame
+    // Wolf approved as candidate D differed from the one the client actually draws.
+    let yaw = (tree_yaw_hash(base[0], base[1]) % 4) as f32 * std::f32::consts::FRAC_PI_2;
     commands.spawn((
         TreeMesh(base),
         WorldAssetRoot(assets.tree_scene(variant)),
         Transform::from_translation(world_to_render(base) - Vec3::Y * 0.5)
+            .with_rotation(bevy::math::Quat::from_rotation_y(yaw))
             .with_scale(Vec3::splat(0.625)),
     ));
 }
@@ -3120,6 +3144,55 @@ mod tests {
         assert_eq!(foliage_scale(&spruce, [0, 0, 2]), 0.95, "mid crown");
         assert_eq!(foliage_scale(&spruce, [0, 0, 3]), 0.78, "upper crown");
         assert_eq!(foliage_scale(&spruce, [0, 0, 4]), 0.62, "crown tip");
+    }
+
+    #[test]
+    fn tree_yaw_varies_between_columns_without_disturbing_the_variant_draw() {
+        // The client drew all 265 pines at identity rotation while the bench randomised quarter
+        // turns and said why, so the frame approved as candidate D differed from the one the
+        // client draws. Three properties, and the third is the one a careless refactor breaks.
+        let columns = (0..40).flat_map(|x| (0..40).map(move |y| (x, y)));
+
+        // 1. Deterministic.
+        assert_eq!(tree_yaw_hash(7, 11), tree_yaw_hash(7, 11));
+
+        // 2. It actually varies -- all four quarter turns must appear, or the forest still reads
+        //    as one repeated tree.
+        let turns = columns
+            .clone()
+            .map(|(x, y)| tree_yaw_hash(x, y) % 4)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            turns,
+            BTreeSet::from([0, 1, 2, 3]),
+            "every quarter turn must occur across a 40x40 patch"
+        );
+
+        // 3. Yaw is an INDEPENDENT draw from variant. Salting one hash to serve both would make
+        //    every column of a given species face the same way.
+        assert!(
+            columns
+                .clone()
+                .any(|(x, y)| tree_yaw_hash(x, y) % 4 != tree_variant_hash(x, y) % 4),
+            "yaw must not be a restatement of the variant draw"
+        );
+
+        // 4. The variant draw is UNCHANGED by adding yaw. FNV-1a mixes every byte, so routing the
+        //    variant through a salted hash -- even with a zero salt -- silently reshuffles which
+        //    pine each column gets. These are the pre-yaw values, computed by hand from FNV-1a
+        //    over the two little-endian words alone.
+        let mut expected = 0x811C_9DC5_u32;
+        for value in [7_u32, 11_u32] {
+            for byte in value.to_le_bytes() {
+                expected ^= u32::from(byte);
+                expected = expected.wrapping_mul(0x0100_0193);
+            }
+        }
+        assert_eq!(
+            tree_variant_hash(7, 11),
+            expected,
+            "the species assignment must be byte-identical to the unsalted hash"
+        );
     }
 
     #[test]
