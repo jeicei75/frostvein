@@ -395,6 +395,20 @@ mod tests {
     }
 
     #[test]
+    fn the_approved_sun_lights_downward() {
+        // Deliberately NOT derived from SUN_ELEVATION_DEGREES: this is the independent floor
+        // that catches the shipped below-horizon aim returning.
+        const APPROVED_DOWNWARD_FLOOR: f32 = -0.15;
+
+        let direction = sun_direction();
+        assert!(
+            direction.y <= APPROVED_DOWNWARD_FLOOR,
+            "sun must travel downward onto the valley; y={} exceeds the approved floor {APPROVED_DOWNWARD_FLOOR}",
+            direction.y
+        );
+    }
+
+    #[test]
     fn the_curtain_mesh_is_a_closed_ring_at_the_aurora_radius() {
         let mesh = aurora_curtain_mesh();
         let positions = mesh

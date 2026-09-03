@@ -1,6 +1,6 @@
 # Story 10.7 Task 1 sabotage table. Run alone: scripts/mutate.sh <this file>
 
-mutation "sun direction returns to the aurora-to-camp aim" gui the_aurora_curtain_hugs_the_horizon_beyond_the_world <<'PY'
+mutation "restore the shipped aurora_core aim" gui the_approved_sun_lights_downward <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
 old = '''pub fn sun_direction() -> Vec3 {
@@ -32,7 +32,7 @@ lines[matches[0]] = 'SUN_ELEVATION_DEGREES = -SUN_AZIMUTH_DEGREES\n'
 p.write_text(''.join(lines))
 PY
 
-mutation "bench sun travels downward at the shipped elevation" py scripts.tests.test_valley_bench.ValleyFramingTests.test_sun_is_aimed_the_way_the_client_aims_it <<'PY'
+mutation "flip the sun direction formula's elevation sign" gui the_approved_sun_lights_downward <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/valley_bench.py'); s = p.read_text()
 old = '        -math.sin(elevation),\n'
