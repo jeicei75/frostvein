@@ -34,8 +34,8 @@ PY
 
 mutation "flip the sun direction formula's elevation sign" gui the_approved_sun_lights_downward <<'PY'
 import pathlib
-p = pathlib.Path('scripts/bench/valley_bench.py'); s = p.read_text()
-old = '        -math.sin(elevation),\n'
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '        -elevation.sin(),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        math.sin(elevation),\n'))
+p.write_text(s.replace(old, '        elevation.sin(),\n'))
 PY
