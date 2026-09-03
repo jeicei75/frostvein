@@ -1562,7 +1562,7 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
   taken on this hardware, so venue and content stay confounded. One cross-build and copy settles it.
   **Do not raise the ceiling to clear the panic.**
 
-## Found while closing 10.4: THE SUN CASTS NO VISIBLE SHADOW (2026-09-03)
+## Found while closing 10.4: THE SUN IS UNDER THE MAP (2026-09-03)
 
 Wolf, on the vehicle: *"Trees don't really generate shadows I think or maybe it's just hard to see
 because of lighting config."* **Measured here, and it is not confined to the trees.**
@@ -1582,30 +1582,66 @@ frame differ. Headless, lavapipe, subdiv 1, 1280x720, `--frames 160`:
 At delta>=16 it reaches only 1.5-1.7x noise, against the 5.7x / 22.6x this story required before it
 would call a change visible. The sun's shadows are not a visible feature of the frame.
 
-**Three candidate mechanisms, each verified in code; which dominates is NOT measured.**
+**THE CAUSE IS FOUND, AND IT IS NOT SHADOWS AT ALL: THE SUN IS UNDER THE MAP.**
 
-1. **No `CascadeShadowConfig` is ever spawned.** The `DirectionalLight` takes
-   `..Default::default()` (`crates/gui/src/ingest.rs:857`), so Bevy 0.19's default applies:
-   `maximum_distance: 150.0` (`bevy_light-0.19.0/src/cascade.rs:153`). **`world_to_render` is one
-   cell to one render unit** (`crates/gui/src/transform.rs:4`), so that is 150 CELLS on a 128x128
-   world viewed from `BOOT_DISTANCE = 90` with the zoom clamp reaching 500
-   (`crates/gui/src/camera.rs:9,56`). At boot much of the vista already sits beyond the shadow
-   distance, and zooming out puts all of it there. **This is the strongest candidate** — it is a
-   Bevy default that was never chosen, and the 1-unit-per-cell scale is what makes it bite.
-2. **Ambient lifts whatever shadow survives.** `ambient_brightness = 4_500` against
-   `directional_illuminance = 22_000` (`crates/gui/src/appearance.rs:45,48`) — a shadowed surface
-   still receives ~20 %, which flattens contrast.
-3. **Light direction.** The sun is the aurora: positioned at `aurora_core()` looking at
-   `CAMP_FOCUS` (`crates/gui/src/atmosphere.rs:209`). A high, near-overhead angle casts short
-   shadows that hide under the geometry casting them.
+`aurora_light_transform()` (`crates/gui/src/atmosphere.rs:209`) puts the only `DirectionalLight` at
+`aurora_core()`, whose height is the **midpoint of the aurora curtain** — `(AURORA_BOTTOM +
+AURORA_TOP) * 0.5` with `AURORA_BOTTOM = -162.0` and `AURORA_TOP = 45.0`
+(`crates/gui/src/atmosphere.rs:41-43,67-71`). That midpoint is **Y = -58.5**, while the terrain
+surface sits at `CAMP_SURFACE_Y = 9.0`. **The sun is parked 67.5 units beneath the world, shining
+upward at it.** Every visible surface faces away from it, so the directional contribution is zero —
+and shadows of a light that lights nothing are invisible by definition.
 
-**Limits of this measurement, stated rather than buried.** Software rendering at boot framing only,
-and the noise is spatially concentrated on the moving dwarves while a shadow signal would sit under
-the trees — a masked diff would be sharper than a whole-frame one. The Δ≥16 excess suggests a small
-real contribution rather than literally none. **But the code facts above are venue-independent**,
-and mechanism 1 predicts exactly what Wolf saw.
+The line reads correctly at a glance, which is why it survived: `aurora_core()` IS the centre of
+the aurora curtain, and the curtain legitimately hangs from +45 down to -162. Using the curtain's
+CENTRE as the sun's position is the error.
 
-**Not 10.4's.** It is a look defect in the lighting rig, concrete and now measured, which is the
-bar this project sets for a look change. It also explains part of the tree-root reading filed on
-2026-09-02: an object that casts no ground shadow has nothing anchoring it to the terrain, so the
-root/junction complaint and this may be one defect seen twice. Whoever takes it should test that.
+**Measured three ways** (headless, lavapipe, subdiv 1, boot framing, `--frames 160`). The
+instrument is the frame's luminance distribution, not a pixel diff — two runs of the same build
+differ by 0.08 mean and 3 dark pixels out of 921,600, so it resolves far below any real change:
+
+| build | mean luminance | dark (<40) | shade-band (40-89) |
+|---|---:|---:|---:|
+| shipped, run a | 87.894 | 161,492 | 223,502 |
+| shipped, run b — **the noise floor** | 87.973 | 161,495 | 223,412 |
+| directional `shadow_maps_enabled: false` | 87.906 | 161,493 | 223,343 |
+| `CascadeShadowConfig` max distance 150 -> 500 | 87.865 | 161,489 | 223,492 |
+| directional `illuminance: 0.0` — **sun deleted** | 87.815 | 161,489 | 223,560 |
+| **sun lifted to Y=200** | **101.188** | **160,432** | **198,034** |
+
+Read the last two rows together. **Deleting the sun entirely changes less than run-to-run noise;
+lifting it moves the mean by 13.3, about 170x that noise, and empties 25,468 pixels out of the
+shade band.** The light is fine. Its position is wrong.
+
+**A candidate this falsified, recorded because the wrong answer was persuasive.** The first version
+of this entry named Bevy's default `CascadeShadowConfig { maximum_distance: 150.0 }` as the
+strongest candidate — never set here, and 150 render units is 150 CELLS at this project's one-unit-
+per-cell scale (`crates/gui/src/transform.rs:4`). It is a real latent oddity and it fit the symptom
+perfectly. **It is not the cause:** setting it to 500 changed the frame by less than noise (row 4).
+It was tested before it was believed, and it should stay untested-and-unfixed until something
+actually needs it.
+
+**Ambient is NOT the cause either** (the other original candidate): with the sun inert, ambient at
+4,500 is currently doing nearly all the lighting work, so its balance against
+`directional_illuminance = 22_000` cannot even be judged until the sun is above ground.
+
+### Why this is bigger than a shadow bug
+
+**Every look decision this project has made was made with the sun off.** 9.1's blow-out work, 9.4's
+tree colours, 10.3's rules of the look, 10.4's tree judgement, the `NEAR_WHITE_AREA_CEILING`
+calibrated on `boot7.png` — all tuned against a scene lit by ambient and point lights alone.
+Raising the sun moves mean luminance by ~15 % and will move the near-white figure with it. **That
+does not invalidate those decisions, but it moves the ground they stand on**, and any of them may
+need re-judging afterwards. Whoever fixes this should expect to re-open the ceiling, not just
+the light.
+
+**Not 10.4's, and deliberately NOT fixed here.** The one-line change is known and measured, but
+raising the sun is the largest look change anyone has proposed on this project — it needs its own
+story, a bench, and Wolf's eye, exactly like any other. It also probably explains part of the
+tree-root reading filed on 2026-09-02: an object casting no ground shadow has nothing anchoring it
+to the terrain, so the root/junction complaint and this may be one defect seen twice.
+
+**The measurement limits, stated.** Software rendering, boot framing, one subdivision. The luminance
+instrument is venue-dependent in absolute terms; the ratios against the same-venue noise floor are
+what carry the argument. The *code* facts — the light's height and the surface's height — are
+venue-independent and are the actual finding.
