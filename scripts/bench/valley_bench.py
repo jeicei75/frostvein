@@ -70,15 +70,17 @@ BOOT_FOCUS = (64.0, 64.0, 9.0)
 RENDER_HEIGHT = 540
 RENDER_WIDTH = round(RENDER_HEIGHT * BOOT_ASPECT_RATIO)
 
-# The aurora itself is out of scope and is NOT drawn, but the client aims its directional light
-# from the aurora's core at the camp [atmosphere.rs:209-211, 67-71], so reproducing the LIGHT
-# needs these numbers. Without them the bench sun was a guess pointing 122 degrees away from the
-# client's, lighting and shadowing different faces of the same terrain.
+# The aurora itself is out of scope and is NOT drawn. Its geometry remains here for the bench's
+# own bright-point calculations, but it no longer steers the directional light.
 AURORA_RADIUS = 600.0
 AURORA_BOTTOM = -162.0
 AURORA_TOP = 45.0
 SKY_CENTRE = (63.5, 0.0, -63.5)
 CAMP_FOCUS = (64.0, 9.0, -64.0)
+
+# [atmosphere.rs] The client and bench must share the sunlight's travel bearing and elevation.
+SUN_AZIMUTH_DEGREES = 40.0398
+SUN_ELEVATION_DEGREES = -6.4181
 
 # Cycles has no ambient-light object: the world background IS the ambient term. The client adds
 # `AmbientLight { color: night_lighting().ambient, brightness: 4_500.0 }` [ingest.rs:714-718] on
@@ -147,7 +149,7 @@ def boot_horizontal_forward():
 
 
 def aurora_core():
-    """[atmosphere.rs:67-71]. The compass point the client's directional light comes from."""
+    """[atmosphere.rs:76-80]. The compass point the curtain is brightest at."""
     return vector_add(
         vector_add(SKY_CENTRE, vector_scale(boot_horizontal_forward(), AURORA_RADIUS)),
         (0.0, (AURORA_BOTTOM + AURORA_TOP) * 0.5, 0.0),
@@ -155,8 +157,15 @@ def aurora_core():
 
 
 def sun_direction():
-    """The client's `aurora_light_transform()` [atmosphere.rs:209-211] as a unit vector."""
-    return vector_normalize(vector_subtract(CAMP_FOCUS, aurora_core()))
+    """[atmosphere.rs] The client's directional-light travel vector."""
+    azimuth = math.radians(SUN_AZIMUTH_DEGREES)
+    elevation = math.radians(SUN_ELEVATION_DEGREES)
+    horizontal = math.cos(elevation)
+    return (
+        math.cos(azimuth) * horizontal,
+        -math.sin(elevation),
+        math.sin(azimuth) * horizontal,
+    )
 
 
 def boot_camera_frame():

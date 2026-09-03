@@ -189,8 +189,13 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
         ),
         (
             &atmosphere,
-            "Transform::from_translation(aurora_core()).looking_at(CAMP_FOCUS, Vec3::Y)",
-            "vector_normalize(vector_subtract(CAMP_FOCUS, aurora_core()))",
+            "pub const SUN_AZIMUTH_DEGREES: f32 = 40.0398;",
+            "SUN_AZIMUTH_DEGREES = 40.0398",
+        ),
+        (
+            &atmosphere,
+            "pub const SUN_ELEVATION_DEGREES: f32 = -6.4181;",
+            "SUN_ELEVATION_DEGREES = -6.4181",
         ),
         // The foliage shrink. Without it the bench drew solid canopy slabs where the client draws
         // sparse crowns, which is the difference an eye reads first.

@@ -46,7 +46,7 @@ use protocol::{Delta, Dims, Snapshot};
 
 use crate::{
     appearance::night_lighting,
-    atmosphere::{aurora_light_transform, fall_snow, setup_atmosphere},
+    atmosphere::{fall_snow, setup_atmosphere, sun_light_transform},
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{
@@ -856,7 +856,7 @@ fn setup_night_lighting(mut commands: Commands) {
             shadow_maps_enabled: true,
             ..Default::default()
         },
-        aurora_light_transform(),
+        sun_light_transform(),
         ClientLocal,
     ));
 }

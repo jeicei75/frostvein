@@ -183,19 +183,11 @@ class ValleyFramingTests(unittest.TestCase):
         )
 
     def test_sun_is_aimed_the_way_the_client_aims_it(self):
-        # Independent oracle: computed from atmosphere.rs's own constants, not from the bench.
-        # The previous hand-picked euler pointed 122 degrees away from this.
-        core = valley_bench.aurora_core()
-        self.assertAlmostEqual(core[1], (-162.0 + 45.0) * 0.5, places=6)
+        # The sun has its own bearing and elevation; the aurora's position is decorative only.
+        # At the shipped elevation it still travels gently upward. Task 4 moves this expectation
+        # below the horizon together with the approved client and bench elevation.
         direction = valley_bench.sun_direction()
-        # AIM IS ASSERTED FIRST, DELIBERATELY. The aurora core hangs BELOW the horizon
-        # ((-162 + 45) / 2 = -58.5) while the camp sits at y = 9, so the client's key light rakes
-        # gently UPWARD across the valley rather than shining down on it; the replaced hand-picked
-        # euler came down from 39.6 degrees above. When the normalisation check ran first it
-        # ABSORBED the sabotage -- a hand-written vector is never exactly unit length, so the row
-        # died on "1.000605 != 1.0" and the aim assertion below never executed. The test looked
-        # identical from outside while pinning nothing about direction.
-        self.assertGreater(direction[1], 0.0, f"key light points downward: {direction}")
+        self.assertGreater(direction[1], 0.0, f"shipped sun must still travel upward: {direction}")
         self.assertLess(direction[1], 0.2, f"key light is too steep: {direction}")
         self.assertGreater(direction[0], 0.5, f"key light comes from the wrong compass point: {direction}")
         self.assertAlmostEqual(sum(component * component for component in direction), 1.0, places=6)
