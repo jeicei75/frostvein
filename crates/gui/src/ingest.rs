@@ -424,6 +424,14 @@ pub fn projection_systems(app: &mut App) {
         // half of the story the readout exists for. It must read the level AFTER the keyboard has
         // written it, or the displayed level trails the cut by one frame.
         .add_systems(Update, update_slice_readout.after(ProjectionSet));
+    // The toggles resource is initialised HERE, beside the systems that READ it, not only in
+    // `client_systems`. Registering a system in one app-builder while its resource is created in
+    // another is the same defect this function's own doc comment describes: `crates/gui/tests/
+    // capture.rs` calls `projection_systems` alone, so both capture instruments panicked with
+    // "Resource does not exist" the moment a lighting system read a resource nothing had created.
+    // `init_resource` is idempotent, so `client_systems` keeping its own call is not a conflict —
+    // each builder now stands up what it registers.
+    app.init_resource::<LightingToggles>();
     app.add_systems(
         Update,
         (apply_lighting_toggles, update_lighting_readout)
