@@ -71,3 +71,28 @@ assert s.count(old) == 1
 s = s.replace(old, '        let _ = enabled;\n')
 p.write_text(s)
 PY
+
+mutation "a mesh-drawn tree hides a terrain face again" gui a_mesh_drawn_tree_hides_no_terrain_face <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = 'if !occludes_terrain(mirror, above, level, cover) {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'if !occludes(mirror, above, level) {'))
+PY
+
+mutation "the stone control stops hiding its face, so the test stops discriminating" gui a_mesh_drawn_tree_hides_no_terrain_face <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    occludes(mirror, position, level) && !is_mesh_drawn_tree(mirror, position, cover)'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    occludes(mirror, position, level) && false'))
+PY
+
+mutation "a light toggle flips its flag but changes nothing drawn" gui lighting_keys_change_the_live_scene_and_its_readout <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    app.init_resource::<LightingToggles>();\n    app.add_systems(\n        Update,\n        (apply_lighting_toggles, update_lighting_readout)'
+assert s.count(old) == 1
+new = '    app.init_resource::<LightingToggles>();\n    app.add_systems(\n        Update,\n        (update_lighting_readout, update_lighting_readout)'
+p.write_text(s.replace(old, new))
+PY
