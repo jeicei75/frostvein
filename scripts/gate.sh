@@ -106,7 +106,7 @@ else
   # ~2 minutes: three real captures at 1280x720 through lavapipe. Story 10.7 is why they exist --
   # black quads every geometry count called healthy, a campfire glowing with its light switched
   # off, and an "after the fix" artifact that was the rejected fix.
-  run "cargo test -p gui pixel guards" cargo test -p gui --test pixel_guard -- --ignored
+  run "cargo test (pixel guards)" cargo test -p gui --test pixel_guard -- --ignored
 fi
 
 # Inverted: a MATCH is the failure. Clients depend on protocol/client-core only.

@@ -1690,7 +1690,34 @@ development_status:
                           # too loose to fail a treeless world. Judgement rests on the printed
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
-  10-7-the-sun-lights-the-valley: review
+  10-7-the-sun-lights-the-valley: in-progress
+                          # 2026-09-03 CODE REVIEW -> in-progress (NOT done). Four layers, no
+                          # coverage holes, every layer ran cargo. THE CODE IS SOUND on every
+                          # count that was executed: sun +13.2 mean luminance reproduced on two
+                          # fresh builds, five toggles wired on the live path, no third residual
+                          # emitter (all-off frame measures warm-lit=0), subdiv-2 holes closed
+                          # (12,285/12,313 vs 12,722 before). The one HIGH was EVIDENCE, not code:
+                          # the committed `probe-subdiv2-after-occluder-fix*.png` were the REJECTED
+                          # first fix -- 13,606 px measured against 12,314 published, and
+                          # 12,722 + 884 = 13,606 is exactly the regression the story's own change
+                          # log attributes to the wrong turn it abandoned. AC12's proof contradicted
+                          # the fix while the fix was fine. Renamed to say what they are; the shipped
+                          # fix re-captured under its own name. Same shape as M2-7's stale binary
+                          # and 10.2's duplicate mesh: the NAME authenticated the artifact.
+                          # 7 patches applied, 7 LOW deferred, 1 dismissed. Mutation table 7 -> 12
+                          # rows, 12/12 KILLED. Full gate GREEN.
+                          # SCOPE CHANGE #5, Wolf's ruling at triage: the no-CLI-flag decision is
+                          # LIFTED. `--lights-off` lands, which gives LightSource::from_name the
+                          # production caller it never had, and with it crates/gui/tests/
+                          # pixel_guard.rs -- the FIRST tests in this workspace that assert pixels.
+                          # AC11's is Wolf's own complaint encoded: all five sources off must leave
+                          # warm_lit_pixels at exactly 0. They cost ~2 min and run in the FULL tier
+                          # only; the fast tier names them skipped beside serve.rs.
+                          # WHY NOT `done`: UX-DR22's closing half covers the SUN only. Wolf's
+                          # recorded sittings predate the torch fix, the emissive fix and the
+                          # subdiv-2 fix. An observable-outcome AC stays open until observed, so
+                          # AC9's closing half for ACs 10-12 is OPEN and the card is written:
+                          # 10-7-signoff/review-vehicle-runbook.md. Nothing pushed; no PR.
                           # 2026-09-03 ALL 12 ACs MET -> review (2nd time). Light toggles on F5-F8
                           # + readout; AC11's guard is the renderer-read component test (Wolf's
                           # ruling) with frame measurements as evidence. AC12: the subdiv>1 black

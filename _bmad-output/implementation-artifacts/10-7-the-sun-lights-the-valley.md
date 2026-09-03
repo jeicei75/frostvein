@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.7: The Sun Lights The Valley
 
-Status: review
+Status: in-progress
 
 **RUNS BEFORE 10.5.** See "Why this is before the dwarves". The board's key is placed above
 10.5 deliberately, because this board's next-story rule reads top to bottom and a prose ruling
@@ -714,12 +714,33 @@ GPT-5.6 (Codex)
   bench tests ok | mutation tables still apply ok            GATE GREEN
   ```
 
-- **AC1, graded on this story's OWN range `47139fa..HEAD`, not `main..HEAD`:** 27 files, 923
-  insertions. Only five are production or test source — `crates/gui/src/atmosphere.rs`,
-  `crates/gui/src/ingest.rs`, `crates/gui/tests/bench_contract.rs`,
-  `scripts/bench/valley_bench.py`, `scripts/tests/test_valley_bench.py` — which is the story's
-  Project-structure table plus the gate-blocking file that table omitted. Everything else is
-  evidence and records.
+- **AC1, graded on this story's OWN range `47139fa..HEAD`, not `main..HEAD`.** `47139fa` is
+  simultaneously this story's `baseline_commit`, the merge-base, and `origin/main`'s tip, and
+  `git merge-base --is-ancestor origin/main HEAD` still passes — so the branch is genuinely
+  unstacked and this range IS the story's own commit range.
+
+  **CORRECTED at the 2026-09-03 review.** The figures here had frozen at the Task 7 close and
+  described a story roughly half this size: "27 files, 923 insertions ... only five are production
+  or test source". They survived the ACs 10-12 scope change unchanged, and the omission that
+  mattered was `crates/gui/src/project.rs` — the file carrying BOTH scope-change fixes. A reader
+  auditing AC1 from this paragraph was never pointed at the largest change in the story.
+
+  As of the review patch pass (`16be85b`): **52 files, 2,986 insertions, 35 commits.** **Eight** are
+  production or test source:
+
+  | file | why |
+  |---|---|
+  | `crates/gui/src/atmosphere.rs` | the decoupled sun, its constants and its guards |
+  | `crates/gui/src/ingest.rs` | the sun's spawn, the toggles, the readout, `--lights-off` |
+  | `crates/gui/src/project.rs` | `occludes_terrain`, `emissive_materials`, the `face_quads` oracle |
+  | `crates/gui/tests/bench_contract.rs` | the client/bench lockstep anchors |
+  | `crates/gui/tests/pixel_guard.rs` | NEW — the two rendered-frame guards |
+  | `scripts/bench/valley_bench.py` | the bench's matching sun, minus the orphaned aurora block |
+  | `scripts/tests/test_valley_bench.py` | the bench's own sun oracle |
+  | `scripts/gate.sh` | runs the pixel guards in the full tier, names them skipped in the fast tier |
+
+  Everything else in the range is evidence and records. This paragraph is now written from
+  `git diff --shortstat` and `--name-only` rather than from memory, which is what let it drift.
 
 - **AC7 discharged without moving anything.** Near-white area: control 1.8239 % / 1.7731 %,
   candidate 2.2546 % / 2.2541 %, ceiling 1.5630 %. Breached on the shipped build before this story
@@ -913,3 +934,51 @@ same answer, so the flag is measuring the thing the hand-built variant measured.
 **What was NOT done, and why.** Seven LOW findings went to `deferred-work.md` under the review-cost
 LOW-tail cap; none is caused by this story's change. The dismissed finding was an azimuth-drift
 claim that `bench_contract.rs` already pins exactly.
+
+**MUTATION TABLE 12/12 KILLED**, run alone on the committed fix, tree restored clean afterwards.
+The five new rows and the guard each dies on:
+
+```
+the installed sun is aimed at nothing                              KILLED
+a mesh-drawn tree hides the face BELOW it again                    KILLED
+a mesh-drawn tree hides the face BESIDE it again                   KILLED
+the bench sun formula diverges while both constants stay identical KILLED
+an unknown light source is accepted instead of refused             KILLED
+```
+
+The fourth is the one to notice: it flips the bench's elevation sign while **both constants stay
+byte-identical**. Before this pass that mutation would have survived, with the two renderers lighting
+the world from different directions and the contract green.
+
+**FULL GATE GREEN, verbatim, and with its new cost stated.**
+
+```
+frostvein gate
+  cargo fmt --check           ok
+  cargo clippy -D warnings    ok
+  cargo test                  ok
+  cargo test (pixel guards)   ok
+  tui has no sim-core edge                ok
+  client-core has no sim-core edge        ok
+  gui has no sim-core edge                ok
+  metrics ledger tests        ok
+  bench tests                 ok
+  mutation tables still apply ok
+GATE GREEN
+
+real	4m56.960s
+user	53m48.246s
+sys	1m17.049s
+```
+
+**The full gate was ~67s and is now 4m57s.** The pixel guards are ~3 minutes of that: three real
+captures at ~57s each through lavapipe. Recorded rather than absorbed quietly, because it is a
+fourfold rise in the cost of the thing every story runs before "done", and whether it is worth
+paying is Wolf's call, not this story's. The FAST tier is unchanged and still ~5s -- the guards are
+`#[ignore]`d and named in its SKIPPED banner beside `serve.rs`.
+
+**A note on how this gate was run.** Three attempts were harness-killed mid-run, twice during
+`cargo test` and once during `serve.rs` -- the delegated-runs-get-killed pattern. The first attempt
+also piped through `tail`, which buffers, so the kill destroyed output that had already been
+produced. Detaching with `setsid nohup` and streaming to a file survived. Worth carrying: a long
+check must write to a file as it goes, never through a buffering pipe.
