@@ -332,6 +332,7 @@ mod tests {
     use crate::appearance::night_lighting;
     use crate::camera::{BOOT_VERTICAL_FOV, CameraRig, boot_horizontal_forward};
     use bevy::color::ColorToPacked;
+    use bevy::prelude::Vec3;
 
     fn boot_eye_height() -> f32 {
         CameraRig::new([64, 64, 9]).transform().translation.y
@@ -387,6 +388,14 @@ mod tests {
         assert!(
             direction.dot(-boot_horizontal_forward()) > 0.99,
             "sun must still travel along the curtain-side bearing: {direction:?}"
+        );
+        // This literal is the measured shipped travel vector, deliberately not calculated from
+        // the sun constants. Its precision distinguishes the decoupled angle model from the
+        // old aurora-to-camp construction while the elevation remains unchanged in Task 1.
+        let shipped_direction = Vec3::new(0.760_799_5, 0.111_782_86, 0.639_287_65);
+        assert!(
+            (direction - shipped_direction).length() < 3e-7,
+            "sun direction must retain the measured shipped vector: {direction:?}"
         );
     }
 
