@@ -1909,3 +1909,55 @@ source as "a MEASUREMENT STAND-IN for 10.4's authored terrain look, NOT a visual
 (`project.rs:995`), so some of what the eye reads at `--subdiv > 1` is placeholder by its own
 admission. Whoever takes this should put the two side by side at the same framing and ask which is
 the intended winter, then make the loser match — rather than leaving the answer to depend on a flag.
+
+## Deferred from: code review of 10-7-the-sun-lights-the-valley (2026-09-03)
+
+Four-layer review, no coverage holes. All seven are LOW and none is caused by 10.7's own change;
+they are recorded here rather than patched, per the review-cost LOW-tail cap.
+
+- **`TreeCover`'s ring overlap depends on a `sim-core` spacing constant nothing ties it to**
+  (`crates/gui/src/project.rs:1934`). `TreeCover::covers` ORs a 3x3 ring over every stored base with
+  no check that the covered cell belongs to that base's own column. It is sound only because
+  `worldgen.rs:186-187` rejects any trunk within Chebyshev distance 2, keeping trunks 3 apart — an
+  invariant enforced in `sim-core` and documented only as a comment in `gui`, with no test tying the
+  two crates together. Loosen the worldgen spacing to 1 and a rejected (gapped) trunk column falls
+  inside an accepted neighbour's footprint, `is_mesh_drawn_tree` reports true for a cell no mesh
+  draws, and the tree vanishes — drawn by neither path, with every `gui` test green. 10.7 did not
+  create this; it added three more consumers of it (the `occludes_terrain` sites). A cross-crate
+  assertion on the spacing would close it.
+- **The Python bench oracle is bounds-only, with wide bands**
+  (`scripts/tests/test_valley_bench.py:186`). The replaced test derived its expected value
+  independently from `AURORA_BOTTOM`/`AURORA_TOP`; the new one calls `sun_direction()` and checks
+  only `direction[1] < -0.15`, `direction[0] > 0.5` and unit length. `direction[0] > 0.5` accepts
+  azimuth 0-60 degrees, so a materially drifted value still passes. The exact constants are pinned
+  by `bench_contract.rs`, so this is belt-and-braces rather than an open hole.
+- **`light_controls` skips the explicit ordering annotation the rest of the file uses**
+  (`crates/gui/src/ingest.rs:498`). It writes the `LightingToggles` resource that
+  `apply_lighting_toggles` reads, but carries no `.after(...)` — unlike every other ordering-sensitive
+  system in the file, which states its constraint and why. Not proven broken: the relevant test passed
+  25/25 reruns. The risk is that a future re-registration reorders it without failing loudly.
+- **The `is_mesh_drawn_tree(neighbour)` tie-break no longer does distinguishable work**
+  (`crates/gui/src/project.rs:849`). With `solid = occludes_terrain(neighbour)`, a mesh-drawn tree
+  neighbour now always yields `false`, forcing `floor = 0`, so the tie (`top == floor`) is reachable
+  only at `top == 0` — which the `else` branch's `if low >= high { continue; }` already handles
+  identically. Not a functional defect; a comprehension hazard, since a maintainer who believes that
+  branch still guards a live case for trees would be wrong. A `// NOTE:` would settle it.
+- **Toggle-off-then-a-delta-spawns-a-new-light is uncovered** (`crates/gui/src/ingest.rs:1083`).
+  `lighting_keys_change_the_live_scene_and_its_readout` toggles pre-existing fixture entities only.
+  Ordering suggests a source switched off before a new campfire or torch arrives is corrected in the
+  same frame — `reconcile_projection` sits earlier in the `ProjectionSet` chain that
+  `apply_lighting_toggles` runs after — and adjacent passing tests depend on that same
+  spawn-then-same-frame interaction, but this exact path is pinned by nothing.
+- **Unlit contributors are bright in an all-off frame, keyless and absent from the readout**
+  (`crates/gui/src/atmosphere.rs:258-280`). Snowflakes, stars and the aurora curtain are
+  `unlit: true`: they emit pixels but illuminate no geometry, so no toggle reaches them and none is
+  listed in the readout. In the measured all-off frame the snowflakes remain conspicuously bright
+  grey squares against a black valley. AC10's point is that a frame can never be judged without
+  knowing which sources were lit; someone judging a low-light frame will see light the readout says
+  is off. One line in the readout or the vehicle runbook would close it.
+- **No mutation row covers the emissive branch**
+  (`_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh`). The emissive
+  assignment is the fix for Wolf's actual complaint and its restore assertion was verified
+  non-vacuous by hand (stubbing the assignment reddens the exact assertion), but that check is
+  recorded in prose and not carried by a row. All 7 existing rows were verified to still apply at
+  HEAD during this review, so none is stale.

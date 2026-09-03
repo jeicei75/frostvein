@@ -3022,28 +3022,117 @@ mod tests {
         }
         let with_stone = world(dims, stone);
 
-        assert!(
-            !top_face_exists(&with_stone, 2, [1, 1, 0]),
+        assert_eq!(
+            face_quads(&with_stone, 2, [1, 1, 0], 2, 1),
+            0,
             "terrain-drawn stone above SHOULD hide the face beneath it -- if this fails the \
              control is wrong and the assertion below proves nothing"
         );
-        assert!(
-            top_face_exists(&with_tree, 2, [1, 1, 0]),
-            "the cell beneath a MESH-drawn trunk must keep its top face: the mesh does not draw \
-             terrain, so a face suppressed here is drawn by nothing and reads as sky"
+        assert_eq!(
+            face_quads(&with_tree, 2, [1, 1, 0], 2, 1),
+            4,
+            "the cell beneath a MESH-drawn trunk must keep its top face, ALL FOUR sub-quads of \
+             it: the mesh does not draw terrain, so a face suppressed here is drawn by nothing \
+             and reads as sky"
         );
     }
 
-    /// Does the terrain mesher emit a top face on the plane above `cell`? Asked of the emitted
-    /// masks, not of a face count -- AC12 is about what is DRAWN, and a count cannot tell a
-    /// missing face from a differently-merged one. `axis 2, sign +1` is the +Z plane; for that
-    /// axis the mask's `(u, v)` are fine x and y (`emit_quad`'s corner mapping).
-    fn top_face_exists(mirror: &Mirror, subdiv: i32, cell: [i32; 3]) -> bool {
+    /// The other TWO substituted call sites. `occludes_terrain` replaced `occludes` at three
+    /// face-emission decisions -- the `above` top face, the `under` bottom face, and the four
+    /// side-axis neighbours -- but the test above reaches only the first. The review found the
+    /// bottom and side substitutions shipping with no coverage at all, which is how a fix gets
+    /// half-proved: the mechanism is right, and two thirds of it is pinned by nothing.
+    ///
+    /// Each case carries its own STONE control, for the same reason the top-face test does. Stone
+    /// is terrain-drawn, so it SHOULD hide the neighbouring face; a mesh-drawn trunk is not, so
+    /// hiding the same face leaves it drawn by nothing. Same geometry, opposite correct answers --
+    /// without the control the assertions would merely restate the mesher back to itself.
+    #[test]
+    fn a_mesh_drawn_tree_hides_neither_the_face_below_it_nor_the_face_beside_it() {
+        let dims = Dims { x: 5, y: 3, z: 8 };
+        let at = |x: usize, y: usize, z: usize| x + y * 5 + z * 15;
+        let mut tiles = vec![Tile::Empty; 5 * 3 * 8];
+        for x in 0..5 {
+            for y in 0..3 {
+                tiles[at(x, y, 0)] = Tile::Solid(protocol::Material::Stone);
+            }
+        }
+        // A mesh-carried trunk at (1,1), and a terrain-drawn stone column at (3,1) as its twin.
+        for z in 1..5 {
+            tiles[at(1, 1, z)] = Tile::Solid(protocol::Material::TreeTrunk);
+            tiles[at(3, 1, z)] = Tile::Solid(protocol::Material::Stone);
+        }
+        // Caps sitting ON each column: the BOTTOM face of each cap asks `occludes_terrain` about
+        // the cell underneath it, which is a mesh trunk in one case and terrain stone in the other.
+        tiles[at(1, 1, 5)] = Tile::Solid(protocol::Material::Stone);
+        tiles[at(3, 1, 5)] = Tile::Solid(protocol::Material::Stone);
+        // Neighbours BESIDE each column at the same height: the +X side face of each asks
+        // `occludes_terrain` about the column cell next to it.
+        tiles[at(0, 1, 1)] = Tile::Solid(protocol::Material::Stone);
+        tiles[at(2, 1, 1)] = Tile::Solid(protocol::Material::Stone);
+        // ...capped, so `column_heights` returns `None` for both and each side cell is a full
+        // cube. Uncapped they carve to the exposed surface, the face runs shorter than the cell,
+        // and the expected sub-quad count stops being `subdiv * subdiv` for a reason that has
+        // nothing to do with trees. Both sides carry the cap so the comparison stays like-for-like.
+        tiles[at(0, 1, 2)] = Tile::Solid(protocol::Material::Stone);
+        tiles[at(2, 1, 2)] = Tile::Solid(protocol::Material::Stone);
+
+        let world = world(dims, tiles);
+        let level = dims.z.saturating_sub(1) as i32;
+        assert!(
+            tree_cover_at(&world, level).covers([1, 1, 1]),
+            "the fixture is only meaningful if a mesh actually carries the trunk"
+        );
+
+        // --- the `under` site (axis 2, sign -1) ---
+        assert_eq!(
+            face_quads(&world, 2, [3, 1, 5], 2, -1),
+            0,
+            "terrain-drawn stone below SHOULD hide the cap's bottom face -- if this control is \
+             wrong the assertion below proves nothing"
+        );
+        assert_eq!(
+            face_quads(&world, 2, [1, 1, 5], 2, -1),
+            4,
+            "the cap resting on a MESH-drawn trunk must keep its bottom face: the trunk mesh does \
+             not draw terrain, so a face suppressed here is drawn by nothing and reads as sky"
+        );
+
+        // --- the side-neighbour site (axis 0, sign +1) ---
+        assert_eq!(
+            face_quads(&world, 2, [2, 1, 1], 0, 1),
+            0,
+            "a terrain-drawn stone column beside it SHOULD hide the +X face -- if this control is \
+             wrong the assertion below proves nothing"
+        );
+        assert_eq!(
+            face_quads(&world, 2, [0, 1, 1], 0, 1),
+            4,
+            "the cell beside a MESH-drawn trunk must keep its +X face, all four sub-quads of it"
+        );
+    }
+
+    /// How many fine sub-quads the terrain mesher emits for one cell's face on `(axis, sign)`.
+    ///
+    /// Asked of the emitted masks, not of a face count -- AC12 is about what is DRAWN, and a
+    /// count cannot tell a missing face from a differently-merged one. It returns the COUNT and
+    /// not a bool for the reason the review found: `any` is true when even one of the
+    /// `subdiv * subdiv` sub-quads survives, so a regression dropping three of four at
+    /// `--subdiv 2` reads exactly like a healthy face.
+    ///
+    /// Mask coordinates follow `emit_quad`'s corner mapping, which is NOT the same on every
+    /// axis: axis 2 -> (fine x, fine y); axis 0 -> (fine y, fine z); axis 1 -> (fine z, fine x).
+    fn face_quads(mirror: &Mirror, subdiv: i32, cell: [i32; 3], axis: usize, sign: i32) -> usize {
         let level = mirror.dims().z.saturating_sub(1) as i32;
         let positions = terrain_positions_at(mirror, level);
-        let plane = (cell[2] + 1) * subdiv;
-        let us = (cell[0] * subdiv)..(cell[0] * subdiv + subdiv);
-        let vs = (cell[1] * subdiv)..(cell[1] * subdiv + subdiv);
+        let plane = (cell[axis] + i32::from(sign > 0)) * subdiv;
+        let (ua, va) = match axis {
+            0 => (1, 2),
+            1 => (2, 0),
+            _ => (0, 1),
+        };
+        let us = (cell[ua] * subdiv)..(cell[ua] * subdiv + subdiv);
+        let vs = (cell[va] * subdiv)..(cell[va] * subdiv + subdiv);
         build_chunk_meshes(
             mirror,
             &positions,
@@ -3053,14 +3142,19 @@ mod tests {
             &tree_cover_at(mirror, level),
         )
         .values()
-        .any(|chunk_mesh| {
-            chunk_mesh.masks.iter().any(|(key, mask)| {
-                key.axis == 2
-                    && key.sign == 1
-                    && key.plane == plane
-                    && mask.iter().any(|(u, v)| us.contains(u) && vs.contains(v))
-            })
+        .map(|chunk_mesh| {
+            chunk_mesh
+                .masks
+                .iter()
+                .filter(|(key, _)| key.axis == axis && key.sign == sign && key.plane == plane)
+                .map(|(_, mask)| {
+                    mask.iter()
+                        .filter(|(u, v)| us.contains(u) && vs.contains(v))
+                        .count()
+                })
+                .sum::<usize>()
         })
+        .sum()
     }
 
     /// `--subdiv N > 1` draws no `TerrainTile`, which is what broke the capture's draw-set

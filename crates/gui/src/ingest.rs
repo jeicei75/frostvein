@@ -164,14 +164,29 @@ impl LightingToggles {
         }
     }
 
-    fn toggle(&mut self, source: LightSource) {
+    fn set(&mut self, source: LightSource, enabled: bool) {
         match source {
-            LightSource::Sun => self.sun = !self.sun,
-            LightSource::Campfire => self.campfire = !self.campfire,
-            LightSource::Torches => self.torches = !self.torches,
-            LightSource::Lanterns => self.lanterns = !self.lanterns,
-            LightSource::Ambient => self.ambient = !self.ambient,
+            LightSource::Sun => self.sun = enabled,
+            LightSource::Campfire => self.campfire = enabled,
+            LightSource::Torches => self.torches = enabled,
+            LightSource::Lanterns => self.lanterns = enabled,
+            LightSource::Ambient => self.ambient = enabled,
         }
+    }
+
+    fn toggle(&mut self, source: LightSource) {
+        self.set(source, !self.enabled(source));
+    }
+
+    /// The starting position `--lights-off` asks for. Named sources start dark; the keys still
+    /// move them afterwards, because this is the same instrument F5-F9 drive -- a capture just
+    /// needs to state where it begins. Idempotent in the source list, so `sun,sun` is `sun`.
+    fn with_off(off: &[LightSource]) -> Self {
+        let mut toggles = Self::default();
+        for &source in off {
+            toggles.set(source, false);
+        }
+        toggles
     }
 }
 
@@ -375,6 +390,12 @@ fn configure_client_app(
     if let Some(subdiv) = args.subdiv {
         app.insert_resource(TerrainSubdivision(subdiv));
     }
+    // UNCONDITIONAL, and inserted BEFORE `client_systems`/`projection_systems` so their
+    // idempotent `init_resource` finds it already there. Unconditional because a wiring step that
+    // only runs when a flag is present is the Milestone 2 defect class this file's own doc
+    // comments catalogue: with no `--lights-off` this inserts exactly `Default`, so the absent
+    // flag and the present one take the SAME path and neither can rot while the other is tested.
+    app.insert_resource(LightingToggles::with_off(&args.lights_off));
     insert_capture_resources(app, &args);
     // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
     // without this resource the actual side never gains them and a WINDOWED capture asserts
@@ -568,6 +589,7 @@ struct Args {
     drag: Option<ScriptedDragSpec>,
     headless: bool,
     subdiv: Option<u32>,
+    lights_off: Vec<LightSource>,
 }
 
 /// Present only under `--headless`: the offscreen texture the camera draws into, and which the
@@ -647,6 +669,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut drag = None;
     let mut headless = false;
     let mut subdiv = None;
+    let mut lights_off = Vec::new();
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -717,6 +740,13 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         } else if arg == "--drag" {
             let value = args.next().context("--drag requires mode,x0,y0,x1,y1")?;
             drag = Some(parse_drag(value)?);
+        } else if arg == "--lights-off" {
+            let value = args
+                .next()
+                .context("--lights-off requires a comma-separated source list")?;
+            for name in value.to_string_lossy().split(',') {
+                lights_off.push(LightSource::from_name(name.trim())?);
+            }
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -763,6 +793,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         drag,
         headless,
         subdiv,
+        lights_off,
     })
 }
 
@@ -1603,6 +1634,59 @@ mod tests {
         }
     }
 
+    /// `--lights-off` is what gives `from_name` a caller the shipped binary reaches. Before it,
+    /// the "unknown source is refused loudly" clause was satisfied only by the test above calling
+    /// the function directly -- a guard with no production path, which is the shape this project
+    /// keeps finding. This asserts the whole chain: the flag parses, an unknown name is refused
+    /// BY THE PARSER, and the named sources arrive in the resource the keys drive.
+    #[test]
+    fn lights_off_parses_refuses_an_unknown_source_and_reaches_the_toggles_the_keys_drive() {
+        let args = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--lights-off"),
+            std::ffi::OsString::from("sun, campfire ,torches"),
+        ])
+        .expect("a comma-separated source list must parse, whitespace and all");
+        assert_eq!(
+            args.lights_off,
+            vec![
+                super::LightSource::Sun,
+                super::LightSource::Campfire,
+                super::LightSource::Torches
+            ]
+        );
+
+        // Refused by the PARSER, not merely by the function: this is the reachable path.
+        // `Args` is deliberately not `Debug`, so match rather than `expect_err`.
+        let refused = match super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--lights-off"),
+            std::ffi::OsString::from("sun,moon"),
+        ]) {
+            Ok(_) => panic!("an unknown source must stop the run, not be silently dropped"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            refused.to_string(),
+            "unknown light source \"moon\"; expected sun, campfire, torches, lanterns, or ambient"
+        );
+
+        // And the wiring: a flag that parses into a field nothing reads is the inert mechanism.
+        let (app, _sender, _server) = configured_app(&["7451", "--lights-off", "sun,ambient"]);
+        let toggles = app
+            .world()
+            .get_resource::<super::LightingToggles>()
+            .expect("the toggles resource must exist on the configured app");
+        assert!(!toggles.enabled(super::LightSource::Sun));
+        assert!(!toggles.enabled(super::LightSource::Ambient));
+        assert!(
+            toggles.enabled(super::LightSource::Campfire)
+                && toggles.enabled(super::LightSource::Torches)
+                && toggles.enabled(super::LightSource::Lanterns),
+            "only the NAMED sources start dark; the rest are untouched"
+        );
+    }
+
     #[test]
     fn light_source_names_are_closed_and_an_unknown_one_is_refused_loudly() {
         assert_eq!(
@@ -1612,6 +1696,10 @@ mod tests {
         assert_eq!(
             super::LightSource::from_name("campfire").unwrap(),
             super::LightSource::Campfire
+        );
+        assert_eq!(
+            super::LightSource::from_name("torches").unwrap(),
+            super::LightSource::Torches
         );
         assert_eq!(
             super::LightSource::from_name("lanterns").unwrap(),
@@ -1626,6 +1714,43 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
             "unknown light source \"moon\"; expected sun, campfire, torches, lanterns, or ambient"
+        );
+    }
+
+    /// AC5's guard, one level DOWN: on the light that is actually installed, not on the pure
+    /// function that computes its aim. `the_approved_sun_lights_downward` asserts
+    /// `sun_direction()`; nothing asserted what `setup_night_lighting` spawned, so pointing the
+    /// spawn at any other transform left every sun test green. That is the
+    /// verification-defect-relocates pattern -- close the hole at the formula and it reopens in
+    /// what feeds the light. Same hand-written floor, deliberately not derived from
+    /// `SUN_ELEVATION_DEGREES`, applied to the entity Bevy actually renders from.
+    #[test]
+    fn the_installed_sun_entity_aims_downward_onto_the_valley() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&bevy::prelude::Transform, With<super::SunLight>>();
+        let transforms = query.iter(app.world()).collect::<Vec<_>>();
+        assert_eq!(
+            transforms.len(),
+            1,
+            "exactly one sun must be installed; found {}",
+            transforms.len()
+        );
+
+        let forward = transforms[0].forward().as_vec3();
+        assert!(
+            (forward.length() - 1.0).abs() < 1e-5,
+            "the installed sun's forward must be unit length: {forward:?}"
+        );
+        assert!(
+            forward.y <= crate::atmosphere::APPROVED_DOWNWARD_FLOOR,
+            "the INSTALLED sun must travel downward onto the valley; y={} exceeds the approved \
+             floor {}",
+            forward.y,
+            crate::atmosphere::APPROVED_DOWNWARD_FLOOR
         );
     }
 

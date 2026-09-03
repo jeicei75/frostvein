@@ -370,17 +370,30 @@ nothing, which is exactly why the shipped default looked clean.
 **The fix.** `occludes_terrain` discounts cells a mesh draws, applied to the three face-EMISSION
 decisions only. **Not** to `column_heights`' carving decision — see the wrong turns below.
 
-**Result, measured on real captures with `10-7-signoff/holes.py`:**
+**Result, measured on real captures with `10-7-signoff/holes.py`.** The figures below were
+CORRECTED at the 2026-09-03 review — see the change log entry — because the artifacts originally
+committed under the "after fix" name were the rejected first fix's frames. Every row now names a
+file that measures what the row claims.
 
-| capture | interior-sky px |
-|---|---:|
-| subdiv 2, before | 12,722 |
-| **subdiv 2, fixed (a / b)** | **12,314 / 12,302** |
-| **subdiv 1, before / fixed** | **11,174 / 11,174 — EXACTLY unchanged** |
+| capture | artifact | interior-sky px |
+|---|---|---:|
+| subdiv 2, before | `candidate-client-subdiv2.png` | 12,722 |
+| subdiv 2, REJECTED first fix | `probe-subdiv2-REJECTED-first-fix-a/-b.png` | 13,606 / 13,608 |
+| **subdiv 2, shipped fix** | **`probe-subdiv2-holes-closed-a/-b.png`** | **12,285 / 12,313** |
+| subdiv 1, shipped fix | (scratch, not committed) | 11,182 / 11,173 |
 
-**~414 px of hole closed against a 12-pixel noise floor (34x)**, and the shipped default is
-untouched to the pixel. Confirmed by eye too: the black quads at the trunk bases are gone from
-`probe-subdiv2-*` and the vehicle's own signature no longer appears.
+**~420 px of hole closed.** Reproduced independently four times on 2026-09-03 — 12,285/12,313 here,
+12,301/12,277 and 12,363/12,286 by two review layers on their own builds — against a before-state of
+12,722 that no run has come near.
+
+**`--subdiv 1` does not regress, stated with its real floor.** Eight readings now exist across three
+sessions: 11,137, 11,155, 11,159, 11,172, 11,173, 11,174, 11,174, 11,182 — a **45 px spread**, so the
+earlier "11,174 / 11,174, EXACTLY unchanged" was one run coinciding with one run, and the 12 px
+two-run floor understated the real spread. The shipped default is unchanged **within a 45 px
+same-build spread**, which is the honest claim and still comfortably clear of the ~420 px signal.
+
+Confirmed by eye as well: the black quads at the trunk bases are absent from
+`probe-subdiv2-holes-closed-*` and plainly present in `probe-subdiv2-REJECTED-first-fix-*`.
 
 **Mutation table: 7 of 7 KILLED**, including three new rows — `a mesh-drawn tree hides a terrain
 face again`, `the stone control stops hiding its face, so the test stops discriminating`, and
@@ -611,6 +624,8 @@ says so.
 | 2026-09-03 | Task 8 landed (F5 sun / F6 campfire / F7 lanterns / F8 ambient, on-screen readout). Its two capture-instrument panics and two stale cross-story mutation rows were fixed by the orchestrator; full gate GREEN. **AC11 measured on real frames: all four toggles work, but the AC's whole-frame 10x bar is the wrong instrument for the two local lights, and they confound each other** — the campfire reads inert until the lanterns are held off, then moves its own window 1.9x the local floor. Recorded with every figure. |
 | 2026-09-03 | Task 9 cause FOUND and a mechanism test landed RED-first: the mesher let a mesh-drawn tree cell suppress a face nothing then drew. Fix committed and the gate is GREEN, but `holes.py` (a new instrument, 2-pixel noise floor) shows it closes 486 px of hole and opens 1,370 at the world edges — net +884, so **AC12 is NOT met**. `--subdiv 1` is exactly unchanged at 11,174. The regression's cause is identified (the carving decision must keep the hole-free full-cube choice) and the blocker is that the test's oracle forces carving parity, so it cannot steer the remaining half. |
 | 2026-09-03 | **Tasks 8 and 9 complete; Status -> review.** Light toggles land on F5-F8 with an on-screen readout; AC11's permanent guard is the renderer-read component test on Wolf's ruling, with the frame measurements committed as evidence. AC12 met: the subdiv>1 holes are closed, interior-sky 12,722 -> 12,314 against a 12 px floor, subdiv 1 unchanged at 11,174 exactly. Mutation table 7/7 KILLED. Full gate GREEN. Two wrong turns recorded — a metric that lied in the flattering direction, and a unit oracle too strong to steer the fix. |
+| 2026-09-03 | **Code review, four layers, no coverage holes.** Full gate re-run green at HEAD by a review layer. Code sound on every count that was run: sun +13.2 mean luminance reproduced on two fresh builds, all five toggles wired on the live path, no third residual emitter, subdiv-2 holes genuinely closed. **One HIGH, and it was the evidence, not the code:** the committed `probe-subdiv2-after-occluder-fix*.png` were the REJECTED first fix (13,606/13,608 measured, against 12,314 published), so AC12's proof contradicted itself while the fix was fine. 7 patches applied, 7 LOW deferred, 1 dismissed. |
+| 2026-09-03 | **SCOPE CHANGE #5 on Wolf's ruling at review: the no-CLI-flag decision is LIFTED.** `--lights-off` lands, giving `from_name` the production caller it never had, and with it `crates/gui/tests/pixel_guard.rs` — the first tests here that assert PIXELS. AC11's is Wolf's own complaint encoded: all five sources off must leave `warm_lit_pixels == 0`. Measured 0, mean 13.205 vs 101.084. AC5's guard extended to the INSTALLED light, AC12's oracle to all three substituted call sites, the bench contract to the sun FORMULA rather than only its constants, and five dead bench constants removed with their anchors. Mutation table 7 rows -> 12. Costs ~2 min on the full gate only. |
 | 2026-09-03 | **Wolf found the toggles incomplete from the seat**: torches were hardcoded lit and every light entity's emissive face kept glowing regardless. Torches get F9; emissive now follows the toggle for campfire and torch materials. The test gains the RESTORE, which nothing had pinned — re-enabling a point light worked only by grace of `flicker_projection`. Mutation table 7/7 KILLED, full gate GREEN. |
 
 ## Dev Agent Record
@@ -778,3 +793,123 @@ GPT-5.6 (Codex)
 - `_bmad-output/implementation-artifacts/deferred-work.md` — the pre-existing near-white breach
   filed as its own defect.
 - `_bmad-output/implementation-artifacts/10-7-the-sun-lights-the-valley.md` — the story record.
+
+**Added at the 2026-09-03 review, which found this list frozen at the Task 7 close.** It named five
+source files and omitted `crates/gui/src/project.rs` entirely — the file carrying BOTH scope-change
+fixes — so anyone working from it was never pointed at the largest change in the story.
+
+- `crates/gui/src/project.rs` — `occludes_terrain` and its three call sites (AC12),
+  `ProjectionAssets::emissive_materials` (AC10/11), and the `face_quads` oracle with the two
+  mesh-drawn-tree tests. **Omitted from this list until the review.**
+- `crates/gui/tests/pixel_guard.rs` — NEW. The two rendered-frame guards.
+- `scripts/gate.sh` — the full tier runs the pixel guards; the fast tier names them as skipped.
+- `_bmad-output/implementation-artifacts/mutations/7-1-slice-into-the-mountain.sh`,
+  `.../m2-1-live-app-systems.sh` — re-anchored rows whose seams this story moved. Only the `10-1`
+  re-anchor was listed before.
+- `_bmad-output/planning-artifacts/epics.md` — the amended Epic 10 execution order.
+- `_bmad-output/implementation-artifacts/10-7-signoff/holes.py` — NEW. The interior-sky instrument
+  AC12 rests on, ported into `pixel_guard.rs` so the same oracle runs in CI.
+- `_bmad-output/implementation-artifacts/10-7-signoff/probe-subdiv2-holes-closed-a/-b.png` — NEW.
+  The shipped fix's frames.
+- `.../probe-subdiv2-REJECTED-first-fix-a/-b.png` — RENAMED from `probe-subdiv2-after-occluder-fix*`,
+  which described them as the accepted fix when they are the abandoned one.
+- `.../ac11-all-five-off.png`, `.../ac11-all-on-after-torch-fix.png` — NEW. The frame evidence for
+  the torch and emissive fixes.
+- `.../review-vehicle-runbook.md` — NEW. The card for UX-DR22's closing half on ACs 10-12.
+- Task 8/9 artifacts already committed but never listed: `ac11-lights-*.png`,
+  `probe-subdiv2-shadows-off*.png`, `subdiv-artifact-headless-subdiv1/2.png`,
+  `vehicle-subdiv-artifacts-2026-09-03.png`.
+
+### Review Findings
+
+Four-layer adversarial review, 2026-09-03, fresh context, on `47139fa..HEAD`. **No coverage holes**:
+every layer verified `cargo 1.97.1` and executed code in its own `CARGO_TARGET_DIR`. Blind Hunter
+(Sonnet) and Edge Case Hunter (Sonnet) had their R1 territories reassigned — the split's named crates
+(`sim-core`, `simd`, `tui`, `protocol`) are empty in this diff — to lighting/toggles and
+mesher/bench-lockstep respectively; both Opus auditors kept whole-diff scope.
+
+**The code is sound. Every defect below is in the evidence trail or the guards, not in what ships.**
+The sun genuinely lights the valley (+13.2 mean luminance, independently reproduced at 80x and 131.8x
+the noise floor on two separate builds), all five toggles are wired on the live path with no keybind
+collision, no third residual emitter exists (all-off frame measures `warm-lit pixels=0`), and the
+subdiv-2 holes are genuinely closed (12,277-12,363 at HEAD vs 12,722 before, measured live by two
+layers independently).
+
+- [ ] [Review][Decision] **AC11 and AC12's pixel-proof clauses are discharged by artifacts, not tests** — AC11 demands "the test is about the frame, not the flag"; AC12 demands "a property of the DRAWING — the pixels — not a geometry count". Both permanent guards sit one level up: `lighting_keys_change_the_live_scene_and_its_readout` asserts renderer-INPUT components, and `a_mesh_drawn_tree_hides_no_terrain_face` asserts emitted mesh masks. Both are strictly stronger than what they replaced and both relaxations are transparently recorded, but all three pixel-level proofs in this story are committed artifacts — nothing in CI catches a pixel regression. Options: accept as a recorded relaxation / amend the AC text to match what shipped / lift the no-CLI-flag ruling so a headless pixel guard becomes possible.
+- [ ] [Review][Decision] **`LightSource::from_name` has no production caller** [crates/gui/src/ingest.rs:121] — AC11's "an unknown source name is refused loudly" is satisfied by a path the shipped binary cannot reach. `rg from_name crates/ scripts/` returns the definition plus five test call sites and nothing else; keys map to a closed enum and Wolf ruled out the CLI flag that would have been the caller. It is `pub`, so `dead_code` never fires. Same shape as "a constant pinned by the guard and read by nothing". Options: delete it per the YAGNI policy / keep it as the deliberate seam and record why / add the caller. (Minor either way: its own test omits `"torches"`.)
+- [ ] [Review][Decision] **UX-DR22's closing half covers the sun only** — the recorded vehicle sitting predates ACs 10-12. Wolf sat again after Task 8 (that is how the incomplete toggles were found), but there is no recorded sitting after the torch/emissive fix or after the subdiv-2 fix. AC12's "confirmed by eye" is the agent's eye on headless probes. AC9's closing half is OPEN for ACs 10-12. Options: Wolf sits again / Wolf accepts on committed evidence once the artifacts below are corrected.
+
+- [ ] [Review][Patch] **HIGH — the committed AC12 "after-fix" artifacts are the REJECTED fix's frames** [_bmad-output/implementation-artifacts/10-7-signoff/probe-subdiv2-after-occluder-fix.png, -b.png] — the story publishes 12,314 / 12,302 interior-sky px. The story's own `holes.py` on those exact files gives **13,606 / 13,608**, and 12,722 + 884 = 13,606 — precisely the net regression the change log attributes to the abandoned first fix. `git log` puts both PNGs in `724949c` ("Record AC12's honest state", the commit whose entry says AC12 is NOT met), never replaced after the real fix `b5fd565`. **No committed artifact carries the published figures** (the subdiv-2 set reads 13,606 / 13,608 / 12,722 / 12,713 / 2,763). The sentence "the black quads at the trunk bases are gone from `probe-subdiv2-*`" is false of the files in the repo, and the black quads are still plainly visible in them. Found independently by the Acceptance and Feature auditors and confirmed by the orchestrator. Fix: re-capture at HEAD and replace, or rename to name the rejected fix they actually depict, and correct the sentence.
+- [ ] [Review][Patch] **AC5's guard is one level above the light that is actually installed** [crates/gui/src/atmosphere.rs:230, crates/gui/src/ingest.rs:976] — `the_approved_sun_lights_downward` asserts `sun_direction()`, a pure function. `sun_light_transform()` has exactly one caller and **no test asserts the spawned `SunLight` entity's transform or forward vector** — the two `SunLight` queries fetch `&DirectionalLight` only. No mutation row touches the spawn site. Point the wiring somewhere else and the guard stays green. This is the verification-defect-relocates pattern: closed at the formula, reopened at what feeds the light. Fix: assert the spawned entity's forward vector, and add a mutation row for the spawn site.
+- [ ] [Review][Patch] **AC12's guard proves 1 of the 3 substituted call sites** [crates/gui/src/project.rs:2991, :3041] — `occludes_terrain` is substituted at the `above` top face (:782), the `under` bottom face (:812) and the side-neighbour check (:825), but `top_face_exists` filters `key.axis == 2 && key.sign == 1`, so the bottom-face and side-face substitutions ship with zero coverage. The fixture's only non-trunk solid is the single ground layer at `z=0`, so neither path is exercised. Separately, `mask.iter().any(...)` is true if even one of the `subdiv*subdiv` sub-quads is present, so a regression dropping 3 of 4 would still pass. Fix: extend the oracle to the bottom and side planes and assert the full sub-quad set.
+- [ ] [Review][Patch] **The lockstep contract pins the sun's constant declarations but no longer the formula** [crates/gui/tests/bench_contract.rs:190-199] — the old anchor pinned the actual expression on both sides; the new one pins only `SUN_AZIMUTH_DEGREES`/`SUN_ELEVATION_DEGREES` declarations. The trig assembly is un-anchored in both languages, so a sign flip or a `sin`/`cos` swap in either would leave the contract green while the two renderers light the world from different directions — the 10.4 defect reopened one level down, at the formula instead of the aim vector. Both implementations were verified to agree today to ~1e-8, so this is structural, not live. Fix: anchor the formula body on both sides, following the `sun.rotation_euler = ...` wiring-anchor pattern already in the file.
+- [ ] [Review][Patch] **The decoupling orphaned `aurora_core()` in the bench, and the contract still pins its four constants under a now-false comment** [scripts/bench/valley_bench.py:151, crates/gui/tests/bench_contract.rs:163-183] — in the bench, `aurora_core()` is defined and **never called**, and `AURORA_RADIUS`, `AURORA_BOTTOM`, `AURORA_TOP` and `SKY_CENTRE` are read only inside it: all five are dead. `bench_contract.rs` still pins all four pairs under "the client's directional light comes FROM it, so these four numbers decide which faces are lit" — they no longer decide any face. The diff also replaced the bench's stale comment with a new one that is itself untrue ("Its geometry remains here for the bench's own bright-point calculations" — there are none). This file already carries the scar: "AMBIENT_RGB was a dead constant this test pinned as though it proved something." In the client these constants stay live (`aurora_curtain_mesh` :91-94); only `aurora_core()` is production-dead there, called solely by a test. Fix: remove the bench orphans and their four anchor pairs, and correct both comments.
+- [ ] [Review][Patch] **The fix for Wolf's actual complaint has no committed frame evidence** — the torch (F9) and emissive fixes landed after the `ac11-lights-*.png` captures, which cover four sources and no all-off case. Nothing committed shows the camp dark. The Feature Auditor produced the measurement during review — all five off gives `warm-lit pixels=0 ground-median-luminance=0`, mean 13.219 vs 101.100 all-on, `dark(<40)` 84.62% — and it passes, so this is an evidence gap rather than a broken feature. Torches is also the one source whose figures cannot be re-measured from the repo, having no committed PNG. Fix: commit the all-off frame and its figures.
+- [ ] [Review][Patch] **Record corrections in this story file** — (a) the AC1 completion note claims "27 files, 923 insertions" and names five source files; the actual range is **45 files, 2,181 insertions** and **six** source files. (b) The **File List omits `crates/gui/src/project.rs` entirely** — the file carrying both scope-change fixes, +133 lines — along with `mutations/7-1-slice-into-the-mountain.sh`, `mutations/m2-1-live-app-systems.sh`, `epics.md`, `holes.py` and every Task 8/9 artifact. Both froze at the Task 7 close and never absorbed the ACs 10-12 scope change, so a reviewer working from the File List is never pointed at `project.rs`. (c) "`--subdiv 1` EXACTLY unchanged at 11,174" is one run coinciding with one run: measured spreads across HEAD and the committed pair are 11,137-11,174, about 37 px against the 12 px floor the story quotes. The non-regression holds within noise; the word "EXACTLY" does not, and it is the publish-a-delta-without-its-floor shape this story warns against elsewhere. (d) The only pasted gate output is a three-line paraphrase predating the scope change, and every later "gate GREEN" is prose; the full gate was independently re-run green at HEAD during this review, so AC1 stands, but paste the verbatim output. (e) AC2's `range-check:` lines are recorded as figure fragments rather than the emitted line.
+
+- [x] [Review][Defer] **`TreeCover`'s ring overlap depends on a `sim-core` spacing constant nothing ties it to** [crates/gui/src/project.rs:1934] — deferred, pre-existing
+- [x] [Review][Defer] **The Python bench oracle is bounds-only, with wide bands** [scripts/tests/test_valley_bench.py:186] — deferred, pre-existing
+- [x] [Review][Defer] **`light_controls` skips the explicit ordering annotation the rest of the file uses** [crates/gui/src/ingest.rs:498] — deferred, pre-existing
+- [x] [Review][Defer] **The `is_mesh_drawn_tree(neighbour)` tie-break no longer does distinguishable work** [crates/gui/src/project.rs:849] — deferred, pre-existing
+- [x] [Review][Defer] **Toggle-off-then-a-delta-spawns-a-new-light is uncovered** [crates/gui/src/ingest.rs:1083] — deferred, pre-existing
+- [x] [Review][Defer] **Unlit contributors are bright in an all-off frame, keyless and absent from the readout** [crates/gui/src/atmosphere.rs:258-280] — deferred, pre-existing
+- [x] [Review][Defer] **No mutation row covers the emissive branch** [_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh] — deferred, pre-existing
+
+**Dismissed as noise (1):** "the azimuth guard tolerates ~8 degrees of drift" (Blind Hunter, MED) —
+`bench_contract.rs` pins the exact literal `pub const SUN_AZIMUTH_DEGREES: f32 = 40.0398;` on both
+sides, so any drift fails the contract immediately. A territory-split artifact: the layer could not
+see the file that pins the constant.
+
+**For the retro — R1's softer failure mode.** Both hunters produced a finding whose resolution lay in
+a file their territory excluded: the Blind Hunter's azimuth finding was settled by
+`bench_contract.rs` (Edge's territory) and the Edge Case Hunter's ring-overlap finding by
+`sim-core/worldgen.rs:186-187` (neither's). R1's revert rule fires on a DEFECT sitting in an excluded
+territory; this is the cheaper failure — false positives costing orchestrator verification turns.
+Convergence this round: 3-way on the mislabelled AC12 artifacts (acceptance + feature + orchestrator),
+3-way on the AC12 guard's altitude (acceptance + feature + edge), 2-way on the stale AC1 figures
+(acceptance + orchestrator) and on the overstated subdiv-1 claim (acceptance + feature).
+
+### Review Patch Pass — 2026-09-03
+
+All seven patch findings applied in one pass, with a single verification pass at the end rather than
+a re-gate per fix. Wolf resolved the three decisions at triage: **lift the no-CLI-flag ruling and
+build the flag here**, **keep `from_name`** (the flag is its caller, so the YAGNI objection
+dissolves), and **sit on the vehicle again before merge**.
+
+**THE SCOPE CHANGE, recorded as the previous ones were.** This is the fifth. Wolf's ruling of
+2026-09-03 that ACs 10-12 would carry no CLI flag is **LIFTED**, by his decision at this review. The
+reason it was taken is the reason it is now reversed: without a flag a keybind cannot drive a
+headless capture, so AC11's "the test is about the frame" and AC12's "a property of the pixels" could
+only ever be discharged by committed artifacts. With `--lights-off` they are discharged by tests.
+
+**What landed**
+
+| # | Finding | Fix | Proof |
+|---|---|---|---|
+| 1 | committed AC12 "after fix" frames were the REJECTED fix (13,606/13,608 vs 12,314 published) | renamed to `probe-subdiv2-REJECTED-first-fix-*`; re-captured at HEAD as `probe-subdiv2-holes-closed-*` | 12,285 / 12,313, and no filename now means two different things |
+| 2 | AC5's guard sat above the light that ships | `the_installed_sun_entity_aims_downward_onto_the_valley` asserts the spawned `SunLight` entity's forward vector | RED observed: aiming the spawn at `Transform::default()` gives `y=-0` and fails the floor |
+| 3 | AC12's oracle proved 1 of 3 substituted call sites | `top_face_exists` → `face_quads(axis, sign)`, counting sub-quads; new test covers the `under` and side sites, each with a stone control | RED observed on BOTH: reverting either site to plain `occludes` gives 0 of 4 quads |
+| 4 | the contract pinned the sun's constants but not the formula | two formula anchors, following the `AMBIENT_RGB` lesson already in that file — pin the USE | RED observed: flipping the bench's elevation sign fails the contract with both constants byte-identical |
+| 5 | the decoupling orphaned `aurora_core()` and four constants in the bench, still pinned under a false comment | orphans deleted; their four anchor pairs removed; both comments corrected | bench still imports and renders; contract green with two live anchors in place of five dead ones |
+| 6 | Wolf's actual complaint had no committed frame | `ac11-all-five-off.png` + `ac11-all-on-after-torch-fix.png` | **`warm-lit pixels=0`**, mean **13.205** vs **101.084** |
+| 7 | AC1 figures and File List froze at Task 7 | both corrected below | — |
+
+**THE TWO PIXEL GUARDS — `crates/gui/tests/pixel_guard.rs`.** The only tests in this workspace that
+assert what was DRAWN. They run the real daemon, the real client and a real Vulkan device, and decode
+the PNG. `switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing` is Wolf's
+complaint encoded: with all five sources off, `warm_lit_pixels` must be **exactly zero**. The other
+counts sky drawn inside the terrain silhouette at `--subdiv 2` against a calibrated ceiling.
+
+**They cost about two minutes**, so they are `#[ignore]`d and `scripts/gate.sh` runs them in its FULL
+tier only, with the fast tier naming them in its SKIPPED banner beside `serve.rs` — a check that did
+not run is a coverage hole, never a clean result. That is a real addition to the full gate's runtime
+and it is Wolf's call whether it stays; it is stated here rather than buried.
+
+**Cross-validation worth recording.** The all-off measurement was produced twice by different
+mechanisms: a review layer built a temporary binary with `LightingToggles::default()` forced false
+and got mean 13.219 / warm-lit 0; the shipped `--lights-off` flag gets 13.205 / warm-lit 0. Two paths,
+same answer, so the flag is measuring the thing the hand-built variant measured.
+
+**What was NOT done, and why.** Seven LOW findings went to `deferred-work.md` under the review-cost
+LOW-tail cap; none is caused by this story's change. The dismissed finding was an azimuth-drift
+claim that `bench_contract.rs` already pins exactly.

@@ -98,3 +98,46 @@ assert s.count(old) == 1
 new = '    app.init_resource::<LightingToggles>();\n    app.add_systems(\n        Update,\n        (update_lighting_readout, update_lighting_readout)'
 p.write_text(s.replace(old, new))
 PY
+
+# --- Added at the 2026-09-03 code review. Each pins a guard the review found missing. ---
+
+mutation "the installed sun is aimed at nothing" gui the_installed_sun_entity_aims_downward_onto_the_valley <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        sun_light_transform(),\n        SunLight,'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        Transform::default(),\n        SunLight,'))
+PY
+
+mutation "a mesh-drawn tree hides the face BELOW it again" gui a_mesh_drawn_tree_hides_neither_the_face_below_it_nor_the_face_beside_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = 'if !occludes_terrain(mirror, under, level, cover) {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'if !occludes(mirror, under, level) {'))
+PY
+
+mutation "a mesh-drawn tree hides the face BESIDE it again" gui a_mesh_drawn_tree_hides_neither_the_face_below_it_nor_the_face_beside_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = 'let solid = occludes_terrain(mirror, neighbour, level, cover);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'let solid = occludes(mirror, neighbour, level);'))
+PY
+
+mutation "the bench sun formula diverges while both constants stay identical" gui bench_literals_match_the_client_palette_lights_and_boot_camera <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/valley_bench.py'); s = p.read_text()
+old = '        -math.sin(elevation),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        math.sin(elevation),\n'))
+PY
+
+mutation "an unknown light source is accepted instead of refused" gui lights_off_parses_refuses_an_unknown_source_and_reaches_the_toggles_the_keys_drive <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            for name in value.to_string_lossy().split(\',\') {\n                lights_off.push(LightSource::from_name(name.trim())?);\n            }'
+assert s.count(old) == 1
+new = '            for name in value.to_string_lossy().split(\',\') {\n                if let Ok(source) = LightSource::from_name(name.trim()) {\n                    lights_off.push(source);\n                }\n            }'
+p.write_text(s.replace(old, new))
+PY

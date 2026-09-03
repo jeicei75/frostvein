@@ -70,15 +70,13 @@ BOOT_FOCUS = (64.0, 64.0, 9.0)
 RENDER_HEIGHT = 540
 RENDER_WIDTH = round(RENDER_HEIGHT * BOOT_ASPECT_RATIO)
 
-# The aurora itself is out of scope and is NOT drawn. Its geometry remains here for the bench's
-# own bright-point calculations, but it no longer steers the directional light.
-AURORA_RADIUS = 600.0
-AURORA_BOTTOM = -162.0
-AURORA_TOP = 45.0
-SKY_CENTRE = (63.5, 0.0, -63.5)
-CAMP_FOCUS = (64.0, 9.0, -64.0)
-
 # [atmosphere.rs] The client and bench must share the sunlight's travel bearing and elevation.
+# These two ARE the light now. The aurora's geometry used to live here because the shipped sun
+# aimed from the curtain's core at the camp; 10.7 decoupled them, which left AURORA_RADIUS,
+# AURORA_BOTTOM, AURORA_TOP, SKY_CENTRE, CAMP_FOCUS and `aurora_core()` read by nothing on this
+# side. They are gone rather than kept: a constant the bench does not use cannot disagree with the
+# client about anything, and pinning one in `bench_contract.rs` states a guarantee that is not
+# being made -- the same trap the AMBIENT_RGB note in that file already records.
 SUN_AZIMUTH_DEGREES = 40.0398
 SUN_ELEVATION_DEGREES = 17.66
 
@@ -144,16 +142,8 @@ def vector_normalize(vector):
 
 
 def boot_horizontal_forward():
-    """[camera.rs:21-23] -- also the direction the aurora core sits along."""
+    """[camera.rs:21-23]."""
     return (-math.cos(BOOT_YAW), 0.0, -math.sin(BOOT_YAW))
-
-
-def aurora_core():
-    """[atmosphere.rs:76-80]. The compass point the curtain is brightest at."""
-    return vector_add(
-        vector_add(SKY_CENTRE, vector_scale(boot_horizontal_forward(), AURORA_RADIUS)),
-        (0.0, (AURORA_BOTTOM + AURORA_TOP) * 0.5, 0.0),
-    )
 
 
 def sun_direction():

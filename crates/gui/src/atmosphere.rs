@@ -226,6 +226,15 @@ pub fn sun_direction() -> Vec3 {
     )
 }
 
+/// The independent floor AC5 asks for: hand-written, deliberately NOT derived from
+/// `SUN_ELEVATION_DEGREES`, and the thing that catches the shipped below-horizon aim returning.
+/// Single-sourced because it now guards TWO levels -- the formula here, and the light actually
+/// spawned in `ingest::setup_night_lighting`. Guarding only the formula left the wiring free to
+/// aim anywhere with the guard still green, which is this project's verification-defect-relocates
+/// pattern; two hand-written assertions against one hand-written floor close both ends.
+#[cfg(test)]
+pub(crate) const APPROVED_DOWNWARD_FLOOR: f32 = -0.15;
+
 /// Bevy reads only this directional light's forward vector; the translation is decorative.
 pub fn sun_light_transform() -> Transform {
     Transform::from_translation(Vec3::ZERO).looking_to(sun_direction(), Vec3::Y)
@@ -323,11 +332,11 @@ pub fn fall_snow(time: Res<Time>, mut flakes: Query<(&Snowflake, &mut Transform)
 #[cfg(test)]
 mod tests {
     use super::{
-        AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT, AURORA_TEXTURE_WIDTH, AURORA_TOP,
-        CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT, SNOWFLAKE_DISC_RADIUS, STAR_COUNT,
-        STAR_RADIUS, aurora_core, aurora_curtain_mesh, aurora_gradient_pixels, inside_boot_frustum,
-        snowflake_positions, snowflake_scale, snowflake_speed, star_positions, star_scale,
-        sun_direction,
+        APPROVED_DOWNWARD_FLOOR, AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT,
+        AURORA_TEXTURE_WIDTH, AURORA_TOP, CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT,
+        SNOWFLAKE_DISC_RADIUS, STAR_COUNT, STAR_RADIUS, aurora_core, aurora_curtain_mesh,
+        aurora_gradient_pixels, inside_boot_frustum, snowflake_positions, snowflake_scale,
+        snowflake_speed, star_positions, star_scale, sun_direction,
     };
     use crate::appearance::night_lighting;
     use crate::camera::{BOOT_VERTICAL_FOV, CameraRig, boot_horizontal_forward};
@@ -396,10 +405,6 @@ mod tests {
 
     #[test]
     fn the_approved_sun_lights_downward() {
-        // Deliberately NOT derived from SUN_ELEVATION_DEGREES: this is the independent floor
-        // that catches the shipped below-horizon aim returning.
-        const APPROVED_DOWNWARD_FLOOR: f32 = -0.15;
-
         let direction = sun_direction();
         assert!(
             direction.y <= APPROVED_DOWNWARD_FLOOR,
