@@ -1602,8 +1602,22 @@ development_status:
   # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
   # clause passes on it, so origin centring is the only discriminating one.
   10-3-the-rules-of-the-look: done
-  10-4-the-trees-look-right-the-pilot: in-progress
-                          # 2026-09-03 THE VEHICLE CARD EXISTS: 10-4-signoff/task-6-vehicle-runbook.md.
+  10-4-the-trees-look-right-the-pilot: review
+                          # 2026-09-03 AC12 CLOSED ON THE VEHICLE -> review. ALL ACs met. Wolf ran
+                          # build 3b0c43f on the RTX 4080. NFR6 PASSES: >100 fps typical, brief ~60
+                          # against 60/30 floors -- FIRST fps ever taken against the mesh trees, at
+                          # 67% of the scene's triangles. Lone gui.exe, no assets/, 265 pines from
+                          # embedded://; windowed --capture wrote its PNG where it used to panic.
+                          # NEW FINDING, MEASURED: THE SUN CASTS NO VISIBLE SHADOW. Deleting the
+                          # whole directional shadow pass moves FEWER pixels than two runs of the
+                          # same build. Strongest cause is a Bevy CascadeShadowConfig default of
+                          # 150 units nobody chose, on a world of 1 render unit per cell. Not
+                          # 10.4's; may be one defect with the tree-root reading. deferred-work.md.
+                          # ALSO DEFERRED: fps varies while dwarves move (Wolf reads lighting; two
+                          # modes fit, pausing the daemon separates them), and near-white reads
+                          # 2.2071% on the GPU vs 9.1's 1.5630% ceiling -- no baseline GPU capture
+                          # exists, so venue and content stay confounded. Do NOT raise the ceiling.
+                          # PRIOR: THE VEHICLE CARD EXISTS: 10-4-signoff/task-6-vehicle-runbook.md.
                           # AC12's closing half is ALL that is left in this story. Every command in
                           # the card was run here on 12da79d first. The build.rs stamp defect
                           # reproduced, so `touch crates/gui/build.rs` is a mandatory build step.

@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.4: The Trees Look Right (the pilot)
 
-Status: in-progress
+Status: review
 
 **Runs after 10.6 and 10.3** (epic execution order 10.6 → 10.3 → 10.4 → 10.5, ruled by Wolf
 2026-08-31). Both have landed: the resolution contract fixes 1.6 m/cell and the asset contract is
@@ -575,6 +575,7 @@ no window and lavapipe does not provide a meaningful frame-rate measurement.
 | 2026-09-02 | **Post-review delivery fix, on Wolf's ruling.** The vehicle copy step failed on first use: `gui.exe` alone fell back to a compile-time WSL path that cannot exist on Windows. The four pines are now compiled into the binary via `include_bytes!` and Bevy's `embedded://` source, so delivery is one file and the assets cannot go stale against it — the same argument `build.rs` makes for stamping the SHA in. Verified by running a lone binary from an empty directory with no `assets/` on the path. Mutation table re-derived: two rows replaced, a third caught BROKEN by the gate's audit and re-pointed, all four KILLED, full gate GREEN.
 | 2026-09-02 | **Code review: four layers, all live, no coverage holes. 3 decisions / 14 patches / 5 deferrals / 1 dismissed, all applied.** The story's central claim was TRUE and its evidence for it was FALSE — both committed AC5 captures were renders of the pre-mesh build, one treatment photographed twice, which is the failure AC3 exists to name. The three decisions turned out to be ONE defect: `tree_meshes` rejected a column it could not represent while both spawn paths filtered every tree cell out of the terrain, so a rejected column was drawn by NEITHER and vanished silently. Wolf ruled: the cube path becomes the fallback (AC6 stops being vestigial), the contiguity check `TreeMesh`'s doc comment always promised now exists, and `authored_bench.py` is promoted onto the gate. The subdiv-2 capture break was this story's OWN regression, not pre-existing. 10 mutation rows, ALL KILLED; full gate GREEN. |
 | 2026-09-02 | **Per-tree yaw, on Wolf's call**, plus AC5 re-captured against it. The bench had always spun each pine in quarter turns and the client applied no rotation at all, so the frame approved as candidate D was not the frame the client drew — a bench/client divergence, and a concrete defect rather than taste. Measured: 116,963 px at delta>=4 against a worst-case same-code noise of 46,050. Wolf's look review of the corrected captures recorded the tree ROOT reading artificial where trunk meets terrain — explicitly NOT this story's, filed in `deferred-work.md` in two halves (asset and client) with the foliage ring named as the candidate and 9.4's three measured reasons for removing it carried forward. |
+| 2026-09-03 | **AC12 CLOSED ON THE VEHICLE.** Wolf ran the card on build `3b0c43f` (RTX 4080). Delivery proven on hardware: a lone `gui.exe` with no `assets/` loaded all 265 pines from `embedded://`, and the WINDOWED `--capture` printed `265 of 265` and wrote its PNG where it used to panic. **NFR6 PASSES** — >100 fps typical, brief ~60, floors 60 / 30 — the first frame rate ever taken against the mesh trees. Three corrections to my own card came out of the sitting: `slice:` is capture-only and was listed as a plain-run line; the near-white ceiling reads WORSE on the GPU (2.2071 %) where the card guessed it would come in under; and `--frames 2000` sits ~1 % from the frames a 144 Hz panel renders in the run, so a truncated capture could not be told from a complete one. Wolf's new observation — no visible tree shadows — was measured: deleting the entire directional shadow pass moves fewer pixels than two runs of the same build. Filed with three code-verified candidate mechanisms, the strongest being a Bevy `CascadeShadowConfig` default of 150 units that nobody chose, on a world where one render unit is one cell. |
 | 2026-09-03 | **The vehicle card for AC12's closing half written**: `10-4-signoff/task-6-vehicle-runbook.md`. Every command in it was executed here first on `12da79d` rather than remembered — startup lines, tree accounting, the capture range check, and the `build.rs` stamp defect, which reproduced. The fps section carries a measured triangle load in place of the unsourced "~479 k terrain" this story's own Still-open note published. |
 
 ### Review Findings — code review 2026-09-02 (4 layers, all live, NO coverage holes)
@@ -866,8 +867,20 @@ and **no** `TerrainTile`, which is precisely the shape the old query could not s
 
 #### Still open
 
-- **AC12's closing half** — still needs the vehicle: a real window and a real frame rate this
-  devpod cannot produce. **The card it needs now exists**:
+- **AC12's closing half — CLOSED ON THE VEHICLE 2026-09-03.** Wolf ran build `3b0c43f` live on
+  gingerspice (RTX 4080 / NVIDIA 616.56) and worked the card. Sections 2, 3 and 5 returned the
+  readings below; for section 4 he ran the client live and let his 2026-09-02 look comments stand
+  rather than adding to them, and raised one new observation — no visible tree shadows — which is
+  measured and filed in `deferred-work.md`. **fps: >100 typical, brief ~60 depending on view,
+  against NFR6's 60 / 30 floors — PASS**, and the first frame rate ever taken against the mesh
+  trees, at ~67 % of the scene's triangles. The delivery ran as a lone `gui.exe` from `$env:TEMP`
+  with no `assets/` beside it, and the WINDOWED `--capture` printed its slice and trees lines and
+  wrote its PNG where before the review it asserted `0 == 265`. Two open items go out as
+  deferrals, neither this story's: the fps variation while dwarves move (Wolf reads it as lighting;
+  two modes fit and one run separates them), and near-white reading 2.2071 % on the GPU against
+  9.1's 1.5630 % ceiling. Full sitting record in `10-4-signoff/README.md`.
+
+  The original note, for the record:
   `10-4-signoff/task-6-vehicle-runbook.md`, every command in it executed here first on `12da79d`.
   The fps question is sharper than this section originally stated. The ~1.2 M triangles of 265
   pines is right — derived from the four GLBs' 4,366 / 5,894 / 3,474 / 4,424 and the 86 / 76 / 103
