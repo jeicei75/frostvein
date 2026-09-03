@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.7: The Sun Lights The Valley
 
-Status: in-progress
+Status: review
 
 **RUNS BEFORE 10.5.** See "Why this is before the dwarves". The board's key is placed above
 10.5 deliberately, because this board's next-story rule reads top to bottom and a prose ruling
@@ -217,10 +217,10 @@ asking for judgement. Same shape here, one level up.
   - [x] Record near-white area for control and candidate from the `capture range check:` line.
         Record it. Do not act on it. (AC7)
 
-- [ ] **Task 7 — Verification and the closing half** (AC: 1, 9)
-  - [ ] Execute the recipe below, RED first, and paste both outputs into the Dev Agent Record.
-  - [ ] Full `scripts/gate.sh` green, pasted.
-  - [ ] Hand Wolf a vehicle card in the shape of
+- [x] **Task 7 — Verification and the closing half** (AC: 1, 9)
+  - [x] Execute the recipe below, RED first, and paste both outputs into the Dev Agent Record.
+  - [x] Full `scripts/gate.sh` green, pasted.
+  - [x] Hand Wolf a vehicle card in the shape of
         `10-4-signoff/task-6-vehicle-runbook.md` for the closing half.
 
 ## THE RULING — Task 3, AC3, UX-DR22 opening half
@@ -413,6 +413,7 @@ says so.
 | 2026-09-03 | Run A (Tasks 1-2) delegated to Codex and KILLED mid-self-gate; commit cadence preserved all four commits. Orchestrator verified independently: gate GREEN 9/9, control re-rendered pixel-identical (0/518,400), candidates separated by 199,830-253,437 px at d>=4. Found that `lumstats.py` and `pixel_diff.py` silently misread RGBA PNGs (hardcoded `bpp=3`), which is why AC4's instrument must gain a colour-type assertion in Task 6. |
 | 2026-09-03 | **Task 3: Wolf ruled `+17.66°`** against the shipped `−6.42°` control and the `+8.62°` / `+25.87°` alternatives, on the side-by-side comparison of the four bench frames. UX-DR22 opening half signed; the closing half still needs his eye on the vehicle. |
 | 2026-09-03 | Tasks 4-6: landed Wolf's `+17.66°` elevation in client and bench, added an independent downward-direction guard, made the PNG instruments reject unsupported RGBA frames, and captured the shipped/candidate noise comparison. |
+| 2026-09-03 | Tasks 4-7 complete. `+17.66°` landed in client and bench in one commit with both `bench_contract.rs` anchors; three tests that pinned the below-horizon sun were corrected rather than loosened. AC5's guard `the_approved_sun_lights_downward` uses a hand-written floor independent of the elevation constant. Mutation table 3/3 KILLED, re-run independently. AC4 measured at **131.8x** its own noise floor. `lumstats.py` and `pixel_diff.py` gained the colour-type guard that closes their silent-misparse trap. Near-white recorded and filed, not moved (AC7). Full gate GREEN 9/9. Status → review; UX-DR22's closing half still open. |
 
 ## Dev Agent Record
 
@@ -465,6 +466,60 @@ GPT-5.6 (Codex)
   ceiling was already breached on the shipped build and is not re-calibrated here.
 
 ### Completion Notes List
+
+- Task 7 executed by the ORCHESTRATOR (Claude) after the delegated Run B was killed mid-recipe.
+  Everything below was run here, not taken from the run.
+
+- **Verification recipe, RED first, three directions.** The instrument can fail by dying and by
+  lying, and this story added a third way it could lie:
+  ```
+  RED 1  zlib.error: Error -5 while decompressing data: incomplete or truncated stream
+  RED 2  all-black    mean=  0.000  dark(<40)=  4,096 (100.00%)  shade-band(40-89)=      0 ( 0.00%)
+  RED 3  UnsupportedPngColourType: candidate-plus17.66.png: unsupported PNG colour type 6; expected RGB (2)
+  ```
+  GREEN, on this story's own captures:
+  ```
+  control-a              mean= 87.890  dark(<40)=161,431 (17.52%)  shade-band(40-89)=223,707 (24.27%)
+  control-b              mean= 87.855  dark(<40)=161,488 (17.52%)  shade-band(40-89)=223,515 (24.25%)
+  cand-a                 mean=101.135  dark(<40)=160,362 (17.40%)  shade-band(40-89)=198,245 (21.51%)
+  cand-b                 mean=101.236  dark(<40)=160,363 (17.40%)  shade-band(40-89)=198,131 (21.50%)
+  ```
+  Signal **13.3130** against a worst same-build noise floor of **0.101** (control spread 0.035,
+  candidate spread 0.101) = **131.8x**, against AC4's 10x bar.
+
+- **Mutation table re-run independently by the orchestrator, 3/3 KILLED**, tree restored clean:
+  `restore the shipped aurora_core aim` -> KILLED by `the_approved_sun_lights_downward` (this is
+  AC5's required row, and it IS the guard's RED); `bench sun elevation diverges from the client` ->
+  KILLED by `bench_literals_match_the_client_palette_lights_and_boot_camera`; `flip the sun
+  direction formula's elevation sign` -> KILLED by `the_approved_sun_lights_downward`. No row
+  anchors a tuned literal, so none goes APPLY-FAILED when the elevation next moves.
+
+- **Full `scripts/gate.sh` GREEN, run by the orchestrator, 9/9, no skips:**
+  ```
+  cargo fmt --check ok | cargo clippy -D warnings ok | cargo test ok
+  tui/client-core/gui have no sim-core edge ok | metrics ledger tests ok
+  bench tests ok | mutation tables still apply ok            GATE GREEN
+  ```
+
+- **AC1, graded on this story's OWN range `47139fa..HEAD`, not `main..HEAD`:** 27 files, 923
+  insertions. Only five are production or test source — `crates/gui/src/atmosphere.rs`,
+  `crates/gui/src/ingest.rs`, `crates/gui/tests/bench_contract.rs`,
+  `scripts/bench/valley_bench.py`, `scripts/tests/test_valley_bench.py` — which is the story's
+  Project-structure table plus the gate-blocking file that table omitted. Everything else is
+  evidence and records.
+
+- **AC7 discharged without moving anything.** Near-white area: control 1.8239 % / 1.7731 %,
+  candidate 2.2546 % / 2.2541 %, ceiling 1.5630 %. Breached on the shipped build before this story
+  started; recorded, not acted on. Filed as its own defect in `deferred-work.md` § "10.7, the
+  near-white ceiling's calibration frame is gone" — with the finding that the ceiling was
+  calibrated on `boot7.png`, a frame rendered with the sun below the horizon, so it needs a new
+  reference frame rather than a bigger number.
+
+- **UX-DR22 closing half is NOT signed.** `10-7-signoff/task-7-vehicle-runbook.md` is the card;
+  it needs Wolf's eye on the vehicle against `candidate-plus17.66.png`, and it asks specifically
+  whether the campfire still reads as the valley's own light source — the trade-off that decided
+  `+17.66°` over `+25.87°`.
+
 
 - Task 1 complete: decoupled the directional-light transform from the aurora, preserving the
   shipped direction until Wolf selects an elevation. The bench reads the matching module-scope
@@ -540,4 +595,13 @@ file enforces that. **Task 6 must make it assert its colour type before it is us
 - `_bmad-output/implementation-artifacts/10-7-signoff/candidate-client-subdiv2.png` — chunk-mesher capture.
 - `_bmad-output/implementation-artifacts/10-7-signoff/lumstats.py` — RGB capture instrument.
 - `_bmad-output/implementation-artifacts/10-7-signoff/pixel_diff.py` — RGB pixel-diff instrument.
-- `_bmad-output/implementation-artifacts/10-7-the-sun-lights-the-valley.md` — Task 1–2 record.
+- `_bmad-output/implementation-artifacts/10-7-signoff/control-client-a.png`,
+  `control-client-b.png`, `candidate-client-a.png`, `candidate-client-b.png`,
+  `candidate-client-subdiv2.png` — AC4's client captures and the both-render-paths confirmation.
+- `_bmad-output/implementation-artifacts/10-7-signoff/lumstats.py`, `pixel_diff.py` — colour-type
+  guard; they raise instead of misparsing a non-RGB frame.
+- `_bmad-output/implementation-artifacts/10-7-signoff/task-7-vehicle-runbook.md` — NEW, the card
+  for UX-DR22's closing half.
+- `_bmad-output/implementation-artifacts/deferred-work.md` — the pre-existing near-white breach
+  filed as its own defect.
+- `_bmad-output/implementation-artifacts/10-7-the-sun-lights-the-valley.md` — the story record.
