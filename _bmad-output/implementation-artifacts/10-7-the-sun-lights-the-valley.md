@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.7: The Sun Lights The Valley
 
-Status: ready-for-dev
+Status: in-progress
 
 **RUNS BEFORE 10.5.** See "Why this is before the dwarves". The board's key is placed above
 10.5 deliberately, because this board's next-story rule reads top to bottom and a prose ruling
@@ -155,15 +155,15 @@ asking for judgement. Same shape here, one level up.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Decouple the sun from the aurora** (AC: 6; Wolf's ruling 2)
-  - [ ] Add a sun transform with its own elevation constant in `crates/gui/src/atmosphere.rs`.
+- [x] **Task 1 — Decouple the sun from the aurora** (AC: 6; Wolf's ruling 2)
+  - [x] Add a sun transform with its own elevation constant in `crates/gui/src/atmosphere.rs`.
         `aurora_light_transform()` is used at exactly one site, `crates/gui/src/ingest.rs:859` —
         `rg -n 'aurora_light_transform' --type rust` before and after to confirm you moved the
         only caller.
-  - [ ] `aurora_core()` keeps its other two uses (`atmosphere.rs:342` frustum check, and the
+  - [x] `aurora_core()` keeps its other two uses (`atmosphere.rs:342` frustum check, and the
         curtain's bright point). Do **not** change the curtain's geometry: `AURORA_BOTTOM`,
         `AURORA_TOP` and `AURORA_RADIUS` are the curtain's, and they stay.
-  - [ ] Replace the self-referential assertion at `atmosphere.rs:361-368` (premise 3). It must not
+  - [x] Replace the self-referential assertion at `atmosphere.rs:361-368` (premise 3). It must not
         derive its expected value from the sun constant.
 
 - [ ] **Task 2 — Bench the control and at least one candidate elevation** (AC: 2, 3)
@@ -378,13 +378,47 @@ says so.
 |---|---|
 | 2026-09-03 | Story created out of 10.4's vehicle sitting, on Wolf's instruction ("write sun story so we don't forget it"). Evidence complete and measured; rulings and context pass outstanding. |
 | 2026-09-03 | Context pass. Five premises re-verified on `47139fa`: the defect is a DIRECTION not a position (Bevy ignores a directional light's translation), the bench carries the same wrong sun and is pinned to it, the existing direction test is self-referential, and `NEAR_WHITE_AREA_CEILING` is already breached with `gui --headless --capture` already exiting 101 on `main`. Wolf's three rulings recorded: bench the elevation, decouple sun from aurora, re-tune nothing else. ACs firmed 6 → 9; tasks, dev notes and an executed verification recipe added. `baseline_commit` corrected `e930d07` → `47139fa` (it was 5 commits stale, and AC1 grades the diff from it). Status → ready-for-dev. |
+| 2026-09-03 | Task 1 complete: separated the directional-light travel vector from the aurora, preserved the shipped direction, locked client and bench sun constants together, and recorded three KILLED mutations. |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+GPT-5.6 (Codex)
+
 ### Debug Log References
+
+- Task 1 RED: `cargo test --offline -p gui the_aurora_curtain_hugs_the_horizon_beyond_the_world`
+  initially failed with `unresolved import super::sun_direction`.
+- Direction equivalence: old `aurora_light_transform().forward()` = `(0.760800, 0.111784,
+  0.639287)`; new `sun_direction()` = `(0.760799, 0.111783, 0.639288)`; maximum component delta
+  `0.00000074`.
+- Mutations: KILLED — `sun direction returns to the aurora-to-camp aim` by
+  `the_aurora_curtain_hugs_the_horizon_beyond_the_world`; KILLED — `bench sun elevation diverges
+  from the client` by `bench_literals_match_the_client_palette_lights_and_boot_camera`; KILLED —
+  `bench sun travels downward at the shipped elevation` by
+  `ValleyFramingTests.test_sun_is_aimed_the_way_the_client_aims_it`.
+- Full `scripts/gate.sh`: GREEN (fmt, clippy, full cargo test, dependency probes, metrics, bench
+  tests, and mutation-table audit all passed).
 
 ### Completion Notes List
 
+- Task 1 complete: decoupled the directional-light transform from the aurora, preserving the
+  shipped direction until Wolf selects an elevation. The bench reads the matching module-scope
+  constants at call time. The bench shipped-elevation assertion intentionally remains upward and
+  must move with the approved elevation in Task 4.
+- Re-anchored 10.1's hand-picked-sun mutation row to the new bench formula after the global
+  mutation audit correctly detected its removed seam.
+
 ### File List
+
+- `crates/gui/src/atmosphere.rs` — sun direction/transform and independent shipped-vector test.
+- `crates/gui/src/ingest.rs` — use the decoupled sun transform.
+- `crates/gui/tests/bench_contract.rs` — lockstep sun-value anchors.
+- `scripts/bench/valley_bench.py` — matching module-scope sun constants and formula.
+- `scripts/tests/test_valley_bench.py` — decoupled shipped-elevation oracle.
+- `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh` — Task 1
+  mutation evidence.
+- `_bmad-output/implementation-artifacts/mutations/10-1-the-headless-bench.sh` — re-anchored
+  stale sun-formula row.
+- `_bmad-output/implementation-artifacts/10-7-the-sun-lights-the-valley.md` — Task 1 record.

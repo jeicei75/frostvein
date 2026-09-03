@@ -100,9 +100,9 @@ PY
 mutation "hand-picked sun aim fails the client-aim test" py scripts.tests.test_valley_bench.ValleyFramingTests.test_sun_is_aimed_the_way_the_client_aims_it <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/valley_bench.py'); s = p.read_text()
-old = '    return vector_normalize(vector_subtract(CAMP_FOCUS, aurora_core()))'
+old = '        math.cos(azimuth) * horizontal,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    return (0.044, -0.637, -0.770)'))
+p.write_text(s.replace(old, '        0.044,\n'))
 PY
 
 mutation "swallowed exception fails the broken-export test" py scripts.tests.test_valley_bench.ValleyBlenderTests.test_a_broken_export_exits_nonzero_instead_of_reporting_success <<'PY'
