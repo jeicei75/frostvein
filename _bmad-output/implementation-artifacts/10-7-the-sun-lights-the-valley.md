@@ -127,6 +127,9 @@ lighting and every one of those judgements is provisional until the sun is raise
 
 ## References
 
+- **`_bmad-output/implementation-artifacts/10-7-signoff/`** — the six captures behind the table
+  above, one per row, plus `lumstats.py` (the instrument that found this) and `pixel_diff.py` (the
+  one that could not). Committed because dwarf motion makes them unreproducible.
 - `_bmad-output/implementation-artifacts/deferred-work.md` — "Found while closing 10.4: THE SUN IS
   UNDER THE MAP (2026-09-03)", the full record with the falsified candidate.
 - `_bmad-output/implementation-artifacts/10-4-signoff/task-6-vehicle-runbook.md` — the sitting that
