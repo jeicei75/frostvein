@@ -177,10 +177,10 @@ asking for judgement. Same shape here, one level up.
   - [ ] Artifacts land in `_bmad-output/implementation-artifacts/10-7-signoff/` beside the six
         frames already there.
 
-- [ ] **Task 3 — Wolf judges, and the decision is recorded** (AC: 3, 9 opening half)
-  - [ ] Present control and candidates side by side, each with its `range-check:` line and its
+- [x] **Task 3 — Wolf judges, and the decision is recorded** (AC: 3, 9 opening half)
+  - [x] Present control and candidates side by side, each with its `range-check:` line and its
         elevation in degrees. Record the decision, the date, and the artifact it rests on.
-  - [ ] **Stop here until Wolf has ruled.** No client change before the opening half is signed.
+  - [x] **Stop here until Wolf has ruled.** No client change before the opening half is signed.
 
 - [ ] **Task 4 — Land the chosen elevation in client and bench together** (AC: 6)
   - [ ] Rust and Python in ONE commit. `bench_contract.rs:192-193` greps the client for
@@ -222,6 +222,36 @@ asking for judgement. Same shape here, one level up.
   - [ ] Full `scripts/gate.sh` green, pasted.
   - [ ] Hand Wolf a vehicle card in the shape of
         `10-4-signoff/task-6-vehicle-runbook.md` for the closing half.
+
+## THE RULING — Task 3, AC3, UX-DR22 opening half
+
+**Wolf chose `+17.66°` on 2026-09-03.** The sun's elevation constant becomes `17.66` in the client
+and the bench together.
+
+| | elevation | artifact | terrain_luma | whole-frame mean | distinct colours | px from control (d>=4) |
+|---|---:|---|---:|---:|---:|---:|
+| control | −6.42° | `control-shipped-minus6.42.png` | 105.853 | 75.435 | 59,190 | — |
+| candidate | +8.62° | `candidate-plus8.62.png` | 119.546 | 84.503 | 85,727 | 199,830 |
+| **CHOSEN** | **+17.66°** | **`candidate-plus17.66.png`** | **132.927** | **93.374** | **90,237** | **232,431** |
+| candidate | +25.87° | `candidate-plus25.87.png` | 143.913 | 100.564 | 89,906 | 253,437 |
+
+Every row carries its `range-check:` line in the Dev Agent Record. The control's was reproduced
+verbatim by an independent re-render whose PNG is bit-identical to the committed one (0 of 518,400
+pixels differ), so the separation column above is signal over a zero-pixel floor.
+
+**What the ruling rested on.** The three candidates were presented side by side with a
+hold-to-compare against the shipped control, at
+<https://claude.ai/code/artifact/89dbd61a-cd0f-476f-ae21-fe1c6bbe100a>, together with the figures
+above and the three judgement calls the numbers cannot settle: the campfire's standing as the
+valley's own light source, shadow length across the dig terraces, and the fact that these are
+Cycles renders pinned to the client's constants rather than frames the client drew.
+`+17.66°` was chosen as the elevation where directional modelling reads clearly — tree shadows on
+the slope, depth in the terraces — while the campfire still owns its pool of warm light, which
+`+25.87°` begins to take from it. It is also the elevation of the original Y=200 probe that proved
+the mechanism.
+
+**This is the OPENING half of UX-DR22 only.** The closing half needs Wolf's eye on the built result
+on the vehicle, against this approved artifact (Task 7).
 
 ## Dev Notes
 
@@ -381,6 +411,7 @@ says so.
 | 2026-09-03 | Task 1 complete: separated the directional-light travel vector from the aurora, preserved the shipped direction, locked client and bench sun constants together, and recorded three KILLED mutations. |
 | 2026-09-03 | Task 2 complete: captured the shipped control and +8.62°, +17.66°, and +25.87° bench candidates through an import-only elevation driver; each candidate's figures differ from the control. Pending Wolf's Task 3 ruling. |
 | 2026-09-03 | Run A (Tasks 1-2) delegated to Codex and KILLED mid-self-gate; commit cadence preserved all four commits. Orchestrator verified independently: gate GREEN 9/9, control re-rendered pixel-identical (0/518,400), candidates separated by 199,830-253,437 px at d>=4. Found that `lumstats.py` and `pixel_diff.py` silently misread RGBA PNGs (hardcoded `bpp=3`), which is why AC4's instrument must gain a colour-type assertion in Task 6. |
+| 2026-09-03 | **Task 3: Wolf ruled `+17.66°`** against the shipped `−6.42°` control and the `+8.62°` / `+25.87°` alternatives, on the side-by-side comparison of the four bench frames. UX-DR22 opening half signed; the closing half still needs his eye on the vehicle. |
 
 ## Dev Agent Record
 
