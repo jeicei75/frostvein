@@ -406,6 +406,39 @@ face again`, `the stone control stops hiding its face, so the test stops discrim
    control** — terrain-drawn stone above MUST hide that face, a mesh-drawn trunk must not. Same
    geometry, opposite correct answers, so the test discriminates instead of restating the mesher.
 
+
+## THE TOGGLES WERE INCOMPLETE, AND WOLF'S EYE FOUND IT AGAIN — 2026-09-03
+
+Wolf, using the new keys on the vehicle: *"if I turn all lights off there is still light emitter in
+the campfire's place .. turning campfire on/off gives more light so it's not stuck campfire"* — a
+correct diagnosis of someone else's bug, from the seat. **Two causes, both real, both now fixed.**
+
+1. **TORCHES WERE HARDCODED LIT.** The match arm read `protocol::LightKind::Torch => true`, and the
+   sim really does spawn torches (`sim-core/src/lib.rs:1573+`). So "everything off" never was. They
+   now have **F9** and their own readout entry.
+2. **A SOURCE OWNS TWO THINGS, and only one was switched.** Beside its `PointLight`, every
+   light-bearing entity carries an **emissive face** baked into its material at spawn from
+   `light_properties` (`project.rs:478`). Switching the light left the emitter glowing — exactly
+   "a light emitter in the campfire's place". Emissive now follows the toggle for both the campfire
+   and the torch materials.
+
+**The test gained what nothing had pinned: the RESTORE.** It pressed each key once and asserted the
+off-state only. Re-enabling a point light happened to work *by grace of* `flicker_projection`, which
+rewrites `intensity` from the base every frame inside `ProjectionSet` while the toggles run
+`.after(ProjectionSet)` — and the emissive has no such benefactor, so nothing would have caught it
+staying black. The test now toggles every source back on and asserts both the light and the emissive
+return. **Verified non-vacuous**: stubbing the emissive assignment reddens it on the exact
+assertion.
+
+**Mutation table 7/7 KILLED.** One row went NO-COMPILE first — its sabotage referenced a binding the
+torch refactor removed — which is the audit doing its job: *a row that cannot apply pins nothing,
+however green the story record reads*.
+
+**A correction, recorded because it was stated before it was checked:** the point-light branch
+writing `if !enabled { intensity = 0.0 }` with no `else` was called a one-way switch here. It is
+not. `flicker_projection` restores the base each frame before the toggle runs, so re-enabling works.
+It is fragile rather than broken, and the new restore assertion is what now holds it.
+
 ## Dev Notes
 
 ### Scope guardrails — do NOT
@@ -572,6 +605,7 @@ says so.
 | 2026-09-03 | Task 8 landed (F5 sun / F6 campfire / F7 lanterns / F8 ambient, on-screen readout). Its two capture-instrument panics and two stale cross-story mutation rows were fixed by the orchestrator; full gate GREEN. **AC11 measured on real frames: all four toggles work, but the AC's whole-frame 10x bar is the wrong instrument for the two local lights, and they confound each other** — the campfire reads inert until the lanterns are held off, then moves its own window 1.9x the local floor. Recorded with every figure. |
 | 2026-09-03 | Task 9 cause FOUND and a mechanism test landed RED-first: the mesher let a mesh-drawn tree cell suppress a face nothing then drew. Fix committed and the gate is GREEN, but `holes.py` (a new instrument, 2-pixel noise floor) shows it closes 486 px of hole and opens 1,370 at the world edges — net +884, so **AC12 is NOT met**. `--subdiv 1` is exactly unchanged at 11,174. The regression's cause is identified (the carving decision must keep the hole-free full-cube choice) and the blocker is that the test's oracle forces carving parity, so it cannot steer the remaining half. |
 | 2026-09-03 | **Tasks 8 and 9 complete; Status -> review.** Light toggles land on F5-F8 with an on-screen readout; AC11's permanent guard is the renderer-read component test on Wolf's ruling, with the frame measurements committed as evidence. AC12 met: the subdiv>1 holes are closed, interior-sky 12,722 -> 12,314 against a 12 px floor, subdiv 1 unchanged at 11,174 exactly. Mutation table 7/7 KILLED. Full gate GREEN. Two wrong turns recorded — a metric that lied in the flattering direction, and a unit oracle too strong to steer the fix. |
+| 2026-09-03 | **Wolf found the toggles incomplete from the seat**: torches were hardcoded lit and every light entity's emissive face kept glowing regardless. Torches get F9; emissive now follows the toggle for campfire and torch materials. The test gains the RESTORE, which nothing had pinned — re-enabling a point light worked only by grace of `flicker_projection`. Mutation table 7/7 KILLED, full gate GREEN. |
 
 ## Dev Agent Record
 

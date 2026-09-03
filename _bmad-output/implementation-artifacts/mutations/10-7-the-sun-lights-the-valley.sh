@@ -70,7 +70,7 @@ old = '''        if !point_light_enabled(&toggles, kind.0) {
         }
 '''
 assert s.count(old) == 1
-s = s.replace(old, '        let _ = enabled;\n')
+s = s.replace(old, '        let _ = (kind, &mut light);\n')
 p.write_text(s)
 PY
 
