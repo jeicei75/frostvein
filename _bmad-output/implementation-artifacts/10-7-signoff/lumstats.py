@@ -1,4 +1,10 @@
 import sys, zlib, struct
+
+
+class UnsupportedPngColourType(ValueError):
+    pass
+
+
 def load(p):
     d=open(p,'rb').read(); i=8; w=h=None; idat=b''
     while i < len(d):
@@ -6,6 +12,8 @@ def load(p):
         if typ==b'IHDR': w,h,bd,ct=struct.unpack('>IIBB',data[:10])
         elif typ==b'IDAT': idat+=data
         i+=12+ln
+    if ct != 2:
+        raise UnsupportedPngColourType(f"{p}: unsupported PNG colour type {ct}; expected RGB (2)")
     raw=zlib.decompress(idat); bpp=3; stride=w*bpp; out=bytearray(); prev=bytearray(stride); pos=0
     for y in range(h):
         f=raw[pos]; pos+=1; line=bytearray(raw[pos:pos+stride]); pos+=stride
