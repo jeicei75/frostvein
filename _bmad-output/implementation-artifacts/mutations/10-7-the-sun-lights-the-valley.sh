@@ -63,7 +63,9 @@ new = '''        light.brightness = night_lighting().ambient_brightness;
         light.illuminance = night_lighting().directional_illuminance;
 '''
 s = s.replace(old, new)
-old = '''        if !enabled {
+# RE-ANCHORED 2026-09-03: the point-light branch moved to a named predicate when torches got
+# their own toggle. Same seam, same sabotage — every source flips its flag and nothing dims.
+old = '''        if !point_light_enabled(&toggles, kind.0) {
             light.intensity = 0.0;
         }
 '''

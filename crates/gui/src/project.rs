@@ -468,6 +468,22 @@ fn terrain_standard_material(base_color: bevy::prelude::Color) -> StandardMateri
     }
 }
 
+impl ProjectionAssets {
+    /// The materials that carry an emissive glow, paired with the light whose colour they take.
+    ///
+    /// Toggling a source off must black these too. The emissive is baked at spawn from
+    /// `light_properties`, so a "campfire off" frame otherwise still shows the campfire GLOWING —
+    /// the residual emitter Wolf found on the vehicle with every toggle off. A point light and an
+    /// emissive face are two different things the same source owns; the instrument has to switch
+    /// both or it answers the wrong question.
+    pub fn emissive_materials(&self) -> [(protocol::LightKind, Handle<StandardMaterial>); 2] {
+        [
+            (protocol::LightKind::Torch, self.torch.clone()),
+            (protocol::LightKind::Campfire, self.campfire.clone()),
+        ]
+    }
+}
+
 fn entity_standard_material(kind: EntityKind) -> StandardMaterial {
     let mut material = StandardMaterial {
         base_color: entity_appearance(kind).color,

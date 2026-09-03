@@ -45,7 +45,7 @@ use client_core::Mirror;
 use protocol::{Delta, Dims, Snapshot};
 
 use crate::{
-    appearance::night_lighting,
+    appearance::{light_properties, night_lighting},
     atmosphere::{fall_snow, setup_atmosphere, sun_light_transform},
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
@@ -77,22 +77,32 @@ const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
 /// The four independently inspectable contributors to the rendered valley.
 ///
 /// This is deliberately a fixed seat-side instrument, not a lighting configuration surface:
-/// F5--F8 are the complete public control and their state lasts only for this client run.
+/// F5--F9 are the complete public control and their state lasts only for this client run.
+/// Torches are their own source because the sim really spawns them (`sim-core/src/lib.rs:1573+`)
+/// and they were previously hardcoded lit, so "everything off" still lit the camp.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LightSource {
     Sun,
     Campfire,
+    Torches,
     Lanterns,
     Ambient,
 }
 
 impl LightSource {
-    const ALL: [Self; 4] = [Self::Sun, Self::Campfire, Self::Lanterns, Self::Ambient];
+    const ALL: [Self; 5] = [
+        Self::Sun,
+        Self::Campfire,
+        Self::Torches,
+        Self::Lanterns,
+        Self::Ambient,
+    ];
 
     fn key(self) -> KeyCode {
         match self {
             Self::Sun => KeyCode::F5,
             Self::Campfire => KeyCode::F6,
+            Self::Torches => KeyCode::F9,
             Self::Lanterns => KeyCode::F7,
             Self::Ambient => KeyCode::F8,
         }
@@ -102,6 +112,7 @@ impl LightSource {
         match self {
             Self::Sun => "sun",
             Self::Campfire => "campfire",
+            Self::Torches => "torches",
             Self::Lanterns => "lanterns",
             Self::Ambient => "ambient",
         }
@@ -111,11 +122,12 @@ impl LightSource {
         match name {
             "sun" => Ok(Self::Sun),
             "campfire" => Ok(Self::Campfire),
+            "torches" => Ok(Self::Torches),
             "lanterns" => Ok(Self::Lanterns),
             "ambient" => Ok(Self::Ambient),
-            _ => {
-                bail!("unknown light source {name:?}; expected sun, campfire, lanterns, or ambient")
-            }
+            _ => bail!(
+                "unknown light source {name:?}; expected sun, campfire, torches, lanterns, or ambient"
+            ),
         }
     }
 }
@@ -124,6 +136,7 @@ impl LightSource {
 pub struct LightingToggles {
     sun: bool,
     campfire: bool,
+    torches: bool,
     lanterns: bool,
     ambient: bool,
 }
@@ -133,6 +146,7 @@ impl Default for LightingToggles {
         Self {
             sun: true,
             campfire: true,
+            torches: true,
             lanterns: true,
             ambient: true,
         }
@@ -144,6 +158,7 @@ impl LightingToggles {
         match source {
             LightSource::Sun => self.sun,
             LightSource::Campfire => self.campfire,
+            LightSource::Torches => self.torches,
             LightSource::Lanterns => self.lanterns,
             LightSource::Ambient => self.ambient,
         }
@@ -153,6 +168,7 @@ impl LightingToggles {
         match source {
             LightSource::Sun => self.sun = !self.sun,
             LightSource::Campfire => self.campfire = !self.campfire,
+            LightSource::Torches => self.torches = !self.torches,
             LightSource::Lanterns => self.lanterns = !self.lanterns,
             LightSource::Ambient => self.ambient = !self.ambient,
         }
@@ -983,7 +999,8 @@ fn lighting_readout(toggles: &LightingToggles) -> String {
                     KeyCode::F6 => "F6",
                     KeyCode::F7 => "F7",
                     KeyCode::F8 => "F8",
-                    _ => unreachable!("the fixed lighting keys are F5 through F8"),
+                    KeyCode::F9 => "F9",
+                    _ => unreachable!("the fixed lighting keys are F5 through F9"),
                 },
                 source.name(),
                 if toggles.enabled(source) { "on" } else { "off" }
@@ -1039,6 +1056,8 @@ fn apply_lighting_toggles(
         &crate::project::ProjectedLight,
         &mut bevy::prelude::PointLight,
     )>,
+    assets: Option<Res<crate::project::ProjectionAssets>>,
+    mut materials: Option<ResMut<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>>,
 ) {
     for mut light in &mut ambient {
         light.brightness = if toggles.enabled(LightSource::Ambient) {
@@ -1055,14 +1074,33 @@ fn apply_lighting_toggles(
         };
     }
     for (kind, mut light) in &mut points {
-        let enabled = match kind.0 {
-            protocol::LightKind::Campfire => toggles.enabled(LightSource::Campfire),
-            protocol::LightKind::Lantern => toggles.enabled(LightSource::Lanterns),
-            protocol::LightKind::Torch => true,
-        };
-        if !enabled {
+        if !point_light_enabled(&toggles, kind.0) {
             light.intensity = 0.0;
         }
+    }
+    // The emissive FACE is a second thing the same source owns, baked at spawn from
+    // `light_properties`. Switching only the point light leaves the emitter glowing, which is
+    // what "everything off and the campfire still lights" looked like on the vehicle.
+    let (Some(assets), Some(materials)) = (assets, materials.as_deref_mut()) else {
+        return;
+    };
+    for (kind, handle) in assets.emissive_materials() {
+        let Some(mut material) = materials.get_mut(&handle) else {
+            continue;
+        };
+        material.emissive = if point_light_enabled(&toggles, kind) {
+            light_properties(kind).color.to_linear()
+        } else {
+            bevy::color::LinearRgba::BLACK
+        };
+    }
+}
+
+fn point_light_enabled(toggles: &LightingToggles, kind: protocol::LightKind) -> bool {
+    match kind {
+        protocol::LightKind::Campfire => toggles.enabled(LightSource::Campfire),
+        protocol::LightKind::Lantern => toggles.enabled(LightSource::Lanterns),
+        protocol::LightKind::Torch => toggles.enabled(LightSource::Torches),
     }
 }
 
@@ -1587,7 +1625,7 @@ mod tests {
             super::LightSource::from_name("moon")
                 .unwrap_err()
                 .to_string(),
-            "unknown light source \"moon\"; expected sun, campfire, lanterns, or ambient"
+            "unknown light source \"moon\"; expected sun, campfire, torches, lanterns, or ambient"
         );
     }
 
@@ -1642,11 +1680,12 @@ mod tests {
 
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F7 lanterns on  F8 ambient on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on"
         );
         for (key, source) in [
             (KeyCode::F5, super::LightSource::Sun),
             (KeyCode::F6, super::LightSource::Campfire),
+            (KeyCode::F9, super::LightSource::Torches),
             (KeyCode::F7, super::LightSource::Lanterns),
             (KeyCode::F8, super::LightSource::Ambient),
         ] {
@@ -1660,7 +1699,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F7 lanterns off  F8 ambient off"
+            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off"
         );
 
         assert_eq!(
@@ -1702,6 +1741,67 @@ mod tests {
             intensity(protocol::LightKind::Lantern),
             0.0,
             "F7 must remove lantern pixels"
+        );
+
+        // THE EMISSIVE FACE, not just the light. Wolf found this on the vehicle: with every
+        // toggle off the campfire's place still glowed, because the emissive is baked into the
+        // entity material at spawn and no toggle touched it. A source owns both.
+        let emissive = |app: &mut App, kind| {
+            let handle = app
+                .world()
+                .resource::<crate::project::ProjectionAssets>()
+                .emissive_materials()
+                .into_iter()
+                .find_map(|(actual, handle)| (actual == kind).then_some(handle))
+                .expect("the named emissive material must exist");
+            app.world()
+                .resource::<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>()
+                .get(&handle)
+                .expect("the material handle must resolve")
+                .emissive
+        };
+        assert_eq!(
+            emissive(&mut app, protocol::LightKind::Campfire),
+            bevy::color::LinearRgba::BLACK,
+            "F6 must black the campfire's emissive face, not only its point light"
+        );
+        assert_eq!(
+            emissive(&mut app, protocol::LightKind::Torch),
+            bevy::color::LinearRgba::BLACK,
+            "F9 must black the torch emissive faces"
+        );
+
+        // AND IT MUST COME BACK. Nothing pinned the restore before: point-light intensity is
+        // rewritten every frame by `flicker_projection` inside `ProjectionSet`, so re-enabling
+        // worked only by that grace, and the emissive has no such benefactor at all.
+        for (key, _) in [
+            (KeyCode::F5, ()),
+            (KeyCode::F6, ()),
+            (KeyCode::F9, ()),
+            (KeyCode::F7, ()),
+            (KeyCode::F8, ()),
+        ] {
+            press(&mut app, key);
+        }
+        assert_eq!(
+            readout(&mut app),
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on"
+        );
+        assert_eq!(
+            emissive(&mut app, protocol::LightKind::Campfire),
+            crate::appearance::light_properties(protocol::LightKind::Campfire)
+                .color
+                .to_linear(),
+            "toggling the campfire back on must restore its emissive face"
+        );
+        assert_ne!(
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::DirectionalLight, With<super::SunLight>>()
+                .single(app.world())
+                .unwrap()
+                .illuminance,
+            0.0,
+            "toggling the sun back on must restore the directional light"
         );
     }
 
@@ -1889,7 +1989,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F7 lanterns on  F8 ambient on".to_string(),
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on".to_string(),
         ];
         expected.sort();
         assert_eq!(
