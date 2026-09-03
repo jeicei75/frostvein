@@ -28,11 +28,18 @@ def load(p):
                 line[x]=(line[x]+pr)&255
         out+=line; prev=line
     return w,h,bytes(out)
-for path,label in [(a.split('=')[0], a.split('=')[1]) for a in sys.argv[1:]]:
-    w,h,px = load(path)
-    n = w*h; tot=0; hist=[0]*256
-    for i in range(0,len(px),3):
-        l = (px[i]*299 + px[i+1]*587 + px[i+2]*114)//1000
-        tot += l; hist[l]+=1
-    dark = sum(hist[:40]); mid = sum(hist[40:90])
-    print(f"{label:<22} mean={tot/n:7.3f}  dark(<40)={dark:>7,} ({100*dark/n:5.2f}%)  shade-band(40-89)={mid:>7,} ({100*mid/n:5.2f}%)")
+# Guarded so `holes.py` can import `load` without this CLI loop running on ITS argv — an
+# unguarded import printed both instruments' output from one invocation.
+def main():
+  for path,label in [(a.split('=')[0], a.split('=')[1]) for a in sys.argv[1:]]:
+      w,h,px = load(path)
+      n = w*h; tot=0; hist=[0]*256
+      for i in range(0,len(px),3):
+          l = (px[i]*299 + px[i+1]*587 + px[i+2]*114)//1000
+          tot += l; hist[l]+=1
+      dark = sum(hist[:40]); mid = sum(hist[40:90])
+      print(f"{label:<22} mean={tot/n:7.3f}  dark(<40)={dark:>7,} ({100*dark/n:5.2f}%)  shade-band(40-89)={mid:>7,} ({100*mid/n:5.2f}%)")
+
+
+if __name__ == "__main__":
+    main()

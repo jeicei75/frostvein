@@ -87,10 +87,8 @@ PY
 mutation "cross-cell connectors are dropped and the fine surface cracks" gui project::tests::the_fine_mesher_reproduces_the_benchs_staircase_counts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-# RE-ANCHORED 2026-09-03 (story 10.7): column_heights gained the `cover` argument when the
-# terrain mesher learned that a mesh-drawn tree occludes nothing. Same seam, same sabotage.
 old = """            let other = solid
-                .then(|| column_heights(mirror, neighbour, subdiv, level, cover))
+                .then(|| column_heights(mirror, neighbour, subdiv, level))
                 .flatten();"""
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            let other = None;'))
@@ -201,8 +199,7 @@ PY
 mutation "snow paint leaks onto the sides of capped rock" gui project::tests::a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-# RE-ANCHORED 2026-09-03 (story 10.7): column_heights gained the `cover` argument.
-old = "        let owner = FaceOwner::new(mirror, position);\n        let own = column_heights(mirror, position, subdiv, level, cover);"
+old = "        let owner = FaceOwner::new(mirror, position);\n        let own = column_heights(mirror, position, subdiv, level);"
 assert s.count(old) == 1
 p.write_text(s.replace(old, """        let owner = FaceOwner {
             chunk: chunk_of(position),

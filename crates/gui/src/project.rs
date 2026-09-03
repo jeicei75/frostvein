@@ -595,16 +595,18 @@ fn column_heights(
     position: [i32; 3],
     subdiv: i32,
     level: i32,
-    cover: &TreeCover,
 ) -> Option<Vec<i32>> {
     let above = [position[0], position[1], position[2] + 1];
     // Foliage keeps the shipped whole-cube path, so it is never carved -- and therefore never
     // uncovers a neighbour either. Carving it emitted faces on the rock behind an opaque cube,
     // and made 9 tree trunks fully enclosed by their own crown look like exposed surface.
-    if subdiv == 1
-        || occludes_terrain(mirror, above, level, cover)
-        || is_tree_foliage(mirror, position)
-    {
+    // DELIBERATELY plain `occludes`, not `occludes_terrain`. `None` here means "do not carve,
+    // draw the full cube", which is the hole-FREE answer. Routing this decision through the
+    // tree-aware occluder made cells under a mesh tree carry detail pits instead of a solid top
+    // and measured 1,370 NEW interior-sky pixels at the world edges against a 2-pixel noise
+    // floor -- more holes, not fewer. The tree-aware occluder belongs on the face-EMISSION
+    // decisions below, where suppressing a face is what leaves nothing drawn.
+    if subdiv == 1 || occludes(mirror, above, level) || is_tree_foliage(mirror, position) {
         return None;
     }
     let plane = (position[2] + 1) * subdiv;
@@ -758,7 +760,7 @@ fn build_chunk_meshes(
             continue;
         }
         let owner = FaceOwner::new(mirror, position);
-        let own = column_heights(mirror, position, subdiv, level, cover);
+        let own = column_heights(mirror, position, subdiv, level);
 
         let above = [position[0], position[1], position[2] + 1];
         if !occludes_terrain(mirror, above, level, cover) {
@@ -806,7 +808,7 @@ fn build_chunk_meshes(
             neighbour[axis] += sign;
             let solid = occludes_terrain(mirror, neighbour, level, cover);
             let other = solid
-                .then(|| column_heights(mirror, neighbour, subdiv, level, cover))
+                .then(|| column_heights(mirror, neighbour, subdiv, level))
                 .flatten();
             // Only paid for when this cell's pit actually uncovers the neighbour.
             let mut neighbour_owner = None;
@@ -2994,14 +2996,55 @@ mod tests {
             "the fixture is only meaningful if a mesh actually carries the trunk"
         );
 
-        let bare_ground = world(dims, bare);
-        assert_eq!(
-            fine_geometry(&with_tree, 2),
-            fine_geometry(&bare_ground, 2),
-            "a mesh-drawn tree must neither add terrain faces nor hide any: the terrain around \
-             it must match the same world with the tree cells empty, or the face it suppressed \
-             is drawn by nothing and reads as a hole to the sky"
+        // A STONE column in the same place is the control, and it is what makes this a
+        // discriminating test rather than a tautology: stone above IS drawn by the terrain, so
+        // suppressing the face beneath it is correct. The mesh tree is not drawn by the terrain,
+        // so suppressing the same face is a hole. Same geometry, opposite correct answers.
+        let mut stone = bare.clone();
+        for z in 1..5 {
+            stone[at(1, 1, z)] = Tile::Solid(protocol::Material::Stone);
+        }
+        let with_stone = world(dims, stone);
+
+        assert!(
+            !top_face_exists(&with_stone, 2, [1, 1, 0]),
+            "terrain-drawn stone above SHOULD hide the face beneath it -- if this fails the \
+             control is wrong and the assertion below proves nothing"
         );
+        assert!(
+            top_face_exists(&with_tree, 2, [1, 1, 0]),
+            "the cell beneath a MESH-drawn trunk must keep its top face: the mesh does not draw \
+             terrain, so a face suppressed here is drawn by nothing and reads as sky"
+        );
+    }
+
+    /// Does the terrain mesher emit a top face on the plane above `cell`? Asked of the emitted
+    /// masks, not of a face count -- AC12 is about what is DRAWN, and a count cannot tell a
+    /// missing face from a differently-merged one. `axis 2, sign +1` is the +Z plane; for that
+    /// axis the mask's `(u, v)` are fine x and y (`emit_quad`'s corner mapping).
+    fn top_face_exists(mirror: &Mirror, subdiv: i32, cell: [i32; 3]) -> bool {
+        let level = mirror.dims().z.saturating_sub(1) as i32;
+        let positions = terrain_positions_at(mirror, level);
+        let plane = (cell[2] + 1) * subdiv;
+        let us = (cell[0] * subdiv)..(cell[0] * subdiv + subdiv);
+        let vs = (cell[1] * subdiv)..(cell[1] * subdiv + subdiv);
+        build_chunk_meshes(
+            mirror,
+            &positions,
+            subdiv,
+            level,
+            None,
+            &tree_cover_at(mirror, level),
+        )
+        .values()
+        .any(|chunk_mesh| {
+            chunk_mesh.masks.iter().any(|(key, mask)| {
+                key.axis == 2
+                    && key.sign == 1
+                    && key.plane == plane
+                    && mask.iter().any(|(u, v)| us.contains(u) && vs.contains(v))
+            })
+        })
     }
 
     /// `--subdiv N > 1` draws no `TerrainTile`, which is what broke the capture's draw-set
@@ -3041,8 +3084,7 @@ mod tests {
             assert!(
                 [[-1, 0], [1, 0], [0, -1], [0, 1]].iter().any(|[dx, dy]| {
                     let side = [cell[0] + dx, cell[1] + dy, cell[2]];
-                    column_heights(&mirror, side, 4, level, &tree_cover_at(&mirror, level))
-                        .is_some()
+                    column_heights(&mirror, side, 4, level).is_some()
                 }),
                 "{cell:?} is buried and has no carved neighbour to uncover it"
             );
