@@ -1726,3 +1726,63 @@ so confirm rather than assume — capture at both and say so."* Both captures we
 triangles=151062` — **the counts, never the picture**. The artifact was sitting in the story's own
 committed evidence for the whole review window. Counts are winding-blind and they are lighting-blind
 too; a "capture both and confirm" subtask needs an assertion about the PIXELS, not the geometry.
+
+## Found while closing 10.7: the metrics ledger's quota column is the WRONG WINDOW (2026-09-03)
+
+**`session_tokens.py` reads `rate_limits.primary.used_percent` and labels it the weekly quota.**
+On this account `primary` is the **300-minute (5-hour)** window and `secondary` is the
+**10080-minute (7-day)** one — read straight off a live rollout:
+
+```
+"primary":   {"used_percent": 0.0,  "window_minutes": 300,   "resets_at": 1788451268}
+"secondary": {"used_percent": 67.0, "window_minutes": 10080, "resets_at": 1788766582}
+```
+
+So **every `quota_pp` figure in every metrics file is the 5-hour number wearing the weekly label.**
+Measured on 10.7's two dev runs: the ledger rows read `23pp` and `22pp`; the weekly window actually
+moved `67% -> 70%` and `70% -> 74%`, i.e. **3 and 4 points**. The 5-hour figures were right; the
+column heading and the docstring at `_bmad/scripts/session_tokens.py:281` are wrong.
+
+**Why this matters beyond tidiness.** `quota_pp` exists because it is *the axis that actually binds*
+for Codex — the ledger header says so explicitly and tells readers `est_usd` is not a substitute.
+A story that reads "burned 23 points of the weekly quota" when it burned 3 will make scheduling
+decisions that are wrong by 8x, in the cautious direction.
+
+**AND IT MAY HAVE ALREADY DONE SO.** Story 8.2's record says *"THIS STORY CONSUMED THE ENTIRE
+WEEKLY CODEX QUOTA: 0% -> 100%"*, and the Epic 3 retro says 3.2 ate *"~51-60 percentage points of a
+full week's quota"* and blocked the next story's dev for six days. **If those readings came from
+`primary`, they were 5-hour windows and both conclusions are overstated** — though the six-day block
+is real and fits a weekly exhaustion, so this is a question to settle, not an answer. **NOT YET
+CHECKED**: read `secondary.used_percent` from 8.2's and 3.2's rollouts directly; do not re-derive
+it from the ledger, which is the thing under suspicion.
+
+**Fix is small and has a trap.** Report both windows, named by their `window_minutes` rather than by
+position — `primary`/`secondary` are an ordering, not a meaning, and a plan change could swap them.
+The tests pin a real rollout line verbatim (deliberately), so extend that fixture rather than
+writing a synthetic one.
+
+## Proposed instrument, out of 10.7's vehicle sitting: per-source light toggles (2026-09-03)
+
+Wolf, 2026-09-03: *"maybe to be test more we should be able to turn on/off different light sources
+separately?"* **Recommended, and the case is now concrete rather than speculative.**
+
+Today the only way to attribute a lighting effect is to **delete a light and rebuild** — which is
+literally how the sun-under-the-map defect was found ("deleting it entirely moves the frame LESS
+than run-to-run noise"). That is a source edit, a rebuild and a fresh capture per question.
+
+**Three concrete uses already exist, which is what clears the YAGNI bar** (no abstraction before a
+third case):
+1. **10.7's own black-quad defect** — is it the sun's shadow map, or the campfire/lantern
+   `PointLight`s? One run with only the sun on answers it. Currently: two rebuilds.
+2. **The deferred ambient-balance question** — 10.7 was forbidden from touching
+   `ambient_brightness`/`directional_illuminance` because ambient cannot be judged until the sun is
+   up. It is up now, and separating ambient from directional is exactly this flag.
+3. **Wolf's own reading at the sitting** — *"camp fire and lanterns are lighting I think"* was a
+   hypothesis he could not test from the seat. This turns it into one run.
+
+**Shape, and keep it this small:** a `--lights <list>` flag naming which sources are active
+(`sun`, `campfire`, `lanterns`, `ambient`), defaulting to all. It is an instrument, **not** a config
+system — no file, no plugin, no runtime toggling. **Its own test is not optional** (this project's
+instrument rule): each named source, switched off alone, must measurably change the frame, and the
+flag must reject a name it does not know rather than silently ignoring it. An untested instrument
+manufactures false evidence rather than merely missing true evidence.
