@@ -443,6 +443,12 @@ It is fragile rather than broken, and the new restore assertion is what now hold
 
 ### Scope guardrails — do NOT
 
+- **Do NOT treat the snow/rock flank divergence as this story's.** A snow cell's vertical faces are
+  snow at `--subdiv 1` and rock at `--subdiv > 1` — each path behaving as designed, measured and
+  filed in `deferred-work.md` § "THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S FLANKS". **Wolf saw it
+  on 2026-09-03 and deferred it deliberately**: *"need to think how snow and rock will work together
+  in some other story not this"*. It predates 10.7 on both paths and nothing here changed it.
+
 - **Do not re-tune any other look constant.** Wolf's ruling 3. 9.1's blow-out work, 9.4's tree
   colours, 10.3's rules of the look, 10.4's tree judgement: all were tuned with the sun off, all
   stay as they are. Raising the sun moves the ground they stand on; re-judging them is a later

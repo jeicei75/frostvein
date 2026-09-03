@@ -1871,6 +1871,11 @@ that is now one keypress.
 
 ## Found at 10.7's second sitting: THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S FLANKS (2026-09-03)
 
+**DEFERRED BY WOLF, 2026-09-03: *"need to think how snow and rock will work together in some other
+story not this"*. This is NOT 10.7's and is not an open defect in it. It is a look question awaiting
+Wolf's thinking, and it gets its own story when he has decided what he wants. A reviewer meeting the
+dark flanks at `--subdiv > 1` should read this entry and move on rather than filing it again.**
+
 Wolf, on the fixed subdiv-2 build: *"still bottom of the blocks have different color than rest of
 the blocks with higher subdiv .. maybe it is in purpose?"* **Half on purpose, and that is the
 problem.** Measured in one terrace region (140x90 px), by palette rather than by eye:
