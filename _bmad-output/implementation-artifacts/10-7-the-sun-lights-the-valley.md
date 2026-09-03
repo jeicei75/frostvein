@@ -380,6 +380,7 @@ says so.
 | 2026-09-03 | Context pass. Five premises re-verified on `47139fa`: the defect is a DIRECTION not a position (Bevy ignores a directional light's translation), the bench carries the same wrong sun and is pinned to it, the existing direction test is self-referential, and `NEAR_WHITE_AREA_CEILING` is already breached with `gui --headless --capture` already exiting 101 on `main`. Wolf's three rulings recorded: bench the elevation, decouple sun from aurora, re-tune nothing else. ACs firmed 6 → 9; tasks, dev notes and an executed verification recipe added. `baseline_commit` corrected `e930d07` → `47139fa` (it was 5 commits stale, and AC1 grades the diff from it). Status → ready-for-dev. |
 | 2026-09-03 | Task 1 complete: separated the directional-light travel vector from the aurora, preserved the shipped direction, locked client and bench sun constants together, and recorded three KILLED mutations. |
 | 2026-09-03 | Task 2 complete: captured the shipped control and +8.62°, +17.66°, and +25.87° bench candidates through an import-only elevation driver; each candidate's figures differ from the control. Pending Wolf's Task 3 ruling. |
+| 2026-09-03 | Run A (Tasks 1-2) delegated to Codex and KILLED mid-self-gate; commit cadence preserved all four commits. Orchestrator verified independently: gate GREEN 9/9, control re-rendered pixel-identical (0/518,400), candidates separated by 199,830-253,437 px at d>=4. Found that `lumstats.py` and `pixel_diff.py` silently misread RGBA PNGs (hardcoded `bpp=3`), which is why AC4's instrument must gain a colour-type assertion in Task 6. |
 
 ## Dev Agent Record
 
@@ -418,6 +419,38 @@ GPT-5.6 (Codex)
 - Task 2 complete: exported a tick-21 snapshot and rendered the shipped control plus +8.62°,
   +17.66°, and +25.87° candidates through an import-only driver. Each candidate's range-check
   figures differs from the control's; Wolf's Task 3 decision remains outstanding.
+
+**Orchestrator (Claude) independent verification of Run A, 2026-09-03.** Codex's exit was not
+trusted; every claim below was re-run here.
+
+- **The delegated run was KILLED by the devpod execution layer mid-self-gate** (empty last-message
+  file, log truncated inside a `codex review` diff). The commit-cadence floor paid for itself for
+  the third time on this project: four commits had already landed, so nothing was lost. The two
+  `401` hits in the log are false positives — the handoff text echoed back, and a line number.
+- **Full `scripts/gate.sh` re-run by the orchestrator: GREEN, 9/9, no skips.**
+- **The control artifact was re-rendered independently and is PIXEL-IDENTICAL** to the committed
+  one: `0` of 518,400 pixels differ, and the `range-check:` line reproduces verbatim —
+  `range-check: blender=5.2.1 exposed_cells=44984 non_sky_fraction=0.686736 distinct_colors=59190
+  terrain_luma=105.853 floors(non_sky_fraction=0.020000, distinct_colors=32, terrain_luma=20.000)`.
+  AC2's "one treatment photographed twice" risk is closed by measurement, not by inspection.
+- **Candidate separation against a zero-pixel same-build floor** (control vs candidate, `d>=4`):
+  +8.62° = 199,830 px, +17.66° = 232,431 px, +25.87° = 253,437 px. Monotonic, and enormous
+  against the 0-pixel reproduction floor above.
+- **Both bench figures are monotonic in elevation**, recomputed here from the saved PNGs rather
+  than taken from the run: `terrain_luma` 105.853 -> 119.546 -> 132.927 -> 143.913, and whole-frame
+  Rec.601 mean 75.435 -> 84.503 -> 93.374 -> 100.564.
+
+**INSTRUMENT DEFECT FOUND, and it lies rather than dying — `lumstats.py` (AC4's instrument) and
+`pixel_diff.py` both hardcode `bpp=3` and never read the PNG's colour type.** The bench writes
+**RGBA** (colour type 6); client captures are **RGB** (colour type 2). Run on the bench frames,
+`lumstats.py` misparses every scanline and returns plausible, wrong, NON-MONOTONIC figures
+(mean 68.266 -> 69.065 -> 67.882 -> 66.981) for frames whose true ladder is cleanly monotonic.
+It caught the orchestrator first: the two instruments appeared to disagree about the direction of
+the effect, and the disagreement was entirely this bug. The story's creation-time REDs proved
+`lumstats.py` dies on a truncated frame and reports an all-black frame honestly; a **third**
+direction — a frame whose colour type it does not support — was never tested, and there it is
+believed. Its own job (AC4, client captures) is RGB and is unaffected today, but nothing in the
+file enforces that. **Task 6 must make it assert its colour type before it is used as evidence.**
 
 ### File List
 
