@@ -74,6 +74,91 @@ const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const MESSAGE_QUEUE: usize = 16;
 const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
 
+/// The four independently inspectable contributors to the rendered valley.
+///
+/// This is deliberately a fixed seat-side instrument, not a lighting configuration surface:
+/// F5--F8 are the complete public control and their state lasts only for this client run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LightSource {
+    Sun,
+    Campfire,
+    Lanterns,
+    Ambient,
+}
+
+impl LightSource {
+    const ALL: [Self; 4] = [Self::Sun, Self::Campfire, Self::Lanterns, Self::Ambient];
+
+    fn key(self) -> KeyCode {
+        match self {
+            Self::Sun => KeyCode::F5,
+            Self::Campfire => KeyCode::F6,
+            Self::Lanterns => KeyCode::F7,
+            Self::Ambient => KeyCode::F8,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Sun => "sun",
+            Self::Campfire => "campfire",
+            Self::Lanterns => "lanterns",
+            Self::Ambient => "ambient",
+        }
+    }
+
+    pub fn from_name(name: &str) -> anyhow::Result<Self> {
+        match name {
+            "sun" => Ok(Self::Sun),
+            "campfire" => Ok(Self::Campfire),
+            "lanterns" => Ok(Self::Lanterns),
+            "ambient" => Ok(Self::Ambient),
+            _ => {
+                bail!("unknown light source {name:?}; expected sun, campfire, lanterns, or ambient")
+            }
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct LightingToggles {
+    sun: bool,
+    campfire: bool,
+    lanterns: bool,
+    ambient: bool,
+}
+
+impl Default for LightingToggles {
+    fn default() -> Self {
+        Self {
+            sun: true,
+            campfire: true,
+            lanterns: true,
+            ambient: true,
+        }
+    }
+}
+
+impl LightingToggles {
+    fn enabled(&self, source: LightSource) -> bool {
+        match source {
+            LightSource::Sun => self.sun,
+            LightSource::Campfire => self.campfire,
+            LightSource::Lanterns => self.lanterns,
+            LightSource::Ambient => self.ambient,
+        }
+    }
+
+    fn toggle(&mut self, source: LightSource) {
+        match source {
+            LightSource::Sun => self.sun = !self.sun,
+            LightSource::Campfire => self.campfire = !self.campfire,
+            LightSource::Lanterns => self.lanterns = !self.lanterns,
+            LightSource::Ambient => self.ambient = !self.ambient,
+        }
+    }
+}
+
 pub enum WireMessage {
     Snapshot(Box<Snapshot>),
     Delta(Box<Delta>),
@@ -321,7 +406,7 @@ pub fn projection_systems(app: &mut App) {
     app.init_resource::<crate::project::TreeReportState>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<TickClock>()
-        .add_systems(Startup, setup_slice_readout)
+        .add_systems(Startup, (setup_slice_readout, setup_lighting_readout))
         .add_systems(
             Update,
             (
@@ -339,6 +424,12 @@ pub fn projection_systems(app: &mut App) {
         // half of the story the readout exists for. It must read the level AFTER the keyboard has
         // written it, or the displayed level trails the cut by one frame.
         .add_systems(Update, update_slice_readout.after(ProjectionSet));
+    app.add_systems(
+        Update,
+        (apply_lighting_toggles, update_lighting_readout)
+            .chain()
+            .after(ProjectionSet),
+    );
 }
 
 /// Everything `run()` registers besides the projection chain: the startup scene, the
@@ -360,7 +451,8 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
-        .init_resource::<DragAnchor>();
+        .init_resource::<DragAnchor>()
+        .init_resource::<LightingToggles>();
     app.add_systems(
         Startup,
         (
@@ -379,6 +471,7 @@ pub fn client_systems(app: &mut App) {
         Update,
         (
             camera_controls,
+            light_controls,
             update_fog_from_camera,
             toggle_overlay,
             fall_snow,
@@ -857,12 +950,113 @@ fn setup_night_lighting(mut commands: Commands) {
             ..Default::default()
         },
         sun_light_transform(),
+        SunLight,
         ClientLocal,
     ));
 }
 
 #[derive(Component)]
+struct SunLight;
+
+#[derive(Component)]
 pub struct SliceReadout;
+
+#[derive(Component)]
+pub struct LightingReadout;
+
+fn lighting_readout(toggles: &LightingToggles) -> String {
+    LightSource::ALL
+        .into_iter()
+        .map(|source| {
+            format!(
+                "{} {} {}",
+                match source.key() {
+                    KeyCode::F5 => "F5",
+                    KeyCode::F6 => "F6",
+                    KeyCode::F7 => "F7",
+                    KeyCode::F8 => "F8",
+                    _ => unreachable!("the fixed lighting keys are F5 through F8"),
+                },
+                source.name(),
+                if toggles.enabled(source) { "on" } else { "off" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
+fn setup_lighting_readout(mut commands: Commands, toggles: Res<LightingToggles>) {
+    commands.spawn((
+        Text::new(lighting_readout(&toggles)),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::srgb(0.86, 0.91, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(72),
+            left: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        LightingReadout,
+        ClientLocal,
+    ));
+}
+
+fn update_lighting_readout(
+    toggles: Res<LightingToggles>,
+    mut readout: Query<&mut Text, With<LightingReadout>>,
+) {
+    if !toggles.is_changed() {
+        return;
+    }
+    let text = lighting_readout(&toggles);
+    for mut readout in &mut readout {
+        *readout = Text::new(text.clone());
+    }
+}
+
+fn light_controls(keys: Res<ButtonInput<KeyCode>>, mut toggles: ResMut<LightingToggles>) {
+    for source in LightSource::ALL {
+        if keys.just_pressed(source.key()) {
+            toggles.toggle(source);
+        }
+    }
+}
+
+fn apply_lighting_toggles(
+    toggles: Res<LightingToggles>,
+    mut ambient: Query<&mut AmbientLight, With<Camera3d>>,
+    mut sun: Query<&mut DirectionalLight, With<SunLight>>,
+    mut points: Query<(
+        &crate::project::ProjectedLight,
+        &mut bevy::prelude::PointLight,
+    )>,
+) {
+    for mut light in &mut ambient {
+        light.brightness = if toggles.enabled(LightSource::Ambient) {
+            night_lighting().ambient_brightness
+        } else {
+            0.0
+        };
+    }
+    for mut light in &mut sun {
+        light.illuminance = if toggles.enabled(LightSource::Sun) {
+            night_lighting().directional_illuminance
+        } else {
+            0.0
+        };
+    }
+    for (kind, mut light) in &mut points {
+        let enabled = match kind.0 {
+            protocol::LightKind::Campfire => toggles.enabled(LightSource::Campfire),
+            protocol::LightKind::Lantern => toggles.enabled(LightSource::Lanterns),
+            protocol::LightKind::Torch => true,
+        };
+        if !enabled {
+            light.intensity = 0.0;
+        }
+    }
+}
 
 fn setup_slice_readout(
     mut commands: Commands,
@@ -1364,6 +1558,146 @@ mod tests {
     }
 
     #[test]
+    fn light_source_names_are_closed_and_an_unknown_one_is_refused_loudly() {
+        assert_eq!(
+            super::LightSource::from_name("sun").unwrap(),
+            super::LightSource::Sun
+        );
+        assert_eq!(
+            super::LightSource::from_name("campfire").unwrap(),
+            super::LightSource::Campfire
+        );
+        assert_eq!(
+            super::LightSource::from_name("lanterns").unwrap(),
+            super::LightSource::Lanterns
+        );
+        assert_eq!(
+            super::LightSource::from_name("ambient").unwrap(),
+            super::LightSource::Ambient
+        );
+        assert_eq!(
+            super::LightSource::from_name("moon")
+                .unwrap_err()
+                .to_string(),
+            "unknown light source \"moon\"; expected sun, campfire, lanterns, or ambient"
+        );
+    }
+
+    #[test]
+    fn lighting_keys_change_the_live_scene_and_its_readout() {
+        let snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![
+                protocol::Entity {
+                    id: 1,
+                    kind: protocol::EntityKind::Campfire,
+                    pos: [0, 0, 0],
+                    state: protocol::JobState::Idle,
+                    light: Some(protocol::LightKind::Campfire),
+                },
+                protocol::Entity {
+                    id: 2,
+                    kind: protocol::EntityKind::Dwarf,
+                    pos: [1, 0, 0],
+                    state: protocol::JobState::Idle,
+                    light: Some(protocol::LightKind::Lantern),
+                },
+            ],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
+        app.update();
+
+        let press = |app: &mut App, key| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(key);
+            keys.clear();
+        };
+        let readout = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::Text, With<super::LightingReadout>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone()
+        };
+
+        assert_eq!(
+            readout(&mut app),
+            "F5 sun on  F6 campfire on  F7 lanterns on  F8 ambient on"
+        );
+        for (key, source) in [
+            (KeyCode::F5, super::LightSource::Sun),
+            (KeyCode::F6, super::LightSource::Campfire),
+            (KeyCode::F7, super::LightSource::Lanterns),
+            (KeyCode::F8, super::LightSource::Ambient),
+        ] {
+            press(&mut app, key);
+            assert!(
+                !app.world()
+                    .resource::<super::LightingToggles>()
+                    .enabled(source),
+                "{key:?} must alter the source the seat-side instrument names"
+            );
+        }
+        assert_eq!(
+            readout(&mut app),
+            "F5 sun off  F6 campfire off  F7 lanterns off  F8 ambient off"
+        );
+
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::DirectionalLight, With<super::SunLight>>()
+                .single(app.world())
+                .unwrap()
+                .illuminance,
+            0.0,
+            "F5 must remove the directional light the renderer reads"
+        );
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::AmbientLight, With<Camera3d>>()
+                .single(app.world())
+                .unwrap()
+                .brightness,
+            0.0,
+            "F8 must remove the camera ambient fill the renderer reads"
+        );
+        let points = app
+            .world_mut()
+            .query::<(&crate::project::ProjectedLight, &bevy::prelude::PointLight)>()
+            .iter(app.world())
+            .map(|(kind, light)| (kind.0, light.intensity))
+            .collect::<Vec<_>>();
+        let intensity = |kind| {
+            points
+                .iter()
+                .find_map(|(actual, intensity)| (*actual == kind).then_some(*intensity))
+                .expect("the fixture must retain its named point light")
+        };
+        assert_eq!(
+            intensity(protocol::LightKind::Campfire),
+            0.0,
+            "F6 must remove campfire pixels"
+        );
+        assert_eq!(
+            intensity(protocol::LightKind::Lantern),
+            0.0,
+            "F7 must remove lantern pixels"
+        );
+    }
+
+    #[test]
     fn the_startup_asset_line_reads_the_blobs_rather_than_the_array_length() {
         let (embedded, bytes) = super::tree_asset_summary();
         assert_eq!(
@@ -1547,6 +1881,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
+            "F5 sun on  F6 campfire on  F7 lanterns on  F8 ambient on".to_string(),
         ];
         expected.sort();
         assert_eq!(
