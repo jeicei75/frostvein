@@ -78,3 +78,51 @@ refactor. That nearly shipped.
 rather than lost on a near-symmetric conifer — which was the open question worth checking before
 claiming the change does anything. Whether the forest READS better is Wolf's eye on the vehicle,
 not this measurement.
+
+## The triangle load, and the correction to this story's own text
+
+Measured 2026-09-03 on `12da79d`, in the devpod, for the vehicle card's fps section. No frame rate
+has ever been taken against the mesh trees, so the card needs to say what it is asking Wolf's GPU
+to draw.
+
+| | subdiv 1 — **what `gui.exe` draws with no flag** | subdiv 2 | subdiv 4 |
+|---|---:|---:|---:|
+| terrain triangles | 576,972 (48,081 cube entities) | 151,062 (118 chunks) | 926,426 (118 chunks) |
+| 265 pines | ~1,187,000 | ~1,187,000 | ~1,187,000 |
+| **total** | **~1,764,000** | ~1,338,000 | ~2,113,000 |
+| trees' share | **67 %** | 89 % | 56 % |
+
+Terrain figures are read straight off the client's own startup line. The tree figure is derived,
+so here is the derivation rather than the number alone: the four embedded GLBs carry **4,366 /
+5,894 / 3,474 / 4,424** triangles (Tree01 / Tree02 / Tree03 / Tree04R), and seed 7451's 265 trunk
+columns are **86 at sim height 4, 76 at 5, 103 at 6**. Height 5 splits between Tree02 and Tree03 by
+hash, so the total lies between **1,095,172 and 1,279,092** and is **1,187,132** on an even split.
+
+Cross-check on the same run: the four GLBs sum to 307,160 + 414,136 + 244,760 + 311,284 =
+**1,277,340 bytes**, exactly what `gui tree assets:` prints. The startup line is reading the blobs.
+
+**The correction.** This story's "Still open" note reads *"~1.2 M triangles vs ~479 k terrain"*.
+The 1.2 M holds. **The 479 k does not**: it matches no reading at any subdivision, and `rg` finds
+it nowhere in the repo — it was written into prose with no source behind it. The table above
+replaces it.
+
+## Instruments re-verified before the vehicle card was written — 2026-09-03, `12da79d`
+
+`gui 7451 --headless --subdiv 2 --capture … --frames 160`, so the card hands over a tested recipe
+rather than a remembered one:
+
+```
+gui build 12da79d
+gui tree assets: 4 of 4 embedded in this binary, 1277340 bytes
+subdiv 2: projected 44885 terrain cubes at z 31 entities=2160 chunks=118 faces=227110 triangles=151062
+gui trees: meshes=265 scenes_loaded=true source=embedded frames=2
+slice: z 31 projected 44885 terrain cubes (265 of 265 cut-face tiles at z 31)
+lantern: … lit terrain tiles at dwarf positions=1870 moved=true
+capture range check: warm-lit pixels=24221 ground-median-luminance=116 near-white-area=1.8159% blown-pool=1.0809% p99-luminance=231.8
+exit=101   ← the pre-existing near-white ceiling, PNG written first
+```
+
+**The `build.rs` stamp defect reproduced.** The binary would not restamp after a commit until
+`crates/gui/build.rs` was touched by hand — the same failure filed at the review. The card makes
+that `touch` a mandatory build step rather than a footnote, because a stamp that silently lags is
+worse than no stamp: it is trusted.

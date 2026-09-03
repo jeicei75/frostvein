@@ -514,6 +514,13 @@ mesh trees. Their direct RGB comparison is **81,101 / 921,600 raw changed pixels
 pixels at max-channel delta >=4/255 and **7,939** at >=16/255. The subdivision was held equal;
 it was necessary in this lavapipe venue for the legacy 100-tick capture health floor to complete.
 
+> **SUPERSEDED at the 2026-09-02 review, kept because it is what was claimed.** Both captures named
+> above were renders of the pre-mesh build, and the three figures — 81,101 / 36,176 / 7,939 — sat
+> INSIDE the same-code noise floor, so they would have read "changed" no matter what was built. The
+> committed evidence is now `client-baseline-2ef194d-subdiv2.png` and
+> `client-head-06471d7-subdiv2.png`, at 289,673 / 264,839 / 201,914 against a worst-case noise of
+> 78,332 / 46,050 / 8,876. Provenance in `10-4-signoff/README.md`.
+
 Mutation run: `CARGO_BUILD_JOBS=8 scripts/mutate.sh
 _bmad-output/implementation-artifacts/mutations/10-4-the-trees-look-right-the-pilot.sh` —
 **KILLED**: `copied executable asset root wins over the build workspace`, `zero spawned meshes
@@ -559,9 +566,16 @@ no window and lavapipe does not provide a meaningful frame-rate measurement.
 - `assets/trees/SM_VoxelPine_Tree0{1,2,3}.glb`, `assets/trees/SM_VoxelPine_Tree04R.glb` — NEW,
   1.28 MB of shipped pines, `include_bytes!`-embedded into `crates/gui` and read by the bench
 - `_bmad-output/implementation-artifacts/10-4-signoff/client-baseline-2ef194d-subdiv2.png` — NEW, baseline client capture
-- `_bmad-output/implementation-artifacts/10-4-signoff/client-head-9eba31f-subdiv2.png` — NEW, mesh-tree client capture
+- `_bmad-output/implementation-artifacts/10-4-signoff/client-head-06471d7-subdiv2.png` — NEW, mesh-tree
+  client capture (regenerated at the review, then again against the yaw build; the `9eba31f`-named
+  file it replaced was a render of the pre-mesh build)
+- `_bmad-output/implementation-artifacts/10-4-signoff/task-6-vehicle-runbook.md` — NEW, the card that
+  closes AC12's closing half
 | 2026-09-02 | Tasks 0-2 complete. Task 0's taper correction and Task 1's three taper candidates delegated to Codex (two commits, per-task cadence held, authored Völundr); the run then exited 1 on 5-hour quota exhaustion mid-self-gate, losing nothing because of that cadence. Orchestrator re-ran the FULL gate independently: GREEN, nine checks, no skips. **Task 2 ruled by Wolf: the mesh path wins and 10.4 lands it in the client**, explicitly overriding Task 2's stop-if-authored instruction. The taper was rejected on measurement, not taste — the whole sweep moves the frame 5.27-5.76 mean pixel delta against 26.07 for deleting every tree, because `foliage_scale` can only shrink a cube inside its own cell and the crown's disc shape is fixed by `place_trees`. "Procedural vs authored" was found to be a false dichotomy: `voxel_pine.py` IS a deterministic seeded generator, so the difference is venue and resolution (1 cube per 1.6 m cell vs 0.2 m voxels baked offline; 103 vs 3,474-5,894 triangles per tree). Candidate D renders 10.2's pines in the valley at boot framing via a bench that IMPORTS `valley_bench` rather than forking it. Three defects recorded: the `0.95` taper arm renders on zero cells while `bench_contract.rs` pins it, 53% of foliage renders snow-grey, and the approved reference sheet self-contradicts on Type 4 (6 CELLS vs 8.8x dwarf height) — resolved to 6 cells, `SM_VoxelPine_Tree04R.glb` regenerated at exactly 9.6 m, overshooting placements 103 of 265 -> 0. |
 | 2026-09-02 | **Post-review delivery fix, on Wolf's ruling.** The vehicle copy step failed on first use: `gui.exe` alone fell back to a compile-time WSL path that cannot exist on Windows. The four pines are now compiled into the binary via `include_bytes!` and Bevy's `embedded://` source, so delivery is one file and the assets cannot go stale against it — the same argument `build.rs` makes for stamping the SHA in. Verified by running a lone binary from an empty directory with no `assets/` on the path. Mutation table re-derived: two rows replaced, a third caught BROKEN by the gate's audit and re-pointed, all four KILLED, full gate GREEN.
+| 2026-09-02 | **Code review: four layers, all live, no coverage holes. 3 decisions / 14 patches / 5 deferrals / 1 dismissed, all applied.** The story's central claim was TRUE and its evidence for it was FALSE — both committed AC5 captures were renders of the pre-mesh build, one treatment photographed twice, which is the failure AC3 exists to name. The three decisions turned out to be ONE defect: `tree_meshes` rejected a column it could not represent while both spawn paths filtered every tree cell out of the terrain, so a rejected column was drawn by NEITHER and vanished silently. Wolf ruled: the cube path becomes the fallback (AC6 stops being vestigial), the contiguity check `TreeMesh`'s doc comment always promised now exists, and `authored_bench.py` is promoted onto the gate. The subdiv-2 capture break was this story's OWN regression, not pre-existing. 10 mutation rows, ALL KILLED; full gate GREEN. |
+| 2026-09-02 | **Per-tree yaw, on Wolf's call**, plus AC5 re-captured against it. The bench had always spun each pine in quarter turns and the client applied no rotation at all, so the frame approved as candidate D was not the frame the client drew — a bench/client divergence, and a concrete defect rather than taste. Measured: 116,963 px at delta>=4 against a worst-case same-code noise of 46,050. Wolf's look review of the corrected captures recorded the tree ROOT reading artificial where trunk meets terrain — explicitly NOT this story's, filed in `deferred-work.md` in two halves (asset and client) with the foliage ring named as the candidate and 9.4's three measured reasons for removing it carried forward. |
+| 2026-09-03 | **The vehicle card for AC12's closing half written**: `10-4-signoff/task-6-vehicle-runbook.md`. Every command in it was executed here first on `12da79d` rather than remembered — startup lines, tree accounting, the capture range check, and the `build.rs` stamp defect, which reproduced. The fps section carries a measured triangle load in place of the unsourced "~479 k terrain" this story's own Still-open note published. |
 
 ### Review Findings — code review 2026-09-02 (4 layers, all live, NO coverage holes)
 
@@ -852,9 +866,16 @@ and **no** `TerrainTile`, which is precisely the shape the old query could not s
 
 #### Still open
 
-- **AC12's closing half** — unchanged, and still needs the vehicle: a real window and a real frame
-  rate this devpod cannot produce. The ~1.2 M triangles of 265 pines against ~479 k for the terrain
-  remains an unanswered fps question.
+- **AC12's closing half** — still needs the vehicle: a real window and a real frame rate this
+  devpod cannot produce. **The card it needs now exists**:
+  `10-4-signoff/task-6-vehicle-runbook.md`, every command in it executed here first on `12da79d`.
+  The fps question is sharper than this section originally stated. The ~1.2 M triangles of 265
+  pines is right — derived from the four GLBs' 4,366 / 5,894 / 3,474 / 4,424 and the 86 / 76 / 103
+  split of the 265 trunk columns across sim heights 4 / 5 / 6. **The "~479 k for the terrain" was
+  never measured**: it matches no reading at any subdivision and appears nowhere in the repo. The
+  client's own startup line reports 576,972 triangles at the shipped default (subdiv 1) and 926,426
+  at subdiv 4, so the pines are **67 %** of the scene as `gui.exe` draws it. Table and provenance in
+  `10-4-signoff/README.md`.
 - **`--at-tick` is unusable on this venue**, so a deterministic capture is not available here. Its
   tick floor demands as many OBSERVED ticks as requested, and software rendering observes roughly a
   third of them. AC5 is therefore reported as a delta **against a measured noise floor**: baseline vs HEAD moves
