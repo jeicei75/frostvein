@@ -1758,6 +1758,11 @@ too; a "capture both and confirm" subtask needs an assertion about the PIXELS, n
 
 ## Found while closing 10.7: the metrics ledger's quota column is the WRONG WINDOW (2026-09-03)
 
+**STATUS 2026-09-03, Wolf: KNOWN AND ALREADY FIXED UPSTREAM in forge-process. It is NOT to be
+fixed here, and it is waiting on a forge sync that will happen at a good moment, not now. Do not
+re-file it and do not raise it again — the record below is kept for the frostvein-side figures
+only.**
+
 **`session_tokens.py` reads `rate_limits.primary.used_percent` and labels it the weekly quota.**
 On this account `primary` is the **300-minute (5-hour)** window and `secondary` is the
 **10080-minute (7-day)** one — read straight off a live rollout:
@@ -1863,3 +1868,39 @@ single-light reasoning and to any measurement that cannot switch them off. The c
 named thing, so it got the attention; the ring outweighed it 2:1 in lumens and nothing in the
 project could see it. **Before tuning an emitter, switch off everything else that emits nearby** —
 that is now one keypress.
+
+## Found at 10.7's second sitting: THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S FLANKS (2026-09-03)
+
+Wolf, on the fixed subdiv-2 build: *"still bottom of the blocks have different color than rest of
+the blocks with higher subdiv .. maybe it is in purpose?"* **Half on purpose, and that is the
+problem.** Measured in one terrace region (140x90 px), by palette rather than by eye:
+
+| | subdiv 1 | subdiv 2 |
+|---|---|---|
+| terrace tops | `rgb(75,102,150)` luma 99 | the same |
+| **risers / flanks** | **no dark colour present at all** | **`rgb(52,60,78)` luma 59, 4.3 % of the region** |
+
+`(52,60,78)` is `Material::Stone (60,70,92)` under this light. So **a snow cell's vertical faces are
+SNOW at `--subdiv 1` and ROCK at `--subdiv > 1`.**
+
+**Each path is behaving as designed, and no one decided they should differ.**
+- The coarse path draws the whole cell in its own material and lays a separate `snow_cap_mesh` slab
+  (1.02 x 0.08 x 1.02) on top, so the flanks are snow-coloured.
+- The fine path deliberately dropped the slab — it is cell-scale, sits at the coarse top while the
+  fine surface is a pit deeper, and "covers 102 % of the cell so it hides 17.9 % of the very detail
+  this path exists to draw" — and paints snow onto TOP FACES only.
+  `a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else` pins exactly that, down to
+  the assertion "covered terrain keeps its dark flank".
+
+Both rules are defensible on their own. **What was never decided is that the world should LOOK
+different at the two fidelities** — and 10.6 adopted k=4 as the target, so this is the look the game
+moves to. Snow blocks gain hard dark stone flanks; that is a material change to the terrain's
+appearance, not a detail.
+
+**It needs Wolf's eye, not an engineer's guess** — snow settling on tops and not on vertical faces is
+arguably the more truthful rule, which is an argument for the FINE path being right and the coarse
+one being the stale look. Note also that the fine path's top-face detail carving is labelled in
+source as "a MEASUREMENT STAND-IN for 10.4's authored terrain look, NOT a visual decision"
+(`project.rs:995`), so some of what the eye reads at `--subdiv > 1` is placeholder by its own
+admission. Whoever takes this should put the two side by side at the same framing and ask which is
+the intended winter, then make the loser match — rather than leaving the answer to depend on a flag.
