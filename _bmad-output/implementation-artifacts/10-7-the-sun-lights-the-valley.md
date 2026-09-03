@@ -166,11 +166,11 @@ asking for judgement. Same shape here, one level up.
   - [x] Replace the self-referential assertion at `atmosphere.rs:361-368` (premise 3). It must not
         derive its expected value from the sun constant.
 
-- [ ] **Task 2 — Bench the control and at least one candidate elevation** (AC: 2, 3)
-  - [ ] Control first: `python3 scripts/bench/export_world.py <snapshot.json>` then
+- [x] **Task 2 — Bench the control and at least one candidate elevation** (AC: 2, 3)
+  - [x] Control first: `python3 scripts/bench/export_world.py <snapshot.json>` then
         `blender --background --python scripts/bench/valley_bench.py -- <snapshot.json> <out.png>`.
         Paste each `range-check:` line into the Dev Agent Record.
-  - [ ] **Candidate bench edits stay uncommitted**, or live in a scratch copy under
+  - [x] **Candidate bench edits stay uncommitted**, or live in a scratch copy under
         `10-7-signoff/`. `bench_contract.rs` forbids a committed bench aim the client does not
         carry, so a committed candidate turns AC1 red and forces the client-first change Task 3
         exists to avoid. The lockstep edit happens once, in Task 3.
@@ -379,6 +379,7 @@ says so.
 | 2026-09-03 | Story created out of 10.4's vehicle sitting, on Wolf's instruction ("write sun story so we don't forget it"). Evidence complete and measured; rulings and context pass outstanding. |
 | 2026-09-03 | Context pass. Five premises re-verified on `47139fa`: the defect is a DIRECTION not a position (Bevy ignores a directional light's translation), the bench carries the same wrong sun and is pinned to it, the existing direction test is self-referential, and `NEAR_WHITE_AREA_CEILING` is already breached with `gui --headless --capture` already exiting 101 on `main`. Wolf's three rulings recorded: bench the elevation, decouple sun from aurora, re-tune nothing else. ACs firmed 6 → 9; tasks, dev notes and an executed verification recipe added. `baseline_commit` corrected `e930d07` → `47139fa` (it was 5 commits stale, and AC1 grades the diff from it). Status → ready-for-dev. |
 | 2026-09-03 | Task 1 complete: separated the directional-light travel vector from the aurora, preserved the shipped direction, locked client and bench sun constants together, and recorded three KILLED mutations. |
+| 2026-09-03 | Task 2 complete: captured the shipped control and +8.62°, +17.66°, and +25.87° bench candidates through an import-only elevation driver; each candidate's figures differ from the control. Pending Wolf's Task 3 ruling. |
 
 ## Dev Agent Record
 
@@ -400,6 +401,11 @@ GPT-5.6 (Codex)
   `ValleyFramingTests.test_sun_is_aimed_the_way_the_client_aims_it`.
 - Full `scripts/gate.sh`: GREEN (fmt, clippy, full cargo test, dependency probes, metrics, bench
   tests, and mutation-table audit all passed).
+- Task 2 range checks (all Blender 5.2.1, `exposed_cells=44984`):
+  - `control-shipped-minus6.42.png`: `non_sky_fraction=0.686736 distinct_colors=59190 terrain_luma=105.853`.
+  - `candidate-plus8.62.png`: `non_sky_fraction=0.687060 distinct_colors=85727 terrain_luma=119.546`.
+  - `candidate-plus17.66.png`: `non_sky_fraction=0.687143 distinct_colors=90237 terrain_luma=132.927`.
+  - `candidate-plus25.87.png`: `non_sky_fraction=0.687182 distinct_colors=89906 terrain_luma=143.913`.
 
 ### Completion Notes List
 
@@ -409,6 +415,9 @@ GPT-5.6 (Codex)
   must move with the approved elevation in Task 4.
 - Re-anchored 10.1's hand-picked-sun mutation row to the new bench formula after the global
   mutation audit correctly detected its removed seam.
+- Task 2 complete: exported a tick-21 snapshot and rendered the shipped control plus +8.62°,
+  +17.66°, and +25.87° candidates through an import-only driver. Each candidate's range-check
+  figures differs from the control's; Wolf's Task 3 decision remains outstanding.
 
 ### File List
 
@@ -421,4 +430,12 @@ GPT-5.6 (Codex)
   mutation evidence.
 - `_bmad-output/implementation-artifacts/mutations/10-1-the-headless-bench.sh` — re-anchored
   stale sun-formula row.
-- `_bmad-output/implementation-artifacts/10-7-the-sun-lights-the-valley.md` — Task 1 record.
+- `_bmad-output/implementation-artifacts/10-7-signoff/world-snapshot.json` — Task 2 exported
+  tick-21 bench input.
+- `_bmad-output/implementation-artifacts/10-7-signoff/sun_elevation_candidate.py` — import-only
+  candidate elevation driver.
+- `_bmad-output/implementation-artifacts/10-7-signoff/control-shipped-minus6.42.png` — control.
+- `_bmad-output/implementation-artifacts/10-7-signoff/candidate-plus8.62.png` — candidate.
+- `_bmad-output/implementation-artifacts/10-7-signoff/candidate-plus17.66.png` — candidate.
+- `_bmad-output/implementation-artifacts/10-7-signoff/candidate-plus25.87.png` — candidate.
+- `_bmad-output/implementation-artifacts/10-7-the-sun-lights-the-valley.md` — Task 1–2 record.
