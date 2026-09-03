@@ -977,6 +977,15 @@ fourfold rise in the cost of the thing every story runs before "done", and wheth
 paying is Wolf's call, not this story's. The FAST tier is unchanged and still ~5s -- the guards are
 `#[ignore]`d and named in its SKIPPED banner beside `serve.rs`.
 
+**Review cost, and the scaffolding it left behind.** 759 turns, 82 min wall-clock, **$74.78**
+(Opus $68.93 / Sonnet $5.85), 97.6 % of all tokens processed were cache reads — the same shape the
+review-cost fact predicts, and comparable to 8.2's $69.25 over 615 turns for review plus patch. The
+five subagent transcripts were 32.3 % of the session, up from 8.2's 26.8 %.
+
+The four isolated layer caches came to **102.2 GB** under `/tmp` — 11 to 18 GB each — and reaping
+them freed **56.6 GB**. That is the isolation fix's stated cost being paid on the day rather than
+accumulating, which is the whole reason the reap is a command in the workflow and not a reminder.
+
 **A note on how this gate was run.** Three attempts were harness-killed mid-run, twice during
 `cargo test` and once during `serve.rs` -- the delegated-runs-get-killed pattern. The first attempt
 also piped through `tail`, which buffers, so the kill destroyed output that had already been
