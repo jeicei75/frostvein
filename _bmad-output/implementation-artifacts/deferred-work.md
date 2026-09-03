@@ -1699,7 +1699,36 @@ of nearly every pine trunk**, and the dark banding along each terrace step is fa
 is the same as the vehicle's, so whoever takes this can **iterate here** and needs the vehicle only
 for the final look judgement. That is the difference between a cheap story and an expensive one.
 
-**Cause is NOT determined, and two families are open.** Do not start from a guess:
+**CAUSE NARROWED 2026-09-03 (orchestrator, measured). IT IS NOT LIGHTING — THEY ARE HOLES.**
+The dark quads are `rgb(5, 12, 28)`, which is **exactly `SKY_RGB`**. They are not shadows and not a
+dark material: they are **sky showing through missing geometry**. Two measurements settle it:
+
+- **Shadow maps OFF changes nothing.** Rebuilt with `shadow_maps_enabled: false` at `--subdiv 2`,
+  identical geometry (`chunks=118 faces=227110 triangles=151062`): sky-coloured terrain pixels
+  9,685 vs 9,700 with shadows on — a 15-pixel difference, i.e. noise. The quads are in the same
+  places, the same shapes. Evidence: `probe-subdiv2-shadows-off.png` and its crop.
+- **The excess is only at `--subdiv > 1`.** Sky-coloured pixels below the skyline: 9,147 at
+  `--subdiv 2` against 7,990 at `--subdiv 1` — **~1,157 pixels of hole**, on frames whose framing
+  and content are otherwise identical.
+
+**FAMILY 1 (shadow bias / cascade) IS FALSIFIED.** Do not spend time there. As a side-effect this
+also means the void `CascadeShadowConfig` falsification no longer needs re-running for this defect.
+
+**LEADING HYPOTHESIS — verify it, do not assume it.** The tree-cell exclusion is the same predicate
+on both render paths (`is_mesh_drawn_tree` = `is_tree() && cover.covers()`, used at
+`project.rs:740`, `:817`, `:1305`, `:2268`), so the exclusion is not asymmetric. What differs is
+what each path draws *after* excluding: a `Cuboid` is a complete six-face box, so removing one
+leaves every neighbour's faces intact and the gap is filled visually; the greedy chunk mesher only
+emits faces at height/material transitions, so **removing a column can leave no face at all where
+that column's sides used to be** — and you see through into the box. That is exactly the shape of
+Wolf's "black artifacts in box bottoms", and it is the same DEFECT CLASS as 10.4's "drawn by
+NEITHER path" hole that `TreeCover` was introduced to close, one render path over.
+
+**The guard AC12 needs writes itself from this finding:** count sky-coloured pixels inside the
+terrain silhouette. A hole is sky where terrain should be — a property that exists only in the
+drawing, which is precisely what a geometry count cannot see.
+
+**Superseded below — the two families as originally filed, kept for the record:**
 1. **Shadow-map bias / cascade behaviour on the chunk-mesher path.** At `--subdiv > 1` terrain goes
    through the chunk mesher instead of per-cell `Cuboid`s, so the geometry is finer and the bias
    tuned for the coarse path may self-shadow. `CascadeShadowConfig` was measured and FALSIFIED in
