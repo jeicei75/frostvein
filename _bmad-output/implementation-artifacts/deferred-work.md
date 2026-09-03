@@ -1561,3 +1561,51 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
   it the other way. **What is missing is a baseline GPU capture** — no `2ef194d` frame has ever been
   taken on this hardware, so venue and content stay confounded. One cross-build and copy settles it.
   **Do not raise the ceiling to clear the panic.**
+
+## Found while closing 10.4: THE SUN CASTS NO VISIBLE SHADOW (2026-09-03)
+
+Wolf, on the vehicle: *"Trees don't really generate shadows I think or maybe it's just hard to see
+because of lighting config."* **Measured here, and it is not confined to the trees.**
+
+**The experiment.** Set `shadow_maps_enabled: false` on the only `DirectionalLight`
+(`crates/gui/src/ingest.rs:856`), rebuild, capture at boot framing, and diff against the shipped
+build — with a same-build control pair for the noise floor, because moving dwarves make every
+frame differ. Headless, lavapipe, subdiv 1, 1280x720, `--frames 160`:
+
+| comparison | raw | >=4 | >=16 |
+|---|---:|---:|---:|
+| **noise** (same build, two runs) | 65,519 | **38,989** | **5,134** |
+| shadows ON vs OFF (run a) | 63,941 | 27,200 | 8,734 |
+| shadows ON vs OFF (run b) | 63,328 | 30,686 | 7,574 |
+
+**Deleting the entire directional shadow pass moves FEWER pixels than two runs of the same build.**
+At delta>=16 it reaches only 1.5-1.7x noise, against the 5.7x / 22.6x this story required before it
+would call a change visible. The sun's shadows are not a visible feature of the frame.
+
+**Three candidate mechanisms, each verified in code; which dominates is NOT measured.**
+
+1. **No `CascadeShadowConfig` is ever spawned.** The `DirectionalLight` takes
+   `..Default::default()` (`crates/gui/src/ingest.rs:857`), so Bevy 0.19's default applies:
+   `maximum_distance: 150.0` (`bevy_light-0.19.0/src/cascade.rs:153`). **`world_to_render` is one
+   cell to one render unit** (`crates/gui/src/transform.rs:4`), so that is 150 CELLS on a 128x128
+   world viewed from `BOOT_DISTANCE = 90` with the zoom clamp reaching 500
+   (`crates/gui/src/camera.rs:9,56`). At boot much of the vista already sits beyond the shadow
+   distance, and zooming out puts all of it there. **This is the strongest candidate** — it is a
+   Bevy default that was never chosen, and the 1-unit-per-cell scale is what makes it bite.
+2. **Ambient lifts whatever shadow survives.** `ambient_brightness = 4_500` against
+   `directional_illuminance = 22_000` (`crates/gui/src/appearance.rs:45,48`) — a shadowed surface
+   still receives ~20 %, which flattens contrast.
+3. **Light direction.** The sun is the aurora: positioned at `aurora_core()` looking at
+   `CAMP_FOCUS` (`crates/gui/src/atmosphere.rs:209`). A high, near-overhead angle casts short
+   shadows that hide under the geometry casting them.
+
+**Limits of this measurement, stated rather than buried.** Software rendering at boot framing only,
+and the noise is spatially concentrated on the moving dwarves while a shadow signal would sit under
+the trees — a masked diff would be sharper than a whole-frame one. The Δ≥16 excess suggests a small
+real contribution rather than literally none. **But the code facts above are venue-independent**,
+and mechanism 1 predicts exactly what Wolf saw.
+
+**Not 10.4's.** It is a look defect in the lighting rig, concrete and now measured, which is the
+bar this project sets for a look change. It also explains part of the tree-root reading filed on
+2026-09-02: an object that casts no ground shadow has nothing anchoring it to the terrain, so the
+root/junction complaint and this may be one defect seen twice. Whoever takes it should test that.
