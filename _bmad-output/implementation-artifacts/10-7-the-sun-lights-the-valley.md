@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.7: The Sun Lights The Valley
 
-Status: in-progress
+Status: review
 
 **RUNS BEFORE 10.5.** See "Why this is before the dwarves". The board's key is placed above
 10.5 deliberately, because this board's next-story rule reads top to bottom and a prose ruling
@@ -280,30 +280,30 @@ the mechanism.
 **This is the OPENING half of UX-DR22 only.** The closing half needs Wolf's eye on the built result
 on the vehicle, against this approved artifact (Task 7).
 
-- [ ] **Task 8 — The light toggles, by key, tested on the frame** (AC: 10, 11)
-  - [ ] A key command per source (sun / campfire / lanterns / ambient) toggling it live in `gui`,
+- [x] **Task 8 — The light toggles, by key, tested on the frame** (AC: 10, 11)
+  - [x] A key command per source (sun / campfire / lanterns / ambient) toggling it live in `gui`,
         plus an on-screen readout of which sources are lit. Keybinds live beside the existing ones;
         read how `1 dig 2 channel 3 stockpile 4 clear` and the slice keys are bound and follow that
         precedent rather than inventing a second scheme.
-  - [ ] **Instrument test per AC11: each source switched off alone must move the frame** more than
+  - [x] **Instrument test per AC11: each source switched off alone must move the frame** more than
         AC4's same-build noise floor. Not a test that the boolean flipped — a test that the
         rendering changed. An unknown source name is refused, loudly.
-  - [ ] Mutation rows: one that makes a toggle inert (flips the flag, changes nothing drawn) and
+  - [x] Mutation rows: one that makes a toggle inert (flips the flag, changes nothing drawn) and
         must be KILLED by the frame test.
-  - [ ] **Do NOT add a CLI flag** (Wolf, 2026-09-03) — a keybind cannot drive a headless capture,
+  - [x] **Do NOT add a CLI flag** (Wolf, 2026-09-03) — a keybind cannot drive a headless capture,
         and that gap is accepted deliberately until something needs it.
 
-- [ ] **Task 9 — Find the cause of the black quads, then fix it** (AC: 12)
-  - [ ] **Diagnose first, with the toggle from Task 8.** One run with only the sun lit, one with the
+- [x] **Task 9 — Find the cause of the black quads, then fix it** (AC: 12)
+  - [x] **Diagnose first, with the toggle from Task 8.** One run with only the sun lit, one with the
         sun off, at `--subdiv 2` — that alone separates the two recorded families (shadow map/cascade
         on the mesher path vs unlit faces out of `emit_quad`). Record which it is BEFORE editing.
-  - [ ] Note the trap already on file: the `CascadeShadowConfig` falsification is **void** for this
+  - [x] Note the trap already on file: the `CascadeShadowConfig` falsification is **void** for this
         question, having been measured with the sun below the horizon and nothing casting. Re-run it
         under the approved sun before quoting it.
-  - [ ] The guard for AC12 asserts PIXELS. Task 4's "capture both and confirm" was discharged from
+  - [x] The guard for AC12 asserts PIXELS. Task 4's "capture both and confirm" was discharged from
         `chunks=118 faces=227110 triangles=151062` and the defect was in the committed capture the
         whole time — the geometry counts are blind to lighting exactly as they are to winding.
-  - [ ] **`--subdiv 1` must not regress.** It is the shipped default and the path every one of
+  - [x] **`--subdiv 1` must not regress.** It is the shipped default and the path every one of
         ACs 1-9 was measured on; re-measure it and say so.
 
 
@@ -358,53 +358,53 @@ frame-level proof above is committed evidence, not a test, because a keybind can
 capture and Wolf ruled out the CLI flag that would let it.
 
 
-## AC12 IS NOT MET — the cause is found, the first fix is half right (2026-09-03)
+## AC12 MET — the holes are closed, and it took two wrong turns to get there (2026-09-03)
 
-**The cause is settled and committed** (`0f82f83`). The dark quads are `rgb(5, 12, 28)` — exactly
-`SKY_RGB` — so they were never shadows or a dark material: they are **holes**. `build_chunk_meshes`
-skips a mesh-drawn tree cell outright while `occludes` answers only "is this cell solid", so a cell
-dropped its face to an occluder that then emitted nothing. **Neither path drew it** — the same class
-as 10.4's "drawn by NEITHER path" column, one render path over. `--subdiv 1` never had it because a
-`Cuboid` is a complete six-face box that culls nothing.
+**The cause.** The dark quads were `rgb(5, 12, 28)` — exactly `SKY_RGB` — so never shadows and never
+a dark material: **holes**. `build_chunk_meshes` skips a mesh-drawn tree cell outright while
+`occludes` answers only "is this cell solid", so a cell dropped its face to an occluder that then
+emitted nothing. **Neither path drew it** — the same class as 10.4's "drawn by NEITHER path" column,
+one render path over. `--subdiv 1` never had it: a `Cuboid` is a complete six-face box that culls
+nothing, which is exactly why the shipped default looked clean.
 
-**A mechanism test exists and was RED first:** `a_mesh_drawn_tree_hides_no_terrain_face`
-(`project.rs`), oracle deliberately independent of the mesher — terrain around a mesh-drawn tree
-must equal terrain for the same world with those cells empty. It failed at `(118, 82)` vs
-`(118, 88)` — six triangles of surface nothing drew — and passes with the fix. Full gate GREEN.
+**The fix.** `occludes_terrain` discounts cells a mesh draws, applied to the three face-EMISSION
+decisions only. **Not** to `column_heights`' carving decision — see the wrong turns below.
 
-**THE INSTRUMENT HAD TO BE BUILT TWICE, and the first one lied in the flattering direction.**
-A y-threshold "sky below the skyline" count reported the fix made things BETTER. It counts horizon
-sky, whose silhouette shifts between builds. The real instrument is `10-7-signoff/holes.py`:
-sky-coloured pixels **inside the terrain silhouette**, resolved per column from the topmost non-sky
-pixel. It is almost perfectly reproducible — two runs of one build read **13,606 / 13,608, a 2-pixel
-noise floor** — so its deltas are trustworthy in a way the pixel-diff floor of 41,601 never is.
-
-**And it says the fix is half right:**
+**Result, measured on real captures with `10-7-signoff/holes.py`:**
 
 | capture | interior-sky px |
 |---|---:|
 | subdiv 2, before | 12,722 |
-| subdiv 2, after (a / b) | 13,606 / 13,608 |
-| **subdiv 1, before / after** | **11,174 / 11,174 — EXACTLY unchanged** |
+| **subdiv 2, fixed (a / b)** | **12,314 / 12,302** |
+| **subdiv 1, before / fixed** | **11,174 / 11,174 — EXACTLY unchanged** |
 
-486 px of hole genuinely closed, 1,370 px of new interior sky appeared, **net +884 against a 2-pixel
-floor**. Localised by region: the new sky is at the **world edges** (+221 left, +150 right) and a
-real new cluster at **bottom-left, 65 -> 388**. The cause of the regression is identified: the fix
-also routed `column_heights`' carving decision through the tree-aware occluder, and `None` there
-means *"do not carve, draw the full cube"* — the hole-FREE choice. Cells under a mesh tree began
-carrying detail pits instead of a solid top.
+**~414 px of hole closed against a 12-pixel noise floor (34x)**, and the shipped default is
+untouched to the pixel. Confirmed by eye too: the black quads at the trunk bases are gone from
+`probe-subdiv2-*` and the vehicle's own signature no longer appears.
 
-**Reverting that one edit does not work either: it turns the mechanism test RED**, because the test's
-oracle forces carving parity with an empty world, and carving legitimately reads the cell above —
-the shipped rule already special-cases trees there (`is_tree_foliage`, "foliage is never carved").
-**So the oracle is too strong to steer the remaining half.** What is needed is an assertion about the
-specific face — a top face on the plane above the cell beneath a mesh-drawn trunk, i.e. a `MeshKey`
-with `axis 2, sign +1` — rather than whole-mesh equality.
+**Mutation table: 7 of 7 KILLED**, including three new rows — `a mesh-drawn tree hides a terrain
+face again`, `the stone control stops hiding its face, so the test stops discriminating`, and
+`a light toggle flips its flag but changes nothing drawn`.
 
-**State, plainly: `--subdiv 1` (the shipped default, and the path ACs 1-9 were measured on) is
-provably untouched at every figure. `--subdiv 2` has fewer holes at the trunks and more at the
-edges, and is not yet better overall.** AC12 stays open. The one number that matters for whoever
-finishes it: **net interior-sky at subdiv 2 must fall below 12,722, on a 2-pixel noise floor.**
+### The two wrong turns, recorded because each is a reusable trap
+
+1. **THE FIRST INSTRUMENT LIED IN THE FLATTERING DIRECTION.** A "sky below the skyline" count said
+   the first fix improved things. It counts horizon sky, whose silhouette shifts between builds, and
+   **I published that delta before measuring its noise floor** — the exact mistake this story
+   already carries an entry about from 10.4's AC5. The real instrument resolves the silhouette **per
+   column** from the topmost non-sky pixel; its noise floor is **12 px across two runs**, against
+   41,601 px for a whole-frame pixel diff. A metric that cannot separate signal from run-to-run
+   noise is not a strict metric, it is a broken one.
+2. **THE FIRST FIX WAS HALF RIGHT, AND THE UNIT ORACLE COULD NOT SEE IT.** Routing the carving
+   decision through the tree-aware occluder too closed 486 px at the trunks and **opened 1,370 px at
+   the world edges** — net worse. `None` from `column_heights` means *"do not carve, draw the full
+   cube"*, which is the hole-FREE answer. The unit test passed the whole time, because its oracle
+   was whole-mesh equality with a tree-cells-empty world, which **forces carving parity that is not
+   required** — carving legitimately reads the cell above, as the shipped `is_tree_foliage` clause
+   already shows. **The narrower oracle is what steered the fix:** assert the SPECIFIC face
+   (`MeshKey` `axis 2, sign +1` above the cell beneath the trunk), with a **stone column as the
+   control** — terrain-drawn stone above MUST hide that face, a mesh-drawn trunk must not. Same
+   geometry, opposite correct answers, so the test discriminates instead of restating the mesher.
 
 ## Dev Notes
 
@@ -571,6 +571,7 @@ says so.
 | 2026-09-03 | **SCOPE CHANGE on Wolf's instruction, after the vehicle sitting.** Status `review` → `in-progress`. ACs 10-12 added: per-source light toggles as a KEY COMMAND in `gui` (explicitly not a CLI flag), an instrument test asserting the FRAME changes rather than the flag, and the removal of the `--subdiv > 1` black quads with a pixel-level guard. Tasks 8-9 added, toggle before diagnosis because the toggle is the instrument. Recorded here rather than run through `correct-course` on Wolf's call. |
 | 2026-09-03 | Task 8 landed (F5 sun / F6 campfire / F7 lanterns / F8 ambient, on-screen readout). Its two capture-instrument panics and two stale cross-story mutation rows were fixed by the orchestrator; full gate GREEN. **AC11 measured on real frames: all four toggles work, but the AC's whole-frame 10x bar is the wrong instrument for the two local lights, and they confound each other** — the campfire reads inert until the lanterns are held off, then moves its own window 1.9x the local floor. Recorded with every figure. |
 | 2026-09-03 | Task 9 cause FOUND and a mechanism test landed RED-first: the mesher let a mesh-drawn tree cell suppress a face nothing then drew. Fix committed and the gate is GREEN, but `holes.py` (a new instrument, 2-pixel noise floor) shows it closes 486 px of hole and opens 1,370 at the world edges — net +884, so **AC12 is NOT met**. `--subdiv 1` is exactly unchanged at 11,174. The regression's cause is identified (the carving decision must keep the hole-free full-cube choice) and the blocker is that the test's oracle forces carving parity, so it cannot steer the remaining half. |
+| 2026-09-03 | **Tasks 8 and 9 complete; Status -> review.** Light toggles land on F5-F8 with an on-screen readout; AC11's permanent guard is the renderer-read component test on Wolf's ruling, with the frame measurements committed as evidence. AC12 met: the subdiv>1 holes are closed, interior-sky 12,722 -> 12,314 against a 12 px floor, subdiv 1 unchanged at 11,174 exactly. Mutation table 7/7 KILLED. Full gate GREEN. Two wrong turns recorded — a metric that lied in the flattering direction, and a unit oracle too strong to steer the fix. |
 
 ## Dev Agent Record
 

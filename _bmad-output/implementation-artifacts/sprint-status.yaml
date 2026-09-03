@@ -1690,8 +1690,22 @@ development_status:
                           # too loose to fail a treeless world. Judgement rests on the printed
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
-  10-7-the-sun-lights-the-valley: in-progress
-                          # 2026-09-03 REOPENED from `review` on Wolf's instruction after the
+  10-7-the-sun-lights-the-valley: review
+                          # 2026-09-03 ALL 12 ACs MET -> review (2nd time). Light toggles on F5-F8
+                          # + readout; AC11's guard is the renderer-read component test (Wolf's
+                          # ruling) with frame measurements as evidence. AC12: the subdiv>1 black
+                          # quads were HOLES, not shadows -- rgb(5,12,28) is SKY_RGB -- caused by the
+                          # mesher letting a mesh-drawn tree cell suppress a face nothing then drew.
+                          # interior-sky 12,722 -> 12,314 on a 12 px floor; subdiv 1 UNCHANGED at
+                          # 11,174 exactly. Mutation table 7/7 KILLED, full gate GREEN.
+                          # TWO WRONG TURNS RECORDED: the first hole metric used a y-threshold and
+                          # reported the regression as an IMPROVEMENT (published before its noise
+                          # floor -- the 10.4 AC5 mistake again); and the first fix also routed the
+                          # CARVING decision through the tree-aware occluder, closing 486 px at the
+                          # trunks and opening 1,370 at the world edges, invisible to a unit oracle
+                          # that forced carving parity. The narrow face oracle + a stone control is
+                          # what steered it.
+                          # PRIOR: REOPENED from `review` on Wolf's instruction after the
                           # vehicle sitting. ACs 10-12 added: per-source light toggles as a KEY
                           # COMMAND in gui (NOT a cli flag -- Wolf), an instrument test asserting
                           # the FRAME moves rather than the flag, and removal of the subdiv>1 black
