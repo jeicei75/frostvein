@@ -40,9 +40,11 @@ gui.exe 7451
 | `gui tree assets:` | `4 of 4 embedded in this binary, 1277340 bytes` | |
 | `projected N terrain cubes at z 31` | `39936` | |
 | `gui trees:` | `meshes=265 scenes_loaded=true source=embedded` | |
-| `slice: z 31 ...` | `(265 of 265 cut-face tiles at z 31)` | |
 
 **`meshes=0` or `scenes_loaded=false` → STOP.** Nothing below means anything.
+
+CONFIRMED ON THE VEHICLE 2026-09-03, build `3b0c43f`: all four read as above, from a lone
+`gui.exe` in `$env:TEMP` with no `assets/` beside it. The embedding delivery is proven on hardware.
 
 ## 3. Windowed capture
 
@@ -53,6 +55,14 @@ echo "exit=%ERRORLEVEL%"
 
 No `--headless` — deliberate. **A panic on `0 == 265` or `capture drew a hollow cut` is a
 regression and is the finding of the sitting.** Otherwise expect `exit=101`.
+
+Two lines print here and ONLY here — the capture report writes them, so a plain
+`gui.exe 7451` does not and never did:
+
+| line | must read | got |
+| --- | --- | --- |
+| `slice: z 31 ...` | `(265 of 265 cut-face tiles at z 31)` | |
+| `trees:` | `meshes=265 of 265 scenes_loaded=true source=embedded` | |
 
 `capture range check:` ______________________________________  exit: ______
 
