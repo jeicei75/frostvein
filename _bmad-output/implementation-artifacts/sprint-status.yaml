@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-02
+last_updated: 2026-09-03
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -1603,7 +1603,15 @@ development_status:
   # clause passes on it, so origin centring is the only discriminating one.
   10-3-the-rules-of-the-look: done
   10-4-the-trees-look-right-the-pilot: in-progress
-                          # CODE-REVIEWED 2026-09-02 -> in-progress. FOUR LAYERS, ALL LIVE, NO
+                          # 2026-09-03 THE VEHICLE CARD EXISTS: 10-4-signoff/task-6-vehicle-runbook.md.
+                          # AC12's closing half is ALL that is left in this story. Every command in
+                          # the card was run here on 12da79d first. The build.rs stamp defect
+                          # reproduced, so `touch crates/gui/build.rs` is a mandatory build step.
+                          # The fps question restated on measurement: the pines are 67% of the
+                          # scene (576,972 terrain triangles at the shipped subdiv 1, ~1.19M for
+                          # 265 pines). The story's own "~479k terrain" was NEVER MEASURED --
+                          # it matches no reading and is nowhere in the repo.
+                          # PRIOR: CODE-REVIEWED 2026-09-02 -> in-progress. FOUR LAYERS, ALL LIVE, NO
                           # COVERAGE HOLES; full gate GREEN on a review layer and again after the
                           # patch pass. 3 decisions / 14 patches / 5 deferrals / 1 dismissed.
                           # THE HEADLINE: the story's central claim was TRUE and its evidence for it
