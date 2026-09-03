@@ -126,3 +126,46 @@ exit=101   ← the pre-existing near-white ceiling, PNG written first
 `crates/gui/build.rs` was touched by hand — the same failure filed at the review. The card makes
 that `touch` a mandatory build step rather than a footnote, because a stamp that silently lags is
 worse than no stamp: it is trusted.
+
+## The vehicle sitting — 2026-09-03, build `3b0c43f`, RTX 4080 Laptop / NVIDIA 616.56
+
+Sections 2 and 3 of `task-6-vehicle-runbook.md` are closed. `10-4-vista.png` (1280x720) is the
+windowed capture.
+
+**What was proven.** A lone `gui.exe` run from `$env:TEMP` with no `assets/` beside it reported
+`4 of 4 embedded in this binary, 1277340 bytes`, `projected 39936 terrain cubes at z 31` and
+`gui trees: meshes=265 scenes_loaded=true source=embedded`. **The delivery works on hardware** —
+that is the failure this story was written around. And the WINDOWED `--capture` printed
+`slice: z 31 ... (265 of 265 cut-face tiles at z 31)` and `trees: meshes=265 of 265` and wrote its
+PNG, where before the review it asserted `0 == 265` and panicked before the screenshot. **That
+regression is dead on the venue that hits it.**
+
+### The near-white ceiling reads WORSE on the GPU, and the card predicted the opposite
+
+| venue | build | near-white-area | ceiling |
+|---|---|---:|---:|
+| **RTX 4080, windowed** | `3b0c43f` | **2.2071 %** | 1.5630 % |
+| lavapipe, headless subdiv 2 | `12da79d` | 1.8159 % | 1.5630 % |
+| lavapipe, headless (story's own pair) | `2ef194d` baseline | 1.6709 % | 1.5630 % |
+| lavapipe, headless (story's own pair) | HEAD | 1.6604 % | 1.5630 % |
+
+The card said the figure "may well come in under the bar" on a real GPU. **It does not — it is the
+worst reading yet, 0.64 points over.** That guess is withdrawn; the reading replaces it.
+
+**Not attributable to the trees on this evidence, and not this story's to fix.** The constant is
+9.1's, and the only controlled comparison available says trees move it the *other* way: headless
+on the story's own pair, baseline 1.6709 % vs HEAD 1.6604 %, i.e. the mesh trees are marginally
+BETTER than the cube trees. What is unmeasured is a **baseline GPU** reading — no `2ef194d`
+capture has ever been taken on this hardware, so venue and content are still confounded. Settling
+it costs one more cross-build and copy; it was not spent, because a -0.01 point content effect
+cannot plausibly explain a +0.64 point venue gap.
+
+**Do not raise the ceiling to make this go away.** It is a measurement on the venue the constant
+was calibrated for, which makes it worth more than the devpod readings that preceded it.
+
+### `--frames` guidance corrected
+
+The card said to set the cap absurdly high because it "costs nothing". On the vehicle it costs
+wall-clock: Wolf ran `--frames 2000` and the run still took ~14 s, observing 141 ticks and 877
+mid-blend frames. **The run is tick-driven and ends on the capture health floor, not on the cap** —
+on a vsync'd window 2000 frames is already more than the run will render. Card fixed.

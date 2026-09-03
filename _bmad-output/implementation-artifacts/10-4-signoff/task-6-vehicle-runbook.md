@@ -10,7 +10,10 @@ Fill every blank; infer nothing. Why any figure below is what it is: `10-4-signo
 
 - `exit=101` on `near-white-area` above `1.5630%`. Pre-existing; the PNG is written first.
 - **`touch crates/gui/build.rs` before every build.** Without it the stamp can lag a commit.
-- **Never `--at-tick`.** Use `--frames`, set absurdly high — it is a cap, not a duration.
+- **Never `--at-tick`.** Use `--frames`. **2000 is plenty** — measured on the vehicle: the run
+  is tick-driven and takes ~14 s, ending on the capture health floor, not on the cap. (An
+  earlier version of this card said "set it absurdly high"; on a vsync'd window that is just
+  a long wait for nothing.)
 
 ## 1. Build
 
@@ -49,7 +52,7 @@ CONFIRMED ON THE VEHICLE 2026-09-03, build `3b0c43f`: all four read as above, fr
 ## 3. Windowed capture
 
 ```
-gui.exe 7451 --capture 10-4-vista.png --frames 200000
+gui.exe 7451 --capture 10-4-vista.png --frames 2000
 echo "exit=%ERRORLEVEL%"
 ```
 
@@ -65,6 +68,11 @@ Two lines print here and ONLY here — the capture report writes them, so a plai
 | `trees:` | `meshes=265 of 265 scenes_loaded=true source=embedded` | |
 
 `capture range check:` ______________________________________  exit: ______
+
+CONFIRMED ON THE VEHICLE 2026-09-03, build `3b0c43f`: both lines printed from a WINDOWED run and
+the PNG was written (`10-4-vista.png`, 1280x720). **The regression this step exists to catch is
+dead on hardware.** `exit=101` as predicted — but see the near-white note in `README.md`: the GPU
+reads WORSE than the devpod, not better, which is the opposite of what this card predicted.
 
 ## 4. Your eye — AC12's closing half
 
