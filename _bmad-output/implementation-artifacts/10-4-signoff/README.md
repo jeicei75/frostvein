@@ -169,3 +169,40 @@ The card said to set the cap absurdly high because it "costs nothing". On the ve
 wall-clock: Wolf ran `--frames 2000` and the run still took ~14 s, observing 141 ticks and 877
 mid-blend frames. **The run is tick-driven and ends on the capture health floor, not on the cap** —
 on a vsync'd window 2000 frames is already more than the run will render. Card fixed.
+
+### The fps reading — NFR6 HOLDS with the mesh trees in
+
+Wolf, on the vehicle, 2026-09-03: **"most of the times it's over 100 but it can drop near 60 for a
+short moment depending on view"**, and it **varies while dwarves are moving**.
+
+| bar (NFR6) | floor | reading | |
+|---|---:|---|:---:|
+| working zoom | 60 fps | >100 typical, brief ~60 worst | PASS |
+| full vista | ≥30 fps | >100 typical, brief ~60 worst | PASS |
+
+**This is the first frame rate ever taken against the mesh trees**, and it clears both bars with
+the pines at ~67 % of the scene's triangles (~1.19 M of ~1.76 M). The open fps question this story
+carried since the review is answered: **the trees are affordable.**
+
+**Not vsync-capped.** Readings above 100 rule out the 60 Hz cap that made 8.2's flat ~140 and
+10.6's flat readings untrustworthy — see the standing trap about a frame rate that does not move.
+
+#### The cause of the variation is a HYPOTHESIS, not a reading
+
+Wolf's read is lighting. It is plausible and it is not measured, so it is recorded as a hypothesis.
+**Two candidate modes fit "varies while dwarves move", and the second one is ours:**
+
+1. **Clustered lighting.** Dwarf lanterns are `PointLight`s and only the campfire casts shadows
+   (`crates/gui/src/project.rs:497`), so their cost is clustered light evaluation per fragment
+   rather than shadow-map re-renders. More lanterns overlapping the view costs more, which fits
+   "depending on view" exactly.
+2. **Per-delta re-mesh on the incremental path.** Moving dwarves produce mirror deltas every tick,
+   and this story's own review deleted a whole-world sweep from that path costing 43-63 ms per
+   tree-touching delta. Any residual per-delta work would ALSO read as movement-correlated stutter,
+   on the CPU rather than the GPU.
+
+**One run separates them.** Hold the camera on a view that shows the dip, then pause the daemon
+(`-` in the TUI — `set_speed: paused`; both clients share one daemon, so the gui freezes too).
+The lanterns stay lit and in view; the deltas stop. **fps recovers → mode 2, the delta path.
+Dips persist → mode 1, lighting.** Not run, and not this story's to run: 10.4's fps obligation is
+discharged by the bars above.

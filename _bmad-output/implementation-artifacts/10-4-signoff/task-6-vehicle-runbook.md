@@ -93,10 +93,12 @@ subdivision (~1.19 M of ~1.76 M) and no frame rate has ever been taken against t
 
 | Where | Floor (NFR6) | Reading |
 | --- | --- | --- |
-| Working zoom | 60 fps sustained | |
-| Full vista (boot framing) | ≥30 fps sustained | |
+| Working zoom | 60 fps sustained | **PASS** — >100 typical, brief ~60 |
+| Full vista (boot framing) | ≥30 fps sustained | **PASS** — >100 typical, brief ~60 |
 
-Let it settle and pan while you watch. **A failed reading is the result, reported with its number.**
+**CLOSED ON THE VEHICLE 2026-09-03.** NFR6 holds with the pines at ~67 % of the triangles, and
+>100 rules out a vsync cap. The variation while dwarves move is recorded as an open hypothesis
+with a one-run discriminator in `README.md` — not this story's.
 
 ## 6. Paste back
 

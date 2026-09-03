@@ -1540,3 +1540,24 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
     floor). The root and the terrain blend remain.
   - **Judgement is Wolf's eye on the vehicle**, per the standing rule that art changes need a
     concrete defect and his look. This entry records the defect; it does not propose a fix.
+
+## Deferred from: 10.4 vehicle sitting (2026-09-03)
+
+- **Frame rate varies while dwarves move, and the cause is unattributed.** Wolf on the RTX 4080:
+  >100 fps typically, brief drops to ~60 depending on view, varying with dwarf movement. **NFR6 is
+  MET** (60 working zoom / 30 full vista), so this is a question about headroom, not a breach, and
+  10.4's fps obligation is discharged. Wolf's read is lighting; recorded as a hypothesis because it
+  was not measured. Two modes fit the symptom: **clustered lighting** (dwarf lanterns are
+  non-shadow-casting `PointLight`s — only the campfire casts, `crates/gui/src/project.rs:497` — so
+  the cost is per-fragment clustered evaluation, which fits "depending on view"), and **per-delta
+  work on the incremental re-mesh path** (moving dwarves emit deltas every tick, and 10.4's review
+  already removed a whole-world sweep costing 43-63 ms per tree-touching delta from exactly that
+  path). **One run separates them:** hold a view that shows the dip and pause the daemon (`-` in
+  the TUI, `set_speed: paused`; one daemon serves both clients). Lanterns stay, deltas stop —
+  fps recovers means the delta path, dips persist means lighting.
+- **The near-white ceiling reads 2.2071 % on the vehicle against its 1.5630 % bar** — the worst
+  reading taken, and on the venue the constant was calibrated for. The constant is 9.1's. Trees are
+  an unlikely cause: the only controlled pair (headless, `2ef194d` 1.6709 % vs HEAD 1.6604 %) moves
+  it the other way. **What is missing is a baseline GPU capture** — no `2ef194d` frame has ever been
+  taken on this hardware, so venue and content stay confounded. One cross-build and copy settles it.
+  **Do not raise the ceiling to clear the panic.**
