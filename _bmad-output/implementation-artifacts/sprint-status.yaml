@@ -1602,8 +1602,13 @@ development_status:
   # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
   # clause passes on it, so origin centring is the only discriminating one.
   10-3-the-rules-of-the-look: done
-  10-4-the-trees-look-right-the-pilot: review
-                          # 2026-09-03 AC12 CLOSED ON THE VEHICLE -> review. ALL ACs met. Wolf ran
+  10-4-the-trees-look-right-the-pilot: done
+                          # 2026-09-03 MERGED as PR #63 (merge commit 276dbd8) -> done. Verified
+                          # on the remote, not the log: state=MERGED, every commit an ancestor of
+                          # origin/main, remote branch deleted, no stacked PR left pointing at it.
+                          # POST-MERGE BRANCH TRAP FIRED AGAIN (6th): the merge put the working
+                          # copy on main. Re-check branch before any commit.
+                          # PRIOR: AC12 CLOSED ON THE VEHICLE -> review. ALL ACs met. Wolf ran
                           # build 3b0c43f on the RTX 4080. NFR6 PASSES: >100 fps typical, brief ~60
                           # against 60/30 floors -- FIRST fps ever taken against the mesh trees, at
                           # 67% of the scene's triangles. Lone gui.exe, no assets/, 265 pines from
