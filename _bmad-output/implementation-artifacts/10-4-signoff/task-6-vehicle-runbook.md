@@ -10,10 +10,10 @@ Fill every blank; infer nothing. Why any figure below is what it is: `10-4-signo
 
 - `exit=101` on `near-white-area` above `1.5630%`. Pre-existing; the PNG is written first.
 - **`touch crates/gui/build.rs` before every build.** Without it the stamp can lag a commit.
-- **Never `--at-tick`.** Use `--frames`. **2000 is plenty** — measured on the vehicle: the run
-  is tick-driven and takes ~14 s, ending on the capture health floor, not on the cap. (An
-  earlier version of this card said "set it absurdly high"; on a vsync'd window that is just
-  a long wait for nothing.)
+- **Never `--at-tick`.** Use **`--frames 20000`**. The run ends on the capture health floor in
+  ~14 s, so the cap never fires and the margin is free. Do NOT trim it to 2000: at 144 Hz that is
+  ~1 % away from the frames a 14 s run renders, and a truncated capture is indistinguishable from
+  a completed one.
 
 ## 1. Build
 
@@ -52,7 +52,7 @@ CONFIRMED ON THE VEHICLE 2026-09-03, build `3b0c43f`: all four read as above, fr
 ## 3. Windowed capture
 
 ```
-gui.exe 7451 --capture 10-4-vista.png --frames 2000
+gui.exe 7451 --capture 10-4-vista.png --frames 20000
 echo "exit=%ERRORLEVEL%"
 ```
 
@@ -96,9 +96,11 @@ subdivision (~1.19 M of ~1.76 M) and no frame rate has ever been taken against t
 | Working zoom | 60 fps sustained | **PASS** — >100 typical, brief ~60 |
 | Full vista (boot framing) | ≥30 fps sustained | **PASS** — >100 typical, brief ~60 |
 
-**CLOSED ON THE VEHICLE 2026-09-03.** NFR6 holds with the pines at ~67 % of the triangles, and
->100 rules out a vsync cap. The variation while dwarves move is recorded as an open hypothesis
-with a one-run discriminator in `README.md` — not this story's.
+**CLOSED ON THE VEHICLE 2026-09-03.** NFR6 holds with the pines at ~67 % of the triangles. The
+panel is 144 Hz G-Sync and the client runs `AutoVsync`, so the ceiling is ~144 — this reading
+varies and dips to ~60, well under it, and so measures the scene rather than the panel. The
+variation while dwarves move is an open hypothesis with a one-run discriminator in `README.md`
+— not this story's.
 
 ## 6. Paste back
 

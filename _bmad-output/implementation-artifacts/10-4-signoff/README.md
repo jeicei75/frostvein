@@ -166,9 +166,17 @@ was calibrated for, which makes it worth more than the devpod readings that prec
 ### `--frames` guidance corrected
 
 The card said to set the cap absurdly high because it "costs nothing". On the vehicle it costs
-wall-clock: Wolf ran `--frames 2000` and the run still took ~14 s, observing 141 ticks and 877
-mid-blend frames. **The run is tick-driven and ends on the capture health floor, not on the cap** —
-on a vsync'd window 2000 frames is already more than the run will render. Card fixed.
+wall-clock: Wolf ran `--frames 2000` and the run took ~14 s, observing 141 ticks — enough to pass
+the capture health floor, so the capture completed normally.
+
+**But "2000 is plenty" is NOT established, and the first version of this note asserted it on a bad
+inference.** That version divided 877 *mid-blend* frames by the wall time to conclude the window
+was running at ~60 fps; mid-blend frames are a subset of frames, so the division measures nothing.
+With the panel at 144 Hz, **~14 s is ~2016 frames — within about 1 % of the 2000 cap.** Whether the
+run ended on its tick floor or was truncated by the cap cannot be told apart from this evidence.
+
+**Use `--frames 20000`:** ~10x margin against a 144 Hz panel, while the run still ends on the tick
+floor in ~14 s, so the margin is free. The original "200000" was not wrong, only needlessly alarming.
 
 ### The fps reading — NFR6 HOLDS with the mesh trees in
 
@@ -184,8 +192,21 @@ short moment depending on view"**, and it **varies while dwarves are moving**.
 the pines at ~67 % of the scene's triangles (~1.19 M of ~1.76 M). The open fps question this story
 carried since the review is answered: **the trees are affordable.**
 
-**Not vsync-capped.** Readings above 100 rule out the 60 Hz cap that made 8.2's flat ~140 and
-10.6's flat readings untrustworthy — see the standing trap about a frame rate that does not move.
+**The reading measures the SCENE, not the panel — and the reason is not the one first written
+here.** Wolf's display is **144 Hz with G-Sync**, and the windowed client takes `DefaultPlugins`
+unmodified (`crates/gui/src/ingest.rs:184`), so present mode is `AutoVsync` and the ceiling is
+**~144 fps**, not 60. An earlier version of this note argued ">100 rules out the 60 Hz cap"; there
+was never a 60 Hz cap to rule out.
+
+**The conclusion survives and gets stronger.** A capped reading's signature is a number that sits
+still. This one does not: it varies with view and dwarf movement and dips to ~60, well under 144.
+**This is the first fps figure for this client taken genuinely below the panel refresh** at the
+shipped default subdivision.
+
+**It also recontextualises the readings before it.** 8.2's "~140 fps" and 10.6's ">140 at k=4" sit
+right on a 144 Hz refresh — they were reading the panel, which is what the board already suspected
+when it wrote "a GPU above the panel refresh at k=4. The cap was real." Those numbers are ceilings,
+not measurements, and should not be compared against this one as though all three measured a scene.
 
 #### The cause of the variation is a HYPOTHESIS, not a reading
 
