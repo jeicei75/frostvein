@@ -174,7 +174,7 @@ asking for judgement. Same shape here, one level up.
         `10-7-signoff/`. `bench_contract.rs` forbids a committed bench aim the client does not
         carry, so a committed candidate turns AC1 red and forces the client-first change Task 3
         exists to avoid. The lockstep edit happens once, in Task 3.
-  - [ ] Artifacts land in `_bmad-output/implementation-artifacts/10-7-signoff/` beside the six
+  - [x] Artifacts land in `_bmad-output/implementation-artifacts/10-7-signoff/` beside the six
         frames already there.
 
 - [x] **Task 3 — Wolf judges, and the decision is recorded** (AC: 3, 9 opening half)
@@ -182,39 +182,39 @@ asking for judgement. Same shape here, one level up.
         elevation in degrees. Record the decision, the date, and the artifact it rests on.
   - [x] **Stop here until Wolf has ruled.** No client change before the opening half is signed.
 
-- [ ] **Task 4 — Land the chosen elevation in client and bench together** (AC: 6)
-  - [ ] Rust and Python in ONE commit. `bench_contract.rs:192-193` greps the client for
+- [x] **Task 4 — Land the chosen elevation in client and bench together** (AC: 6)
+  - [x] Rust and Python in ONE commit. `bench_contract.rs:192-193` greps the client for
         `Transform::from_translation(aurora_core()).looking_at(CAMP_FOCUS, Vec3::Y)` and the bench
         for `vector_normalize(vector_subtract(CAMP_FOCUS, aurora_core()))`; both anchors move.
-  - [ ] Both render paths must agree: at `--subdiv 1` every cell is a `Cuboid`, at `--subdiv > 1`
+  - [x] Both render paths must agree: at `--subdiv 1` every cell is a `Cuboid`, at `--subdiv > 1`
         trunks go through the chunk mesher. Lighting is per-scene, not per-path, so confirm rather
         than assume — capture at both and say so.
-  - [ ] Do **not** touch `directional_illuminance` (22,000) or `ambient_brightness` (4,500).
+  - [x] Do **not** touch `directional_illuminance` (22,000) or `ambient_brightness` (4,500).
         Ambient's balance genuinely cannot be judged until the sun is above the horizon, and that
         is the next story's question, not this one's.
 
-- [ ] **Task 5 — The guard, its RED, and the mutation rows** (AC: 5, 8)
-  - [ ] Write the direction guard per AC5. Independent oracle; hand-written floor.
-  - [ ] Author `mutations/10-7-the-sun-lights-the-valley.sh`, ≥3 rows, format per
+- [x] **Task 5 — The guard, its RED, and the mutation rows** (AC: 5, 8)
+  - [x] Write the direction guard per AC5. Independent oracle; hand-written floor.
+  - [x] Author `mutations/10-7-the-sun-lights-the-valley.sh`, ≥3 rows, format per
         `mutations/9-4-trees-fewer-and-distinct-from-the-ground.sh`. Suggested rows: (a) restore
         the shipped `aurora_core()` aim — AC5's required row; (b) flip the sign of the new
         elevation constant; (c) diverge the bench's `sun_direction()` from the client's, which
         `bench_contract.rs` must catch.
-  - [ ] Run `scripts/mutate.sh` and record KILLED **per row, naming the mutation**. `mutate.sh`
+  - [x] Run `scripts/mutate.sh` and record KILLED **per row, naming the mutation**. `mutate.sh`
         rewrites source in place and is **not** concurrency-safe — never run it alongside anything
         else. **Commit the fix before mutating**: undoing a mutation with `git checkout --` on an
         uncommitted fix destroys the fix.
-  - [ ] Re-mutate after any strengthening. "KILLED" names the TEST, not your new assertion — an
+  - [x] Re-mutate after any strengthening. "KILLED" names the TEST, not your new assertion — an
         earlier assert can absorb the mutation while the line you just added has never run.
 
-- [ ] **Task 6 — Measure, with the noise floor beside it** (AC: 4, 7)
-  - [ ] Instrument: `_bmad-output/implementation-artifacts/10-7-signoff/lumstats.py`. It already
+- [x] **Task 6 — Measure, with the noise floor beside it** (AC: 4, 7)
+  - [x] Instrument: `_bmad-output/implementation-artifacts/10-7-signoff/lumstats.py`. It already
         exists and is already tested (see Verification). Cite it; do not write a third one, and do
         **not** use a pixel diff — its noise floor here is 38,989 pixels, larger than the signal.
-  - [ ] Two runs of the shipped build for the noise floor, two of the candidate. Publish mean,
+  - [x] Two runs of the shipped build for the noise floor, two of the candidate. Publish mean,
         dark(<40) and shade-band(40-89) for all four, and the ratio of signal to the **worst**
         noise reading.
-  - [ ] Record near-white area for control and candidate from the `capture range check:` line.
+  - [x] Record near-white area for control and candidate from the `capture range check:` line.
         Record it. Do not act on it. (AC7)
 
 - [ ] **Task 7 — Verification and the closing half** (AC: 1, 9)
@@ -412,6 +412,7 @@ says so.
 | 2026-09-03 | Task 2 complete: captured the shipped control and +8.62°, +17.66°, and +25.87° bench candidates through an import-only elevation driver; each candidate's figures differ from the control. Pending Wolf's Task 3 ruling. |
 | 2026-09-03 | Run A (Tasks 1-2) delegated to Codex and KILLED mid-self-gate; commit cadence preserved all four commits. Orchestrator verified independently: gate GREEN 9/9, control re-rendered pixel-identical (0/518,400), candidates separated by 199,830-253,437 px at d>=4. Found that `lumstats.py` and `pixel_diff.py` silently misread RGBA PNGs (hardcoded `bpp=3`), which is why AC4's instrument must gain a colour-type assertion in Task 6. |
 | 2026-09-03 | **Task 3: Wolf ruled `+17.66°`** against the shipped `−6.42°` control and the `+8.62°` / `+25.87°` alternatives, on the side-by-side comparison of the four bench frames. UX-DR22 opening half signed; the closing half still needs his eye on the vehicle. |
+| 2026-09-03 | Tasks 4-6: landed Wolf's `+17.66°` elevation in client and bench, added an independent downward-direction guard, made the PNG instruments reject unsupported RGBA frames, and captured the shipped/candidate noise comparison. |
 
 ## Dev Agent Record
 
@@ -438,6 +439,30 @@ GPT-5.6 (Codex)
   - `candidate-plus8.62.png`: `non_sky_fraction=0.687060 distinct_colors=85727 terrain_luma=119.546`.
   - `candidate-plus17.66.png`: `non_sky_fraction=0.687143 distinct_colors=90237 terrain_luma=132.927`.
   - `candidate-plus25.87.png`: `non_sky_fraction=0.687182 distinct_colors=89906 terrain_luma=143.913`.
+- Task 4 focused GREEN: the horizontal-bearing test, the bench literal contract, and
+  `ValleyFramingTests.test_sun_is_aimed_the_way_the_client_aims_it`. The obsolete
+  shipped-direction literal was deleted.
+- Task 4 render paths: `control-client-a.png` at `--subdiv 1` reported `chunks=0`; the approved
+  `candidate-client-subdiv2.png` at `--subdiv 2` reported `chunks=118 faces=227110
+  triangles=151062`. Both wrote their PNG before the expected near-white assertion.
+- Instrument RED: both scripts raised `UnsupportedPngColourType: ... unsupported PNG colour type
+  6; expected RGB (2)` on `candidate-plus17.66.png`; GREEN: the RGB client captures parsed.
+- Task 5 final mutation run: KILLED — `restore the shipped aurora_core aim` by
+  `the_approved_sun_lights_downward`; KILLED — `bench sun elevation diverges from the client` by
+  `bench_literals_match_the_client_palette_lights_and_boot_camera`; KILLED — `flip the sun
+  direction formula's elevation sign` by `the_approved_sun_lights_downward`.
+- Task 6 captures (all saved before expected exit 101):
+  - `control-client-a.png`: mean=87.890; dark(<40)=161,431; shade-band(40-89)=223,707;
+    near-white=1.8239%; blown-pool=1.1361%; p99=234.0.
+  - `control-client-b.png`: mean=87.855; dark(<40)=161,488; shade-band(40-89)=223,515;
+    near-white=1.7731%; blown-pool=1.1230%; p99=232.4.
+  - `candidate-client-a.png`: mean=101.135; dark(<40)=160,362; shade-band(40-89)=198,245;
+    near-white=2.2546%; blown-pool=1.1751%; p99=234.0.
+  - `candidate-client-b.png`: mean=101.236; dark(<40)=160,363; shade-band(40-89)=198,131;
+    near-white=2.2541%; blown-pool=1.1551%; p99=235.2.
+- Same-build mean spread: control=0.035, candidate=0.101; worst noise floor=0.101. Control mean
+  87.8725 → candidate mean 101.1855: change 13.3130, or **131.8x** the floor. The near-white
+  ceiling was already breached on the shipped build and is not re-calibrated here.
 
 ### Completion Notes List
 
@@ -450,6 +475,12 @@ GPT-5.6 (Codex)
 - Task 2 complete: exported a tick-21 snapshot and rendered the shipped control plus +8.62°,
   +17.66°, and +25.87° candidates through an import-only driver. Each candidate's range-check
   figures differs from the control's; Wolf's Task 3 decision remains outstanding.
+- Task 4 complete: the client and bench share `17.66` in one commit; the bearing test projects
+  onto XZ, so it proves bearing rather than incorrectly constraining elevation.
+- Task 5 complete: the deliberately hand-written `APPROVED_DOWNWARD_FLOOR` guards downward
+  light travel independently of the elevation constant; all three mutation rows were killed.
+- Task 6 complete: the RGB-only instruments fail loudly on RGBA and four client captures measure
+  a 131.8x signal-to-noise ratio. The pre-existing near-white breach was recorded, not retuned.
 
 **Orchestrator (Claude) independent verification of Run A, 2026-09-03.** Codex's exit was not
 trusted; every claim below was re-run here.
@@ -502,4 +533,11 @@ file enforces that. **Task 6 must make it assert its colour type before it is us
 - `_bmad-output/implementation-artifacts/10-7-signoff/candidate-plus8.62.png` — candidate.
 - `_bmad-output/implementation-artifacts/10-7-signoff/candidate-plus17.66.png` — candidate.
 - `_bmad-output/implementation-artifacts/10-7-signoff/candidate-plus25.87.png` — candidate.
+- `_bmad-output/implementation-artifacts/10-7-signoff/control-client-a.png` — shipped client capture.
+- `_bmad-output/implementation-artifacts/10-7-signoff/control-client-b.png` — shipped client capture.
+- `_bmad-output/implementation-artifacts/10-7-signoff/candidate-client-a.png` — approved client capture.
+- `_bmad-output/implementation-artifacts/10-7-signoff/candidate-client-b.png` — approved client capture.
+- `_bmad-output/implementation-artifacts/10-7-signoff/candidate-client-subdiv2.png` — chunk-mesher capture.
+- `_bmad-output/implementation-artifacts/10-7-signoff/lumstats.py` — RGB capture instrument.
+- `_bmad-output/implementation-artifacts/10-7-signoff/pixel_diff.py` — RGB pixel-diff instrument.
 - `_bmad-output/implementation-artifacts/10-7-the-sun-lights-the-valley.md` — Task 1–2 record.
