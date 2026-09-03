@@ -1815,3 +1815,51 @@ system — no file, no plugin, no runtime toggling. **Its own test is not option
 instrument rule): each named source, switched off alone, must measurably change the frame, and the
 flag must reject a name it does not know rather than silently ignoring it. An untested instrument
 manufactures false evidence rather than merely missing true evidence.
+
+## Measured 2026-09-03: THE CAMP'S WARM SIGNATURE IS MOSTLY TORCHES, NOT THE CAMPFIRE
+
+Wolf, on being handed the new toggles: *"i just wonder how much time we spent for tweaking campfire
+intensity and actually it was all about torches"*. **Measured, and he is substantially right.**
+This became measurable only today: torches were hardcoded lit until F9 existed, so no run in this
+project's history could separate them.
+
+`camp_emitters` (`sim-core/src/lib.rs:1564`) puts **four torches at ±2 cells on the diagonals around
+the campfire**. Campfire 25,000,000 lm / range 28; each torch 14,000,000 / range 20, so the ring
+carries **56M lm against the fire's 25M**, spread across the very pool that was tuned.
+
+Headless `--subdiv 1 --frames 160`, one build per treatment, figures from the capture range check:
+
+| treatment | warm-lit px | ground median | near-white | blown-pool |
+|---|---:|---:|---:|---:|
+| all on (a / b) | 19,341 / 20,117 | 135 | 2.28 / 2.23 % | 1.158 / 1.157 % |
+| campfire off | 20,009 | 133 | 2.09 % | 1.145 % |
+| torches off | 9,264 | 123 | 1.85 % | 1.039 % |
+| torches **and** campfire off | 6,956 | 118 | 1.51 % | 0.805 % |
+
+**Marginal contributions, taken with the confounder removed** — the second column is the trap: with
+torches lit, the campfire's whole contribution is invisible.
+
+| | warm-lit px | blown-pool |
+|---|---:|---:|
+| torches | **-10,436** | -0.118 pp |
+| campfire, torches still lit | +300 (nil, swamped) | -0.012 pp |
+| campfire, torches already off | -2,308 | **-0.234 pp** |
+
+**The nuance matters, so state it precisely rather than as "it was all torches":**
+- **Warm-lit pixel count is a torch detector.** 10,436 against the campfire's 2,308 — **4.5 : 1**.
+  This is the metric `WARM_PIXEL_FLOOR` guards.
+- **The blown white core is the campfire's**, and by a factor of two: 0.234 pp against 0.118 pp.
+  That is consistent with the tuning note in `light_properties` ("72M lm blew a ~9-tile pool to flat
+  white"), so that pass was aimed at the right knob for the thing it was looking at.
+- **The breached near-white ceiling is split roughly evenly** — 0.40 pp torches, 0.34 pp campfire.
+
+**CONSEQUENCE FOR THE DEFERRED NEAR-WHITE STORY** (§ "10.7, the near-white ceiling's calibration
+frame is gone"): about **40 % of the breach is four torches nobody has ever examined**, and every
+tuning pass on record moved the campfire. Whoever takes it should start by measuring the torch ring,
+not the fire — and now can, with F9.
+
+**The generalisable trap:** four small identical emitters around one big one are invisible to
+single-light reasoning and to any measurement that cannot switch them off. The campfire was the
+named thing, so it got the attention; the ring outweighed it 2:1 in lumens and nothing in the
+project could see it. **Before tuning an emitter, switch off everything else that emits nearby** —
+that is now one keypress.
