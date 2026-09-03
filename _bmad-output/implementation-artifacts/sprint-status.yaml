@@ -1685,6 +1685,19 @@ development_status:
                           # too loose to fail a treeless world. Judgement rests on the printed
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
+  10-7-the-sun-lights-the-valley: backlog
+                          # CREATED 2026-09-03 out of 10.4's vehicle sitting, on Wolf's
+                          # instruction. THE SUN IS UNDER THE MAP: the only DirectionalLight sits
+                          # at the aurora curtain's MIDPOINT, Y=-58.5, surface is Y=9 -- it shines
+                          # upward from below and lights nothing. Deleting it moves the frame LESS
+                          # than run-to-run noise; lifting it moves mean luminance 13.3 vs a 0.08
+                          # noise floor (~170x). PLACED ABOVE 10.5 ON PURPOSE -- it must run first.
+                          # Judging authored dwarves under an ambient-only scene repeats 10.4's
+                          # own failure (approving a frame the client does not draw), one level up.
+                          # NOT context-filled: 3 rulings open (where the sun goes, whether it
+                          # stays coupled to the aurora, what gets re-judged). ACs provisional.
+                          # Expect NEAR_WHITE_AREA_CEILING to re-open: it was calibrated on a
+                          # sun-off frame and already reads 2.2071% vs 1.5630% on the vehicle.
   10-5-dwarves-worth-looking-at: backlog
   epic-10-retrospective: optional
 
