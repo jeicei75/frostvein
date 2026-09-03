@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.7: The Sun Lights The Valley
 
-Status: review
+Status: in-progress
 
 **RUNS BEFORE 10.5.** See "Why this is before the dwarves". The board's key is placed above
 10.5 deliberately, because this board's next-story rule reads top to bottom and a prose ruling
@@ -153,6 +153,33 @@ asking for judgement. Same shape here, one level up.
    implemented. UX-DR22 **closing** half: Wolf has viewed the built result live on the vehicle and
    compared it against the approved artifact.
 
+### Added 2026-09-03 by Wolf's instruction, after the vehicle sitting
+
+These two are a deliberate SCOPE CHANGE to a story that had reached `review` with ACs 1-9 met.
+Wolf's call, made at the sitting: the light toggle is not to be deferred into its own story, and the
+black-quad defect is to be fixed here rather than filed. The toggle comes FIRST because it is the
+instrument the defect is diagnosed with, and this project does not trust an instrument it has not
+tested.
+
+10. **The lighting sources can be switched independently from the seat, by key.** A key command in
+    the `gui` client toggles each light source — the sun, the campfire, the lanterns, and the ambient
+    fill — on and off live, without a rebuild or a restart. It is an **instrument, not a config
+    system**: no file, no plugin, no persistence. Its state is visible on screen, so a frame can
+    never be judged without knowing which sources were lit when it was taken.
+11. **The instrument is tested, and its test is about the frame, not the flag.** Switching each
+    source off alone must **measurably change the rendered frame**, asserted against the same-build
+    noise floor AC4 established — a toggle that flips a boolean nothing reads is the inert-mechanism
+    defect this project has shipped before. An unknown source name is refused loudly rather than
+    ignored.
+12. **The black quads at `--subdiv > 1` are gone, and something asserts they stay gone.** At the
+    approved sun elevation, the pure-black hard-edged quads at trunk bases must not appear at
+    `--subdiv 2`, and the guard must be a property of the DRAWING — the pixels — not a geometry
+    count. `candidate-client-subdiv2.png` and `subdiv-artifact-headless-subdiv1/2.png` are the
+    before-evidence; the cause is recorded in `deferred-work.md` with two open families and is NOT
+    presupposed here. **If the fix needs a look judgement, it stops for Wolf's eye** exactly as the
+    elevation did.
+
+
 ## Tasks / Subtasks
 
 - [x] **Task 1 — Decouple the sun from the aurora** (AC: 6; Wolf's ruling 2)
@@ -252,6 +279,32 @@ the mechanism.
 
 **This is the OPENING half of UX-DR22 only.** The closing half needs Wolf's eye on the built result
 on the vehicle, against this approved artifact (Task 7).
+
+- [ ] **Task 8 — The light toggles, by key, tested on the frame** (AC: 10, 11)
+  - [ ] A key command per source (sun / campfire / lanterns / ambient) toggling it live in `gui`,
+        plus an on-screen readout of which sources are lit. Keybinds live beside the existing ones;
+        read how `1 dig 2 channel 3 stockpile 4 clear` and the slice keys are bound and follow that
+        precedent rather than inventing a second scheme.
+  - [ ] **Instrument test per AC11: each source switched off alone must move the frame** more than
+        AC4's same-build noise floor. Not a test that the boolean flipped — a test that the
+        rendering changed. An unknown source name is refused, loudly.
+  - [ ] Mutation rows: one that makes a toggle inert (flips the flag, changes nothing drawn) and
+        must be KILLED by the frame test.
+  - [ ] **Do NOT add a CLI flag** (Wolf, 2026-09-03) — a keybind cannot drive a headless capture,
+        and that gap is accepted deliberately until something needs it.
+
+- [ ] **Task 9 — Find the cause of the black quads, then fix it** (AC: 12)
+  - [ ] **Diagnose first, with the toggle from Task 8.** One run with only the sun lit, one with the
+        sun off, at `--subdiv 2` — that alone separates the two recorded families (shadow map/cascade
+        on the mesher path vs unlit faces out of `emit_quad`). Record which it is BEFORE editing.
+  - [ ] Note the trap already on file: the `CascadeShadowConfig` falsification is **void** for this
+        question, having been measured with the sun below the horizon and nothing casting. Re-run it
+        under the approved sun before quoting it.
+  - [ ] The guard for AC12 asserts PIXELS. Task 4's "capture both and confirm" was discharged from
+        `chunks=118 faces=227110 triangles=151062` and the defect was in the committed capture the
+        whole time — the geometry counts are blind to lighting exactly as they are to winding.
+  - [ ] **`--subdiv 1` must not regress.** It is the shipped default and the path every one of
+        ACs 1-9 was measured on; re-measure it and say so.
 
 ## Dev Notes
 
@@ -415,6 +468,7 @@ says so.
 | 2026-09-03 | Tasks 4-6: landed Wolf's `+17.66°` elevation in client and bench, added an independent downward-direction guard, made the PNG instruments reject unsupported RGBA frames, and captured the shipped/candidate noise comparison. |
 | 2026-09-03 | Tasks 4-7 complete. `+17.66°` landed in client and bench in one commit with both `bench_contract.rs` anchors; three tests that pinned the below-horizon sun were corrected rather than loosened. AC5's guard `the_approved_sun_lights_downward` uses a hand-written floor independent of the elevation constant. Mutation table 3/3 KILLED, re-run independently. AC4 measured at **131.8x** its own noise floor. `lumstats.py` and `pixel_diff.py` gained the colour-type guard that closes their silent-misparse trap. Near-white recorded and filed, not moved (AC7). Full gate GREEN 9/9. Status → review; UX-DR22's closing half still open. |
 | 2026-09-03 | **Vehicle sitting (Wolf).** UX-DR22's closing half observed: terrain shadows correct at the shipped `--subdiv 1`, fps unchanged, campfire and lanterns still reading as the valley's own light. One defect found and filed rather than fixed here — black hard-edged quads at box bottoms at `--subdiv > 1`, which reproduces headless. Evidence committed to `10-7-signoff/`. |
+| 2026-09-03 | **SCOPE CHANGE on Wolf's instruction, after the vehicle sitting.** Status `review` → `in-progress`. ACs 10-12 added: per-source light toggles as a KEY COMMAND in `gui` (explicitly not a CLI flag), an instrument test asserting the FRAME changes rather than the flag, and the removal of the `--subdiv > 1` black quads with a pixel-level guard. Tasks 8-9 added, toggle before diagnosis because the toggle is the instrument. Recorded here rather than run through `correct-course` on Wolf's call. |
 
 ## Dev Agent Record
 

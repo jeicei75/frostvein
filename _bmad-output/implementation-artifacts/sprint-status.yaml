@@ -1690,7 +1690,13 @@ development_status:
                           # too loose to fail a treeless world. Judgement rests on the printed
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
-  10-7-the-sun-lights-the-valley: review
+  10-7-the-sun-lights-the-valley: in-progress
+                          # 2026-09-03 REOPENED from `review` on Wolf's instruction after the
+                          # vehicle sitting. ACs 10-12 added: per-source light toggles as a KEY
+                          # COMMAND in gui (NOT a cli flag -- Wolf), an instrument test asserting
+                          # the FRAME moves rather than the flag, and removal of the subdiv>1 black
+                          # quads with a PIXEL-level guard. Toggle lands FIRST because it is the
+                          # instrument the defect is diagnosed with.
                           # 2026-09-03 TASKS 1-7 DONE -> review. WOLF RULED +17.66 deg against the
                           # shipped -6.42 control and +8.62/+25.87 alternatives, on a side-by-side
                           # of four bench frames; UX-DR22 OPENING half signed, CLOSING half still
