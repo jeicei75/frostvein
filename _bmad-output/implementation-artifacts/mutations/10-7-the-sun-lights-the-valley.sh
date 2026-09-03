@@ -39,3 +39,35 @@ old = '        -elevation.sin(),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        elevation.sin(),\n'))
 PY
+
+mutation "make every lighting toggle inert after it flips" gui lighting_keys_change_the_live_scene_and_its_readout <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '''        light.brightness = if toggles.enabled(LightSource::Ambient) {
+            night_lighting().ambient_brightness
+        } else {
+            0.0
+        };
+    }
+    for mut light in &mut sun {
+        light.illuminance = if toggles.enabled(LightSource::Sun) {
+            night_lighting().directional_illuminance
+        } else {
+            0.0
+        };
+'''
+assert s.count(old) == 1
+new = '''        light.brightness = night_lighting().ambient_brightness;
+    }
+    for mut light in &mut sun {
+        light.illuminance = night_lighting().directional_illuminance;
+'''
+s = s.replace(old, new)
+old = '''        if !enabled {
+            light.intensity = 0.0;
+        }
+'''
+assert s.count(old) == 1
+s = s.replace(old, '        let _ = enabled;\n')
+p.write_text(s)
+PY
