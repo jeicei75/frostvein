@@ -1645,3 +1645,32 @@ to the terrain, so the root/junction complaint and this may be one defect seen t
 instrument is venue-dependent in absolute terms; the ratios against the same-venue noise floor are
 what carry the argument. The *code* facts — the light's height and the surface's height — are
 venue-independent and are the actual finding.
+
+## Deferred from: 10.7, the near-white ceiling's calibration frame is gone (2026-09-03)
+
+- **`NEAR_WHITE_AREA_CEILING` was already breached before story 10.7 started, on both venues, and
+  10.7 does not touch it (AC7).** Filed here because a pre-existing breach with no home is a
+  panic everyone learns to step over. **Measured, headless, `gui --headless --subdiv 1 --frames 160`:**
+
+  | build | near-white area | ceiling | exit |
+  |---|---:|---:|---|
+  | `47139fa`, sun below horizon (run a / run b) | 1.8757 % / 1.7755 % | 1.5630 % | 101 |
+  | 10.7's approved `+17.66°` sun (run a / run b) | 2.2546 % / 2.2541 % | 1.5630 % | 101 |
+
+  The vehicle reads **2.2071 %** on the shipped build (10.4's sitting, entry above), so the breach
+  is not a headless artefact. Raising the sun made it worse — expectedly, a lit valley has more
+  bright pixels — but **it did not cause it**: the shipped build breaches by 20 % with the sun
+  under the map.
+
+- **The real finding is not the breach, it is the calibration.** The ceiling is 9.1's, calibrated
+  on `boot7.png` — **a frame rendered with the sun below the horizon**, like every other look
+  decision on this project before 10.7. The constant does not merely need raising to fit a new
+  scene; **its calibration frame no longer represents the game**, so re-deriving it means picking a
+  new reference frame under the sun, not scaling the old number. That is a look decision needing
+  Wolf's eye and a bench, i.e. its own story — and it is the same shape as the ambient balance that
+  10.7's Task 4 was explicitly forbidden from touching for the same reason.
+
+- **Do not raise the constant to clear the panic.** The check saves the PNG before it validates
+  (`capture.rs:1250-1253`), so every capture stays usable at exit 101; the panic costs evidence
+  nothing today. Whoever takes this needs one baseline capture on the calibration venue plus a new
+  reference frame under the approved sun, and should re-read 9.1 before moving a digit.
