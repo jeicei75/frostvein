@@ -306,6 +306,57 @@ on the vehicle, against this approved artifact (Task 7).
   - [ ] **`--subdiv 1` must not regress.** It is the shipped default and the path every one of
         ACs 1-9 was measured on; re-measure it and say so.
 
+
+## AC11 MEASURED, AND THE AC ITSELF WAS WRONG — 2026-09-03 (orchestrator)
+
+AC11 asked that each source, switched off alone, move the rendered frame by at least **10x AC4's
+same-build noise floor**. That was measured for all four sources on real captures
+(`--headless --subdiv 1 --frames 160`, one temporary build per source, sources forced off at
+`LightingToggles::default()`; artifacts `ac11-lights-*.png`). **All four toggles work. Two of them
+cannot clear the bar as written, and the bar is what is wrong.**
+
+Whole-frame mean luminance, against a re-measured floor of **0.104** (two all-on runs, 101.104 /
+101.208 — reproducing AC4's 0.101):
+
+| source off | frame mean | change | x floor | changed px d>=4 (floor 41,601) |
+|---|---:|---:|---:|---:|
+| **sun** | 87.847 | **13.31** | **128x** | 322,439 (7.8x) |
+| **ambient** | 60.806 | **40.35** | **388x** | 619,238 (14.9x) |
+| campfire | 100.966 | 0.19 | **1.8x** | 43,894 (1.1x) |
+| lanterns | 100.871 | 0.29 | **2.7x** | 43,660 (1.0x) |
+
+**Why the two local lights fail a whole-frame bar, and why that is not a defect.** The changed-pixel
+noise floor at this framing is **41,601 px at d>=4** because the dwarves move between runs and the
+capture's motion-health floor panics if the world is paused, so the noise cannot be removed. A
+campfire pool and a handful of lanterns are simply smaller than that. Measured in the campfire's
+OWN window (280x190 = 53,200 px, local d>=16 noise floor **2,694**):
+
+| treatment | local mean | px > 200 luma | local d>=16 vs all-on |
+|---|---:|---:|---:|
+| all on (a / b) | 158.57 / 159.23 | 16,164 / 16,687 | — (2,694 = floor) |
+| lanterns off | 154.97 | 13,959 | **9,821 (3.6x)** |
+| campfire off | 157.96 | 15,683 | 1,918 (**below floor**) |
+
+**THE TWO LOCAL LIGHTS CONFOUND EACH OTHER.** Campfire-off looked inert even locally — the failure
+AC11 exists to catch — but the camp is **lantern-dominated**: the dwarves cluster there. Removing
+the confounder settles it. With lanterns ALREADY off, switching the campfire off moves the camp
+window **5,108 px at d>=16 (1.9x the local floor)**, local mean 154.97 -> 153.33, px>200
+13,959 -> 12,997. **The campfire toggle is real.**
+
+**The irony is the finding.** AC11 demanded a frame measurement to catch an inert mechanism; its
+*global* form would have falsely condemned two working toggles, and its local form condemns the
+campfire until a second light is held off. **A per-source frame oracle must match the source's
+spatial extent and control for the other lights in its neighbourhood** — a single whole-frame
+threshold applied to four sources of wildly different extent is the wrong instrument, not a strict
+one. Recorded rather than quietly relaxed, because "the toggle moved the frame" is exactly the kind
+of claim this project has learned to distrust when the number behind it is unstated.
+
+**The permanent guard** stays `lighting_keys_change_the_live_scene_and_its_readout`, which asserts
+the values the RENDERER reads go to zero — `DirectionalLight.illuminance`, `AmbientLight.brightness`,
+and both `PointLight.intensity` values — one level below the boolean, plus the readout text. The
+frame-level proof above is committed evidence, not a test, because a keybind cannot drive a headless
+capture and Wolf ruled out the CLI flag that would let it.
+
 ## Dev Notes
 
 ### Scope guardrails — do NOT
@@ -469,6 +520,7 @@ says so.
 | 2026-09-03 | Tasks 4-7 complete. `+17.66°` landed in client and bench in one commit with both `bench_contract.rs` anchors; three tests that pinned the below-horizon sun were corrected rather than loosened. AC5's guard `the_approved_sun_lights_downward` uses a hand-written floor independent of the elevation constant. Mutation table 3/3 KILLED, re-run independently. AC4 measured at **131.8x** its own noise floor. `lumstats.py` and `pixel_diff.py` gained the colour-type guard that closes their silent-misparse trap. Near-white recorded and filed, not moved (AC7). Full gate GREEN 9/9. Status → review; UX-DR22's closing half still open. |
 | 2026-09-03 | **Vehicle sitting (Wolf).** UX-DR22's closing half observed: terrain shadows correct at the shipped `--subdiv 1`, fps unchanged, campfire and lanterns still reading as the valley's own light. One defect found and filed rather than fixed here — black hard-edged quads at box bottoms at `--subdiv > 1`, which reproduces headless. Evidence committed to `10-7-signoff/`. |
 | 2026-09-03 | **SCOPE CHANGE on Wolf's instruction, after the vehicle sitting.** Status `review` → `in-progress`. ACs 10-12 added: per-source light toggles as a KEY COMMAND in `gui` (explicitly not a CLI flag), an instrument test asserting the FRAME changes rather than the flag, and the removal of the `--subdiv > 1` black quads with a pixel-level guard. Tasks 8-9 added, toggle before diagnosis because the toggle is the instrument. Recorded here rather than run through `correct-course` on Wolf's call. |
+| 2026-09-03 | Task 8 landed (F5 sun / F6 campfire / F7 lanterns / F8 ambient, on-screen readout). Its two capture-instrument panics and two stale cross-story mutation rows were fixed by the orchestrator; full gate GREEN. **AC11 measured on real frames: all four toggles work, but the AC's whole-frame 10x bar is the wrong instrument for the two local lights, and they confound each other** — the campfire reads inert until the lanterns are held off, then moves its own window 1.9x the local floor. Recorded with every figure. |
 
 ## Dev Agent Record
 
