@@ -794,6 +794,58 @@
     "schema": 2,
     "turns": 81
   },
+  "b31911ae-3f52-4845-8b5a-47ac0be0ccb7.jsonl": {
+    "by_model": {
+      "<synthetic>": {
+        "cache_creation": 0,
+        "cache_read": 0,
+        "input": 0,
+        "output": 0
+      },
+      "claude-opus-5": {
+        "cache_creation": 1931646,
+        "cache_read": 125713622,
+        "input": 1368,
+        "output": 488792
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 641393,
+        "cache_read": 30432683,
+        "input": 502,
+        "output": 35420
+      }
+    },
+    "cache_creation": 2573039,
+    "cache_read": 156146305,
+    "input": 1870,
+    "last_ts": "2026-09-02T16:02:45.430Z",
+    "marked_at": null,
+    "output": 524212,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 936
+  },
+  "b3b54830-ce3d-41b6-93ca-a7cf19628d78.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 975358,
+        "cache_read": 149793193,
+        "input": 1172,
+        "output": 570612
+      }
+    },
+    "cache_creation": 975358,
+    "cache_read": 149793193,
+    "input": 1172,
+    "last_ts": "2026-09-02T12:49:39.684Z",
+    "marked_at": null,
+    "output": 570612,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 586
+  },
   "bae20bdf-ee48-4c97-b7f9-83b90b612736.jsonl": {
     "by_model": {
       "claude-fable-5": {
@@ -1030,6 +1082,26 @@
     "quota_last": null,
     "schema": 2,
     "turns": 379
+  },
+  "f8426b80-dc64-4b70-964f-8e953796aa3b.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 1022097,
+        "cache_read": 62009701,
+        "input": 800,
+        "output": 350375
+      }
+    },
+    "cache_creation": 1022097,
+    "cache_read": 62009701,
+    "input": 800,
+    "last_ts": "2026-09-02T08:14:21.532Z",
+    "marked_at": null,
+    "output": 350375,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 400
   },
   "f9323089-8d5e-466e-884c-c266635750c4.jsonl": {
     "by_model": {
@@ -1768,5 +1840,85 @@
     "quota_last": 47.0,
     "schema": 2,
     "turns": 77
+  },
+  "rollout-2026-09-02T08-31-58-01a0613f-121a-7d81-82dd-757c0b00fe01.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 14407680,
+        "input": 573563,
+        "output": 33653
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 14407680,
+    "input": 573563,
+    "last_ts": "2026-09-02T08:56:45.364Z",
+    "marked_at": null,
+    "output": 33653,
+    "primary_only": false,
+    "quota_last": 100.0,
+    "schema": 2,
+    "turns": 141
+  },
+  "rollout-2026-09-02T10-36-39-01a061b1-389a-79f1-8a84-044ea44d2257.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 2360064,
+        "input": 115093,
+        "output": 12481
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 2360064,
+    "input": 115093,
+    "last_ts": "2026-09-02T10:42:18.900Z",
+    "marked_at": null,
+    "output": 12481,
+    "primary_only": false,
+    "quota_last": 9.0,
+    "schema": 2,
+    "turns": 29
+  },
+  "rollout-2026-09-02T10-45-55-01a061b9-b641-7eb0-916d-33b663f23179.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 363264,
+        "input": 50424,
+        "output": 4163
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 363264,
+    "input": 50424,
+    "last_ts": "2026-09-02T10:47:43.358Z",
+    "marked_at": null,
+    "output": 4163,
+    "primary_only": false,
+    "quota_last": 11.0,
+    "schema": 2,
+    "turns": 9
+  },
+  "rollout-2026-09-02T11-04-05-01a061ca-57ab-7e80-b65e-d91131b5177c.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 33050368,
+        "input": 753208,
+        "output": 75799
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 33050368,
+    "input": 753208,
+    "last_ts": "2026-09-02T11:54:22.499Z",
+    "marked_at": null,
+    "output": 75799,
+    "primary_only": false,
+    "quota_last": 95.0,
+    "schema": 2,
+    "turns": 262
   }
 }

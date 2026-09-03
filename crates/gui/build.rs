@@ -18,6 +18,10 @@ fn main() {
     println!("cargo:rerun-if-changed=../../.git/index");
 
     println!("cargo:rustc-env=GUI_BUILD_SHA={}", sha());
+    // NOTE: `GUI_WORKSPACE_ROOT` used to be stamped here too. Its only consumer was
+    // `resolve_asset_root`, deleted when the pines were embedded -- and it stamped THIS machine's
+    // absolute Linux path into a binary that gets copied to Windows, which is the exact artefact
+    // the embedding fix existed to remove. Removed with its consumer.
 }
 
 /// The short SHA, suffixed `-dirty` when the working tree has uncommitted changes.

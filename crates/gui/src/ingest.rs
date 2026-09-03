@@ -3,7 +3,7 @@ use std::{
     ffi::OsString,
     io::{BufRead, BufReader, Read},
     net::TcpStream,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Mutex,
         mpsc::{self, Receiver, SyncSender, TryRecvError},
@@ -49,7 +49,10 @@ use crate::{
     atmosphere::{aurora_light_transform, fall_snow, setup_atmosphere},
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
-    capture::{CaptureState, accumulate_motion, capture_after_frames},
+    capture::{
+        CaptureState, TreeCaptureVerification, accumulate_motion, capture_after_frames,
+        update_tree_capture_verification,
+    },
     command::send_commands,
     designate::{
         DesignateMode, DragAnchor, DragMode, designation_input, setup_designate_hint,
@@ -59,8 +62,8 @@ use crate::{
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
         ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery,
-        TerrainSubdivision, TerrainTile, WorldProjected, blend_entities, flicker_lights,
-        has_terrain_above, reconcile, setup_projection_assets, sync_drag_preview,
+        TerrainSubdivision, TerrainTile, TreeMeshQuery, WorldProjected, blend_entities,
+        flicker_lights, has_terrain_above, reconcile, setup_projection_assets, sync_drag_preview,
         sync_hover_highlight,
     },
     slice::SliceLevel,
@@ -94,12 +97,79 @@ pub struct ProjectionWork {
     pub dirty_tiles: BTreeSet<[i32; 3]>,
 }
 
+/// The four pines, compiled INTO the binary and served from the `embedded://` asset source.
+///
+/// WHY EMBEDDED RATHER THAN SHIPPED BESIDE THE EXECUTABLE. `build.rs` stamps the commit SHA into
+/// this binary because "every previous guard was a procedure, and a procedure is exactly what a
+/// stale binary defeats". "Remember to copy `assets/` next to `gui.exe`" is that same shape of
+/// procedure, and it failed the first time the vehicle used it: the fallback it lands on is a
+/// path stamped at COMPILE time on the build machine, so on Windows it resolves to a Linux path
+/// that cannot exist. Embedding removes the copy step instead of documenting it — the assets
+/// cannot be left behind, and they cannot go stale against the binary that draws them.
+///
+/// ORDER IS LOAD-BEARING: these are indexed by `TreeVariant` in `project.rs::tree_scene`, so the
+/// table and that match arm are one mapping in two places. `tree_asset_paths_match_the_loader`
+/// asserts they agree rather than trusting them to.
+pub const TREE_ASSETS: [(&str, &[u8]); 4] = [
+    (
+        "trees/SM_VoxelPine_Tree01.glb",
+        include_bytes!("../../../assets/trees/SM_VoxelPine_Tree01.glb"),
+    ),
+    (
+        "trees/SM_VoxelPine_Tree02.glb",
+        include_bytes!("../../../assets/trees/SM_VoxelPine_Tree02.glb"),
+    ),
+    (
+        "trees/SM_VoxelPine_Tree03.glb",
+        include_bytes!("../../../assets/trees/SM_VoxelPine_Tree03.glb"),
+    ),
+    (
+        "trees/SM_VoxelPine_Tree04R.glb",
+        include_bytes!("../../../assets/trees/SM_VoxelPine_Tree04R.glb"),
+    ),
+];
+
+/// How many embedded pines actually carry glTF bytes, and how many bytes in total.
+///
+/// A blob is counted only if it is non-empty AND opens with the binary-glTF magic, so an emptied
+/// or truncated `include_bytes!` is visible on the first line of output rather than at the moment
+/// a scene silently fails to load.
+pub fn tree_asset_summary() -> (usize, usize) {
+    let embedded = TREE_ASSETS
+        .iter()
+        .filter(|(_, bytes)| bytes.starts_with(b"glTF"))
+        .count();
+    (embedded, TREE_ASSETS.iter().map(|(_, b)| b.len()).sum())
+}
+
+/// Publish the embedded pines into the `embedded://` source before anything loads them.
+///
+/// `AssetPlugin::build` creates the registry and registers the source, so this must run AFTER
+/// `DefaultPlugins` and before the startup system that loads the scenes.
+fn register_tree_assets(app: &mut App) {
+    let registry = app
+        .world_mut()
+        .resource_mut::<bevy::asset::io::embedded::EmbeddedAssetRegistry>();
+    for (path, bytes) in TREE_ASSETS {
+        registry.insert_asset(PathBuf::new(), Path::new(path), bytes);
+    }
+}
+
 pub fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
     // M2-7. FIRST line out, before the connect can fail: a session that cannot reach the daemon
     // still learns which binary it is holding, and that is exactly the case where the answer
     // usually turns out to be "a stale one". See `crate::BUILD_SHA`.
     eprintln!("gui build {}", crate::BUILD_SHA);
+    // This line inspects the BLOBS, not `TREE_ASSETS.len()`. Printing the array length reported
+    // "4 embedded" identically with every blob emptied, with the registration deleted, or with
+    // `embedded://` resolution broken -- a confirmation step that could not observe the failure
+    // the runbook asks it to confirm. Decoding is still Bevy's; this only proves bytes are here.
+    let (embedded, bytes) = tree_asset_summary();
+    eprintln!(
+        "gui tree assets: {embedded} of {} embedded in this binary, {bytes} bytes",
+        TREE_ASSETS.len()
+    );
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
     if args.headless {
@@ -129,6 +199,7 @@ pub fn run() -> anyhow::Result<()> {
                 config: overlay_config_off(),
             });
     }
+    register_tree_assets(&mut app);
     configure_client_app(&mut app, mirror, receiver, writer, args);
     // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
     // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
@@ -204,6 +275,13 @@ fn configure_client_app(
         app.insert_resource(TerrainSubdivision(subdiv));
     }
     insert_capture_resources(app, &args);
+    // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
+    // without this resource the actual side never gains them and a WINDOWED capture asserts
+    // 0 == 265 and panics before the screenshot. That is the exact command the vehicle sitting
+    // card runs (`gui.exe <port> --capture <png> --frames N`, no `--headless`).
+    if args.capture.is_some() {
+        app.insert_resource(TreeCaptureVerification::default());
+    }
     client_systems(app);
     projection_systems(app);
     if let Some(capture) = args.capture {
@@ -240,6 +318,8 @@ pub fn projection_systems(app: &mut App) {
     // here rather than made `Option` in the system: a resource that is genuinely missing in
     // production should fail loudly, not quietly render "cursor -" forever.
     app.init_resource::<PickedTile>();
+    app.init_resource::<crate::project::TreeReportState>();
+    app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<TickClock>()
         .add_systems(Startup, setup_slice_readout)
         .add_systems(
@@ -325,7 +405,11 @@ pub fn client_systems(app: &mut App) {
 pub fn capture_systems(app: &mut App) {
     app.add_systems(
         Update,
-        (accumulate_motion, capture_after_frames)
+        (
+            update_tree_capture_verification,
+            accumulate_motion,
+            capture_after_frames,
+        )
             .chain()
             .after(ProjectionSet),
     );
@@ -1001,6 +1085,7 @@ pub fn reconcile_projection(
     )>,
     zones: Query<(bevy::prelude::Entity, &ProjectedZone)>,
     terrain: TerrainQuery,
+    trees: TreeMeshQuery,
     chips: DigChipQuery,
     assets: Option<Res<ProjectionAssets>>,
     mut meshes: Option<ResMut<Assets<bevy::prelude::Mesh>>>,
@@ -1025,6 +1110,7 @@ pub fn reconcile_projection(
         &designations,
         &zones,
         &terrain,
+        &trees,
         &chips,
         assets.as_deref(),
         meshes.as_deref_mut(),
@@ -1126,6 +1212,48 @@ mod tests {
     use crate::project::{SnowCap, TerrainChunk, TerrainSubdivision, TerrainTile, WorldProjected};
     use bevy::ecs::system::RunSystemOnce;
 
+    /// Every pine must actually be INSIDE the binary, and be a real GLB.
+    ///
+    /// A length check alone would pass on four empty files, which is the shape of this project's
+    /// recorded silent failures: the previous filesystem loader failed on the vehicle with a
+    /// green suite behind it. The glTF magic is the independent oracle — it comes from the file
+    /// content, not from anything this module asserts about itself.
+    #[test]
+    fn every_tree_variant_is_embedded_in_the_binary_as_a_real_glb() {
+        assert_eq!(
+            super::TREE_ASSETS.len(),
+            4,
+            "one embedded pine per TreeVariant"
+        );
+        for (path, bytes) in super::TREE_ASSETS {
+            assert!(
+                bytes.len() > 100_000,
+                "{path} is {} bytes — too small to be a shipped pine",
+                bytes.len()
+            );
+            assert_eq!(
+                &bytes[0..4],
+                b"glTF",
+                "{path} does not carry the glTF magic, so it is not a GLB"
+            );
+        }
+    }
+
+    /// The embedded table and the loader's paths are ONE mapping written in two places.
+    ///
+    /// `project.rs::tree_scene` indexes `ProjectionAssets::trees` by `TreeVariant`, and that array
+    /// is built from these paths in order. If the two ever disagree, every tree draws as the wrong
+    /// species and nothing else goes red.
+    #[test]
+    fn tree_asset_paths_match_the_loader() {
+        let embedded = super::TREE_ASSETS.map(|(path, _)| path);
+        assert_eq!(
+            embedded,
+            crate::project::TREE_SCENE_PATHS,
+            "the embedded table and the loader disagree about which pine is which"
+        );
+    }
+
     #[test]
     fn capture_forces_the_frame_time_overlay_off() {
         let mut app = App::new();
@@ -1205,6 +1333,58 @@ mod tests {
             .init_resource::<FpsOverlayConfig>();
         super::configure_client_app(&mut app, mirror, receiver, writer, parsed);
         (app, sender, server)
+    }
+
+    #[test]
+    fn a_capture_carries_its_tree_accounting_whether_or_not_it_is_headless() {
+        // `expected_cut_face` adds the tree meshes unconditionally, so if this resource is
+        // missing the ACTUAL side never gains them and the cut-face assert reads 0 == 265. It
+        // was gated on `--headless`, which is exactly the flag the vehicle sitting card does NOT
+        // pass -- so the one run a human performs was the one run that could not capture.
+        for args in [
+            vec!["7451", "--capture", "/tmp/unused.png", "--frames", "1"],
+            vec![
+                "7451",
+                "--headless",
+                "--capture",
+                "/tmp/unused.png",
+                "--frames",
+                "1",
+            ],
+        ] {
+            let headless = args.contains(&"--headless");
+            let (app, _sender, _server) = configured_app(&args);
+            assert!(
+                app.world()
+                    .get_resource::<crate::capture::TreeCaptureVerification>()
+                    .is_some(),
+                "a capture must carry its tree accounting (headless={headless})"
+            );
+        }
+    }
+
+    #[test]
+    fn the_startup_asset_line_reads_the_blobs_rather_than_the_array_length() {
+        let (embedded, bytes) = super::tree_asset_summary();
+        assert_eq!(
+            embedded,
+            super::TREE_ASSETS.len(),
+            "every embedded pine must carry binary-glTF bytes"
+        );
+        assert!(
+            bytes > 1_000_000,
+            "the four pines are ~1.28 MB; {bytes} bytes means a blob is empty or truncated"
+        );
+        // The discriminator: the count must come from the BYTES, so an emptied blob moves it.
+        // Reading `TREE_ASSETS.len()` would report 4 with every blob emptied, which is what the
+        // startup line used to do and what made it unable to observe its own failure.
+        assert_eq!(
+            super::TREE_ASSETS
+                .iter()
+                .filter(|(_, blob)| blob.starts_with(b"glTF"))
+                .count(),
+            embedded
+        );
     }
 
     fn scripted_drag_line(start: [i32; 3], end: [i32; 3]) -> String {
@@ -1781,7 +1961,7 @@ mod tests {
     /// pixel AC has been vehicle-bound since 2026-08-11. They DO have a CPU Vulkan device
     /// (lavapipe), and rendering needs a device rather than a window — `--headless` is what turns
     /// that into a measurement. Verified live: the headless client reproduced the draw-set oracle
-    /// on both the pre-9.4 world (53,365) and the current one (44,984).
+    /// on both the pre-9.4 world (53,365) and the mesh-tree draw set (39,936).
     #[test]
     fn headless_is_off_by_default_and_on_only_when_asked() {
         let interactive = super::parse_args_from([std::ffi::OsString::from("7451")])

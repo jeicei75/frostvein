@@ -11,3 +11,11 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-opus-5 | 39 | 78 | 157,589 | 2,661,524 | 26,166 | 2,845,357 | $2.97 | `60fe8659-b50f-48f9-b552-c4ad4f31c534.jsonl` | 2026-09-01 14:57 UTC · rates 2026-08-31 | 4 | — |
+| create | claude | claude-opus-5 | 400 | 800 | 1,022,097 | 62,009,701 | 350,375 | 63,382,973 | $46.16 | `f8426b80-dc64-4b70-964f-8e953796aa3b.jsonl` | 2026-09-02 08:15 UTC · rates 2026-08-31 | 197 | — |
+| dev | codex | gpt-5.6-terra | 141 | 573,563 | 0 | 14,407,680 | 33,653 | 15,014,896 | $4.43 | `rollout-2026-09-02T08-31-58-01a0613f-121a-7d81-82dd-757c0b00fe01.jsonl` | 2026-09-02 12:07 UTC · rates 2026-08-31 | 25 | 35pp |
+| dev | codex | gpt-5.6-terra | 29 | 115,093 | 0 | 2,360,064 | 12,481 | 2,487,638 | $0.85 | `rollout-2026-09-02T10-36-39-01a061b1-389a-79f1-8a84-044ea44d2257.jsonl` | 2026-09-02 12:07 UTC · rates 2026-08-31 | 5 | 9pp |
+| dev | codex | gpt-5.6-terra | 9 | 50,424 | 0 | 363,264 | 4,163 | 417,851 | $0.22 | `rollout-2026-09-02T10-45-55-01a061b9-b641-7eb0-916d-33b663f23179.jsonl` | 2026-09-02 12:07 UTC · rates 2026-08-31 | 2 | 2pp |
+| dev | codex | gpt-5.6-terra | 262 | 753,208 | 0 | 33,050,368 | 75,799 | 33,879,375 | $9.03 | `rollout-2026-09-02T11-04-05-01a061ca-57ab-7e80-b65e-d91131b5177c.jsonl` | 2026-09-02 12:07 UTC · rates 2026-08-31 | 50 | 83pp |
+| dev | claude | claude-opus-5 | 500 | 1,000 | 855,985 | 113,648,840 | 491,534 | 114,997,359 | $74.47 | `b3b54830-ce3d-41b6-93ca-a7cf19628d78.jsonl` | 2026-09-02 12:09 UTC · rates 2026-08-31 | 221 | — |
+| dev | claude | claude-opus-5 | 86 | 172 | 119,373 | 36,144,353 | 79,078 | 36,342,976 | $20.80 | `b3b54830-ce3d-41b6-93ca-a7cf19628d78.jsonl` | 2026-09-02 15:21 UTC · rates 2026-08-31 | 41 | — |
+| review | claude | <synthetic>, claude-opus-5, claude-sonnet-5 | 936 | 1,870 | 2,573,039 | 156,146,305 | 524,212 | 159,245,426 | $99.22 | `b31911ae-3f52-4845-8b5a-47ac0be0ccb7.jsonl` | 2026-09-02 16:02 UTC · rates 2026-08-31 | 191 | — |

@@ -5,6 +5,7 @@ use std::{
 
 use bevy::{
     app::AppExit,
+    asset::AssetServer,
     ecs::message::MessageWriter,
     prelude::{
         Camera3d, Commands, On, PointLight, Query, Res, ResMut, Resource, Transform, Vec2, Window,
@@ -23,11 +24,14 @@ use crate::{
     ingest::{ScriptedCursor, ScriptedDrag},
     pick::PickedTile,
     project::{
-        ProjectedDesignation, ProjectedZone, TerrainChunkCells, TerrainTile, WorldProjected,
+        ProjectedDesignation, ProjectedZone, ProjectionAssets, TerrainChunkCells, TerrainTile,
+        TreeCover, TreeMesh, WorldProjected, expected_tree_mesh_count, is_visible_at_slice,
+        tree_cells_at_or_below,
     },
     slice::SliceLevel,
     transform::world_to_render,
 };
+use bevy::ecs::change_detection::DetectChanges;
 use bevy::window::PrimaryWindow;
 
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +49,19 @@ pub struct DrawStats {
     /// the draw set, on the same principle as `expected_cut_face` above.
     expected_designations: usize,
     expected_zones: usize,
+}
+
+/// The live state that a headless capture must report before it may save its PNG.
+#[derive(Resource, Debug, Clone, Default)]
+pub struct TreeCaptureVerification {
+    expected: usize,
+    spawned: usize,
+    cut_face_meshes: usize,
+    scenes_loaded: bool,
+    /// The bases actually SPAWNED, carried here rather than re-queried in `capture_after_frames`
+    /// (which is already at Bevy's system-param ceiling). This is the independent oracle's input:
+    /// it must come from the entities that exist, never from `tree_meshes`.
+    bases: Vec<[i32; 3]>,
 }
 
 impl DrawStats {
@@ -184,6 +201,76 @@ pub fn draw_stats(
     )
 }
 
+/// Samples the exact mesh entities and scene handles that a headless capture will judge.
+pub fn update_tree_capture_verification(
+    verification: Option<ResMut<TreeCaptureVerification>>,
+    mirror: Option<Res<MirrorResource>>,
+    slice: Option<Res<SliceLevel>>,
+    trees: Query<&TreeMesh>,
+    assets: Option<Res<ProjectionAssets>>,
+    asset_server: Option<Res<AssetServer>>,
+) {
+    let (Some(mut verification), Some(mirror), Some(slice)) = (verification, mirror, slice) else {
+        return;
+    };
+    // `expected_tree_mesh_count` sweeps the whole world; the answer can only change when the
+    // mirror or the cut does. Running it unconditionally re-paid that sweep on EVERY Update frame
+    // for the whole length of a capture.
+    if mirror.is_changed() || slice.is_changed() {
+        verification.expected = expected_tree_mesh_count(&mirror.0, slice.level());
+    }
+    verification.spawned = trees.iter().count();
+    verification.bases = trees.iter().map(|tree| tree.0).collect();
+    verification.cut_face_meshes = trees
+        .iter()
+        .filter(|tree| tree.0[2] <= slice.level())
+        .count();
+    verification.scenes_loaded = assets
+        .zip(asset_server)
+        .is_some_and(|(assets, asset_server)| assets.tree_scenes_loaded(&asset_server));
+}
+
+/// The tree oracle that routes through NEITHER `tree_meshes` nor the spawn path.
+///
+/// `assert_tree_capture` compares `tree_meshes()` against `spawn(tree_meshes())`, so a defect
+/// inside the mesh rule moves both sides together and the assert still reads equal -- which is
+/// exactly how a column the rule rejected could be drawn by nothing at all while the capture
+/// reported a match. This compares three independently derived things: the tree cells the MIRROR
+/// holds, the mesh bases actually SPAWNED, and the terrain cells actually DRAWN. A visible tree
+/// cell that no mesh covers and no terrain cube drew is a tree nobody can see.
+fn assert_no_tree_is_undrawn(
+    mirror: &Mirror,
+    level: i32,
+    spawned_bases: &[[i32; 3]],
+    drawn: &BTreeSet<[i32; 3]>,
+) {
+    let cover = TreeCover::from_meshes(spawned_bases);
+    let undrawn = tree_cells_at_or_below(mirror, level)
+        .into_iter()
+        .filter(|cell| is_visible_at_slice(mirror, *cell, level))
+        .filter(|cell| !cover.covers(*cell) && !drawn.contains(cell))
+        .collect::<Vec<_>>();
+    assert!(
+        undrawn.is_empty(),
+        "{} visible tree cells are drawn by neither a mesh nor the cube fallback; first {:?}",
+        undrawn.len(),
+        &undrawn[..undrawn.len().min(5)]
+    );
+}
+
+fn assert_tree_capture(expected: usize, spawned: usize, scenes_loaded: bool) {
+    assert!(
+        scenes_loaded,
+        "capture tree scenes failed to load from the embedded asset source; the pines are \
+         compiled into this binary, so a failure here is a decode or registration fault, never \
+         a missing file"
+    );
+    assert_eq!(
+        spawned, expected,
+        "capture spawned {spawned} tree meshes but the mirror requires {expected}"
+    );
+}
+
 /// The drawn coarse cells, from whichever path drew them.
 ///
 /// `--subdiv N > 1` replaces per-cell `TerrainTile` entities with chunk meshes, so counting
@@ -248,7 +335,10 @@ fn lantern_assertions_apply(mirror: &Mirror, level: i32) -> bool {
         .any(|entity| entity.kind == EntityKind::Dwarf && entity.pos[2] <= level)
 }
 
-/// The tiles the mirror says the cut face must contain: solid or ramp, exactly at the cut.
+/// The draw units the mirror says the cut must contain: solid terrain exactly at the cut, plus
+/// each whole tree mesh whose base is at or below it. Trees no longer have one cube per tile and
+/// slices deliberately draw the whole mesh, so counting tree tiles here would compare unlike
+/// units and falsely call a correct mesh cut hollow.
 fn expected_cut_face(mirror: &Mirror, level: i32) -> usize {
     let dims = mirror.dims();
     let mut count = 0;
@@ -256,13 +346,14 @@ fn expected_cut_face(mirror: &Mirror, level: i32) -> usize {
         for x in 0..dims.x as i32 {
             if matches!(
                 mirror.tile([x, y, level]),
-                Some(Tile::Solid(_) | Tile::Ramp(_))
+                Some(Tile::Solid(material) | Tile::Ramp(material))
+                    if !matches!(material, protocol::Material::TreeTrunk | protocol::Material::TreeFoliage)
             ) {
                 count += 1;
             }
         }
     }
-    count
+    count + expected_tree_mesh_count(mirror, level)
 }
 
 #[derive(Resource)]
@@ -674,6 +765,7 @@ pub fn accumulate_motion(
     capture: Option<ResMut<CaptureState>>,
     projected: Query<(&WorldProjected, &Transform, Option<&PointLight>), Without<TerrainTile>>,
     terrain: Query<(&TerrainTile, &Transform)>,
+    chunk_cells: Query<&TerrainChunkCells>,
 ) {
     let (Some(mirror), Some(mut capture)) = (mirror, capture) else {
         return;
@@ -722,9 +814,21 @@ pub fn accumulate_motion(
     // frame and corrupt the very fps reading AC13 asks for. The sliding property is carried by
     // `motion.mid_blend_frames` and by the headless blend test, not by this line.
     if capture.lantern.needs_observation(&positions) {
+        // BOTH draw paths, for the same reason `drawn_cells` reads both. `--subdiv N > 1` spawns
+        // no per-cell `TerrainTile` at all, so sweeping that query alone reported ZERO lit tiles
+        // and `assert_valid` panicked before the PNG was written on every subdiv-2 capture. The
+        // per-cell entities that used to keep this query non-empty at subdiv>1 were the foliage
+        // cubes, and 10.4 moved foliage to meshes -- which is what turned a working instrument
+        // into one that could only fail.
         let terrain = terrain
             .iter()
             .map(|(tile, transform)| (tile.0, transform.translation))
+            .chain(
+                chunk_cells
+                    .iter()
+                    .flat_map(|cells| cells.0.iter().copied())
+                    .map(|cell| (cell, world_to_render(cell))),
+            )
             .collect::<Vec<_>>();
         capture.lantern.observe(lanterns.into_iter().map(
             |(id, position, light_translation, range)| {
@@ -760,6 +864,7 @@ pub fn capture_after_frames(
     cameras: Query<&CameraRig, With<Camera3d>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     headless: Option<Res<crate::ingest::HeadlessTarget>>,
+    tree_verification: Option<Res<TreeCaptureVerification>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if capture.requested || capture.failed {
@@ -790,7 +895,7 @@ pub fn capture_after_frames(
     if capture_due {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
         // run whose five numbers are needed to diagnose it, and a panic prints none of them.
-        let draw = collect_draw_stats(
+        let mut draw = collect_draw_stats(
             slice.level(),
             &mirror.0,
             &terrain,
@@ -798,6 +903,15 @@ pub fn capture_after_frames(
             &designations,
             &zones,
         );
+        if let Some(tree_verification) = tree_verification.as_deref() {
+            draw.cut_face_tiles += tree_verification.cut_face_meshes;
+            assert_no_tree_is_undrawn(
+                &mirror.0,
+                slice.level(),
+                &tree_verification.bases,
+                &drawn_cells(&terrain, &chunk_cells).collect::<BTreeSet<_>>(),
+            );
+        }
         if let Some(cursor) = cursor {
             let expected = cameras.single().ok().and_then(|rig| {
                 windows
@@ -832,6 +946,19 @@ pub fn capture_after_frames(
             "slice: z {} projected {} terrain cubes ({} of {} cut-face tiles at z {})",
             draw.level, draw.terrain_tiles, draw.cut_face_tiles, draw.expected_cut_face, draw.level
         );
+        if let Some(tree_verification) = tree_verification {
+            println!(
+                "trees: meshes={} of {} scenes_loaded={} source=embedded",
+                tree_verification.spawned,
+                tree_verification.expected,
+                tree_verification.scenes_loaded,
+            );
+            assert_tree_capture(
+                tree_verification.expected,
+                tree_verification.spawned,
+                tree_verification.scenes_loaded,
+            );
+        }
         println!(
             "marks: z {} designations={} of {} zones={} of {}",
             draw.level,
@@ -1543,6 +1670,48 @@ mod tests {
     }
 
     #[test]
+    fn tree_capture_requires_loaded_scenes_and_every_rederived_mesh() {
+        assert!(
+            std::panic::catch_unwind(|| assert_tree_capture(1, 0, true)).is_err(),
+            "a treed mirror with zero spawned meshes must not save a successful capture"
+        );
+        assert!(
+            std::panic::catch_unwind(|| assert_tree_capture(1, 1, false)).is_err(),
+            "failed scene handles must not save a successful capture"
+        );
+        assert_tree_capture(1, 1, true);
+    }
+
+    #[test]
+    fn cut_oracle_counts_a_whole_tree_mesh_above_its_last_tile() {
+        let mirror = Mirror::from_snapshot(protocol::Snapshot {
+            msg_type: protocol::MessageType::Snapshot,
+            dims: protocol::Dims { x: 1, y: 1, z: 5 },
+            tiles: vec![
+                Tile::Solid(protocol::Material::TreeTrunk),
+                Tile::Solid(protocol::Material::TreeTrunk),
+                Tile::Solid(protocol::Material::TreeTrunk),
+                Tile::Empty,
+                Tile::Empty,
+            ],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: protocol::Speed::Normal,
+            tick: 0,
+        })
+        .expect("a hand-built tree snapshot must load");
+
+        assert_eq!(
+            expected_cut_face(&mirror, 3),
+            1,
+            "the whole mesh remains visible above its final source tile; a tree tile count would \
+             wrongly read this cut as empty"
+        );
+    }
+
+    #[test]
     fn a_level_with_no_solid_tiles_is_a_legitimate_empty_cut_face() {
         // Slicing into open sky above the mountain: the mirror says nothing is there, so drawing
         // nothing at the cut is correct and must not be read as a hollow shell.
@@ -1592,6 +1761,43 @@ mod tests {
             "the item count is a running maximum, not the last frame's reading"
         );
         items_then_gone.assert_valid(true);
+    }
+
+    #[test]
+    fn the_independent_oracle_fails_a_tree_that_neither_path_draws() {
+        use protocol::{Dims, Material, MessageType, Snapshot, Speed};
+
+        // The hole this oracle exists for, staged directly: a tree cell the mirror holds, no mesh
+        // covering it, and no terrain cube drawn for it. `assert_tree_capture` cannot see this --
+        // it compares `tree_meshes()` with `spawn(tree_meshes())`, and a rejected column is absent
+        // from BOTH, so it reads equal while the tree is invisible.
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 2 },
+            tiles: vec![Tile::Solid(Material::TreeTrunk), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+
+        assert!(
+            std::panic::catch_unwind(|| assert_no_tree_is_undrawn(
+                &mirror,
+                1,
+                &[],
+                &BTreeSet::new()
+            ))
+            .is_err(),
+            "a tree cell drawn by neither path must fail the capture"
+        );
+        // Drawn as a cube by the fallback: accounted for.
+        assert_no_tree_is_undrawn(&mirror, 1, &[], &BTreeSet::from([[0, 0, 0]]));
+        // Carried by a mesh whose base is at or below it: also accounted for.
+        assert_no_tree_is_undrawn(&mirror, 1, &[[0, 0, 0]], &BTreeSet::new());
     }
 
     #[test]

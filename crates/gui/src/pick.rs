@@ -569,8 +569,9 @@ mod tests {
         assert_eq!(
             first_visible_hit(above, -Vec3::Y, &mirror, TOP).map(|hit| hit.tile),
             Some([x, y, 3]),
-            "foliage is drawn at 0.62-0.95 of its cell, so it is not pickable geometry and must \
-             not occlude the stone the player can plainly see through it"
+            "tree foliage is represented by a presentation mesh while picking still walks the \
+             authoritative tile grid, so foliage must stay non-pickable and reveal the trunk \
+             tile beneath it"
         );
     }
 }

@@ -26,6 +26,12 @@ gui.exe 7451 --capture 9-1-vista.png --frames 400000
 echo "exit=$?"
 ```
 
+NOTE (10.4 review, 2026-09-02): this command is WINDOWED — no `--headless` — and for a short
+window it could not have worked. The tree accounting the cut-face oracle needs was inserted only
+under `--headless`, so a windowed capture compared 0 drawn tree meshes against the 265 the mirror
+requires and panicked before the screenshot. Fixed; the resource now follows `--capture`, not the
+window. If this command ever panics on `capture drew a hollow cut`, that gate has regressed.
+
 Read the range-check line. **It gained a field on 2026-08-29** and now reads:
 `capture range check: warm-lit pixels=N ground-median-luminance=N near-white-area=X% blown-pool=Y% p99-luminance=Z`
 
@@ -56,7 +62,8 @@ a GPU frame. That is the measurement, not a broken build — the PNG is written 
 the evidence survives. At or under the bar CONFIRMS the ceiling; over it IS the correction. Either
 answer closes AC13.
 
-Also expected at startup: `projected 44984 terrain cubes at z 31`. It read 53365 before 9.4.
+Also expected at startup: `projected 39936 terrain cubes at z 31`. It read 53365 before 9.4;
+the 44,984 simulation census includes the 5,048 tree cells now rendered as meshes.
 **Not a regression** — tree density changed, then the ground-level foliage ring was removed.
 
 ## 2. Your eye on the trees — closes 9.4's AC10

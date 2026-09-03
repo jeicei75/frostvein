@@ -32,7 +32,46 @@ CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
   cargo build -p gui --release --target x86_64-pc-windows-gnu
 ```
 
-`gui.exe` lands at `target/x86_64-pc-windows-gnu/release/gui.exe`. Copy it to the Windows side.
+`gui.exe` lands at `target/x86_64-pc-windows-gnu/release/gui.exe`. **Copy that one file. There is
+nothing else to copy.**
+
+The four tree GLBs are compiled INTO the binary (`ingest::TREE_ASSETS`, served from Bevy's
+`embedded://` source), so the executable is self-contained and the assets cannot be left behind or
+go stale against the build that draws them.
+
+```powershell
+Copy-Item \\wsl$\<distro>\workspace\projects\frostvein\target\x86_64-pc-windows-gnu\release\gui.exe C:\frostvein\
+```
+
+Confirm on startup — the client prints this before it connects:
+
+```
+gui tree assets: 4 of 4 embedded in this binary, 1277340 bytes
+```
+
+That line reads the BLOBS: it counts only the pines that actually carry binary-glTF bytes, so an
+emptied or truncated asset reads `0 of 4` rather than passing. It still cannot speak for decoding,
+because Bevy has not started yet — so wait for the second line, which is the one that proves the
+pines reached the world and appears on EVERY run, windowed included:
+
+```
+gui trees: meshes=265 scenes_loaded=true source=embedded frames=2
+```
+
+**Both lines matter, and the review that added the second one is why.** The startup line used to
+print `TREE_ASSETS.len()` — a compile-time array length that would have read `4 embedded`
+identically with every blob emptied, with the registration deleted, or with `embedded://`
+resolution broken. A confirmation step that cannot observe its own failure is not a confirmation
+step. If `meshes=0` or `scenes_loaded=false`, the pines did not load; report it rather than
+looking for them on screen.
+
+**Superseded 2026-09-02, story 10.4.** This runbook previously said to copy the executable *and*
+the whole `assets/` directory beside it. That instruction was correct for the first mesh-tree
+build and failed the first time it was used: with the `.exe` alone, the client fell back to
+`GUI_WORKSPACE_ROOT`, a path stamped at COMPILE time on the WSL build machine, which on Windows
+resolves to a Linux path that cannot exist. The fix removed the copy step rather than restating
+it — the same reasoning `crates/gui/build.rs` gives for stamping the commit SHA into the binary:
+a procedure is exactly what a copied binary defeats.
 
 ## Start the daemon once (WSL, leave it running all session)
 
@@ -65,13 +104,15 @@ as a warm lantern pixel, and it sits outside the ground-luminance sample region.
 **2. The startup draw-set line now names its level.** It reads
 
 ```
-projected 44984 terrain cubes at z 31
+projected 39936 terrain cubes at z 31
 ```
 
 **This figure changed on 2026-08-29 and older recipes quote the old one.** It read `53365` from
 story 5.3 until story 9.4, which moved it twice — to 45,261 when tree density was cut, then to
 44,984 when the ground-level foliage ring was removed. The shipped world now has 301,048 solid
-cells rather than 315,068, of which 44,984 are exposed. Verified by direct computation against the shipped seed.
+cells rather than 315,068, of which 44,984 are exposed; 10.4 renders its 5,048 tree cells as
+meshes, so the client startup line is 39,936 terrain cubes. Verified by direct computation against
+the shipped seed.
 Any recipe or runbook still telling you to expect `53365` predates 9.4 — **that is not a
 regression**. The oracle answers "did the rim or a slice silently drop tiles?", so what matters is
 that the number is stable ACROSS a session, not that it matches a figure written before the world

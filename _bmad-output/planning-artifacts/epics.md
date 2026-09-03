@@ -1607,7 +1607,7 @@ path is untouched; the finer path lives behind a `--subdiv` flag so it can be co
 *sim* grid is **costed, not built** — no change to `Dims`, worldgen, the protocol or pathfinding.
 
 **Measured at planning (2026-08-31), on the real exported world, not assumed:** 524,288 cells,
-301,048 solid, **44,984 exposed cubes** — but only **61,142 faces are actually on the surface**,
+301,048 solid, **44,984 exposed cells** — but only **61,142 faces are actually on the surface**,
 against **269,904** submitted as whole cubes, so **77% of the geometry we draw is interior and
 invisible**. Greedy-meshed, the same world is **19,264 quads / 38,528 triangles** against the
 shipped **539,808** — a **14× triangle headroom available before any resolution increase**.

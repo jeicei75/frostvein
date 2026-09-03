@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-01
+last_updated: 2026-09-03
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -1602,7 +1602,102 @@ development_status:
   # (centre X -0.100000 against the four deliverables' 0.000000) -- and note that EVERY OTHER
   # clause passes on it, so origin centring is the only discriminating one.
   10-3-the-rules-of-the-look: done
-  10-4-the-trees-look-right-the-pilot: backlog
+  10-4-the-trees-look-right-the-pilot: review
+                          # 2026-09-03 AC12 CLOSED ON THE VEHICLE -> review. ALL ACs met. Wolf ran
+                          # build 3b0c43f on the RTX 4080. NFR6 PASSES: >100 fps typical, brief ~60
+                          # against 60/30 floors -- FIRST fps ever taken against the mesh trees, at
+                          # 67% of the scene's triangles. Lone gui.exe, no assets/, 265 pines from
+                          # embedded://; windowed --capture wrote its PNG where it used to panic.
+                          # NEW FINDING, CAUSE FOUND: THE SUN IS UNDER THE MAP. The only
+                          # DirectionalLight sits at the aurora curtain's MIDPOINT, Y=-58.5, while
+                          # the surface is Y=9 -- it shines upward from below and lights nothing.
+                          # Deleting it entirely moves the frame LESS than run-to-run noise;
+                          # lifting it moves mean luminance 13.3 against a 0.08 noise floor.
+                          # EVERY look decision so far (9.1 blowout, 9.4 colours, 10.3 rules, 10.4
+                          # trees, the near-white ceiling) was tuned with the sun off. Not 10.4's,
+                          # needs its own story + bench + Wolf's eye. deferred-work.md.
+                          # ALSO DEFERRED: fps varies while dwarves move (Wolf reads lighting; two
+                          # modes fit, pausing the daemon separates them), and near-white reads
+                          # 2.2071% on the GPU vs 9.1's 1.5630% ceiling -- no baseline GPU capture
+                          # exists, so venue and content stay confounded. Do NOT raise the ceiling.
+                          # PRIOR: THE VEHICLE CARD EXISTS: 10-4-signoff/task-6-vehicle-runbook.md.
+                          # AC12's closing half is ALL that is left in this story. Every command in
+                          # the card was run here on 12da79d first. The build.rs stamp defect
+                          # reproduced, so `touch crates/gui/build.rs` is a mandatory build step.
+                          # The fps question restated on measurement: the pines are 67% of the
+                          # scene (576,972 terrain triangles at the shipped subdiv 1, ~1.19M for
+                          # 265 pines). The story's own "~479k terrain" was NEVER MEASURED --
+                          # it matches no reading and is nowhere in the repo.
+                          # PRIOR: CODE-REVIEWED 2026-09-02 -> in-progress. FOUR LAYERS, ALL LIVE, NO
+                          # COVERAGE HOLES; full gate GREEN on a review layer and again after the
+                          # patch pass. 3 decisions / 14 patches / 5 deferrals / 1 dismissed.
+                          # THE HEADLINE: the story's central claim was TRUE and its evidence for it
+                          # was FALSE. The embedding fix works -- two layers ran a lone binary from
+                          # an empty dir and got 265 of 265 meshes from embedded:// -- but BOTH
+                          # committed AC5 captures were renders of the PRE-MESH build. One treatment
+                          # photographed twice, which is the failure AC3 was written to name,
+                          # landing on AC5's own artifacts. Confirmed 3 ways: by eye, by rebuilding
+                          # 9eba31f (exit 101, no PNG at all), and by measurement -- a real HEAD
+                          # capture differs from the committed one by 257,952 px at d>=4 against a
+                          # 6,620 noise floor. Regenerated from real builds: 261,952 at d>=4 vs a
+                          # WORST-CASE same-code noise of 46,050 (5.7x; 22.6x at d>=16).
+                          # THREE DECISIONS WERE ONE DEFECT. tree_meshes REJECTS a column it cannot
+                          # represent while both spawn paths filter every tree cell out of the
+                          # terrain -- so a rejected column was drawn by NEITHER path and vanished
+                          # silently, with the cut-face oracle rejecting it on both sides at once
+                          # and reporting a match. Wolf ruled: revive the cube path as the FALLBACK
+                          # (AC6 stops being vestigial), add the contiguity check TreeMesh's doc
+                          # comment always promised (a dug-through trunk now shows its hole instead
+                          # of redrawing an unbroken pine), and promote authored_bench.py onto the
+                          # gate reading the SAME GLBs the client embeds.
+                          # THE SUBDIV-2 BREAK WAS OURS, not pre-existing: dc79164 removed the only
+                          # TerrainTile entities at subdiv>1 and the lantern sweep queried that
+                          # component alone -- lit=0, panic BEFORE the PNG. Now lit=1870, PNG
+                          # written. It was filed as pre-existing because a genuinely pre-existing
+                          # panic (the near-white ceiling) sat next to it; filing them together is
+                          # what let it hide. A WINDOWED --capture also always panicked (0 == 265),
+                          # which is the exact command epic-9-shared-sitting-card.md tells Wolf to
+                          # run. 10 mutation rows, ALL KILLED, anchors re-audited after cargo fmt.
+                          # METRICS TRAP 4 AGAIN: the dev transcript's cursor sat at 12:09 while the
+                          # embedding work ran to 12:51 -- 86 turns / $20.80 belonged to no row.
+                          # OPEN: AC12's closing half (real window, real fps) still needs the
+                          # vehicle; ~1.2M triangles vs ~479k terrain is an unanswered fps question.
+                          # --at-tick is unusable on this venue (its floor wants as many OBSERVED
+                          # ticks as requested; software rendering observes ~a third).
+                          # STORY CREATED 2026-09-02 on branch 10-4-..., baseline 2ef194d, full gate
+                          # GREEN at creation. THREE OF SIX EPIC PREMISES WERE WRONG: "Blender 4.3.2"
+                          # is stale (bare `blender` is 5.2.1 and figures are NOT comparable across
+                          # the two, which is why the bench stamps blender= into every line); "no
+                          # devpod can open a window" is HALF false (no window, but lavapipe renders
+                          # and `gui --headless --capture` produces real client pixels -- only fps is
+                          # unmeasurable); and Eevee's exclusion is right for the WRONG reason
+                          # (missing libegl1, not llvmpipe). The epic's AC also names `SPRUCE_SNOW`,
+                          # a value superseded at round 7.
+                          # A SEVENTH DEFECT WAS FOUND IN THE JUST-MERGED GUIDELINES: the foliage
+                          # taper reads 0.72/0.86/full where the client ships 0.62/0.78/0.95. Same
+                          # round-7 commit 10c06e1 moved the taper, the snow cap AND the crown, and
+                          # a later commit documented only the crown -- the third value the partial
+                          # update hid. Task 0 corrects it. Evidence for issue #62.
+                          # VERIFICATION RECIPE EXECUTED AT CREATION, RED FIRST: stripping all 5,582
+                          # tree cells moved every bench figure (exposed_cells 44,984->40,148,
+                          # distinct_colors 59,191->27,999, terrain_luma 105.853->125.883) -- AND THE
+                          # RED STILL EXITED 0 AND PASSED ITS RANGE CHECK, because the floors are far
+                          # too loose to fail a treeless world. Judgement rests on the printed
+                          # figures, never the exit code. Control + RED artifacts committed to
+                          # 10-4-signoff/.
+  10-7-the-sun-lights-the-valley: backlog
+                          # CREATED 2026-09-03 out of 10.4's vehicle sitting, on Wolf's
+                          # instruction. THE SUN IS UNDER THE MAP: the only DirectionalLight sits
+                          # at the aurora curtain's MIDPOINT, Y=-58.5, surface is Y=9 -- it shines
+                          # upward from below and lights nothing. Deleting it moves the frame LESS
+                          # than run-to-run noise; lifting it moves mean luminance 13.3 vs a 0.08
+                          # noise floor (~170x). PLACED ABOVE 10.5 ON PURPOSE -- it must run first.
+                          # Judging authored dwarves under an ambient-only scene repeats 10.4's
+                          # own failure (approving a frame the client does not draw), one level up.
+                          # NOT context-filled: 3 rulings open (where the sun goes, whether it
+                          # stays coupled to the aurora, what gets re-judged). ACs provisional.
+                          # Expect NEAR_WHITE_AREA_CEILING to re-open: it was calibrated on a
+                          # sun-off frame and already reads 2.2071% vs 1.5630% on the vehicle.
   10-5-dwarves-worth-looking-at: backlog
   epic-10-retrospective: optional
 

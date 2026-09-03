@@ -39,10 +39,10 @@ Ruled in [Value and materials](#value-and-materials), except the rim row. Every 
 | ↳ before round 7 | `(158, 170, 196)` **(superseded at round 7)** | `#9EAAC4` | trimmed ~8%: the caps dominate the visible area at boot pitch |
 | `Material::TreeFoliage` | `(44, 100, 58)` | `#2C643A` | green since 9.4 |
 | ↳ before 9.4 | `(55, 73, 84)` **(superseded by 9.4)** | `#374954` | 9.9 from stone — near-camouflage |
-| `foliage_snow_color()` | `(156, 170, 196)` | `#9CAAC4` | exposed spruce crown; a material swap, never a terrain cap |
+| `foliage_snow_color()` | `(156, 170, 196)` | `#9CAAC4` | exposed spruce crown **on the cube fallback path**; a material swap, never a terrain cap. A GLB pine carries its snow in its own palette |
 | ↳ before round 7 | `(172, 186, 210)` **(superseded at round 7)** | `#ACBAD2` | the artifact's `SPRUCE_SNOW` |
 | `Material::TreeTrunk` | — | — | stated in the code table only |
-| foliage taper | 0.72 / 0.86 / full | — | skirts and tips / upper crown / mid-crown |
+| foliage taper | 0.62 / 0.78 / 0.95 | — | skirts and tips / upper crown / mid-crown — **cube fallback path only** |
 | `rim_dissolved_color()` | exactly the sky colour | — | see [Edge treatment](#edge-treatment) |
 
 ### Lights
@@ -86,7 +86,7 @@ the horizon angle), [Sky and lights](#sky-and-lights) (curtain top and edge alph
 | Fog range at boot | opens 75, saturates 155 | eye-only |
 | Rim dissolve | 13 levels (`RIM_LEVELS`) over `RIM_WIDTH` | the rim dissolve test below |
 | Rim dissolve, before | linear 5 steps over 10 tiles **(superseded)** | read as a hard band |
-| Draw-set oracle | 44,984 of 301,048 — a measurement | the cube oracle |
+| Draw-set oracle | 39,936 terrain cubes of 301,048 solid — a measurement | the cube oracle |
 
 The boot composition tests are
 `boot_composition_places_the_camp_low_and_the_skyline_at_the_top_third` and
@@ -155,11 +155,20 @@ The boot frame is a night scene.
 - Foliage is green since story 9.4. Trees separate on GREEN, the axis the cool directional does
   not compress.
 - Every terrain material MUST keep blue at or above red.
-- Foliage cubes taper by their contiguous foliage above: ground skirts and crown tips scale to
-  0.72, the upper crown to 0.86, and the mid-crown stays full scale. The taper MUST NOT change the
-  six-neighbour exposed-face set.
+- **The valley's trees are four authored GLB pines**, not cubes, since story 10.4:
+  `SM_VoxelPine_Tree0{1,2,3}` and `Tree04R`, embedded in the binary via `include_bytes!` and
+  served from `embedded://`. One mesh is re-derived per trunk column; the variant follows the
+  column's height in cells (4 / 5 / 5 / 6), tie-broken by a stable FNV hash of x,y. Snow is baked
+  into the GLB palette, so the two rules below do NOT govern a pine's pixels.
+- **The cube rules below are the FALLBACK path**, and they are live: a trunk column the mesh rule
+  cannot represent — a gap dug through it, or a height outside 4-6 — is drawn as cubes rather than
+  by nothing. That fallback is the only thing standing between a dug tree and an invisible one, so
+  these values still ship and are still pinned.
+- Foliage cubes on the fallback path taper by their contiguous foliage above: ground skirts and
+  crown tips scale to 0.62, the upper crown to 0.78, and the mid-crown to 0.95. The taper MUST NOT
+  change the six-neighbour exposed-face set.
 - Ramps follow the same material rules, because the renderer presents them as full cubes.
-- The **exposed crown** of a spruce — foliage with nothing solid above it — takes its own
+- The **exposed crown** of a fallback spruce — foliage with nothing solid above it — takes its own
   snow-laden material. This is a material swap and MUST NOT be a terrain cap.
 
 Check: `appearance_tables_pin_the_cold_boot_palette` (`crates/gui/src/appearance.rs`) pins the
@@ -235,8 +244,9 @@ Two mechanisms are in the build, and they do different jobs.
 - Shared steps per surface keep the dissolve to a handful of material handles; per-tile blending
   would mean one material per cube.
 - The rim tiles MUST still be drawn. The draw set is watched by the cube oracle and MUST never
-  shrink to hide an edge. **The oracle is a measurement of the shipped world, not a constant** — it
-  reads **44,984** exposed cubes of 301,048 solid today, and moves whenever world content moves.
+  shrink to hide an edge. **The oracle is a measurement of the shipped draw set, not a constant** —
+  it reads **39,936 terrain cubes** of 301,048 solid today. The simulation census remains 44,984
+  exposed cells: 5,048 tree cells now render as meshes rather than cubes.
 - **The fog colour and the rim's target colour MUST both be exactly the sky colour.** A haze colour
   only becomes available once the sky itself carries a vertical gradient; until then these three
   colours move together or not at all.

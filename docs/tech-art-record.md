@@ -32,6 +32,10 @@ terrain cap: capping foliage puts a bright slab on every ground-level skirt tile
 landform, which is what the round-3 capture showed. Bare cube foliage without it reads as a dark
 clump in a lit field.
 
+Round-7 commit `10c06e1` moved the foliage taper together with the snow cap and the crown. Its
+documentation follow-up recorded only the crown, leaving the guidelines' taper stale until story
+10.4 corrected both occurrences.
+
 ## Sky and lights
 
 The aurora was first built on a ring of **radius 220** **(superseded by
@@ -83,8 +87,9 @@ candidate walked to the end and found wanting, by arithmetic on the real framing
 
 Story 9.4 moved the draw-set oracle twice in one story: **53,365 of 315,068** **(superseded by
 9.4)** before it, **45,261** **(superseded by 9.4's second half)** after the tree-density cut,
-44,984 after the ground-level foliage ring was removed. It moves whenever world content moves; what
-must not change is that the rim dissolves by colour alone and removes no tiles.
+44,984 after the ground-level foliage ring was removed. Story 10.4 keeps that simulation census
+but moves its 5,048 tree cells out of the cube draw set, which now reports 39,936 terrain cubes.
+What must not change is that the rim dissolves by colour alone and removes no tiles.
 
 A lighter "horizon haze" would be more true to a real aurora-lit night — and the approved artifact
 has one — but with a uniform sky it would make far terrain *lighter* than the sky behind it and hand
@@ -130,3 +135,26 @@ five-dwarf assets have instance counts roughly four orders of magnitude lower. T
 16 voxels/cell remains the authored-asset target, not a request to render terrain at that density.
 `k=8` is frame-rate servable (100–140 fps) but is not adopted because every dig hitches 38–78 ms
 versus k=4's 5–13 ms. `k=16` is geometry-only, without a valid fps reading.
+
+## The cube foliage rules are a fallback, not dead code (10.4 review, 2026-09-02)
+
+Story 10.4 moved the valley's trees to four authored GLB pines and filtered every tree cell out of
+both terrain spawn paths. That left `foliage_scale`, `has_snow_laden_crown`, `foliage_snow_color()`
+and `TerrainSlot::FoliageCrown` unreachable in production while their tests stayed green — and it
+opened a hole nobody could see: `tree_meshes` REJECTS a column it cannot represent (a height
+outside 4-6), so a rejected column was drawn by the mesh path and the cube path neither. The tree
+simply vanished, and the cut-face oracle rejected it on both sides at once and reported a match.
+
+Wolf's ruling at the review: revive the cube path as the fallback rather than delete it. A column
+the mesh rule rejects renders as cubes, exactly as it did before mesh trees. That closes the hole,
+makes the taper and crown values live again rather than a guard over nothing, and answers the
+second half of the same defect — `tree_meshes` promised a *contiguous* trunk column and never
+checked it, so digging one mid-trunk cell left min and max untouched and the client redrew an
+unbroken pine over a hole the sim had already stored. The contiguity check now rejects that column
+into the same fallback.
+
+The documented taper was separately wrong before any of this: round-7 commit `10c06e1` moved the
+taper, the snow cap and the crown together and only the crown was documented, leaving
+`0.72 / 0.86 / full` in the guidelines against the shipped `0.62 / 0.78 / 0.95`. Corrected at 10.4
+Task 0; the surrounding text was then corrected AGAIN at the review, because Task 0 landed before
+the mesh ruling and left the cube rules reading as the shipped description of every tree.
