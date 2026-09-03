@@ -414,6 +414,7 @@ says so.
 | 2026-09-03 | **Task 3: Wolf ruled `+17.66°`** against the shipped `−6.42°` control and the `+8.62°` / `+25.87°` alternatives, on the side-by-side comparison of the four bench frames. UX-DR22 opening half signed; the closing half still needs his eye on the vehicle. |
 | 2026-09-03 | Tasks 4-6: landed Wolf's `+17.66°` elevation in client and bench, added an independent downward-direction guard, made the PNG instruments reject unsupported RGBA frames, and captured the shipped/candidate noise comparison. |
 | 2026-09-03 | Tasks 4-7 complete. `+17.66°` landed in client and bench in one commit with both `bench_contract.rs` anchors; three tests that pinned the below-horizon sun were corrected rather than loosened. AC5's guard `the_approved_sun_lights_downward` uses a hand-written floor independent of the elevation constant. Mutation table 3/3 KILLED, re-run independently. AC4 measured at **131.8x** its own noise floor. `lumstats.py` and `pixel_diff.py` gained the colour-type guard that closes their silent-misparse trap. Near-white recorded and filed, not moved (AC7). Full gate GREEN 9/9. Status → review; UX-DR22's closing half still open. |
+| 2026-09-03 | **Vehicle sitting (Wolf).** UX-DR22's closing half observed: terrain shadows correct at the shipped `--subdiv 1`, fps unchanged, campfire and lanterns still reading as the valley's own light. One defect found and filed rather than fixed here — black hard-edged quads at box bottoms at `--subdiv > 1`, which reproduces headless. Evidence committed to `10-7-signoff/`. |
 
 ## Dev Agent Record
 
@@ -515,59 +516,34 @@ GPT-5.6 (Codex)
   calibrated on `boot7.png`, a frame rendered with the sun below the horizon, so it needs a new
   reference frame rather than a bigger number.
 
-- **UX-DR22 closing half is NOT signed.** `10-7-signoff/task-7-vehicle-runbook.md` is the card;
-  it needs Wolf's eye on the vehicle against `candidate-plus17.66.png`, and it asks specifically
-  whether the campfire still reads as the valley's own light source — the trade-off that decided
-  `+17.66°` over `+25.87°`.
+- **UX-DR22 CLOSING HALF — OBSERVED ON THE VEHICLE, 2026-09-03 (Wolf).** The built result was
+  viewed live against the approved artifact. **The sun change itself passes on every count Wolf
+  was asked for:**
+  - terrain shadows read correctly at `--subdiv 1`, the shipped default and the path AC4 measured;
+  - **fps unchanged** — *"fps still the same about so performance is not an issue"*, so raising the
+    sun costs nothing NFR6 cares about, which was the open question about real shadow work;
+  - the campfire and the lanterns still read as the valley's own light sources — *"camp fire and
+    lanterns are lighting I think"* — which is the exact trade-off that chose `+17.66°` over
+    `+25.87°`, confirmed by the eye it was reserved for.
 
+- **ONE DEFECT FOUND, AND IT IS NOT THIS STORY'S TO FIX.** *"with higher subdivs there are some
+  black hard artifacts... in box bottoms or something like that.. probably terrain shadows wrongly
+  rendered in case of higher subdiv."* Confirmed and characterised: at `--subdiv > 1` a pure-black
+  hard-edged quad sits at the base of nearly every pine trunk and the terrace-step banding hardens;
+  at `--subdiv 1`, same region and framing, there are none. **It reproduces headless in the devpod**,
+  so it can be worked without the vehicle. Filed with its evidence and both open cause families in
+  `deferred-work.md` § "Found at 10.7's vehicle sitting: BLACK QUADS AT BOX BOTTOMS". It is out of
+  this story's scope by its own guardrails (`CascadeShadowConfig` is off-limits here, and no look
+  constant is re-tuned), and it could not have existed as a *visible* defect before this story —
+  with the sun below the horizon nothing cast anything.
 
-- Task 1 complete: decoupled the directional-light transform from the aurora, preserving the
-  shipped direction until Wolf selects an elevation. The bench reads the matching module-scope
-  constants at call time. The bench shipped-elevation assertion intentionally remains upward and
-  must move with the approved elevation in Task 4.
-- Re-anchored 10.1's hand-picked-sun mutation row to the new bench formula after the global
-  mutation audit correctly detected its removed seam.
-- Task 2 complete: exported a tick-21 snapshot and rendered the shipped control plus +8.62°,
-  +17.66°, and +25.87° candidates through an import-only driver. Each candidate's range-check
-  figures differs from the control's; Wolf's Task 3 decision remains outstanding.
-- Task 4 complete: the client and bench share `17.66` in one commit; the bearing test projects
-  onto XZ, so it proves bearing rather than incorrectly constraining elevation.
-- Task 5 complete: the deliberately hand-written `APPROVED_DOWNWARD_FLOOR` guards downward
-  light travel independently of the elevation constant; all three mutation rows were killed.
-- Task 6 complete: the RGB-only instruments fail loudly on RGBA and four client captures measure
-  a 131.8x signal-to-noise ratio. The pre-existing near-white breach was recorded, not retuned.
-
-**Orchestrator (Claude) independent verification of Run A, 2026-09-03.** Codex's exit was not
-trusted; every claim below was re-run here.
-
-- **The delegated run was KILLED by the devpod execution layer mid-self-gate** (empty last-message
-  file, log truncated inside a `codex review` diff). The commit-cadence floor paid for itself for
-  the third time on this project: four commits had already landed, so nothing was lost. The two
-  `401` hits in the log are false positives — the handoff text echoed back, and a line number.
-- **Full `scripts/gate.sh` re-run by the orchestrator: GREEN, 9/9, no skips.**
-- **The control artifact was re-rendered independently and is PIXEL-IDENTICAL** to the committed
-  one: `0` of 518,400 pixels differ, and the `range-check:` line reproduces verbatim —
-  `range-check: blender=5.2.1 exposed_cells=44984 non_sky_fraction=0.686736 distinct_colors=59190
-  terrain_luma=105.853 floors(non_sky_fraction=0.020000, distinct_colors=32, terrain_luma=20.000)`.
-  AC2's "one treatment photographed twice" risk is closed by measurement, not by inspection.
-- **Candidate separation against a zero-pixel same-build floor** (control vs candidate, `d>=4`):
-  +8.62° = 199,830 px, +17.66° = 232,431 px, +25.87° = 253,437 px. Monotonic, and enormous
-  against the 0-pixel reproduction floor above.
-- **Both bench figures are monotonic in elevation**, recomputed here from the saved PNGs rather
-  than taken from the run: `terrain_luma` 105.853 -> 119.546 -> 132.927 -> 143.913, and whole-frame
-  Rec.601 mean 75.435 -> 84.503 -> 93.374 -> 100.564.
-
-**INSTRUMENT DEFECT FOUND, and it lies rather than dying — `lumstats.py` (AC4's instrument) and
-`pixel_diff.py` both hardcode `bpp=3` and never read the PNG's colour type.** The bench writes
-**RGBA** (colour type 6); client captures are **RGB** (colour type 2). Run on the bench frames,
-`lumstats.py` misparses every scanline and returns plausible, wrong, NON-MONOTONIC figures
-(mean 68.266 -> 69.065 -> 67.882 -> 66.981) for frames whose true ladder is cleanly monotonic.
-It caught the orchestrator first: the two instruments appeared to disagree about the direction of
-the effect, and the disagreement was entirely this bug. The story's creation-time REDs proved
-`lumstats.py` dies on a truncated frame and reports an all-black frame honestly; a **third**
-direction — a frame whose colour type it does not support — was never tested, and there it is
-believed. Its own job (AC4, client captures) is RGB and is unaffected today, but nothing in the
-file enforces that. **Task 6 must make it assert its colour type before it is used as evidence.**
+- **HOW THIS STORY'S OWN EVIDENCE MISSED IT, recorded because it is the reusable lesson.** Task 4's
+  subtask said *"Lighting is per-scene, not per-path, so confirm rather than assume — capture at
+  both and say so."* Both captures were taken, `candidate-client-subdiv2.png` was committed, and the
+  confirmation was written from `chunks=118 faces=227110 triangles=151062` — **the counts, never the
+  picture**. The artifact was in the story's own committed evidence the whole time. A "capture both
+  and confirm" obligation is only discharged by an assertion about the PIXELS; geometry counts are
+  blind to lighting exactly as they are to winding.
 
 ### File List
 

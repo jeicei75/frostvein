@@ -1674,3 +1674,55 @@ venue-independent and are the actual finding.
   (`capture.rs:1250-1253`), so every capture stays usable at exit 101; the panic costs evidence
   nothing today. Whoever takes this needs one baseline capture on the calibration venue plus a new
   reference frame under the approved sun, and should re-read 9.1 before moving a digit.
+
+## Found at 10.7's vehicle sitting: BLACK QUADS AT BOX BOTTOMS, ONLY AT SUBDIV > 1 (2026-09-03)
+
+Wolf, on the vehicle, after 10.7 raised the sun: *"shadows for terrain work with subdiv 1 without
+an issue.. with higher subdivs there are some black hard artifacts"*, and on being asked:
+*"I don't mean tree shadows actually but there are some black artifacts in box bottoms or something
+like that.. probably terrain shadows wrongly rendered in case of higher subdiv"*.
+
+**What is actually on screen.** At `--subdiv > 1`, a **pure-black, hard-edged quad sits at the base
+of nearly every pine trunk**, and the dark banding along each terrace step is far harder than at
+`--subdiv 1`. At `--subdiv 1`, in the same region at the same framing, **there are none**.
+
+**Evidence, all committed to `10-7-signoff/`:**
+
+| file | what it is |
+|---|---|
+| `vehicle-subdiv-artifacts-2026-09-03.png` | Wolf's own vehicle screenshot, 3825x1523, RTX 4080 |
+| `subdiv-artifact-headless-subdiv2.png` | matched crop, headless devpod, `--subdiv 2` — black quads at trunk bases |
+| `subdiv-artifact-headless-subdiv1.png` | the SAME region and framing at `--subdiv 1` — clean |
+| `candidate-client-subdiv2.png` | the full headless `--subdiv 2` capture the crops come from |
+
+**IT REPRODUCES HEADLESS IN THE DEVPOD.** The signature in `subdiv-artifact-headless-subdiv2.png`
+is the same as the vehicle's, so whoever takes this can **iterate here** and needs the vehicle only
+for the final look judgement. That is the difference between a cheap story and an expensive one.
+
+**Cause is NOT determined, and two families are open.** Do not start from a guess:
+1. **Shadow-map bias / cascade behaviour on the chunk-mesher path.** At `--subdiv > 1` terrain goes
+   through the chunk mesher instead of per-cell `Cuboid`s, so the geometry is finer and the bias
+   tuned for the coarse path may self-shadow. `CascadeShadowConfig` was measured and FALSIFIED in
+   10.7's investigation (`probe-cascade-max-500-FALSIFIED.png`) — but that was measured **with the
+   sun below the horizon**, i.e. with nothing casting, so **that falsification is void for this
+   question** and must be re-run under the approved sun before it is quoted again.
+2. **Unlit faces out of the mesher.** `emit_quad` (`crates/gui/src/project.rs:1040-1085`) gives all
+   four vertices one face normal and picks winding by `key.sign`. The comment there records that
+   the winding was inverted on every axis and both signs until it was fixed — and it was fixed
+   against **culling**, i.e. against faces being VISIBLE, which is winding-blind to lighting.
+   Nothing yet asserts that a mesher face is LIT the way the equivalent `Cuboid` face is.
+
+**Why this could not have been caught before 10.7.** With the sun 6.42° below the horizon nothing
+cast anything and every face was ambient fill, so no build before this one could show it. It is a
+latent defect the sun revealed, exactly as 10.4's vehicle sitting revealed the sun itself.
+
+**It is not shipping broken today** — the client default is `--subdiv 1` (`project.rs:53`), which is
+the clean path and the one 10.7's AC4 measured. **But it is on the adopted road**: 10.6 ruled k=4,
+and k>1 *is* this path. Whoever schedules 10.6's adoption inherits this.
+
+**How 10.7's own evidence missed it.** Task 4's subtask read *"Lighting is per-scene, not per-path,
+so confirm rather than assume — capture at both and say so."* Both captures were taken, the
+`--subdiv 2` one was committed, and the conclusion was drawn from `chunks=118 faces=227110
+triangles=151062` — **the counts, never the picture**. The artifact was sitting in the story's own
+committed evidence for the whole review window. Counts are winding-blind and they are lighting-blind
+too; a "capture both and confirm" subtask needs an assertion about the PIXELS, not the geometry.
