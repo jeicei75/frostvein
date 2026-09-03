@@ -35,8 +35,8 @@ pub const FAR_TERRAIN_EDGE: f32 = -128.0;
 pub const SUN_AZIMUTH_DEGREES: f32 = 40.0398;
 
 /// Degrees above the horizon. Positive means the light travels DOWNWARD onto the valley.
-/// Shipped value; the chosen value lands in Task 4 after Wolf rules on the benched candidates.
-pub const SUN_ELEVATION_DEGREES: f32 = -6.4181;
+/// Chosen by Wolf from the Task 2 bench candidates on 2026-09-03.
+pub const SUN_ELEVATION_DEGREES: f32 = 17.66;
 
 /// The horizontal centre of the world footprint; all sky geometry is hung around it.
 pub const SKY_CENTRE: Vec3 = Vec3::new(63.5, 0.0, -63.5);
@@ -386,16 +386,11 @@ mod tests {
             "sun direction must be unit length: {direction:?}"
         );
         assert!(
-            direction.dot(-boot_horizontal_forward()) > 0.99,
+            Vec3::new(direction.x, 0.0, direction.z)
+                .normalize()
+                .dot(-boot_horizontal_forward())
+                > 0.99,
             "sun must still travel along the curtain-side bearing: {direction:?}"
-        );
-        // This literal is the measured shipped travel vector, deliberately not calculated from
-        // the sun constants. Its precision distinguishes the decoupled angle model from the
-        // old aurora-to-camp construction while the elevation remains unchanged in Task 1.
-        let shipped_direction = Vec3::new(0.760_799_5, 0.111_782_86, 0.639_287_65);
-        assert!(
-            (direction - shipped_direction).length() < 3e-7,
-            "sun direction must retain the measured shipped vector: {direction:?}"
         );
     }
 

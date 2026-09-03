@@ -80,7 +80,7 @@ CAMP_FOCUS = (64.0, 9.0, -64.0)
 
 # [atmosphere.rs] The client and bench must share the sunlight's travel bearing and elevation.
 SUN_AZIMUTH_DEGREES = 40.0398
-SUN_ELEVATION_DEGREES = -6.4181
+SUN_ELEVATION_DEGREES = 17.66
 
 # Cycles has no ambient-light object: the world background IS the ambient term. The client adds
 # `AmbientLight { color: night_lighting().ambient, brightness: 4_500.0 }` [ingest.rs:714-718] on

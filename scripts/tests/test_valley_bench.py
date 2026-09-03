@@ -184,11 +184,9 @@ class ValleyFramingTests(unittest.TestCase):
 
     def test_sun_is_aimed_the_way_the_client_aims_it(self):
         # The sun has its own bearing and elevation; the aurora's position is decorative only.
-        # At the shipped elevation it still travels gently upward. Task 4 moves this expectation
-        # below the horizon together with the approved client and bench elevation.
+        # Wolf's approved elevation is above the horizon, so the key light travels downward.
         direction = valley_bench.sun_direction()
-        self.assertGreater(direction[1], 0.0, f"shipped sun must still travel upward: {direction}")
-        self.assertLess(direction[1], 0.2, f"key light is too steep: {direction}")
+        self.assertLess(direction[1], -0.15, f"sun must travel downward onto the valley: {direction}")
         self.assertGreater(direction[0], 0.5, f"key light comes from the wrong compass point: {direction}")
         self.assertAlmostEqual(sum(component * component for component in direction), 1.0, places=6)
 

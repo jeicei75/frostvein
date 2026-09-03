@@ -194,8 +194,8 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
         ),
         (
             &atmosphere,
-            "pub const SUN_ELEVATION_DEGREES: f32 = -6.4181;",
-            "SUN_ELEVATION_DEGREES = -6.4181",
+            "pub const SUN_ELEVATION_DEGREES: f32 = 17.66;",
+            "SUN_ELEVATION_DEGREES = 17.66",
         ),
         // The foliage shrink. Without it the bench drew solid canopy slabs where the client draws
         // sparse crowns, which is the difference an eye reads first.
