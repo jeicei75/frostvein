@@ -1961,3 +1961,27 @@ they are recorded here rather than patched, per the review-cost LOW-tail cap.
   non-vacuous by hand (stubbing the assignment reddens the exact assertion), but that check is
   recorded in prose and not carried by a row. All 7 existing rows were verified to still apply at
   HEAD during this review, so none is stale.
+
+## Surfaced at 10.7's pre-merge vehicle sitting (2026-09-04)
+
+- **FOUR LARGE ENCLOSED-SKY HOLES AT THE RIDGE, AT BOTH SUBDIVISIONS, AND THEY PREDATE 10.7.**
+  945 / 525 / 294 / 186 px at `--subdiv 2` and the same four at `--subdiv 1` (801 / 363 / 232 / 217),
+  clustered at `x 164-325` and `x 1096-1151`, `y 257-301` at the boot framing — up on the far ridge
+  where the terrain meets the sky. Measured with `10-7-signoff/enclosed.py`; painted magenta in
+  `10-7-signoff/wolf-sitting-sd1-holes-marked.png`. **They are byte-identical in
+  `control-shipped-a-e930d07.png`**, a capture of the shipped build taken before any change in story
+  10.7, so this story neither caused them nor touched them. These are what Wolf saw as "2-3 black
+  holes on top of terrain cubes" — they are by far the largest holes on screen, ~1,650 px of the
+  1,650 px total at the shipped `--subdiv 1`. **Cause NOT diagnosed. Do not presuppose one** — the
+  two candidates not yet separated are a missing terrain face at the world's outer boundary, and
+  sky beyond the world's edge enclosed by trees standing past the last terrain cell. Distinguishing
+  them needs the geometry, not the pixels. **Revisit trigger:** whoever picks up the AC12 remainder;
+  it wants its own story, because it is a different mesher question from the trunk-base family and
+  it affects the shipped default, which the trunk-base family does not.
+- **`holes.py` and `pixel_guard.rs::interior_sky` measure open sky, not interior sky.** Their
+  per-column silhouette rule never engages, because the night sky is a gradient and no column's
+  topmost pixel is ever exactly `SKY_RGB` — the silhouette resolves at `y <= 19` in all 1,280
+  columns. Superseded by `10-7-signoff/enclosed.py` (border flood fill, 0 px noise floor). Left
+  here as the entry that says the OLD figures in this story and in `pixel_guard.rs` are readings of
+  a different quantity, so nobody re-derives a conclusion from them. See the story's
+  "AC12 IS NOT MET" section for the arithmetic.

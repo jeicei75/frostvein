@@ -1691,6 +1691,21 @@ development_status:
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
   10-7-the-sun-lights-the-valley: in-progress
+                          # 2026-09-04 AC12 FALSIFIED AT THE PRE-MERGE SITTING, full gate green.
+                          # Wolf: "tree trunk bases has still black quads and there is 2-3 black
+                          # holes on top of terrain cubes". BOTH reproduce headless at 6cd6f8d.
+                          # TWO FAMILIES: (a) trunk bases, this story's, PARTIALLY fixed -- 82 blobs
+                          # -> 54, ~200 px left, --subdiv 2 only; (b) four ridge holes ~1,650 px at
+                          # BOTH subdivs, byte-identical in control-shipped-a-e930d07.png from
+                          # before the story, so NOT 10.7's -- filed in deferred-work.md.
+                          # WHY THE GUARD WAS GREEN: holes.py and pixel_guard.rs resolve the
+                          # silhouette as a column's topmost non-sky pixel, and the sky is a
+                          # GRADIENT, so it lands at y<=19 in all 1,280 columns and they count OPEN
+                          # SKY (11,174 of 18,889). Only their DELTA tracked holes; the story read a
+                          # delta as a level, and AC12 asks for gone. New oracle
+                          # 10-7-signoff/enclosed.py: border flood fill, RED-first, 0 px noise floor.
+                          # NEXT: Wolf's call on scope -- the trunk-base remainder is 10.7's, the
+                          # ridge family is not. Nothing pushed; no PR.
                           # 2026-09-03 CODE REVIEW -> in-progress (NOT done). Four layers, no
                           # coverage holes, every layer ran cargo. THE CODE IS SOUND on every
                           # count that was executed: sun +13.2 mean luminance reproduced on two

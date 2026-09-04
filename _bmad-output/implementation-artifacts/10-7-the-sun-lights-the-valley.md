@@ -358,7 +358,80 @@ frame-level proof above is committed evidence, not a test, because a keybind can
 capture and Wolf ruled out the CLI flag that would let it.
 
 
-## AC12 MET — the holes are closed, and it took two wrong turns to get there (2026-09-03)
+## AC12 IS NOT MET — WOLF'S EYE, 2026-09-04, AND THE INSTRUMENT WAS THE REASON
+
+Wolf, at the pre-merge sitting: *"tree trunk bases has still black quads and there is 2-3 black holes
+on top of terrain cubes"*. Both halves reproduce headless at `6cd6f8d` with the full gate GREEN.
+**The section below this one is superseded** — it was written in good faith from a metric that cannot
+express the claim it was used to make.
+
+### What is actually on screen, measured topologically
+
+A hole is sky with terrain drawn all the way around it, so resolve it as a **flood fill from the
+frame border**: sky the fill reaches is open sky, sky it cannot reach is a hole.
+`10-7-signoff/enclosed.py`, RED-first (punching a 20x20 sky square into terrain moves it by exactly
+400 px and one blob; adding a star to the sky does not move it at all).
+
+| capture | enclosed-sky px | blobs |
+|---|---:|---:|
+| `--subdiv 2` before the fix (`candidate-client-subdiv2.png`) | 2,571 | 82 |
+| `--subdiv 2` REJECTED first fix | 3,449 | 67 |
+| `--subdiv 2` shipped fix (`probe-subdiv2-holes-closed-a.png`) | 2,146 | 54 |
+| **`--subdiv 2` at `6cd6f8d`, run a / run b** | **2,177 / 2,177** | **54** |
+| **`--subdiv 1` at `6cd6f8d`, run a / run b** | **1,650 / 1,650** | **15** |
+| `--subdiv 1` on the PRE-STORY shipped build (`control-shipped-a-e930d07.png`) | 1,650 | 15 |
+
+**Same-build noise floor: 0 px.** Two captures of one binary agree exactly, at both subdivisions.
+
+### The two families are different defects, and only one of them is this story's
+
+1. **TRUNK BASES — this story's defect, partially fixed.** 82 blobs -> 54. What remains is ~200 px of
+   slivers at `--subdiv 2` only; `--subdiv 1` has none of them, so the story's premise about the
+   coarse path holds. Sampled under two trunks in the committed "holes closed" artifact: **32 px and
+   20 px of exactly `rgb(5,12,28)`**. They are plainly visible in
+   `probe-subdiv2-holes-closed-a.png` — the artifact this story committed to prove they were gone.
+   The review corrected that filename's *name* (see the change log) and nobody re-opened its
+   *content*, which is the artifact-name lesson landing a second time on the same file.
+2. **FOUR LARGE HOLES AT THE RIDGE — NOT this story's, and older than it.** 945 / 525 / 294 / 186 px
+   at `--subdiv 2`, the same four at `--subdiv 1`, and **byte-identical in `control-shipped-a-e930d07.png`,
+   captured on the shipped build before any change in this story**. 10.7 neither caused them nor
+   touched them. These are the "2-3 black holes on top of terrain cubes" — they are the large,
+   obvious ones. Cause NOT diagnosed; do not presuppose one. Filed in `deferred-work.md`.
+
+### Why every instrument said green — the silhouette rule never engages
+
+`holes.py` and `pixel_guard.rs::interior_sky` count, per column, the sky below that column's topmost
+non-sky pixel. **The night sky is a gradient**, so the top of every column is some other shade and
+the silhouette resolves at `y <= 19` in all 1,280 columns. Measured on the `--subdiv 1` capture:
+
+```
+exactly-SKY pixels in the whole frame          18,889
+  above each column's silhouette                7,715
+  below it  = what holes.py reports            11,174
+genuinely enclosed by terrain                   1,650
+```
+
+So ~87% of the reading is open sky. The metric's DELTA does track holes — 12,722 -> 12,285 is 437 px
+against this file's 425 on the same pair, which is why it looked like it worked. **But a delta can
+only say "some closed"; it can never say "none left", and AC12 asks for gone.** The story read a
+delta as a level. That is the whole defect, and it is a new shape: not an instrument that lied, an
+instrument that answered a different question accurately.
+
+The guard inherits it, and its comment is the load-bearing falsehood — `pixel_guard.rs:231`:
+
+```rust
+// The residual ~12,300 is legitimate sky between real terrain, not holes, which is why this is
+// a calibrated ceiling and not zero.
+const INTERIOR_SKY_CEILING: usize = 12_600;
+```
+
+The residual is not legitimate sky. It contains all 54 holes, and the ceiling leaves ~290 px of
+headroom above today's reading — it would pass a further regression before it complained.
+
+Evidence: `wolf-sitting-sd2-holes-marked.png`, `wolf-sitting-sd1-holes-marked.png` (every enclosed
+pixel painted magenta) and `wolf-sitting-sd2-trunk-crop.png` (5x, two trunk bases).
+
+## SUPERSEDED 2026-09-04 — AC12 MET — the holes are closed, and it took two wrong turns to get there (2026-09-03)
 
 **The cause.** The dark quads were `rgb(5, 12, 28)` — exactly `SKY_RGB` — so never shadows and never
 a dark material: **holes**. `build_chunk_meshes` skips a mesh-drawn tree cell outright while
@@ -392,8 +465,11 @@ earlier "11,174 / 11,174, EXACTLY unchanged" was one run coinciding with one run
 two-run floor understated the real spread. The shipped default is unchanged **within a 45 px
 same-build spread**, which is the honest claim and still comfortably clear of the ~420 px signal.
 
-Confirmed by eye as well: the black quads at the trunk bases are absent from
-`probe-subdiv2-holes-closed-*` and plainly present in `probe-subdiv2-REJECTED-first-fix-*`.
+~~Confirmed by eye as well: the black quads at the trunk bases are absent from
+`probe-subdiv2-holes-closed-*` and plainly present in `probe-subdiv2-REJECTED-first-fix-*`.~~
+**FALSE, corrected 2026-09-04.** They are present in `probe-subdiv2-holes-closed-*` too — 32 px and
+20 px of exactly `rgb(5,12,28)` under two trunks. The "confirmation by eye" was an agent's reading
+of a headless probe, and it agreed with the number it already believed.
 
 **Mutation table: 7 of 7 KILLED**, including three new rows — `a mesh-drawn tree hides a terrain
 face again`, `the stone control stops hiding its face, so the test stops discriminating`, and
@@ -627,6 +703,7 @@ says so.
 | 2026-09-03 | **Code review, four layers, no coverage holes.** Full gate re-run green at HEAD by a review layer. Code sound on every count that was run: sun +13.2 mean luminance reproduced on two fresh builds, all five toggles wired on the live path, no third residual emitter, subdiv-2 holes genuinely closed. **One HIGH, and it was the evidence, not the code:** the committed `probe-subdiv2-after-occluder-fix*.png` were the REJECTED first fix (13,606/13,608 measured, against 12,314 published), so AC12's proof contradicted itself while the fix was fine. 7 patches applied, 7 LOW deferred, 1 dismissed. |
 | 2026-09-03 | **SCOPE CHANGE #5 on Wolf's ruling at review: the no-CLI-flag decision is LIFTED.** `--lights-off` lands, giving `from_name` the production caller it never had, and with it `crates/gui/tests/pixel_guard.rs` — the first tests here that assert PIXELS. AC11's is Wolf's own complaint encoded: all five sources off must leave `warm_lit_pixels == 0`. Measured 0, mean 13.205 vs 101.084. AC5's guard extended to the INSTALLED light, AC12's oracle to all three substituted call sites, the bench contract to the sun FORMULA rather than only its constants, and five dead bench constants removed with their anchors. Mutation table 7 rows -> 12. Costs ~2 min on the full gate only. |
 | 2026-09-03 | **Wolf found the toggles incomplete from the seat**: torches were hardcoded lit and every light entity's emissive face kept glowing regardless. Torches get F9; emissive now follows the toggle for campfire and torch materials. The test gains the RESTORE, which nothing had pinned — re-enabling a point light worked only by grace of `flicker_projection`. Mutation table 7/7 KILLED, full gate GREEN. |
+| 2026-09-04 | **AC12 FALSIFIED BY WOLF'S EYE at the pre-merge sitting**, with the full gate green at `6cd6f8d`. Both halves reproduce headless: ~200 px of trunk-base holes at `--subdiv 2` (54 blobs, down from 82 — the fix was partial, not complete), and four large ridge holes of ~1,650 px that are **byte-identical in the pre-story shipped build** and are therefore not this story's. Root cause of the false green: `holes.py`'s and `pixel_guard.rs`'s per-column silhouette rule never engages, because the sky is a gradient — they count open sky (11,174 of a frame's 18,889 sky px) and only their DELTA tracked holes. A delta was read as a level. New instrument `10-7-signoff/enclosed.py` resolves holes topologically, RED-first, with a 0 px noise floor. |
 
 ## Dev Agent Record
 
