@@ -272,15 +272,59 @@ def sum_claude_transcript(path: str) -> dict[str, object]:
     return _as_summary(turns, sorted(models), totals, by_model, span=_span(stamps))
 
 
+#: Seven days, the window ``quota_pp`` is labelled with.
+_WEEK_MINUTES = 7 * 24 * 60
+
+
+def _weekly_used_percent(rate_limits: object) -> float | None:
+    """``used_percent`` for the 7-DAY window, chosen by ``window_minutes`` — NEVER by key
+    name. The key is not stable across codex-cli/account changes and the duration is the
+    actual meaning.
+
+    History, because this looked correct for months: on 2026-08-06 a real rollout carried
+    ``primary.window_minutes == 10080`` (the weekly) with ``secondary: null``, so reading
+    ``primary`` was right. By 2026-08-31 Codex had added a 5-HOUR window as ``primary``
+    and moved the weekly to ``secondary`` — unchanged code then recorded 5h points under a
+    weekly heading, and inverted a live-gate risk call on ep-16-us-03 (reported the weekly
+    at 96% when it had 85% left; only the self-clearing 5h window was spent).
+
+    Rollouts predating ``window_minutes`` declare no duration, so there is nothing to
+    select on and the historical ``primary`` reading stands.
+    """
+    if not isinstance(rate_limits, dict):
+        return None
+    # SELECT FIRST, then read the percentage. Filtering on ``used_percent`` up here
+    # dropped a weekly window declaring ``used_percent: null`` out of the candidate set
+    # entirely, and the 5-HOUR window then won and was recorded under the weekly
+    # heading — the very defect this function was rewritten to close. An unknown weekly
+    # percentage must read as UNKNOWN, never as another window's number.
+    timed = [
+        w for w in rate_limits.values()
+        if isinstance(w, dict) and isinstance(w.get("window_minutes"), (int, float))
+    ]
+    # Nearest to seven days, not merely the longest: ``max`` would hand the weekly
+    # heading to a future 30-day window, which is the identical axis swap one rollout
+    # later.
+    chosen = (
+        min(timed, key=lambda w: abs(w["window_minutes"] - _WEEK_MINUTES))
+        if timed
+        else rate_limits.get("primary")
+    )
+    pct = chosen.get("used_percent") if isinstance(chosen, dict) else None
+    return float(pct) if isinstance(pct, (int, float)) else None
+
+
 def sum_codex_transcript(path: str) -> dict[str, object]:
     """Sum a Codex ``rollout-*.jsonl`` (cumulative). Codex emits ``token_count``
     events whose ``info.total_token_usage`` is *already cumulative*, so the session
     total is the LAST such event — not a sum over events. ``input_tokens`` there is
     the full prompt count *including* cached, so fresh = input - cached.
 
-    Also captures ``payload.rate_limits.primary.used_percent`` — Codex bills a weekly
-    QUOTA, not metered tokens, so that is the axis which actually binds, and ``est_usd``
-    is not a substitute for it. See the ledger header.
+    Also captures the 7-DAY ``used_percent`` from ``payload.rate_limits`` — Codex bills a
+    weekly QUOTA, not metered tokens, so that is the axis which actually binds, and
+    ``est_usd`` is not a substitute for it. See the ledger header. Which KEY holds the
+    weekly window is not stable, so it is selected by ``window_minutes``; see
+    ``_weekly_used_percent``.
 
     NOTE: ``rate_limits`` is a SIBLING of ``info`` under ``payload``, not a member of it
     (verified against a real codex-cli 0.146.0 rollout). Reading it from ``info`` yields
@@ -307,9 +351,9 @@ def sum_codex_transcript(path: str) -> dict[str, object]:
             if payload.get("model"):  # session_meta / turn_context carry the model id
                 models.add(str(payload["model"]))
             if payload.get("type") == "token_count":
-                pct = ((payload.get("rate_limits") or {}).get("primary") or {}).get("used_percent")
-                if isinstance(pct, (int, float)):
-                    quota.append(float(pct))
+                pct = _weekly_used_percent(payload.get("rate_limits"))
+                if pct is not None:
+                    quota.append(pct)
                 info = payload.get("info")
                 if isinstance(info, dict) and isinstance(info.get("total_token_usage"), dict):
                     last = info["total_token_usage"]
@@ -723,8 +767,12 @@ _LEDGER_HEADER = (
     "substitute for it.** Codex runs on a subscription with a weekly quota, so no dollars "
     "are literally spent on a `tool=codex` row — `est_usd` weights tokens by `PRICES` "
     "purely as a cross-tool comparability benchmark. `quota_pp` is percentage points of the "
-    "7-day window consumed over the same delta window, read from "
-    "`rate_limits.primary.used_percent` in the rollout. Two caveats decide whether a number "
+    "7-day window consumed over the same delta window, read from the `rate_limits` entry "
+    "whose `window_minutes` is largest — selected by DURATION, never by key name, because "
+    "Codex moved the weekly from `primary` to `secondary` when it added a 5-hour window. "
+    "**Rows recorded before forge-process 1.3.3 (2026-08-31) read `primary` unconditionally, "
+    "so any written after Codex added the 5h window hold 5-HOUR points under this weekly "
+    "heading and read far too high.** Two caveats decide whether a number "
     "is trustworthy: the percentage is **account-wide**, so a concurrent run in another "
     "project inflates it (check each rollout's `cwd` before attributing), and a weekly reset "
     "inside the window shows `—` rather than a negative. Claude rows are always `—`. This "

@@ -1,0 +1,36 @@
+# Project (Nidavellir/Asgard) overrides for bmad-review-patch.
+# TEMPLATE per forge-process.manifest: the gate commands, sub-repo layout and Voelundr
+# commit persona are project-specific. The universal rules (both-sides closure,
+# mutation-verify, patch-HIGH-and-MED-only, one verification pass) are the shared half
+# the manifest's shared-rules-vs-project-parts note is about.
+
+[workflow]
+
+persistent_facts = [
+  "file:{project-root}/**/project-context.md",
+
+  "THE DECISIONS ARE ALREADY MADE. A `[Review][Decision]` item in the story carries Wolf's resolution inline, recorded at review time. Implement the ruling; do NOT re-derive it, re-argue it, or 'improve' on it. If a ruling turns out to be unimplementable as written, STOP and say exactly why — do not silently substitute your own call. This is the single largest waste mode for a patch pass: the review already paid for that thinking once.",
+
+  "PATCH HIGH AND MED ONLY; THE LOW TAIL IS ALREADY CLOSED (ep-11 retro A3). Items marked `[Review][Defer]` are recorded in deferred-work.md with their file:line and are DONE for this pass — no patch, no covering test, no re-gate. The one exception: a LOW that sits inside a function you are already editing for a HIGH or MED. In ep-11 the HIGH findings earned their keep while the LOW tail drove the patch turns that cost the most per turn.",
+
+  "BOTH-SIDES CLOSURE (ep-15 retro A1 / issue #20). A patch is NOT closed until it has been verified from the direction it was NOT written for, against a PRE-EXISTING-STATE fixture. Before ticking any item, state in one line: which side the fix was written for, which side you then tested, and what pre-existing data or state the fixture reproduced. A fixture built from the shape the NEW code emits does not test the old world the fix exists to handle. This is the rule the whole round-2 review exists to check, so closing an item without it simply moves the cost downstream — on ep-15-us-03 that cost $123.05 of review against $1.33 of dev.",
+
+  "MUTATION-VERIFY EVERY NEW TEST (ep-15 retro A2 / issue #21). A new or changed test does not count until you have shown it CAN FAIL on the thing it asserts: mutate the specific behaviour, watch THAT test redden, restore, and record the mutation in the story. Per test, naming the mutation — not once for the file. Two traps: a focused run cannot establish exclusivity (run the suite, or say plainly that exclusivity is unverified), and a test can pass VACUOUSLY when its assertions are negative-only and the code degrades to empty on any error — prefer at least one POSITIVE assertion about the value produced.",
+
+  "ONE VERIFICATION PASS, NOT ONE PER PATCH. Re-gate turns are the most expensive work in this phase, so batch the patches and run the gate once at the end. The stated risk is real and accepted — a later patch can break an earlier verified one — and what catches it is the final clean gate plus the full suite, not a re-gate after every fix.",
+
+  "COMMIT CADENCE — HARD FLOOR (dev-workflow.md §3). Never one squashed commit per repo. Commit at minimum once per finding group, ideally on each green. A squash is what makes the round-2 review unable to see what each patch changed. Commit as Voelundr inside the correct projects/<repo> sub-repo (confirm `git remote -v` and cwd; NEVER the forge root), and never add a `Co-Authored-By: Claude` trailer.",
+
+  "REVIEW-GATED: NO PUSH, NO PR, NO MERGE without Wolf's explicit yes. That gate belongs to bmad-code-review's on_complete and is his call, not this skill's. Land commits locally and stop.",
+
+  "A LIVE GATE IS NEVER YOURS. If the story carries a live/devpod AC (a Task 9, an AC16), it stays OPEN until a human runs it on the pods. Never mark it done, never infer it green from a passing suite, and say plainly in your summary what remains unproven live. On this project a green suite has already coexisted with a feature that did nothing.",
+
+  "PODS RUN COPIES, NOT CHECKOUTS. If a patch changes anything a pod executes — a hook, a cron script, a plugin, a relay module — merging it changes nothing live. Say so explicitly in the summary and name the deploy step, rather than letting a landed commit read as a landed fix.",
+]
+
+# Final terminal step. STEP A is not optional and is not someone else's job: this phase is
+# measured because it is the QUALITY SIGNAL for the loop — rework the review required after
+# dev finished. Note the SessionEnd hook (record_phase_on_exit.py) is a SAFETY NET for a
+# session that dies mid-pass, not the primary path; the primary path is right here, visible,
+# where a human can read it.
+on_complete = "Three steps, in order. STEP A (METRIC): record this session's cost with Bash `python3 {project-root}/_bmad/scripts/session_tokens.py --phase review-patch --story <STORY_KEY>` (<STORY_KEY> = the story file basename without .md). Show the printed breakdown and call out the `est. cost` line. Then run `python3 {project-root}/_bmad/scripts/phase_state.py clear` — the declaration made in step 1 has served its purpose and a stale file is noise. Recording is delta-based, so a fresh patch session bills exactly this pass. STEP B (STATUS): update the story's Review Findings checkboxes for every item you actually landed, leave unlanded ones unchecked with a one-line reason, and sync `{implementation_artifacts}/sprint-status.yaml` — status stays `in-progress` while ANY live gate is unrun, and only reaches `review` again if you are handing back for a round-2 review. STEP C (CHAIN): a round-2 review is the DEFAULT next step when HIGH or MED patches landed — its specific job is the both-sides check, catching round-1 fixes that were closed in one direction only (ep-15's signature defect: round 2 existed purely because round 1's patches were each half-closed, and that round was rework, not caution). Offer it; do not launch it in this session — bmad-code-review's own fresh-context precondition forbids reviewing work done earlier in the same session. Tell Wolf to `/clear` and run `/bmad-code-review`. METRIC RULE (mark vs row): a window that belongs to a phase gets a ROW; only a window belonging to no phase at all gets `session_tokens.py --mark`, which advances the cursor without writing a row — a mark where a row was owed hides the spend instead of over-attributing it visibly."
