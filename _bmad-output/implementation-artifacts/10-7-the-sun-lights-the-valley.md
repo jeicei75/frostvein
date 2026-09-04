@@ -528,6 +528,46 @@ trunk, ringed by rock, previously hidden behind the very neighbours that are sti
 them. They are drawn now so that `--subdiv 2`, which culls those neighbours' faces, has something to
 show.
 
+### Wolf's sitting on the fix, and what the residual actually is — 2026-09-04
+
+**Wolf, having sat at `--subdiv` 1, 2 AND 4:** *"holes are fixed now even on terrain"*, and
+*"16 is ok"*.
+
+**The residual is NOT holes, and issue #65's premise was wrong.** What settles it is the whole-world
+face oracle reporting **zero** missing faces after the draw-set fix: if no face is missing anywhere
+in the world, enclosed sky cannot be a missing face. What it is instead: the terrain **stops** at the
+world's outer boundary — a hard vertical cliff — and the pines carry on standing past the last
+terrain cell, so the canopy closes over pockets of open sky that a border flood fill cannot reach.
+That is candidate 2 of the two the issue listed and deliberately did not presuppose. #65 is closed as
+not-a-defect and retitled; the one live observation kept there is that trees are planted beyond the
+terrain's edge and stand over nothing — cosmetic, invisible at this framing, unasked-for.
+
+Consequently `pixel_guard.rs`'s ceilings are **a property of this framing, not a debt**, and the
+comment that promised they would fall to zero is corrected.
+
+**All three subdivisions, on the clean build `4042fe9`:**
+
+| | `--subdiv 1` | `--subdiv 2` | `--subdiv 4` |
+|---|---:|---:|---:|
+| before the draw-set fix | 1,650 px / 15 | 2,177 / 54 | 1,959 / 67 |
+| **after** | **1,650 / 15** | **2,042 / 16** | **1,825 / 19** |
+
+Every blob at `--subdiv 4` sits in the `y 270-350` rim band or at the frame's left/right edge; the
+three above `--subdiv 2`'s count are 1-2 px fragments of the same boundary resolving finer. **Nothing
+remains at trunk-base coordinates** (`y 590-660`), which is where the 38 closed holes lived.
+
+**A PROCEDURE DEFECT WORTH MORE THAN THE MEASUREMENT IT NEARLY RUINED.** The first `--subdiv 4`
+capture read **1,959 px / 67 blobs**, with the trunk-base holes apparently back at their exact
+pre-fix coordinates and sizes — a regression report one step from being sent. The build stamp read
+`bcff646-dirty`, built during the mutation run. **`mutate.sh` restores the SOURCE when it finishes
+and leaves the last mutant BINARY on disk**, and that last row is
+`the draw set stops seeing PAST a mesh-drawn tree` — the sabotage that removes this very fix. The
+capture was measuring the sabotage. M2-7's compiled-in stamp is the only reason this was caught, which
+is exactly the trap it was built for: a procedure cannot defend against a stale binary, because the
+procedure is what goes stale. **Rule: rebuild before any capture that follows a mutation run**, and
+read the stamp on every capture rather than only when something looks wrong — here it looked wrong in
+the flattering direction for a regression report, which is the direction that gets published.
+
 ### Diagnosis of the trunk-base remainder — what is RULED OUT so far (2026-09-04)
 
 Wolf's ruling at the sitting: the ridge family gets a GitHub issue and no story
@@ -839,6 +879,7 @@ says so.
 | 2026-09-03 | **Wolf found the toggles incomplete from the seat**: torches were hardcoded lit and every light entity's emissive face kept glowing regardless. Torches get F9; emissive now follows the toggle for campfire and torch materials. The test gains the RESTORE, which nothing had pinned — re-enabling a point light worked only by grace of `flicker_projection`. Mutation table 7/7 KILLED, full gate GREEN. |
 | 2026-09-04 | **AC12 FALSIFIED BY WOLF'S EYE at the pre-merge sitting**, with the full gate green at `6cd6f8d`. Both halves reproduce headless: ~200 px of trunk-base holes at `--subdiv 2` (54 blobs, down from 82 — the fix was partial, not complete), and four large ridge holes of ~1,650 px that are **byte-identical in the pre-story shipped build** and are therefore not this story's. Root cause of the false green: `holes.py`'s and `pixel_guard.rs`'s per-column silhouette rule never engages, because the sky is a gradient — they count open sky (11,174 of a frame's 18,889 sky px) and only their DELTA tracked holes. A delta was read as a level. New instrument `10-7-signoff/enclosed.py` resolves holes topologically, RED-first, with a 0 px noise floor. |
 | 2026-09-04 | **AC12's trunk-base half CLOSED; cause was the DRAW SET.** Wolf ruled at the sitting: GitHub issue for the ridge family, no story yet; fix the trunk bases here. Issue [#65](https://github.com/jeicei75/frostvein/issues/65) filed. The defect was `occludes` -> `occludes_terrain` one level up: `is_visible_at_slice` reads a `TreeTrunk` cell as ordinary solid cover, so the ground under a trunk never reached `build_chunk_meshes` and emitted nothing whatever the emission decisions said. Found by running the REAL world through the mesher — 232 owed faces missing, every one on a cell absent from the draw set — after two hand-built fixtures failed to reproduce it, because both made the cell exposed for their own reasons. Fix: `is_visible_to_terrain_at_slice`, one call site. `--subdiv 2` 2,177 px / 54 blobs -> **2,042 / 16**, every survivor #65's; `--subdiv 1` exactly unchanged at 1,650 / 15 and its whole-frame change inside its own noise band. Guard oracle REPLACED, not re-calibrated: `interior_sky` -> `enclosed_sky`, blob count as the primary bar because 38 holes were only 135 px between them. Mutation table 12 -> 14 rows. |
+| 2026-09-04 | **Wolf sat on the fix at `--subdiv` 1, 2 and 4: holes gone, "16 is ok".** The residual is NOT holes and issue #65's premise was wrong — the whole-world face oracle reports ZERO missing faces, so enclosed sky cannot be a missing face; it is sky past the world's outer edge, framed by pines standing beyond the last terrain cell. #65 closed as not-a-defect and retitled; the guard's comment promising its ceilings would fall to zero is corrected — they are a property of this framing. Mutation table **14/14 KILLED, zero survivors**. Also recorded: the first `--subdiv 4` capture read 67 blobs and was measuring a MUTANT binary — `mutate.sh` restores the source and leaves the last mutant build on disk, and that row is the one that removes this fix. Caught by M2-7's compiled-in stamp reading `-dirty`. |
 
 ## Dev Agent Record
 

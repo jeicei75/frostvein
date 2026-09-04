@@ -1691,6 +1691,32 @@ development_status:
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
   10-7-the-sun-lights-the-valley: in-progress
+                          # 2026-09-04 AC12 TRUNK BASES CLOSED, and the cause was the DRAW SET,
+                          # not face emission: is_visible_at_slice reads a Solid(TreeTrunk) cell as
+                          # ordinary cover, so the ground under a trunk never reached the mesher and
+                          # emitted nothing whatever the emission decisions said. occludes ->
+                          # occludes_terrain, one level up. Found by running the REAL world through
+                          # the mesher (232 owed faces missing, EVERY one on a cell absent from the
+                          # draw set -> 0) after TWO hand-built fixtures failed to reproduce it,
+                          # because both made the cell exposed for their own reasons.
+                          # subdiv 2: 2,177 px / 54 blobs -> 2,042 / 16. subdiv 4: 1,959 / 67 ->
+                          # 1,825 / 19. subdiv 1 EXACTLY unchanged at 1,650 / 15, its whole-frame
+                          # diff inside its own noise band despite 212 newly drawn cells.
+                          # WOLF SAT AT subdiv 1, 2 AND 4: "holes are fixed now even on terrain",
+                          # "16 is ok". THE RESIDUAL IS NOT HOLES -- the face oracle reports zero
+                          # missing faces, so it cannot be a missing face; it is sky past the
+                          # world's outer edge, framed by pines standing beyond the last terrain
+                          # cell. Issue #65 CLOSED as not-a-defect and retitled. The guard's
+                          # ceilings are a property of the framing, not a debt; comment corrected.
+                          # Guard oracle REPLACED not re-calibrated: interior_sky counted OPEN sky
+                          # (its per-column silhouette never engages -- the sky is a gradient) ->
+                          # enclosed_sky, a border flood fill. Blob count is the primary bar: the
+                          # 38 trunk holes were 135 px between them.
+                          # Mutation table 12 -> 14 rows, 14/14 KILLED, zero survivors.
+                          # TRAP RECORDED: the first subdiv-4 capture measured a MUTANT binary --
+                          # mutate.sh restores the SOURCE and leaves the last mutant BUILD on disk,
+                          # and that row removes this very fix. Caught only by M2-7's compiled-in
+                          # stamp reading -dirty. Rebuild before any capture after a mutation run.
                           # 2026-09-04 AC12 FALSIFIED AT THE PRE-MERGE SITTING, full gate green.
                           # Wolf: "tree trunk bases has still black quads and there is 2-3 black
                           # holes on top of terrain cubes". BOTH reproduce headless at 6cd6f8d.
