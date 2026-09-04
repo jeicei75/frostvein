@@ -1690,7 +1690,16 @@ development_status:
                           # too loose to fail a treeless world. Judgement rests on the printed
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
-  10-7-the-sun-lights-the-valley: review
+  10-7-the-sun-lights-the-valley: done
+                          # 2026-09-04 MERGED as PR #66 (4256b15 -> merge 87f3bdc), 43 commits,
+                          # 56 files, +3,757/-202. Full gate GREEN at the pushed commit and green
+                          # again on the pre-push hook. All twelve ACs met, UX-DR22 signed both
+                          # halves, mutations 14/14 killed.
+                          # MERGED WITH A STATED GAP, not a resolved one: the draw-set fix, the
+                          # guard's oracle replacement and two mutation rows landed AFTER the
+                          # four-layer review, so that code has had no fresh-context review. It is
+                          # in the PR body. Worth remembering that the review which DID run passed,
+                          # and Wolf's sitting falsified AC12 anyway.
                           # 2026-09-04 ALL TWELVE ACs MET -> review. UX-DR22's closing half is
                           # SIGNED for ACs 10-12: Wolf at the vehicle on subdiv 1, 2 and 4 ("holes
                           # are fixed now even on terrain", "16 is ok"), and on the toggles ("light
