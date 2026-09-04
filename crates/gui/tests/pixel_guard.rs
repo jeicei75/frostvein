@@ -291,10 +291,14 @@ fn the_fine_mesher_leaves_no_sky_showing_through_the_terrain() {
     // discriminates it by a margin barely above nothing. The pixel ceiling is the second net,
     // for a regression that grows a hole rather than adding one.
     //
-    // NEITHER CEILING IS ZERO, AND IT SHOULD BE. The whole 2,042 px residual is the four large
-    // ridge holes of https://github.com/jeicei75/frostvein/issues/65 -- byte-identical in a
-    // capture of the build from BEFORE story 10.7, present at `--subdiv 1` too, and not this
-    // story's to fix. When #65 closes, both numbers here become 0 and this comment goes with it.
+    // NEITHER CEILING IS ZERO, AND THAT IS CORRECT -- it is not a debt. The 2,042 px residual is
+    // NOT holes: it is the sky BEYOND THE WORLD'S EDGE, where the terrain stops at its outer
+    // boundary and pines carry on standing past the last terrain cell, so the canopy closes over
+    // pockets of open sky and a border flood fill cannot reach them. The whole-world face oracle
+    // reports zero missing faces after this fix, which is what rules out the alternative. Wolf
+    // ruled at the 2026-09-04 sitting, having looked at `--subdiv` 1, 2 and 4: the holes are gone
+    // and 16 is fine. So these ceilings are a property of this framing, not a bug waiting to be
+    // fixed, and raising them to clear a failing run would still be forbidden.
     const BLOB_CEILING: usize = 20;
     const ENCLOSED_SKY_CEILING: usize = 2_300;
     assert!(
