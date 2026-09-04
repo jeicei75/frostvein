@@ -40,28 +40,84 @@ fn mean_luminance(pixels: &[[u8; 4]]) -> f32 {
     total as f32 / pixels.len() as f32
 }
 
-/// Sky-coloured pixels INSIDE the terrain silhouette -- a port of `10-7-signoff/holes.py`.
+/// Sky pixels that no path from the frame border can reach through sky -- a port of
+/// `10-7-signoff/enclosed.py`, and the replacement for the silhouette count this file shipped with.
 ///
-/// A hole is sky with terrain drawn around it. Horizon sky is not a hole, which is why the
-/// silhouette is resolved per COLUMN (the topmost non-sky pixel of that column) rather than by a
-/// y-threshold. The threshold version was tried first, counted horizon sky whose edge shifts between
-/// builds, and reported an 884-pixel REGRESSION as an improvement.
-fn interior_sky(pixels: &[[u8; 4]], width: usize, height: usize) -> usize {
+/// THE OLD ORACLE MEASURED THE WRONG QUANTITY. It resolved a column's silhouette as that column's
+/// topmost non-sky pixel, and the night sky is a GRADIENT, so no column's top pixel is ever exactly
+/// `SKY` and the silhouette landed at `y <= 19` in all 1,280 columns. What it counted was OPEN SKY:
+/// 11,174 px of a frame holding 18,889 sky pixels, against 1,650 genuinely enclosed. Its delta still
+/// tracked holes, which is why it looked like it worked -- but a delta can say "some closed" and
+/// never "none left", and AC12 asks for gone. Story 10.7 read a delta as a level and shipped 54
+/// holes under a green guard, until Wolf saw them from the seat.
+///
+/// A hole is a TOPOLOGICAL fact -- sky with terrain drawn all the way around it -- so this resolves
+/// it as a flood fill from the border. Everything the fill reaches is open sky however deep in the
+/// frame it looks; everything it cannot reach is a hole. Same-build noise floor: 0 px, twice, at
+/// both subdivisions, against the old oracle's 45 px spread over eight readings.
+fn enclosed_sky(pixels: &[[u8; 4]], width: usize, height: usize) -> (usize, usize) {
     const SKY: [u8; 3] = [5, 12, 28];
-    let mut count = 0;
+    let sky: Vec<bool> = pixels.iter().map(|p| [p[0], p[1], p[2]] == SKY).collect();
+    let mut seen = vec![false; width * height];
+    let mut queue = std::collections::VecDeque::new();
+    let push = |i: usize, seen: &mut Vec<bool>, queue: &mut std::collections::VecDeque<usize>| {
+        if sky[i] && !seen[i] {
+            seen[i] = true;
+            queue.push_back(i);
+        }
+    };
     for x in 0..width {
-        let mut inside = false;
-        for y in 0..height {
-            let p = pixels[y * width + x];
-            let is_sky = [p[0], p[1], p[2]] == SKY;
-            if !inside {
-                inside = !is_sky;
-            } else if is_sky {
-                count += 1;
+        push(x, &mut seen, &mut queue);
+        push((height - 1) * width + x, &mut seen, &mut queue);
+    }
+    for y in 0..height {
+        push(y * width, &mut seen, &mut queue);
+        push(y * width + width - 1, &mut seen, &mut queue);
+    }
+    while let Some(i) = queue.pop_front() {
+        let (x, y) = (i % width, i / width);
+        if x > 0 {
+            push(i - 1, &mut seen, &mut queue);
+        }
+        if x + 1 < width {
+            push(i + 1, &mut seen, &mut queue);
+        }
+        if y > 0 {
+            push(i - width, &mut seen, &mut queue);
+        }
+        if y + 1 < height {
+            push(i + width, &mut seen, &mut queue);
+        }
+    }
+    // Second pass: how many SEPARATE regions, which is where the discrimination is -- 38 trunk
+    // holes came to only 135 pixels between them.
+    let mut total = 0;
+    let mut blobs = 0;
+    for start in 0..width * height {
+        if !sky[start] || seen[start] {
+            continue;
+        }
+        blobs += 1;
+        seen[start] = true;
+        queue.push_back(start);
+        while let Some(i) = queue.pop_front() {
+            total += 1;
+            let (x, y) = (i % width, i / width);
+            if x > 0 {
+                push(i - 1, &mut seen, &mut queue);
+            }
+            if x + 1 < width {
+                push(i + 1, &mut seen, &mut queue);
+            }
+            if y > 0 {
+                push(i - width, &mut seen, &mut queue);
+            }
+            if y + 1 < height {
+                push(i + width, &mut seen, &mut queue);
             }
         }
     }
-    count
+    (total, blobs)
 }
 
 struct Daemon {
@@ -210,32 +266,47 @@ fn switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing() {
 
 /// AC12, on the pixels rather than on the mesh masks.
 ///
-/// The permanent mask test proves the mesher emits the specific face a mesh-drawn tree must not
-/// hide. It is a genuinely discriminating test and it is still geometry: it cannot see a hole opened
-/// anywhere it was not pointed. This counts sky drawn INSIDE the silhouette across the whole frame,
-/// which is what a hole actually is and what Wolf saw as hard black quads at the trunk bases.
+/// The permanent mask tests prove the mesher emits the specific faces a mesh-drawn tree must not
+/// hide, and that the ground under a trunk reaches the mesher at all. They are genuinely
+/// discriminating and they are still geometry: they cannot see a hole opened anywhere they were not
+/// pointed. This one asks the frame.
 #[test]
 #[ignore = "renders real frames; scripts/gate.sh runs it in the full tier"]
 fn the_fine_mesher_leaves_no_sky_showing_through_the_terrain() {
     let daemon = Daemon::spawn();
     let (fine, width, height) = daemon.capture("subdiv2", &["--subdiv", "2"]);
-    let holes = interior_sky(&fine, width, height);
-    println!("AC12 pixel guard: subdiv 2 interior-sky px = {holes}");
+    let (holes, blobs) = enclosed_sky(&fine, width, height);
+    println!("AC12 pixel guard: subdiv 2 enclosed-sky px = {holes} in {blobs} blobs");
 
-    // Hand-written, NOT derived from the mesher. The states this must separate, all measured on
-    // 2026-09-03 with `10-7-signoff/holes.py`, run-to-run noise 12 px:
-    //   fixed (this build)          12,277 - 12,363   <- must pass
-    //   before the fix              12,722            <- must fail
-    //   the REJECTED first fix      13,606            <- must fail
-    // 12,600 clears the worst fixed reading by ~240 px and still fails the before-state by 122.
-    // The residual ~12,300 is legitimate sky between real terrain, not holes, which is why this is
-    // a calibrated ceiling and not zero.
-    const INTERIOR_SKY_CEILING: usize = 12_600;
+    // Hand-written, NOT derived from the mesher. Every state this must separate, measured with
+    // `10-7-signoff/enclosed.py`, same-build noise floor 0 px:
+    //   this build                       2,042 px /  16 blobs   <- must pass
+    //   the draw-set hole (10.7's first  2,177 px /  54 blobs   <- must fail
+    //     fix, which Wolf's eye caught)
+    //   before any 10.7 fix              2,571 px /  82 blobs   <- must fail
+    //   the REJECTED first fix           3,449 px /  67 blobs   <- must fail
+    //
+    // THE BLOB COUNT IS THE PRIMARY BAR, because it is where the separation actually is: the
+    // trunk-base family was 38 separate holes but only 135 pixels, so a pixel ceiling alone
+    // discriminates it by a margin barely above nothing. The pixel ceiling is the second net,
+    // for a regression that grows a hole rather than adding one.
+    //
+    // NEITHER CEILING IS ZERO, AND IT SHOULD BE. The whole 2,042 px residual is the four large
+    // ridge holes of https://github.com/jeicei75/frostvein/issues/65 -- byte-identical in a
+    // capture of the build from BEFORE story 10.7, present at `--subdiv 1` too, and not this
+    // story's to fix. When #65 closes, both numbers here become 0 and this comment goes with it.
+    const BLOB_CEILING: usize = 20;
+    const ENCLOSED_SKY_CEILING: usize = 2_300;
     assert!(
-        holes <= INTERIOR_SKY_CEILING,
-        "sky is showing through the terrain at --subdiv 2: {holes} interior-sky pixels, above the \
-         {INTERIOR_SKY_CEILING} ceiling. A mesh-drawn tree cell is skipped by the terrain mesher, \
-         so letting it suppress a neighbouring face leaves that face drawn by NOTHING and the \
-         camera sees straight through to the sky."
+        blobs <= BLOB_CEILING,
+        "sky is showing through the terrain at --subdiv 2: {blobs} separate enclosed-sky regions, \
+         above the {BLOB_CEILING} ceiling. Every hole beyond the four of issue #65 is a terrain \
+         face that nothing drew -- either a mesh-drawn tree cell suppressing a neighbour's face, \
+         or the ground under a trunk never reaching the mesher at all."
+    );
+    assert!(
+        holes <= ENCLOSED_SKY_CEILING,
+        "sky is showing through the terrain at --subdiv 2: {holes} enclosed-sky pixels, above the \
+         {ENCLOSED_SKY_CEILING} ceiling."
     );
 }

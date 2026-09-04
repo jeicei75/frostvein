@@ -431,6 +431,103 @@ headroom above today's reading — it would pass a further regression before it 
 Evidence: `wolf-sitting-sd2-holes-marked.png`, `wolf-sitting-sd1-holes-marked.png` (every enclosed
 pixel painted magenta) and `wolf-sitting-sd2-trunk-crop.png` (5x, two trunk bases).
 
+### AC12's trunk-base half is CLOSED — the cause was the DRAW SET (2026-09-04)
+
+**The cause, and it is the same defect one level up.** `occludes` -> `occludes_terrain` fixed the
+face-EMISSION decisions inside `build_chunk_meshes`. It could not help a cell that never enters the
+loop. `is_visible_at_slice` keeps a cell only if something beside it is not solid — and a
+`Tile::Solid(TreeTrunk)` cell **is** solid. So the ground directly under a trunk, ringed by rock and
+capped by the trunk, is judged hidden, is absent from `terrain_positions_at`, and emits nothing at
+all. The tree mesh draws no terrain, so the ground the trunk stands on is drawn by nobody.
+
+**The fix:** `is_visible_to_terrain_at_slice`, which is to `is_visible_at_slice` exactly what
+`occludes_terrain` is to `occludes` — a neighbour hides this cell only if it is solid **and not
+carried by a tree mesh**. One predicate, one call site.
+
+**How it was found, after two hand-built fixtures failed to reproduce it.** A probe ran the REAL
+world through the mesher once — snapshot pulled off the daemon's own wire, `Mirror::from_snapshot`,
+`build_chunk_meshes` — indexed every emitted quad by `(axis, sign, plane, u, v)`, and then asked, for
+every solid in-slice cell that terrain owns, whether each face it owes to a non-occluding neighbour
+exists. Result:
+
+```
+before   MISSING FACES: 232      every one of them on a cell absent from the draw set
+after    MISSING FACES: 0
+```
+
+That is what a hand-built fixture could not show: both earlier fixtures happened to make the cell
+exposed for reasons of their own, so the draw set was never under test. **The permanent test uses the
+fixture they did not have** — the cell ringed by rock on all four sides and below, its only opening
+the trunk above — with the terrain-drawn stone twin as the control, where hiding the face is correct.
+`the_ground_under_a_trunk_reaches_the_mesher_even_when_rock_rings_it`.
+
+**RED observed**, by reverting the one call site:
+
+```
+assertion `left == right` failed: the ground under a MESH-drawn trunk must reach the mesher and
+keep its top face, all four sub-quads of it
+  left: 0
+ right: 4
+```
+
+**Measured on real frames, `enclosed.py`, same-build noise floor 0 px:**
+
+| capture | enclosed-sky px | blobs |
+|---|---:|---:|
+| `--subdiv 2` before any 10.7 fix | 2,571 | 82 |
+| `--subdiv 2` the REJECTED first fix | 3,449 | 67 |
+| `--subdiv 2` 10.7's shipped fix — what Wolf saw | 2,177 | 54 |
+| **`--subdiv 2` with the draw-set fix, run a / run b** | **2,042 / 2,042** | **16 / 16** |
+
+**38 of the 54 holes are gone, and every one that remains is issue #65's.** The 16 survivors are the
+four large ridge blobs and their small neighbours, at the same coordinates and the same sizes as in
+`control-shipped-a-e930d07.png` from before this story. The trunk-base family is closed.
+
+**The blob count is the finding here, not the pixel count.** 38 holes came to 135 pixels between
+them. A pixel-only ceiling separates the fixed state from the broken one by a margin barely above
+nothing, which is why `pixel_guard.rs` now asserts BOTH, with the blob count as the primary bar.
+
+**The guard's oracle is replaced, not re-calibrated.** `interior_sky` -> `enclosed_sky`: a flood fill
+from the frame border, ported from `enclosed.py`. Ceilings are 20 blobs and 2,300 px, and **neither
+is zero, which is stated in the test as a debt against #65, not as a calibration**. When #65 closes
+both become 0.
+
+**What the draw set costs.** Cells drawn, before -> after: `--subdiv 2` 44,885 -> 44,891 (+6),
+faces 228,092 -> 229,020, triangles 151,588 -> 151,968. `--subdiv 1` 39,936 -> 40,148 (+212
+entities), triangles_derived 576,972 -> 579,516. The shipped default therefore DOES change — 212
+previously-undrawn ground cells under trunks are now drawn — and that is measured below rather than
+assumed harmless.
+
+**AND THE SHIPPED DEFAULT DOES NOT MOVE, measured against its own noise floor both ways.**
+
+On the hole oracle, which has a 0 px noise floor, `--subdiv 1` is **exactly unchanged**:
+
+```
+before the fix   1,650 px / 15 blobs   (run a and run b)
+after the fix    1,650 px / 15 blobs   (run a and run b)
+```
+
+On a whole-frame pixel diff, which does not — the snow is animated, so two captures of ONE binary
+differ by tens of thousands of pixels. The noise floor is therefore measured twice and the **worst**
+taken, exactly as 10.4's AC5 failed to do:
+
+```
+same-build noise, before-fix run a vs run b     raw= 55,925   >=4= 16,377   >=16= 2,524
+same-build noise, after-fix  run a vs run b     raw= 64,723   >=4= 24,885   >=16= 3,622   <- worst
+the CHANGE, before-a vs after-a                 raw= 64,328   >=4= 24,320   >=16= 3,853
+the CHANGE, before-b vs after-b                 raw= 44,484   >=4= 10,396   >=16= 2,535
+```
+
+Both change readings sit **below the worst same-build noise at `>=4`**. At `>=16` one of the two
+(3,853) is 6% above the worst noise figure and the other is well below it, so the honest claim is
+*the change is inside the noise band*, not *the frames are identical*. The zero-noise oracle is the
+one that settles it: no hole opened, none closed, 15 blobs before and after.
+
+That the 212 new cells cost nothing visible is what should be expected — they are ground under a
+trunk, ringed by rock, previously hidden behind the very neighbours that are still drawn in front of
+them. They are drawn now so that `--subdiv 2`, which culls those neighbours' faces, has something to
+show.
+
 ### Diagnosis of the trunk-base remainder — what is RULED OUT so far (2026-09-04)
 
 Wolf's ruling at the sitting: the ridge family gets a GitHub issue and no story
@@ -741,6 +838,7 @@ says so.
 | 2026-09-03 | **SCOPE CHANGE #5 on Wolf's ruling at review: the no-CLI-flag decision is LIFTED.** `--lights-off` lands, giving `from_name` the production caller it never had, and with it `crates/gui/tests/pixel_guard.rs` — the first tests here that assert PIXELS. AC11's is Wolf's own complaint encoded: all five sources off must leave `warm_lit_pixels == 0`. Measured 0, mean 13.205 vs 101.084. AC5's guard extended to the INSTALLED light, AC12's oracle to all three substituted call sites, the bench contract to the sun FORMULA rather than only its constants, and five dead bench constants removed with their anchors. Mutation table 7 rows -> 12. Costs ~2 min on the full gate only. |
 | 2026-09-03 | **Wolf found the toggles incomplete from the seat**: torches were hardcoded lit and every light entity's emissive face kept glowing regardless. Torches get F9; emissive now follows the toggle for campfire and torch materials. The test gains the RESTORE, which nothing had pinned — re-enabling a point light worked only by grace of `flicker_projection`. Mutation table 7/7 KILLED, full gate GREEN. |
 | 2026-09-04 | **AC12 FALSIFIED BY WOLF'S EYE at the pre-merge sitting**, with the full gate green at `6cd6f8d`. Both halves reproduce headless: ~200 px of trunk-base holes at `--subdiv 2` (54 blobs, down from 82 — the fix was partial, not complete), and four large ridge holes of ~1,650 px that are **byte-identical in the pre-story shipped build** and are therefore not this story's. Root cause of the false green: `holes.py`'s and `pixel_guard.rs`'s per-column silhouette rule never engages, because the sky is a gradient — they count open sky (11,174 of a frame's 18,889 sky px) and only their DELTA tracked holes. A delta was read as a level. New instrument `10-7-signoff/enclosed.py` resolves holes topologically, RED-first, with a 0 px noise floor. |
+| 2026-09-04 | **AC12's trunk-base half CLOSED; cause was the DRAW SET.** Wolf ruled at the sitting: GitHub issue for the ridge family, no story yet; fix the trunk bases here. Issue [#65](https://github.com/jeicei75/frostvein/issues/65) filed. The defect was `occludes` -> `occludes_terrain` one level up: `is_visible_at_slice` reads a `TreeTrunk` cell as ordinary solid cover, so the ground under a trunk never reached `build_chunk_meshes` and emitted nothing whatever the emission decisions said. Found by running the REAL world through the mesher — 232 owed faces missing, every one on a cell absent from the draw set — after two hand-built fixtures failed to reproduce it, because both made the cell exposed for their own reasons. Fix: `is_visible_to_terrain_at_slice`, one call site. `--subdiv 2` 2,177 px / 54 blobs -> **2,042 / 16**, every survivor #65's; `--subdiv 1` exactly unchanged at 1,650 / 15 and its whole-frame change inside its own noise band. Guard oracle REPLACED, not re-calibrated: `interior_sky` -> `enclosed_sky`, blob count as the primary bar because 38 holes were only 135 px between them. Mutation table 12 -> 14 rows. |
 
 ## Dev Agent Record
 

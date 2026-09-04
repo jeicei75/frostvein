@@ -141,3 +141,21 @@ assert s.count(old) == 1
 new = '            for name in value.to_string_lossy().split(\',\') {\n                if let Ok(source) = LightSource::from_name(name.trim()) {\n                    lights_off.push(source);\n                }\n            }'
 p.write_text(s.replace(old, new))
 PY
+
+# --- Added 2026-09-04, after Wolf's eye falsified AC12 at the pre-merge sitting. ---
+
+mutation "the ground under a trunk never reaches the mesher again" gui the_ground_under_a_trunk_reaches_the_mesher_even_when_rock_rings_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = 'if is_visible_to_terrain_at_slice(mirror, position, level, cover)'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'if is_visible_at_slice(mirror, position, level)'))
+PY
+
+mutation "the draw set stops seeing PAST a mesh-drawn tree" gui the_ground_under_a_trunk_reaches_the_mesher_even_when_rock_rings_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '            || is_mesh_drawn_tree(mirror, neighbour, cover)\n    })\n}'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    })\n}'))
+PY
