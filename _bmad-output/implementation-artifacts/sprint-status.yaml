@@ -1690,7 +1690,18 @@ development_status:
                           # too loose to fail a treeless world. Judgement rests on the printed
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
-  10-7-the-sun-lights-the-valley: in-progress
+  10-7-the-sun-lights-the-valley: review
+                          # 2026-09-04 ALL TWELVE ACs MET -> review. UX-DR22's closing half is
+                          # SIGNED for ACs 10-12: Wolf at the vehicle on subdiv 1, 2 and 4 ("holes
+                          # are fixed now even on terrain", "16 is ok"), and on the toggles ("light
+                          # toggles are working properly") -- his first look at F5-F9, the readout
+                          # and the all-off state since the torch and emissive fixes landed.
+                          # Full gate GREEN 10/10 with both pixel guards; mutations 14/14 killed.
+                          # OPEN QUESTION BEFORE MERGE: the four-layer review of 2026-09-03
+                          # predates the draw-set fix and the guard oracle replacement, so roughly
+                          # 30 lines of production code and a rewritten guard have had NO
+                          # fresh-context review. Wolf's call whether that is worth a pass.
+                          # Nothing pushed; no PR.
                           # 2026-09-04 AC12 TRUNK BASES CLOSED, and the cause was the DRAW SET,
                           # not face emission: is_visible_at_slice reads a Solid(TreeTrunk) cell as
                           # ordinary cover, so the ground under a trunk never reached the mesher and

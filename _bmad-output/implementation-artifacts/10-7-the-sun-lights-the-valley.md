@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.7: The Sun Lights The Valley
 
-Status: in-progress
+Status: review
 
 **RUNS BEFORE 10.5.** See "Why this is before the dwarves". The board's key is placed above
 10.5 deliberately, because this board's next-story rule reads top to bottom and a prose ruling
@@ -528,6 +528,20 @@ trunk, ringed by rock, previously hidden behind the very neighbours that are sti
 them. They are drawn now so that `--subdiv 2`, which culls those neighbours' faces, has something to
 show.
 
+### UX-DR22's CLOSING HALF IS SIGNED — ACs 10, 11 and 12 — 2026-09-04
+
+Wolf, at the vehicle, across two sittings on the same day:
+
+- **AC12**, having looked at `--subdiv` 1, 2 and 4: *"holes are fixed now even on terrain"*, and of
+  the 16 remaining enclosed-sky regions, *"16 is ok"*.
+- **ACs 10 and 11**: *"light toggles are working properly"* — the first time his eye has been on
+  F5-F9, the readout and the all-off state SINCE the torch and emissive fixes, which landed after
+  the sitting that found them broken.
+
+**AC9 is therefore met in both halves**: the opening half was signed 2026-09-03 on
+`candidate-plus17.66.png` before the client change was written, and the closing half is signed here
+for the sun (2026-09-03) and for ACs 10-12 (today). **All twelve ACs are met.**
+
 ### Wolf's sitting on the fix, and what the residual actually is — 2026-09-04
 
 **Wolf, having sat at `--subdiv` 1, 2 AND 4:** *"holes are fixed now even on terrain"*, and
@@ -880,6 +894,7 @@ says so.
 | 2026-09-04 | **AC12 FALSIFIED BY WOLF'S EYE at the pre-merge sitting**, with the full gate green at `6cd6f8d`. Both halves reproduce headless: ~200 px of trunk-base holes at `--subdiv 2` (54 blobs, down from 82 — the fix was partial, not complete), and four large ridge holes of ~1,650 px that are **byte-identical in the pre-story shipped build** and are therefore not this story's. Root cause of the false green: `holes.py`'s and `pixel_guard.rs`'s per-column silhouette rule never engages, because the sky is a gradient — they count open sky (11,174 of a frame's 18,889 sky px) and only their DELTA tracked holes. A delta was read as a level. New instrument `10-7-signoff/enclosed.py` resolves holes topologically, RED-first, with a 0 px noise floor. |
 | 2026-09-04 | **AC12's trunk-base half CLOSED; cause was the DRAW SET.** Wolf ruled at the sitting: GitHub issue for the ridge family, no story yet; fix the trunk bases here. Issue [#65](https://github.com/jeicei75/frostvein/issues/65) filed. The defect was `occludes` -> `occludes_terrain` one level up: `is_visible_at_slice` reads a `TreeTrunk` cell as ordinary solid cover, so the ground under a trunk never reached `build_chunk_meshes` and emitted nothing whatever the emission decisions said. Found by running the REAL world through the mesher — 232 owed faces missing, every one on a cell absent from the draw set — after two hand-built fixtures failed to reproduce it, because both made the cell exposed for their own reasons. Fix: `is_visible_to_terrain_at_slice`, one call site. `--subdiv 2` 2,177 px / 54 blobs -> **2,042 / 16**, every survivor #65's; `--subdiv 1` exactly unchanged at 1,650 / 15 and its whole-frame change inside its own noise band. Guard oracle REPLACED, not re-calibrated: `interior_sky` -> `enclosed_sky`, blob count as the primary bar because 38 holes were only 135 px between them. Mutation table 12 -> 14 rows. |
 | 2026-09-04 | **Wolf sat on the fix at `--subdiv` 1, 2 and 4: holes gone, "16 is ok".** The residual is NOT holes and issue #65's premise was wrong — the whole-world face oracle reports ZERO missing faces, so enclosed sky cannot be a missing face; it is sky past the world's outer edge, framed by pines standing beyond the last terrain cell. #65 closed as not-a-defect and retitled; the guard's comment promising its ceilings would fall to zero is corrected — they are a property of this framing. Mutation table **14/14 KILLED, zero survivors**. Also recorded: the first `--subdiv 4` capture read 67 blobs and was measuring a MUTANT binary — `mutate.sh` restores the source and leaves the last mutant build on disk, and that row is the one that removes this fix. Caught by M2-7's compiled-in stamp reading `-dirty`. |
+| 2026-09-04 | **UX-DR22's closing half SIGNED for ACs 10-12; all twelve ACs met; Status -> review.** Wolf on the toggles, his first look since the torch and emissive fixes: *"light toggles are working properly"*. Full gate GREEN 10/10 including both pixel guards, mutation table 14/14 killed. **NOT yet re-reviewed:** the four-layer review of 2026-09-03 predates the draw-set fix and the guard's oracle replacement, so that code has had no fresh-context review. Nothing pushed; no PR. |
 
 ## Dev Agent Record
 
