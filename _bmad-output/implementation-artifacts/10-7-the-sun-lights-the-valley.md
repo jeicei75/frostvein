@@ -431,6 +431,43 @@ headroom above today's reading — it would pass a further regression before it 
 Evidence: `wolf-sitting-sd2-holes-marked.png`, `wolf-sitting-sd1-holes-marked.png` (every enclosed
 pixel painted magenta) and `wolf-sitting-sd2-trunk-crop.png` (5x, two trunk bases).
 
+### Diagnosis of the trunk-base remainder — what is RULED OUT so far (2026-09-04)
+
+Wolf's ruling at the sitting: the ridge family gets a GitHub issue and no story
+([#65](https://github.com/jeicei75/frostvein/issues/65)); the trunk bases are fixed here.
+
+**What the pictures show.** The black is a wedge directly under the trunk's *downhill* side, at the
+trunk/ground junction, and it is exactly `rgb(5,12,28)`. `wolf-sitting-sd2-trunk-crop.png`.
+
+**RULED OUT — the terrain mesher's face emission around a mesh-drawn tree.** An exhaustive face diff:
+build a fixture twice, once with a mesh-carried trunk and once with a terrain-drawn stone twin at the
+same cell, then compare `face_quads` for every cell in a 5x5x7 neighbourhood on all six directions.
+Run on a flat plateau and again on a staircase (the real valley is a heightfield and the holes sit at
+step risers). **The only differences in either fixture are the tree cells' OWN side faces** — which
+the tree mesh is supposed to carry — plus the cell beneath the trunk correctly *gaining* its top face
+from the shipped fix. Every ground cell's faces are identical between the two worlds. So the
+`occludes_terrain` substitution is not obviously incomplete in any shape that can be built by hand.
+
+**Two content-neutralisation probes were BLOCKED by existing capture guards**, which are doing their
+job:
+
+- suppressing tree mesh spawning trips `capture.rs:253` —
+  *"5048 visible tree cells are drawn by neither a mesh nor the cube fallback"*;
+- drawing the trees as terrain instead trips the mesh-count assert (`left: 3, right: 0`).
+
+**A separate observation worth its own line, cause or not.** `TreeCover::covers` is deliberately
+conservative: it returns true for the whole one-cell crown ring at or above a meshed base, including
+plain terrain inside the ring. `assert_no_tree_is_undrawn` then decides a cell is covered by asking
+**that same predicate**. So a tree cell the conservative cover claims but the actual pine geometry
+(scaled 0.625, sunk 0.5) never reaches is drawn by nothing, and the guard cannot see it — the oracle
+and the mechanism share a belief. That is the self-referential-test shape this project has been bitten
+by three times, in a guard rather than a test.
+
+**What is still needed to converge:** the real world's geometry at one of these cells. A hand-built
+fixture has now failed twice to reproduce, and the next honest step is a probe that connects to the
+running daemon, builds the real `Mirror`, and reports which exposed face is missing — not another
+plausible cause tested against the frame.
+
 ## SUPERSEDED 2026-09-04 — AC12 MET — the holes are closed, and it took two wrong turns to get there (2026-09-03)
 
 **The cause.** The dark quads were `rgb(5, 12, 28)` — exactly `SKY_RGB` — so never shadows and never
