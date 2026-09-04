@@ -45,8 +45,8 @@ use client_core::Mirror;
 use protocol::{Delta, Dims, Snapshot};
 
 use crate::{
-    appearance::night_lighting,
-    atmosphere::{aurora_light_transform, fall_snow, setup_atmosphere},
+    appearance::{light_properties, night_lighting},
+    atmosphere::{fall_snow, setup_atmosphere, sun_light_transform},
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig},
     capture::{
@@ -73,6 +73,122 @@ const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const MESSAGE_QUEUE: usize = 16;
 const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
+
+/// The four independently inspectable contributors to the rendered valley.
+///
+/// This is deliberately a fixed seat-side instrument, not a lighting configuration surface:
+/// F5--F9 are the complete public control and their state lasts only for this client run.
+/// Torches are their own source because the sim really spawns them (`sim-core/src/lib.rs:1573+`)
+/// and they were previously hardcoded lit, so "everything off" still lit the camp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LightSource {
+    Sun,
+    Campfire,
+    Torches,
+    Lanterns,
+    Ambient,
+}
+
+impl LightSource {
+    const ALL: [Self; 5] = [
+        Self::Sun,
+        Self::Campfire,
+        Self::Torches,
+        Self::Lanterns,
+        Self::Ambient,
+    ];
+
+    fn key(self) -> KeyCode {
+        match self {
+            Self::Sun => KeyCode::F5,
+            Self::Campfire => KeyCode::F6,
+            Self::Torches => KeyCode::F9,
+            Self::Lanterns => KeyCode::F7,
+            Self::Ambient => KeyCode::F8,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Sun => "sun",
+            Self::Campfire => "campfire",
+            Self::Torches => "torches",
+            Self::Lanterns => "lanterns",
+            Self::Ambient => "ambient",
+        }
+    }
+
+    pub fn from_name(name: &str) -> anyhow::Result<Self> {
+        match name {
+            "sun" => Ok(Self::Sun),
+            "campfire" => Ok(Self::Campfire),
+            "torches" => Ok(Self::Torches),
+            "lanterns" => Ok(Self::Lanterns),
+            "ambient" => Ok(Self::Ambient),
+            _ => bail!(
+                "unknown light source {name:?}; expected sun, campfire, torches, lanterns, or ambient"
+            ),
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct LightingToggles {
+    sun: bool,
+    campfire: bool,
+    torches: bool,
+    lanterns: bool,
+    ambient: bool,
+}
+
+impl Default for LightingToggles {
+    fn default() -> Self {
+        Self {
+            sun: true,
+            campfire: true,
+            torches: true,
+            lanterns: true,
+            ambient: true,
+        }
+    }
+}
+
+impl LightingToggles {
+    fn enabled(&self, source: LightSource) -> bool {
+        match source {
+            LightSource::Sun => self.sun,
+            LightSource::Campfire => self.campfire,
+            LightSource::Torches => self.torches,
+            LightSource::Lanterns => self.lanterns,
+            LightSource::Ambient => self.ambient,
+        }
+    }
+
+    fn set(&mut self, source: LightSource, enabled: bool) {
+        match source {
+            LightSource::Sun => self.sun = enabled,
+            LightSource::Campfire => self.campfire = enabled,
+            LightSource::Torches => self.torches = enabled,
+            LightSource::Lanterns => self.lanterns = enabled,
+            LightSource::Ambient => self.ambient = enabled,
+        }
+    }
+
+    fn toggle(&mut self, source: LightSource) {
+        self.set(source, !self.enabled(source));
+    }
+
+    /// The starting position `--lights-off` asks for. Named sources start dark; the keys still
+    /// move them afterwards, because this is the same instrument F5-F9 drive -- a capture just
+    /// needs to state where it begins. Idempotent in the source list, so `sun,sun` is `sun`.
+    fn with_off(off: &[LightSource]) -> Self {
+        let mut toggles = Self::default();
+        for &source in off {
+            toggles.set(source, false);
+        }
+        toggles
+    }
+}
 
 pub enum WireMessage {
     Snapshot(Box<Snapshot>),
@@ -274,6 +390,12 @@ fn configure_client_app(
     if let Some(subdiv) = args.subdiv {
         app.insert_resource(TerrainSubdivision(subdiv));
     }
+    // UNCONDITIONAL, and inserted BEFORE `client_systems`/`projection_systems` so their
+    // idempotent `init_resource` finds it already there. Unconditional because a wiring step that
+    // only runs when a flag is present is the Milestone 2 defect class this file's own doc
+    // comments catalogue: with no `--lights-off` this inserts exactly `Default`, so the absent
+    // flag and the present one take the SAME path and neither can rot while the other is tested.
+    app.insert_resource(LightingToggles::with_off(&args.lights_off));
     insert_capture_resources(app, &args);
     // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
     // without this resource the actual side never gains them and a WINDOWED capture asserts
@@ -321,7 +443,7 @@ pub fn projection_systems(app: &mut App) {
     app.init_resource::<crate::project::TreeReportState>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<TickClock>()
-        .add_systems(Startup, setup_slice_readout)
+        .add_systems(Startup, (setup_slice_readout, setup_lighting_readout))
         .add_systems(
             Update,
             (
@@ -339,6 +461,20 @@ pub fn projection_systems(app: &mut App) {
         // half of the story the readout exists for. It must read the level AFTER the keyboard has
         // written it, or the displayed level trails the cut by one frame.
         .add_systems(Update, update_slice_readout.after(ProjectionSet));
+    // The toggles resource is initialised HERE, beside the systems that READ it, not only in
+    // `client_systems`. Registering a system in one app-builder while its resource is created in
+    // another is the same defect this function's own doc comment describes: `crates/gui/tests/
+    // capture.rs` calls `projection_systems` alone, so both capture instruments panicked with
+    // "Resource does not exist" the moment a lighting system read a resource nothing had created.
+    // `init_resource` is idempotent, so `client_systems` keeping its own call is not a conflict —
+    // each builder now stands up what it registers.
+    app.init_resource::<LightingToggles>();
+    app.add_systems(
+        Update,
+        (apply_lighting_toggles, update_lighting_readout)
+            .chain()
+            .after(ProjectionSet),
+    );
 }
 
 /// Everything `run()` registers besides the projection chain: the startup scene, the
@@ -360,7 +496,8 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
-        .init_resource::<DragAnchor>();
+        .init_resource::<DragAnchor>()
+        .init_resource::<LightingToggles>();
     app.add_systems(
         Startup,
         (
@@ -379,6 +516,7 @@ pub fn client_systems(app: &mut App) {
         Update,
         (
             camera_controls,
+            light_controls,
             update_fog_from_camera,
             toggle_overlay,
             fall_snow,
@@ -451,6 +589,7 @@ struct Args {
     drag: Option<ScriptedDragSpec>,
     headless: bool,
     subdiv: Option<u32>,
+    lights_off: Vec<LightSource>,
 }
 
 /// Present only under `--headless`: the offscreen texture the camera draws into, and which the
@@ -530,6 +669,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut drag = None;
     let mut headless = false;
     let mut subdiv = None;
+    let mut lights_off = Vec::new();
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -600,6 +740,13 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         } else if arg == "--drag" {
             let value = args.next().context("--drag requires mode,x0,y0,x1,y1")?;
             drag = Some(parse_drag(value)?);
+        } else if arg == "--lights-off" {
+            let value = args
+                .next()
+                .context("--lights-off requires a comma-separated source list")?;
+            for name in value.to_string_lossy().split(',') {
+                lights_off.push(LightSource::from_name(name.trim())?);
+            }
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -646,6 +793,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         drag,
         headless,
         subdiv,
+        lights_off,
     })
 }
 
@@ -856,13 +1004,136 @@ fn setup_night_lighting(mut commands: Commands) {
             shadow_maps_enabled: true,
             ..Default::default()
         },
-        aurora_light_transform(),
+        sun_light_transform(),
+        SunLight,
         ClientLocal,
     ));
 }
 
 #[derive(Component)]
+struct SunLight;
+
+#[derive(Component)]
 pub struct SliceReadout;
+
+#[derive(Component)]
+pub struct LightingReadout;
+
+fn lighting_readout(toggles: &LightingToggles) -> String {
+    LightSource::ALL
+        .into_iter()
+        .map(|source| {
+            format!(
+                "{} {} {}",
+                match source.key() {
+                    KeyCode::F5 => "F5",
+                    KeyCode::F6 => "F6",
+                    KeyCode::F7 => "F7",
+                    KeyCode::F8 => "F8",
+                    KeyCode::F9 => "F9",
+                    _ => unreachable!("the fixed lighting keys are F5 through F9"),
+                },
+                source.name(),
+                if toggles.enabled(source) { "on" } else { "off" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
+fn setup_lighting_readout(mut commands: Commands, toggles: Res<LightingToggles>) {
+    commands.spawn((
+        Text::new(lighting_readout(&toggles)),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::srgb(0.86, 0.91, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(72),
+            left: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        LightingReadout,
+        ClientLocal,
+    ));
+}
+
+fn update_lighting_readout(
+    toggles: Res<LightingToggles>,
+    mut readout: Query<&mut Text, With<LightingReadout>>,
+) {
+    if !toggles.is_changed() {
+        return;
+    }
+    let text = lighting_readout(&toggles);
+    for mut readout in &mut readout {
+        *readout = Text::new(text.clone());
+    }
+}
+
+fn light_controls(keys: Res<ButtonInput<KeyCode>>, mut toggles: ResMut<LightingToggles>) {
+    for source in LightSource::ALL {
+        if keys.just_pressed(source.key()) {
+            toggles.toggle(source);
+        }
+    }
+}
+
+fn apply_lighting_toggles(
+    toggles: Res<LightingToggles>,
+    mut ambient: Query<&mut AmbientLight, With<Camera3d>>,
+    mut sun: Query<&mut DirectionalLight, With<SunLight>>,
+    mut points: Query<(
+        &crate::project::ProjectedLight,
+        &mut bevy::prelude::PointLight,
+    )>,
+    assets: Option<Res<crate::project::ProjectionAssets>>,
+    mut materials: Option<ResMut<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>>,
+) {
+    for mut light in &mut ambient {
+        light.brightness = if toggles.enabled(LightSource::Ambient) {
+            night_lighting().ambient_brightness
+        } else {
+            0.0
+        };
+    }
+    for mut light in &mut sun {
+        light.illuminance = if toggles.enabled(LightSource::Sun) {
+            night_lighting().directional_illuminance
+        } else {
+            0.0
+        };
+    }
+    for (kind, mut light) in &mut points {
+        if !point_light_enabled(&toggles, kind.0) {
+            light.intensity = 0.0;
+        }
+    }
+    // The emissive FACE is a second thing the same source owns, baked at spawn from
+    // `light_properties`. Switching only the point light leaves the emitter glowing, which is
+    // what "everything off and the campfire still lights" looked like on the vehicle.
+    let (Some(assets), Some(materials)) = (assets, materials.as_deref_mut()) else {
+        return;
+    };
+    for (kind, handle) in assets.emissive_materials() {
+        let Some(mut material) = materials.get_mut(&handle) else {
+            continue;
+        };
+        material.emissive = if point_light_enabled(&toggles, kind) {
+            light_properties(kind).color.to_linear()
+        } else {
+            bevy::color::LinearRgba::BLACK
+        };
+    }
+}
+
+fn point_light_enabled(toggles: &LightingToggles, kind: protocol::LightKind) -> bool {
+    match kind {
+        protocol::LightKind::Campfire => toggles.enabled(LightSource::Campfire),
+        protocol::LightKind::Lantern => toggles.enabled(LightSource::Lanterns),
+        protocol::LightKind::Torch => toggles.enabled(LightSource::Torches),
+    }
+}
 
 fn setup_slice_readout(
     mut commands: Commands,
@@ -1363,6 +1634,302 @@ mod tests {
         }
     }
 
+    /// `--lights-off` is what gives `from_name` a caller the shipped binary reaches. Before it,
+    /// the "unknown source is refused loudly" clause was satisfied only by the test above calling
+    /// the function directly -- a guard with no production path, which is the shape this project
+    /// keeps finding. This asserts the whole chain: the flag parses, an unknown name is refused
+    /// BY THE PARSER, and the named sources arrive in the resource the keys drive.
+    #[test]
+    fn lights_off_parses_refuses_an_unknown_source_and_reaches_the_toggles_the_keys_drive() {
+        let args = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--lights-off"),
+            std::ffi::OsString::from("sun, campfire ,torches"),
+        ])
+        .expect("a comma-separated source list must parse, whitespace and all");
+        assert_eq!(
+            args.lights_off,
+            vec![
+                super::LightSource::Sun,
+                super::LightSource::Campfire,
+                super::LightSource::Torches
+            ]
+        );
+
+        // Refused by the PARSER, not merely by the function: this is the reachable path.
+        // `Args` is deliberately not `Debug`, so match rather than `expect_err`.
+        let refused = match super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--lights-off"),
+            std::ffi::OsString::from("sun,moon"),
+        ]) {
+            Ok(_) => panic!("an unknown source must stop the run, not be silently dropped"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            refused.to_string(),
+            "unknown light source \"moon\"; expected sun, campfire, torches, lanterns, or ambient"
+        );
+
+        // And the wiring: a flag that parses into a field nothing reads is the inert mechanism.
+        let (app, _sender, _server) = configured_app(&["7451", "--lights-off", "sun,ambient"]);
+        let toggles = app
+            .world()
+            .get_resource::<super::LightingToggles>()
+            .expect("the toggles resource must exist on the configured app");
+        assert!(!toggles.enabled(super::LightSource::Sun));
+        assert!(!toggles.enabled(super::LightSource::Ambient));
+        assert!(
+            toggles.enabled(super::LightSource::Campfire)
+                && toggles.enabled(super::LightSource::Torches)
+                && toggles.enabled(super::LightSource::Lanterns),
+            "only the NAMED sources start dark; the rest are untouched"
+        );
+    }
+
+    #[test]
+    fn light_source_names_are_closed_and_an_unknown_one_is_refused_loudly() {
+        assert_eq!(
+            super::LightSource::from_name("sun").unwrap(),
+            super::LightSource::Sun
+        );
+        assert_eq!(
+            super::LightSource::from_name("campfire").unwrap(),
+            super::LightSource::Campfire
+        );
+        assert_eq!(
+            super::LightSource::from_name("torches").unwrap(),
+            super::LightSource::Torches
+        );
+        assert_eq!(
+            super::LightSource::from_name("lanterns").unwrap(),
+            super::LightSource::Lanterns
+        );
+        assert_eq!(
+            super::LightSource::from_name("ambient").unwrap(),
+            super::LightSource::Ambient
+        );
+        assert_eq!(
+            super::LightSource::from_name("moon")
+                .unwrap_err()
+                .to_string(),
+            "unknown light source \"moon\"; expected sun, campfire, torches, lanterns, or ambient"
+        );
+    }
+
+    /// AC5's guard, one level DOWN: on the light that is actually installed, not on the pure
+    /// function that computes its aim. `the_approved_sun_lights_downward` asserts
+    /// `sun_direction()`; nothing asserted what `setup_night_lighting` spawned, so pointing the
+    /// spawn at any other transform left every sun test green. That is the
+    /// verification-defect-relocates pattern -- close the hole at the formula and it reopens in
+    /// what feeds the light. Same hand-written floor, deliberately not derived from
+    /// `SUN_ELEVATION_DEGREES`, applied to the entity Bevy actually renders from.
+    #[test]
+    fn the_installed_sun_entity_aims_downward_onto_the_valley() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&bevy::prelude::Transform, With<super::SunLight>>();
+        let transforms = query.iter(app.world()).collect::<Vec<_>>();
+        assert_eq!(
+            transforms.len(),
+            1,
+            "exactly one sun must be installed; found {}",
+            transforms.len()
+        );
+
+        let forward = transforms[0].forward().as_vec3();
+        assert!(
+            (forward.length() - 1.0).abs() < 1e-5,
+            "the installed sun's forward must be unit length: {forward:?}"
+        );
+        assert!(
+            forward.y <= crate::atmosphere::APPROVED_DOWNWARD_FLOOR,
+            "the INSTALLED sun must travel downward onto the valley; y={} exceeds the approved \
+             floor {}",
+            forward.y,
+            crate::atmosphere::APPROVED_DOWNWARD_FLOOR
+        );
+    }
+
+    #[test]
+    fn lighting_keys_change_the_live_scene_and_its_readout() {
+        let snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![
+                protocol::Entity {
+                    id: 1,
+                    kind: protocol::EntityKind::Campfire,
+                    pos: [0, 0, 0],
+                    state: protocol::JobState::Idle,
+                    light: Some(protocol::LightKind::Campfire),
+                },
+                protocol::Entity {
+                    id: 2,
+                    kind: protocol::EntityKind::Dwarf,
+                    pos: [1, 0, 0],
+                    state: protocol::JobState::Idle,
+                    light: Some(protocol::LightKind::Lantern),
+                },
+            ],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
+        app.update();
+
+        let press = |app: &mut App, key| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(key);
+            keys.clear();
+        };
+        let readout = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::Text, With<super::LightingReadout>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone()
+        };
+
+        assert_eq!(
+            readout(&mut app),
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on"
+        );
+        for (key, source) in [
+            (KeyCode::F5, super::LightSource::Sun),
+            (KeyCode::F6, super::LightSource::Campfire),
+            (KeyCode::F9, super::LightSource::Torches),
+            (KeyCode::F7, super::LightSource::Lanterns),
+            (KeyCode::F8, super::LightSource::Ambient),
+        ] {
+            press(&mut app, key);
+            assert!(
+                !app.world()
+                    .resource::<super::LightingToggles>()
+                    .enabled(source),
+                "{key:?} must alter the source the seat-side instrument names"
+            );
+        }
+        assert_eq!(
+            readout(&mut app),
+            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off"
+        );
+
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::DirectionalLight, With<super::SunLight>>()
+                .single(app.world())
+                .unwrap()
+                .illuminance,
+            0.0,
+            "F5 must remove the directional light the renderer reads"
+        );
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::AmbientLight, With<Camera3d>>()
+                .single(app.world())
+                .unwrap()
+                .brightness,
+            0.0,
+            "F8 must remove the camera ambient fill the renderer reads"
+        );
+        let points = app
+            .world_mut()
+            .query::<(&crate::project::ProjectedLight, &bevy::prelude::PointLight)>()
+            .iter(app.world())
+            .map(|(kind, light)| (kind.0, light.intensity))
+            .collect::<Vec<_>>();
+        let intensity = |kind| {
+            points
+                .iter()
+                .find_map(|(actual, intensity)| (*actual == kind).then_some(*intensity))
+                .expect("the fixture must retain its named point light")
+        };
+        assert_eq!(
+            intensity(protocol::LightKind::Campfire),
+            0.0,
+            "F6 must remove campfire pixels"
+        );
+        assert_eq!(
+            intensity(protocol::LightKind::Lantern),
+            0.0,
+            "F7 must remove lantern pixels"
+        );
+
+        // THE EMISSIVE FACE, not just the light. Wolf found this on the vehicle: with every
+        // toggle off the campfire's place still glowed, because the emissive is baked into the
+        // entity material at spawn and no toggle touched it. A source owns both.
+        let emissive = |app: &mut App, kind| {
+            let handle = app
+                .world()
+                .resource::<crate::project::ProjectionAssets>()
+                .emissive_materials()
+                .into_iter()
+                .find_map(|(actual, handle)| (actual == kind).then_some(handle))
+                .expect("the named emissive material must exist");
+            app.world()
+                .resource::<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>()
+                .get(&handle)
+                .expect("the material handle must resolve")
+                .emissive
+        };
+        assert_eq!(
+            emissive(&mut app, protocol::LightKind::Campfire),
+            bevy::color::LinearRgba::BLACK,
+            "F6 must black the campfire's emissive face, not only its point light"
+        );
+        assert_eq!(
+            emissive(&mut app, protocol::LightKind::Torch),
+            bevy::color::LinearRgba::BLACK,
+            "F9 must black the torch emissive faces"
+        );
+
+        // AND IT MUST COME BACK. Nothing pinned the restore before: point-light intensity is
+        // rewritten every frame by `flicker_projection` inside `ProjectionSet`, so re-enabling
+        // worked only by that grace, and the emissive has no such benefactor at all.
+        for (key, _) in [
+            (KeyCode::F5, ()),
+            (KeyCode::F6, ()),
+            (KeyCode::F9, ()),
+            (KeyCode::F7, ()),
+            (KeyCode::F8, ()),
+        ] {
+            press(&mut app, key);
+        }
+        assert_eq!(
+            readout(&mut app),
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on"
+        );
+        assert_eq!(
+            emissive(&mut app, protocol::LightKind::Campfire),
+            crate::appearance::light_properties(protocol::LightKind::Campfire)
+                .color
+                .to_linear(),
+            "toggling the campfire back on must restore its emissive face"
+        );
+        assert_ne!(
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::DirectionalLight, With<super::SunLight>>()
+                .single(app.world())
+                .unwrap()
+                .illuminance,
+            0.0,
+            "toggling the sun back on must restore the directional light"
+        );
+    }
+
     #[test]
     fn the_startup_asset_line_reads_the_blobs_rather_than_the_array_length() {
         let (embedded, bytes) = super::tree_asset_summary();
@@ -1547,6 +2114,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on".to_string(),
         ];
         expected.sort();
         assert_eq!(

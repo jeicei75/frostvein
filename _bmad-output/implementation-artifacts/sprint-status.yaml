@@ -1690,7 +1690,134 @@ development_status:
                           # too loose to fail a treeless world. Judgement rests on the printed
                           # figures, never the exit code. Control + RED artifacts committed to
                           # 10-4-signoff/.
-  10-7-the-sun-lights-the-valley: backlog
+  10-7-the-sun-lights-the-valley: review
+                          # 2026-09-04 ALL TWELVE ACs MET -> review. UX-DR22's closing half is
+                          # SIGNED for ACs 10-12: Wolf at the vehicle on subdiv 1, 2 and 4 ("holes
+                          # are fixed now even on terrain", "16 is ok"), and on the toggles ("light
+                          # toggles are working properly") -- his first look at F5-F9, the readout
+                          # and the all-off state since the torch and emissive fixes landed.
+                          # Full gate GREEN 10/10 with both pixel guards; mutations 14/14 killed.
+                          # OPEN QUESTION BEFORE MERGE: the four-layer review of 2026-09-03
+                          # predates the draw-set fix and the guard oracle replacement, so roughly
+                          # 30 lines of production code and a rewritten guard have had NO
+                          # fresh-context review. Wolf's call whether that is worth a pass.
+                          # Nothing pushed; no PR.
+                          # 2026-09-04 AC12 TRUNK BASES CLOSED, and the cause was the DRAW SET,
+                          # not face emission: is_visible_at_slice reads a Solid(TreeTrunk) cell as
+                          # ordinary cover, so the ground under a trunk never reached the mesher and
+                          # emitted nothing whatever the emission decisions said. occludes ->
+                          # occludes_terrain, one level up. Found by running the REAL world through
+                          # the mesher (232 owed faces missing, EVERY one on a cell absent from the
+                          # draw set -> 0) after TWO hand-built fixtures failed to reproduce it,
+                          # because both made the cell exposed for their own reasons.
+                          # subdiv 2: 2,177 px / 54 blobs -> 2,042 / 16. subdiv 4: 1,959 / 67 ->
+                          # 1,825 / 19. subdiv 1 EXACTLY unchanged at 1,650 / 15, its whole-frame
+                          # diff inside its own noise band despite 212 newly drawn cells.
+                          # WOLF SAT AT subdiv 1, 2 AND 4: "holes are fixed now even on terrain",
+                          # "16 is ok". THE RESIDUAL IS NOT HOLES -- the face oracle reports zero
+                          # missing faces, so it cannot be a missing face; it is sky past the
+                          # world's outer edge, framed by pines standing beyond the last terrain
+                          # cell. Issue #65 CLOSED as not-a-defect and retitled. The guard's
+                          # ceilings are a property of the framing, not a debt; comment corrected.
+                          # Guard oracle REPLACED not re-calibrated: interior_sky counted OPEN sky
+                          # (its per-column silhouette never engages -- the sky is a gradient) ->
+                          # enclosed_sky, a border flood fill. Blob count is the primary bar: the
+                          # 38 trunk holes were 135 px between them.
+                          # Mutation table 12 -> 14 rows, 14/14 KILLED, zero survivors.
+                          # TRAP RECORDED: the first subdiv-4 capture measured a MUTANT binary --
+                          # mutate.sh restores the SOURCE and leaves the last mutant BUILD on disk,
+                          # and that row removes this very fix. Caught only by M2-7's compiled-in
+                          # stamp reading -dirty. Rebuild before any capture after a mutation run.
+                          # 2026-09-04 AC12 FALSIFIED AT THE PRE-MERGE SITTING, full gate green.
+                          # Wolf: "tree trunk bases has still black quads and there is 2-3 black
+                          # holes on top of terrain cubes". BOTH reproduce headless at 6cd6f8d.
+                          # TWO FAMILIES: (a) trunk bases, this story's, PARTIALLY fixed -- 82 blobs
+                          # -> 54, ~200 px left, --subdiv 2 only; (b) four ridge holes ~1,650 px at
+                          # BOTH subdivs, byte-identical in control-shipped-a-e930d07.png from
+                          # before the story, so NOT 10.7's -- filed in deferred-work.md.
+                          # WHY THE GUARD WAS GREEN: holes.py and pixel_guard.rs resolve the
+                          # silhouette as a column's topmost non-sky pixel, and the sky is a
+                          # GRADIENT, so it lands at y<=19 in all 1,280 columns and they count OPEN
+                          # SKY (11,174 of 18,889). Only their DELTA tracked holes; the story read a
+                          # delta as a level, and AC12 asks for gone. New oracle
+                          # 10-7-signoff/enclosed.py: border flood fill, RED-first, 0 px noise floor.
+                          # NEXT: Wolf's call on scope -- the trunk-base remainder is 10.7's, the
+                          # ridge family is not. Nothing pushed; no PR.
+                          # 2026-09-03 CODE REVIEW -> in-progress (NOT done). Four layers, no
+                          # coverage holes, every layer ran cargo. THE CODE IS SOUND on every
+                          # count that was executed: sun +13.2 mean luminance reproduced on two
+                          # fresh builds, five toggles wired on the live path, no third residual
+                          # emitter (all-off frame measures warm-lit=0), subdiv-2 holes closed
+                          # (12,285/12,313 vs 12,722 before). The one HIGH was EVIDENCE, not code:
+                          # the committed `probe-subdiv2-after-occluder-fix*.png` were the REJECTED
+                          # first fix -- 13,606 px measured against 12,314 published, and
+                          # 12,722 + 884 = 13,606 is exactly the regression the story's own change
+                          # log attributes to the wrong turn it abandoned. AC12's proof contradicted
+                          # the fix while the fix was fine. Renamed to say what they are; the shipped
+                          # fix re-captured under its own name. Same shape as M2-7's stale binary
+                          # and 10.2's duplicate mesh: the NAME authenticated the artifact.
+                          # 7 patches applied, 7 LOW deferred, 1 dismissed. Mutation table 7 -> 12
+                          # rows, 12/12 KILLED. Full gate GREEN.
+                          # SCOPE CHANGE #5, Wolf's ruling at triage: the no-CLI-flag decision is
+                          # LIFTED. `--lights-off` lands, which gives LightSource::from_name the
+                          # production caller it never had, and with it crates/gui/tests/
+                          # pixel_guard.rs -- the FIRST tests in this workspace that assert pixels.
+                          # AC11's is Wolf's own complaint encoded: all five sources off must leave
+                          # warm_lit_pixels at exactly 0. They cost ~2 min and run in the FULL tier
+                          # only; the fast tier names them skipped beside serve.rs.
+                          # WHY NOT `done`: UX-DR22's closing half covers the SUN only. Wolf's
+                          # recorded sittings predate the torch fix, the emissive fix and the
+                          # subdiv-2 fix. An observable-outcome AC stays open until observed, so
+                          # AC9's closing half for ACs 10-12 is OPEN and the card is written:
+                          # 10-7-signoff/review-vehicle-runbook.md. Nothing pushed; no PR.
+                          # 2026-09-03 ALL 12 ACs MET -> review (2nd time). Light toggles on F5-F8
+                          # + readout; AC11's guard is the renderer-read component test (Wolf's
+                          # ruling) with frame measurements as evidence. AC12: the subdiv>1 black
+                          # quads were HOLES, not shadows -- rgb(5,12,28) is SKY_RGB -- caused by the
+                          # mesher letting a mesh-drawn tree cell suppress a face nothing then drew.
+                          # interior-sky 12,722 -> 12,314 on a 12 px floor; subdiv 1 UNCHANGED at
+                          # 11,174 exactly. Mutation table 7/7 KILLED, full gate GREEN.
+                          # TWO WRONG TURNS RECORDED: the first hole metric used a y-threshold and
+                          # reported the regression as an IMPROVEMENT (published before its noise
+                          # floor -- the 10.4 AC5 mistake again); and the first fix also routed the
+                          # CARVING decision through the tree-aware occluder, closing 486 px at the
+                          # trunks and opening 1,370 at the world edges, invisible to a unit oracle
+                          # that forced carving parity. The narrow face oracle + a stone control is
+                          # what steered it.
+                          # PRIOR: REOPENED from `review` on Wolf's instruction after the
+                          # vehicle sitting. ACs 10-12 added: per-source light toggles as a KEY
+                          # COMMAND in gui (NOT a cli flag -- Wolf), an instrument test asserting
+                          # the FRAME moves rather than the flag, and removal of the subdiv>1 black
+                          # quads with a PIXEL-level guard. Toggle lands FIRST because it is the
+                          # instrument the defect is diagnosed with.
+                          # 2026-09-03 TASKS 1-7 DONE -> review. WOLF RULED +17.66 deg against the
+                          # shipped -6.42 control and +8.62/+25.87 alternatives, on a side-by-side
+                          # of four bench frames; UX-DR22 OPENING half signed, CLOSING half still
+                          # open (card: 10-7-signoff/task-7-vehicle-runbook.md). AC4 measured
+                          # 131.8x its own noise floor (mean 87.87 -> 101.19, worst same-build
+                          # spread 0.101). Mutation table 3/3 KILLED, re-run independently; no row
+                          # anchors a tuned literal. Full gate GREEN 9/9 on the orchestrator's own
+                          # run. AC1 clean on 47139fa..HEAD: five source files, which is the
+                          # story's table PLUS scripts/tests/test_valley_bench.py -- a GATE-BLOCKING
+                          # file the table omitted that PINNED THE DEFECT (it asserted the key light
+                          # travels UPWARD).
+                          # BOTH DELEGATED RUNS WERE HARNESS-KILLED, Run A mid-self-gate and Run B
+                          # mid-verification-recipe. The commit-cadence floor cost nothing both
+                          # times; the orchestrator finished Task 7 directly.
+                          # INSTRUMENT DEFECT FOUND AND CLOSED: lumstats.py and pixel_diff.py
+                          # hardcoded bpp=3 and never read the PNG colour type, so on the bench's
+                          # RGBA frames they DID NOT DIE, THEY LIED -- returning a plausible
+                          # NON-MONOTONIC luminance ladder for frames whose true ladder is clean.
+                          # It misled the orchestrator first. They now raise; a third RED is on file.
+                          # AC7 HELD: near-white 1.82% -> 2.25% against a 1.5630% ceiling, recorded
+                          # and NOT moved. Breach PREDATES the story on both venues. Filed in
+                          # deferred-work.md with the real finding: the ceiling was calibrated on
+                          # boot7.png, a frame rendered WITH THE SUN BELOW THE HORIZON, so it needs
+                          # a new reference frame rather than a bigger number.
+                          # NOT THIS STORY'S, flagged: session_tokens.py reads rate_limits.primary
+                          # and calls it the weekly window. On this account primary is the 5-HOUR
+                          # window and secondary is the weekly one, so every quota_pp in the ledger
+                          # is the 5-hour figure. Run A really moved weekly 67% -> 70%.
                           # CREATED 2026-09-03 out of 10.4's vehicle sitting, on Wolf's
                           # instruction. THE SUN IS UNDER THE MAP: the only DirectionalLight sits
                           # at the aurora curtain's MIDPOINT, Y=-58.5, surface is Y=9 -- it shines
@@ -1699,10 +1826,29 @@ development_status:
                           # noise floor (~170x). PLACED ABOVE 10.5 ON PURPOSE -- it must run first.
                           # Judging authored dwarves under an ambient-only scene repeats 10.4's
                           # own failure (approving a frame the client does not draw), one level up.
-                          # NOT context-filled: 3 rulings open (where the sun goes, whether it
-                          # stays coupled to the aurora, what gets re-judged). ACs provisional.
-                          # Expect NEAR_WHITE_AREA_CEILING to re-open: it was calibrated on a
-                          # sun-off frame and already reads 2.2071% vs 1.5630% on the vehicle.
+                          # CONTEXT-FILLED 2026-09-03; ACs firmed 6 -> 9; added to epics.md the
+                          # same day (execution order there now reads 10.6->10.3->10.4->10.7->10.5).
+                          # ALL THREE RULINGS ANSWERED (Wolf): elevation is BENCHED not pre-picked;
+                          # the sun is DECOUPLED from the aurora; NOTHING ELSE is re-tuned.
+                          # baseline_commit corrected e930d07 -> 47139fa (5 commits stale, and AC1
+                          # grades the diff from it).
+                          # TWO TRAPS MEASURED AT CREATION, both new. (1) It is a DIRECTION defect,
+                          # not a position one: Bevy reads a directional light's forward vector and
+                          # IGNORES its translation (bevy_light-0.19.0/src/directional_light.rs:25),
+                          # so the sun is at -6.42 deg elevation and the draft's own suggested
+                          # height guard WOULD CERTIFY A BROKEN BUILD. (2) `gui --headless
+                          # --capture` ALREADY EXITS 101 on main -- "near-white area is 1.8757%,
+                          # above the 1.5630% ceiling" -- so the ceiling is breached on BOTH venues
+                          # before the story starts and a red capture check is NOT evidence about
+                          # the sun. The PNG is still written (save-then-validate). AC7 forbids
+                          # raising the constant; the breach is filed as its own defect.
+                          # Also found: the existing "aurora light must arrive from the curtain
+                          # side" test is SELF-REFERENTIAL and passes with the sun underground.
+                          # VERIFICATION RECIPE EXECUTED AT CREATION, RED FIRST: lumstats.py dies
+                          # loudly on a truncated frame and reports an all-black frame as
+                          # mean=0.000/dark=100%, so a blank capture cannot pass as a lit valley.
+                          # Same-build noise floor re-measured on 47139fa: 0.107 mean (the Y=200
+                          # probe's 13.3 is 124x it). Full gate GREEN, 9/9, no skips.
   10-5-dwarves-worth-looking-at: backlog
   epic-10-retrospective: optional
 

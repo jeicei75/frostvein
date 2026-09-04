@@ -29,6 +29,15 @@ pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
 pub const SKYLINE_MAX: f32 = 26.0;
 pub const FAR_TERRAIN_EDGE: f32 = -128.0;
 
+/// Compass bearing the sunlight TRAVELS along, in degrees (atan2(z, x) of the travel vector).
+/// Preserved from the shipped aim — measured 40.0398 at story creation — because this story
+/// moves the sun's ELEVATION and re-tunes nothing else (Wolf's ruling 3).
+pub const SUN_AZIMUTH_DEGREES: f32 = 40.0398;
+
+/// Degrees above the horizon. Positive means the light travels DOWNWARD onto the valley.
+/// Chosen by Wolf from the Task 2 bench candidates on 2026-09-03.
+pub const SUN_ELEVATION_DEGREES: f32 = 17.66;
+
 /// The horizontal centre of the world footprint; all sky geometry is hung around it.
 pub const SKY_CENTRE: Vec3 = Vec3::new(63.5, 0.0, -63.5);
 
@@ -63,7 +72,7 @@ const STAR_SCALE_MAX: f32 = 3.0;
 const STAR_AZIMUTH_STEP: f32 = 0.754_877_7;
 const STAR_HEIGHT_STEP: f32 = 0.569_840_3;
 
-/// The compass point the curtain is brightest at, and where its light comes from.
+/// The compass point the curtain is brightest at.
 pub fn aurora_core() -> Vec3 {
     SKY_CENTRE
         + boot_horizontal_forward() * AURORA_RADIUS
@@ -206,8 +215,29 @@ pub fn snowflake_scale(index: usize) -> f32 {
     0.3 + 0.18 * (index as f32 * 0.381_966).fract()
 }
 
-pub fn aurora_light_transform() -> Transform {
-    Transform::from_translation(aurora_core()).looking_at(CAMP_FOCUS, Vec3::Y)
+pub fn sun_direction() -> Vec3 {
+    let azimuth = SUN_AZIMUTH_DEGREES.to_radians();
+    let elevation = SUN_ELEVATION_DEGREES.to_radians();
+    let horizontal = elevation.cos();
+    Vec3::new(
+        azimuth.cos() * horizontal,
+        -elevation.sin(),
+        azimuth.sin() * horizontal,
+    )
+}
+
+/// The independent floor AC5 asks for: hand-written, deliberately NOT derived from
+/// `SUN_ELEVATION_DEGREES`, and the thing that catches the shipped below-horizon aim returning.
+/// Single-sourced because it now guards TWO levels -- the formula here, and the light actually
+/// spawned in `ingest::setup_night_lighting`. Guarding only the formula left the wiring free to
+/// aim anywhere with the guard still green, which is this project's verification-defect-relocates
+/// pattern; two hand-written assertions against one hand-written floor close both ends.
+#[cfg(test)]
+pub(crate) const APPROVED_DOWNWARD_FLOOR: f32 = -0.15;
+
+/// Bevy reads only this directional light's forward vector; the translation is decorative.
+pub fn sun_light_transform() -> Transform {
+    Transform::from_translation(Vec3::ZERO).looking_to(sun_direction(), Vec3::Y)
 }
 
 pub fn inside_boot_frustum(position: Vec3) -> bool {
@@ -302,15 +332,16 @@ pub fn fall_snow(time: Res<Time>, mut flakes: Query<(&Snowflake, &mut Transform)
 #[cfg(test)]
 mod tests {
     use super::{
-        AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT, AURORA_TEXTURE_WIDTH, AURORA_TOP,
-        CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT, SNOWFLAKE_DISC_RADIUS, STAR_COUNT,
-        STAR_RADIUS, aurora_core, aurora_curtain_mesh, aurora_gradient_pixels,
-        aurora_light_transform, inside_boot_frustum, snowflake_positions, snowflake_scale,
-        snowflake_speed, star_positions, star_scale,
+        APPROVED_DOWNWARD_FLOOR, AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT,
+        AURORA_TEXTURE_WIDTH, AURORA_TOP, CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT,
+        SNOWFLAKE_DISC_RADIUS, STAR_COUNT, STAR_RADIUS, aurora_core, aurora_curtain_mesh,
+        aurora_gradient_pixels, inside_boot_frustum, snowflake_positions, snowflake_scale,
+        snowflake_speed, star_positions, star_scale, sun_direction,
     };
     use crate::appearance::night_lighting;
-    use crate::camera::{BOOT_VERTICAL_FOV, CameraRig};
+    use crate::camera::{BOOT_VERTICAL_FOV, CameraRig, boot_horizontal_forward};
     use bevy::color::ColorToPacked;
+    use bevy::prelude::Vec3;
 
     fn boot_eye_height() -> f32 {
         CameraRig::new([64, 64, 9]).transform().translation.y
@@ -358,14 +389,27 @@ mod tests {
             "the camera must stay inside the star shell at every zoom; {excursion} vs {STAR_RADIUS}"
         );
 
-        let toward_camp = (CAMP_FOCUS - aurora_core()).normalize();
+        let direction = sun_direction();
         assert!(
-            aurora_light_transform()
-                .forward()
-                .as_vec3()
-                .dot(toward_camp)
+            (direction.length() - 1.0).abs() < 1e-5,
+            "sun direction must be unit length: {direction:?}"
+        );
+        assert!(
+            Vec3::new(direction.x, 0.0, direction.z)
+                .normalize()
+                .dot(-boot_horizontal_forward())
                 > 0.99,
-            "aurora light must arrive from the curtain side"
+            "sun must still travel along the curtain-side bearing: {direction:?}"
+        );
+    }
+
+    #[test]
+    fn the_approved_sun_lights_downward() {
+        let direction = sun_direction();
+        assert!(
+            direction.y <= APPROVED_DOWNWARD_FLOOR,
+            "sun must travel downward onto the valley; y={} exceeds the approved floor {APPROVED_DOWNWARD_FLOOR}",
+            direction.y
         );
     }
 

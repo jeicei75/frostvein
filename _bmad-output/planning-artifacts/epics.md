@@ -1352,10 +1352,13 @@ into "here is what you will see" artifacts; BlenderMCP on gingerspice gives him 
 seat with Claude in the loop; the guidelines grow an asset contract; and the bench proves itself
 on the trees before the first authored assets — dwarves — go through it.
 
-**EXECUTION ORDER IS NOT NUMERIC ORDER (added 2026-08-31, Wolf).** The remainder of this epic runs
-**10.6 → 10.3 → 10.4 → 10.5**: the resolution bench measures what we can serve, then the contract
-writes it down, then the assets are authored against it. 10.6 is numerically last and first in
-sequence, the same shape as the gfx pass running before 8.3.
+**EXECUTION ORDER IS NOT NUMERIC ORDER (added 2026-08-31, Wolf; amended 2026-09-03).** The
+remainder of this epic runs **10.6 → 10.3 → 10.4 → 10.7 → 10.5**: the resolution bench measures
+what we can serve, then the contract writes it down, then the assets are authored against it.
+10.6 is numerically last and first in sequence, the same shape as the gfx pass running before 8.3.
+**10.7 was added 2026-09-03 and inserted before 10.5** — it fixes the lighting every earlier look
+judgement was made without, and judging authored dwarves under an ambient-only scene would repeat
+10.4's own failure one level up.
 
 **Added 2026-08-28. The PRD's asset-pipeline trigger has fired.** The PRD holds authored assets
 until "a concrete case forces the decision — dwarves are the expected first case." RULED
@@ -1659,3 +1662,60 @@ the measurements behind them, in a form story 10.3 copies rather than re-derives
 **SPLIT LINE, named now:** if this overruns a dev session, the `gui --subdiv` path and the vehicle
 fps run split into a second story; the offline bench lands first and is already enough to unblock
 10.3 on geometry grounds.
+
+
+### Story 10.7: The Sun Lights The Valley
+
+As the boss,
+I want the sun to actually light the valley,
+So that every look judgement I make from here on is made under the lighting the game ships with,
+instead of the ambient-only scene every judgement so far was made under.
+
+**Added 2026-09-03, out of 10.4's vehicle sitting, on Wolf's instruction — and it runs BEFORE
+10.5.** The client's only `DirectionalLight` is aimed by `aurora_light_transform()`, which points
+it from the aurora curtain's midpoint: the sun sits at **−6.42° elevation — below the horizon,
+shining upward** — so no visible surface receives it, and shadows of a light that lights nothing
+are invisible. That is the symptom Wolf reported on the vehicle ("trees don't really generate
+shadows"). Measured: **deleting the sun entirely changes the frame LESS than running the same
+binary twice**, while raising it moves mean luminance ~170x that noise floor. **Every look
+decision this project has made was made with the sun off** — 9.1's blow-out work, 9.4's tree
+colours, 10.3's rules of the look, 10.4's tree judgement. **RULED 2026-09-03 (Wolf): the elevation
+is benched rather than pre-picked; the sun is decoupled from the aurora; nothing else is re-tuned
+here.** Note it is a DIRECTION defect, not a position one — Bevy reads a directional light's
+forward vector and ignores its translation.
+
+**Acceptance Criteria:**
+
+**Given** bench artifacts for the shipped elevation and at least one candidate above the horizon,
+**When** Wolf judges them,
+**Then** the chosen elevation is recorded with the artifact and the figures it rests on, and no
+client change was made before that judgement (UX-DR22 opening half).
+
+**Given** the approved elevation lands in the client,
+**Then** the frame's mean luminance moves by **at least 10x the same-build noise floor**, with
+that floor re-measured on this story's own build and published beside the figure — a delta without
+its noise floor is not evidence.
+
+**Given** a decorative constant was silently steering the key light,
+**When** the fix lands,
+**Then** the sun carries its own transform and its own elevation constant, and `aurora_core()`
+means only the aurora curtain's bright point.
+
+**Given** the defect survived because nothing could see it,
+**Then** a guard fails when the sun returns below the horizon — asserting the light's **direction**
+on an oracle independent of the sun's own constant — and it is **shown to fail** by re-applying the
+shipped aim.
+
+**Given** the Blender bench reimplements the same sun and is pinned to the client by
+`bench_contract.rs`,
+**When** the client's aim changes,
+**Then** the bench's changes with it in the same commit, so neither venue renders a sun the other
+does not.
+
+**Given** `NEAR_WHITE_AREA_CEILING` is already breached on both venues before this story,
+**Then** it is measured and recorded, **not raised** — a capture failing that check is the state of
+`main`, not evidence about the sun.
+
+**Given** the milestone eye,
+**Then** Wolf signs the sun off live on the vehicle against the approved artifact (UX-DR22 closing
+half).

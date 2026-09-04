@@ -468,6 +468,22 @@ fn terrain_standard_material(base_color: bevy::prelude::Color) -> StandardMateri
     }
 }
 
+impl ProjectionAssets {
+    /// The materials that carry an emissive glow, paired with the light whose colour they take.
+    ///
+    /// Toggling a source off must black these too. The emissive is baked at spawn from
+    /// `light_properties`, so a "campfire off" frame otherwise still shows the campfire GLOWING —
+    /// the residual emitter Wolf found on the vehicle with every toggle off. A point light and an
+    /// emissive face are two different things the same source owns; the instrument has to switch
+    /// both or it answers the wrong question.
+    pub fn emissive_materials(&self) -> [(protocol::LightKind, Handle<StandardMaterial>); 2] {
+        [
+            (protocol::LightKind::Torch, self.torch.clone()),
+            (protocol::LightKind::Campfire, self.campfire.clone()),
+        ]
+    }
+}
+
 fn entity_standard_material(kind: EntityKind) -> StandardMaterial {
     let mut material = StandardMaterial {
         base_color: entity_appearance(kind).color,
@@ -575,6 +591,54 @@ fn occludes(mirror: &Mirror, position: [i32; 3], level: i32) -> bool {
     position[2] <= level && matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_)))
 }
 
+/// Visibility as the TERRAIN draw set must see it, for the same reason `occludes_terrain` exists
+/// one level down.
+///
+/// `is_visible_at_slice` keeps a cell only if something beside it is not solid. A mesh-drawn tree
+/// cell IS solid, so the ground directly under a trunk, ringed by rock, is judged hidden and never
+/// reaches `build_chunk_meshes` at all -- and a cell that never enters that loop emits nothing,
+/// whatever the face-emission decisions inside it say. The tree mesh draws no terrain, so the top
+/// of that cell, the ground the trunk stands on, is drawn by nothing and reads as sky.
+///
+/// This is the SAME defect `occludes_terrain` closed, one level up in what FEEDS the mesher, which
+/// is why fixing the emission decisions alone left holes behind. Measured on the real world before
+/// this fix: 232 owed faces absent, and every single one on a cell missing from the draw set.
+fn is_visible_to_terrain_at_slice(
+    mirror: &Mirror,
+    position: [i32; 3],
+    level: i32,
+    cover: &TreeCover,
+) -> bool {
+    if position[2] > level {
+        return false;
+    }
+    if !matches!(mirror.tile(position), Some(Tile::Solid(_) | Tile::Ramp(_))) {
+        return false;
+    }
+    if position[2] == level {
+        return true;
+    }
+    NEIGHBOURS.into_iter().any(|delta| {
+        let neighbour = [
+            position[0] + delta[0],
+            position[1] + delta[1],
+            position[2] + delta[2],
+        ];
+        !matches!(mirror.tile(neighbour), Some(Tile::Solid(_) | Tile::Ramp(_)))
+            || is_mesh_drawn_tree(mirror, neighbour, cover)
+    })
+}
+
+/// Occlusion as the TERRAIN mesher must see it. A mesh-drawn tree cell is drawn by its own mesh
+/// and is skipped outright by `build_chunk_meshes`, so it can hide nothing on the terrain's
+/// behalf: counting it as an occluder drops a face that then NOTHING emits, and the camera sees
+/// straight through to the sky. `occludes` alone answers only "is this cell solid", which is why
+/// the hole survived -- and why it appeared only at `--subdiv > 1`, the coarse path drawing every
+/// cell as a complete `Cuboid` that culls nothing.
+fn occludes_terrain(mirror: &Mirror, position: [i32; 3], level: i32, cover: &TreeCover) -> bool {
+    occludes(mirror, position, level) && !is_mesh_drawn_tree(mirror, position, cover)
+}
+
 /// Fine column heights inside one coarse cell, in fine voxels, or `None` for a full cube.
 ///
 /// This is the same heightfield `scripts/bench/resolution_bench.py` measures: a cell whose top
@@ -590,6 +654,12 @@ fn column_heights(
     // Foliage keeps the shipped whole-cube path, so it is never carved -- and therefore never
     // uncovers a neighbour either. Carving it emitted faces on the rock behind an opaque cube,
     // and made 9 tree trunks fully enclosed by their own crown look like exposed surface.
+    // DELIBERATELY plain `occludes`, not `occludes_terrain`. `None` here means "do not carve,
+    // draw the full cube", which is the hole-FREE answer. Routing this decision through the
+    // tree-aware occluder made cells under a mesh tree carry detail pits instead of a solid top
+    // and measured 1,370 NEW interior-sky pixels at the world edges against a 2-pixel noise
+    // floor -- more holes, not fewer. The tree-aware occluder belongs on the face-EMISSION
+    // decisions below, where suppressing a face is what leaves nothing drawn.
     if subdiv == 1 || occludes(mirror, above, level) || is_tree_foliage(mirror, position) {
         return None;
     }
@@ -747,7 +817,7 @@ fn build_chunk_meshes(
         let own = column_heights(mirror, position, subdiv, level);
 
         let above = [position[0], position[1], position[2] + 1];
-        if !occludes(mirror, above, level) {
+        if !occludes_terrain(mirror, above, level, cover) {
             // Settled snow is PAINT on the top faces here, not the shipped path's separate slab.
             // A slab is cell-scale: it sits at the coarse cell top while the fine surface is a
             // pit deeper, it covers 102% of the cell so it hides 17.9% of the very detail this
@@ -777,7 +847,7 @@ fn build_chunk_meshes(
             }
         }
         let under = [position[0], position[1], position[2] - 1];
-        if !occludes(mirror, under, level) {
+        if !occludes_terrain(mirror, under, level, cover) {
             let plane = position[2] * subdiv;
             for du in 0..subdiv {
                 for dv in 0..subdiv {
@@ -790,7 +860,7 @@ fn build_chunk_meshes(
         for (axis, sign) in [(0usize, -1i32), (0, 1), (1, -1), (1, 1)] {
             let mut neighbour = position;
             neighbour[axis] += sign;
-            let solid = occludes(mirror, neighbour, level);
+            let solid = occludes_terrain(mirror, neighbour, level, cover);
             let other = solid
                 .then(|| column_heights(mirror, neighbour, subdiv, level))
                 .flatten();
@@ -2264,7 +2334,7 @@ pub(crate) fn terrain_positions_at_with_cover(
     let level = level.clamp(0, mirror.dims().z.saturating_sub(1) as i32);
     let mut positions = Vec::new();
     for_each_position(mirror.dims(), |position| {
-        if is_visible_at_slice(mirror, position, level)
+        if is_visible_to_terrain_at_slice(mirror, position, level, cover)
             && !is_mesh_drawn_tree(mirror, position, cover)
         {
             positions.push(position);
@@ -2934,6 +3004,258 @@ mod tests {
             "{faces} faces at k=2 is more than the outer surface can hold -- \
              something inside the block is being drawn"
         );
+    }
+
+    /// A mesh-drawn tree cell is drawn by ITS MESH and by nothing else, so it must not be
+    /// allowed to hide a terrain face either. Wolf found the consequence by eye on the vehicle
+    /// after 10.7 raised the sun: hard dark quads at the base of nearly every trunk at
+    /// `--subdiv > 1`, and none at `--subdiv 1`. They were measured to be `rgb(5, 12, 28)` --
+    /// exactly `SKY_RGB` -- so they were never shadows or a dark material. They were HOLES, and
+    /// rebuilding with `shadow_maps_enabled: false` moved the count by 15 pixels out of 9,700.
+    ///
+    /// The mechanism: `build_chunk_meshes` skips a mesh-drawn tree cell outright, while
+    /// `occludes` knows only "is this cell solid". So the ground cell beneath a trunk asked
+    /// whether the cell above it was solid, got yes, and dropped its own top face -- and the
+    /// trunk cell that "hid" it emitted nothing, having been skipped. Neither path drew it. The
+    /// coarse path never had this defect because a `Cuboid` is a complete six-face box that
+    /// culls nothing, which is exactly why `--subdiv 1` looked clean.
+    ///
+    /// INDEPENDENT ORACLE, deliberately not derived from the mesher: the terrain the mesher
+    /// emits around a MESH-DRAWN tree must be identical to the terrain it emits for the same
+    /// world with those tree cells EMPTY. The terrain neither draws the tree nor may pretend
+    /// the tree hides anything on its behalf. Same defect class as 10.4's "drawn by NEITHER
+    /// path" column, one render path over.
+    #[test]
+    fn a_mesh_drawn_tree_hides_no_terrain_face() {
+        let dims = Dims { x: 3, y: 3, z: 8 };
+        let at = |x: usize, y: usize, z: usize| x + y * 3 + z * 9;
+        let mut tiles = vec![Tile::Empty; 3 * 3 * 8];
+        for x in 0..3 {
+            for y in 0..3 {
+                tiles[at(x, y, 0)] = Tile::Solid(protocol::Material::Stone);
+            }
+        }
+        // A contiguous four-cell trunk standing on the ground at the centre column, which
+        // `classify_trunk_column` accepts, so a mesh really does carry it.
+        let mut bare = tiles.clone();
+        for z in 1..5 {
+            tiles[at(1, 1, z)] = Tile::Solid(protocol::Material::TreeTrunk);
+            bare[at(1, 1, z)] = Tile::Empty;
+        }
+
+        let with_tree = world(dims, tiles);
+        let level = dims.z.saturating_sub(1) as i32;
+        assert!(
+            tree_cover_at(&with_tree, level).covers([1, 1, 1]),
+            "the fixture is only meaningful if a mesh actually carries the trunk"
+        );
+
+        // A STONE column in the same place is the control, and it is what makes this a
+        // discriminating test rather than a tautology: stone above IS drawn by the terrain, so
+        // suppressing the face beneath it is correct. The mesh tree is not drawn by the terrain,
+        // so suppressing the same face is a hole. Same geometry, opposite correct answers.
+        let mut stone = bare.clone();
+        for z in 1..5 {
+            stone[at(1, 1, z)] = Tile::Solid(protocol::Material::Stone);
+        }
+        let with_stone = world(dims, stone);
+
+        assert_eq!(
+            face_quads(&with_stone, 2, [1, 1, 0], 2, 1),
+            0,
+            "terrain-drawn stone above SHOULD hide the face beneath it -- if this fails the \
+             control is wrong and the assertion below proves nothing"
+        );
+        assert_eq!(
+            face_quads(&with_tree, 2, [1, 1, 0], 2, 1),
+            4,
+            "the cell beneath a MESH-drawn trunk must keep its top face, ALL FOUR sub-quads of \
+             it: the mesh does not draw terrain, so a face suppressed here is drawn by nothing \
+             and reads as sky"
+        );
+    }
+
+    /// The other TWO substituted call sites. `occludes_terrain` replaced `occludes` at three
+    /// face-emission decisions -- the `above` top face, the `under` bottom face, and the four
+    /// side-axis neighbours -- but the test above reaches only the first. The review found the
+    /// bottom and side substitutions shipping with no coverage at all, which is how a fix gets
+    /// half-proved: the mechanism is right, and two thirds of it is pinned by nothing.
+    ///
+    /// Each case carries its own STONE control, for the same reason the top-face test does. Stone
+    /// is terrain-drawn, so it SHOULD hide the neighbouring face; a mesh-drawn trunk is not, so
+    /// hiding the same face leaves it drawn by nothing. Same geometry, opposite correct answers --
+    /// without the control the assertions would merely restate the mesher back to itself.
+    #[test]
+    fn a_mesh_drawn_tree_hides_neither_the_face_below_it_nor_the_face_beside_it() {
+        let dims = Dims { x: 5, y: 3, z: 8 };
+        let at = |x: usize, y: usize, z: usize| x + y * 5 + z * 15;
+        let mut tiles = vec![Tile::Empty; 5 * 3 * 8];
+        for x in 0..5 {
+            for y in 0..3 {
+                tiles[at(x, y, 0)] = Tile::Solid(protocol::Material::Stone);
+            }
+        }
+        // A mesh-carried trunk at (1,1), and a terrain-drawn stone column at (3,1) as its twin.
+        for z in 1..5 {
+            tiles[at(1, 1, z)] = Tile::Solid(protocol::Material::TreeTrunk);
+            tiles[at(3, 1, z)] = Tile::Solid(protocol::Material::Stone);
+        }
+        // Caps sitting ON each column: the BOTTOM face of each cap asks `occludes_terrain` about
+        // the cell underneath it, which is a mesh trunk in one case and terrain stone in the other.
+        tiles[at(1, 1, 5)] = Tile::Solid(protocol::Material::Stone);
+        tiles[at(3, 1, 5)] = Tile::Solid(protocol::Material::Stone);
+        // Neighbours BESIDE each column at the same height: the +X side face of each asks
+        // `occludes_terrain` about the column cell next to it.
+        tiles[at(0, 1, 1)] = Tile::Solid(protocol::Material::Stone);
+        tiles[at(2, 1, 1)] = Tile::Solid(protocol::Material::Stone);
+        // ...capped, so `column_heights` returns `None` for both and each side cell is a full
+        // cube. Uncapped they carve to the exposed surface, the face runs shorter than the cell,
+        // and the expected sub-quad count stops being `subdiv * subdiv` for a reason that has
+        // nothing to do with trees. Both sides carry the cap so the comparison stays like-for-like.
+        tiles[at(0, 1, 2)] = Tile::Solid(protocol::Material::Stone);
+        tiles[at(2, 1, 2)] = Tile::Solid(protocol::Material::Stone);
+
+        let world = world(dims, tiles);
+        let level = dims.z.saturating_sub(1) as i32;
+        assert!(
+            tree_cover_at(&world, level).covers([1, 1, 1]),
+            "the fixture is only meaningful if a mesh actually carries the trunk"
+        );
+
+        // --- the `under` site (axis 2, sign -1) ---
+        assert_eq!(
+            face_quads(&world, 2, [3, 1, 5], 2, -1),
+            0,
+            "terrain-drawn stone below SHOULD hide the cap's bottom face -- if this control is \
+             wrong the assertion below proves nothing"
+        );
+        assert_eq!(
+            face_quads(&world, 2, [1, 1, 5], 2, -1),
+            4,
+            "the cap resting on a MESH-drawn trunk must keep its bottom face: the trunk mesh does \
+             not draw terrain, so a face suppressed here is drawn by nothing and reads as sky"
+        );
+
+        // --- the side-neighbour site (axis 0, sign +1) ---
+        assert_eq!(
+            face_quads(&world, 2, [2, 1, 1], 0, 1),
+            0,
+            "a terrain-drawn stone column beside it SHOULD hide the +X face -- if this control is \
+             wrong the assertion below proves nothing"
+        );
+        assert_eq!(
+            face_quads(&world, 2, [0, 1, 1], 0, 1),
+            4,
+            "the cell beside a MESH-drawn trunk must keep its +X face, all four sub-quads of it"
+        );
+    }
+
+    /// The DRAW SET, which is what feeds every face-emission decision the tests above pin.
+    ///
+    /// Those tests all use a cell that is exposed for reasons of its own, so they pass whether or
+    /// not the draw set is tree-aware -- and on the real world it was not. The ground directly
+    /// under a trunk is ringed by rock and capped by the trunk; `is_visible_at_slice` reads a
+    /// `TreeTrunk` cell as ordinary solid cover, judges the cell hidden, and it never reaches
+    /// `build_chunk_meshes` at all. Its top face -- the ground the trunk stands on -- is then
+    /// drawn by nothing, because the tree mesh draws no terrain.
+    ///
+    /// So the fixture here is deliberately the one the other tests do NOT have: the cell is
+    /// enclosed on all four sides and below, and its ONLY opening is the trunk above it. The stone
+    /// control is the same geometry with a terrain-drawn column, where hiding the face is correct.
+    #[test]
+    fn the_ground_under_a_trunk_reaches_the_mesher_even_when_rock_rings_it() {
+        let dims = Dims { x: 3, y: 3, z: 8 };
+        let at = |x: usize, y: usize, z: usize| x + y * 3 + z * 9;
+        let build = |trunk: bool| {
+            let mut tiles = vec![Tile::Empty; 3 * 3 * 8];
+            for x in 0..3 {
+                for y in 0..3 {
+                    for z in 0..2 {
+                        tiles[at(x, y, z)] = Tile::Solid(protocol::Material::Stone);
+                    }
+                }
+            }
+            let material = if trunk {
+                protocol::Material::TreeTrunk
+            } else {
+                protocol::Material::Stone
+            };
+            for z in 2..5 {
+                tiles[at(1, 1, z)] = Tile::Solid(material);
+            }
+            world(dims, tiles)
+        };
+        let (tree, stone) = (build(true), build(false));
+        let level = dims.z.saturating_sub(1) as i32;
+        assert!(
+            tree_cover_at(&tree, level).covers([1, 1, 2]),
+            "the fixture is only meaningful if a mesh actually carries the trunk"
+        );
+        assert!(
+            !is_exposed(&stone, [1, 1, 1]),
+            "the fixture is only meaningful if rock rings the cell -- an exposed cell reaches the \
+             mesher for reasons that have nothing to do with trees, which is why every earlier \
+             test here passes with the draw set unfixed"
+        );
+
+        assert_eq!(
+            face_quads(&stone, 2, [1, 1, 1], 2, 1),
+            0,
+            "a terrain-drawn stone column above SHOULD hide the top face -- if this control is \
+             wrong the assertion below proves nothing"
+        );
+        assert_eq!(
+            face_quads(&tree, 2, [1, 1, 1], 2, 1),
+            4,
+            "the ground under a MESH-drawn trunk must reach the mesher and keep its top face, all \
+             four sub-quads of it: the trunk mesh draws no terrain, so this face is drawn by \
+             nothing and the camera sees straight through to the sky"
+        );
+    }
+
+    /// How many fine sub-quads the terrain mesher emits for one cell's face on `(axis, sign)`.
+    ///
+    /// Asked of the emitted masks, not of a face count -- AC12 is about what is DRAWN, and a
+    /// count cannot tell a missing face from a differently-merged one. It returns the COUNT and
+    /// not a bool for the reason the review found: `any` is true when even one of the
+    /// `subdiv * subdiv` sub-quads survives, so a regression dropping three of four at
+    /// `--subdiv 2` reads exactly like a healthy face.
+    ///
+    /// Mask coordinates follow `emit_quad`'s corner mapping, which is NOT the same on every
+    /// axis: axis 2 -> (fine x, fine y); axis 0 -> (fine y, fine z); axis 1 -> (fine z, fine x).
+    fn face_quads(mirror: &Mirror, subdiv: i32, cell: [i32; 3], axis: usize, sign: i32) -> usize {
+        let level = mirror.dims().z.saturating_sub(1) as i32;
+        let positions = terrain_positions_at(mirror, level);
+        let plane = (cell[axis] + i32::from(sign > 0)) * subdiv;
+        let (ua, va) = match axis {
+            0 => (1, 2),
+            1 => (2, 0),
+            _ => (0, 1),
+        };
+        let us = (cell[ua] * subdiv)..(cell[ua] * subdiv + subdiv);
+        let vs = (cell[va] * subdiv)..(cell[va] * subdiv + subdiv);
+        build_chunk_meshes(
+            mirror,
+            &positions,
+            subdiv,
+            level,
+            None,
+            &tree_cover_at(mirror, level),
+        )
+        .values()
+        .map(|chunk_mesh| {
+            chunk_mesh
+                .masks
+                .iter()
+                .filter(|(key, _)| key.axis == axis && key.sign == sign && key.plane == plane)
+                .map(|(_, mask)| {
+                    mask.iter()
+                        .filter(|(u, v)| us.contains(u) && vs.contains(v))
+                        .count()
+                })
+                .sum::<usize>()
+        })
+        .sum()
     }
 
     /// `--subdiv N > 1` draws no `TerrainTile`, which is what broke the capture's draw-set

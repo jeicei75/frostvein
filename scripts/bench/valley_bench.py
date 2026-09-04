@@ -70,15 +70,15 @@ BOOT_FOCUS = (64.0, 64.0, 9.0)
 RENDER_HEIGHT = 540
 RENDER_WIDTH = round(RENDER_HEIGHT * BOOT_ASPECT_RATIO)
 
-# The aurora itself is out of scope and is NOT drawn, but the client aims its directional light
-# from the aurora's core at the camp [atmosphere.rs:209-211, 67-71], so reproducing the LIGHT
-# needs these numbers. Without them the bench sun was a guess pointing 122 degrees away from the
-# client's, lighting and shadowing different faces of the same terrain.
-AURORA_RADIUS = 600.0
-AURORA_BOTTOM = -162.0
-AURORA_TOP = 45.0
-SKY_CENTRE = (63.5, 0.0, -63.5)
-CAMP_FOCUS = (64.0, 9.0, -64.0)
+# [atmosphere.rs] The client and bench must share the sunlight's travel bearing and elevation.
+# These two ARE the light now. The aurora's geometry used to live here because the shipped sun
+# aimed from the curtain's core at the camp; 10.7 decoupled them, which left AURORA_RADIUS,
+# AURORA_BOTTOM, AURORA_TOP, SKY_CENTRE, CAMP_FOCUS and `aurora_core()` read by nothing on this
+# side. They are gone rather than kept: a constant the bench does not use cannot disagree with the
+# client about anything, and pinning one in `bench_contract.rs` states a guarantee that is not
+# being made -- the same trap the AMBIENT_RGB note in that file already records.
+SUN_AZIMUTH_DEGREES = 40.0398
+SUN_ELEVATION_DEGREES = 17.66
 
 # Cycles has no ambient-light object: the world background IS the ambient term. The client adds
 # `AmbientLight { color: night_lighting().ambient, brightness: 4_500.0 }` [ingest.rs:714-718] on
@@ -142,21 +142,20 @@ def vector_normalize(vector):
 
 
 def boot_horizontal_forward():
-    """[camera.rs:21-23] -- also the direction the aurora core sits along."""
+    """[camera.rs:21-23]."""
     return (-math.cos(BOOT_YAW), 0.0, -math.sin(BOOT_YAW))
 
 
-def aurora_core():
-    """[atmosphere.rs:67-71]. The compass point the client's directional light comes from."""
-    return vector_add(
-        vector_add(SKY_CENTRE, vector_scale(boot_horizontal_forward(), AURORA_RADIUS)),
-        (0.0, (AURORA_BOTTOM + AURORA_TOP) * 0.5, 0.0),
-    )
-
-
 def sun_direction():
-    """The client's `aurora_light_transform()` [atmosphere.rs:209-211] as a unit vector."""
-    return vector_normalize(vector_subtract(CAMP_FOCUS, aurora_core()))
+    """[atmosphere.rs] The client's directional-light travel vector."""
+    azimuth = math.radians(SUN_AZIMUTH_DEGREES)
+    elevation = math.radians(SUN_ELEVATION_DEGREES)
+    horizontal = math.cos(elevation)
+    return (
+        math.cos(azimuth) * horizontal,
+        -math.sin(elevation),
+        math.sin(azimuth) * horizontal,
+    )
 
 
 def boot_camera_frame():

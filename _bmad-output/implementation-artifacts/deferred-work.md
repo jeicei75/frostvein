@@ -1645,3 +1645,343 @@ to the terrain, so the root/junction complaint and this may be one defect seen t
 instrument is venue-dependent in absolute terms; the ratios against the same-venue noise floor are
 what carry the argument. The *code* facts — the light's height and the surface's height — are
 venue-independent and are the actual finding.
+
+## Deferred from: 10.7, the near-white ceiling's calibration frame is gone (2026-09-03)
+
+- **`NEAR_WHITE_AREA_CEILING` was already breached before story 10.7 started, on both venues, and
+  10.7 does not touch it (AC7).** Filed here because a pre-existing breach with no home is a
+  panic everyone learns to step over. **Measured, headless, `gui --headless --subdiv 1 --frames 160`:**
+
+  | build | near-white area | ceiling | exit |
+  |---|---:|---:|---|
+  | `47139fa`, sun below horizon (run a / run b) | 1.8757 % / 1.7755 % | 1.5630 % | 101 |
+  | 10.7's approved `+17.66°` sun (run a / run b) | 2.2546 % / 2.2541 % | 1.5630 % | 101 |
+
+  The vehicle reads **2.2071 %** on the shipped build (10.4's sitting, entry above), so the breach
+  is not a headless artefact. Raising the sun made it worse — expectedly, a lit valley has more
+  bright pixels — but **it did not cause it**: the shipped build breaches by 20 % with the sun
+  under the map.
+
+- **The real finding is not the breach, it is the calibration.** The ceiling is 9.1's, calibrated
+  on `boot7.png` — **a frame rendered with the sun below the horizon**, like every other look
+  decision on this project before 10.7. The constant does not merely need raising to fit a new
+  scene; **its calibration frame no longer represents the game**, so re-deriving it means picking a
+  new reference frame under the sun, not scaling the old number. That is a look decision needing
+  Wolf's eye and a bench, i.e. its own story — and it is the same shape as the ambient balance that
+  10.7's Task 4 was explicitly forbidden from touching for the same reason.
+
+- **Do not raise the constant to clear the panic.** The check saves the PNG before it validates
+  (`capture.rs:1250-1253`), so every capture stays usable at exit 101; the panic costs evidence
+  nothing today. Whoever takes this needs one baseline capture on the calibration venue plus a new
+  reference frame under the approved sun, and should re-read 9.1 before moving a digit.
+
+## Found at 10.7's vehicle sitting: BLACK QUADS AT BOX BOTTOMS, ONLY AT SUBDIV > 1 (2026-09-03)
+
+Wolf, on the vehicle, after 10.7 raised the sun: *"shadows for terrain work with subdiv 1 without
+an issue.. with higher subdivs there are some black hard artifacts"*, and on being asked:
+*"I don't mean tree shadows actually but there are some black artifacts in box bottoms or something
+like that.. probably terrain shadows wrongly rendered in case of higher subdiv"*.
+
+**What is actually on screen.** At `--subdiv > 1`, a **pure-black, hard-edged quad sits at the base
+of nearly every pine trunk**, and the dark banding along each terrace step is far harder than at
+`--subdiv 1`. At `--subdiv 1`, in the same region at the same framing, **there are none**.
+
+**Evidence, all committed to `10-7-signoff/`:**
+
+| file | what it is |
+|---|---|
+| `vehicle-subdiv-artifacts-2026-09-03.png` | Wolf's own vehicle screenshot, 3825x1523, RTX 4080 |
+| `subdiv-artifact-headless-subdiv2.png` | matched crop, headless devpod, `--subdiv 2` — black quads at trunk bases |
+| `subdiv-artifact-headless-subdiv1.png` | the SAME region and framing at `--subdiv 1` — clean |
+| `candidate-client-subdiv2.png` | the full headless `--subdiv 2` capture the crops come from |
+
+**IT REPRODUCES HEADLESS IN THE DEVPOD.** The signature in `subdiv-artifact-headless-subdiv2.png`
+is the same as the vehicle's, so whoever takes this can **iterate here** and needs the vehicle only
+for the final look judgement. That is the difference between a cheap story and an expensive one.
+
+**CAUSE NARROWED 2026-09-03 (orchestrator, measured). IT IS NOT LIGHTING — THEY ARE HOLES.**
+The dark quads are `rgb(5, 12, 28)`, which is **exactly `SKY_RGB`**. They are not shadows and not a
+dark material: they are **sky showing through missing geometry**. Two measurements settle it:
+
+- **Shadow maps OFF changes nothing.** Rebuilt with `shadow_maps_enabled: false` at `--subdiv 2`,
+  identical geometry (`chunks=118 faces=227110 triangles=151062`): sky-coloured terrain pixels
+  9,685 vs 9,700 with shadows on — a 15-pixel difference, i.e. noise. The quads are in the same
+  places, the same shapes. Evidence: `probe-subdiv2-shadows-off.png` and its crop.
+- **The excess is only at `--subdiv > 1`.** Sky-coloured pixels below the skyline: 9,147 at
+  `--subdiv 2` against 7,990 at `--subdiv 1` — **~1,157 pixels of hole**, on frames whose framing
+  and content are otherwise identical.
+
+**FAMILY 1 (shadow bias / cascade) IS FALSIFIED.** Do not spend time there. As a side-effect this
+also means the void `CascadeShadowConfig` falsification no longer needs re-running for this defect.
+
+**LEADING HYPOTHESIS — verify it, do not assume it.** The tree-cell exclusion is the same predicate
+on both render paths (`is_mesh_drawn_tree` = `is_tree() && cover.covers()`, used at
+`project.rs:740`, `:817`, `:1305`, `:2268`), so the exclusion is not asymmetric. What differs is
+what each path draws *after* excluding: a `Cuboid` is a complete six-face box, so removing one
+leaves every neighbour's faces intact and the gap is filled visually; the greedy chunk mesher only
+emits faces at height/material transitions, so **removing a column can leave no face at all where
+that column's sides used to be** — and you see through into the box. That is exactly the shape of
+Wolf's "black artifacts in box bottoms", and it is the same DEFECT CLASS as 10.4's "drawn by
+NEITHER path" hole that `TreeCover` was introduced to close, one render path over.
+
+**The guard AC12 needs writes itself from this finding:** count sky-coloured pixels inside the
+terrain silhouette. A hole is sky where terrain should be — a property that exists only in the
+drawing, which is precisely what a geometry count cannot see.
+
+**Superseded below — the two families as originally filed, kept for the record:**
+1. **Shadow-map bias / cascade behaviour on the chunk-mesher path.** At `--subdiv > 1` terrain goes
+   through the chunk mesher instead of per-cell `Cuboid`s, so the geometry is finer and the bias
+   tuned for the coarse path may self-shadow. `CascadeShadowConfig` was measured and FALSIFIED in
+   10.7's investigation (`probe-cascade-max-500-FALSIFIED.png`) — but that was measured **with the
+   sun below the horizon**, i.e. with nothing casting, so **that falsification is void for this
+   question** and must be re-run under the approved sun before it is quoted again.
+2. **Unlit faces out of the mesher.** `emit_quad` (`crates/gui/src/project.rs:1040-1085`) gives all
+   four vertices one face normal and picks winding by `key.sign`. The comment there records that
+   the winding was inverted on every axis and both signs until it was fixed — and it was fixed
+   against **culling**, i.e. against faces being VISIBLE, which is winding-blind to lighting.
+   Nothing yet asserts that a mesher face is LIT the way the equivalent `Cuboid` face is.
+
+**Why this could not have been caught before 10.7.** With the sun 6.42° below the horizon nothing
+cast anything and every face was ambient fill, so no build before this one could show it. It is a
+latent defect the sun revealed, exactly as 10.4's vehicle sitting revealed the sun itself.
+
+**It is not shipping broken today** — the client default is `--subdiv 1` (`project.rs:53`), which is
+the clean path and the one 10.7's AC4 measured. **But it is on the adopted road**: 10.6 ruled k=4,
+and k>1 *is* this path. Whoever schedules 10.6's adoption inherits this.
+
+**How 10.7's own evidence missed it.** Task 4's subtask read *"Lighting is per-scene, not per-path,
+so confirm rather than assume — capture at both and say so."* Both captures were taken, the
+`--subdiv 2` one was committed, and the conclusion was drawn from `chunks=118 faces=227110
+triangles=151062` — **the counts, never the picture**. The artifact was sitting in the story's own
+committed evidence for the whole review window. Counts are winding-blind and they are lighting-blind
+too; a "capture both and confirm" subtask needs an assertion about the PIXELS, not the geometry.
+
+## Found while closing 10.7: the metrics ledger's quota column is the WRONG WINDOW (2026-09-03)
+
+**STATUS 2026-09-03, Wolf: KNOWN AND ALREADY FIXED UPSTREAM in forge-process. It is NOT to be
+fixed here, and it is waiting on a forge sync that will happen at a good moment, not now. Do not
+re-file it and do not raise it again — the record below is kept for the frostvein-side figures
+only.**
+
+**`session_tokens.py` reads `rate_limits.primary.used_percent` and labels it the weekly quota.**
+On this account `primary` is the **300-minute (5-hour)** window and `secondary` is the
+**10080-minute (7-day)** one — read straight off a live rollout:
+
+```
+"primary":   {"used_percent": 0.0,  "window_minutes": 300,   "resets_at": 1788451268}
+"secondary": {"used_percent": 67.0, "window_minutes": 10080, "resets_at": 1788766582}
+```
+
+So **every `quota_pp` figure in every metrics file is the 5-hour number wearing the weekly label.**
+Measured on 10.7's two dev runs: the ledger rows read `23pp` and `22pp`; the weekly window actually
+moved `67% -> 70%` and `70% -> 74%`, i.e. **3 and 4 points**. The 5-hour figures were right; the
+column heading and the docstring at `_bmad/scripts/session_tokens.py:281` are wrong.
+
+**Why this matters beyond tidiness.** `quota_pp` exists because it is *the axis that actually binds*
+for Codex — the ledger header says so explicitly and tells readers `est_usd` is not a substitute.
+A story that reads "burned 23 points of the weekly quota" when it burned 3 will make scheduling
+decisions that are wrong by 8x, in the cautious direction.
+
+**AND IT MAY HAVE ALREADY DONE SO.** Story 8.2's record says *"THIS STORY CONSUMED THE ENTIRE
+WEEKLY CODEX QUOTA: 0% -> 100%"*, and the Epic 3 retro says 3.2 ate *"~51-60 percentage points of a
+full week's quota"* and blocked the next story's dev for six days. **If those readings came from
+`primary`, they were 5-hour windows and both conclusions are overstated** — though the six-day block
+is real and fits a weekly exhaustion, so this is a question to settle, not an answer. **NOT YET
+CHECKED**: read `secondary.used_percent` from 8.2's and 3.2's rollouts directly; do not re-derive
+it from the ledger, which is the thing under suspicion.
+
+**Fix is small and has a trap.** Report both windows, named by their `window_minutes` rather than by
+position — `primary`/`secondary` are an ordering, not a meaning, and a plan change could swap them.
+The tests pin a real rollout line verbatim (deliberately), so extend that fixture rather than
+writing a synthetic one.
+
+## Proposed instrument, out of 10.7's vehicle sitting: per-source light toggles (2026-09-03)
+
+Wolf, 2026-09-03: *"maybe to be test more we should be able to turn on/off different light sources
+separately?"* **Recommended, and the case is now concrete rather than speculative.**
+
+Today the only way to attribute a lighting effect is to **delete a light and rebuild** — which is
+literally how the sun-under-the-map defect was found ("deleting it entirely moves the frame LESS
+than run-to-run noise"). That is a source edit, a rebuild and a fresh capture per question.
+
+**Three concrete uses already exist, which is what clears the YAGNI bar** (no abstraction before a
+third case):
+1. **10.7's own black-quad defect** — is it the sun's shadow map, or the campfire/lantern
+   `PointLight`s? One run with only the sun on answers it. Currently: two rebuilds.
+2. **The deferred ambient-balance question** — 10.7 was forbidden from touching
+   `ambient_brightness`/`directional_illuminance` because ambient cannot be judged until the sun is
+   up. It is up now, and separating ambient from directional is exactly this flag.
+3. **Wolf's own reading at the sitting** — *"camp fire and lanterns are lighting I think"* was a
+   hypothesis he could not test from the seat. This turns it into one run.
+
+**Shape, and keep it this small:** a `--lights <list>` flag naming which sources are active
+(`sun`, `campfire`, `lanterns`, `ambient`), defaulting to all. It is an instrument, **not** a config
+system — no file, no plugin, no runtime toggling. **Its own test is not optional** (this project's
+instrument rule): each named source, switched off alone, must measurably change the frame, and the
+flag must reject a name it does not know rather than silently ignoring it. An untested instrument
+manufactures false evidence rather than merely missing true evidence.
+
+## Measured 2026-09-03: THE CAMP'S WARM SIGNATURE IS MOSTLY TORCHES, NOT THE CAMPFIRE
+
+Wolf, on being handed the new toggles: *"i just wonder how much time we spent for tweaking campfire
+intensity and actually it was all about torches"*. **Measured, and he is substantially right.**
+This became measurable only today: torches were hardcoded lit until F9 existed, so no run in this
+project's history could separate them.
+
+`camp_emitters` (`sim-core/src/lib.rs:1564`) puts **four torches at ±2 cells on the diagonals around
+the campfire**. Campfire 25,000,000 lm / range 28; each torch 14,000,000 / range 20, so the ring
+carries **56M lm against the fire's 25M**, spread across the very pool that was tuned.
+
+Headless `--subdiv 1 --frames 160`, one build per treatment, figures from the capture range check:
+
+| treatment | warm-lit px | ground median | near-white | blown-pool |
+|---|---:|---:|---:|---:|
+| all on (a / b) | 19,341 / 20,117 | 135 | 2.28 / 2.23 % | 1.158 / 1.157 % |
+| campfire off | 20,009 | 133 | 2.09 % | 1.145 % |
+| torches off | 9,264 | 123 | 1.85 % | 1.039 % |
+| torches **and** campfire off | 6,956 | 118 | 1.51 % | 0.805 % |
+
+**Marginal contributions, taken with the confounder removed** — the second column is the trap: with
+torches lit, the campfire's whole contribution is invisible.
+
+| | warm-lit px | blown-pool |
+|---|---:|---:|
+| torches | **-10,436** | -0.118 pp |
+| campfire, torches still lit | +300 (nil, swamped) | -0.012 pp |
+| campfire, torches already off | -2,308 | **-0.234 pp** |
+
+**The nuance matters, so state it precisely rather than as "it was all torches":**
+- **Warm-lit pixel count is a torch detector.** 10,436 against the campfire's 2,308 — **4.5 : 1**.
+  This is the metric `WARM_PIXEL_FLOOR` guards.
+- **The blown white core is the campfire's**, and by a factor of two: 0.234 pp against 0.118 pp.
+  That is consistent with the tuning note in `light_properties` ("72M lm blew a ~9-tile pool to flat
+  white"), so that pass was aimed at the right knob for the thing it was looking at.
+- **The breached near-white ceiling is split roughly evenly** — 0.40 pp torches, 0.34 pp campfire.
+
+**CONSEQUENCE FOR THE DEFERRED NEAR-WHITE STORY** (§ "10.7, the near-white ceiling's calibration
+frame is gone"): about **40 % of the breach is four torches nobody has ever examined**, and every
+tuning pass on record moved the campfire. Whoever takes it should start by measuring the torch ring,
+not the fire — and now can, with F9.
+
+**The generalisable trap:** four small identical emitters around one big one are invisible to
+single-light reasoning and to any measurement that cannot switch them off. The campfire was the
+named thing, so it got the attention; the ring outweighed it 2:1 in lumens and nothing in the
+project could see it. **Before tuning an emitter, switch off everything else that emits nearby** —
+that is now one keypress.
+
+## Found at 10.7's second sitting: THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S FLANKS (2026-09-03)
+
+**DEFERRED BY WOLF, 2026-09-03: *"need to think how snow and rock will work together in some other
+story not this"*. This is NOT 10.7's and is not an open defect in it. It is a look question awaiting
+Wolf's thinking, and it gets its own story when he has decided what he wants. A reviewer meeting the
+dark flanks at `--subdiv > 1` should read this entry and move on rather than filing it again.**
+
+Wolf, on the fixed subdiv-2 build: *"still bottom of the blocks have different color than rest of
+the blocks with higher subdiv .. maybe it is in purpose?"* **Half on purpose, and that is the
+problem.** Measured in one terrace region (140x90 px), by palette rather than by eye:
+
+| | subdiv 1 | subdiv 2 |
+|---|---|---|
+| terrace tops | `rgb(75,102,150)` luma 99 | the same |
+| **risers / flanks** | **no dark colour present at all** | **`rgb(52,60,78)` luma 59, 4.3 % of the region** |
+
+`(52,60,78)` is `Material::Stone (60,70,92)` under this light. So **a snow cell's vertical faces are
+SNOW at `--subdiv 1` and ROCK at `--subdiv > 1`.**
+
+**Each path is behaving as designed, and no one decided they should differ.**
+- The coarse path draws the whole cell in its own material and lays a separate `snow_cap_mesh` slab
+  (1.02 x 0.08 x 1.02) on top, so the flanks are snow-coloured.
+- The fine path deliberately dropped the slab — it is cell-scale, sits at the coarse top while the
+  fine surface is a pit deeper, and "covers 102 % of the cell so it hides 17.9 % of the very detail
+  this path exists to draw" — and paints snow onto TOP FACES only.
+  `a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else` pins exactly that, down to
+  the assertion "covered terrain keeps its dark flank".
+
+Both rules are defensible on their own. **What was never decided is that the world should LOOK
+different at the two fidelities** — and 10.6 adopted k=4 as the target, so this is the look the game
+moves to. Snow blocks gain hard dark stone flanks; that is a material change to the terrain's
+appearance, not a detail.
+
+**It needs Wolf's eye, not an engineer's guess** — snow settling on tops and not on vertical faces is
+arguably the more truthful rule, which is an argument for the FINE path being right and the coarse
+one being the stale look. Note also that the fine path's top-face detail carving is labelled in
+source as "a MEASUREMENT STAND-IN for 10.4's authored terrain look, NOT a visual decision"
+(`project.rs:995`), so some of what the eye reads at `--subdiv > 1` is placeholder by its own
+admission. Whoever takes this should put the two side by side at the same framing and ask which is
+the intended winter, then make the loser match — rather than leaving the answer to depend on a flag.
+
+## Deferred from: code review of 10-7-the-sun-lights-the-valley (2026-09-03)
+
+Four-layer review, no coverage holes. All seven are LOW and none is caused by 10.7's own change;
+they are recorded here rather than patched, per the review-cost LOW-tail cap.
+
+- **`TreeCover`'s ring overlap depends on a `sim-core` spacing constant nothing ties it to**
+  (`crates/gui/src/project.rs:1934`). `TreeCover::covers` ORs a 3x3 ring over every stored base with
+  no check that the covered cell belongs to that base's own column. It is sound only because
+  `worldgen.rs:186-187` rejects any trunk within Chebyshev distance 2, keeping trunks 3 apart — an
+  invariant enforced in `sim-core` and documented only as a comment in `gui`, with no test tying the
+  two crates together. Loosen the worldgen spacing to 1 and a rejected (gapped) trunk column falls
+  inside an accepted neighbour's footprint, `is_mesh_drawn_tree` reports true for a cell no mesh
+  draws, and the tree vanishes — drawn by neither path, with every `gui` test green. 10.7 did not
+  create this; it added three more consumers of it (the `occludes_terrain` sites). A cross-crate
+  assertion on the spacing would close it.
+- **The Python bench oracle is bounds-only, with wide bands**
+  (`scripts/tests/test_valley_bench.py:186`). The replaced test derived its expected value
+  independently from `AURORA_BOTTOM`/`AURORA_TOP`; the new one calls `sun_direction()` and checks
+  only `direction[1] < -0.15`, `direction[0] > 0.5` and unit length. `direction[0] > 0.5` accepts
+  azimuth 0-60 degrees, so a materially drifted value still passes. The exact constants are pinned
+  by `bench_contract.rs`, so this is belt-and-braces rather than an open hole.
+- **`light_controls` skips the explicit ordering annotation the rest of the file uses**
+  (`crates/gui/src/ingest.rs:498`). It writes the `LightingToggles` resource that
+  `apply_lighting_toggles` reads, but carries no `.after(...)` — unlike every other ordering-sensitive
+  system in the file, which states its constraint and why. Not proven broken: the relevant test passed
+  25/25 reruns. The risk is that a future re-registration reorders it without failing loudly.
+- **The `is_mesh_drawn_tree(neighbour)` tie-break no longer does distinguishable work**
+  (`crates/gui/src/project.rs:849`). With `solid = occludes_terrain(neighbour)`, a mesh-drawn tree
+  neighbour now always yields `false`, forcing `floor = 0`, so the tie (`top == floor`) is reachable
+  only at `top == 0` — which the `else` branch's `if low >= high { continue; }` already handles
+  identically. Not a functional defect; a comprehension hazard, since a maintainer who believes that
+  branch still guards a live case for trees would be wrong. A `// NOTE:` would settle it.
+- **Toggle-off-then-a-delta-spawns-a-new-light is uncovered** (`crates/gui/src/ingest.rs:1083`).
+  `lighting_keys_change_the_live_scene_and_its_readout` toggles pre-existing fixture entities only.
+  Ordering suggests a source switched off before a new campfire or torch arrives is corrected in the
+  same frame — `reconcile_projection` sits earlier in the `ProjectionSet` chain that
+  `apply_lighting_toggles` runs after — and adjacent passing tests depend on that same
+  spawn-then-same-frame interaction, but this exact path is pinned by nothing.
+- **Unlit contributors are bright in an all-off frame, keyless and absent from the readout**
+  (`crates/gui/src/atmosphere.rs:258-280`). Snowflakes, stars and the aurora curtain are
+  `unlit: true`: they emit pixels but illuminate no geometry, so no toggle reaches them and none is
+  listed in the readout. In the measured all-off frame the snowflakes remain conspicuously bright
+  grey squares against a black valley. AC10's point is that a frame can never be judged without
+  knowing which sources were lit; someone judging a low-light frame will see light the readout says
+  is off. One line in the readout or the vehicle runbook would close it.
+- **No mutation row covers the emissive branch**
+  (`_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh`). The emissive
+  assignment is the fix for Wolf's actual complaint and its restore assertion was verified
+  non-vacuous by hand (stubbing the assignment reddens the exact assertion), but that check is
+  recorded in prose and not carried by a row. All 7 existing rows were verified to still apply at
+  HEAD during this review, so none is stale.
+
+## Surfaced at 10.7's pre-merge vehicle sitting (2026-09-04)
+
+- **FOUR LARGE ENCLOSED-SKY HOLES AT THE RIDGE, AT BOTH SUBDIVISIONS, AND THEY PREDATE 10.7.**
+  945 / 525 / 294 / 186 px at `--subdiv 2` and the same four at `--subdiv 1` (801 / 363 / 232 / 217),
+  clustered at `x 164-325` and `x 1096-1151`, `y 257-301` at the boot framing — up on the far ridge
+  where the terrain meets the sky. Measured with `10-7-signoff/enclosed.py`; painted magenta in
+  `10-7-signoff/wolf-sitting-sd1-holes-marked.png`. **They are byte-identical in
+  `control-shipped-a-e930d07.png`**, a capture of the shipped build taken before any change in story
+  10.7, so this story neither caused them nor touched them. These are what Wolf saw as "2-3 black
+  holes on top of terrain cubes" — they are by far the largest holes on screen, ~1,650 px of the
+  1,650 px total at the shipped `--subdiv 1`. **Cause NOT diagnosed. Do not presuppose one** — the
+  two candidates not yet separated are a missing terrain face at the world's outer boundary, and
+  sky beyond the world's edge enclosed by trees standing past the last terrain cell. Distinguishing
+  them needs the geometry, not the pixels. **Revisit trigger:** whoever picks up the AC12 remainder;
+  it wants its own story, because it is a different mesher question from the trunk-base family and
+  it affects the shipped default, which the trunk-base family does not.
+- **`holes.py` and `pixel_guard.rs::interior_sky` measure open sky, not interior sky.** Their
+  per-column silhouette rule never engages, because the night sky is a gradient and no column's
+  topmost pixel is ever exactly `SKY_RGB` — the silhouette resolves at `y <= 19` in all 1,280
+  columns. Superseded by `10-7-signoff/enclosed.py` (border flood fill, 0 px noise floor). Left
+  here as the entry that says the OLD figures in this story and in `pixel_guard.rs` are readings of
+  a different quantity, so nobody re-derives a conclusion from them. See the story's
+  "AC12 IS NOT MET" section for the arithmetic.

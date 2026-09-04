@@ -99,6 +99,14 @@ if [ "$FAST" -eq 1 ]; then
   run "cargo test -p simd --bins" cargo test -p simd --bins
 else
   run "cargo test" cargo test
+  # The pixel guards, and the ONLY checks here that look at a rendered frame. `cargo test` above
+  # builds every binary, including the daemon these spawn, so they run after it and never alone.
+  # `#[ignore]`d at the source so the fast tier skips them without needing to know their names;
+  # named in the SKIPPED banner below so a fast pass can never be mistaken for having run them.
+  # ~2 minutes: three real captures at 1280x720 through lavapipe. Story 10.7 is why they exist --
+  # black quads every geometry count called healthy, a campfire glowing with its light switched
+  # off, and an "after the fix" artifact that was the rejected fix.
+  run "cargo test (pixel guards)" cargo test -p gui --test pixel_guard -- --ignored
 fi
 
 # Inverted: a MATCH is the failure. Clients depend on protocol/client-core only.
@@ -152,6 +160,7 @@ fi
 if [ "$FAST" -eq 1 ]; then
   echo "GATE GREEN (FAST) -- NOT the full gate."
   echo "  SKIPPED: crates/simd/tests/serve.rs (61 daemon integration tests, ~59s)."
+  echo "  SKIPPED: crates/gui/tests/pixel_guard.rs (2 rendered-frame guards, ~2m)."
   echo "  This is a COVERAGE HOLE, not a clean result. Run scripts/gate.sh with no"
   echo "  arguments before pushing, and before calling any story done."
   exit 0

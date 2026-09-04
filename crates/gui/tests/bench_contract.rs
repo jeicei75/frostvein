@@ -160,37 +160,34 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
             "BOOT_ASPECT_RATIO: f32 = 16.0 / 9.0",
             "BOOT_ASPECT_RATIO = 16.0 / 9.0",
         ),
-        // The key light's aim. The bench does not draw the aurora, but the client's directional
-        // light comes FROM it, so these four numbers decide which faces are lit.
+        // The key light's aim -- BOTH the two numbers and the arithmetic that turns them into a
+        // vector. The aurora's five constants used to sit here, from when the sun aimed out of the
+        // curtain's core; 10.7 decoupled them and the bench stopped reading any of them, so the
+        // rows were pinning an agreement neither side was making any more. Removed rather than
+        // left green, for the reason the AMBIENT_RGB note below already records.
         (
             &atmosphere,
-            "pub const AURORA_RADIUS: f32 = 600.0;",
-            "AURORA_RADIUS = 600.0",
+            "pub const SUN_AZIMUTH_DEGREES: f32 = 40.0398;",
+            "SUN_AZIMUTH_DEGREES = 40.0398",
         ),
         (
             &atmosphere,
-            "pub const AURORA_BOTTOM: f32 = -162.0;",
-            "AURORA_BOTTOM = -162.0",
+            "pub const SUN_ELEVATION_DEGREES: f32 = 17.66;",
+            "SUN_ELEVATION_DEGREES = 17.66",
+        ),
+        // THE FORMULA, not just its inputs. Pinning the two declarations alone let either language
+        // flip a sign or swap sin for cos while both literals stayed byte-identical and this test
+        // stayed green -- the 10.4 client/bench divergence reopened one level down, at the
+        // arithmetic instead of the aim vector. Same lesson as AMBIENT_RGB: pin the USE.
+        (
+            &atmosphere,
+            "azimuth.cos() * horizontal, -elevation.sin(), azimuth.sin() * horizontal,",
+            "math.cos(azimuth) * horizontal, -math.sin(elevation), math.sin(azimuth) * horizontal,",
         ),
         (
             &atmosphere,
-            "pub const AURORA_TOP: f32 = 45.0;",
-            "AURORA_TOP = 45.0",
-        ),
-        (
-            &atmosphere,
-            "pub const SKY_CENTRE: Vec3 = Vec3::new(63.5, 0.0, -63.5);",
-            "SKY_CENTRE = (63.5, 0.0, -63.5)",
-        ),
-        (
-            &atmosphere,
-            "pub const CAMP_SURFACE_Y: f32 = 9.0;",
-            "CAMP_FOCUS = (64.0, 9.0, -64.0)",
-        ),
-        (
-            &atmosphere,
-            "Transform::from_translation(aurora_core()).looking_at(CAMP_FOCUS, Vec3::Y)",
-            "vector_normalize(vector_subtract(CAMP_FOCUS, aurora_core()))",
+            "let horizontal = elevation.cos();",
+            "horizontal = math.cos(elevation)",
         ),
         // The foliage shrink. Without it the bench drew solid canopy slabs where the client draws
         // sparse crowns, which is the difference an eye reads first.

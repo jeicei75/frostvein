@@ -41,9 +41,11 @@ PY
 mutation "camera controls drop out of the update tuple" gui camera_controls_drive_the_rig <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            camera_controls,\n            update_fog_from_camera,'
+# RE-ANCHORED 2026-09-03 (story 10.7): light_controls now sits between these two. The row still
+# drops camera_controls out of the update tuple and nothing else.
+old = '            camera_controls,\n            light_controls,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            update_fog_from_camera,'))
+p.write_text(s.replace(old, '            light_controls,'))
 PY
 
 mutation "fog stops following the camera" gui fog_follows_the_camera_rig_every_frame <<'PY'
