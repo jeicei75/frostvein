@@ -92,6 +92,9 @@ The real question is whether frostvein wants the *skill*. It ran a review-patch 
 - `python3 -m unittest discover -s _bmad/scripts/tests` — **78 tests OK**, including the 11 new
   phase-hook tests.
 - `scripts/forge-process.sh check /workspace/projects/frostvein` — **in sync** at 1.5.0.
+- `scripts/gate.sh` — **GATE GREEN**, all ten lines. The upgrade runbook's step 5 asks for the
+  project's own gate as well as `check`, because installing a new `session_tokens.py` must not break
+  the metric recording the gate exercises; re-run after the devpod crash, on this branch, at 1.5.0.
 - `.gitignore` gained four negations. Without them all four new files were installed to disk and
   invisible to git, so a fresh clone would have reported MISSING and the sync would have been real
   on one machine only.
