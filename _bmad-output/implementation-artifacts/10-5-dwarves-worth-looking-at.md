@@ -138,8 +138,15 @@ project has shipped before. **Wolf decides; record the ruling in this file with 
 
 2. **`EntityKind::Dwarf` is drawn from a glTF scene, not the shared cube.** With the real daemon
    running, a `gui --headless --capture` frame differs from the committed
-   `10-5-signoff/control-cube-dwarves-a.png` by **at least 10x the same-build noise floor**, and that
-   floor is re-measured on this story's own build — two runs of one binary, the **worst** taken.
+   `10-5-signoff/control-cube-dwarves-a.png` **inside a window containing at least one wire dwarf**,
+   by at least **10x the same-build noise floor measured in that same window** — two runs of one
+   binary, the **worst** taken. Publish the window's coordinates and both figures.
+   **NOT a whole-frame bar. The authoring run measured the whole-frame same-build noise at
+   `raw=64,851 / >=4=24,243 / >=16=8,982` on an unchanged binary** — the snow is animated, so a
+   whole-frame 10x bar would demand a quarter of the frame change and five dwarf-sized silhouettes
+   cannot reach it. This is 10.7's AC11 lesson arriving one story later: a whole-frame bar is the
+   wrong instrument for a local change, and it fails in the direction that looks like the feature
+   is broken.
 3. **The dwarf stands on the ground.** Its rendered base sits at the cell floor, not its centre: the
    entity spawn applies the same `- Vec3::Y * 0.5` drop the tree path uses (`project.rs:2275`), and a
    test asserts the spawned `Transform`'s translation against a hand-written expected value that is
@@ -283,13 +290,43 @@ project has shipped before. **Wolf decides; record the ruling in this file with 
 **Executed at story creation, 2026-09-04, on `834f105`.** The instrument is `10-7-signoff/pixel_diff.py`,
 reused rather than reinvented, and the control frames it grades are committed by this story.
 
+Control frames captured on a CLEAN tree so their stamp is trustworthy: the first attempt read
+`gui build 87f3bdc-dirty` — a binary built at the previous commit — and was discarded and re-taken
+rather than committed. The committed pair carries **`gui build 4b01a58`**, this story's own commit.
+
+```bash
+./target/debug/simd 7491 &
+./target/debug/gui 7491 --headless --subdiv 1 --frames 160 \
+  --capture _bmad-output/implementation-artifacts/10-5-signoff/control-cube-dwarves-a.png
+# ...and again to -b.png. Exits 101 on the near-white ceiling; the PNG is still written.
+```
+
 ### The deliberate RED, observed before any green was accepted
 
-(filled in below by the authoring run)
+The instrument can fail in two directions — by dying, and by lying — so both were driven:
 
-### The control, and the noise floor AC2 must beat
+```
+RED 1  a truncated frame
+       zlib.error: Error -5 while decompressing data: incomplete or truncated stream
+RED 2  a frame diffed against ITSELF
+       RED2-self       raw=      0  >=4=      0  >=16=      0
+```
 
-(filled in below by the authoring run)
+RED 1 proves it dies loudly on a bad frame rather than printing plausible numbers. RED 2 proves it
+can say **nothing changed** — without which "the dwarf changed" means nothing. Restore: none, both
+REDs are scratch files.
+
+### The noise floor, and why AC2 is a LOCAL bar
+
+```
+NOISE-a-vs-b            raw= 64,851   >=4= 24,243   >=16=  8,982
+```
+
+**That is two captures of ONE unchanged binary.** The snow is animated, so tens of thousands of
+pixels differ frame to frame with no code change at all. A whole-frame 10x bar is therefore
+unreachable by five dwarf-sized silhouettes, which is why AC2 asks for a windowed measurement and
+its own windowed floor. The dev agent must re-measure both on their build; these figures are the
+shape of the problem, not a number to inherit.
 
 **The obligation this recipe cannot yet discharge:** the "after" frame does not exist at authoring
 time. The dev agent must produce it with the same command against the same daemon port and framing,
@@ -305,6 +342,7 @@ Small commits, imperative messages. Push and PR only on Wolf's explicit yes.
 | Date | Change |
 |---|---|
 | 2026-09-04 | Story created. **The epic's named split line is taken and this is Part A, the seam.** Nine premises re-verified on `834f105`: six were wrong, stale or absent — `bevy_gltf` is already enabled (AC1 half-moot), the lantern is wire-driven not client-table-driven, hot-reload has no venue under the embedded-delivery decision, an asset-contract dwarf floats half a cell on the entity path, `scale: 0.65` is pinned by a two-language source-text grep, and `WorldAssetRoot`'s scene children break two partition tests. Wolf's ruling required on the hot-reload venue before Task 2. |
+| 2026-09-04 | **Verification recipe EXECUTED, and it falsified this story's own AC2.** Two REDs observed (a truncated frame dies with `zlib.error`; a frame against itself reads exactly 0/0/0). The same-build noise floor on an unchanged binary is `raw=64,851 / >=4=24,243 / >=16=8,982` — the snow is animated — so the whole-frame 10x bar AC2 originally carried was **unreachable by five dwarf-sized silhouettes**, the same defect 10.7 hit with its AC11 whole-frame bar. AC2 is now a WINDOWED bar against a windowed floor. Control frames re-taken on a clean tree after the first pair came out stamped `87f3bdc-dirty`; the committed pair carries `4b01a58`. |
 
 ## Dev Agent Record
 
