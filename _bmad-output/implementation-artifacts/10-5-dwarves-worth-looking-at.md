@@ -14,8 +14,9 @@ in the premises below: the entity path needs an origin change, a scale change pi
 source-text grep across two languages, a partition invariant that scene children break, and a
 hot-reload question nobody has ruled on — before any authored geometry exists.
 
-**Part B — the authored dwarf, generalising `check_asset.py`, and UX-DR22's two halves — is a
-separate story, and it cannot start until Wolf has a model.** That is not a scheduling preference:
+**Part B — the authored dwarf, generalising `check_asset.py`, UX-DR22's two halves, and now option A's
+dev-only disk loading (Task 1's ruling) — is a separate story, and it cannot start until Wolf has a
+model.** That is not a scheduling preference:
 UX-DR22's opening half requires an approved artifact of the real asset before implementation, so
 Part B's first input is Wolf's `.blend`, not a dev agent's.
 
@@ -55,14 +56,19 @@ so that when I hand over a dwarf I have made, the client already knows how to st
 
    Bevy's bridge between the two is `embedded_watcher` (`bevy_asset-0.19.0/Cargo.toml:39`,
    `embedded_watcher = ["file_watcher"]`), which watches the **source file** and overwrites the
-   embedded bytes in the running binary. It resolves that source through `get_base_path()`, the
-   **compile-time** path (`bevy_asset-0.19.0/src/io/embedded/embedded_watcher.rs:34`), and it maps
-   embedded paths back via the `full_path` argument this project passes as **`PathBuf::new()`**.
+   embedded bytes in the running binary. It roots that search at `get_base_path()`
+   (`bevy_asset-0.19.0/src/io/embedded/embedded_watcher.rs:34`) and maps file events back to embedded
+   paths via the `full_path` argument this project passes as **`PathBuf::new()`** — an empty key, so
+   the mapping is dead here whatever the root resolves to. **Corrected 2026-09-05:** `get_base_path()`
+   is a **runtime** resolution, not a compile-time one — `BEVY_ASSET_ROOT`, then `CARGO_MANIFEST_DIR`,
+   then the executable's own directory (`bevy_asset-0.19.0/src/io/file/mod.rs:19-29`). That does not
+   rescue this path (the pines are `include_bytes!` blobs, so there is no file to watch and no key to
+   match), but it is what makes option A cheap: see the ruling.
 
    **Consequence, and it is the story's central question:** the machine that can *show* a dwarf (the
    Windows vehicle) has no source tree at that path, and the machine that has the source tree (the
    devpod) cannot open a window. Hot-reload as the addendum promised it does not have a venue.
-   **See "Wolf's ruling required" below. Do not pick one of these silently.**
+   **See the Task 1 ruling below, taken 2026-09-05.**
 
 4. **AN ASSET-CONTRACT DWARF WILL FLOAT HALF A CELL.** Entities are placed at the cell **centre** —
    `world_to_render(position)` with no offset (`project.rs:1480`, `:1491`). Trees are placed at the
@@ -110,7 +116,7 @@ so that when I hand over a dwarf I have made, the client already knows how to st
    (`tech-art-guidelines.md:452-458`). **Part A's stand-in is an existing pine, which already passes.
    Generalising the checker belongs to Part B with the real asset in hand.**
 
-## Wolf's ruling required — Task 1, and the story stops here without it
+## Task 1 — the hot-reload venue: RULED 2026-09-05
 
 **The hot-reload venue.** AC3 of the epic demands *"the running client hot-reloads it without
 restart — the art-iteration loop the addendum promised, demonstrated"*. Premise 3 shows that loop has
@@ -118,14 +124,47 @@ no venue as the client is built today. The options, costed:
 
 | # | Option | Cost | What it gives up |
 |---|---|---|---|
-| A | **Dev-only disk loading**: a `--assets <dir>` flag that overrides the embedded source, plus `file_watcher`, and ship `assets/` beside `gui.exe` on the vehicle | one flag, one `AssetPlugin` config, `notify` enters the graph | the lone-`gui.exe` property, for dev builds only. This is the arrangement `resolve_asset_root` was deleted for — the difference is that the path becomes an explicit argument rather than a compile-time stamp, which is what made the old one fail |
+| A | **Dev-only disk loading**: a `--assets <dir>` flag that overrides the embedded source, plus `file_watcher`, with the directory being a **Windows checkout of this repo** — see the ruling, this row was corrected on 2026-09-05 | one flag, one `AssetPlugin` config, `notify` enters the graph | the lone-`gui.exe` property, for dev builds only. This is the arrangement `resolve_asset_root` was deleted for — the difference is that the path becomes an explicit argument rather than a compile-time stamp, which is what made the old one fail |
 | B | **Accept rebuild-and-copy**, as the pines do today, and drop the hot-reload AC | nothing | the addendum's art-iteration promise. Iteration cost is a full cross-compile per tweak |
 | C | **Build natively on Windows** so source tree and window are the same machine | a Windows Rust toolchain and a second build path; the never-two-Bevy-versions rule applies | the single build venue |
 
-**Recommendation: A, deferred to Part B.** Part A does not need hot-reload to prove the seam, and A's
-value is only realised once there is a model worth iterating on. Enabling `file_watcher` in Part A
-would add `notify` to the graph for a capability nothing exercises — the inert-mechanism shape this
-project has shipped before. **Wolf decides; record the ruling in this file with the date.**
+**RULING — Wolf, 2026-09-05: option A, deferred to Part B.** Part A does not need hot-reload to prove
+the seam, and A's value is only realised once there is a model worth iterating on. Enabling
+`file_watcher` in Part A would add `notify` to the graph for a capability nothing exercises — the
+inert-mechanism shape this project has shipped before. AC11 is therefore met by this entry, and
+`file_watcher` stays off in Part A.
+
+**Wolf's amendment, and it changes what A costs.** The asset directory is a **Windows checkout of
+this repo**, not an `assets/` copy shipped beside `gui.exe`. The Windows side already has a fetch
+pipeline. Compilation stays in the devpod — `file_watcher` is a *cargo feature*, a build-time choice
+rather than a machine one, so it cross-compiles into `gui.exe` and the watcher then runs against the
+Windows checkout at runtime. No Windows toolchain appears and the single-build-venue property is
+untouched.
+
+**Why that works, and why it is not the deleted `resolve_asset_root`.** Bevy resolves the asset root
+at **runtime** — `BEVY_ASSET_ROOT`, then `CARGO_MANIFEST_DIR`, then the executable's directory
+(`bevy_asset-0.19.0/src/io/file/mod.rs:19-29`). Nothing needs stamping into the binary, which is the
+exact failure `GUI_WORKSPACE_ROOT` and `resolve_asset_root` were deleted for (`crates/gui/build.rs:20-24`).
+The flag is ~6 lines in the hand-rolled loop at `ingest.rs:660`. The pines stay embedded; the disk
+path is additive and dev-only.
+
+**Conditions on Part B, all of them closing the same trap — two candidate asset trees is the stale-artifact
+shape this project keeps being bitten by:**
+
+1. **`--assets` is explicit and never a silent default.** With it absent the binary behaves exactly as
+   it does today.
+2. **The resolved asset root is printed on the first line out, beside the build stamp** (`ingest.rs:279-286`),
+   so a session can see which tree it read rather than being told which tree it should have read. A
+   procedure is what a stale artifact defeats — the reasoning in `build.rs:1-10` applies unchanged.
+3. **A pwsh launcher on the Windows side** (Wolf, 2026-09-05): fetch the checkout, copy the fresh
+   `gui.exe`, start it with `--assets`. Its value is that it makes checkout and binary come from one
+   act rather than two, so **it must verify the checkout's SHA against the `gui build <sha>` stamp and
+   refuse to launch on a mismatch, and refuse on a `-dirty` stamp**, where no exact comparison exists.
+   A launcher that only copies is a convenience; one that checks is the guard.
+
+**Unverified, and the first thing Part B should prove — cheaply, before any of the above:** that
+`notify-debouncer-full` cross-compiles clean to the Windows target. Windows is a first-class `notify`
+platform and no C toolchain should be needed, but that has not been run here and is not claimed.
 
 ## Acceptance Criteria
 
@@ -195,9 +234,9 @@ project has shipped before. **Wolf decides; record the ruling in this file with 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Wolf's ruling on the hot-reload venue (AC11).** Put the table above in front of Wolf,
-      take the decision, record it here with the date. **Nothing else starts until this is recorded**;
-      the answer decides whether `file_watcher` and a `--assets` flag are in scope at all.
+- [x] **Task 1 — Wolf's ruling on the hot-reload venue (AC11).** DONE 2026-09-05: option A, deferred
+      to Part B, with the asset directory amended to a Windows checkout and three conditions on Part B.
+      Recorded in full above. `file_watcher` and `--assets` are **out of scope for Part A**.
 - [ ] **Task 2 — the seam draws a scene (AC2, AC9).**
   - [ ] Extend `ProjectionAssets` (`project.rs:229-245`) with a dwarf scene handle, loaded in
         `setup_projection_assets` (`project.rs:257-296`) through the **same `map_or_else` fallback**
@@ -229,7 +268,7 @@ project has shipped before. **Wolf decides; record the ruling in this file with 
   [placeholder sets the budget]: 96.8% of 10.6's triangle budget was the measurement stand-in.
 - **Do not touch `check_asset.py`.** Its V1-voxel clauses are correct for what exists; generalising
   them without the real asset in hand means guessing the second family's shape.
-- **Do not enable `file_watcher`** ahead of Task 1's ruling.
+- **Do not enable `file_watcher`, and do not add `--assets`.** Task 1's ruling defers both to Part B.
 - **Do not re-tune any look constant.** Not the sun (10.7), not the palette, not
   `NEAR_WHITE_AREA_CEILING` — `gui --headless --capture` already exits 101 on `main`
   (`pixel_guard.rs:173-177`), so a red capture exit is not evidence about dwarves.
@@ -343,6 +382,7 @@ Small commits, imperative messages. Push and PR only on Wolf's explicit yes.
 |---|---|
 | 2026-09-04 | Story created. **The epic's named split line is taken and this is Part A, the seam.** Nine premises re-verified on `834f105`: six were wrong, stale or absent — `bevy_gltf` is already enabled (AC1 half-moot), the lantern is wire-driven not client-table-driven, hot-reload has no venue under the embedded-delivery decision, an asset-contract dwarf floats half a cell on the entity path, `scale: 0.65` is pinned by a two-language source-text grep, and `WorldAssetRoot`'s scene children break two partition tests. Wolf's ruling required on the hot-reload venue before Task 2. |
 | 2026-09-04 | **Verification recipe EXECUTED, and it falsified this story's own AC2.** Two REDs observed (a truncated frame dies with `zlib.error`; a frame against itself reads exactly 0/0/0). The same-build noise floor on an unchanged binary is `raw=64,851 / >=4=24,243 / >=16=8,982` — the snow is animated — so the whole-frame 10x bar AC2 originally carried was **unreachable by five dwarf-sized silhouettes**, the same defect 10.7 hit with its AC11 whole-frame bar. AC2 is now a WINDOWED bar against a windowed floor. Control frames re-taken on a clean tree after the first pair came out stamped `87f3bdc-dirty`; the committed pair carries `4b01a58`. |
+| 2026-09-05 | **Task 1 RULED: option A, deferred to Part B** — dev-only `--assets` disk loading plus `file_watcher`, neither of them in Part A. Wolf amended what A means: the asset directory is a **Windows checkout of this repo**, not an `assets/` copy shipped beside `gui.exe`, and compilation stays in the devpod because `file_watcher` is a build-time cargo feature rather than a machine choice. Premise 3 corrected in passing — `get_base_path()` resolves at **runtime** (`BEVY_ASSET_ROOT` → `CARGO_MANIFEST_DIR` → exe dir, `bevy_asset-0.19.0/src/io/file/mod.rs:19-29`), not compile time, which is why A needs nothing stamped into the binary; the premise's conclusion is unchanged, because `include_bytes!` leaves no file to watch and the `PathBuf::new()` key leaves nothing to match. Three conditions recorded on Part B, including Wolf's pwsh launcher, which must verify the checkout SHA against the `gui build <sha>` stamp rather than only copying. One thing left unclaimed: `notify-debouncer-full` cross-compiling to the Windows target has not been run. |
 
 ## Dev Agent Record
 
