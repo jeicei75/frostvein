@@ -1,15 +1,58 @@
 #!/usr/bin/env bash
-# Runs the FULL frostvein gate before every push (~67s).
+# Runs the frostvein gate before every push, scoped to what the push actually carries.
 #
 # ENABLE (once per clone):  git config core.hooksPath .githooks
 #
 # This is the tier that runs crates/simd/tests/serve.rs — 61 integration tests against a
-# real daemon over a real socket, which the pre-commit hook defers for speed. Nothing here
-# is new coverage; it is the coverage the fast tier openly declares it skipped.
+# real daemon over a real socket — and the pixel guards, which the pre-commit hook defers
+# for speed. Nothing here is new coverage; it is the coverage the fast tier openly declares
+# it skipped.
 #
 # `git push --no-verify` still bypasses it, deliberately and visibly.
 #
 # NOTE this repo's standing rule: push/PR only on Wolf's explicit yes. This hook does not
-# grant permission to push — it makes a push that DOES happen carry a full green gate.
+# grant permission to push — it makes a push that DOES happen carry a green gate.
+#
+# WHY IT PARSES STDIN (2026-09-05): git hands a pre-push hook one line per ref being pushed —
+# `<local ref> <local sha> <remote ref> <remote sha>` — and this hook used to throw it away and
+# `exec` the full gate regardless. That range is the right question, and it is specifically NOT
+# `main..HEAD`: every M2 story branch is stacked, so a range against main is wrong by default
+# (epic-5-retro-2026-08-23.md:193). gate.sh --range decides from it which heavy checks the push
+# could possibly move, and names every one it skips. See the scope block in scripts/gate.sh.
+#
+# CONSERVATIVE BY CONSTRUCTION: anything this cannot read exactly — more than one ref in a
+# single push, a brand-new branch whose range is unbounded, a remote sha this clone does not
+# have — falls through to the full gate. The narrowing only happens when the range is certain.
 
-exec "$(git rev-parse --show-toplevel)/scripts/gate.sh"
+set -uo pipefail
+
+gate="$(git rev-parse --show-toplevel)/scripts/gate.sh"
+zero=$(git hash-object --stdin </dev/null | tr '0-9a-f' '0')
+
+refs=0
+push_local=""
+push_remote=""
+deletions=0
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ -z "${local_sha:-}" ] && continue
+  if [ "$local_sha" = "$zero" ]; then
+    deletions=$((deletions + 1))
+    continue
+  fi
+  refs=$((refs + 1))
+  push_local="$local_sha"
+  push_remote="${remote_sha:-}"
+done
+
+# A deletion carries no content, so there is nothing for a quality gate to judge.
+if [ "$refs" -eq 0 ] && [ "$deletions" -gt 0 ]; then
+  echo "frostvein gate: branch deletion only, nothing to check"
+  exit 0
+fi
+
+if [ "$refs" -eq 1 ] && [ -n "$push_remote" ] && [ "$push_remote" != "$zero" ] \
+   && git cat-file -e "${push_remote}^{commit}" 2>/dev/null; then
+  exec "$gate" --range "$push_remote" "$push_local"
+fi
+
+exec "$gate"
