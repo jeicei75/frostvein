@@ -1101,3 +1101,96 @@ class LedgerWidthGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QuotaWindowSelectionTests(unittest.TestCase):
+    """`quota_pp` claims to be the 7-DAY window. Which JSON key holds it is NOT stable.
+
+    On 2026-08-06 a real rollout carried `primary.window_minutes == 10080` (the weekly)
+    with `secondary: null` — so reading `primary` was correct when this was written. By
+    2026-08-31 Codex had added a 5-HOUR window as `primary` and moved the weekly to
+    `secondary`, so the same code silently began recording 5h points under a weekly
+    heading. It inverted a live-gate risk call on ep-16-us-03: reported "weekly at 96%,
+    the gate may be starved" when the weekly actually had 85% left and only the
+    self-clearing 5h window was spent.
+
+    The fix is to select the window by `window_minutes`, never by key name — the duration
+    is the meaning, the key is just where it happened to sit that month.
+    """
+
+    # Hand-copied from a real codex-cli 0.146.0 rollout, 2026-08-31. NOT fixture-built.
+    TODAY_SHAPE = (
+        '{"timestamp":"2026-08-31T08:36:09.010Z","type":"event_msg","payload":'
+        '{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,'
+        '"cached_input_tokens":900,"output_tokens":25,"total_tokens":1025}},'
+        '"rate_limits":{"limit_id":"codex","limit_name":null,'
+        '"primary":{"used_percent":96.0,"window_minutes":300,"resets_at":1788179782},'
+        '"secondary":{"used_percent":15.0,"window_minutes":10080,"resets_at":1788766582},'
+        '"plan_type":"plus"}}}'
+    )
+
+    def _sum(self, line):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "rollout-w.jsonl"
+            path.write_text(line + "\n")
+            return st.sum_codex_transcript(str(path))
+
+    def test_weekly_comes_from_the_10080_minute_window_not_from_primary(self):
+        s = self._sum(self.TODAY_SHAPE)
+        self.assertEqual(s["quota_last"], 15.0,
+                         "must read the 7-day window (secondary here), not the 5h primary")
+        self.assertNotEqual(s["quota_last"], 96.0, "96% is the 5-HOUR window — the wrong axis")
+
+    def test_weekly_still_found_when_it_sits_under_primary(self):
+        """The 2026-08-06 layout. Selection must be by duration, so BOTH layouts work."""
+        line = self.TODAY_SHAPE.replace(
+            '"primary":{"used_percent":96.0,"window_minutes":300,"resets_at":1788179782},'
+            '"secondary":{"used_percent":15.0,"window_minutes":10080,"resets_at":1788766582},',
+            '"primary":{"used_percent":15.0,"window_minutes":10080,"resets_at":1788766582},'
+            '"secondary":null,',
+        )
+        self.assertEqual(self._sum(line)["quota_last"], 15.0)
+
+    def test_weekly_window_with_a_null_percentage_does_not_hand_the_axis_to_the_5h_one(self):
+        """THE SHAPE THE FIX EXISTS FOR, and the one all three tests above miss.
+
+        Every test above populates `used_percent` on every window, so the filter that
+        drops percent-less windows never fired. Filtering on `used_percent` BEFORE
+        selecting on `window_minutes` drops a weekly window that declares
+        `used_percent: null` — and the 5-hour window then wins `max()` and is recorded
+        under the weekly heading. That is precisely the defect a4b717d was written to
+        close, and the one that already inverted a live-gate risk call.
+        """
+        line = self.TODAY_SHAPE.replace(
+            '"secondary":{"used_percent":15.0,"window_minutes":10080,"resets_at":1788766582},',
+            '"secondary":{"used_percent":null,"window_minutes":10080,"resets_at":1788766582},',
+        )
+        quota = self._sum(line)["quota_last"]
+        self.assertIsNone(
+            quota,
+            "an unknown weekly percentage must be UNKNOWN, never the 5-hour window's",
+        )
+        self.assertNotEqual(quota, 96.0, "96% is the 5-HOUR window — the wrong axis")
+
+    def test_the_weekly_window_is_the_one_nearest_seven_days_not_merely_the_longest(self):
+        """`max(window_minutes)` codifies "largest window wins", so a future 30-day
+        window would silently become "weekly" — the identical axis swap one rollout
+        later."""
+        line = self.TODAY_SHAPE.replace(
+            '"plan_type":"plus"',
+            '"tertiary":{"used_percent":3.0,"window_minutes":43200},"plan_type":"plus"',
+        )
+        self.assertEqual(
+            self._sum(line)["quota_last"], 15.0, "must stay on the 7-day window"
+        )
+
+    def test_falls_back_to_primary_when_no_window_minutes_are_declared(self):
+        """Older rollouts (and the synthetic fixture) carry no `window_minutes`. Absent a
+        duration there is nothing to select on, so the historical behaviour stands."""
+        line = (
+            '{"type":"event_msg","payload":{"type":"token_count",'
+            '"info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":900,'
+            '"output_tokens":25,"total_tokens":1025}},'
+            '"rate_limits":{"primary":{"used_percent":42.0}}}}'
+        )
+        self.assertEqual(self._sum(line)["quota_last"], 42.0)

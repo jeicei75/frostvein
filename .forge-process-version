@@ -3,11 +3,15 @@
 # can tell 'upstream moved' apart from 'we changed it locally'. A TEMPLATE that
 # was kept (not re-installed) keeps its EARLIER hash, so a pending notice survives.
 # `ack <project-root> <path>` re-stamps one TEMPLATE after you MERGE it by hand.
-VERSION=1.3.2
-SRC bb40b57a8c4f4c52f1d4272179dda085b7b30aeef1aa85c668c4ab87bde47a2d _bmad/scripts/session_tokens.py
-SRC e13ce3045c4c190414f86e795a0e6c33270cfbd1142435a786e609d71eea9a94 _bmad/scripts/tests/test_session_tokens.py
+VERSION=1.5.0
+SRC 64018bb2d421daa159e08259f7be575659e527112b91b5d84d25010e4d8c19cd _bmad/scripts/session_tokens.py
+SRC 80ab103cc3433f2f3509789100e31c8370b5586a9e2265565c1caf20809ebd0c _bmad/scripts/tests/test_session_tokens.py
+SRC 01fe25441ee4b8fd6240a892df4dbeda51e68cc4f76974caf38190894a718671 _bmad/scripts/phase_state.py
+SRC 3b0c2485338df2333c8ba6d3f6c4dec0ef6ba21a6e10a386ac058e0321a91f52 _bmad/scripts/record_phase_on_exit.py
+SRC 5e11d3c32013cd3978e674f3a99ef3d0c9345a909fa87f1cd2da730a5e64e7aa _bmad/scripts/tests/test_phase_metric_hook.py
+SRC 015d3189b18c37f2c564050c28614f52d916564252f5afeda8d9393192174110 _bmad/custom/bmad-review-patch.toml
 SRC 8c19cce4b58d40e62e3e7170bdecdda5f280bca0e144c3cce4a395289f1c5d5e _bmad/custom/bmad-create-story.toml
-SRC a4a991477e1240d2be428f9238c5b44f7068fa571d303c0c0700b60d28c34dac _bmad/custom/bmad-dev-story.toml
-SRC e87f6da421d20d6430f08cd23d39c711ca212e5a1ea0d966d9342ca39b13078a _bmad/custom/bmad-code-review.toml
+SRC a9e887eccd743c90403806788bea2cf4879d3cdd3f860e976cf04c18e58df157 _bmad/custom/bmad-dev-story.toml
+SRC 452c5e5f1a70111f883c30f503128f6ebbc35e17d68a8c8539c382180b1b1138 _bmad/custom/bmad-code-review.toml
 SRC 7a15cafe9128fe329212c30c260792459a7a818e7738bfc710d04dbf506a3722 _bmad/custom/bmad-sprint-status.toml
 SRC 275f037bda0d0616f1742ca5e725963b65b98be4ee30a174cf274fcef0dadb6b scripts/codex-handoff.sh
