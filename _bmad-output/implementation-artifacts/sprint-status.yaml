@@ -1858,7 +1858,35 @@ development_status:
                           # mean=0.000/dark=100%, so a blank capture cannot pass as a lit valley.
                           # Same-build noise floor re-measured on 47139fa: 0.107 mean (the Y=200
                           # probe's 13.3 is 124x it). Full gate GREEN, 9/9, no skips.
-  10-5-dwarves-worth-looking-at: backlog
+  10-5-dwarves-worth-looking-at: ready-for-dev
+                          # 2026-09-04 STORY CREATED (ready-for-dev). Baseline 834f105.
+                          # THE EPIC'S OWN SPLIT LINE IS TAKEN (epics.md:1591-1593): this story is
+                          # PART A, the seam -- a stand-in glTF rendering on the entity path. PART B,
+                          # the authored dwarf plus generalising check_asset.py plus UX-DR22's two
+                          # halves, is a separate story and CANNOT START until Wolf has a model,
+                          # because UX-DR22's opening half needs an approved artifact of the real
+                          # asset before implementation. Part B's first input is Wolf's .blend.
+                          # NINE PREMISES RE-VERIFIED, SIX WRONG OR ABSENT FROM THE EPIC:
+                          #  1. bevy_gltf is ALREADY enabled via 3d_bevy_render -- half of the
+                          #     epic's AC1 is a no-op. Only file_watcher is off.
+                          #  2. The lantern is NOT client-table-driven: entity_light_kind(Dwarf) is
+                          #     None and the client refuses to light a dwarf by kind; it comes over
+                          #     the WIRE from sim-core DWARF_LIGHT.
+                          #  3. HOT-RELOAD HAS NO VENUE. embedded_watcher resolves the source by
+                          #     COMPILE-TIME path, so the Windows vehicle (which can show a dwarf)
+                          #     has no source tree and the devpod (which has one) cannot open a
+                          #     window. This is the exact failure GUI_WORKSPACE_ROOT was deleted
+                          #     for. WOLF'S RULING REQUIRED -- three costed options in the story.
+                          #  4. An asset-contract dwarf (min Y = 0) FLOATS half a cell: entities are
+                          #     placed at cell CENTRE, trees at cell FLOOR.
+                          #  5. scale 0.65 is pinned TWICE, one a source-text grep that also
+                          #     requires valley_bench.py edited in the same commit.
+                          #  6. WorldAssetRoot spawns CHILDREN, which classify_client_local
+                          #     (PostStartup-only) never reaches -- two partition tests are a live
+                          #     trap for a scene-drawn dwarf.
+                          # check_asset.py is deliberately NOT touched here: it rejects an authored
+                          # dwarf on its first clause BY DESIGN (V1 voxel assets only), and
+                          # generalising it without the real asset means guessing.
   epic-10-retrospective: optional
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).
