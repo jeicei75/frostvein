@@ -218,20 +218,25 @@ arrived here predated both guards.
   pass, so its meshes are one revision behind what ships. Re-import the GLBs, or
   regenerate, before building on it. The `.glb` is the deliverable; the `.blend` is not.
 
-**Tracked, STALE, and PENDING REMOVAL — awaiting Wolf's yes, 2026-09-06:**
+**Removed 2026-09-06, on Wolf's yes — do not restore:**
 
 - `blender/tree.blend` and `blender/tree.blend1` — the interactive **first pass**, with the
   off-centre canopy, the too-dark texture and the thick 5×5 trunks. Nothing in the pipeline
-  reads them. Story 10.2's signoff record already ruled on this pair in terms — *"Safe to
-  delete"* — and additionally notes that `tree.blend` **overwrote** the file that was in
-  the project before that work, and that `tree.blend1` is an autosave of that same stale
-  session rather than the original.
-  **Do not build on either.** That session's `tree.glb` carries the glTF mesh and node name
-  `SM_VoxelPine_Tree02` — the *deliverable's* name — while being a different asset (5,130
-  tris, centre X −0.100 against the deliverable's 5,894 and +0.000). An asset's identity is
-  its published name **and** its published figures, never its internal name alone, and this
-  pair is the measured counterexample the contract cites.
-  `.gitignore` now excludes `*.blend[0-9]`, so no future autosave can be committed.
+  ever read them. Story 10.2's signoff record had already ruled on this pair in terms —
+  *"Safe to delete"* — and additionally notes that `tree.blend` **overwrote** the file that
+  was in the project before that work, and that `tree.blend1` was an autosave of that same
+  stale session rather than the original.
+
+  Recorded here because a deletion leaves no trace where a reader will look. That session's
+  sibling `tree.glb` carries the glTF mesh and node name `SM_VoxelPine_Tree02` — the
+  *deliverable's* name — while being a different asset: 5,130 tris and centre X −0.100
+  against the deliverable's 5,894 and +0.000. An asset's identity is its published name
+  **and** its published figures, never its internal name alone, and this pair is the
+  measured counterexample `docs/tech-art-guidelines.md` cites. If a `tree.blend` reappears
+  here, it is that one, and it is not a source.
+
+  `.gitignore` now excludes `*.blend[0-9]`, so no future autosave can be committed. Both
+  files remain recoverable from commit `5ff1ed7`.
 
 **Tracked, and MOOD ART — not a dimension source:**
 
