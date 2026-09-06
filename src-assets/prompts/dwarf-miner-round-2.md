@@ -35,18 +35,32 @@ can reach 20,000 triangles and make the character worse.
 one primitive, one 64×64 atlas, greedy-meshed unwelded quad soup, **no emissive at any colour**,
 `src-assets/` only, and the byte-identical cold-run proof as the finishing condition.
 
-## One fix in `render_dwarf.py`
+## `render_dwarf.py` — already changed on the forge side, one thing to check
 
-It renders with **Workbench, which needs `libEGL.so.1`**. That library is absent on the forge
-devpod, so the script exits 134 there: the forge can reproduce your *asset* but not your
-*renders*, which leaves the committed PNGs as the only evidence of the look. That is precisely the
-failure the "the script is the durable record" clause exists to prevent, one level up from where
-it was fixed.
+**Do not redo this; pull it.** Two problems were found and fixed there, because neither could be
+tested from the art seat:
 
-Add a **Cycles CPU** path — denoising **off**, which is required in that venue — selected by a flag
-or by falling back when Workbench is unavailable, so one script produces comparable frames on both
-seats. Keep Workbench as the default where it works; it is deterministic and has no sampler noise,
-which is why you chose it.
+1. **The script did not run on the forge at all.** Workbench renders through EGL and
+   `libEGL.so.1` is absent on the devpod — Blender *aborts* with exit 134 before writing anything.
+   `--engine cycles` now renders the same five views on CPU with denoising off. Workbench stays
+   the default where it works; there is no auto-fallback, because Workbench does not raise when
+   EGL is missing, it kills the process, so there is nothing to catch.
+
+2. **The flat pass was not flat.** Its docstring calls it "the only honest way to read the
+   palette", and measured against the renders you committed, **zero of the ten palette hexes
+   survive to the PNG** — skin `#E9D2BB` reads back as `#BDB3AA`. The pass is unlit, but the view
+   transform still rewrites every colour, so a palette read off that frame is wrong in silence.
+   The transform is now set to `Standard` for the flat pass only, and restored for the lit one, so
+   the lit look you judged is unchanged.
+
+`assert_flat_is_flat()` now makes the script prove this every run rather than claim it in prose.
+It is verified by sabotage on the Cycles path: removing the transform line fails it at exit 1 with
+all ten colours reported missing.
+
+**What is owed from your seat, and it is one line of output:** run the script under Workbench as
+you normally do and confirm it prints `FLAT-CHECK all 10 palette colours reach the PNG exactly`.
+The Workbench half of the fix could not be verified on the forge — no EGL — so you are the only
+one who can close it. If it fails, say so with the list it prints; do not work around it.
 
 ## And report your cost
 
