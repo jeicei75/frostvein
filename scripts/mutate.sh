@@ -62,8 +62,12 @@ survivors=0
 # straight through to the KILLED branch having run no test at all.
 PACKAGES=$(rg -N '^name = "' crates/*/Cargo.toml | sed 's/.*"\(.*\)"/\1/')
 
+# A fourth argument of `ignored` runs the test with `-- --ignored`. Without it a row naming an
+# `#[ignore]`d test silently collects ZERO tests, exits 0, and reports SURVIVED -- "your test is not
+# pinning what it claims" when the truth is "your test never ran". Story 10.5 hit exactly that with
+# its AC10 row, which targets a test that drives the real binary and is therefore ignored by default.
 mutation() {
-  local name="$1" tier="$2" test="$3"
+  local name="$1" tier="$2" test="$3" mode="${4:-}"
   local script; script=$(cat)
 
   printf '\n=== %s ===\n' "$name"
@@ -83,7 +87,11 @@ mutation() {
   if [ "$tier" = "py" ]; then
     out=$(python3 -m unittest "$test" 2>&1); rc=$?
   else
-    out=$(cargo test --offline -p "$tier" "$test" 2>&1); rc=$?
+    if [ "$mode" = "ignored" ]; then
+      out=$(cargo test --offline -p "$tier" "$test" -- --ignored 2>&1); rc=$?
+    else
+      out=$(cargo test --offline -p "$tier" "$test" 2>&1); rc=$?
+    fi
   fi
   restore_all
 
@@ -116,6 +124,17 @@ mutation() {
     survivors=$((survivors + 1))
     echo "  test SKIPPED or not collected — proves nothing, treating as a survivor"
     printf '%s\n' "$out" | rg -N 'skipped|Ran 0 tests' | head -3
+  elif [ "$tier" != "py" ] && [ "$rc" -eq 0 ] && ! printf '%s' "$out" | rg -qN '[1-9][0-9]* passed'; then
+    # The py tier has had this guard since three Blender-gated rows landed in SURVIVED; the cargo
+    # tier did not, and an `#[ignore]`d target hits it the same way: every test binary reports
+    # "0 passed; 0 failed; N filtered out", cargo exits 0, and the row reads SURVIVED having judged
+    # nothing. Guarded on rc==0 so a genuine failure -- which also shows no passing test -- still
+    # reaches the KILLED branch below.
+    RESULTS+=("NOT-RUN")
+    survivors=$((survivors + 1))
+    echo "  cargo collected NO tests — proves nothing, treating as a survivor"
+    echo "  (an #[ignore]d target needs a fourth argument: mutation \"...\" <tier> <test> ignored)"
+    printf '%s\n' "$out" | rg -N 'test result|filtered out' | head -2
   elif [ "$rc" -ne 0 ]; then
     RESULTS+=("KILLED")
     printf '%s\n' "$out" | rg -N 'panicked at|AssertionError|assertion|test result: FAILED' | head -4

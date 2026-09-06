@@ -17,7 +17,7 @@ PY
 
 # AC3's other half. The spawn is the easy half to get right and the easy half to assume is enough;
 # this row proves the test is not passing on the blend arm alone.
-mutation "the spawn arm forgets the dwarf's floor offset" gui the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend <<'PY'
+mutation "the spawn arm forgets the dwarf's floor offset" gui the_spawn_arm_places_the_dwarf_on_the_floor_before_any_blend <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '                                world_to_render(position) + entity_draw_offset(mirror_entity.kind),\n'
@@ -53,7 +53,8 @@ PY
 
 # AC10. The instrument must report what was DRAWN. A hardcoded count is the failure shape a
 # well-formedness assertion cannot see, which is why the test varies the slice and reads the number.
-mutation "the dwarf startup line reports a constant" gui the_dwarf_startup_line_reports_what_was_actually_drawn <<'PY'
+# `ignored`, because this test drives the real binary and is filtered out of a default run.
+mutation "the dwarf startup line reports a constant" gui the_dwarf_startup_line_reports_what_was_actually_drawn ignored <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '    let dwarves = scene_entities.iter().count();\n'

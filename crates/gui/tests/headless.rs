@@ -1053,6 +1053,45 @@ fn the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend() {
     );
 }
 
+/// The SPAWN arm's floor offset, pinned on its own.
+///
+/// `the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend` cannot see a broken spawn:
+/// `apply_entity_blending` rewrites the translation on the same frame, so it CORRECTS the spawn
+/// before any assertion runs. A mutation removing the spawn offset survived that test, which is the
+/// mutation table doing its job -- a green test that cannot fail pins nothing.
+///
+/// So this one runs `reconcile_projection` ALONE, on an entity that has just arrived, and reads the
+/// translation before the blend has ever touched it.
+#[test]
+fn the_spawn_arm_places_the_dwarf_on_the_floor_before_any_blend() {
+    let existing = 81;
+    let arriving = 82;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(existing, [0, 0, 0])],
+    ));
+    app.update();
+
+    // A second dwarf arrives on the wire. Reconciliation spawns it; nothing else runs.
+    apply_delta(
+        &mut app,
+        delta(
+            vec![],
+            vec![dwarf(existing, [0, 0, 0]), dwarf(arriving, [3, 0, 0])],
+        ),
+    );
+    app.world_mut()
+        .run_system_once(reconcile_projection)
+        .expect("production reconciliation must run");
+
+    assert_eq!(
+        projected_translation(&mut app, arriving),
+        bevy::prelude::Vec3::new(3.0, -0.5, 0.0),
+        "the spawn arm must place the dwarf on the cell floor itself, not lean on the blend \
+         writer to correct it a system later"
+    );
+}
+
 /// The floor drop is the dwarf's alone: a cube kind is drawn at the cell centre and must not move.
 #[test]
 fn the_floor_drop_does_not_move_the_cube_kinds() {
