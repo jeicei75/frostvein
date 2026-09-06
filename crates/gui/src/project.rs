@@ -345,6 +345,35 @@ pub fn entity_draw_offset(kind: EntityKind) -> Vec3 {
     }
 }
 
+/// The yaw an entity should be drawn at, or `None` to HOLD the rotation it already carries.
+///
+/// `None` is what makes "hold the last direction" free: a stationary dwarf keeps the rotation
+/// already on his `Transform`, so no per-entity facing state has to exist anywhere. The Transform
+/// IS the memory.
+///
+/// Derived from the two wire positions the blend already reads, so facing never becomes wire state
+/// (AD-16). `astar_neighbours` is four-directional, so this is four yaws, not arbitrary angles.
+///
+/// Cube kinds always get `None`. A cube has no front, and a torch that swung to face its own
+/// flicker would be a change nobody asked for.
+pub fn entity_draw_rotation(
+    kind: EntityKind,
+    previous: Option<[i32; 3]>,
+    current: [i32; 3],
+) -> Option<bevy::prelude::Quat> {
+    if kind != EntityKind::Dwarf {
+        return None;
+    }
+    let delta = world_to_render(current) - world_to_render(previous?);
+    // Yaw only: a dwarf walking up a ramp must not pitch forward.
+    let heading = Vec3::new(delta.x, 0.0, delta.z);
+    if heading.length_squared() <= f32::EPSILON {
+        return None;
+    }
+    // The authored model faces glTF -Z, which is Bevy's forward, so `looking_to` IS the yaw.
+    Some(Transform::default().looking_to(heading, Vec3::Y).rotation)
+}
+
 /// Keeps one presentation-only hover slab in lockstep with the latest camera pick.
 pub fn sync_hover_highlight(
     mut commands: Commands,
@@ -1544,6 +1573,18 @@ pub fn reconcile(
                             Transform::from_translation(
                                 world_to_render(position) + entity_draw_offset(mirror_entity.kind),
                             )
+                            // `unwrap_or_default()` is identity, and identity is right HERE: at
+                            // the spawn there is no previous facing to hold. Written at both
+                            // writers anyway, because the offset taught this story that the spawn
+                            // being the easy half does not make it the only half.
+                            .with_rotation(
+                                entity_draw_rotation(
+                                    mirror_entity.kind,
+                                    mirror.previous_entity(id).map(|previous| previous.pos),
+                                    position,
+                                )
+                                .unwrap_or_default(),
+                            )
                             .with_scale(bevy::prelude::Vec3::splat(METRES_TO_CELLS)),
                         ));
                     } else {
@@ -1781,13 +1822,17 @@ pub fn blend_entities(
         .collect::<std::collections::BTreeMap<_, _>>();
     for (marker, mut transform) in projected.iter_mut() {
         if let Some(entity) = entities.get(&marker.0) {
-            transform.translation = blended_translation(
-                mirror
-                    .previous_entity(marker.0)
-                    .map(|previous| previous.pos),
-                entity.pos,
-                clock.factor(),
-            ) + entity_draw_offset(entity.kind);
+            let previous = mirror
+                .previous_entity(marker.0)
+                .map(|previous| previous.pos);
+            transform.translation = blended_translation(previous, entity.pos, clock.factor())
+                + entity_draw_offset(entity.kind);
+            // Rotation is written HERE as well as at the spawn, for the same reason the offset is:
+            // this is the sole writer after the spawn frame, so a facing set only at the spawn
+            // would be correct for exactly one frame. `None` means hold what is already there.
+            if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {
+                transform.rotation = rotation;
+            }
         } else if let Some(position) = items.get(&marker.0) {
             // Items have no previous wire state; snapping is the only wire-true presentation.
             // Must go through `item_translation` for the same reason the spawn does: this is the

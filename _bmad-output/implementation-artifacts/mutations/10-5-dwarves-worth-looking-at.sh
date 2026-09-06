@@ -10,9 +10,9 @@
 mutation "the blend arm forgets the dwarf's floor offset" gui the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '            ) + entity_draw_offset(entity.kind);\n'
+old = '                + entity_draw_offset(entity.kind);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            );\n'))
+p.write_text(s.replace(old, '                ;\n'))
 PY
 
 # AC3's other half. The spawn is the easy half to get right and the easy half to assume is enough;
@@ -61,3 +61,23 @@ old = '    let dwarves = scene_entities.iter().count();\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let dwarves = 5;\n'))
 PY
+
+# Facing, and the arm that would ship the same defect the offset did: written at the spawn only, a
+# dwarf faces correctly for exactly one frame and then never turns again.
+mutation "the blend arm never updates facing" gui the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops <<'ROW'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "            if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {\n                transform.rotation = rotation;\n            }\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+ROW
+
+# Wolf's ruling, pinned. `None` for a zero delta is what makes a stopped dwarf HOLD his facing;
+# without it he snaps to a default the moment he stands still.
+mutation "a stopped dwarf snaps to a default facing" gui the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops <<'ROW'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = "    if heading.length_squared() <= f32::EPSILON {\n        return None;\n    }\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+ROW

@@ -1092,6 +1092,72 @@ fn the_spawn_arm_places_the_dwarf_on_the_floor_before_any_blend() {
     );
 }
 
+/// Facing follows travel, and HOLDS when the dwarf stops -- Wolf's ruling, 2026-09-06.
+///
+/// Asserted on the forward VECTOR, not on the quaternion. Two quats can be equal rotations and
+/// unequal bit patterns, and the forward vector is the thing anyone can actually see.
+///
+/// `world_to_render([x, y, z]) = (x, z, -y)`, so a step along sim +x is a step along render +x,
+/// and the model faces Bevy's forward, -Z. The expected vectors below are written from that, not
+/// read back from the code under test.
+#[test]
+fn the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops() {
+    let id = 95;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    let forward = |app: &mut App| {
+        let mut query = app.world_mut().query::<(&WorldProjected, &Transform)>();
+        query
+            .iter(app.world())
+            .find_map(|(projected, transform)| {
+                (projected.0 == id).then(|| transform.rotation * bevy::prelude::Vec3::NEG_Z)
+            })
+            .expect("the wire entity must have a projection")
+    };
+
+    // Walk east: sim +x is render +x.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(10.0);
+    app.update();
+    let east = forward(&mut app);
+    assert!(
+        east.x > 0.9 && east.y.abs() < 0.01,
+        "walking along sim +x must face render +x and stay level, got {east:?}"
+    );
+
+    // Walk north: sim +y is render -z.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 3, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(10.0);
+    app.update();
+    let north = forward(&mut app);
+    assert!(
+        north.z < -0.9 && north.y.abs() < 0.01,
+        "walking along sim +y must face render -z, got {north:?}"
+    );
+
+    // STOP. The same position twice: nothing to face, so hold what is already there.
+    for _ in 0..3 {
+        apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 3, 0])]));
+        app.world_mut()
+            .resource_mut::<gui::blend::TickClock>()
+            .advance(10.0);
+        app.update();
+    }
+    let held = forward(&mut app);
+    assert!(
+        (held - north).length() < 0.001,
+        "a stopped dwarf must HOLD his last facing, not snap back to a default: {north:?} -> {held:?}"
+    );
+}
+
 /// The floor drop is the dwarf's alone: a cube kind is drawn at the cell centre and must not move.
 #[test]
 fn the_floor_drop_does_not_move_the_cube_kinds() {
