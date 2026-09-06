@@ -174,8 +174,12 @@ Verify by decoding the PNG back out of the **finished GLB**, not out of the Blen
 
 ## The asset contract — pass it unchanged
 
-`scripts/bench/check_asset.py` enforces a "V1 voxel asset" shape. v1 met every clause and needed
-no change to the checker; hold that.
+`scripts/bench/check_asset.py` enforces a "V1 voxel asset" shape. Hold every clause.
+
+**The grid clause was amended for you on 2026-09-06** — `PROJECT_GRID_METRES` moved 0.1 → 0.0125,
+because no 96-voxel 1.20 m dwarf can land on a 0.1 m grid. **Pull before you start.** With that
+change the 96-voxel asset passes the contract cleanly and unchanged on your side, so a grid-clause
+rejection is now a real defect in your geometry, not an expected limitation.
 
 - **One mesh, one material, one primitive** — one draw call.
 - **One embedded PNG atlas of exactly 64×64 texels**, 4×4 grid of 16 px cells, UVs inset to cell
