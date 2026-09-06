@@ -204,11 +204,36 @@ platform and no C toolchain should be needed, but that has not been run here and
    `WorldProjected` entity, not on a scene child, so `LanternStats` samples the right translation
    (`capture.rs:799`, `:833-841`); `a_dwarf_lantern_stays_on_its_blended_projection_transform`
    (`headless.rs:1052`) stays green.
-7. **The marker partition still holds with scene children.** Both
-   `world_and_client_local_markers_are_a_structural_partition` (`headless.rs:1586`) and
-   `the_classification_pass_leaves_no_entity_outside_the_partition` (`headless.rs:2725`) pass with a
-   scene-drawn dwarf **in a fixture that has an `AssetServer`** — a fixture without one does not
-   exercise this and does not satisfy the AC.
+7. **AMENDED 2026-09-06, on Wolf's ruling: the dwarf introduces no new CLASS of partition hole,
+   and the hole itself is [issue #73](https://github.com/jeicei75/frostvein/issues/73).**
+
+   As originally written this AC required both
+   `world_and_client_local_markers_are_a_structural_partition` and
+   `the_classification_pass_leaves_no_entity_outside_the_partition` to pass with a scene-drawn dwarf
+   in a fixture that has an `AssetServer`. **That cannot be satisfied inside Part A, because the
+   defect is not this story's.** Measured on the running client:
+
+   | slice | trees | dwarves | unmarked |
+   |---|---|---|---|
+   | `--z 9` | 6 | 5 | 39 |
+   | `--z 31` | 265 | 5 | 1,075 |
+
+   Two equations, one answer: **4 unmarked children per tree, 3 per dwarf, base 0**, and
+   265×4 + 5×3 = 1,075 exactly. The hole arrived with the **pines in 10.4**; the dwarf adds 15 of
+   1,075, or **1.4%**. An `AssetServer` fixture would go red immediately — on the trees.
+
+   Worse, and found on the vehicle after the arithmetic above: **it is not constant.** At
+   `--subdiv 4`, the ADOPTED terrain resolution, it is **3,240** with identical tree and dwarf
+   counts, so 2,165 of it is neither scene children nor anything this story touches.
+
+   **What Part A owes instead, and does:** the count is now printed on every run
+   (`gui partition: unmarked=…`), so the hole cannot stay invisible, and the cause, the arithmetic
+   and the subdiv-4 measurement are all recorded on #73 — including the warning that a fix aimed
+   only at scene children closes a third of it at `k=1`, looks complete, and leaves two thirds open
+   at `k=4`.
+
+   The two tests remain green and remain blind; that is stated on the issue rather than papered
+   over here.
 8. **No new emissive.** `switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing`
    (`pixel_guard.rs:222`) still measures `warm_lit_pixels == 0` with all five sources off. The
    stand-in's material must not introduce an emissive nothing can switch off
@@ -237,7 +262,7 @@ platform and no C toolchain should be needed, but that has not been run here and
 - [x] **Task 1 — Wolf's ruling on the hot-reload venue (AC11).** DONE 2026-09-05: option A, deferred
       to Part B, with the asset directory amended to a Windows checkout and three conditions on Part B.
       Recorded in full above. `file_watcher` and `--assets` are **out of scope for Part A**.
-- [ ] **Task 2 — the seam draws a scene (AC2, AC9).**
+- [x] **Task 2 — the seam draws a scene (AC2, AC9).**
   - [ ] Extend `ProjectionAssets` (`project.rs:229-245`) with a dwarf scene handle, loaded in
         `setup_projection_assets` (`project.rs:257-296`) through the **same `map_or_else` fallback**
         the trees use, so a missing `AssetServer` yields `Handle::default()`.
@@ -246,18 +271,18 @@ platform and no C toolchain should be needed, but that has not been run here and
   - [ ] Stand-in asset: an existing `assets/trees/*.glb`, chosen because it already passes
         `check_asset.py` and is **obviously not a dwarf**, so no frame from Part A can be mistaken for
         a finished dwarf.
-- [ ] **Task 3 — the floor offset (AC3).** Apply the tree path's `- Vec3::Y * 0.5` to the entity
+- [x] **Task 3 — the floor offset (AC3).** Apply the tree path's `- Vec3::Y * 0.5` to the entity
       spawn; test the resulting translation against a hand-written expected value.
-- [ ] **Task 4 — scale 0.65 → 0.75 (AC4).** `appearance.rs` and `valley_bench.py:54` in one commit;
+- [x] **Task 4 — scale 0.65 → 0.75 (AC4).** `appearance.rs` and `valley_bench.py:54` in one commit;
       update `appearance_tables_pin_the_cold_boot_palette`; confirm both `bench_contract.rs` anchors
       still match exactly once.
-- [ ] **Task 5 — the partition (AC7).** Decide how scene children are classified. Note
+- [x] **Task 5 — the partition (AC7).** AMENDED — see AC7 and issue #73. Decide how scene children are classified. Note
       `classify_client_local` runs only at `PostStartup` (`ingest.rs:1193-1200`), so a runtime-spawned
       child is never reached. Add the `AssetServer`-bearing fixture that actually exercises it.
-- [ ] **Task 6 — regressions (AC5, AC6, AC8).** Blending, lantern transform, emissive. Run the pixel
+- [x] **Task 6 — regressions (AC5, AC6, AC8).** Blending, lantern transform, emissive. Run the pixel
       guards, which the fast gate skips.
-- [ ] **Task 7 — the instrument and its test (AC10).**
-- [ ] **Task 8 — mutations (AC12), then the full gate (AC1).**
+- [x] **Task 7 — the instrument and its test (AC10).**
+- [x] **Task 8 — mutations (AC12), then the full gate (AC1).**
 
 ## Dev Notes
 
@@ -388,10 +413,61 @@ Small commits, imperative messages. Push and PR only on Wolf's explicit yes.
 
 ### Agent Model Used
 
-### Debug Log References
+`claude-opus-5[1m]`, orchestrator and dev in one session, 2026-09-06.
 
 ### Completion Notes List
 
+**Full gate GREEN, 498s**, pixel guards included. Mutation table: **7 rows, all KILLED**.
+
+Four findings beyond the ACs, each measured rather than argued:
+
+1. **The dwarf levitated, and every test was green.** `apply_entity_blending` rewrites the
+   translation of every projected entity on every frame after the spawn, from a bare
+   `world_to_render`. The floor offset applied at the spawn was therefore correct for exactly one
+   frame. Wolf saw it from the seat in seconds. Items had hit the identical defect and the comment
+   left at that fix names the trap in terms. Fixed with one `entity_draw_offset` used by BOTH
+   writers, and a test that moves the dwarf and runs the blend to completion — a spawn-time
+   assertion cannot catch it, because the spawn was never wrong.
+
+2. **AC2's recipe could not work.** Its controls were captured unpaused, and the dwarves wander, so
+   the same-build noise floor contained dwarf-sized differences. Measured: the change was SMALLER
+   than the noise on the raw channel. Three confounders were removed one at a time — the wandering
+   (pause), the campfire/torch/lantern flicker which runs on wall-clock and which pausing the SIM
+   does not stop, and a window large enough to dilute the signal but not the floor. Retaken, the
+   floor is **exactly zero** and the change is 411/313/192. See `10-5-signoff/AC2-measurement.md`.
+
+3. **AC7's defect is not this story's.** 4 unmarked scene children per tree, 3 per dwarf: the hole
+   arrived with the pines in 10.4 and the dwarf adds 1.4% of it. It also triples at the adopted
+   `--subdiv 4`. Amended on Wolf's ruling; the count is now printed every run and the fix is
+   issue #73.
+
+4. **`mutate.sh` reported SURVIVED for a test that never ran.** The `py` tier had a NOT-RUN guard;
+   the cargo tier did not, so an `#[ignore]`d target collected zero tests, exited 0, and read as a
+   survivor. Guard added, plus an `ignored` argument so a row can ask for it.
+
+Two of my own tests were found green-for-the-wrong-reason by the mutation table before I trusted
+them: one asserted after the blend had already repaired a broken spawn, and one stopped the dwarf
+facing render −Z, which is exactly the fallback `looking_to` returns for a zero direction.
+
+Beyond scope, on Wolf's asks: **space pauses the simulation**, `--static-world` lets a paused world
+be captured, and **dwarves face where they are walking and hold it when they stop**.
+
 ### File List
 
+- `crates/gui/src/project.rs` — the seam, `entity_draw_offset`, `entity_draw_rotation`,
+  `dwarf_scene`, the dwarf and partition instrument lines
+- `crates/gui/src/ingest.rs` — `DWARF_ASSET`, `--static-world`, `toggle_pause` registration
+- `crates/gui/src/command.rs` — `SimPaused`, `toggle_pause`
+- `crates/gui/src/capture.rs` — `with_static_world`
+- `crates/gui/src/appearance.rs` — dwarf scale 0.75
+- `crates/gui/tests/headless.rs`, `tests/pixel_guard.rs`, `tests/bench_contract.rs`
+- `scripts/bench/valley_bench.py` — dwarf tuple 0.75
+- `scripts/mutate.sh` — cargo NOT-RUN guard, `ignored` mode
+- `assets/gltf/SM_VoxelDwarf_Miner01.glb` — NEW
+- `_bmad-output/implementation-artifacts/10-5-signoff/` — controls, mesh frames,
+  `window_diff.py`, `AC2-measurement.md`
+- `_bmad-output/implementation-artifacts/mutations/10-5-dwarves-worth-looking-at.sh` — NEW
+
 ### Review Findings
+
+| 2026-09-06 | **Part A implemented; full gate GREEN 498s, 7 mutation rows all KILLED.** Four findings beyond the ACs: the dwarf levitated because the spawn is not the only writer of a translation (caught from the seat, not by any test); AC2's recipe was unsatisfiable and its controls were retaken against a paused world with the light flicker off, giving a noise floor of exactly zero; AC7's partition defect predates the story by an epic (4 unmarked children per tree, 3 per dwarf) and triples at `--subdiv 4`, so it was AMENDED on Wolf's ruling and filed as issue #73; and `mutate.sh` reported SURVIVED for a test that never ran, a guard the `py` tier already had. Beyond scope on Wolf's asks: space pauses the simulation, `--static-world` captures a paused world, and dwarves face their direction of travel and hold it when they stop. |
