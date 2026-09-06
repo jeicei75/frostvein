@@ -274,6 +274,54 @@ naming clause. Keep it. Note it fires *before* the voxel check, so exercise the 
 4. What you could not achieve at 96 voxels, and any contract clause you could not satisfy.
    **A limitation reported is the deliverable; a limitation worked around silently is a defect.**
 
+## Report your cost and your model
+
+This work is billed to a story ledger like every other phase, and a session on the art seat is the
+one kind this project keeps losing: the ledger's own attribution note records a row that is *"a
+CEILING, not the story's cost"* because no boundary was marked, and a whole session has previously
+gone **absent from the cursors entirely** — no row, no mark, nothing anomalous to notice. **Your
+report is the only place these numbers will exist**, so a missing figure here is a permanently
+missing ledger row, not a delay.
+
+**Run the project's own instrument, in print mode, against your own transcript** — do not count
+anything by hand:
+
+```
+python3 _bmad/scripts/session_tokens.py --tool claude     --transcript ~/.claude/projects/<your-project-slug>/<your-session-id>.jsonl
+```
+
+`--transcript` is required: the default discovery derives its directory from the *forge* root slug
+and will not find a transcript on this seat. Without `--story` the script only prints — it writes
+no ledger row and does not advance the cursor, which is what you want. It counts any subagent
+transcripts under `<session-id>/subagents/` automatically; a phase that spawns work pays for it.
+
+Paste the whole block verbatim. It looks like this:
+
+```
+Session token cost  (<id>.jsonl, tool=claude)  (369 turns, claude-opus-5)
+  input (fresh)            738
+  cache creation       589,394
+  cache read        72,491,761
+  output               418,581
+  total processed   73,500,474
+  wall-clock           219 min  (elapsed, includes idle gaps)
+  est. cost             $50.40  (benchmark — verify rates in PRICES)
+```
+
+Also state, in the report:
+
+- **The model, read from your session banner — not from memory.** A delegated run on this project
+  has silently drifted to a different model and effort than the one it was asked for, and reported
+  the intended one. Check what you are actually running on and say that.
+- **The seat** — which machine, which OS, which Blender build.
+- **The transcript filename**, so the forge side can record the row against the right file.
+- **Where the wall-clock is idle rather than work**, if a long gap was a person thinking. The
+  number includes human gaps and cannot tell them from a stall.
+
+**Do not write to the ledger yourself.** Recording the row is a forge-side act, like promoting the
+`.glb` — the cursor file is shared state and a row written from another machine against a
+transcript the forge cannot see is worse than no row at all.
+
 ## Decisions — all ruled. None of these are yours.
 
 v1's report presented these as "ruled" having taken them itself. They are ruled now, by Wolf, on
