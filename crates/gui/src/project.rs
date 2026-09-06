@@ -314,6 +314,25 @@ pub fn setup_projection_assets(
     });
 }
 
+/// The draw offset an entity kind needs on top of its cell position.
+///
+/// Cube kinds are drawn at the cell CENTRE, which is right for a unit cube. The authored dwarf
+/// conforms to the asset contract's `min Y = 0`, so its origin is its feet and it must sit on the
+/// cell FLOOR instead.
+///
+/// This exists as a function, and not as a term at the spawn site, because the spawn is NOT the
+/// only writer of a dwarf's translation: `apply_entity_blending` overwrites it on every frame
+/// after. Applying the drop only at the spawn left the dwarf correctly placed for exactly one
+/// frame and levitating half a cell -- two thirds of his own height -- from the next one on. Wolf
+/// saw it from the seat; no test here did. `item_translation` carries the same warning for items
+/// and for the same reason.
+pub fn entity_draw_offset(kind: EntityKind) -> Vec3 {
+    match kind {
+        EntityKind::Dwarf => -Vec3::Y * 0.5,
+        _ => Vec3::ZERO,
+    }
+}
+
 /// Keeps one presentation-only hover slab in lockstep with the latest camera pick.
 pub fn sync_hover_highlight(
     mut commands: Commands,
@@ -1511,7 +1530,7 @@ pub fn reconcile(
                         entity.insert((
                             WorldAssetRoot(assets.dwarf_scene.clone()),
                             Transform::from_translation(
-                                world_to_render(position) - bevy::prelude::Vec3::Y * 0.5,
+                                world_to_render(position) + entity_draw_offset(mirror_entity.kind),
                             )
                             .with_scale(bevy::prelude::Vec3::splat(METRES_TO_CELLS)),
                         ));
@@ -1756,7 +1775,7 @@ pub fn blend_entities(
                     .map(|previous| previous.pos),
                 entity.pos,
                 clock.factor(),
-            );
+            ) + entity_draw_offset(entity.kind);
         } else if let Some(position) = items.get(&marker.0) {
             // Items have no previous wire state; snapping is the only wire-true presentation.
             // Must go through `item_translation` for the same reason the spawn does: this is the

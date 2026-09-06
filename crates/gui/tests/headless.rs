@@ -1011,6 +1011,70 @@ fn later_production_reconciliation_does_not_clobber_a_blended_translation() {
     );
 }
 
+/// AC3, and the frame AFTER the spawn is the one that matters.
+///
+/// The authored dwarf's origin is his feet (`min Y = 0` per the asset contract), so he is drawn on
+/// the cell FLOOR while cube kinds are drawn at the cell CENTRE. Placing him at the spawn alone is
+/// not enough: `apply_entity_blending` rewrites the translation of every projected entity on every
+/// subsequent frame, and it did so from a bare `world_to_render`. That left the dwarf correct for
+/// exactly one frame and half a cell in the air -- two thirds of his own height -- from the next
+/// one on. Wolf saw it from the seat; a spawn-only assertion could not.
+///
+/// The expected values below are HAND-WRITTEN from the convention, not computed from the code
+/// under test: `world_to_render([x, y, z]) = (x, z, -y)`, a dwarf at cell z stands on the solid
+/// block at z-1 whose unit-cube top is at render y = z - 0.5.
+#[test]
+fn the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend() {
+    let id = 91;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    // Cell z = 0, so the floor -- and his feet -- are at render y = -0.5.
+    assert_eq!(
+        projected_translation(&mut app, id),
+        bevy::prelude::Vec3::new(0.0, -0.5, 0.0),
+        "at spawn the dwarf's origin must sit on the cell floor, not its centre"
+    );
+
+    // Move him one cell and let the blend run to completion. This is the arm that was wrong.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(10.0);
+    app.update();
+    assert_eq!(
+        projected_translation(&mut app, id),
+        bevy::prelude::Vec3::new(2.0, -0.5, 0.0),
+        "after the blend rewrites it, the dwarf must STILL be on the floor. A bare \
+         world_to_render here lifts him half a cell on the frame after he appears."
+    );
+}
+
+/// The floor drop is the dwarf's alone: a cube kind is drawn at the cell centre and must not move.
+#[test]
+fn the_floor_drop_does_not_move_the_cube_kinds() {
+    let id = 92;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![Entity {
+            id,
+            kind: EntityKind::Torch,
+            pos: [0, 0, 0],
+            state: JobState::Idle,
+            light: None,
+        }],
+    ));
+    app.update();
+    assert_eq!(
+        projected_translation(&mut app, id),
+        bevy::prelude::Vec3::new(0.0, 0.0, 0.0),
+        "a unit cube's centre is its middle, so a torch stays at the cell centre"
+    );
+}
+
 #[test]
 fn a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table() {
     let id = 77;
@@ -1152,7 +1216,10 @@ fn snapshot_rewind_snaps_at_a_mid_blend_clock() {
 
     assert_eq!(
         projected_translation(&mut app, id),
-        world_to_render([19, 0, 0]),
+        // The dwarf draws on the cell FLOOR, not its centre -- his origin is his feet. The drop
+        // is written out here rather than read from `entity_draw_offset`, so that changing the
+        // offset fails this test instead of moving with it.
+        world_to_render([19, 0, 0]) - bevy::prelude::Vec3::Y * 0.5,
         "a snapshot must snap even while the clock is half way through an interval"
     );
 }
@@ -1359,11 +1426,16 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         if terrain.is_some() && transform.translation == world_to_render([0, 0, 0]) {
             terrain_at_origin += 1;
         }
-        if terrain.is_none() && marker.0 == 0 && transform.translation == world_to_render([1, 0, 0])
+        // Dwarves sit on the cell floor; the literal drop keeps this independent of the code.
+        if terrain.is_none()
+            && marker.0 == 0
+            && transform.translation == world_to_render([1, 0, 0]) - bevy::prelude::Vec3::Y * 0.5
         {
             dwarf_at_position += 1;
         }
-        if terrain.is_none() && marker.0 == 1 && transform.translation == world_to_render([0, 0, 0])
+        if terrain.is_none()
+            && marker.0 == 1
+            && transform.translation == world_to_render([0, 0, 0]) - bevy::prelude::Vec3::Y * 0.5
         {
             second_dwarf_at_position += 1;
         }
