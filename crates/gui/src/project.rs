@@ -1988,6 +1988,10 @@ impl ProjectionAssets {
             .iter()
             .all(|scene| asset_server.is_loaded_with_dependencies(scene.id()))
     }
+
+    pub fn dwarf_scene_loaded(&self, asset_server: &AssetServer) -> bool {
+        asset_server.is_loaded_with_dependencies(self.dwarf_scene.id())
+    }
 }
 
 /// The trunk columns a mesh actually carries, keyed by column so a cell can ask in O(1).
@@ -2259,6 +2263,11 @@ const YAW_SALT: u32 = 0x5941_5721;
 #[derive(Resource, Default)]
 pub struct TreeReportState {
     reported: bool,
+    /// Tracked separately from `reported` ON PURPOSE. Sharing one flag gated the dwarf line on the
+    /// TREES' readiness, and measured at `--z 0` and `--z 5` -- where no tree is above the cut --
+    /// the dwarf line then never printed at all, though five dwarves were drawn. An instrument
+    /// that goes quiet exactly when the scene is unusual is worse than none.
+    dwarves_reported: bool,
     frames: u32,
 }
 
@@ -2271,20 +2280,35 @@ pub struct TreeReportState {
 pub fn report_tree_meshes_once(
     mut state: ResMut<TreeReportState>,
     trees: Query<&TreeMesh>,
+    // Scene-drawn PROJECTED entities are exactly the dwarves: trees carry `WorldAssetRoot` too but
+    // are client-local and never `WorldProjected`, so this counts what it says without a mirror.
+    scene_entities: Query<&WorldAssetRoot, With<WorldProjected>>,
     assets: Option<Res<ProjectionAssets>>,
     asset_server: Option<Res<AssetServer>>,
 ) {
-    if state.reported {
+    if state.reported && state.dwarves_reported {
         return;
     }
     state.frames += 1;
-    let loaded = assets
+    let (loaded, dwarf_loaded) = assets
         .zip(asset_server)
-        .is_some_and(|(assets, asset_server)| assets.tree_scenes_loaded(&asset_server));
+        .map_or((false, false), |(a, server)| {
+            (a.tree_scenes_loaded(&server), a.dwarf_scene_loaded(&server))
+        });
     let spawned = trees.iter().count();
+    let dwarves = scene_entities.iter().count();
     // Report on success, or give up and report the FAILURE rather than staying silent: a line
     // that only ever appears when things worked is not an instrument.
-    if (loaded && spawned > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES {
+    // The dwarf's counterpart, on its OWN readiness. Wolf's first vehicle run of the seam printed
+    // the tree line and nothing about the dwarf, so the output could not say whether the authored
+    // scene had loaded at all.
+    if !state.dwarves_reported
+        && ((dwarf_loaded && dwarves > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES)
+    {
+        state.dwarves_reported = true;
+        eprintln!("gui dwarves: meshes={dwarves} scenes_loaded={dwarf_loaded} source=embedded");
+    }
+    if !state.reported && ((loaded && spawned > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES) {
         state.reported = true;
         eprintln!(
             "gui trees: meshes={spawned} scenes_loaded={loaded} source=embedded frames={}",

@@ -204,11 +204,77 @@ impl Daemon {
     }
 }
 
+impl Daemon {
+    /// One real client run, returning its `gui dwarves:` line. Stderr is captured rather than
+    /// discarded, which is where the startup instrument prints.
+    fn dwarf_report(&self, extra: &[&str]) -> String {
+        let out = std::env::temp_dir().join(format!(
+            "frostvein-dwarf-report-{}-{}.png",
+            std::process::id(),
+            extra.join("_")
+        ));
+        let result = Command::new(env!("CARGO_BIN_EXE_gui"))
+            .arg(self.port.to_string())
+            .args([
+                "--headless",
+                "--capture",
+                out.to_str().expect("a utf-8 path"),
+            ])
+            .args(extra)
+            .stdout(Stdio::null())
+            .output()
+            .expect("the client must run");
+        let _ = std::fs::remove_file(&out);
+        String::from_utf8_lossy(&result.stderr)
+            .lines()
+            .find(|line| line.starts_with("gui dwarves:"))
+            .unwrap_or("<no dwarf line printed>")
+            .to_string()
+    }
+}
+
 impl Drop for Daemon {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+/// AC10: the dwarf's startup line, driven through the real binary and proved to MOVE.
+///
+/// A well-formedness assertion would pass against a hardcoded string. The state this varies is the
+/// slice: the dwarves stand at z 9, so a run cut at z 5 draws none of them. Same binary, same
+/// daemon, one flag apart.
+///
+/// The zero case is the one worth having. Reporting `meshes=0` is the instrument admitting it drew
+/// nothing; going SILENT there is what it did before the tree and dwarf reports were given separate
+/// readiness flags, and a line that only appears when things worked is not an instrument.
+///
+/// It costs a 600-frame run: below the cut there are no dwarves, so the report waits out
+/// `TREE_REPORT_DEADLINE_FRAMES` rather than firing on success.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
+    let daemon = Daemon::spawn();
+
+    let above = daemon.dwarf_report(&["--subdiv", "1", "--z", "9", "--frames", "60"]);
+    let below = daemon.dwarf_report(&["--subdiv", "1", "--z", "5", "--frames", "700"]);
+    println!("AC10 dwarf line: above the cut {above:?} / below {below:?}");
+
+    assert_eq!(
+        above, "gui dwarves: meshes=5 scenes_loaded=true source=embedded",
+        "with the slice at the dwarves' own level the line must name all five and say the \
+         authored scene loaded"
+    );
+    assert_eq!(
+        below, "gui dwarves: meshes=0 scenes_loaded=true source=embedded",
+        "cut below them the line must still appear and report ZERO. Silence here would mean the \
+         instrument only speaks when it has good news."
+    );
+    assert_ne!(
+        above, below,
+        "the line must change with the state it claims to report"
+    );
 }
 
 /// AC11, on the frame rather than on the flag.
