@@ -122,7 +122,10 @@ def setup_cycles(scene):
     scene.render.engine = 'CYCLES'
     scene.cycles.device = 'CPU'
     scene.cycles.use_denoising = False
-    scene.view_settings.view_transform = 'Standard'
+    # The view transform is deliberately NOT set here -- it is per-mode, below. Setting it in this
+    # function captured 'Standard' into `default_transform` and so forced the LIT pass onto it too,
+    # and left the per-mode line unable to fail. Caught by sabotaging that line and watching the
+    # flat-pass check survive when it should have died.
     scene.world.use_nodes = True
     scene.world.node_tree.nodes["Background"].inputs[0].default_value = (0.16, 0.16, 0.17, 1.0)
 
@@ -156,6 +159,8 @@ def main():
     target = mathutils.Vector((0.0, 0.0, ob.dimensions.z / 2.0))
     cam = add_camera(ob)
 
+    default_transform = scene.view_settings.view_transform   # before any engine setup moves it
+
     if engine == "cycles":
         setup_cycles(scene)
         add_studio_lights(target)
@@ -167,8 +172,6 @@ def main():
     # renders committed on 2026-09-06, ZERO of the ten palette hexes survived to the PNG -- skin
     # #E9D2BB read back as #BDB3AA -- so a palette read off that frame is wrong in silence. Set per
     # mode rather than globally so the lit pass keeps whatever look it was judged under.
-    default_transform = scene.view_settings.view_transform
-
     written = []
     for mode, light in (("flat", 'FLAT'), ("lit", 'STUDIO')):
         shading.light = light
