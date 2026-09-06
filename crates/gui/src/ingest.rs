@@ -428,7 +428,8 @@ fn configure_client_app(
                 args.expect_work,
             ),
             None => CaptureState::new(capture, args.frames, args.expect_work),
-        };
+        }
+        .with_static_world(args.static_world);
         app.insert_resource(capture);
         capture_systems(app);
     }
@@ -596,6 +597,7 @@ struct Args {
     capture: Option<PathBuf>,
     frames: u32,
     expect_work: bool,
+    static_world: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
     cursor: Option<Vec2>,
@@ -676,6 +678,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut capture = None;
     let mut frames = None;
     let mut expect_work = false;
+    let mut static_world = false;
     let mut slice_level = None;
     let mut distance = None;
     let mut cursor = None;
@@ -697,6 +700,12 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                     .parse()
                     .context("invalid --frames count")?,
             );
+        } else if arg == "--static-world" {
+            // For capturing a PAUSED world. The motion instrument exists to catch a client that
+            // has stopped updating, and a deliberately still world is a false positive for it.
+            // Explicit and never a default, so it cannot silently disable the guard on a run that
+            // was supposed to be moving.
+            static_world = true;
         } else if arg == "--expect-work" {
             expect_work = true;
         } else if arg == "--headless" {
@@ -800,6 +809,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         capture,
         frames: frames.unwrap_or(DEFAULT_AT_TICK_FRAME_BUDGET),
         expect_work,
+        static_world,
         slice_level,
         distance,
         cursor,

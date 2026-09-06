@@ -365,6 +365,9 @@ pub struct CaptureState {
     requested: bool,
     failed: bool,
     expect_work: bool,
+    /// The world is deliberately still (`--static-world`), so the motion instrument's assertions
+    /// are false positives rather than findings. See the parse site for why it is never a default.
+    static_world: bool,
     motion: MotionStats,
     lantern: LanternStats,
 }
@@ -719,6 +722,7 @@ impl CaptureState {
             requested: false,
             failed: false,
             expect_work,
+            static_world: false,
             motion: MotionStats::default(),
             lantern: LanternStats::default(),
         }
@@ -734,6 +738,15 @@ impl CaptureState {
         let mut capture = Self::new(path, frames, expect_work);
         capture.at_tick = Some((start_tick, ticks_after_start));
         capture
+    }
+
+    /// A SETTER rather than a fifth positional bool. Every existing construction site is a test
+    /// that does not care about this flag, and threading it through all of them would have made
+    /// the call sites less readable to express a default.
+    #[must_use]
+    pub fn with_static_world(mut self, static_world: bool) -> Self {
+        self.static_world = static_world;
+        self
     }
 
     pub fn requested(&self) -> bool {
@@ -1001,7 +1014,14 @@ pub fn capture_after_frames(
         // empty both when the slice legitimately hides them AND when entity projection is broken
         // entirely, so keying off it alone made every non-top capture — which is every capture
         // this story takes — exit 0 on a total lantern regression.
-        if lantern_assertions_apply(&mirror.0, slice.level()) {
+        if capture.static_world {
+            // Announced, never silent: a record showing a clean capture must not hide that the
+            // motion half of the instrument was switched off for it.
+            println!(
+                "static-world: the simulation is paused, so the lantern-movement and motion \
+                 assertions are SKIPPED. The range, black-frame and uniform-frame checks still run."
+            );
+        } else if lantern_assertions_apply(&mirror.0, slice.level()) {
             capture.lantern.assert_valid();
         } else {
             println!(
@@ -1032,6 +1052,7 @@ pub fn capture_after_frames(
                     );
                 }
             }
+            None if capture.static_world => {}
             None => capture.motion.assert_valid(capture.expect_work),
         }
         capture.requested = true;
