@@ -69,9 +69,73 @@ def aim(cam, target, azimuth_deg, elevation_deg, radius=6.0):
     cam.rotation_euler = (-offset).to_track_quat('-Z', 'Y').to_euler()
 
 
+# Workbench is the default and the better instrument: deterministic, no sampler noise, and
+# `light=FLAT` is exactly unlit albedo. It renders through EGL, and `libEGL.so.1` is ABSENT on the
+# forge devpod -- Blender aborts there with exit 134 before writing anything. That left the asset
+# reproducible from the forge but its RENDERS reproducible only on the art seat, so the committed
+# PNGs were the only evidence of the look: the failure the "script is the durable record" clause
+# exists to prevent, one level up from the generator.
+#
+# So: `-- <out_dir> --engine cycles` renders the same views on CPU, which needs no EGL. It is
+# slower and carries sampler noise, and the two engines' `lit` passes are NOT pixel-comparable --
+# use one engine for any comparison. Denoising is off because the venue has no denoiser.
+#
+# There is no auto-fallback on purpose. Workbench does not raise when EGL is missing, it ABORTS the
+# process, so there is nothing to catch; a caller that cannot use it has to say so.
+def atlas_image(ob):
+    """The palette texture out of the object's own material, not a re-load from disk."""
+    tree = ob.data.materials[0].node_tree
+    return next(n.image for n in tree.nodes if n.type == 'TEX_IMAGE')
+
+
+def make_flat_material(ob):
+    """Unlit albedo under Cycles: emission at strength 1 with a Standard view transform means the
+    rendered pixel IS the palette hex. Any other view transform (AgX is the default) rolls the
+    highlights off and quietly rewrites the colours you are trying to read."""
+    material = bpy.data.materials.new("DwarfFlat")
+    material.use_nodes = True
+    tree = material.node_tree
+    tree.nodes.clear()
+    out = tree.nodes.new('ShaderNodeOutputMaterial')
+    emission = tree.nodes.new('ShaderNodeEmission')
+    tex = tree.nodes.new('ShaderNodeTexImage')
+    tex.image, tex.interpolation, tex.extension = atlas_image(ob), 'Closest', 'EXTEND'
+    tree.links.new(tex.outputs['Color'], emission.inputs['Color'])
+    tree.links.new(emission.outputs['Emission'], out.inputs['Surface'])
+    return material
+
+
+def add_studio_lights(target):
+    for name, offset, energy in (("key", (-3.0, -4.0, 4.0), 900.0),
+                                 ("fill", (4.0, -3.0, 1.5), 250.0),
+                                 ("rim", (2.0, 4.0, 3.0), 400.0)):
+        data = bpy.data.lights.new(name, 'AREA')
+        data.energy, data.size = energy, 4.0
+        lamp = bpy.data.objects.new(name, data)
+        bpy.context.collection.objects.link(lamp)
+        lamp.location = target + mathutils.Vector(offset)
+        direction = target - lamp.location
+        lamp.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
+
+
+def setup_cycles(scene):
+    scene.render.engine = 'CYCLES'
+    scene.cycles.device = 'CPU'
+    scene.cycles.use_denoising = False
+    scene.view_settings.view_transform = 'Standard'
+    scene.world.use_nodes = True
+    scene.world.node_tree.nodes["Background"].inputs[0].default_value = (0.16, 0.16, 0.17, 1.0)
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    out_dir = os.path.abspath(argv[0]) if argv else "renders"
+    positional = [a for a in argv if not a.startswith("--")]
+    out_dir = os.path.abspath(positional[0]) if positional else "renders"
+    engine = "workbench"
+    if "--engine" in argv:
+        engine = argv[argv.index("--engine") + 1]
+    if engine not in ("workbench", "cycles"):
+        raise SystemExit("error: --engine must be workbench or cycles (got %r)" % engine)
     os.makedirs(out_dir, exist_ok=True)
 
     ob = build()
@@ -92,9 +156,28 @@ def main():
     target = mathutils.Vector((0.0, 0.0, ob.dimensions.z / 2.0))
     cam = add_camera(ob)
 
+    if engine == "cycles":
+        setup_cycles(scene)
+        add_studio_lights(target)
+        lit_material = ob.data.materials[0]
+        flat_material = make_flat_material(ob)
+
+    # The flat pass is only "unlit albedo" if the VIEW TRANSFORM is Standard. Blender's default
+    # (AgX) rolls highlights off and quietly rewrites every colour: measured on the Workbench flat
+    # renders committed on 2026-09-06, ZERO of the ten palette hexes survived to the PNG -- skin
+    # #E9D2BB read back as #BDB3AA -- so a palette read off that frame is wrong in silence. Set per
+    # mode rather than globally so the lit pass keeps whatever look it was judged under.
+    default_transform = scene.view_settings.view_transform
+
     written = []
     for mode, light in (("flat", 'FLAT'), ("lit", 'STUDIO')):
         shading.light = light
+        scene.view_settings.view_transform = 'Standard' if mode == "flat" else default_transform
+        if engine == "cycles":
+            ob.data.materials[0] = flat_material if mode == "flat" else lit_material
+            # 1 sample is exact for pure emission and there is nothing to converge; the lit pass
+            # has real light transport and needs more.
+            scene.cycles.samples = 1 if mode == "flat" else 24
         for name, azimuth, elevation in VIEWS:
             aim(cam, target, azimuth, elevation)
             path = os.path.join(out_dir, "dwarf-%s-%s.png" % (mode, name))
@@ -102,10 +185,36 @@ def main():
             bpy.ops.render.render(write_still=True)
             written.append(path)
 
+    assert_flat_is_flat(out_dir)
+
     sheet = contact_comparison(out_dir)
     for path in written + [sheet]:
         print("RENDER %s" % path)
     print("OK %d renders -> %s" % (len(written) + 1, out_dir))
+
+
+def assert_flat_is_flat(out_dir):
+    """The flat pass claims to be readable albedo. Make it prove that rather than assert it.
+
+    Every palette colour must survive to the PNG as its exact hex somewhere across the flat views.
+    A view transform, a colour-managed image node or a stray light shifts all of them at once, so
+    this fails loudly on the whole class rather than on one colour. Edge pixels are antialiased and
+    land between palette entries, which is why the check asks whether each colour APPEARS, not
+    whether every pixel is one.
+    """
+    seen = set()
+    for name, _a, _e in VIEWS:
+        frame = read_png(os.path.join(out_dir, "dwarf-flat-%s.png" % name))
+        seen |= {tuple(int(c) for c in px) for px in frame.reshape(-1, 3)}
+    wanted = {tuple(int(h.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) for h in dwarf.PALETTE_HEX}
+    missing = sorted("#%02X%02X%02X" % c for c in wanted - seen)
+    if missing:
+        raise SystemExit(
+            "flat pass is not flat: %d of %d palette colours never reach the PNG (%s). The view "
+            "transform is the usual cause -- it must be Standard for this pass."
+            % (len(missing), len(wanted), ", ".join(missing))
+        )
+    print("FLAT-CHECK all %d palette colours reach the PNG exactly" % len(wanted))
 
 
 # --- the comparison the brief asks for -------------------------------------
