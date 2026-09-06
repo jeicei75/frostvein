@@ -1,299 +1,212 @@
-# Session report — the dwarf miner, via Blender MCP
+# Report — the dwarf miner, version 2 (96 voxels)
 
-**Answers:** `prompts/dwarf-miner-blender-mcp.md`.
-**Date:** 2026-09-06. **Seat:** Windows 11 art seat, Blender **5.2.1 LTS** (build 2026-08-25),
-Blender MCP attached. **Status:** delivered; three findings below are Wolf's to rule on.
+**Session:** Claude Code with Blender MCP, Blender 5.2.1 LTS, Windows.
+**Brief:** `src-assets/prompts/dwarf-miner-blender-mcp.md` v2, 2026-09-06.
+**Supersedes:** the v1 report previously at this path.
 
 ---
 
-## The three open decisions, as ruled
+## 1. Figures, and two independent cold runs
 
-The brief ended with three decisions reserved for Wolf. All three were taken before any
-modelling, on 2026-09-06:
+```
+FIGURES name=SM_VoxelDwarf_Miner01 voxel=0.0125 height_voxels=96 voxels=156898
+groups=backpack:23587,belt:5919,body:116092,lantern:7584,pickaxe:3716
+centring=-5,+8 quads=6003 verts=24012 tris=12006
+bbox=1.2500x1.2000x0.8000 centre_x=+0.000000 centre_z=+0.000000 min_y=+0.000000
+volume=0.306441 expected_volume=0.306441 materials=1 primitives=1 images=1
+palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50,#6B5B49,#34271C,#F0A63C
+glb_bytes=842036
+```
 
-| # | Decision | Ruling |
-|---|---|---|
-| 1 | The published name | **`SM_VoxelDwarf_Miner01`**, as proposed |
-| 2 | Is the gear part of the mesh? | **Bake in, keep separable** — the brief's own recommendation |
-| 3 | The 1.20 m dwarf anchor | **Ratified at 1.20 m** |
+Two cold `blender --background` runs into two different paths, no MCP, no hand steps:
 
-Ruling 3 was taken **before** the measurement in finding 3 existed. That finding is the
-reason to re-hear it; nothing else here depends on re-opening it.
+```
+5a41a983966c57afc2c4d03b1fe5367ea5f2bc2bea6ae045e8b8a4c0725bcae0  runA/SM_VoxelDwarf_Miner01.glb
+5a41a983966c57afc2c4d03b1fe5367ea5f2bc2bea6ae045e8b8a4c0725bcae0  runB/SM_VoxelDwarf_Miner01.glb
+IDENTICAL
+```
 
-## Deliverables
+He is **96 voxels of 0.0125 m = 1.20 m**, bbox centred on X and Z to 0.000000, feet at
+`min Y = 0`, and the signed volume equals the voxel volume to the last printed digit, which
+is the closure oracle: no hole, no duplicated face, no inverted normal.
 
-| Path | What |
+**Guards, exercised independently** (each exits non-zero and writes nothing):
+
+| | |
 |---|---|
-| `src-assets/blender/dwarf_miner.py` | the standalone headless generator — **the durable record** |
-| `src-assets/blender/dwarf.blend` | the editable source, written by the generator's `--blend` |
-| `assets/gltf/SM_VoxelDwarf_Miner01.glb` | the runtime glTF, at the location `docs/tech-art-guidelines.md:463` contracts |
-| `src-assets/ASSET_NOTES.md` | a dwarf section: generation, palette, the three findings |
+| wrong basename, `--voxel 0` | `error: basename must be 'SM_VoxelDwarf_Miner01', got 'wrong_name.glb'` — the naming guard fires **first**, so the voxel guard below is reached only on a correct basename |
+| correct basename, `--voxel 0` | `error: --voxel must be greater than 0 (got 0.0)` |
+| unwritable output path | `generator failed: PermissionError: ...` — exit 1, not Blender's usual exit 0 after a traceback |
 
-Nothing was committed or pushed. `voxel_pine.py` was **not edited** — the generator imports
-it, as the brief required.
-
----
-
-## 1. The `FIGURES` line, and the SHA-256 from two independent runs
+## 2. `check_asset.py`, verbatim
 
 ```
-FIGURES name=SM_VoxelDwarf_Miner01 voxel=0.100 voxels=239 groups=body:216,lantern:12,pickaxe:11
-  quads=108 verts=432 tris=216 bbox=1.000x1.200x0.600 centre_x=+0.000000 centre_z=+0.000000
-  min_y=+0.000000 volume=0.239000 expected_volume=0.239000 materials=1 primitives=1 images=1
-  palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50,#6B5B49 glb_bytes=16688
-OK SM_VoxelDwarf_Miner01 -> assets/gltf/SM_VoxelDwarf_Miner01.glb
+FIGURES src-assets\export\SM_VoxelDwarf_Miner01.glb size_m=1.2x1.2x0.8 min_y_m=0.000000
+centre_x_m=0.000000 centre_z_m=0.000000
+palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50 tris=12006 verts=24012
 ```
 
-Three cold Blender runs into three separate paths — no MCP, no hand steps:
+Exit 0. **No rejection.** Every clause holds and the checker needed no change from this session.
+
+The four shipped pines and the v1 dwarf still pass the same checker unchanged, so nothing
+regressed:
 
 ```
-3a87cbbd03660316e152c6a75ae959daf4bcdd64aea42301767234ec71dd6760  assets/gltf/SM_VoxelDwarf_Miner01.glb
-3a87cbbd03660316e152c6a75ae959daf4bcdd64aea42301767234ec71dd6760  <scratch>/run-a/SM_VoxelDwarf_Miner01.glb
-3a87cbbd03660316e152c6a75ae959daf4bcdd64aea42301767234ec71dd6760  <scratch>/run-b/SM_VoxelDwarf_Miner01.glb
+FIGURES assets\trees\SM_VoxelPine_Tree01.glb  size=5.0x6.4x5.0 tris=4366
+FIGURES assets\trees\SM_VoxelPine_Tree02.glb  size=5.0x8.0x5.4 tris=5894
+FIGURES assets\trees\SM_VoxelPine_Tree03.glb  size=3.8x8.0x3.4 tris=3474
+FIGURES assets\trees\SM_VoxelPine_Tree04R.glb size=4.2x9.6x4.2 tris=4424
 ```
 
-`cmp` confirms identical, not merely equal-digest.
+### The one thing the checker's verdict does NOT cover
 
-**There is no `--seed`, and that is not an omission.** Unlike the pines this generator draws
-no random numbers at all — every voxel is placed by an explicit rule — so determinism is by
-construction rather than by discipline about hashing.
-
-### The self-verification the script carries
-
-Every figure is read back **out of the written GLB**, never off the spec that was asked for.
-Beyond the brief's list, the generator also asserts the 0.1 m grid clause, `CLAMP_TO_EDGE`
-wrap, the basename/mesh/node naming triple, and the absence of animations, skins, cameras,
-extensions and any emissive field.
-
-The two non-optional guards are present and were exercised:
-
-| Invocation | Exit | First line of stderr |
-|---|---|---|
-| `--voxel 0` | 1 | `error: --voxel must be greater than 0 (got 0.0)` |
-| `--voxel -0.1` | 1 | `error: --voxel must be greater than 0 (got -0.1)` |
-| wrong basename (`dwarf.glb`) | 1 | `error: basename must be 'SM_VoxelDwarf_Miner01', got 'dwarf.glb'` |
-| not a `.glb` | 1 | `error: output must be a .glb path` |
-| unknown option `--seed 7` | 1 | `error: unknown option '--seed'` |
-| no arguments | 1 | usage |
-| `--voxel 0.2` | 0 | — |
-
-The basename guard is an addition to the brief's list: the contract requires
-`basename == mesh name == node name` and that string is compiled into the client, so the
-generator refuses to write a GLB the checker would reject rather than writing one and failing
-afterwards.
-
-## 2. `scripts/bench/check_asset.py`'s verdict
-
-**Accepted. Exit 0. No code change to the checker.**
-
-```
-FIGURES assets\gltf\SM_VoxelDwarf_Miner01.glb size_m=1.0x1.2x0.6 min_y_m=0.000000
-  centre_x_m=0.000000 centre_z_m=0.000000
-  palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50 tris=216 verts=432
-```
-
-The brief anticipated that some V1 clause might prove impossible for a character and asked
-for a report rather than a workaround. **None did** — but that outcome was not free, and
-finding 2 below is the clause that came closest to breaking. The checker prints seven palette
-cells because its reader is sized to the pine's seven-colour atlas; the dwarf ships eight and
-the eighth is verified by the generator instead. That is a display limit in the checker, not
-a rejection.
+Its `palette=` field lists **seven** cells and stops, exactly as the brief warned:
+`PALETTE_HEX` is hardcoded to the pine's seven and it iterates `range(len(PALETTE_HEX))`.
+So **Wood Trunk, Hair and Lantern flame — cells 7, 8 and 9 — are invisible to it**, and it
+does not compare the seven it does read against anything either (`contract_data` treats the
+colour-to-role map as a signoff comparison, not a clause). All ten cells are read back out of
+the finished GLB and checked against the module's hex by the generator's own
+`shipped_palette == PALETTE_HEX` check. **That check is the only mechanical verification
+those cells get anywhere in the repo.** Do not read the checker's exit 0 as validating them.
 
 ## 3. Renders
 
-Five views — front, both orthographic sides, back, and one ¾ — rendered headless from the
-**written GLB**, on the neutral studio backdrop `scripts/bench/spike_pine_render.py` uses, so
-the frames carry no client scene lighting the asset does not own.
+In `src-assets/renders/`, all produced by `src-assets/blender/render_dwarf.py`, which imports
+the generator and builds the model rather than loading the `.blend` — so a render can never
+show geometry the generator does not ship.
 
-Currently in the session scratchpad: `renders/sheet-vs-renders.png` (Section A above, the
-five renders below), `renders/strip.png`, and the five individually. **They have no permanent
-home yet** — placing them under `_bmad-output/implementation-artifacts/10-5-signoff/` is
-Wolf's call, not an assumption this session should make.
+| | |
+|---|---|
+| `dwarf-{lit,flat}-front.png` | front orthographic |
+| `dwarf-{lit,flat}-side-right.png` | his right, the pickaxe side |
+| `dwarf-{lit,flat}-side-left.png` | his left, the lantern side |
+| `dwarf-{lit,flat}-back.png` | back orthographic |
+| `dwarf-{lit,flat}-three-quarter.png` | the ¾ |
+| **`dwarf-vs-contact-sheet.png`** | **all five, beside contact-sheet frame r3c5** — the comparison the brief asks for |
 
-Three cuts were needed before the silhouette read, each recorded in the generator's comments:
+Two passes, because one is not honest on its own: `flat` is unlit albedo, the only way to read
+the palette; `lit` is studio-lit, the only way to see that the forms are stepped at all.
+Neither is a claim about how the client will light him.
 
-1. the pickaxe read as a **hook** — a bare bar at the top of a haft. Fixed by turning both
-   ends of the head down, which is the least that still reads as a pickaxe.
-2. the pickaxe **bisected him in profile** — it was carried at `y=0`, dead centre in depth.
-   Moved to `y=1`, a voxel proud of the torso.
-3. the lantern read as **a box on the floor** — slung on a bail at `z 1-3`, then `z 2-4`.
-   Its cap now sits level with the fist at `z=5` with the body just under, which is how the
-   contact sheet carries it.
+## 4. What v1 could not do, and where this landed
 
-## 4. What the budget forced out, and what could not be satisfied
+| required | delivered |
+|---|---|
+| Eyes, whites and darker pupil, set apart with a bridge | 6 voxels of white each, a 4-voxel pupil sunk one voxel behind it, held apart by a 4-voxel nose bridge |
+| A brow ledge stepped proud of the face | 3 voxels tall, 2 proud, and **narrower than the face** so skin carries past its ends at the temples |
+| A nose | projects 4 voxels at the tip, 3 at the bridge — past the brow, and visible in profile |
+| Beard separated from the hair by **value** | Beard `#5E4632` against Hair `#34271C`, a luminance ratio of 0.56 |
+| A lantern that reads as a lantern | dark iron cage — four corner posts and a centre mullion — standing in front of warm `#F0A63C` panes |
+| A pickaxe that reads in profile *and* head-on | small boss the haft passes through, two wings stepping out and **down** to points |
 
-### Finding 1 — `Pants` and `Wood` cannot be settled from the sheet
+## 5. Limitations — reported, not worked around
 
-**Both values ship as the brief's, carried and NOT confirmed.**
+1. **12,006 triangles, against the brief's expected 14,000–30,000.** Under the band, and I
+   am not going to dress that up. The first cut was **451 quads / 902 triangles** from 149,528
+   voxels, because a voxel figure built from rectangular slabs greedy-meshes into almost
+   nothing — a flat face merges into one enormous quad however many voxels sit behind it.
+   Rounding every organic mass into a superelliptic column whose profile varies with z took it
+   to ~9,000, and cutting a strand groove down every third column of the beard and hair (which
+   the contact sheet's beard visibly has) took it to 12,006. Getting the rest of the way needs
+   more genuine surface incident — belt fittings, boot lacing, a third cloth value — not more
+   voxels. **I judged it better to stop at a form I can defend against the reference than to
+   add ornament the reference does not have in order to hit a number.** Flagging it rather
+   than quietly landing short.
 
-The brief asked for a re-read from a full-resolution copy of the sheet. There isn't one:
-`reference-sheet.jpg` is **1024 × 558**, and that is its full resolution, not a downscale.
+2. **The tunic is one green where the reference has two.** The contact sheet and the front
+   ortho both show a lighter yellow-green front panel over darker green sleeves and shoulders.
+   The ruled palette has one Tunic `#5F7A6A` and one Pants `#474B41`, and no lighter green;
+   I used Pants for the sleeves and shoulders to get a two-tone, but the *lighter* panel is
+   not reproducible. Six atlas cells are free, so an eleventh colour would fit mechanically —
+   **that is a palette ruling and not mine to take.**
 
-At that size the sheet's `8` and `B` are the same glyph — provably, because `Wood Trunk`
-reads `#685849` there while the pines demonstrably ship `#6B5B49`. The brief established
-that; this session tried to break the remaining ties by sampling the swatches, and **could
-not**.
+3. **The bounding box is centred; his body is not.** The centring line reads `centring=-5,+8`:
+   the lattice is translated 5 voxels in X and 8 in Y to land the box on the origin. In X that
+   is the pickaxe reaching further out than the lantern; in Y it is the backpack. So his feet
+   stand ~6 cm from the origin in X and ~10 cm in Y. The contract measures the box and the box
+   is exact, but a placement system that assumes the origin is under his boots will see that
+   offset. Cannot be removed without either unbalancing the gear or dropping it.
 
-Absolute luminance is unusable (measured bias across swatches runs −17..+1). Channel
-differences cancel most of that, so they were calibrated against the three swatches whose
-truth is known from the shipped pine atlas:
+4. **Gear is baked in and touches the body, so a later cut is not free.** Decision 2 rules the
+   lantern and pickaxe into the mesh, kept as separate voxel groups, and `part_of` tracks them
+   (`groups=` on the FIGURES line). But the greedy mesher culls the faces between adjacent
+   voxels regardless of group, and the fists necessarily touch their gear — so deleting a group
+   from the finished mesh would leave a hole where the hand met it. **The cut is a re-run of
+   the generator with the part excluded, not a selection-and-delete in the mesh.** The code is
+   structured for that; the mesh is not.
 
-| Swatch | sampled R−G / G−B | truth R−G / G−B | error |
-|---|---|---|---|
-| Snow `#FFFFFF` | +0.52 / +0.78 | 0 / 0 | **+0.52 / +0.78** |
-| Wood Trunk `#6B5B49` | +16.93 / +14.36 | +16 / +18 | **+0.93 / −3.64** |
-| Needle Green `#364D3F` | −14.18 / +10.70 | −23 / +14 | **+8.82 / −3.30** |
+5. **Cells 8 and 9 are DERIVED, not sampled clean**, and I want that on the record because
+   the brief said "sample … do not invent it" and neither could be sampled straight.
 
-Residual error reaches **8.8/255**. The candidates are **3/255** apart, so the method cannot
-discriminate:
+   - **Hair `#34271C`.** The two sources disagree by a factor of two: the reference sheet's
+     front ortho gives hair:beard = **0.87**, the contact sheet's frame r3c5 gives **0.42**.
+     Both are compromised, in opposite directions — the sheet's figure is 139 px tall and
+     JPEG-compressed, so a 5/255 gap is inside its noise; the contact sheet is torch-lit from
+     above and behind, so the hair mass is usually the shadow side while the beard catches the
+     key. I took the **midpoint, 0.56**, applied to the Beard albedo with its hue unchanged.
+     The *direction* is certain and is the point the brief makes; the exact value is a judgement
+     between two bad measurements.
+   - **Lantern flame `#F0A63C`.** The pane **cores** cannot be used: they measure `#F7DFA6`
+     (contact) and `#FDECAB` (sheet), a pale cream a hair off Skin `#E9D2BB`, because they are
+     blown out by the light the client puts inside the lantern. Shipping that would have
+     repeated v1's exact failure. I took the hue from the pane **edge**, where the glow falls
+     off and the glass's own colour survives (`#533517`, R:G:B 1 : 0.64 : 0.28), and raised it
+     to a value a lit pane wants.
 
-| Role | Candidate | predicts R−G / G−B | residual |
-|---|---|---|---|
-| Pants (sampled −1.53 / +6.49) | `#474B41` *(shipped)* | −4 / +10 | +2.47 / −3.51 |
-| | `#474841` | −1 / +7 | **−0.53 / −0.51** |
-| Wood (sampled +28.70 / +22.93) | `#8B6B50` *(shipped)* | +32 / +27 | −3.30 / −4.07 |
-| | `#8B6850` | +35 / +24 | −6.30 / −1.07 |
+   Both are **albedo only. Nothing is emissive** — the material carries no emission input and
+   the generator asserts no `emissive*` key reaches the GLB material. Per the brief, a bright
+   warm albedo is safe under the darkness guard because with every light off the scene renders
+   near-black; an emissive material would be a light nobody can switch off.
 
-The residuals actually lean **`#474841`** for Pants — against the brief's stated
-`G > R > B` argument, which both candidates satisfy — and **split** for Wood. Neither lean
-clears the noise floor, so neither overturns the brief.
+6. **Pants `#474B41` and Wood `#8B6B50` remain UNRESOLVED**, carried from the brief unchanged.
+   The sheet's `8` and `B` are the same glyph at 1024 px and the swatches are JPEG-noisy.
+   Only the original art file settles them. Untouched by this round.
 
-**One look at the original art file settles both.** Nothing available in this repo can.
+## 6. Two decisions I took, and why
 
-### Finding 2 — the pine's half-voxel lattice shift is off the project grid at 0.1 m
+Both are within the brief's grant to model from the reference; naming them because either
+could reasonably have gone the other way.
 
-`voxel_pine.greedy_mesh()` subtracts half a voxel in X and Y so an **odd**-width trunk
-centres on the origin. At the pine's 0.2 m voxel that shift is 0.1 m and lands on the grid.
-At the dwarf's **0.1 m** voxel it is **0.05 m**, and `check_asset.py`'s grid clause rejects
-every vertex.
+1. **The pose is the contact sheet's, not the front orthographic's.** The sheet's front view is
+   a display pose: the pickaxe lies diagonally across the body with its head and the lantern
+   **both** out on his left. The bounding box would still centre — the contract only measures
+   the box — but it would centre on a point ~14 voxels off his feet, and every instance placed
+   from the asset would stand beside its own origin. The contact sheet, which the brief makes
+   the primary source, carries the pickaxe in the right hand and the lantern in the left; that
+   is the in-situ pose *and* the one that balances. (The front and back orthos are mutually
+   consistent — the haft butt swaps sides between them — so this is a pose choice, not a
+   contradiction in the reference.)
 
-The dwarf is therefore **even-width in X and Y**, and the shift is undone after meshing. That
-is a rigid translation of the whole quad soup, which is exactly why the mesher itself could be
-imported **unedited** — the brief's constraint held.
+2. **Both arms hang; the pickaxe is carried upright rather than raised.** The contact sheet's
+   frames are mining-strike poses. Nothing here is rigged, so a neutral carry is the right base
+   for the rig that follows, and it keeps the pick head level with the top of his hair rather
+   than above it — a tool that outtopped him would make a "1.20 m dwarf" 1.10 m of dwarf under
+   a raised pick, since the bbox is his height.
 
-A consequence worth recording as a contract question: the resolution contract's phrasing
-*"every voxel centre lands on the 0.1 m lattice"* and the checker's clause *POSITION values
-on the 0.1 m grid* **cannot both hold at a 0.1 m voxel**. One is satisfied by the corners,
-the other by the centres, and they are half a voxel apart. The checker is the mechanical
-gate, so it won here; voxel centres land on the half-grid.
+## 7. On the grid clause
 
-### Finding 3 — Section A depicts roughly twice the resolution the contract allows
+The brief as first read told this session to pass the contract unchanged while ruling a voxel
+size that could not: `check_asset.py` enforced a **0.1 m** grid, and 1.20 m / 96 = 0.0125 m
+lands off it on seven planes in eight. That was verified rather than argued — v1's geometry
+built at `--voxel 0.0125` was rejected, `grid clause: POSITION values must use the 0.1 m
+project grid` — and raised before any modelling. Wolf amended the checker
+(`ce1a033`, `aae8701`) to `PROJECT_GRID_METRES = 0.0125`, with the tolerance moved from grid
+steps to metres. **This session wrote nothing outside `src-assets/`.**
 
-The contract fixes the dwarf at 12 voxels of 0.1 m
-(`docs/tech-art-guidelines.md:352`, *"dwarves target 0.1 m (12 voxels = 1.20 m = 0.75 cells)"*).
+## 8. Files
 
-Measured off the sheet's own **back view**, the cleanest standing silhouette on it —
-bounding box **29 × 92 px**, edge-step run lengths `{4:4, 5:3, 7:1, 11:1, 2:1}`, modal step
-**4–5 px** — the drawn figure is about **20–23 voxels tall and ~7 wide**. Method: isolate the
-figure from the blueprint ground by saturation and darkness, then take run lengths of the
-left and right silhouette edges; on voxel art every edge step is one voxel. The sample is
-small, so the figure is a range, not a number.
+| | |
+|---|---|
+| generator | `src-assets/blender/dwarf_miner.py` — replaced, not extended |
+| render script | `src-assets/blender/render_dwarf.py` — new |
+| editable source | `src-assets/blender/dwarf.blend` — 6,003 polys, matches the shipped GLB |
+| renders | `src-assets/renders/` — 11 PNGs |
+| this report | `src-assets/prompts/dwarf-miner-blender-mcp-report.md` |
+| exported GLB | `src-assets/export/SM_VoxelDwarf_Miner01.glb` — **gitignored scratch, deliberately** |
 
-It is also **not voxel art**: at 8× the front view shows anti-aliased outlines, gradient
-shading, a warm glowing lantern pane and a *curved* organic pickaxe head. Section A is
-concept art at illustration fidelity, whatever its title says.
+`voxel_pine.py` is imported and **unedited**: the greedy mesher, material, exporter, GLB
+reader, PNG decoder and volume oracle all come from it. The even-width fix still applies —
+the dwarf is even-width in X and Y and the mesher's half-voxel shift is undone after meshing.
 
-At 12 voxels the following are unavailable — not merely difficult — and were dropped:
-
-- **eyes.** Once hair frames it the face is 2 voxels wide. A separated pair cannot exist, and
-  an adjacent pair reads as a brow band rather than as eyes.
-- the moustache as a mass distinct from the beard
-- bracers; the tunic's layered panels; boot cuffs
-- the pickaxe's **curved** pick and its hammer poll — it ships as a straight 3-voxel bar with
-  both ends turned down
-- the lantern's frame and mullions — it ships as base / pane / cap, three voxels
-
-**Nothing here is fixable by modelling harder.** 0.1 m is the floor the brief and the contract
-both set, and a finer voxel is additionally rejected by the checker's grid clause. The exits
-are exactly two:
-
-1. **accept the coarse read** — what ships today; or
-2. **raise the 1.20 m anchor**, which re-labels every tree's dwarf-multiple on the sheet and
-   moves `gui`'s `scale` (already owed a correction to `0.75` by story 10.5).
-
-The model reads as a bearded, gear-carrying dwarf either way. This is a ruling about how much
-of the sheet's design survives, not about whether the asset works.
-
----
-
-## The build, for the record
-
-Axes are Blender's: **+X** is his left, **+Y** is the way he faces, **+Z** is up; the
-exporter's `export_yup` lands him facing −Z in glTF.
-
-```
-X  -5..4   (10 voxels, 1.00 m)   pickaxe head .. lantern
-Y  -3..2   ( 6 voxels, 0.60 m)   backpack ..... beard and nose
-Z   0..11  (12 voxels, 1.20 m)   boot sole .... hair and pickaxe head
-```
-
-A bounding box is centred only when `max == -min - 1` on an axis, so **the gear is what
-balances him**: the pickaxe reaches −5 and the lantern +4, the backpack −3 and the beard +2.
-Moving one without the other decentres the asset, and every instance placed from it then
-leans the same way. That constraint is load-bearing and is commented as such in the
-generator.
-
-Body: boots and trousers `z 0-3` on two columns with a 2-voxel gap; tunic torso `z 4-7` with
-a full belt band and a metal buckle on the front face only; backpack on the back plane;
-head `z 8-11` as a solid hair block with the face cut back into its front plane, plus a nose
-proud of the beard; beard hanging forward over the chest.
-
-**Gear is baked in as separable groups** — `body:216, lantern:12, pickaxe:11`, reported on
-every `FIGURES` line. They touch the body only at the hands, and because the mesh is unwelded
-quad soup, cutting them out for the mining-strike cycle later is a selection, not a remodel.
-
-### Palette, cell-to-role map
-
-Section A's swatch column with the sheet's `Needle Green` dropped — that one is the tree's.
-
-| Cell | Hex | Role |
-|---|---|---|
-| 0 | `#E9D2BB` | Skin |
-| 1 | `#5E4632` | Beard — also the hair |
-| 2 | `#FFFFFF` | Snow — **used here as the lantern's glass pane** |
-| 3 | `#5F7A6A` | Tunic |
-| 4 | `#474B41` | Pants — *see finding 1* |
-| 5 | `#A9B2AC` | Metal |
-| 6 | `#8B6B50` | Wood — *see finding 1* |
-| 7 | `#6B5B49` | Wood Trunk — belt, boots, backpack |
-
-Cells 8–15 are unused and black, as on the pines.
-
-`Snow` needed a job on a dwarf who is never snowed on. It is the lantern's pane: the one
-place underground that wants a pure white, and it reads as glass from all four sides. **It is
-plain albedo and not emissive** — the client owns the lantern's light, and a baked emissive
-face is a light nobody can switch off. The generator asserts the material carries no emissive
-field at all.
-
-Both colour bugs the brief warned about are guarded: the PNG is hand-encoded and packed as
-exact bytes rather than via `Image.pack()` on a `GENERATED` image, and the hex is written to
-`.pixels` display-referred without linearising. Every cell is decoded back **out of the
-finished GLB** and compared.
-
-## What was not run, and what was left alone
-
-- **`scripts/gate.sh` did not run, and no green gate is claimed.** There is no `cargo` on
-  this seat — it is the art box, not the build box. Worth knowing before the push: `assets/`
-  is in the gate's `CODE_RE` *and* `RENDER_RE`, so the push carrying this GLB will pull the
-  **full** gate including the pixel guards.
-- `scripts/tests` was run and reports **33 tests, 1 error, 6 skipped**. The error is
-  `test_resolution_bench` failing to import `resolution_bench`, which imports `resource` — a
-  POSIX-only stdlib module. **Pre-existing platform limitation of this seat, not caused by
-  this work**; it passes on the devpod.
-- **The pines are undisturbed.** `voxel_pine.py` is unchanged from `HEAD`, and all four trees
-  regenerate byte-identical to the shipped files.
-- `mise.toml` and `pyproject.toml` are staged as deletions in the index and were before this
-  session started. Not touched.
-- `dwarf.blend1` is a Blender autosave; `.gitignore` already excludes `*.blend[0-9]`.
-
-## Open for Wolf
-
-1. **Finding 3** — accept the coarse read, or raise the 1.20 m anchor. Ruled once already,
-   before the measurement existed.
-2. **Finding 1** — `Pants` and `Wood` need the original art file, or a ruling to keep the
-   brief's values as shipped.
-3. **Finding 2** — the contract's "voxel centres on the lattice" and the checker's "POSITION
-   on the grid" disagree at a 0.1 m voxel. The checker won here; the contract's wording may
-   want the same correction.
-4. Where the renders should live, and whether `assets/gltf/` and the two new
-   `src-assets/blender/` files go on a branch now.
+**Promoting the GLB to `assets/gltf/SM_VoxelDwarf_Miner01.glb` is a separate act from the
+forge side and was not taken here.** The file currently there is still v1 (216 triangles).
