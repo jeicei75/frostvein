@@ -29,11 +29,15 @@ def load(p):
                 line[x]=(line[x]+pr)&255
         out+=line; prev=line
     return w,h,bytes(out)
-w,h,A=load(sys.argv[1]); _,_,B=load(sys.argv[2])
-raw=d4=d16=0
-for i in range(0,len(A),3):
-    m=max(abs(A[i]-B[i]),abs(A[i+1]-B[i+1]),abs(A[i+2]-B[i+2]))
-    if m: raw+=1
-    if m>=4: d4+=1
-    if m>=16: d16+=1
-print(f"{sys.argv[3]:<28} raw={raw:>7,}  >=4={d4:>7,}  >=16={d16:>7,}")
+# Guarded so `load` can be IMPORTED. Without this the whole-frame diff runs on import and dies on
+# `sys.argv`, which is what stopped 10.5's windowed sibling reusing this reader. Behaviour when run
+# as a script is unchanged.
+if __name__ == "__main__":
+    w,h,A=load(sys.argv[1]); _,_,B=load(sys.argv[2])
+    raw=d4=d16=0
+    for i in range(0,len(A),3):
+        m=max(abs(A[i]-B[i]),abs(A[i+1]-B[i+1]),abs(A[i+2]-B[i+2]))
+        if m: raw+=1
+        if m>=4: d4+=1
+        if m>=16: d16+=1
+    print(f"{sys.argv[3]:<28} raw={raw:>7,}  >=4={d4:>7,}  >=16={d16:>7,}")
