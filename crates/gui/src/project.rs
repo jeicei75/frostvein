@@ -96,6 +96,18 @@ pub type TerrainQuery<'w, 's> = Query<
 
 pub type TreeMeshQuery<'w, 's> = Query<'w, 's, (BevyEntity, &'static TreeMesh)>;
 
+/// Entities AD-14's partition does not reach. See `report_tree_meshes_once`.
+pub type UnmarkedQuery<'w, 's> = Query<
+    'w,
+    's,
+    BevyEntity,
+    (
+        With<Transform>,
+        Without<WorldProjected>,
+        Without<ClientLocal>,
+    ),
+>;
+
 pub type DynamicProjectionQuery<'w, 's> = Query<
     'w,
     's,
@@ -2283,6 +2295,12 @@ pub fn report_tree_meshes_once(
     // Scene-drawn PROJECTED entities are exactly the dwarves: trees carry `WorldAssetRoot` too but
     // are client-local and never `WorldProjected`, so this counts what it says without a mirror.
     scene_entities: Query<&WorldAssetRoot, With<WorldProjected>>,
+    // AD-14 says every drawable entity is either `WorldProjected` or `ClientLocal`. Scene children
+    // are neither: `WorldAssetRoot` spawns them at runtime and `classify_client_local` runs once at
+    // `PostStartup`, so nothing ever reaches them. Counted here because the two partition tests
+    // cannot see it -- both fixtures are `MinimalPlugins` with no `AssetServer`, so no scene ever
+    // loads and no child is ever spawned in them.
+    unmarked: UnmarkedQuery,
     assets: Option<Res<ProjectionAssets>>,
     asset_server: Option<Res<AssetServer>>,
 ) {
@@ -2307,6 +2325,15 @@ pub fn report_tree_meshes_once(
     {
         state.dwarves_reported = true;
         eprintln!("gui dwarves: meshes={dwarves} scenes_loaded={dwarf_loaded} source=embedded");
+        // MEASURED 2026-09-06 at the boot slice: 1075 = 265 trees x 4 + 5 dwarves x 3, base 0.
+        // The pines have carried this since 10.4; the dwarf adds 15 of it, 1.4%. Printed rather
+        // than asserted because fixing it is a design change to how scene children are classified,
+        // and that is bigger than the story that made it visible. An unmeasured hole gets argued
+        // about; a printed one gets closed.
+        eprintln!(
+            "gui partition: unmarked={} (transform-bearing entities with neither marker)",
+            unmarked.iter().count()
+        );
     }
     if !state.reported && ((loaded && spawned > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES) {
         state.reported = true;
