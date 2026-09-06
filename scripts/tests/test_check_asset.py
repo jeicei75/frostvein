@@ -90,9 +90,15 @@ class CheckAssetTests(unittest.TestCase):
     def test_off_grid_positions_and_unapplied_transforms_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             off_grid = pathlib.Path(directory) / "off-grid.glb"
+            # -2.007 is off the project grid: 2.007 / 0.0125 = 160.56, not an integer.
+            # It was -2.05 while the grid was 0.1 m, and -2.05 is EXACTLY 164 grid steps at
+            # 0.0125 -- so the 2026-09-06 grid move would have made this fixture legal and
+            # left the test passing vacuously against an accepted file. If the project grid
+            # moves again, re-check this literal against it; a fixture that lands on the new
+            # grid cannot fail the clause it exists to prove.
             write_tree02_mutant(
                 off_grid,
-                lambda document, binary, start: struct.pack_into("<f", binary, start, -2.05),
+                lambda document, binary, start: struct.pack_into("<f", binary, start, -2.007),
             )
             result = check(off_grid)
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)

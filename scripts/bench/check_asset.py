@@ -14,8 +14,24 @@ import zlib
 
 MAX_GLB_BYTES = 16 * 1024 * 1024
 MAX_DECODED_PNG_BYTES = 16 * 1024 * 1024
-PROJECT_GRID_METRES = 0.1
-GRID_TOLERANCE = 0.000_01
+# The finest authored voxel any asset family may use; every other family declares an integer
+# multiple of it (pines 0.2 m = 16x, terrain 0.4 m = 32x). Moved 0.1 -> 0.0125 on 2026-09-06 when
+# the dwarf was ruled to 96 voxels at 1.20 m: 1.20 / 96 = 0.0125, and no 96-voxel dwarf of that
+# height can land on a 0.1 m grid. The move only LOOSENS this clause, so no shipped asset changes
+# status -- the pines' 0.2 m positions are multiples of both.
+#
+# The cost, stated because it is real: at 0.1 m this clause caught a vertex misplaced by 0.05 m,
+# and it no longer does. It still catches a position that is off ANY voxel lattice, which is the
+# authoring mistake it exists for.
+PROJECT_GRID_METRES = 0.0125
+# In METRES, not in grid steps. It exists to absorb the float32 representation error in the GLB's
+# own POSITION values -- a property of how large the coordinate is, not of how fine the grid is.
+# Stated as grid steps (as it was until 2026-09-06) it silently tightened 8x when the grid moved
+# 0.1 -> 0.0125, to 1.25e-7 m, and the SHIPPED PINES began failing: 4.3 m is 4.30000019 in float32,
+# which is 344.000015 grid steps at 0.0125 -- off by 1.5e-5 against a 1e-5 step tolerance.
+# 1e-5 m is ~17x the worst float32 error at this world's coordinate range (9.6 m -> ~5.7e-7 m) and
+# ~600x tighter than the smallest real authoring mistake, half a voxel at 6.25e-3 m.
+GRID_TOLERANCE_METRES = 0.000_01
 UV_TOLERANCE = 0.000_001
 CLAMP_TO_EDGE = 33071
 JSON_CHUNK = 0x4E4F534A
@@ -286,10 +302,13 @@ def contract_data(document, binary):
     if any(not math.isfinite(value) for point in point_data for value in point):
         raise AssetError("geometry clause: POSITION values must be finite")
     if any(
-        abs(value / PROJECT_GRID_METRES - round(value / PROJECT_GRID_METRES)) > GRID_TOLERANCE
+        abs(value - round(value / PROJECT_GRID_METRES) * PROJECT_GRID_METRES)
+        > GRID_TOLERANCE_METRES
         for point in point_data for value in point
     ):
-        raise AssetError("grid clause: POSITION values must use the 0.1 m project grid")
+        raise AssetError(
+            f"grid clause: POSITION values must use the {PROJECT_GRID_METRES} m project grid"
+        )
     minimum = tuple(min(point[axis] for point in point_data) for axis in range(3))
     maximum = tuple(max(point[axis] for point in point_data) for axis in range(3))
     tris = index_data["count"] // 3

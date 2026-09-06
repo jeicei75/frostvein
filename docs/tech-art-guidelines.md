@@ -336,10 +336,10 @@ solid cut face and the absence of hatch or simulation state are **eye-only** unt
 
 ## Resolution contract
 
-- The simulation cell is **1.6 m**. The project/authored voxel is **0.1 m**, therefore there are
-  **16 project voxels per cell**.
+- The simulation cell is **1.6 m**. The project/authored voxel is **0.0125 m**, therefore there
+  are **128 project voxels per cell**. It was 0.1 m until 2026-09-06; see the units note below.
 - A declared asset MAY use an integer multiple of the project voxel: the 10.2 pines use 0.2 m
-  (= 2 project voxels) while retaining metre dimensions on the same grid.
+  (= 16 project voxels) while retaining metre dimensions on the same grid.
 - Terrain has a separate served resolution and budget from authored assets. The **adopted decision**
   is **0.4 m terrain visual voxels**: visual subdivision **`k = 4`** of one 1.6 m simulation cell,
   while the simulation remains `k = 1`.
@@ -349,8 +349,35 @@ solid cut face and the absence of hatch or simulation state are **eye-only** unt
   owner".
 - The terrain budget is **80,120–928,884 chunk-mesh triangles at k=4**. The ceiling excludes about
   54k triangles from the 4,501 tree-foliage cube entities, because it counts chunk meshes only.
-- Terrain is served at 0.4 m; trees remain authored at their declared 0.2 m (a 2× project-voxel
-  multiple); dwarves target 0.1 m (12 voxels = 1.20 m = 0.75 cells).
+- Terrain is served at 0.4 m (a 32× multiple); trees remain authored at their declared 0.2 m
+  (16×); dwarves target **0.0125 m (96 voxels = 1.20 m = 0.75 cells)**, ruled 2026-09-06.
+
+### State detail as voxels per object, not metres per voxel
+
+**This clause was stated the wrong way round until 2026-09-06 and it cost a modelling round.**
+"Trees at 0.2 m, dwarves at 0.1 m" reads as though the dwarf were the finer of the two. Measured
+across the object it is the reverse, because the dwarf is 8× smaller in metres while his voxels
+were only 2× smaller:
+
+| | voxels tall | voxel | metres tall | triangles |
+|---|---|---|---|---|
+| pine Tree04R | 48 | 0.2 m | 9.6 m | 4,424 |
+| pine Tree02 | 40 | 0.2 m | 8.0 m | 5,894 |
+| dwarf, as first authored | **12** | 0.1 m | 1.20 m | **216** |
+| dwarf, ruled | **96** | 0.0125 m | 1.20 m | ~14,000–30,000 |
+
+Background scenery had four times the silhouette resolution and twenty times the geometry of the
+character the game is about. At twelve voxels the dwarf's face is three voxels wide, so eyes, a
+brow and a beard separable from the hair are not difficult but **unavailable**.
+
+The two framings agree only for objects of equal size. **Ask how many voxels lie across the
+thing.** A pine is a cone on a column and nearly all its shape is silhouette; a dwarf carries a
+face, hands, gear and an asymmetric pose in the same budget.
+
+**Voxel size and voxel count are independent, and their product is the height.** Raising the count
+does not change how big anything is: 96 × 0.0125 m is the same 1.20 m as 12 × 0.1 m, so `scale`
+and every wire value are untouched. Cost is not the constraint either — the world holds **five**
+dwarves (`crates/sim-core/src/lib.rs:1534`) against 265 pines.
 - `gui`'s `scale: 0.65` is stale. **Story 10.5 owes the one-line correction to `scale: 0.75`**,
   because 1.20 m / 1.6 m per cell = 0.75. It is not a change made by this contract.
 
@@ -431,8 +458,8 @@ whether it replaces **tile** presentation (trees: `Material`/draw-set rules) or 
 and other appearance values never become wire state (AD-16).
 
 - **Grid and orientation.** Geometry uses metres, +Y up and applied transforms. It is authored on
-  the 0.1 m project grid, or on an explicitly declared integer multiple (the existing pines are
-  0.2 m = 2×). **Mechanically-checkable:** `scripts/bench/check_asset.py` verifies the supplied
+  the 0.0125 m project grid, or on an explicitly declared integer multiple (the existing pines are
+  0.2 m = 16×). **Mechanically-checkable:** `scripts/bench/check_asset.py` verifies the supplied
   glTF's position bounds; the declared multiple and visual read are **eye-only**.
 - **Origin.** The trunk/foot base sits at `min Y = 0`; its placement origin is centred in X and Z
   (within the published six-decimal tolerance). **Mechanically-checkable:**

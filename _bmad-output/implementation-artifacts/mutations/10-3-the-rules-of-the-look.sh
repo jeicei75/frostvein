@@ -36,7 +36,10 @@ PY
 mutation "off-grid positions are accepted" py scripts.tests.test_check_asset.CheckAssetTests.test_off_grid_positions_and_unapplied_transforms_are_rejected <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
-old = '        raise AssetError("grid clause: POSITION values must use the 0.1 m project grid")\n'
+old = '''        raise AssetError(
+            f"grid clause: POSITION values must use the {PROJECT_GRID_METRES} m project grid"
+        )
+'''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        pass\n'))
 PY
