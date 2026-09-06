@@ -1119,20 +1119,8 @@ fn the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops() {
             .expect("the wire entity must have a projection")
     };
 
-    // Walk east: sim +x is render +x.
-    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
-    app.world_mut()
-        .resource_mut::<gui::blend::TickClock>()
-        .advance(10.0);
-    app.update();
-    let east = forward(&mut app);
-    assert!(
-        east.x > 0.9 && east.y.abs() < 0.01,
-        "walking along sim +x must face render +x and stay level, got {east:?}"
-    );
-
-    // Walk north: sim +y is render -z.
-    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 3, 0])]));
+    // Walk north FIRST: sim +y is render -z.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [0, 3, 0])]));
     app.world_mut()
         .resource_mut::<gui::blend::TickClock>()
         .advance(10.0);
@@ -1141,6 +1129,22 @@ fn the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops() {
     assert!(
         north.z < -0.9 && north.y.abs() < 0.01,
         "walking along sim +y must face render -z, got {north:?}"
+    );
+
+    // Then east, and stop facing EAST on purpose. Bevy's `looking_to` falls back to -Z when it is
+    // handed a zero direction, and -Z is exactly what walking north produces -- so stopping while
+    // facing north cannot tell "held his facing" from "snapped to the fallback". Ending on +x can.
+    // The first version of this test stopped facing north, and the sabotage that deletes the
+    // zero-delta guard SURVIVED it.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 3, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(10.0);
+    app.update();
+    let east = forward(&mut app);
+    assert!(
+        east.x > 0.9 && east.y.abs() < 0.01,
+        "walking along sim +x must face render +x and stay level, got {east:?}"
     );
 
     // STOP. The same position twice: nothing to face, so hold what is already there.
@@ -1153,8 +1157,8 @@ fn the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops() {
     }
     let held = forward(&mut app);
     assert!(
-        (held - north).length() < 0.001,
-        "a stopped dwarf must HOLD his last facing, not snap back to a default: {north:?} -> {held:?}"
+        (held - east).length() < 0.001,
+        "a stopped dwarf must HOLD his last facing, not snap to a default: {east:?} -> {held:?}"
     );
 }
 
