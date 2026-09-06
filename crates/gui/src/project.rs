@@ -241,12 +241,22 @@ pub struct ProjectionAssets {
     zone_mark: Handle<StandardMaterial>,
     hover_highlight: Handle<StandardMaterial>,
     trees: [Handle<WorldAsset>; 4],
+    dwarf_scene: Handle<WorldAsset>,
 }
 
 /// Scene paths in `TreeVariant` order, served from the `embedded://` source.
 ///
 /// The bytes live in `ingest::TREE_ASSETS`; this is the order `tree_scene` indexes by, and
 /// `ingest::tree_asset_paths_match_the_loader` pins the two together.
+/// The authored dwarf's scene, served from the same `embedded://` source as the pines.
+/// Bytes in `ingest::DWARF_ASSET`.
+pub const DWARF_SCENE_PATH: &str = "gltf/SM_VoxelDwarf_Miner01.glb";
+
+/// Authored assets are modelled in METRES; render space is simulation CELLS at 1.6 m each.
+/// The pines carried this as a bare 0.625 at their one call site; the dwarf is the second, so it
+/// gets a name. A 1.20 m dwarf therefore draws 0.75 cells tall without any per-kind scale.
+pub const METRES_TO_CELLS: f32 = 0.625;
+
 pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree01.glb",
     "trees/SM_VoxelPine_Tree02.glb",
@@ -288,12 +298,19 @@ pub fn setup_projection_assets(
         ))),
         zone_mark: materials.add(terrain_standard_material(zone_color())),
         hover_highlight: materials.add(terrain_standard_material(hover_highlight_color())),
-        trees: asset_server.map_or_else(
+        trees: asset_server.as_ref().map_or_else(
             || std::array::from_fn(|_| Handle::default()),
             |asset_server| {
                 TREE_SCENE_PATHS.map(|path| asset_server.load(format!("embedded://{path}#Scene0")))
             },
         ),
+        // Same fallback, and it is load-bearing: every MinimalPlugins test runs without an
+        // AssetServer and must get Handle::default() rather than panicking.
+        dwarf_scene: asset_server
+            .as_ref()
+            .map_or_else(Handle::default, |asset_server| {
+                asset_server.load(format!("embedded://{DWARF_SCENE_PATH}#Scene0"))
+            }),
     });
 }
 
@@ -1485,12 +1502,27 @@ pub fn reconcile(
             if let Some(assets) = assets {
                 if let Some(mirror_entity) = mirror_entity {
                     let appearance = entity_appearance(mirror_entity.kind);
-                    entity.insert((
-                        Mesh3d(assets.cube.clone()),
-                        MeshMaterial3d(assets.entity_material(mirror_entity.kind)),
-                        Transform::from_translation(world_to_render(position))
-                            .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
-                    ));
+                    if mirror_entity.kind == EntityKind::Dwarf {
+                        // The authored model, not the shared cube. Placed at the cell FLOOR like
+                        // the trees (`- Vec3::Y * 0.5`), not the cell centre: the asset contract
+                        // puts an asset's base at min Y = 0, so a conforming model dropped on the
+                        // entity path's centred placement stands half a cell in the air. The cube
+                        // only looked right because a unit cube's centre is its middle.
+                        entity.insert((
+                            WorldAssetRoot(assets.dwarf_scene.clone()),
+                            Transform::from_translation(
+                                world_to_render(position) - bevy::prelude::Vec3::Y * 0.5,
+                            )
+                            .with_scale(bevy::prelude::Vec3::splat(METRES_TO_CELLS)),
+                        ));
+                    } else {
+                        entity.insert((
+                            Mesh3d(assets.cube.clone()),
+                            MeshMaterial3d(assets.entity_material(mirror_entity.kind)),
+                            Transform::from_translation(world_to_render(position))
+                                .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
+                        ));
+                    }
                     if let Some(light) = mirror_entity.light {
                         entity.insert((point_light(light), ProjectedLight(light)));
                     }

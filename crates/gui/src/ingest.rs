@@ -258,6 +258,16 @@ pub fn tree_asset_summary() -> (usize, usize) {
     (embedded, TREE_ASSETS.iter().map(|(_, b)| b.len()).sum())
 }
 
+/// The authored dwarf, embedded the same way the pines are.
+///
+/// Kept as its own const rather than appended to `TREE_ASSETS`: that array is indexed by
+/// `TreeVariant` order and `tree_asset_paths_match_the_loader` pins it to `TREE_SCENE_PATHS`,
+/// so a fifth entry would silently break both.
+pub const DWARF_ASSET: (&str, &[u8]) = (
+    "gltf/SM_VoxelDwarf_Miner01.glb",
+    include_bytes!("../../../assets/gltf/SM_VoxelDwarf_Miner01.glb"),
+);
+
 /// Publish the embedded pines into the `embedded://` source before anything loads them.
 ///
 /// `AssetPlugin::build` creates the registry and registers the source, so this must run AFTER
@@ -266,7 +276,7 @@ fn register_tree_assets(app: &mut App) {
     let registry = app
         .world_mut()
         .resource_mut::<bevy::asset::io::embedded::EmbeddedAssetRegistry>();
-    for (path, bytes) in TREE_ASSETS {
+    for &(path, bytes) in TREE_ASSETS.iter().chain(std::iter::once(&DWARF_ASSET)) {
         registry.insert_asset(PathBuf::new(), Path::new(path), bytes);
     }
 }
