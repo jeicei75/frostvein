@@ -15,6 +15,33 @@ A **voxel dwarf miner** for frostvein, a Rust voxel-colony sim. He is one entity
 snowy valley seen from an isometric camera, standing about a fifth as tall as the pine
 trees beside him. He carries a lantern and a pickaxe.
 
+## Where you may write — `src-assets/` and nowhere else
+
+**Ruled by Wolf, 2026-09-06. This session writes nothing outside `src-assets/`.**
+
+| | |
+|---|---|
+| the generator | `src-assets/blender/<name>.py` |
+| the editable source | `src-assets/blender/<name>.blend` |
+| the exported `.glb` | `src-assets/export/<published-name>.glb` |
+| your report | `src-assets/prompts/<brief-name>-report.md` |
+
+`src-assets/export/` is **gitignored scratch**, which is deliberate: the asset contract puts
+the runtime glTF at `assets/gltf/<published-name>.glb`, and **promoting it there is a separate,
+deliberate act taken from the forge side — not yours.** Two committed copies of one asset is
+how a bench and a client come to draw different trees, and this repo has already paid for that
+once.
+
+**Why this rule exists**, because the alternative sounds harmless: the previous session wrote
+its `.glb` to `assets/gltf/` — correct per the contract, outside `src-assets/` in practice. The
+commit was made from inside `src-assets/`, so `git add .` could not reach it, and the `-a` that
+swept up an unrelated tracked deletion does not stage untracked files. The deliverable was
+reported as delivered and was not in the repo. Nothing was ignored and nothing errored.
+
+**Before you claim anything is committed:** run `git status` from the **repository root**, not
+from your working directory, and read the untracked list. A scoped `status` will tell you the
+tree is clean when it is not.
+
 ## Reference — use these, and only these
 
 In `src-assets/references/`:
@@ -76,9 +103,8 @@ passes it needs no code change to ship:
   quad its own four vertices. `tris == quads × 2` and `verts == quads × 4`, exactly. This
   is also what keeps the mining-strike joints separable later.
 - **Naming:** the file basename, the glTF mesh name and the glTF node name must all be the
-  **same** string. Proposed: **`SM_VoxelDwarf_Miner01`** → `assets/gltf/SM_VoxelDwarf_Miner01.glb`.
-  Confirm the name before you build; it becomes a compiled-in string and renaming it later
-  touches the client.
+  **same** string. Proposed: **`SM_VoxelDwarf_Miner01`**. Confirm the name before you build;
+  it becomes a compiled-in string and renaming it later touches the client.
 
 If some clause turns out to be genuinely impossible for a character — a second material,
 say — **report it and stop.** Do not "fix" a conforming asset to satisfy a pine rule, and
@@ -154,7 +180,7 @@ So: use MCP to explore, judge and iterate freely — that is what it is good for
 session is finished only when **`src-assets/blender/dwarf_miner.py`** exists and
 
 ```
-blender --background --python src-assets/blender/dwarf_miner.py -- assets/gltf/SM_VoxelDwarf_Miner01.glb
+blender --background --python src-assets/blender/dwarf_miner.py -- src-assets/export/SM_VoxelDwarf_Miner01.glb
 ```
 
 writes a **byte-identical** GLB from a cold Blender, with no MCP and no hand steps. Prove
