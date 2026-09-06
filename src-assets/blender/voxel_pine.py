@@ -34,6 +34,7 @@ import math
 import os
 import struct
 import sys
+import traceback
 import zlib
 
 import bpy
@@ -91,11 +92,65 @@ TREE_TYPES = {
     3: dict(label="Tree03", cells=5, height=40, dwarf_mult=6.67,
             trunk_r=(2.0, 1.2), flare=(4, 3), spire=(35, 2.6),
             tiers=[(14, 8.0), (19, 7.0), (24, 6.0), (28, 5.0), (32, 3.6)]),
-    4: dict(label="Tree04", cells=6, height=53, dwarf_mult=8.80,
-            trunk_r=(2.1, 1.2), flare=(4, 3), spire=(45, 3.0),
-            tiers=[(14, 10.0), (20, 9.0), (26, 8.0), (32, 6.5), (37, 5.0),
-                   (42, 3.6)]),
 }
+
+# ---------------------------------------------------------------------------
+# Type 4 is 4R, and the rescale is computed rather than transcribed
+# ---------------------------------------------------------------------------
+# The approved reference sheet labels each Section B variant TWICE, and only Type 4's two
+# labels contradict each other:
+#
+#     Type 1   "4 CELLS"   "5.32x dwarf height"  -> 5.32 * 1.20 = 6.38 m = 3.99 cells  agree
+#     Type 2   "5 CELLS"   "6.67x dwarf height"  -> 6.67 * 1.20 = 8.00 m = 5.00 cells  agree
+#     Type 3   "5 CELLS"   "6.67x dwarf height"  -> 8.00 m = 5.00 cells                agree
+#     Type 4   "6 CELLS"   "8.80x dwarf height"  -> 8.80 * 1.20 = 10.56 m = 6.60 cells  CLASH
+#
+# Story 10.4 resolved it to the CELL label: `place_trees` has a hard ceiling of 6 cells, so a
+# 6.625-cell tree fits no tree the simulation can generate -- it overshot on 103 of 265
+# placements, every one of them 1.0 m too tall. The cell count is the half the simulation can
+# honour, so the dwarf multiple is the stale half. In voxels at 0.2 m, 6 cells is 48, which
+# also restores the 8-voxels-per-cell alignment the other three already have (32 = 4x8,
+# 40 = 5x8, 48 = 6x8; the superseded 53 is 6.625x8).
+#
+# The design is scaled UNIFORMLY by 48/53. Rescaling height alone would squat the silhouette
+# into a different tree, and 10.4 was comparing the ASSET, not a new design.
+#
+# WHY THIS IS COMPUTED AND NOT A TABLE OF NUMBERS: the shipped SM_VoxelPine_Tree04R.glb is
+# reproduced byte-for-byte only if these floats are bit-identical to the ones story 10.4
+# produced. Transcribing rounded values would change the bytes. `_TREE04_PRE_RESCALE` is kept
+# as the documented input to the arithmetic -- it is NOT a buildable variant and ships nowhere.
+_TREE04_PRE_RESCALE = dict(
+    label="Tree04", cells=6, height=53, dwarf_mult=8.80,
+    trunk_r=(2.1, 1.2), flare=(4, 3), spire=(45, 3.0),
+    tiers=[(14, 10.0), (20, 9.0), (26, 8.0), (32, 6.5), (37, 5.0), (42, 3.6)],
+)
+
+METRES_PER_CELL = 1.6                  # the simulation cell; the resolution contract's
+TREE04R_CELLS = 6                      # `place_trees` hard ceiling
+TREE04R_HEIGHT = round(TREE04R_CELLS * METRES_PER_CELL / DEFAULT_VOXEL)   # 48
+
+
+def _rescale_tree04(source, height):
+    """Uniformly rescale the Type 4 spec to `height` voxels.
+
+    Radii stay floats (the generator compares them with `<=`); z positions and `flare` must
+    be ints because they are fed to `range()`.
+    """
+    factor = height / source["height"]
+    return dict(
+        source,
+        label="Tree04R",
+        cells=TREE04R_CELLS,
+        height=height,
+        dwarf_mult=TREE04R_CELLS * METRES_PER_CELL / DWARF_HEIGHT_M,
+        trunk_r=tuple(r * factor for r in source["trunk_r"]),
+        flare=tuple(max(1, round(r * factor)) for r in source["flare"]),
+        spire=(round(source["spire"][0] * factor), source["spire"][1] * factor),
+        tiers=[(round(z * factor), r * factor) for z, r in source["tiers"]],
+    )
+
+
+TREE_TYPES[4] = _rescale_tree04(_TREE04_PRE_RESCALE, TREE04R_HEIGHT)
 
 
 # ---------------------------------------------------------------------------
@@ -596,6 +651,12 @@ def parse_args(argv):
             voxel = float(rest.pop(0))
         else:
             raise SystemExit("error: unknown option %r\n%s" % (flag, USAGE))
+    # Voxel size must be positive. Zero is the dangerous one: it collapses the mesh to a point
+    # AND scales expected_h/expected_volume by the same zero, so every closure check passes
+    # vacuously and the script reports OK on nothing. The oracle has to be independent of the
+    # input it is checking. (Negative values already fail the checks, on sign.)
+    if not voxel > 0.0:
+        raise SystemExit("error: --voxel must be greater than 0 (got %r)\n%s" % (voxel, USAGE))
     return ttype, os.path.abspath(out), seed, voxel
 
 
@@ -695,4 +756,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        # main() and parse_args already exit with a meaningful code; assert-style failures use 1.
+        raise
+    except Exception as error:
+        # Blender's --background runner prints a traceback for ANY uncaught exception and still
+        # exits 0, so a bad --seed/--voxel value, an unwritable output path, or an export failure
+        # would report success having written nothing. This is the same guard valley_bench.py and
+        # spike_pine_render.py carry, and the asset contract's clause 6 ("Exit 0 with no output is
+        # not a result") requires it of the generator too.
+        traceback.print_exc()
+        raise SystemExit("generator failed: %s: %s" % (type(error).__name__, error)) from error

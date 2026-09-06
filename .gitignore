@@ -43,3 +43,11 @@ __pycache__/
 
 # Windows Mark-of-the-Web streams, created by every file copied from the vehicle.
 *:Zone.Identifier
+
+# Blender autosave backups (.blend1, .blend2, ...) -- never a deliverable.
+*.blend[0-9]
+
+# Art export scratch. The generators write straight to assets/trees/ and assets/gltf/;
+# a second committed copy of a shipped .glb is how a bench and a client come to draw
+# different trees (scripts/bench/authored_bench.py:55-58).
+src-assets/export/
