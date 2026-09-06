@@ -308,6 +308,12 @@ Session token cost  (<id>.jsonl, tool=claude)  (369 turns, claude-opus-5)
   est. cost             $50.40  (benchmark — verify rates in PRICES)
 ```
 
+**Label this row `dev-art`.** The ledger's `tool` column cannot separate you from any other
+Claude Code session — it selects the transcript parser (`claude` vs `codex`) and you are `claude`
+like the rest. `phase` is the axis that can, it is free text, and the project already uses
+`dev-selfgate` and `dev-orchestration` the same way. A `dev-art` row sorts beside the other dev
+rows in the rollup and makes art-seat cost separable from code cost for the first time.
+
 Also state, in the report:
 
 - **The model, read from your session banner — not from memory.** A delegated run on this project
