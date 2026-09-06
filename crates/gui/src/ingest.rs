@@ -503,6 +503,7 @@ pub fn client_systems(app: &mut App) {
     app.init_resource::<PickedTile>()
         .init_resource::<crate::project::DragPreviewCells>()
         .init_resource::<crate::command::PendingCommands>()
+        .init_resource::<crate::command::SimPaused>()
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
@@ -540,6 +541,9 @@ pub fn client_systems(app: &mut App) {
             sync_hover_highlight.after(update_pick),
             designation_input.after(update_pick),
             sync_drag_preview.after(designation_input),
+            // Before `send_commands`, so a space press reaches the daemon on the same frame it is
+            // read rather than the next one.
+            crate::command::toggle_pause.after(update_pick),
             send_commands.after(designation_input),
             update_designate_hint.after(designation_input),
         ),

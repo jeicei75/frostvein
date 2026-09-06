@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, net::TcpStream, sync::Mutex};
 
-use bevy::prelude::{Res, ResMut, Resource};
-use protocol::Command;
+use bevy::prelude::{ButtonInput, KeyCode, Res, ResMut, Resource};
+use protocol::{Command, Speed};
 
 /// The GUI's upstream half of the daemon connection. `TcpStream` is Send but not Sync, so the
 /// mutex is the same resource boundary used by `IngestReceiver`.
@@ -43,6 +43,40 @@ impl PendingCommands {
     pub fn dropped(&self) -> usize {
         self.dropped
     }
+}
+
+/// Whether the client believes the simulation is paused.
+///
+/// Client-side because the wire carries no speed in the snapshot; this is presentation state that
+/// mirrors what we last ASKED for, not what the daemon reports. A reconnect would desync it, and
+/// reconnect is outside this story.
+#[derive(Resource, Default)]
+pub struct SimPaused(pub bool);
+
+/// Space toggles the simulation between paused and running.
+///
+/// Added because judging anything in a moving scene is guesswork: the dwarves wander, so two
+/// captures of one binary differ by dwarf-sized areas with no code change at all, and a person at
+/// the seat cannot hold a frame still to look at it. Story 10.5's AC2 measurement is unreachable
+/// without it -- the same-build noise floor swamps the signal it is meant to separate.
+pub fn toggle_pause(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut paused: ResMut<SimPaused>,
+    mut pending: ResMut<PendingCommands>,
+) {
+    if !keys.just_pressed(KeyCode::Space) {
+        return;
+    }
+    paused.0 = !paused.0;
+    pending.push(Command::SetSpeed {
+        speed: if paused.0 {
+            Speed::Paused
+        } else {
+            Speed::Normal
+        },
+    });
+    // Say so on stderr: a paused world looks exactly like a stalled one.
+    eprintln!("sim {}", if paused.0 { "PAUSED" } else { "running" });
 }
 
 /// Sends all commands built by the input systems. Errors deliberately drain the failed queue:
@@ -92,13 +126,62 @@ mod tests {
         time::Duration,
     };
 
+    use bevy::prelude::{ButtonInput, KeyCode};
     use bevy::{
         MinimalPlugins,
         app::{App, Update},
     };
-    use protocol::{Command, DesignationKind, Rect};
+    use protocol::{Command, DesignationKind, Rect, Speed};
 
-    use super::{CommandSink, MAX_PENDING_COMMANDS, PendingCommands, send_commands};
+    use super::{
+        CommandSink, MAX_PENDING_COMMANDS, PendingCommands, SimPaused, send_commands, toggle_pause,
+    };
+
+    /// Space toggles, and the SECOND press matters as much as the first: a pause that cannot be
+    /// released is a hang. Asserted on the queued command rather than on the resource flag, because
+    /// the flag moving without a command reaching the daemon is the inert-mechanism shape.
+    #[test]
+    fn space_toggles_the_simulation_between_paused_and_running() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<PendingCommands>()
+            .init_resource::<SimPaused>()
+            .init_resource::<ButtonInput<KeyCode>>()
+            .add_systems(Update, toggle_pause);
+
+        // No key: nothing queued. An input system that fires unprompted is worse than one that
+        // never fires, because it fires during someone else's test.
+        app.update();
+        assert!(app.world().resource::<PendingCommands>().is_empty());
+
+        for (press, expected) in [(1, Speed::Paused), (2, Speed::Normal), (3, Speed::Paused)] {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::Space);
+            app.update();
+            // Production releases and clears every frame; `MinimalPlugins` does neither. RELEASE
+            // as well as clear: `clear()` drops `just_pressed` but leaves the key held, and
+            // `press()` on an already-held key does not re-fire `just_pressed`, so the second
+            // press would never be seen.
+            {
+                let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+                input.release(KeyCode::Space);
+                input.clear();
+            }
+            app.update();
+            let queued = app.world().resource::<PendingCommands>().commands().clone();
+            assert_eq!(
+                queued.back(),
+                Some(&Command::SetSpeed { speed: expected }),
+                "press {press} must queue set_speed {expected:?}"
+            );
+            assert_eq!(
+                queued.len(),
+                press,
+                "a held or released key must not queue a second command"
+            );
+        }
+    }
 
     #[test]
     fn concrete_socket_writer_sends_newline_delimited_json() {
