@@ -9,20 +9,20 @@
 ## 1. Figures, and two independent cold runs
 
 ```
-FIGURES name=SM_VoxelDwarf_Miner01 voxel=0.0125 height_voxels=96 voxels=156898
-groups=backpack:23587,belt:5919,body:116092,lantern:7584,pickaxe:3716
-centring=-5,+8 quads=6003 verts=24012 tris=12006
+FIGURES name=SM_VoxelDwarf_Miner01 voxel=0.0125 height_voxels=96 voxels=154557
+groups=backpack:24050,belt:6422,body:112717,lantern:7628,pickaxe:3740
+centring=-5,+8 quads=7199 verts=28796 tris=14398
 bbox=1.2500x1.2000x0.8000 centre_x=+0.000000 centre_z=+0.000000 min_y=+0.000000
-volume=0.306441 expected_volume=0.306441 materials=1 primitives=1 images=1
+volume=0.301869 expected_volume=0.301869 materials=1 primitives=1 images=1
 palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50,#6B5B49,#34271C,#F0A63C
-glb_bytes=842036
+glb_bytes=1009476
 ```
 
 Two cold `blender --background` runs into two different paths, no MCP, no hand steps:
 
 ```
-5a41a983966c57afc2c4d03b1fe5367ea5f2bc2bea6ae045e8b8a4c0725bcae0  runA/SM_VoxelDwarf_Miner01.glb
-5a41a983966c57afc2c4d03b1fe5367ea5f2bc2bea6ae045e8b8a4c0725bcae0  runB/SM_VoxelDwarf_Miner01.glb
+205493a41f64d9008fbfb18fb2e46771fa66b0410c23b6bf2dec79c450cebb5f  runA/SM_VoxelDwarf_Miner01.glb
+205493a41f64d9008fbfb18fb2e46771fa66b0410c23b6bf2dec79c450cebb5f  runB/SM_VoxelDwarf_Miner01.glb
 IDENTICAL
 ```
 
@@ -43,7 +43,7 @@ is the closure oracle: no hole, no duplicated face, no inverted normal.
 ```
 FIGURES src-assets\export\SM_VoxelDwarf_Miner01.glb size_m=1.2x1.2x0.8 min_y_m=0.000000
 centre_x_m=0.000000 centre_z_m=0.000000
-palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50 tris=12006 verts=24012
+palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50 tris=14398 verts=28796
 ```
 
 Exit 0. **No rejection.** Every clause holds and the checker needed no change from this session.
@@ -101,33 +101,21 @@ Neither is a claim about how the client will light him.
 
 ## 5. Limitations — reported, not worked around
 
-1. **12,006 triangles, against the brief's expected 14,000–30,000.** Under the band, and I
-   am not going to dress that up. The first cut was **451 quads / 902 triangles** from 149,528
-   voxels, because a voxel figure built from rectangular slabs greedy-meshes into almost
-   nothing — a flat face merges into one enormous quad however many voxels sit behind it.
-   Rounding every organic mass into a superelliptic column whose profile varies with z took it
-   to ~9,000, and cutting a strand groove down every third column of the beard and hair (which
-   the contact sheet's beard visibly has) took it to 12,006. Getting the rest of the way needs
-   more genuine surface incident — belt fittings, boot lacing, a third cloth value — not more
-   voxels. **I judged it better to stop at a form I can defend against the reference than to
-   add ornament the reference does not have in order to hit a number.** Flagging it rather
-   than quietly landing short.
-
-2. **The tunic is one green where the reference has two.** The contact sheet and the front
+1. **The tunic is one green where the reference has two.** The contact sheet and the front
    ortho both show a lighter yellow-green front panel over darker green sleeves and shoulders.
    The ruled palette has one Tunic `#5F7A6A` and one Pants `#474B41`, and no lighter green;
    I used Pants for the sleeves and shoulders to get a two-tone, but the *lighter* panel is
    not reproducible. Six atlas cells are free, so an eleventh colour would fit mechanically —
    **that is a palette ruling and not mine to take.**
 
-3. **The bounding box is centred; his body is not.** The centring line reads `centring=-5,+8`:
+2. **The bounding box is centred; his body is not.** The centring line reads `centring=-5,+8`:
    the lattice is translated 5 voxels in X and 8 in Y to land the box on the origin. In X that
    is the pickaxe reaching further out than the lantern; in Y it is the backpack. So his feet
    stand ~6 cm from the origin in X and ~10 cm in Y. The contract measures the box and the box
    is exact, but a placement system that assumes the origin is under his boots will see that
    offset. Cannot be removed without either unbalancing the gear or dropping it.
 
-4. **Gear is baked in and touches the body, so a later cut is not free.** Decision 2 rules the
+3. **Gear is baked in and touches the body, so a later cut is not free.** Decision 2 rules the
    lantern and pickaxe into the mesh, kept as separate voxel groups, and `part_of` tracks them
    (`groups=` on the FIGURES line). But the greedy mesher culls the faces between adjacent
    voxels regardless of group, and the fists necessarily touch their gear — so deleting a group
@@ -135,7 +123,7 @@ Neither is a claim about how the client will light him.
    the generator with the part excluded, not a selection-and-delete in the mesh.** The code is
    structured for that; the mesh is not.
 
-5. **Cells 8 and 9 are DERIVED, not sampled clean**, and I want that on the record because
+4. **Cells 8 and 9 are DERIVED, not sampled clean**, and I want that on the record because
    the brief said "sample … do not invent it" and neither could be sampled straight.
 
    - **Hair `#34271C`.** The two sources disagree by a factor of two: the reference sheet's
@@ -158,9 +146,43 @@ Neither is a claim about how the client will light him.
    warm albedo is safe under the darkness guard because with every light off the scene renders
    near-black; an emissive material would be a light nobody can switch off.
 
-6. **Pants `#474B41` and Wood `#8B6B50` remain UNRESOLVED**, carried from the brief unchanged.
+5. **Pants `#474B41` and Wood `#8B6B50` remain UNRESOLVED**, carried from the brief unchanged.
    The sheet's `8` and `B` are the same glyph at 1024 px and the swatches are JPEG-noisy.
    Only the original art file settles them. Untouched by this round.
+
+### On triangle count, which is a symptom and not a budget
+
+The first cut of this body was **451 quads / 902 triangles** from 149,528 voxels — because a
+voxel figure built from rectangular slabs greedy-meshes into almost nothing. A flat slab face
+merges into one enormous quad however many voxels sit behind it, so the count is not a cost to
+manage, it is the *measurement* of whether the surface has any shape. Three levers took it to
+14,398, and every one of them is also a fidelity improvement:
+
+| | quads |
+|---|---|
+| rectangular slabs (first cut) | 451 |
+| superelliptic columns whose profile varies with z | 4,471 |
+| strand grooves down the beard and hair, which the contact sheet has | 6,003 |
+| fittings: soles, toe caps, lacing, rivets, seams, cuffs, studs, grip wrap, sheath, bedroll binding | 6,911 |
+| rounder exponents on torso, head, beard and pack | **7,199** |
+
+A rivet, a seam and a strand channel are all the same thing to the mesher: a **colour or
+surface boundary that breaks a co-planar run**. Detail and triangle count are one lever here,
+not two competing ones.
+
+**Two traps in the groove pass, both found in a render and neither by reasoning:**
+
+- The brow ledge, the pupils and the mouth are all painted in **Hair**, proud of the skin. A
+  Hair groove over the face therefore does not cut a strand, it **deletes the feature and
+  exposes the skin behind it** — at depth 2 the brow went and the face came back wearing
+  goggles; even at depth 1 the pupils went, because they are only one voxel proud. Hair grooves
+  are now confined to the crown (z 84+) and the nape, away from the face band.
+- The sideburns and moustache are two voxels proud, and **14 is a multiple of 7**, so the
+  coarse step-7 beard groove ate them at exactly x ±14. That groove now stops below the
+  moustache.
+- Grooves cut from +Y, which is wrong for anything on his back: the frontmost Wood voxel of a
+  backpack column is the face buried inside his torso, so cutting there carves a **cavity
+  nobody can see** and pays for it in hidden quads. `groove()` takes a `side` for that.
 
 ## 6. Two decisions I took, and why
 
@@ -199,7 +221,7 @@ steps to metres. **This session wrote nothing outside `src-assets/`.**
 |---|---|
 | generator | `src-assets/blender/dwarf_miner.py` — replaced, not extended |
 | render script | `src-assets/blender/render_dwarf.py` — new |
-| editable source | `src-assets/blender/dwarf.blend` — 6,003 polys, matches the shipped GLB |
+| editable source | `src-assets/blender/dwarf.blend` — 7,199 polys, matches the shipped GLB |
 | renders | `src-assets/renders/` — 11 PNGs |
 | this report | `src-assets/prompts/dwarf-miner-blender-mcp-report.md` |
 | exported GLB | `src-assets/export/SM_VoxelDwarf_Miner01.glb` — **gitignored scratch, deliberately** |

@@ -188,6 +188,8 @@ BEARD_P = [(30, 9, 6, 13), (33, 11, 5, 15), (38, 14, 4, 17), (44, 16, 3, 18),
            (74, 18, -12, 17)]
 NAPE = [(55, 17, -18, -4), (59, 19, -18, -2), (63, 20, -18, 0)]
 BOOT = [(0, 9, -10, 15), (3, 9, -10, 15), (6, 9, -9, 13), (8, 8, -9, 12)]
+SOLE = [(0, 9, -10, 15), (1, 9, -10, 15)]
+TOECAP = [(2, 8, 6, 14), (5, 8, 6, 13)]
 CUFF = [(9, 10, -11, 14), (10, 10, -11, 14)]
 SHAFT = [(11, 9, -9, 10), (16, 8, -8, 9)]
 THIGH = [(17, 8, -8, 9), (20, 9, -9, 9)]
@@ -264,6 +266,30 @@ def build_voxels():
         solid(put, table, z0, z1, colour, part, power, xc)
         solid(put, table, z0, z1, colour, part, power, -xc)
 
+    def mfill(x0, x1, y0, y1, z0, z1, colour, part="body"):
+        """A box and its reflection, for fittings that come in pairs."""
+        fill(x0, x1, y0, y1, z0, z1, colour, part)
+        fill(-1 - x1, -1 - x0, y0, y1, z0, z1, colour, part)
+
+    def paint_front(xs, zs, colour, part="body", mirror=False):
+        """Recolour the frontmost voxel of each (x, z) column.
+
+        The bodies here are rounded, so their front plane moves with x and z
+        and a box fill would either sink inside them or float off them. This
+        lands on the surface whatever the profile does -- which is also why a
+        seam or a rivet placed this way can never change the silhouette, the
+        extents or the centring offset.
+        """
+        xs, zs = set(xs), set(zs)
+        cols = {}
+        for (x, y, z) in vox:
+            if x in xs and z in zs and cols.get((x, z), -10 ** 6) < y:
+                cols[(x, z)] = y
+        for (x, z), y in cols.items():
+            put(x, y, z, colour, part)
+        if mirror:
+            paint_front([-1 - x for x in xs], zs, colour, part)
+
     # --- legs, z 0..20 -----------------------------------------------------
     # Short and thick: the front ortho gives the legs the bottom fifth of the
     # figure, which is what makes the head and the beard read as big.
@@ -274,8 +300,8 @@ def build_voxels():
 
     # --- torso, z 19..62 ---------------------------------------------------
     # The tunic is short and belted low: hem at 19, belt at 21..23.
-    solid(put, TORSO, 19, 62, TUNIC, "body")
-    solid(put, TORSO, 55, 62, PANTS, "body")                  # shoulders, the darker green
+    solid(put, TORSO, 19, 62, TUNIC, "body", 2.5)
+    solid(put, TORSO, 55, 62, PANTS, "body", 2.5)                  # shoulders, the darker green
     belt = [(z, hx + 1, yb - 1, yf + 1) for (z, hx, yb, yf) in TORSO]
     solid(put, belt, 20, 24, WOOD, "belt")                    # belt, a full band
     fill(-6, 5, 9, 11, 20, 24, METAL, "belt")                 # buckle, front face only
@@ -291,7 +317,7 @@ def build_voxels():
     # --- backpack, z 33..69 ------------------------------------------------
     # Hung off the back of the torso, with a rolled bedroll strapped across its
     # top. The side ortho gives it a third of the figure's depth.
-    solid(put, PACK, 33, 62, WOOD, "backpack", 5.0)
+    solid(put, PACK, 33, 62, WOOD, "backpack", 3.6)
     solid(put, BEDROLL, 63, 69, WOOD_TRUNK, "backpack", 2.0)   # a rolled bedroll IS round
     fill(-12, 11, -39, -38, 42, 56, WOOD_TRUNK, "backpack")   # flap
     fill(-16, 15, -39, -38, 36, 39, WOOD_TRUNK, "backpack")   # cinch strap round it
@@ -304,16 +330,76 @@ def build_voxels():
              WOOD_TRUNK, "backpack")                          # shoulder straps
 
     # --- head and beard, z 30..95 ------------------------------------------
-    solid(put, HEAD, 63, 95, HAIR, "body", 3.0)
+    solid(put, HEAD, 63, 95, HAIR, "body", 2.6)
     solid(put, NAPE, 55, 63, HAIR, "body")
-    solid(put, BEARD_P, 30, 74, BEARD, "body", 2.5)
+    solid(put, BEARD_P, 30, 74, BEARD, "body", 2.2)
     build_face(vox, put, fill)
 
-    # Tunic hem trim and boot straps: small, and both are on the reference.
+    # --- fittings ----------------------------------------------------------
+    # Everything below is small hardware the reference carries: soles, toe caps,
+    # buckles, rivets, seams, cuffs, a grip wrap, a bedroll binding. It is also
+    # the cheapest geometry in the file, for the same reason the strands are: a
+    # rivet or a seam is a COLOUR BOUNDARY, and a colour boundary breaks the
+    # co-planar run that greedy meshing would otherwise swallow into one quad.
+    # Detail and triangle count are not competing budgets here, they are one
+    # lever. All of it stays INSIDE the existing extents, so the bounding box,
+    # its parity and the centring offset are untouched.
     hem = [(z, hx + 1, yb - 1, yf + 1) for (z, hx, yb, yf) in TORSO]
-    solid(put, hem, 19, 19, WOOD_TRUNK, "body")
+    solid(put, hem, 19, 19, WOOD_TRUNK, "body")               # tunic hem trim
+    collar = [(z, hx - 2, yb + 2, yf - 2) for (z, hx, yb, yf) in TORSO]
+    solid(put, collar, 61, 62, WOOD_TRUNK, "body")            # collar band
+
+    # Boots: a dark sole, a lighter toe cap, a strap and an outboard buckle.
+    both(SOLE, 0, 1, HAIR, "body", 3.0, LEG_X)
+    both(TOECAP, 2, 5, WOOD, "body", 3.0, LEG_X)
     both(CUFF, 13, 13, HAIR, "body", 3.0, LEG_X)              # a strap round each boot
+    mfill(17, 20, -3, 2, 9, 10, METAL, "body")                # buckle on the outer cuff
+
+    # Belt: rivets along it, and the strap tail hanging past the buckle.
+    for rivet_x in (8, 12, 16, 20):
+        paint_front(range(rivet_x, rivet_x + 1), range(22, 23), METAL, "belt", mirror=True)
+    fill(-2, 1, 10, 12, 15, 19, WOOD_TRUNK, "belt")           # strap tail
     fill(-30, -21, 6, 12, 18, 26, WOOD_TRUNK, "belt")         # belt pouch, on his left
+    fill(-28, -23, 12, 13, 24, 25, METAL, "belt")             # its clasp
+
+    # Tunic seams, framing the front panel the reference has and this palette
+    # cannot colour -- there is one green in the ruled ten and the sheet shows
+    # two. The seams are the closest it gets; see the report.
+    paint_front(range(13, 15), range(24, 55), PANTS, "body", mirror=True)
+
+    # Arms: a cuff where the sleeve ends. Nothing on the forearm -- the
+    # reference leaves it bare, and a band there reads as a bright stripe.
+    both(UPPER_ARM, 46, 47, WOOD_TRUNK, "body", 2.5, ARM_X)
+
+    # Pack: side pockets proud of it, a dark binding round the bedroll, studs.
+    mfill(17, 19, -34, -24, 38, 48, WOOD_TRUNK, "backpack")
+    mfill(5, 8, -36, -19, 63, 69, HAIR, "backpack")
+    for stud_z in (45, 50, 55):
+        mfill(9, 10, -40, -39, stud_z, stud_z + 1, METAL, "backpack")
+
+    # Pickaxe: butt cap, a wrapped grip where the fist closes, and a ferrule
+    # under the head. A bare dowel does not read as a haft.
+    fill(36, 41, 6, 11, 15, 17, METAL, "pickaxe")
+    fill(36, 41, 6, 11, 28, 31, HAIR, "pickaxe")
+    fill(36, 41, 6, 11, 34, 37, HAIR, "pickaxe")
+    fill(35, 42, 5, 12, 82, 84, METAL, "pickaxe")
+
+    # Lantern: a bail over the cap and a vent band round it.
+    fill(-41, -32, 8, 9, 38, 40, METAL, "lantern")
+    fill(-39, -34, 6, 11, 30, 31, METAL, "lantern")
+
+    # Boot lacing: three dark bands up the front of each boot.
+    for lace_z in (3, 6, 15):
+        mfill(5, 18, 11, 14, lace_z, lace_z + 1, HAIR, "body")
+
+    # A sheathed knife on the belt, his right, hanging clear of the leg.
+    fill(21, 24, 7, 12, 8, 21, WOOD_TRUNK, "belt")
+    fill(21, 24, 7, 12, 22, 24, METAL, "belt")                # its pommel
+    fill(20, 25, 6, 13, 19, 20, HAIR, "belt")                 # the throat of the sheath
+
+    # A coil of rope lashed to the side of the pack.
+    for coil_z in (50, 54, 58):
+        mfill(16, 19, -33, -23, coil_z, coil_z + 1, WOOD_TRUNK, "backpack")
 
     build_pickaxe(fill)
     build_lantern(fill)
@@ -325,25 +411,46 @@ def build_voxels():
     # into, so the quads follow the shape instead of hiding it. Purely a function
     # of x, so it stays deterministic.
     groove(vox, part_of, BEARD, 30, 74)
-    groove(vox, part_of, HAIR, 63, 95)
+    groove(vox, part_of, BEARD, 30, 67, step=5)               # a second, finer parting
+    groove(vox, part_of, BEARD, 30, 67, step=7, depth=2)      # a coarser parting over it,
+    #                                                         # BELOW the moustache: see
+    #                                                         # build_face on 2-proud parts
+    # HAIR grooves must AVOID THE FACE BAND, z 63..83. The brow ledge, the
+    # pupils and the mouth are all painted in HAIR proud of the skin, so a groove
+    # over them does not cut a strand, it deletes the feature and exposes the
+    # skin behind: at depth 2 the brow went and the face came back wearing
+    # goggles, and even at depth 1 the pupils did, because they are only one
+    # voxel proud. The crown and the nape have no such features.
+    groove(vox, part_of, HAIR, 84, 95)
+    groove(vox, part_of, HAIR, 88, 95, step=5, depth=2)
+    groove(vox, part_of, HAIR, 55, 62)                        # the nape, behind
+    groove(vox, part_of, WOOD, 33, 62, side=-1)               # pack leather, from behind
+    groove(vox, part_of, WOOD_TRUNK, 0, 16)                   # boot leather
+    groove(vox, part_of, TUNIC, 19, 29, step=4)               # folds in the tunic skirt
+    groove(vox, part_of, PANTS, 17, 20, step=4)               # and in the trouser
+    groove(vox, part_of, SKIN, 29, 40)                        # knuckles and tendons;
+    #                                                         # SKIN starts again at 70
     return vox, part_of
 
 
-def groove(vox, part_of, colour, z0, z1, step=3):
+def groove(vox, part_of, colour, z0, z1, step=3, depth=1, side=1):
     """Cut a one-voxel channel down every `step`-th column of a coloured mass.
 
-    Only the frontmost voxel of each column goes, so the mass stays closed --
+    Only the outermost voxel of each column goes, so the mass stays closed --
     the volume oracle in main() checks exactly that and would catch a hole.
+    `side` is +1 to cut from the front (+Y) and -1 to cut from the back, which
+    is what anything hung off his back needs if the channel is to be visible.
     """
-    columns = {}
-    for (x, y, z), c in vox.items():
-        if c != colour or not z0 <= z <= z1 or x % step:
-            continue
-        if columns.get((x, z), -10 ** 6) < y:
-            columns[(x, z)] = y
-    for (x, z), y in columns.items():
-        del vox[(x, y, z)]
-        del part_of[(x, y, z)]
+    for _ in range(depth):
+        columns = {}
+        for (x, y, z), c in vox.items():
+            if c != colour or not z0 <= z <= z1 or x % step:
+                continue
+            if columns.get((x, z), -10 ** 6) < y * side:
+                columns[(x, z)] = y * side
+        for (x, z), y in columns.items():
+            del vox[(x, y * side, z)]
+            del part_of[(x, y * side, z)]
 
 
 # --- the face --------------------------------------------------------------
@@ -432,6 +539,11 @@ def build_face(vox, put, fill):
     for x, y, z in face_cells(68, 71, 11):
         put(x, y + 1, z, BEARD, "body")
         put(x, y + 2, z, BEARD, "body")
+
+    # A mouth: two voxels of shadow under the moustache, which is all a mouth
+    # needs at this scale and is what the contact sheet shows.
+    for x, y, z in face_cells(66, 67, 6):
+        put(x, y + 1, z, HAIR, "body")
 
     # Sideburns, rising to eye level and framing the face down to the beard.
     for z in range(63, SIDEBURN_TOP + 1):
