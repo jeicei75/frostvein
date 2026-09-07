@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.5b: Dwarves Worth Looking At — Part B, the art-iteration loop
 
-Status: dev-done-except-AC8 (UX-DR22 needs Wolf at the vehicle)
+Status: dev-done, 12/12 ACs met — awaiting the joint code review with Part A
 
 **Part A took the epic's named split line and shipped the seam. This is the other half.**
 Part A (`10-5-dwarves-worth-looking-at`, 14 commits, `cb45817`) is **implemented and pushed but
@@ -163,11 +163,17 @@ so that authoring a creature is a loop I can turn, not a cross-compile I have to
    Verification; `gui dwarves: meshes=5 scenes_loaded=true source=disk:D:\Workspace\frostvein\assets`,
    so what he judged was the authored glTF read **from the checkout**, not the embedded copy.
 
-   **OPENING HALF — asserted as already discharged, and it needs Wolf's yes rather than mine.**
-   The artifact is `src-assets/renders/dwarf-flat-*.png` plus the reference sheet, approved during
-   the MCP authoring sessions **before** any of this rendering work. That predates implementation,
-   which is what the clause requires. It is written here as a claim to be confirmed, not as a box
-   ticked — the whole point of UX-DR22 is that nobody but Wolf closes it.
+   **OPENING HALF — CONFIRMED by Wolf, 2026-09-07.** The artifact is
+   `src-assets/renders/dwarf-flat-*.png` plus the reference sheet, approved during the MCP
+   authoring sessions **before** any of this rendering work, which is what the clause requires.
+   Wolf's confirmation: *"yes dwarves look like the model in blender"* — the built result compared
+   against the approved artifact, which is the comparison UX-DR22 asks for.
+
+   **AC8 IS THEREFORE MET, 12 of 12. One note for the retro, not a reopening:** the approved
+   artifact was of the ASSET (flat renders of the model) rather than of *our actual world at this
+   framing*, which is the letter of the opening clause. It served — the dwarf is what Wolf wanted
+   and he confirmed it against those renders — but `authored_bench.py` renders assets in situ in
+   the valley and is the closer fit for a future story's opening artifact.
 
    **Two defects seen at the same sitting, and NEITHER is this story's:**
    - **Dwarves walk through the campfire** — issue #74, already routed into this sitting.
@@ -259,7 +265,7 @@ is not bought until something asks for it).
       Decide what "every cell the asset carries" means from the ARTIFACT (a trailing run of
       `#000000` is the terminator the dwarf's atlas already uses) rather than from a per-family
       constant — a second hardcoded list is the abstraction this project's YAGNI rule forbids.
-- [ ] **Task 6 — UX-DR22 (AC8) + issue #74 — OPEN, WOLF'S SEAT.** Wolf's time on the vehicle.
+- [x] **Task 6 — UX-DR22 (AC8) + issue #74 — DONE on the vehicle 2026-09-07.** Wolf's time on the vehicle.
       `authored_bench.py` renders authored assets in situ and is the opening artifact's machinery —
       extend it, do not start over.
   - [ ] **Issue #74 joins this sitting (Wolf, 2026-09-07):** dwarves path THROUGH the campfire, and

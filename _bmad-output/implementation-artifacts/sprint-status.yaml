@@ -1900,6 +1900,15 @@ development_status:
                           # dwarf on its first clause BY DESIGN (V1 voxel assets only), and
                           # generalising it without the real asset means guessing.
   10-5b-the-art-iteration-loop: review
+                          # 2026-09-07 ALL 12 ACs MET. AC8/UX-DR22 closed on the vehicle: Wolf
+                          # "dwarves look like the model in blender", judged against the glTF
+                          # read from the CHECKOUT (source=disk:), not the embedded copy.
+                          # Task 4's launcher WALKED: happy path + MISMATCH (on a genuinely
+                          # stale binary, not staged) + unrecognised stamp + diverged checkout
+                          # + -dirty. Issue #74 seen and stays open; the campfire blow-out is
+                          # NOT this story's -- the CUBE blows out identically, so the authored
+                          # dwarf is exonerated and the decomposition went to #75.
+                          # AWAITING the joint review with Part A (Wolf's ruling: one review).
                           # 2026-09-07 DEV DONE except AC8. Full gate GREEN 475s (pixel
                           # guards in, flaky #72 did not fire); mutation table 12 rows ALL
                           # KILLED. 11 of 12 ACs met -- AC8 is UX-DR22 and needs Wolf at the
