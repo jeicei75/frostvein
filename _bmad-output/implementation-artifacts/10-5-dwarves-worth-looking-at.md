@@ -101,7 +101,7 @@ so that when I hand over a dwarf I have made, the client already knows how to st
    exists end to end. `TREE_SCENE_PATHS` (`project.rs:250-256`) →
    `asset_server.load(format!("embedded://{path}#Scene0"))` (`project.rs:292-296`) →
    `WorldAssetRoot(assets.tree_scene(variant))` (`project.rs:2260-2279`). Part A rides this path with
-   an existing pine `.glb` as the stand-in.
+   an existing pine `.glb` as the stand-in. **SUPERSEDED: it rode it with the authored dwarf.**
 
 8. **CONFIRMED — the headless fallback is load-bearing.** With no `AssetServer` (every
    `MinimalPlugins` test, `headless.rs:57-71`) `ProjectionAssets` fills scene handles with
@@ -115,6 +115,10 @@ so that when I hand over a dwarf I have made, the client already knows how to st
    violation; story 10.5 introduces the second asset family and owns generalising these clauses"*
    (`tech-art-guidelines.md:452-458`). **Part A's stand-in is an existing pine, which already passes.
    Generalising the checker belongs to Part B with the real asset in hand.**
+   **AMENDED 2026-09-07: the premise held but its quoted prediction did not.** The authored dwarf
+   shipped in Part A and `check_asset.py` ACCEPTS it — it is a single-mesh, single-material,
+   64×64-atlas V1 asset, so the "will be REJECTED" clause never fired. Only the palette bound
+   needed generalising, which Part B did (AC7). `tech-art-guidelines.md` has been corrected.
 
 ## Task 1 — the hot-reload venue: RULED 2026-09-05
 
@@ -271,6 +275,9 @@ platform and no C toolchain should be needed, but that has not been run here and
   - [ ] Stand-in asset: an existing `assets/trees/*.glb`, chosen because it already passes
         `check_asset.py` and is **obviously not a dwarf**, so no frame from Part A can be mistaken for
         a finished dwarf.
+        **SUPERSEDED — the authored dwarf shipped instead (joint review, 2026-09-07). Part A's
+        frames therefore DO show a finished dwarf, and `10-5-signoff/mesh-dwarves-*.png` are
+        pictures of the real asset, not of a pine.**
 - [x] **Task 3 — the floor offset (AC3).** Apply the tree path's `- Vec3::Y * 0.5` to the entity
       spawn; test the resulting translation against a hand-written expected value.
 - [x] **Task 4 — scale 0.65 → 0.75 (AC4).** `appearance.rs` and `valley_bench.py:54` in one commit;
@@ -288,9 +295,20 @@ platform and no C toolchain should be needed, but that has not been run here and
 
 ### Scope guardrails — do NOT
 
+> **AMENDED AT THE JOINT REVIEW, 2026-09-07. THE FIRST GUARDRAIL BELOW WAS NOT FOLLOWED, AND THAT
+> WAS THE RIGHT CALL — but this file went on describing a pine.** The dev session shipped the REAL
+> authored dwarf (`assets/gltf/SM_VoxelDwarf_Miner01.glb`, 14,398 tris, byte-reproducible from
+> `src-assets/blender/dwarf_miner.py`), not the pine stand-in Task 2 specifies. Wolf accepted the
+> over-delivery and Part B was rescoped around it. The deviation was recorded only in **Part B's**
+> story, so a reader of Part A alone was told the shipped asset is a pine — which is exactly the
+> stale-record shape this project keeps paying for. Everything below is left standing as the
+> instruction that was given; what SHIPPED is the authored dwarf.
+
 - **Do not author or commit a dwarf model.** That is Part B and it is Wolf's hand, not a generated
   stand-in. A generated "placeholder dwarf" would become the thing everyone judges — see
   [placeholder sets the budget]: 96.8% of 10.6's triangle budget was the measurement stand-in.
+  **NOT FOLLOWED — see the banner above. The committed dwarf is authored, not generated, so the
+  hazard this guardrail names did not materialise.**
 - **Do not touch `check_asset.py`.** Its V1-voxel clauses are correct for what exists; generalising
   them without the real asset in hand means guessing the second family's shape.
 - **Do not enable `file_watcher`, and do not add `--assets`.** Task 1's ruling defers both to Part B.
@@ -356,7 +374,12 @@ reused rather than reinvented, and the control frames it grades are committed by
 
 Control frames captured on a CLEAN tree so their stamp is trustworthy: the first attempt read
 `gui build 87f3bdc-dirty` — a binary built at the previous commit — and was discarded and re-taken
-rather than committed. The committed pair carries **`gui build 4b01a58`**, this story's own commit.
+rather than committed. **CORRECTED at the joint review, 2026-09-07: the committed pair does NOT
+carry `4b01a58`.** Those frames were REPLACED under the same filenames at `cc66a49` ("Retake AC2's
+controls against a paused world"), and `10-5-signoff/AC2-measurement.md` records the retake as taken
+at **`bbb6e51`**. The `4b01a58` pair no longer exists in the working tree; only the git history has
+it. Same names, different images, and this sentence asserted the superseded provenance — the
+[[artifact-name-outlives-its-content]] shape, which this repo has now hit twice.
 
 ```bash
 ./target/debug/simd 7491 &
@@ -406,7 +429,7 @@ Small commits, imperative messages. Push and PR only on Wolf's explicit yes.
 | Date | Change |
 |---|---|
 | 2026-09-04 | Story created. **The epic's named split line is taken and this is Part A, the seam.** Nine premises re-verified on `834f105`: six were wrong, stale or absent — `bevy_gltf` is already enabled (AC1 half-moot), the lantern is wire-driven not client-table-driven, hot-reload has no venue under the embedded-delivery decision, an asset-contract dwarf floats half a cell on the entity path, `scale: 0.65` is pinned by a two-language source-text grep, and `WorldAssetRoot`'s scene children break two partition tests. Wolf's ruling required on the hot-reload venue before Task 2. |
-| 2026-09-04 | **Verification recipe EXECUTED, and it falsified this story's own AC2.** Two REDs observed (a truncated frame dies with `zlib.error`; a frame against itself reads exactly 0/0/0). The same-build noise floor on an unchanged binary is `raw=64,851 / >=4=24,243 / >=16=8,982` — the snow is animated — so the whole-frame 10x bar AC2 originally carried was **unreachable by five dwarf-sized silhouettes**, the same defect 10.7 hit with its AC11 whole-frame bar. AC2 is now a WINDOWED bar against a windowed floor. Control frames re-taken on a clean tree after the first pair came out stamped `87f3bdc-dirty`; the committed pair carries `4b01a58`. |
+| 2026-09-04 | **Verification recipe EXECUTED, and it falsified this story's own AC2.** Two REDs observed (a truncated frame dies with `zlib.error`; a frame against itself reads exactly 0/0/0). The same-build noise floor on an unchanged binary is `raw=64,851 / >=4=24,243 / >=16=8,982` — the snow is animated — so the whole-frame 10x bar AC2 originally carried was **unreachable by five dwarf-sized silhouettes**, the same defect 10.7 hit with its AC11 whole-frame bar. AC2 is now a WINDOWED bar against a windowed floor. Control frames re-taken on a clean tree after the first pair came out stamped `87f3bdc-dirty`; that pair carried `4b01a58`, and was itself later replaced at `cc66a49` (see the correction under Verification). |
 | 2026-09-05 | **Task 1 RULED: option A, deferred to Part B** — dev-only `--assets` disk loading plus `file_watcher`, neither of them in Part A. Wolf amended what A means: the asset directory is a **Windows checkout of this repo**, not an `assets/` copy shipped beside `gui.exe`, and compilation stays in the devpod because `file_watcher` is a build-time cargo feature rather than a machine choice. Premise 3 corrected in passing — `get_base_path()` resolves at **runtime** (`BEVY_ASSET_ROOT` → `CARGO_MANIFEST_DIR` → exe dir, `bevy_asset-0.19.0/src/io/file/mod.rs:19-29`), not compile time, which is why A needs nothing stamped into the binary; the premise's conclusion is unchanged, because `include_bytes!` leaves no file to watch and the `PathBuf::new()` key leaves nothing to match. Three conditions recorded on Part B, including Wolf's pwsh launcher, which must verify the checkout SHA against the `gui build <sha>` stamp rather than only copying. One thing left unclaimed: `notify-debouncer-full` cross-compiling to the Windows target has not been run. |
 
 ## Dev Agent Record
@@ -471,3 +494,9 @@ be captured, and **dwarves face where they are walking and hold it when they sto
 ### Review Findings
 
 | 2026-09-06 | **Part A implemented; full gate GREEN 498s, 7 mutation rows all KILLED.** Four findings beyond the ACs: the dwarf levitated because the spawn is not the only writer of a translation (caught from the seat, not by any test); AC2's recipe was unsatisfiable and its controls were retaken against a paused world with the light flicker off, giving a noise floor of exactly zero; AC7's partition defect predates the story by an epic (4 unmarked children per tree, 3 per dwarf) and triples at `--subdiv 4`, so it was AMENDED on Wolf's ruling and filed as issue #73; and `mutate.sh` reported SURVIVED for a test that never ran, a guard the `py` tier already had. Beyond scope on Wolf's asks: space pauses the simulation, `--static-world` captures a paused world, and dwarves face their direction of travel and hold it when they stop. |
+
+## Review Findings
+
+Part A was reviewed JOINTLY with Part B on 2026-09-07, per Wolf's ruling that one review covers
+both. All findings — including the four that belong to Part A's code and record — are recorded in
+`10-5b-the-art-iteration-loop.md` under "Review Findings", not duplicated here.

@@ -1911,7 +1911,8 @@ development_status:
                           # AWAITING the joint review with Part A (Wolf's ruling: one review).
                           # 2026-09-07 DEV DONE except AC8. Full gate GREEN 475s (pixel
                           # guards in, flaky #72 did not fire); mutation table 12 rows ALL
-                          # KILLED. 11 of 12 ACs met -- AC8 is UX-DR22 and needs Wolf at the
+                          # KILLED at dev time -- a 13th was added later at 703bb94 with no
+                          # recorded verdict, and the review added 5 more, so the table is now 18. 11 of 12 ACs met -- AC8 is UX-DR22 and needs Wolf at the
                           # Windows vehicle, as does Task 4's launcher, which is written but
                           # UNRUN (no Windows, no display here).
                           # SIX FINDINGS BEYOND THE ACs:

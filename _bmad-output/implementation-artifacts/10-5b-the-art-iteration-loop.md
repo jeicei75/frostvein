@@ -480,6 +480,42 @@ piping `--version` straight into `Select-Object -First 1` can stop the pipeline 
 `$LASTEXITCODE` describing something other than the binary; and a bare `StartsWith` would treat
 `D:\frostvein\...` as inside a checkout at `D:\frost`, running a binary from another tree in place.
 
+### The headline outcome, OBSERVED — added at the joint review, 2026-09-07
+
+**"Change my dwarf and see the change in the running client without a rebuild" had no AC, no test
+and no recorded observation until this review.** AC2 proves the *startup-time* byte source; AC4 and
+AC5 prove the flag and the watcher-off case. Wolf's vehicle sitting on 2026-09-07 was a launch and
+a look, not an edit-while-running. The mechanism was reasoned to work and never once watched.
+
+It was watched during the review, headless on this devpod, and **it works**:
+
+```
+# one client, running, against a live daemon
+gui <port> --headless --assets /tmp/hot --capture /tmp/hot-after.png --frames …
+# then, while it ran, the asset under it was replaced with a PINE:
+cp <pine>.glb /tmp/hot/gltf/SM_VoxelDwarf_Miner01.glb        # 14:56:39
+# the running client's own log, unprompted:
+INFO bevy_asset::server: Reloaded gltf/SM_VoxelDwarf_Miner01.glb   # 14:56:41
+```
+
+Diffed in Part A's dwarf window `612,570..642,610` (1,200 px), against two controls:
+
+| pair | raw | >=4 | >=16 |
+|---|---:|---:|---:|
+| control (dwarf) vs the hot-swapped client | 1,024 | 1,016 | 966 |
+| control (dwarf) vs a client STARTED on the pine | 1,024 | 1,015 | 961 |
+| the hot-swapped client vs the client started on the pine | **24** | 22 | 17 |
+
+The reading is in the third row: after the swap the running client converged on the
+*started-on-the-pine* control to within 24 of 1,200 pixels — residual animated snow — while
+diverging from its own starting state by the full change. The reload is not a repaint or a
+reconnect; the client ended up in the state it would have been in had it launched on the new asset.
+
+**WHAT THIS DOES NOT PROVE, and it is the half that matters to Wolf.** This is `llvmpipe`, headless,
+on Linux. The Windows leg goes through `ReadDirectoryChangesW` and **has still never been seen to
+fire**. The mechanism is linked into `gui.exe` and `launch-gui.ps1` forwards `--assets`, but the
+loop closing *at the seat* remains unobserved. It is one edit away from being known.
+
 ## Branch and commits
 
 Branch `10-5b-the-art-iteration-loop`, off **`10-5-dwarves-worth-looking-at` at `cb45817`**, not
@@ -505,7 +541,12 @@ covers Part A and Part B together, after B.
 ### Completion Notes List
 
 **FULL GATE GREEN, 475s**, pixel guards included; the flaky all-off guard (#72) did not fire.
-**Mutation table: 12 rows, all KILLED** — after one round that found a real defect, below.
+**Mutation table: 18 rows.** Rows 1-12 were run and KILLED at dev time. **Row 13
+(`--version falls through to the port parser`) was added afterwards, at `703bb94`, and the "12
+rows, all KILLED" record was never updated — so a thirteenth row shipped with no recorded verdict
+while three places in this repo said there were twelve.** Rows 14-18 were added at the joint code
+review (2026-09-07), each pinning a fix for a finding and each RED-checked by hand: the mutation
+applied, the named test observed to fail, the fix restored.
 
 **Eleven of twelve ACs met. AC8 (UX-DR22) is the exception and is not mine to close** — it needs
 Wolf at the Windows vehicle. Task 4's launcher is written but **UNRUN**, for the same reason.
@@ -564,7 +605,7 @@ the first recorded frame.
 - `scripts/tests/test_check_asset.py`, `scripts/tests/test_perf_summary.py` — NEW tests
 - `scripts/launch-gui.ps1` — NEW, Task 4, **unrun**
 - `src-assets/prompts/dwarf-miner-blender-mcp.md` — the corrected under-read note
-- `_bmad-output/implementation-artifacts/mutations/10-5b-the-art-iteration-loop.sh` — NEW, 12 rows
+- `_bmad-output/implementation-artifacts/mutations/10-5b-the-art-iteration-loop.sh` — NEW, 18 rows (12 at dev, +1 at `703bb94`, +5 at the review)
 - `_bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh` — two rows re-anchored
 - `_bmad-output/implementation-artifacts/10-5b-signoff/` — AC2's frames, crops and measurement
 
@@ -594,3 +635,113 @@ the first recorded frame.
 ### Nothing open
 
 All three questions raised at story creation are answered.
+
+## Review Findings — joint review of Part A + Part B, 2026-09-07
+
+Four layers, full house, no timeouts and no coverage holes (`cargo --version` verified in each).
+Territories were re-split: R1 assigns Blind Hunter `sim-core` and Edge Case Hunter
+`simd`/`tui`/`protocol`, and this diff touches **none** of them — `sim-core` and `simd` and `tui`
+are zero lines, `protocol` is seven. Blind Hunter took `crates/gui/src` + `protocol`, Edge Case
+Hunter took `crates/gui/tests` + `scripts` + `Cargo.toml`; both Opus auditors kept whole-diff
+scope. This is live evidence for issue #45 (M2-5, "give the R1 territory split a real M2 mapping").
+
+Gate re-run by the orchestrator rather than inherited from the story record.
+`[A]`/`[B]` tag which story a finding belongs to.
+
+### Decision needed
+
+- [x] [Review][Decision] **[B] AC9's provenance-header clause is not implemented, and the
+  summariser structurally forbids adding it** — AC9 requires the header to name "build stamp, asset
+  source, `--subdiv`, dwarf/tree counts, and whether vsync was on". `CSV_HEADER`
+  (`crates/gui/src/perf.rs:37`) is the eight column names and nothing else; `rg -i vsync` returns
+  nothing in the entire repo. `perf_summary.load()` (`scripts/bench/perf_summary.py:39-44`) rejects
+  any file whose first row is not exactly `COLUMNS`, so a preamble cannot be added on one side
+  alone. AC9's recorded amendment covers only the *columns* (`draws`/`tris`/`remesh_chunks`), never
+  this sentence — so the story reads 12/12 with the clause unbuilt. The clause exists so a VEHICLE
+  log can be read after the fact, which is the one venue where the numbers are real and where vsync
+  actually caps. **Options: (a) implement the preamble on both sides; (b) amend AC9 the way its
+  columns were amended, recording why; (c) carry the provenance as extra columns instead.**
+- [x] [Review][Decision] **[B] The headline outcome has no AC, no test, and no recorded
+  observation** — "change my dwarf and see the change in the running client without a rebuild".
+  AC2 proves the *startup-time* byte source; AC4/AC5 prove the flag and the watcher-off case. No AC
+  and no test observes a change reaching a *running* client, and the 2026-09-07 vehicle sitting was
+  a launch and a look, not an edit-while-running. **The Feature Auditor supplied the first
+  observation anywhere during this review** (see "Evidence produced during review" below).
+  **Options: (a) add an AC and a test; (b) record the review's headless observation as the
+  evidence; (c) rule it vehicle-only and carry it forward.**
+- [x] [Review][Decision] **[B] The documented authoring loop exports to a directory nothing
+  watches** — `src-assets/prompts/dwarf-miner-blender-mcp.md:38,42-43` rules the export target
+  `src-assets/export/SM_VoxelDwarf_Miner01.glb` (gitignored) and calls promotion to `assets/gltf/`
+  "a separate act". The launcher watches only `<checkout>\assets` (`scripts/launch-gui.ps1:119`).
+  Nothing in the story, the launcher help, or the prompt tells the artist that the loop needs that
+  copy — the one step between "I changed my dwarf" and "the client sees it". **Options: (a) export
+  straight to `assets/gltf/`; (b) document the promotion step in the launcher help; (c) leave it,
+  the separation is deliberate.**
+
+**Wolf's rulings on the three, 2026-09-07:**
+1. **AC9's header clause — IMPLEMENT ON BOTH SIDES.** Done: a `# run:` preamble carrying build
+   stamp, asset source, subdiv, vsync and the content counts, written on the FIRST frame (the first
+   moment the counts are real) so the open-time schema guarantee is untouched; `perf_summary.py`
+   skips `#` lines and echoes them, and says so when a log has none. Pinned end to end on the real
+   binary by `the_perf_log_names_the_run_that_produced_it`.
+2. **The headline outcome — RECORD THE REVIEW'S OBSERVATION.** Done: see "The headline outcome,
+   OBSERVED" under Verification. No new AC was added; the Windows leg is named as still unobserved.
+3. **The artist's loop — DOCUMENT THE PROMOTION STEP.** Done: a callout in
+   `src-assets/prompts/dwarf-miner-blender-mcp.md` and a `.NOTES` block in `launch-gui.ps1`. The
+   deliberate `src-assets/export/` -> `assets/gltf/` separation is kept.
+
+### Patch
+
+- [x] [Review][Patch] [B] `dirty_tiles` is structurally always 0, so AC10's steady/edit split can never fire [crates/gui/src/ingest.rs:1417]
+- [x] [Review][Patch] [B] AC6's mandated test drives a binary that panics on every run, and the helper never reads the exit status [crates/gui/tests/pixel_guard.rs:260]
+- [x] [Review][Patch] [B] A third `source=` line prints a hardcoded `embedded`, and every committed AC2 capture carries it [crates/gui/src/capture.rs:964]
+- [x] [Review][Patch] [B] `perf_summary.py` exits 0 on a log that measured nothing (header + frame-0 only) [scripts/bench/perf_summary.py:541]
+- [x] [Review][Patch] [B] `check_asset.py` returns an empty palette and exits 0; a mid-range black cell becomes a phantom `#000000` [scripts/bench/check_asset.py:179]
+- [x] [Review][Patch] [B] `docs/tech-art-guidelines.md` still says the checker publishes seven cells and REJECTS an authored dwarf [docs/tech-art-guidelines.md:473]
+- [x] [Review][Patch] [B] `dwarf_miner.py` still tells the reader `check_asset.py`'s `PALETTE_HEX` is hardcoded to seven — it was deleted [src-assets/blender/dwarf_miner.py:897]
+- [x] [Review][Patch] [A] Part A's story still specifies a pine stand-in and forbids committing a dwarf model, with Task 2 ticked against it [10-5-dwarves-worth-looking-at.md:104]
+- [x] [Review][Patch] [B] Mutation table has 13 rows; story and sprint-status both say 12, and row 13 has no recorded verdict [mutations/10-5b-the-art-iteration-loop.sh]
+- [x] [Review][Patch] [B] `--perf-log`'s only live wiring sits in `run()` — the project's own named antipattern, with no mutation row [crates/gui/src/ingest.rs:351]
+- [x] [Review][Patch] [A] `--static-world` is ignored when combined with `--at-tick`, and `static_world` has zero test coverage anywhere [crates/gui/src/capture.rs:1055]
+- [x] [Review][Patch] [B] `launch-gui.ps1` never checks `git status --porcelain`'s exit code, so a failed status reports the checkout clean [scripts/launch-gui.ps1]
+- [x] [Review][Patch] [B] `dwarf_report`'s scratch filename embeds `/` from `extra`, silently producing a screenshot that is never written [crates/gui/tests/pixel_guard.rs:210]
+- [x] [Review][Patch] [B] `perf_summary.load` silently drops extra trailing columns while short rows are rejected [scripts/bench/perf_summary.py:541]
+- [x] [Review][Patch] [B] `mutate.sh`'s new "0 passed" guard scans every test binary in the package, not the named test's own [scripts/mutate.sh:149]
+- [x] [Review][Patch] [A] Part A's Verification names `gui build 4b01a58` for control frames replaced at `cc66a49` [10-5-dwarves-worth-looking-at.md]
+- [x] [Review][Patch] [B] Task 7's required llvmpipe `// NOTE:` is absent from the instrument that emits frametimes [crates/gui/src/perf.rs]
+- [x] [Review][Patch] [B] A comment claims an embedded fallback that does not exist under `SceneSource::Disk` [crates/gui/src/ingest.rs:342]
+
+### Deferred
+
+- [x] [Review][Defer] [A] `toggle_pause` and `send_commands` share `ResMut<PendingCommands>` with no enforced order [crates/gui/src/ingest.rs:572] — deferred, LOW
+- [x] [Review][Defer] [A] `entity_appearance(Dwarf).color` is dead for the live render path [crates/gui/src/appearance.rs:290] — deferred, LOW
+- [x] [Review][Defer] [B] The "dwarves" counters actually count scene-rendered `WorldProjected` entities [crates/gui/src/ingest.rs:1405] — deferred, LOW
+- [x] [Review][Defer] [B] `launch-gui.ps1` assumes both `git rev-parse --short` calls agree on abbreviation length [scripts/launch-gui.ps1] — deferred, LOW, fails safe
+- [x] [Review][Defer] [A] `entity_draw_offset`'s non-Dwarf arm is tested via `Torch` only, never `Campfire` [crates/gui/tests/headless.rs] — deferred, LOW
+- [x] [Review][Defer] [A] Part A's File List calls a replaced asset "NEW" [10-5-dwarves-worth-looking-at.md] — deferred, LOW
+- [x] [Review][Defer] [B] A mutation row labelled "rows are buffered instead of written" actually blanks row content [mutations/10-5b-the-art-iteration-loop.sh] — deferred, LOW, the KILLED is real
+- [x] [Review][Defer] [B] AC6 says "both startup lines"; the test asserts only `gui dwarves:` [crates/gui/tests/pixel_guard.rs:279] — deferred, LOW
+- [x] [Review][Defer] [B] `--assets` existence is not checked at parse time; a typo costs ~12 min before `scenes_loaded=false` [crates/gui/src/ingest.rs:789] — deferred, LOW
+- [x] [Review][Defer] [B] No `--help`; the new flags are undocumented outside the story and the launcher [crates/gui/src/ingest.rs:806] — deferred, LOW
+
+### Dismissed (1)
+
+`protocol::DEFAULT_PORT` 7373 -> 7451 was raised by two layers as an unscoped `protocol` change.
+Dismissed: it is Wolf-directed, consistently threaded through `simd`/`tui`/`gui`/the launcher, and
+no live `7373` survives outside historical journal prose. The Feature Auditor independently listed
+it under "Not defects".
+
+### Evidence produced during review, that the story does not record
+
+**The loop turns.** The Feature Auditor ran one client with `--assets /tmp/hot`, overwrote
+`gltf/SM_VoxelDwarf_Miner01.glb` with a pine `.glb` while it ran, and got
+`INFO bevy_asset::server: Reloaded gltf/SM_VoxelDwarf_Miner01.glb` two seconds later. Diffed in
+Part A's dwarf window `612,570..642,610` (1,200 px): the hot-swapped client converged on a
+pine-at-start control (residual 24 px, snow) and diverged from the dwarf control by the full
+change (1,024 raw). This is the first evidence anywhere that the headline outcome works, and it
+was produced by the review rather than the story.
+
+**The artifact Wolf judged IS the artifact that ships.** This project's named trap did not fire.
+`assets/gltf/SM_VoxelDwarf_Miner01.glb` is blob `24926f8d` at both `cdc5770` (the commit the
+launcher verified at the sitting) and `HEAD`; the only code changed since is `headless.rs` and
+`protocol/src/lib.rs`, neither of which can move a rendered dwarf.

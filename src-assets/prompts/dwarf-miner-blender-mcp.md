@@ -44,6 +44,13 @@ glTF at `assets/gltf/<published-name>.glb`, and **promoting it there is a separa
 the forge side — not yours.** Two committed copies of one asset is how a bench and a client come
 to draw different trees.
 
+> **The running client will NOT see your export until it is promoted.** `--assets` points at
+> `<checkout>/assets`, and `scripts/launch-gui.ps1` watches that directory and no other, so the
+> hot-reload loop reloads `assets/gltf/SM_VoxelDwarf_Miner01.glb` — never `src-assets/export/`.
+> The copy between the two is the one manual step in the loop and it is deliberate, so that a
+> half-finished export cannot reach a running seat by accident. If you change the dwarf and the
+> client does not move, this is why.
+
 **Why this rule exists**, because the alternative sounds harmless: v1 wrote its `.glb` to
 `assets/gltf/` — correct per the contract, outside `src-assets/` in practice. The commit was made
 from inside `src-assets/`, so `git add .` could not reach it and the `-a` that swept up an

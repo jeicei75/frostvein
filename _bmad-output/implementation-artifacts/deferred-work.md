@@ -1985,3 +1985,49 @@ they are recorded here rather than patched, per the review-cost LOW-tail cap.
   here as the entry that says the OLD figures in this story and in `pixel_guard.rs` are readings of
   a different quantity, so nobody re-derives a conclusion from them. See the story's
   "AC12 IS NOT MET" section for the arithmetic.
+
+## Deferred from: code review of 10-5b-the-art-iteration-loop (joint with 10-5) — 2026-09-07
+
+Joint four-layer review of Part A + Part B. All ten below are LOW and go straight here per the
+review-cost rule (no patch, no covering test, no re-gate). The HIGH/MED findings and the three
+decision-needed items live in the story file's Review Findings section, not here.
+
+- **`toggle_pause` and `send_commands` share `ResMut<PendingCommands>` with no enforced relative
+  order** (`crates/gui/src/ingest.rs:572`). Each is ordered against a different upstream system,
+  neither against the other. The comment's claim that a space press "reaches the daemon on the same
+  frame" rests on Bevy's implementation-defined tie-break, not a real constraint — and ambiguity
+  detection defaults to `LogLevel::Ignore`, so it would resolve silently either way.
+- **`entity_appearance(EntityKind::Dwarf).color` is dead for the live render path**
+  (`crates/gui/src/appearance.rs:290`). The dwarf now draws via `WorldAssetRoot`; the cube material
+  carrying that colour is still built at startup and attached to nothing. Harmless, but it is the
+  "constant nothing reads any more" shape.
+- **The "dwarves" counters count scene-rendered `WorldProjected` entities, not dwarves**
+  (`crates/gui/src/ingest.rs:1405`, `crates/gui/src/project.rs:2391`). Correct today because
+  dwarves are the only scene-drawn kind. The moment a second one exists, both the perf column and
+  the startup line silently report a mixed total under a name that says "dwarves" — the exact trap
+  `perf.rs:34` warns about for the `terrain` field, not applied here.
+- **`launch-gui.ps1` assumes both `git rev-parse --short` calls pick the same abbreviation length.**
+  Neither side pins `--abbrev=N`, and git auto-scales by object count. Fails SAFE (over-rejects, it
+  cannot accept a wrong binary), which is why it is deferred rather than patched.
+- **`entity_draw_offset`'s non-Dwarf arm is exercised only through `Torch`, never `Campfire`**
+  (`crates/gui/tests/headless.rs`). Same code path, so low value — but `Campfire` is the one enum
+  member the new test never names.
+- **Part A's File List calls `assets/gltf/SM_VoxelDwarf_Miner01.glb` "NEW".** It existed on `main`
+  at 16,688 bytes (added at `ef44d98`) and was OVERWRITTEN with 1,009,476. `1528360`'s commit
+  message says so plainly ("TWO ROUNDS STALE"); the story record does not. Two different meshes
+  have now shared this name in this repo — see [[superseded-artifact-identity-collision]].
+- **A mutation row's label overstates what it sabotages** (`mutations/10-5b-the-art-iteration-loop.sh`).
+  The row "rows are buffered instead of written" replaces the row content with an empty string; it
+  blanks content, it does not introduce buffering. The durability property IS genuinely pinned
+  elsewhere, so the KILLED verdict is real — but the row does not prove the thing its name claims.
+- **AC6 says "both startup lines"; the test asserts one** (`crates/gui/tests/pixel_guard.rs:279`).
+  Only `gui dwarves:` is read. Both lines read the same `source` local, so the risk is small, but
+  the trees line's `source=` is pinned by nothing.
+- **`--assets` existence is not checked at parse time** (`crates/gui/src/ingest.rs:789`; only
+  `is_absolute` is checked). A typo yields a client with no trees and no dwarves whose only
+  complaint is `scenes_loaded=false` after `TREE_REPORT_DEADLINE_FRAMES = 600` — about 12 minutes
+  on this venue. The launcher checks; a hand-run does not.
+- **No `--help`, and the new flags are undocumented outside the story.** An unrecognised flag falls
+  through to the port branch (`crates/gui/src/ingest.rs:806`) and reports `invalid port`.
+  `--assets`, `--perf-log` and `--version` appear only in the story file and `launch-gui.ps1`'s
+  comment header; the README documents no `gui` flags at all.
