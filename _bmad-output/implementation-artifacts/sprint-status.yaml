@@ -1899,7 +1899,30 @@ development_status:
                           # check_asset.py is deliberately NOT touched here: it rejects an authored
                           # dwarf on its first clause BY DESIGN (V1 voxel assets only), and
                           # generalising it without the real asset means guessing.
-  10-5b-the-art-iteration-loop: ready-for-dev
+  10-5b-the-art-iteration-loop: review
+                          # 2026-09-07 DEV DONE except AC8. Full gate GREEN 475s (pixel
+                          # guards in, flaky #72 did not fire); mutation table 12 rows ALL
+                          # KILLED. 11 of 12 ACs met -- AC8 is UX-DR22 and needs Wolf at the
+                          # Windows vehicle, as does Task 4's launcher, which is written but
+                          # UNRUN (no Windows, no display here).
+                          # SIX FINDINGS BEYOND THE ACs:
+                          #  1. My own watcher test pinned NOTHING -- it asserted the flag
+                          #     going in, not the decision coming out, so forcing the
+                          #     override left it green. Only the mutation table said so.
+                          #     4th self-referential test in this repo (1.1, 1.2, 1.3).
+                          #  2. Perf-log batching lost 60 of 300 frames: the capture path
+                          #     exits by PANIC, which runs no destructors. Per-frame writes
+                          #     now; 153 rows from a run that still exits 101.
+                          #  3. A column named `chunks` read 40,148 -- that is TerrainTile,
+                          #     one per exposed CELL. Renamed, and it now sums both terrain
+                          #     modes; --subdiv 1 and N>1 draw different components.
+                          #  4. This story broke two of M2-1's mutation rows (they matched
+                          #     an ADJACENT PAIR of systems) and the gate refused the
+                          #     commit. Re-anchored on one symbol each, both re-verified.
+                          #  5. AC2 nearly shipped a false finding: a no-dwarf window showed
+                          #     72 changed px against a floor of 74 IN THAT SAME WINDOW.
+                          #  6. `meshes=5` cannot see a scene that loads and draws nothing,
+                          #     so the frames were LOOKED AT: five pines where five dwarves.
                           # 2026-09-07 STORY CREATED (ready-for-dev). Baseline cb45817 -- the
                           # PART A BRANCH TIP, not main; Part A is unmerged so `main..HEAD` is
                           # the wrong range for its gate AC (every M2 story is stacked).

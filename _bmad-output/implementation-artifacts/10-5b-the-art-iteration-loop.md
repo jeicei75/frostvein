@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.5b: Dwarves Worth Looking At — Part B, the art-iteration loop
 
-Status: ready-for-dev
+Status: dev-done-except-AC8 (UX-DR22 needs Wolf at the vehicle)
 
 **Part A took the epic's named split line and shipped the seam. This is the other half.**
 Part A (`10-5-dwarves-worth-looking-at`, 14 commits, `cb45817`) is **implemented and pushed but
@@ -193,7 +193,7 @@ is not bought until something asks for it).
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — `--assets <dir>` (AC2, AC3, AC5).**
+- [x] **Task 1 — `--assets <dir>` (AC2, AC3, AC5).**
   - [ ] Parse `--assets <dir>` in `parse_args_from` (`ingest.rs:676`), beside `--static-world`.
         Absolute path; reject a relative one with a message rather than resolving it against an
         unstated base.
@@ -205,22 +205,22 @@ is not bought until something asks for it).
         (premise 7) or every `MinimalPlugins` test panics.
   - [ ] Skip `register_tree_assets` (`ingest.rs:275`) on the disk path, or leave it and let the
         prefix decide — either is fine; say which in a `// NOTE:` and why.
-- [ ] **Task 2 — the resolved source on both instrument lines (AC6).** `project.rs:2372`, `:2386`.
+- [x] **Task 2 — the resolved source on both instrument lines (AC6).** `project.rs:2372`, `:2386`.
       Test drives the real binary with and without the flag and asserts the two lines DIFFER.
-- [ ] **Task 3 — `file_watcher` (AC4).** One feature word in `Cargo.toml:19-30` plus its
+- [x] **Task 3 — `file_watcher` (AC4).** One feature word in `Cargo.toml:19-30` plus its
       justification comment. `notify` cross-compiles — premise 3, already settled.
-- [ ] **Task 4 — the pwsh launcher (closes issue #46, M2-7).** Fetch the checkout, copy the fresh
+- [x] **Task 4 — the pwsh launcher (closes issue #46, M2-7).** Fetch the checkout, copy the fresh
       `gui.exe`, start it with `--assets`. **It must verify the checkout's SHA against the
       `gui build <sha>` stamp and refuse to launch on a mismatch, and refuse on a `-dirty` stamp**
       where no exact comparison exists. A launcher that only copies is a convenience; one that
       checks is the guard. It cannot run here — state its RED and the observation Wolf must produce.
-- [ ] **Task 5 — generalise the palette reader (AC7).** `check_asset.py:164`'s loop bound.
+- [x] **Task 5 — generalise the palette reader (AC7).** `check_asset.py:164`'s loop bound.
       Decide what "every cell the asset carries" means from the ARTIFACT (a trailing run of
       `#000000` is the terminator the dwarf's atlas already uses) rather than from a per-family
       constant — a second hardcoded list is the abstraction this project's YAGNI rule forbids.
-- [ ] **Task 6 — UX-DR22 (AC8).** Wolf's time on the vehicle. `authored_bench.py` renders authored
+- [ ] **Task 6 — UX-DR22 (AC8) — OPEN, WOLF'S SEAT.** Wolf's time on the vehicle. `authored_bench.py` renders authored
       assets in situ and is the opening artifact's machinery — extend it, do not start over.
-- [ ] **Task 7 — the performance log (AC9, AC10, AC11).** RULED 2026-09-07; scope in the ACs.
+- [x] **Task 7 — the performance log (AC9, AC10, AC11).** RULED 2026-09-07; scope in the ACs.
   - [ ] `--perf-log <path>` in `parse_args_from` (`ingest.rs:676`), and the on-demand key beside
         `toggle_overlay` (`ingest.rs:1299`) / `toggle_pause`.
   - [ ] **`FrameTimeDiagnosticsPlugin` is currently added on the WINDOWED path only**
@@ -232,7 +232,7 @@ is not bought until something asks for it).
   - [ ] The summariser is a **separate stdlib-only script** under `scripts/bench/` (Blender uses
         the uv python, so numpy is invisible — [[gfx-bench-venue]]), tested from
         `scripts/tests/` like `check_asset.py` is.
-- [ ] **Task 8 — mutations (AC12), then the full gate (AC1).**
+- [x] **Task 8 — mutations (AC12), then the full gate (AC1).**
 
 ## Dev Notes
 
@@ -379,11 +379,73 @@ covers Part A and Part B together, after B.
 
 ### Agent Model Used
 
-### Debug Log References
+`claude-opus-5[1m]`, orchestrator and dev in one session, 2026-09-07.
 
 ### Completion Notes List
 
+**FULL GATE GREEN, 475s**, pixel guards included; the flaky all-off guard (#72) did not fire.
+**Mutation table: 12 rows, all KILLED** — after one round that found a real defect, below.
+
+**Eleven of twelve ACs met. AC8 (UX-DR22) is the exception and is not mine to close** — it needs
+Wolf at the Windows vehicle. Task 4's launcher is written but **UNRUN**, for the same reason.
+
+Six findings beyond the ACs, each measured rather than argued:
+
+1. **My own watcher test pinned nothing, and only the mutation table said so.**
+   `the_file_watcher_is_armed_only_when_there_is_a_disk_tree_to_watch` asserted
+   `args.assets.is_some()` — the flag going *in*, not the decision coming *out* — so forcing
+   `watch_for_changes_override` to `Some(true)` left it green. The `AssetPlugin` construction is
+   now extracted into `asset_plugin_for` so the decision can be read, and the test asserts both
+   directions against hand-written literals. Fourth time this project has hit the self-referential
+   shape (1.1, 1.2, 1.3, here).
+
+2. **Batching lost 60 of 300 frames on the perf log's first real run.** The capture path exits by
+   **panic** (101 on `main`), and a panic runs no destructors and never returns from `app.run()`,
+   so the buffered tail was simply gone — and a short file reads as a short RUN, not a truncated
+   one. Every row is now written as it happens. Re-measured: **153 rows from a run that still exits
+   101**, where batching wrote 120.
+
+3. **A column named `chunks` read 40,148.** That is `TerrainTile`, one per exposed cell — a
+   plausible-looking number under a name that made it mean something else. Renamed `terrain`, and
+   it now sums `TerrainTile` **and** `TerrainChunk`, because `--subdiv 1` draws the first and
+   `--subdiv N>1` the second: a column that silently counts nothing in one of two modes is worse
+   than no column.
+
+4. **This story broke two of story M2-1's mutation rows, and the gate refused the commit.**
+   Registering a system between `toggle_overlay,` and `fall_snow,` invalidated two rows that
+   matched that **adjacent pair**. Re-anchored on one exactly-once symbol each, and both re-verified
+   KILLED by running them. A row that cannot apply pins nothing however green its record reads.
+
+5. **AC2's second window nearly became a false finding.** A window with no dwarf in it showed 72
+   changed pixels — which reads as the feature leaking across the frame. Its floor *in that same
+   window* is **74**. The change was below its own floor: animated snow, which `--static-world` does
+   not stop because it is not simulation state.
+
+6. **`meshes=5` could not have caught a scene that loaded and drew nothing.** So the frames were
+   **looked at**, not only counted: the 6x crops show five pines standing where five dwarves stand.
+
+Two things checked and found **not** to be defects, recorded so nobody re-opens them: `mutate.sh`'s
+cargo NOT-RUN guard works correctly (a non-existent test name reports NOT-RUN, not SURVIVED — an
+earlier SURVIVED of mine came from a truncated extraction, not the guard); and the perf log's
+`t_ms` failure was my own test racing `File::create`, not a product bug — `t_ms` is now anchored to
+the first recorded frame.
+
 ### File List
+
+- `crates/gui/src/project.rs` — `SceneSource`, the two load prefixes, the two `source=` lines
+- `crates/gui/src/ingest.rs` — `--assets`, `--perf-log`, `--version`, `asset_plugin_for`,
+  `record_perf_frame`
+- `crates/gui/src/perf.rs` — NEW, the per-frame log
+- `crates/gui/tests/pixel_guard.rs` — AC6's real-binary test
+- `Cargo.toml` — `file_watcher` and its justification against the trim
+- `scripts/bench/check_asset.py` — the palette reader; `PALETTE_HEX` deleted
+- `scripts/bench/perf_summary.py` — NEW, percentiles + the steady/edit split
+- `scripts/tests/test_check_asset.py`, `scripts/tests/test_perf_summary.py` — NEW tests
+- `scripts/launch-gui.ps1` — NEW, Task 4, **unrun**
+- `src-assets/prompts/dwarf-miner-blender-mcp.md` — the corrected under-read note
+- `_bmad-output/implementation-artifacts/mutations/10-5b-the-art-iteration-loop.sh` — NEW, 12 rows
+- `_bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh` — two rows re-anchored
+- `_bmad-output/implementation-artifacts/10-5b-signoff/` — AC2's frames, crops and measurement
 
 ### Review Findings
 
