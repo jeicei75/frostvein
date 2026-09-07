@@ -135,7 +135,23 @@ runs it on every commit — enable that once per clone with:
 
 ```bash
 git config core.hooksPath .githooks
+git config core.sshCommand 'ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=60'
 ```
+
+The second line is not optional decoration. `.githooks/pre-push` runs the **full** gate, 350-450s,
+and git opens the connection to the remote *before* running the hook — so the socket sits idle for
+the whole gate and GitHub closes it. The keepalives stop that. This cannot be committed into the
+repo: git deliberately refuses to let a fetched repository dictate the client's ssh options.
+
+**Push with the wrapper rather than `git push` directly:**
+
+```bash
+scripts/push.sh
+```
+
+It gates *before* opening the connection, and then **asks the remote whether the push landed**. That
+last step is the point — a push killed by the idle timeout leaves `GATE GREEN` as the last line on
+screen and no branch on the remote, which is a failure that reads as a success. See issue #76.
 
 ## Crates
 
