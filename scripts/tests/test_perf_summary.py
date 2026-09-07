@@ -168,6 +168,71 @@ class LoadTests(unittest.TestCase):
             perf_summary.load(path)
         self.assertIn("line 3", str(caught.exception))
 
+    def test_a_log_holding_only_frame_zero_is_refused_not_summarised_as_a_run(self):
+        """The zero-row case was guarded and this one was not -- the same defect one row along.
+
+        Frame 0 carries a placeholder frametime rather than a reading, so a file holding nothing
+        else measured NOTHING. It used to print `frames=1 measured=0`, both populations "none
+        recorded", and exit 0 -- indistinguishable from a healthy run of a quiet scene.
+        """
+        path = write(self.tmp, ["0,0.000,0.000,40148,265,5,0,0"])
+        with self.assertRaises(perf_summary.PerfError) as caught:
+            perf_summary.load(path)
+        self.assertIn("nothing was measured", str(caught.exception))
+
+    def test_a_row_with_a_surplus_column_is_refused_like_a_short_one(self):
+        """`DictReader` files surplus fields under `None` and drops them without a word.
+
+        A SHORT row already failed on `int(None)`. A LONG one parsed clean and silently lost its
+        tail, so the two directions of "wrong shape" behaved differently.
+        """
+        path = write(self.tmp, ["1,10,10,121,265,5,0,0", "2,20,10,121,265,5,0,0,999"])
+        with self.assertRaises(perf_summary.PerfError) as caught:
+            perf_summary.load(path)
+        self.assertIn("line 3", str(caught.exception))
+        self.assertIn("9 fields", str(caught.exception))
+
+    def test_the_run_preamble_is_skipped_by_the_reader_and_echoed_in_the_report(self):
+        """AC9. The provenance line must not reach the CSV reader, and must not be swallowed either.
+
+        Without it a frametime cannot be attributed to a build, an asset tree, a subdivision, or a
+        vsync state -- and a capped run measures the monitor rather than the scene.
+        """
+        preamble = (
+            "# run: build=abc1234 assets=disk:D:\\Workspace\\frostvein\\assets "
+            "subdiv=4 vsync=on terrain=40148 trees=265 dwarves=5"
+        )
+        path = self.tmp / "run.csv"
+        path.write_text(
+            HEADER + "\n" + preamble + "\n1,10,10.0,121,265,5,0,0\n2,20,10.0,121,265,5,3,0\n"
+        )
+
+        rows = perf_summary.load(path)
+        self.assertEqual([row["frame"] for row in rows], [1, 2])
+        self.assertEqual(perf_summary.provenance(path), [preamble])
+
+        result = subprocess.run(
+            [sys.executable, str(SUMMARY), str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("vsync=on", result.stdout)
+        self.assertIn("build=abc1234", result.stdout)
+
+    def test_a_log_with_no_preamble_says_so_rather_than_printing_numbers_alone(self):
+        """Silence would read as "this run has no provenance to report", which is not the same."""
+        path = write(self.tmp, ["1,10,10.0,121,265,5,0,0", "2,20,10.0,121,265,5,0,0"])
+        result = subprocess.run(
+            [sys.executable, str(SUMMARY), str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no run preamble", result.stdout)
+
 
 def _parse(rows):
     """The row dicts `summarise` expects, without a file round-trip."""

@@ -27,6 +27,16 @@
 //! tenth of a percent — and there is then no tail, no batch boundary, and no flush path that can
 //! silently go unreached.
 
+//! NOTE: A FRAMETIME FROM THIS DEVPOD IS NOT A PERFORMANCE STATEMENT. There is no GPU here --
+//! rendering goes through `llvmpipe`, a software rasteriser -- so the numbers this writes on the
+//! devpod measure a CPU emulating a graphics card. A review run measured p50 = 574.63 ms and a
+//! debug build has read over 1,100 ms; neither is a fact about the game. The real logs come from
+//! the vehicle, and this file's own tests pin the ARITHMETIC against synthetic rows precisely
+//! because the numbers cannot be checked where they are written.
+//!
+//! Task 7 asked for this caveat and it went to `HeadlessTarget`'s doc instead -- one hop from the
+//! instrument that actually emits the milliseconds, which is where somebody reading a p50 will be.
+
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -35,6 +45,42 @@ use std::time::Instant;
 use bevy::prelude::{Res, ResMut, Resource};
 
 pub const CSV_HEADER: &str = "frame,t_ms,frametime_ms,terrain,trees,dwarves,dirty_tiles,mark";
+
+/// What produced this log, written as a single `#` preamble line (AC9).
+///
+/// WHY IT IS WRITTEN ON THE FIRST FRAME AND NOT AT OPEN. Three of its seven facts are content
+/// counts, and nothing has been drawn when the file is created. Writing the preamble lazily keeps
+/// the column header exactly where it was -- a file that exists is still always a file with a
+/// schema, which is the property `the_header_is_written_when_the_log_opens...` pins -- and still
+/// puts the provenance above every measured row.
+///
+/// WHY IT EXISTS AT ALL. A log is read on a different day than it is written, from a different
+/// machine than it was measured on. Without this line it cannot say which build, which asset tree,
+/// which subdivision, or whether a vsync cap meant the run measured the monitor rather than the
+/// scene -- and this project has already published one fps figure that never moved because the
+/// terrain was not being rasterised at all.
+#[derive(Debug, Clone)]
+pub struct RunProvenance {
+    pub build: String,
+    pub assets: String,
+    pub subdiv: u32,
+    pub vsync: bool,
+}
+
+impl RunProvenance {
+    fn line(&self, counts: FrameCounts) -> String {
+        format!(
+            "# run: build={} assets={} subdiv={} vsync={} terrain={} trees={} dwarves={}",
+            self.build,
+            self.assets,
+            self.subdiv,
+            if self.vsync { "on" } else { "off" },
+            counts.terrain,
+            counts.trees,
+            counts.dwarves,
+        )
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PerfRow {
@@ -106,6 +152,9 @@ pub struct PerfLog {
     /// Reported once and then suppressed: a write that fails usually fails every frame, and sixty
     /// copies a second of one error buries the run's own output.
     reported_error: bool,
+    /// Taken and written by the first recorded frame, which is the first moment the content counts
+    /// in it are real.
+    run: Option<RunProvenance>,
 }
 
 impl PerfLog {
@@ -120,6 +169,7 @@ impl PerfLog {
             pending_mark: false,
             marks: 0,
             reported_error: false,
+            run: None,
         };
         match File::create(&log.path) {
             Ok(mut file) => match writeln!(file, "{CSV_HEADER}") {
@@ -132,6 +182,14 @@ impl PerfLog {
             ),
         }
         log
+    }
+
+    /// Attach the run's provenance. A SETTER rather than a second constructor argument: every
+    /// existing call site is a test that has no build stamp, no asset tree and no window to ask
+    /// about vsync, and giving them one would be inventing the facts this line exists to record.
+    pub fn with_run(mut self, run: RunProvenance) -> Self {
+        self.run = Some(run);
+        self
     }
 
     pub fn path(&self) -> &Path {
@@ -179,9 +237,15 @@ impl PerfLog {
     /// Record and write one frame. There is no buffer, so there is no tail to lose.
     pub fn record(&mut self, now: Instant, counts: FrameCounts) {
         let row = self.row(now, counts);
+        let preamble = self.run.take().map(|run| run.line(counts));
         let Some(file) = self.file.as_mut() else {
             return;
         };
+        if let Some(preamble) = preamble
+            && let Err(error) = writeln!(file, "{preamble}")
+        {
+            eprintln!("gui perf-log: cannot write the run preamble: {error}");
+        }
         if let Err(error) = writeln!(file, "{}", row.to_csv())
             && !self.reported_error
         {

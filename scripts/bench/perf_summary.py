@@ -35,34 +35,75 @@ class PerfError(ValueError):
     """The log cannot be summarised, and the reason is concrete."""
 
 
+def provenance(path):
+    """The `# run:` preamble lines, which name the build, asset tree, subdivision and vsync state.
+
+    Returned separately from the rows because they are not rows. A log is read on a different day
+    and usually a different machine than it was written on, and a column of frametimes that cannot
+    say which build produced it, against which asset tree, at which subdivision, or whether a vsync
+    cap meant the run measured the MONITOR, is not a measurement anybody can act on.
+    """
+    with open(path, newline="") as handle:
+        return [line.strip() for line in handle if line.lstrip().startswith("#")]
+
+
 def load(path):
     """Return the rows, refusing a file whose shape is not the one this script understands."""
     with open(path, newline="") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames != COLUMNS:
+        raw_lines = handle.readlines()
+    # Comment lines are stripped BEFORE the reader sees them -- `csv.DictReader` would otherwise
+    # take a leading `#` line as the header. Original line numbers are carried alongside so a
+    # malformed row is still named by its position in the real file.
+    body = [
+        (number, line)
+        for number, line in enumerate(raw_lines, start=1)
+        if not line.lstrip().startswith("#")
+    ]
+    reader = csv.DictReader([line for _, line in body])
+    if reader.fieldnames != COLUMNS:
+        raise PerfError(
+            f"unexpected columns {reader.fieldnames!r}; expected {COLUMNS!r}. A log written by "
+            "a different build cannot be compared with one written by this one."
+        )
+    rows = []
+    for index, raw in enumerate(reader):
+        # `body[0]` is the header, so the first data row is `body[1]`.
+        line = body[index + 1][0]
+        # A SHORT row is caught by the `int()` calls below, which see `None` for the missing keys.
+        # A LONG one is not: `DictReader` files every surplus field under the `None` key and
+        # discards it silently, so a row with a ninth column parsed clean and lost it. The two
+        # directions of "wrong shape" must fail the same way.
+        if raw.get(None):
             raise PerfError(
-                f"unexpected columns {reader.fieldnames!r}; expected {COLUMNS!r}. A log written by "
-                "a different build cannot be compared with one written by this one."
+                f"line {line} has {len(COLUMNS) + len(raw[None])} fields, expected "
+                f"{len(COLUMNS)}; trailing {raw[None]!r}"
             )
-        rows = []
-        for line, raw in enumerate(reader, start=2):
-            try:
-                rows.append(
-                    {
-                        "frame": int(raw["frame"]),
-                        "t_ms": float(raw["t_ms"]),
-                        "frametime_ms": float(raw["frametime_ms"]),
-                        "terrain": int(raw["terrain"]),
-                        "trees": int(raw["trees"]),
-                        "dwarves": int(raw["dwarves"]),
-                        "dirty_tiles": int(raw["dirty_tiles"]),
-                        "mark": int(raw["mark"]),
-                    }
-                )
-            except (TypeError, ValueError) as error:
-                raise PerfError(f"line {line} is malformed: {error}") from error
+        try:
+            rows.append(
+                {
+                    "frame": int(raw["frame"]),
+                    "t_ms": float(raw["t_ms"]),
+                    "frametime_ms": float(raw["frametime_ms"]),
+                    "terrain": int(raw["terrain"]),
+                    "trees": int(raw["trees"]),
+                    "dwarves": int(raw["dwarves"]),
+                    "dirty_tiles": int(raw["dirty_tiles"]),
+                    "mark": int(raw["mark"]),
+                }
+            )
+        except (TypeError, ValueError) as error:
+            raise PerfError(f"line {line} is malformed: {error}") from error
     if not rows:
         raise PerfError("the log has a header but no rows; the run recorded nothing")
+    # Frame 0 carries a placeholder frametime rather than a reading, so a file holding nothing else
+    # measured NOTHING. Refused rather than summarised: it used to print `frames=1 measured=0` with
+    # both populations "none recorded" and exit 0, which is indistinguishable from a healthy run of
+    # a quiet scene. Exit 0 is not a result.
+    if all(row["frame"] == 0 for row in rows):
+        raise PerfError(
+            f"the log has {len(rows)} row(s) but none after frame 0, so nothing was measured; "
+            "frame 0 is a placeholder, not a reading"
+        )
     return rows
 
 
@@ -122,8 +163,12 @@ def population(rows):
     }
 
 
-def render(path, summary):
+def render(path, summary, run=()):
     lines = [f"PERF {path}"]
+    # Printed FIRST, because every number below is only meaningful against it.
+    lines.extend(f"  {line}" for line in run)
+    if not run:
+        lines.append("  (no run preamble -- this log cannot say which build or assets produced it)")
     content = summary["content"]
     moved = [key for key, (low, high) in content.items() if low != high]
     lines.append(
@@ -167,7 +212,7 @@ def main():
         raise SystemExit(__doc__.strip().splitlines()[2].strip())
     path = sys.argv[1]
     try:
-        print(render(path, summarise(load(path))))
+        print(render(path, summarise(load(path)), provenance(path)))
     except PerfError as error:
         raise SystemExit(f"perf_summary: {error}") from error
 

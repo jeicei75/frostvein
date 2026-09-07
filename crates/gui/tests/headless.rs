@@ -64,6 +64,7 @@ fn headless_app(snapshot: Snapshot) -> App {
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: Default::default(),
+            ..Default::default()
         })
         .add_systems(bevy::app::Startup, setup_projection_assets);
     projection_systems(&mut app);
@@ -2320,6 +2321,7 @@ fn live_app(
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: Default::default(),
+            ..Default::default()
         })
         .insert_resource(IngestReceiver::new(receiver));
     client_systems(&mut app);
@@ -3730,5 +3732,67 @@ fn the_hint_bar_names_the_mode_that_will_commit() {
         read_hint(&mut app),
         designation_hint(DesignateMode::Stockpile, true),
         "the bar must switch to its dragging text while a drag is live"
+    );
+}
+
+/// The perf log's `dirty_tiles` column, read through the SCHEDULE rather than by calling
+/// `record_perf_frame` by hand.
+///
+/// This shape is the only one that can see the defect it exists for. `reconcile_projection` drains
+/// `ProjectionWork::dirty_tiles` in `Update` and `record_perf_frame` writes the row in `Last`,
+/// which Bevy always runs afterwards -- so the column read an already-emptied set and reported `0`
+/// on every row of every real run, while `perf.rs`'s own tests passed because they inject
+/// `FrameCounts` directly and never exercise the ordering. The assertion is on the FILE, because
+/// the file is the whole point: a vehicle run is read from it after the fact.
+///
+/// Both directions, deliberately: an edit frame must report a non-zero count, and the steady frame
+/// after it must fall back to zero rather than inherit the edit's.
+#[test]
+fn the_perf_row_reports_the_tiles_the_reconcile_actually_drained() {
+    let path =
+        std::env::temp_dir().join(format!("frostvein-perf-drained-{}.csv", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+
+    let (mut app, _sender) = live_app(snapshot(
+        vec![Tile::Solid(Material::Stone), Tile::Empty],
+        Vec::new(),
+    ));
+    app.insert_resource(gui::perf::PerfLog::new(path.clone()));
+    app.update();
+
+    apply_delta(
+        &mut app,
+        delta(
+            vec![TileChange {
+                pos: [1, 0, 0],
+                tile: Tile::Solid(Material::Stone),
+            }],
+            Vec::new(),
+        ),
+    );
+    app.update();
+    app.update();
+
+    let written = std::fs::read_to_string(&path).expect("the perf log must be on disk");
+    let _ = std::fs::remove_file(&path);
+    let dirty = written
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with('#') && !line.starts_with("frame"))
+        .map(|line| {
+            line.split(',')
+                .nth(6)
+                .expect("every row carries a dirty_tiles column")
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        dirty.iter().any(|tiles| tiles != "0"),
+        "no row recorded the dug tile, so the summariser's edit population can never fill: {dirty:?}"
+    );
+    assert_eq!(
+        dirty.last().map(String::as_str),
+        Some("0"),
+        "the steady frame after an edit must report zero, not inherit the edit's count: {dirty:?}"
     );
 }

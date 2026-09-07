@@ -211,6 +211,14 @@ impl IngestReceiver {
 pub struct ProjectionWork {
     pub snapshot: bool,
     pub dirty_tiles: BTreeSet<[i32; 3]>,
+    /// How many tiles the last reconcile DRAINED, kept because the count outlives the set.
+    ///
+    /// `dirty_tiles` is emptied by `reconcile_projection` in `Update`; the perf row is written by
+    /// `record_perf_frame` in `Last`, which Bevy always runs afterwards. Reading the set there
+    /// therefore always reads an empty one, and the column that exists to separate edit frames
+    /// from steady ones reported `0` on every row of every run. Set unconditionally on each
+    /// reconcile, so a steady frame resets it rather than inheriting the last edit's count.
+    pub drained_tiles: usize,
 }
 
 /// The four pines, compiled INTO the binary and served from the `embedded://` asset source.
@@ -343,15 +351,13 @@ pub fn run() -> anyhow::Result<()> {
     }
     // Registered on BOTH paths, deliberately. The embedded blobs cost nothing to publish and the
     // `--assets` prefix simply stops naming them, so the disk path does not depend on this being
-    // skipped -- which keeps one code path rather than two, and keeps a fallback available if a
-    // disk tree is missing a file. NOTE: the limitation is that a disk run cannot prove the
-    // embedded copy is absent, only that it was not the thing read; AC2 measures the bytes.
+    // skipped -- which keeps one code path rather than two.
+    // NOTE: this is NOT a fallback, and it used to say it was. Under `SceneSource::Disk` the load
+    // prefix is `""`, so a missing file on the disk tree simply fails to load; nothing reaches for
+    // the embedded copy. The other limitation is unchanged: a disk run cannot prove the embedded
+    // copy is absent, only that it was not the thing read, and AC2 measures the bytes.
     register_tree_assets(&mut app);
     app.insert_resource(scene_source);
-    if let Some(path) = args.perf_log.clone() {
-        eprintln!("gui perf-log: recording to {}", path.display());
-        app.insert_resource(crate::perf::PerfLog::new(path));
-    }
     configure_client_app(&mut app, mirror, receiver, writer, args);
     // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
     // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
@@ -418,6 +424,7 @@ fn configure_client_app(
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
+            ..Default::default()
         })
         .insert_resource(ClearColor(night_lighting().sky));
     if args.headless {
@@ -425,6 +432,36 @@ fn configure_client_app(
     }
     if let Some(subdiv) = args.subdiv {
         app.insert_resource(TerrainSubdivision(subdiv));
+    }
+    // MOVED OUT OF `run()`, where it was the project's own named antipattern: the flag parsed,
+    // validated and then reached the app from a place no test could drive, so deleting the two
+    // lines left the entire suite green. It belongs with the other resources the extracted builder
+    // stands up.
+    if let Some(path) = args.perf_log.clone() {
+        eprintln!("gui perf-log: recording to {}", path.display());
+        // The asset label is READ from the resource rather than recomputed from `args`: deciding
+        // the source twice is exactly how a client reports one tree and reads another.
+        let assets = app
+            .world()
+            .get_resource::<crate::project::SceneSource>()
+            .cloned()
+            .unwrap_or_default()
+            .label();
+        app.insert_resource(
+            crate::perf::PerfLog::new(path).with_run(crate::perf::RunProvenance {
+                build: crate::BUILD_SHA.to_string(),
+                assets,
+                // With the flag absent no `TerrainSubdivision` resource is inserted at all and
+                // the client draws one `TerrainTile` per exposed cell, which IS subdivision 1.
+                // Recorded as the number rather than left blank, so the line never omits the fact
+                // that decides how much geometry the frametime beside it was paying for.
+                subdiv: args.subdiv.unwrap_or(1),
+                // Headless has no window and therefore no present mode. A windowed run takes
+                // Bevy's default, which is `PresentMode::Fifo` -- vsync ON, and the reason a
+                // frametime from the seat can be measuring the monitor rather than the scene.
+                vsync: !args.headless,
+            }),
+        );
     }
     // UNCONDITIONAL, and inserted BEFORE `client_systems`/`projection_systems` so their
     // idempotent `init_resource` finds it already there. Unconditional because a wiring step that
@@ -1414,9 +1451,12 @@ fn record_perf_frame(
             terrain: terrain_tiles.iter().count() + terrain_chunks.iter().count(),
             trees: trees.iter().count(),
             dwarves: dwarves.iter().count(),
-            // Read BEFORE `apply_projection_work` drains it, which is why this runs in `Last` on
-            // the frame the tiles arrived rather than after the rebuild consumed them.
-            dirty_tiles: work.map_or(0, |work| work.dirty_tiles.len()),
+            // The DRAINED count, not the live set. `reconcile_projection` empties `dirty_tiles`
+            // in `Update` and this runs in `Last`, so the set is always empty by now -- reading it
+            // pinned this column to 0 on every row and left AC10's steady/edit split unable to
+            // fire. `the_perf_row_reports_the_tiles_the_reconcile_actually_drained` runs both
+            // systems in one schedule, which is the only place the ordering is visible.
+            dirty_tiles: work.map_or(0, |work| work.drained_tiles),
         },
     );
 }
@@ -1515,6 +1555,8 @@ pub fn reconcile_projection(
     let changes = std::mem::take(&mut work.dirty_tiles)
         .into_iter()
         .collect::<Vec<_>>();
+    // The perf row is written in `Last`, after this drain, so the count has to survive it.
+    work.drained_tiles = changes.len();
     // A chunk mesh is a whole surface, not a set of mutable per-cell entities, so a terrain delta
     // cannot be edited in place the way a cube entity can -- but it does not need the WORLD
     // rebuilt either. `reconcile` rebuilds only the chunks the changed cells can reach. This line
@@ -3340,6 +3382,7 @@ mod tests {
             .insert_resource(ProjectionWork {
                 snapshot: false,
                 dirty_tiles: [[1, 0, 0]].into_iter().collect(),
+                ..Default::default()
             })
             .init_resource::<TickClock>()
             .add_systems(Update, ingest_messages);
