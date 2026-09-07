@@ -46,6 +46,13 @@
     Anything else is forwarded to gui.exe unchanged, AFTER the port and `--assets`. Put `--` first
     when a flag might be mistaken for one of this script's own parameters; that form always works.
 
+.NOTES
+    HOT RELOAD WATCHES <checkout>\assets AND NOTHING ELSE. Edit the dwarf, export from Blender,
+    and then COPY the .glb to <checkout>\assets\gltf\ -- the Blender pipeline exports to
+    src-assets\export\, which is gitignored scratch and is NOT watched. That copy is the one
+    manual step in the loop and it is deliberate: a half-finished export cannot reach a running
+    seat by accident. If you change the dwarf and the client does not move, this is why.
+
 .EXAMPLE
     ./launch-gui.ps1
     # checkout = this repo, exe = .bin\gui.exe, assets = <checkout>\assets
@@ -143,7 +150,15 @@ $head = $head.Trim()
 # feature. But "gui.exe and checkout are both <sha>" is then a FALSE statement about the tree being
 # served, and a launcher whose headline claim can be quietly wrong is the thing this script exists
 # to replace. So the claim is made accurate instead.
+# The exit code is CHECKED, unlike every other git call here, which all were. An unchecked
+# `git status` that fails -- a locked index, a permission fault, a repo in an odd state -- returns
+# nothing, `$dirtyFiles` is then empty, and the script reports the checkout as CLEAN. That is the
+# one claim this launcher exists to make trustworthy, and it would be asserting cleanliness it had
+# never determined.
 $dirtyFiles = @(& git -C $Checkout status --porcelain)
+if ($LASTEXITCODE -ne 0) {
+    Fail 'cannot read the checkout status; refusing to report a cleanliness that was never determined'
+}
 $checkoutState = if ($dirtyFiles.Count -gt 0) {
     "$head (+$($dirtyFiles.Count) local change(s) -- the served tree is NOT exactly $head)"
 } else {

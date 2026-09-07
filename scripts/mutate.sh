@@ -146,12 +146,20 @@ mutation() {
     survivors=$((survivors + 1))
     echo "  test SKIPPED or not collected — proves nothing, treating as a survivor"
     printf '%s\n' "$out" | rg -N 'skipped|Ran 0 tests' | head -3
-  elif [ "$tier" != "py" ] && [ "$rc" -eq 0 ] && ! printf '%s' "$out" | rg -qN '[1-9][0-9]* passed'; then
+  elif [ "$tier" != "py" ] && [ "$rc" -eq 0 ] && ! printf '%s' "$out" | rg -N '^test .* \.\.\. ok$' | rg -qNF "$test"; then
     # The py tier has had this guard since three Blender-gated rows landed in SURVIVED; the cargo
     # tier did not, and an `#[ignore]`d target hits it the same way: every test binary reports
     # "0 passed; 0 failed; N filtered out", cargo exits 0, and the row reads SURVIVED having judged
     # nothing. Guarded on rc==0 so a genuine failure -- which also shows no passing test -- still
     # reaches the KILLED branch below.
+    #
+    # THE NAMED TEST, NOT ANY TEST. This asked `rg '[1-9][0-9]* passed'` of the COMBINED output of
+    # every test binary in the package -- each integration-test file compiles to its own binary and
+    # prints its own summary. A filter that collected nothing in the target's binary but happened to
+    # match a passing test in a sibling file satisfied the old check on that sibling's "1 passed",
+    # and the row went back to judging nothing while claiming otherwise. Matching the test's OWN
+    # `test <name> ... ok` line cannot be satisfied by a different binary. `-F` because a row's test
+    # name is a literal, not a pattern.
     RESULTS+=("NOT-RUN")
     survivors=$((survivors + 1))
     echo "  cargo collected NO tests — proves nothing, treating as a survivor"

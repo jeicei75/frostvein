@@ -11,6 +11,9 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CHECKER = ROOT / "scripts/bench/check_asset.py"
+sys.path.insert(0, str(ROOT / "scripts/bench"))
+
+import check_asset  # noqa: E402
 SIGNOFF = ROOT / "_bmad-output/implementation-artifacts/10-2-signoff"
 
 
@@ -45,6 +48,53 @@ def write_tree02_mutant(target, change):
         + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
         + struct.pack("<II", len(binary), 0x004E4942) + binary
     )
+
+
+def atlas_parts(colours):
+    """A minimal in-memory `(document, binary)` carrying a 64x64 V1 atlas painted with `colours`.
+
+    Built here rather than by mutating a shipped `.glb` because the cases below need atlases no
+    published family has: an entirely unpainted one, and one with a HOLE between painted cells.
+    """
+    import zlib
+
+    pixels = bytearray(b"\x00" * (check_asset.ATLAS * check_asset.ATLAS * 3))
+    for index, colour in enumerate(colours):
+        if colour is None:
+            continue
+        rgb = bytes.fromhex(colour)
+        column, row = index % check_asset.CELLS_PER_ROW, index // check_asset.CELLS_PER_ROW
+        for dy in range(check_asset.CELL):
+            for dx in range(check_asset.CELL):
+                x = column * check_asset.CELL + dx
+                # Row 0 of the image is the TOP; the reader indexes cells from the bottom.
+                y = check_asset.ATLAS - 1 - (row * check_asset.CELL + dy)
+                pixels[(y * check_asset.ATLAS + x) * 3:(y * check_asset.ATLAS + x) * 3 + 3] = rgb
+
+    raw = b"".join(
+        b"\x00" + bytes(pixels[y * check_asset.ATLAS * 3:(y + 1) * check_asset.ATLAS * 3])
+        for y in range(check_asset.ATLAS)
+    )
+
+    def chunk(kind, payload):
+        return (
+            struct.pack(">I", len(payload))
+            + kind
+            + payload
+            + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+        )
+
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", check_asset.ATLAS, check_asset.ATLAS, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+    document = {
+        "images": [{"bufferView": 0}],
+        "bufferViews": [{"byteOffset": 0, "byteLength": len(png)}],
+    }
+    return document, png
 
 
 class CheckAssetTests(unittest.TestCase):
@@ -238,6 +288,43 @@ class CheckAssetTests(unittest.TestCase):
             result = check(stretched)
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("outside the 0-1 atlas", result.stderr)
+
+
+
+
+class PaletteReadTests(unittest.TestCase):
+    """The palette reader's own boundaries, which no shipped asset exercises."""
+
+    def test_an_entirely_unpainted_atlas_is_refused_rather_than_reported_as_empty(self):
+        """It returned `[]` and the caller printed `palette=` and exited 0.
+
+        An empty palette is not a description of an asset, it is the absence of one -- and it read
+        exactly like a healthy asset nobody had looked closely at.
+        """
+        document, binary = atlas_parts([])
+        with self.assertRaises(check_asset.AssetError) as caught:
+            check_asset.palette_from_glb(document, binary)
+        self.assertIn("no palette at all", str(caught.exception))
+
+    def test_a_hole_between_painted_cells_is_named_not_reported_as_black(self):
+        """The trailing-black trim cannot see an interior gap, so it became a phantom colour.
+
+        `#000000` in the middle of the list reads to the eye doing the signoff as a deliberate
+        black. No shipped family paints black, so this is a gap in the paint.
+        """
+        document, binary = atlas_parts(["0A141E", None, "28323C"])
+        with self.assertRaises(check_asset.AssetError) as caught:
+            check_asset.palette_from_glb(document, binary)
+        self.assertIn("[1]", str(caught.exception))
+        self.assertIn("not a colour", str(caught.exception))
+
+    def test_a_painted_run_reads_back_exactly_and_the_unpainted_tail_is_trimmed(self):
+        """The control: the two refusals above must not be firing on healthy input."""
+        document, binary = atlas_parts(["0A141E", "28323C", "F0A63C"])
+        self.assertEqual(
+            check_asset.palette_from_glb(document, binary),
+            ["#0A141E", "#28323C", "#F0A63C"],
+        )
 
 
 if __name__ == "__main__":

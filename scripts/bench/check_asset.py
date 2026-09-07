@@ -184,6 +184,22 @@ def palette_from_glb(document, binary):
         values.append("#%02X%02X%02X" % tuple(pixels[offset:offset + 3]))
     while values and values[-1] == UNUSED_CELL:
         values.pop()
+    if not values:
+        raise AssetError(
+            "palette/material clause: every atlas cell is unpainted, so the asset carries no "
+            "palette at all. An empty `palette=` used to be printed as a result and exit 0, which "
+            "is indistinguishable from a healthy asset whose colours nobody looked at."
+        )
+    # An unpainted cell BETWEEN painted ones is not a terminator and must not be reported as if it
+    # were a colour: `#000000` in the middle of the list reads, to the eye doing the signoff, as a
+    # deliberate black. No shipped family paints black, so a hole here is a gap in the paint and
+    # the checker should say which cell rather than smuggle a phantom colour into the comparison.
+    holes = [index for index, value in enumerate(values) if value == UNUSED_CELL]
+    if holes:
+        raise AssetError(
+            f"palette/material clause: cell(s) {holes} are unpainted but sit before painted ones; "
+            f"a gap in the paint is not a colour. Palette read: {','.join(values)}"
+        )
     return values
 
 
