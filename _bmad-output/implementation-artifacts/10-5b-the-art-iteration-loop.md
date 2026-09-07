@@ -423,13 +423,39 @@ A binary already inside the checkout is run **where it lies**; only one from out
 .\scripts\launch-gui.ps1                      # the happy path
 ```
 
-Three refusals to provoke, with the expected first word and `$LASTEXITCODE` 1 each:
+**WALKED ON THE VEHICLE, 2026-09-07 (Wolf).** The happy path and three refusals have now been
+observed; the transcripts are his, quoted here rather than paraphrased.
 
-| Break | Expect |
-|---|---|
-| Drop a `gui.exe` built at a different commit | `MISMATCH`, naming both SHAs |
-| Build with an uncommitted change, drop that | `the binary is stamped '<sha>-dirty'` |
-| Drop a pre-10.5b `gui.exe` (no `--version`) | `unrecognised stamp` — **not** a started client |
+| Break | Expect | Observed |
+|---|---|---|
+| Happy path | verified, then launches | ✅ `verified — gui.exe and checkout are both cdc5770`, then `source=disk:` on all three startup lines |
+| A `gui.exe` at a different commit | `MISMATCH`, naming both SHAs | ✅ **and NOT contrived** — see below |
+| A pre-10.5b `gui.exe` (no `--version`) | `unrecognised stamp`, **not** a started client | ✅ `unrecognised stamp … 'git version 2.48.1.windows.1'` |
+| Checkout diverged from the remote | `git pull --ff-only failed` | ✅ hit while pulling onto a locally-edited script |
+| A `-dirty` stamp | `the binary is stamped '<sha>-dirty'` | ⬜ **see the split below** |
+
+**MISMATCH fired on a REAL stale binary, which is worth more than the staged version.** The recipe
+offered was to check the tree out at `HEAD~1`. Wolf never needed it: he pulled `57ee860`, his
+`gui.exe` was still built at `cdc5770`, and the guard caught it on the first genuine occurrence of
+exactly the condition it exists for — a binary left behind by a tree that moved on.
+
+```
+launch-gui: MISMATCH — the binary and the checkout are different commits.
+    gui.exe   cdc5770
+    checkout  57ee860
+```
+
+**The `unrecognised stamp` RED was walked with `git.exe`**, no old build required: any executable
+whose `--version` does not match `^gui build (\S+)$` exercises it. That branch matters because a
+pre-10.5b binary has no `--version` flag at all, so a naive script would *start the client* rather
+than report anything.
+
+**The `-dirty` refusal splits in two, and only one half is walked:**
+- **`build.rs` emits `-dirty` on a dirty tree — OBSERVED**, twice, during this story's own dev:
+  `gui build fa5701a-dirty` and `gui build cdc5770-dirty` appear in the session's run logs.
+- **The launcher refusing that stamp — NOT yet walked.** It needs a dirty build on the vehicle, or
+  a one-line stub: a `.cmd` echoing `gui build abc1234-dirty` passed as `-Exe`. Recorded as owed
+  rather than counted, because a check never seen to refuse is a habit, not a guard.
 
 **`.bin/` is gitignored, and that is load-bearing rather than tidiness.** `build.rs` derives
 `-dirty` from `git status --porcelain`, which counts UNTRACKED files, so an un-ignored drop
