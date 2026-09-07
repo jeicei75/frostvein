@@ -159,13 +159,25 @@ $checkoutState = if ($dirtyFiles.Count -gt 0) {
 $stampOutput = & $Exe --version 2>&1
 $stampExit = $LASTEXITCODE
 $stampLine = ($stampOutput | Select-Object -First 1)
-if ($stampExit -ne 0) { Fail "gui.exe --version failed ($stampExit): $stampLine" }
-if ($stampLine -notmatch '^gui build (?<sha>\S+)$') {
+# A binary that SUPPORTS --version always exits 0, so any non-zero status here means it does not
+# support the flag: it treated `--version` as the positional port argument and rejected it
+# (`Error: invalid port`). That is the diagnosis, and it belongs on THIS branch rather than on the
+# one below -- the message used to live on the `-notmatch` path, which needs exit 0, so an old
+# binary produced a bare "failed (1)" while the sentence explaining it sat unreachable.
+#
+# NOTE the chicken-and-egg this closes: the SHA comparison is what reports a stale binary, and a
+# binary too old to answer --version cannot reach that comparison. So a build predating the flag
+# has to be named HERE or it is reported as a mystery.
+if ($stampExit -ne 0) {
     Fail @"
-unrecognised stamp from gui.exe --version: '$stampLine'
-A build predating story 10.5b has no --version flag at all, and will have tried to start the
-client instead. Drop a newer binary.
+this gui.exe does not support --version (exit $stampExit): $stampLine
+It predates the flag, so it cannot be identified and cannot be checked against the checkout.
+`--version` landed with story 10.5b: build from a branch that contains it (10-5b-the-art-iteration-loop
+at time of writing), not from main.
 "@
+}
+if ($stampLine -notmatch '^gui build (?<sha>\S+)$') {
+    Fail "unrecognised stamp from gui.exe --version: '$stampLine' (expected 'gui build <sha>')"
 }
 $stamp = $Matches['sha']
 

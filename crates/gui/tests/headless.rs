@@ -247,6 +247,43 @@ fn projected_marks(app: &mut App) -> Vec<([i32; 3], Option<&'static str>, [i32; 
     marks
 }
 
+/// `--version` prints the build stamp and exits, touching nothing else.
+///
+/// WHY THIS TEST EXISTS, and it is not the obvious reason. The flag was added for
+/// `scripts/launch-gui.ps1`, verified BY HAND once, and then never pinned — so when it later
+/// appeared to be missing there was no way to tell a broken build from a broken memory, and I
+/// asserted it had never been committed when it had. A capability with no test is a capability
+/// nobody can answer questions about.
+///
+/// It also pins the CHICKEN-AND-EGG the launcher depends on: the SHA comparison is what reports a
+/// stale binary, and a binary too old to answer `--version` never reaches that comparison. So this
+/// flag is load-bearing for a guard, not a convenience.
+///
+/// No daemon, no window: `--version` must answer on a machine with neither, which is exactly the
+/// vehicle's situation when someone is checking what they just copied.
+#[test]
+fn version_prints_the_build_stamp_and_exits_without_a_daemon() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg("--version")
+        .output()
+        .expect("the client must run");
+
+    assert!(
+        output.status.success(),
+        "--version must exit 0 with no daemon and no window; got {:?} with stderr {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let first = stdout.lines().next().unwrap_or_default();
+    assert_eq!(
+        first,
+        format!("gui build {}", gui::BUILD_SHA),
+        "the launcher matches this line with ^gui build (\\S+)$ and compares the sha to the \
+         checkout HEAD; if the shape moves, the launcher stops being able to identify a binary"
+    );
+}
+
 #[test]
 fn snapshot_marks_project_through_the_live_ingest_schedule() {
     let dims = Dims { x: 2, y: 2, z: 3 };

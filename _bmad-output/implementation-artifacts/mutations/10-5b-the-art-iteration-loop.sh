@@ -134,3 +134,14 @@ old = '        + ("" if moved else "   (UNCHANGED -- a flat frametime here says 
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        + ""\n'))
 PY
+
+# AC6's identification step rests entirely on this flag, and it had NO test until Wolf hit
+# `Error: invalid port` on the vehicle. Deleting the early return sends `--version` into the
+# positional port parser -- precisely what a binary predating the flag does.
+mutation "--version falls through to the port parser" gui version_prints_the_build_stamp_and_exits_without_a_daemon <<'ROW'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    if print_version_and_exit_if_asked() {\n        return Ok(());\n    }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+ROW
