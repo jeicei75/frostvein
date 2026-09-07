@@ -377,6 +377,39 @@ python3 _bmad-output/implementation-artifacts/10-5-signoff/window_diff.py ...
 change, with the change at least 10x the floor, both published with the window's coordinates.
 `--static-world` is not optional — Part A measured the change SMALLER than the noise without it.
 
+### The launcher's RED — UNWALKED, and Wolf's to observe (Task 4)
+
+`scripts/launch-gui.ps1` has **never been executed**: there is no PowerShell on this devpod and no
+Windows. Its check must be seen to REFUSE before any green from it is believed — a guard that has
+only ever passed is a habit.
+
+**Defaults, amended 2026-09-07 on Wolf's ask** — run it with no arguments:
+`-Checkout` is the repo the script is in (asked of `git rev-parse --show-toplevel`, so it works
+unmoved from `scripts/` and equally from the checkout root), and `-Exe` is `<checkout>\.bin\gui.exe`.
+A binary already inside the checkout is run **where it lies**; only one from outside is copied in.
+
+```powershell
+.\scripts\launch-gui.ps1                      # the happy path
+```
+
+Three refusals to provoke, with the expected first word and `$LASTEXITCODE` 1 each:
+
+| Break | Expect |
+|---|---|
+| Drop a `gui.exe` built at a different commit | `MISMATCH`, naming both SHAs |
+| Build with an uncommitted change, drop that | `the binary is stamped '<sha>-dirty'` |
+| Drop a pre-10.5b `gui.exe` (no `--version`) | `unrecognised stamp` — **not** a started client |
+
+**`.bin/` is gitignored, and that is load-bearing rather than tidiness.** `build.rs` derives
+`-dirty` from `git status --porcelain`, which counts UNTRACKED files, so an un-ignored drop
+directory would make every build in that checkout stamp `-dirty` — and the launcher refuses a dirty
+stamp. The drop would have broken the check it exists to feed.
+
+**Two bugs found by reading, before it ever ran**, both in the check itself rather than around it:
+piping `--version` straight into `Select-Object -First 1` can stop the pipeline early and leave
+`$LASTEXITCODE` describing something other than the binary; and a bare `StartsWith` would treat
+`D:\frostvein\...` as inside a checkout at `D:\frost`, running a binary from another tree in place.
+
 ## Branch and commits
 
 Branch `10-5b-the-art-iteration-loop`, off **`10-5-dwarves-worth-looking-at` at `cb45817`**, not

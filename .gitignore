@@ -51,3 +51,12 @@ __pycache__/
 # a second committed copy of a shipped .glb is how a bench and a client come to draw
 # different trees (scripts/bench/authored_bench.py:55-58).
 src-assets/export/
+
+# The vehicle's binary drop. `scripts/launch-gui.ps1` defaults to `.bin/gui.exe` inside the
+# checkout, so the binary and the assets it serves come from one place.
+#
+# IGNORED IS LOAD-BEARING, not tidiness: `crates/gui/build.rs` derives the `-dirty` suffix from
+# `git status --porcelain`, which counts UNTRACKED files. An un-ignored `.bin/gui.exe` would make
+# every build in that checkout stamp `-dirty`, and the launcher refuses a dirty stamp -- so the
+# drop directory would break the very check it exists to feed.
+.bin/
