@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-03
+last_updated: 2026-09-07
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -1858,7 +1858,19 @@ development_status:
                           # mean=0.000/dark=100%, so a blank capture cannot pass as a lit valley.
                           # Same-build noise floor re-measured on 47139fa: 0.107 mean (the Y=200
                           # probe's 13.3 is 124x it). Full gate GREEN, 9/9, no skips.
-  10-5-dwarves-worth-looking-at: ready-for-dev
+  10-5-dwarves-worth-looking-at: review
+                          # 2026-09-06 PART A IMPLEMENTED, 14 commits, pushed as
+                          # `10-5-dwarves-worth-looking-at` at cb45817. NOT merged, NO PR, and
+                          # NOT yet reviewed -- status moved backlog->review 2026-09-07 because
+                          # `ready-for-dev` on an implemented story reads as an invitation to
+                          # re-dev it. Full gate GREEN (432s, re-run 2026-09-07, not inherited);
+                          # mutation table 7 rows all KILLED. AC7 AMENDED on Wolf's ruling: the
+                          # partition hole predates the story by an epic (4 unmarked scene
+                          # children per tree, 3 per dwarf; 3,240 at the adopted --subdiv 4) and
+                          # is issue #73. Part A OVER-DELIVERED: it shipped the REAL authored
+                          # dwarf, not the pine stand-in its own Task 2 specified.
+                          # WOLF'S RULING 2026-09-07: Part B runs FIRST, then ONE review covers
+                          # Part A and Part B together. Do not open a PR for A on its own.
                           # 2026-09-04 STORY CREATED (ready-for-dev). Baseline 834f105.
                           # THE EPIC'S OWN SPLIT LINE IS TAKEN (epics.md:1591-1593): this story is
                           # PART A, the seam -- a stand-in glTF rendering on the entity path. PART B,
@@ -1887,6 +1899,33 @@ development_status:
                           # check_asset.py is deliberately NOT touched here: it rejects an authored
                           # dwarf on its first clause BY DESIGN (V1 voxel assets only), and
                           # generalising it without the real asset means guessing.
+  10-5b-the-art-iteration-loop: ready-for-dev
+                          # 2026-09-07 STORY CREATED (ready-for-dev). Baseline cb45817 -- the
+                          # PART A BRANCH TIP, not main; Part A is unmerged so `main..HEAD` is
+                          # the wrong range for its gate AC (every M2 story is stacked).
+                          # SCOPE CHANGED BY PART A OVER-DELIVERING: the authored dwarf is
+                          # already shipped and embedded, so "Part B cannot start until Wolf has
+                          # a model" is SPENT. B is the LOOP (--assets disk loading +
+                          # file_watcher, Task 1's option A), the CHECKER, and the SIGN-OFF.
+                          # THREE PREMISES CORRECTED THE RECORD, all executed not read:
+                          #  1. check_asset.py does NOT reject the dwarf -- it ACCEPTS him and
+                          #     SILENTLY UNDER-READS his palette by 3 cells (reads the pines'
+                          #     7; the dwarf has 10). The unread three include the flame
+                          #     #F0A63C, the one colour a pixel guard cares about.
+                          #  2. notify-debouncer-full 0.7.0 CROSS-COMPILES AND LINKS to
+                          #     x86_64-pc-windows-gnu -- 13MB .exe, exit 0. Part A's one
+                          #     unclaimed risk is closed.
+                          #  3. `source=embedded` is a HARDCODED literal in both instrument
+                          #     lines, so the line B must change is itself the
+                          #     text-that-does-not-move-when-the-maths-does shape (10.1).
+                          # Also settled from vendored source: an absolute AssetPlugin.file_path
+                          # REPLACES the base via Path::join, so option A stamps nothing into
+                          # the binary; and file_watcher turns watching on GLOBALLY unless
+                          # overridden, a cost every headless test would pay (AC5).
+                          # OPEN, RAISED NOT ASSUMED: the performance probe (Task 7) is recorded
+                          # NOWHERE -- not epics.md, not Part A, not deferred-work, not an issue
+                          # -- and the story recommends splitting Tasks 6-7 (Wolf's vehicle time
+                          # + the unruled probe) from Tasks 1-5. Wolf's call, not taken here.
   epic-10-retrospective: optional
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).
