@@ -28,6 +28,28 @@ MUTATIONS="${1:?mutations file required — see the usage comment in this script
 cd "$(dirname "$0")/.." || exit 1
 export PATH="$HOME/.cargo/bin:$PATH"
 
+# BUILD PARALLELISM IS CAPPED BY MEMORY, NOT BY CORES, and that is the whole point of this block.
+#
+# Cargo defaults to one rustc per core. This devpod has 32 cores and 23 GB, which is roughly 700 MB
+# per process before anything else is running -- and Bevy's crates are far hungrier than that. A
+# mutation run makes it worse in two ways nothing else does: every row rebuilds, and every row EDITS
+# A SOURCE FILE, which wakes rust-analyzer into a second full check against its own `target/
+# flycheck0`. Two 32-way builds at once is what nearly took the machine down on 2026-09-07, during a
+# 13-row table that had run fine on previous days -- the difference being branch switches across a
+# `bevy` feature boundary, each of which invalidates the entire dependency graph.
+#
+# Derived from total memory rather than hardcoded so it stays right on a different machine. Override
+# with CARGO_BUILD_JOBS if you know better than this arithmetic.
+if [ -z "${CARGO_BUILD_JOBS:-}" ]; then
+  mem_gb=$(awk '/MemTotal/ {print int($2 / 1024 / 1024)}' /proc/meminfo 2>/dev/null || echo 8)
+  cores=$(nproc 2>/dev/null || echo 4)
+  jobs=$((mem_gb / 2))
+  [ "$jobs" -lt 2 ] && jobs=2
+  [ "$jobs" -gt "$cores" ] && jobs="$cores"
+  export CARGO_BUILD_JOBS="$jobs"
+  echo "mutate.sh: capping cargo at ${CARGO_BUILD_JOBS} jobs (${mem_gb} GB / ${cores} cores)"
+fi
+
 BACKUP=$(mktemp -d)
 trap 'restore_all; rm -rf "$BACKUP"' EXIT
 
