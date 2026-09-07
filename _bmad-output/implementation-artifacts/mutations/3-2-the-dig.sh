@@ -348,7 +348,7 @@ PY
 mutation "A-star allows z changes without a ramp" sim-core astar_crosses_only_a_ramp_backed_level_change <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''            if terrain.is_standable(candidate)
+old = '''            if is_walkable(terrain, blocked, candidate)
                 && matches!(
                     terrain.tile(Pos {
                         z: lower.z - 1,
@@ -772,15 +772,20 @@ PY
 mutation "unreachable lower id starves a reachable dwarf" sim-core an_unreachable_lower_id_does_not_starve_a_reachable_dwarf <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                let path =
-                    match astar_with_budget(&terrain, **pos, &goals, &mut astar_nodes_remaining) {
-                        (Some(path), false) => path,
-                        (None, false) => continue,
-                        (None, true) => break 'jobs,
-                        (Some(_), true) => {
-                            unreachable!("a completed search cannot exhaust its budget")
-                        }
-                    };
+old = '''                let path = match astar_with_budget(
+                    &terrain,
+                    &blocked,
+                    **pos,
+                    &goals,
+                    &mut astar_nodes_remaining,
+                ) {
+                    (Some(path), false) => path,
+                    (None, false) => continue,
+                    (None, true) => break 'jobs,
+                    (Some(_), true) => {
+                        unreachable!("a completed search cannot exhaust its budget")
+                    }
+                };
 '''
 assert old in s
 p.write_text(s.replace(old, '                let path = Vec::new();\n'))
@@ -926,11 +931,16 @@ PY
 mutation "each claim search gets a fresh node budget" sim-core claim_jobs_bounds_aggregate_astar_expansions_per_tick <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                let path =
-                    match astar_with_budget(&terrain, **pos, &goals, &mut astar_nodes_remaining) {
+old = '''                let path = match astar_with_budget(
+                    &terrain,
+                    &blocked,
+                    **pos,
+                    &goals,
+                    &mut astar_nodes_remaining,
+                ) {
 '''
 new = '''                let mut per_search_nodes = MAX_ASTAR_NODES;
-                let path = match astar_with_budget(&terrain, **pos, &goals, &mut per_search_nodes) {
+                let path = match astar_with_budget(&terrain, &blocked, **pos, &goals, &mut per_search_nodes) {
 '''
 assert old in s
 p.write_text(s.replace(old, new))
