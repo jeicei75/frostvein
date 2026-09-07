@@ -157,6 +157,23 @@ so that authoring a creature is a loop I can turn, not a cross-compile I have to
    vehicle** and compared it against that artifact. Per AD-17, `gui --capture` output serves the
    closing half and never replaces the opening half.
 
+   **CLOSING HALF MET — Wolf, 2026-09-07, on the vehicle** (RTX 4080 Laptop, Vulkan, discrete GPU):
+   *"Dwarves look like the model in blender."* That is the comparison the closing half asks for —
+   the built result against the authored artifact — and it passes. The launch is transcribed under
+   Verification; `gui dwarves: meshes=5 scenes_loaded=true source=disk:D:\Workspace\frostvein\assets`,
+   so what he judged was the authored glTF read **from the checkout**, not the embedded copy.
+
+   **OPENING HALF — asserted as already discharged, and it needs Wolf's yes rather than mine.**
+   The artifact is `src-assets/renders/dwarf-flat-*.png` plus the reference sheet, approved during
+   the MCP authoring sessions **before** any of this rendering work. That predates implementation,
+   which is what the clause requires. It is written here as a claim to be confirmed, not as a box
+   ticked — the whole point of UX-DR22 is that nobody but Wolf closes it.
+
+   **Two defects seen at the same sitting, and NEITHER is this story's:**
+   - **Dwarves walk through the campfire** — issue #74, already routed into this sitting.
+   - **The lighting needs heavy work** — issue #75, and Wolf ruled it a separate story on sight.
+     See the measurement below on whether blown-out dwarves near the campfire are 10.5b's problem.
+
 ### The measurement — RULED 2026-09-07
 
 **What it is, in Wolf's words: performance written to a log so it can be read AFTER a live run,

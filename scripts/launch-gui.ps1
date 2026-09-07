@@ -36,17 +36,27 @@
     a second candidate binary either.
 
 .PARAMETER Port
-    The daemon port. Defaults to the protocol default.
+    The daemon port. Defaults to 7451, which is also `protocol::DEFAULT_PORT` — so a bare `simd`
+    with no argument listens on exactly this port.
 
 .PARAMETER SkipFetch
     Do not fetch/pull the checkout first. The SHA check still runs.
+
+.PARAMETER GuiArgs
+    Anything else is forwarded to gui.exe unchanged, AFTER the port and `--assets`. Put `--` first
+    when a flag might be mistaken for one of this script's own parameters; that form always works.
 
 .EXAMPLE
     ./launch-gui.ps1
     # checkout = this repo, exe = .bin\gui.exe, assets = <checkout>\assets
 
 .EXAMPLE
-    ./launch-gui.ps1 -Exe D:\drop\gui.exe -Port 7878
+    ./launch-gui.ps1 -- --perf-log run.csv
+    # the same launch, plus a frame log; read it afterwards with
+    #   python3 scripts/bench/perf_summary.py run.csv
+
+.EXAMPLE
+    ./launch-gui.ps1 -Exe D:\drop\gui.exe -Port 7451
 
 .NOTES
     UNRUN ON WINDOWS AT AUTHORING TIME. Written in a Linux devpod with no Windows and no display,
@@ -59,8 +69,15 @@
 param(
     [string]$Checkout,
     [string]$Exe,
-    [int]$Port = 7878,
-    [switch]$SkipFetch
+    # 7451, matching `protocol::DEFAULT_PORT` -- the constant was moved 7373 -> 7451 in this same
+    # commit so the two cannot drift. A bare `simd` therefore lands on exactly this port.
+    [int]$Port = 7451,
+    [switch]$SkipFetch,
+    # Everything else goes straight to gui.exe. This exists so that wanting a flag is never a
+    # reason to bypass the SHA check -- a hand-run gui.exe is exactly the case where a stale binary
+    # goes unnoticed, which is the failure this script was written to close.
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$GuiArgs
 )
 
 $ErrorActionPreference = 'Stop'
@@ -120,6 +137,18 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($head)) {
 }
 $head = $head.Trim()
 
+# The checkout's OWN cleanliness, REPORTED and not refused. Local edits are normal here -- editing
+# an asset and watching it reload is the whole point of `--assets` -- so refusing would fight the
+# feature. But "gui.exe and checkout are both <sha>" is then a FALSE statement about the tree being
+# served, and a launcher whose headline claim can be quietly wrong is the thing this script exists
+# to replace. So the claim is made accurate instead.
+$dirtyFiles = @(& git -C $Checkout status --porcelain)
+$checkoutState = if ($dirtyFiles.Count -gt 0) {
+    "$head (+$($dirtyFiles.Count) local change(s) -- the served tree is NOT exactly $head)"
+} else {
+    $head
+}
+
 # --- Ask the BINARY what it is ----------------------------------------------------------------
 # Not the filename, not the mtime. `--version` prints `gui build <sha>` and exits without
 # connecting to a daemon or opening a window.
@@ -158,7 +187,12 @@ against assets its binary never saw.
 "@
 }
 
-Write-Host "launch-gui: verified — gui.exe and checkout are both $head" -ForegroundColor Green
+Write-Host "launch-gui: verified — gui.exe $stamp, checkout $checkoutState" -ForegroundColor Green
+if ($dirtyFiles.Count -gt 0) {
+    Write-Host "launch-gui: the checkout has uncommitted changes; --assets serves them, not $head" -ForegroundColor Yellow
+    $dirtyFiles | Select-Object -First 5 | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+    if ($dirtyFiles.Count -gt 5) { Write-Host "    ... and $($dirtyFiles.Count - 5) more" -ForegroundColor Yellow }
+}
 
 # --- Run it -----------------------------------------------------------------------------------
 # A binary already inside the checkout is run WHERE IT LIES. Copying it elsewhere would create the
@@ -181,6 +215,11 @@ if ($Exe.StartsWith($checkoutPrefix, [StringComparison]::OrdinalIgnoreCase)) {
     Write-Host "launch-gui: copied to $target"
 }
 
+# ORDER IS DELIBERATE: port, then --assets, then whatever was forwarded. A forwarded `--assets`
+# therefore lands LAST, and `gui`'s parser takes the last occurrence -- so the launcher's default is
+# overridable rather than a wall.
+$argv = @([string]$Port, '--assets', $assets) + $GuiArgs
+if ($GuiArgs) { Write-Host "launch-gui: forwarding $($GuiArgs -join ' ')" }
 Write-Host "launch-gui: starting on port $Port with --assets $assets"
-& $target $Port --assets $assets
+& $target @argv
 exit $LASTEXITCODE
