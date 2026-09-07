@@ -358,6 +358,10 @@ pub fn run() -> anyhow::Result<()> {
     // embedded copy is absent, only that it was not the thing read; AC2 measures the bytes.
     register_tree_assets(&mut app);
     app.insert_resource(scene_source);
+    if let Some(path) = args.perf_log.clone() {
+        eprintln!("gui perf-log: recording to {}", path.display());
+        app.insert_resource(crate::perf::PerfLog::new(path));
+    }
     configure_client_app(&mut app, mirror, receiver, writer, args);
     // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
     // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
@@ -563,6 +567,7 @@ pub fn client_systems(app: &mut App) {
             light_controls,
             update_fog_from_camera,
             toggle_overlay,
+            crate::perf::mark_perf_frame_on_key,
             fall_snow,
         ),
     )
@@ -580,7 +585,9 @@ pub fn client_systems(app: &mut App) {
             send_commands.after(designation_input),
             update_designate_hint.after(designation_input),
         ),
-    );
+    )
+    // `Last`, so the row describes a frame that has actually been drawn.
+    .add_systems(bevy::app::Last, record_perf_frame);
 }
 
 /// The capture instrument's registration, including the ordering edge that keeps it reading the
@@ -641,6 +648,8 @@ struct Args {
     /// `--assets <dir>`: read glTF scenes from this directory instead of the embedded blobs.
     /// Dev-only, absolute, and never a default.
     assets: Option<PathBuf>,
+    /// `--perf-log <path>`: append one CSV row per frame, to be read after the run.
+    perf_log: Option<PathBuf>,
 }
 
 /// Present only under `--headless`: the offscreen texture the camera draws into, and which the
@@ -723,6 +732,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut subdiv = None;
     let mut lights_off = Vec::new();
     let mut assets = None;
+    let mut perf_log = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -758,6 +768,12 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                 );
             }
             assets = Some(dir);
+        } else if arg == "--perf-log" {
+            // Off unless asked, like --capture and --static-world. A run that was not asked to
+            // measure itself writes no file and pays nothing.
+            perf_log = Some(PathBuf::from(
+                args.next().context("--perf-log requires a path")?,
+            ));
         } else if arg == "--expect-work" {
             expect_work = true;
         } else if arg == "--headless" {
@@ -871,6 +887,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         subdiv,
         lights_off,
         assets,
+        perf_log,
     })
 }
 
@@ -1347,6 +1364,35 @@ fn update_fog_from_camera(mut cameras: Query<(&CameraRig, &mut DistanceFog)>) {
         let (start, end) = fog_falloff(rig.distance);
         fog.falloff = FogFalloff::Linear { start, end };
     }
+}
+
+/// One CSV row per frame, if `--perf-log` asked for it.
+///
+/// Runs in `Last` so the row describes a frame that has actually been drawn, and reads the same
+/// queries the startup instrument counts -- one source for both, so the log and the console cannot
+/// disagree about what was on screen.
+fn record_perf_frame(
+    log: Option<ResMut<crate::perf::PerfLog>>,
+    terrain_tiles: Query<&TerrainTile>,
+    terrain_chunks: Query<&crate::project::TerrainChunk>,
+    trees: Query<&crate::project::TreeMesh>,
+    dwarves: Query<&bevy::world_serialization::WorldAssetRoot, With<WorldProjected>>,
+    work: Option<Res<ProjectionWork>>,
+) {
+    let Some(mut log) = log else {
+        return;
+    };
+    log.record(
+        std::time::Instant::now(),
+        crate::perf::FrameCounts {
+            terrain: terrain_tiles.iter().count() + terrain_chunks.iter().count(),
+            trees: trees.iter().count(),
+            dwarves: dwarves.iter().count(),
+            // Read BEFORE `apply_projection_work` drains it, which is why this runs in `Last` on
+            // the frame the tiles arrived rather than after the rebuild consumed them.
+            dirty_tiles: work.map_or(0, |work| work.dirty_tiles.len()),
+        },
+    );
 }
 
 fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut config: ResMut<FpsOverlayConfig>) {

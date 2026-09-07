@@ -157,7 +157,14 @@ queries, which `llvmpipe` here cannot exercise — vehicle-only and untestable i
 is not bought until something asks for it).
 
 9. **`--perf-log <path>` writes one CSV row per frame, and every row carries the CONTENT beside the
-    TIME.** Columns: `frame, t_ms, frametime_ms, draws, tris, remesh_chunks`. A timing column with
+    TIME.** Columns as shipped: `frame, t_ms, frametime_ms, terrain, trees, dwarves, dirty_tiles,
+    mark`. **AMENDED from the authored `draws, tris, remesh_chunks`, and each change is a
+    correction rather than a substitution:** `draws`/`tris` need `RenderDiagnosticsPlugin` and GPU
+    timestamps that `llvmpipe` cannot exercise here, so they would be vehicle-only and untestable —
+    the entity counts move when the drawn world moves, which is the property the column exists for.
+    `remesh_chunks` became `dirty_tiles` because `reconcile` returns `()` and giving it a chunk
+    count would change a signature with many callers for a refinement nothing has asked for; tiles
+    answer the question the split needs. `mark` is new — see AC11. A timing column with
     no content column beside it cannot be told apart from a broken instrument — **~140 fps once
     survived a 39% triangle cut here because the terrain was never rasterised**
     ([[fps-that-does-not-move]]). The header names the run: build stamp, asset source, `--subdiv`,
@@ -172,9 +179,12 @@ is not bought until something asks for it).
     the wild (worst-1%-averaged vs the 99th-percentile frame) are not the same number.
     The summariser is a pure function over the CSV, so it gets a RED **on this devpod** before any
     real data is trusted to it; the numbers themselves come from the vehicle.
-11. **A key at the seat dumps the last N frames on demand** (Wolf's ruling — the flag serves a
-    scripted run, the key catches "that felt bad just now", which a scripted run never reproduces).
-    Off unless asked, like `--capture` and `--static-world`.
+11. **A key at the seat marks the moment, and the summary reports it** (Wolf's ruling — the flag
+    serves a scripted run, the key catches "that felt bad just now", which a scripted run never
+    reproduces). **AMENDED from "dumps the last N frames": with every row written as it happens
+    there is nothing left to dump** — the rows are already on disk. What a ten-minute log actually
+    lacks is a LANDMARK, so `F4` flags the next frame and the summary prints every marked frame with
+    its time. Off unless asked, like `--capture` and `--static-world`.
 
 ### Scope
 

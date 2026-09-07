@@ -59,17 +59,21 @@ PY
 mutation "the F3 overlay toggle is never registered" gui f3_toggles_the_diagnostic_overlay <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            toggle_overlay,\n            fall_snow,'
+# ANCHORED ON THE ONE SYMBOL, not on its neighbour. This row asserted the PAIR
+# `toggle_overlay,\n            fall_snow,` and stopped applying the moment story 10.5b
+# registered a system between them -- the row pinned nothing and only the gate's audit said so.
+old = '            toggle_overlay,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            fall_snow,'))
+p.write_text(s.replace(old, ''))
 PY
 
 mutation "snow stops falling" gui snow_falls_every_frame <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            toggle_overlay,\n            fall_snow,\n'
+# Anchored on the one symbol, for the reason given on the row above.
+old = '            fall_snow,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            toggle_overlay,\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 # The exact seam story 7.2's review found inert: the flag parsed, validated, and never reached
