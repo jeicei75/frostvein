@@ -68,7 +68,7 @@ PY
 mutation "the watcher is armed even with no disk tree" gui the_file_watcher_is_armed_only_when_there_is_a_disk_tree_to_watch <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        watch_for_changes_override: Some(args.assets.is_some()),\n'
+old = '        watch_for_changes_override: Some(assets.is_some()),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        watch_for_changes_override: Some(true),\n'))
 PY

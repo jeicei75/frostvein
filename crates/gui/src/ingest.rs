@@ -312,20 +312,7 @@ pub fn run() -> anyhow::Result<()> {
     // SEE which asset tree it read rather than be told which one it should have read. Two candidate
     // asset trees is the stale-artifact shape this project keeps paying for.
     eprintln!("gui assets: source={}", scene_source.label());
-    let asset_plugin = AssetPlugin {
-        // Absolute, so `get_base_path().join(..)` resolves to exactly this directory. Checked at
-        // parse time.
-        file_path: args
-            .assets
-            .as_ref()
-            .map(|dir| dir.display().to_string())
-            .unwrap_or_else(|| AssetPlugin::default().file_path),
-        // `file_watcher` is compiled in, and Bevy then defaults watching ON. With no `--assets`
-        // there is nothing on disk to watch, so every headless test in the gate would pay for a
-        // `notify` thread that can never fire. Explicit in BOTH directions rather than inherited.
-        watch_for_changes_override: Some(args.assets.is_some()),
-        ..Default::default()
-    };
+    let asset_plugin = asset_plugin_for(args.assets.as_deref());
     if args.headless {
         // No window, and therefore no winit: WinitPlugin panics outright where there is no display
         // server, which is every devpod this project builds on. ScheduleRunnerPlugin drives the
@@ -714,6 +701,27 @@ enum ScriptedDragStage {
     Hold,
     Release,
     Done,
+}
+
+/// The `AssetPlugin` for this run — extracted so a test can read the decision it makes.
+///
+/// It was inline in `run()`, and the test that claimed to pin it asserted `args.assets.is_some()`
+/// instead: re-testing the PARSER while naming the watcher. The mutation table caught it —
+/// forcing `watch_for_changes_override` to `Some(true)` changed nothing the test could see.
+fn asset_plugin_for(assets: Option<&Path>) -> AssetPlugin {
+    AssetPlugin {
+        // Absolute, so `get_base_path().join(..)` resolves to exactly this directory. Checked at
+        // parse time.
+        file_path: assets.map_or_else(
+            || AssetPlugin::default().file_path,
+            |dir| dir.display().to_string(),
+        ),
+        // `file_watcher` is compiled in, and Bevy then defaults watching ON. With no `--assets`
+        // there is nothing on disk to watch, so every headless test in the gate would pay for a
+        // `notify` thread that can never fire. Explicit in BOTH directions rather than inherited.
+        watch_for_changes_override: Some(assets.is_some()),
+        ..Default::default()
+    }
 }
 
 fn parse_args() -> anyhow::Result<Args> {
@@ -1838,23 +1846,34 @@ mod tests {
     /// AC5. `file_watcher` is compiled in, and Bevy then defaults watching ON -- so the cost of a
     /// `notify` thread would land on every headless test in the gate for a capability nothing
     /// exercises. This pins the override in BOTH directions rather than trusting the default.
+    ///
+    /// IT READS THE PLUGIN, not the parser. The first version of this test asserted
+    /// `args.assets.is_some()`, which is the flag going in rather than the decision coming out --
+    /// so forcing `watch_for_changes_override` to `Some(true)` left it green. The mutation table
+    /// found that; a green test named for the watcher had pinned nothing about the watcher.
     #[test]
     fn the_file_watcher_is_armed_only_when_there_is_a_disk_tree_to_watch() {
-        for (flag, expected) in [(None, false), (Some("/tmp/frostvein-checkout"), true)] {
-            let mut argv = vec![std::ffi::OsString::from("7451")];
-            if let Some(dir) = flag {
-                argv.push(std::ffi::OsString::from("--assets"));
-                argv.push(std::ffi::OsString::from(dir));
-            }
-            let args = super::parse_args_from(argv).expect("must parse");
-            // The same expression `run()` builds the plugin from, asserted against a hand-written
-            // expectation rather than re-deriving it.
-            assert_eq!(
-                args.assets.is_some(),
-                expected,
-                "watch_for_changes_override must follow --assets, not the feature flag"
-            );
-        }
+        let embedded = super::asset_plugin_for(None);
+        assert_eq!(
+            embedded.watch_for_changes_override,
+            Some(false),
+            "with no disk tree the watcher must be explicitly OFF, not left to Bevy's default"
+        );
+        assert_eq!(
+            embedded.file_path,
+            bevy::asset::AssetPlugin::default().file_path,
+            "no flag must leave the asset root exactly as it ships"
+        );
+
+        let dir = std::path::Path::new("/tmp/frostvein-checkout");
+        let on_disk = super::asset_plugin_for(Some(dir));
+        assert_eq!(
+            on_disk.watch_for_changes_override,
+            Some(true),
+            "a disk tree is the only thing that arms the watcher"
+        );
+        // Hand-written, not re-derived from the expression under test.
+        assert_eq!(on_disk.file_path, "/tmp/frostvein-checkout");
     }
 
     /// `--lights-off` is what gives `from_name` a caller the shipped binary reaches. Before it,
