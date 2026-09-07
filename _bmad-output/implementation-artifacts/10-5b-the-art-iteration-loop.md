@@ -172,7 +172,21 @@ so that authoring a creature is a loop I can turn, not a cross-compile I have to
    **Two defects seen at the same sitting, and NEITHER is this story's:**
    - **Dwarves walk through the campfire** — issue #74, already routed into this sitting.
    - **The lighting needs heavy work** — issue #75, and Wolf ruled it a separate story on sight.
-     See the measurement below on whether blown-out dwarves near the campfire are 10.5b's problem.
+
+   **THE ONE QUESTION THAT COULD HAVE MADE THE LIGHTING 10.5b's PROBLEM IS CLOSED, and closed by
+   the right evidence.** Blown-out dwarves near the campfire would belong to this story if the
+   AUTHORED dwarf blew out where the CUBE did not — a one-variable comparison. Wolf answered it
+   from the seat before I could run it: **the cube blows out identically, and so does everything
+   else near the campfire and torches.** The dwarf is not the variable; proximity to a warm light
+   is. **10.5b owes nothing here.**
+
+   Measured on the devpod immediately afterwards and handed to #75 rather than acted on, because
+   the exoneration is this story's business and the fix is not: no single light's removal gets the
+   frame under the ceiling (best case, sun off, is still +0.1947 points over), the four torches
+   dominate so completely that turning them off trips the warm-lit FLOOR instead, and **the
+   1.5630% ceiling was calibrated on 2026-08-29, six days before the sun was lifted out from under
+   the map** — so the guard compares a sunlit world against a sunless calibration. Figures and
+   caveats are on issue #75.
 
 ### The measurement — RULED 2026-09-07
 
