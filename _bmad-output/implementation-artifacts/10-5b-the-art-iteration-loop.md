@@ -249,7 +249,8 @@ is not bought until something asks for it).
       Test drives the real binary with and without the flag and asserts the two lines DIFFER.
 - [x] **Task 3 — `file_watcher` (AC4).** One feature word in `Cargo.toml:19-30` plus its
       justification comment. `notify` cross-compiles — premise 3, already settled.
-- [x] **Task 4 — the pwsh launcher (closes issue #46, M2-7).** Fetch the checkout, copy the fresh
+- [x] **Task 4 — the pwsh launcher (closes issue #46, M2-7). WALKED on the vehicle 2026-09-07 —
+      happy path plus every meaningful refusal.** Fetch the checkout, copy the fresh
       `gui.exe`, start it with `--assets`. **It must verify the checkout's SHA against the
       `gui build <sha>` stamp and refuse to launch on a mismatch, and refuse on a `-dirty` stamp**
       where no exact comparison exists. A launcher that only copies is a convenience; one that
@@ -432,7 +433,7 @@ observed; the transcripts are his, quoted here rather than paraphrased.
 | A `gui.exe` at a different commit | `MISMATCH`, naming both SHAs | ✅ **and NOT contrived** — see below |
 | A pre-10.5b `gui.exe` (no `--version`) | `unrecognised stamp`, **not** a started client | ✅ `unrecognised stamp … 'git version 2.48.1.windows.1'` |
 | Checkout diverged from the remote | `git pull --ff-only failed` | ✅ hit while pulling onto a locally-edited script |
-| A `-dirty` stamp | `the binary is stamped '<sha>-dirty'` | ⬜ **see the split below** |
+| A `-dirty` stamp | `the binary is stamped '<sha>-dirty'` | ✅ both halves — see below |
 
 **MISMATCH fired on a REAL stale binary, which is worth more than the staged version.** The recipe
 offered was to check the tree out at `HEAD~1`. Wolf never needed it: he pulled `57ee860`, his
@@ -450,12 +451,18 @@ whose `--version` does not match `^gui build (\S+)$` exercises it. That branch m
 pre-10.5b binary has no `--version` flag at all, so a naive script would *start the client* rather
 than report anything.
 
-**The `-dirty` refusal splits in two, and only one half is walked:**
-- **`build.rs` emits `-dirty` on a dirty tree — OBSERVED**, twice, during this story's own dev:
-  `gui build fa5701a-dirty` and `gui build cdc5770-dirty` appear in the session's run logs.
-- **The launcher refusing that stamp — NOT yet walked.** It needs a dirty build on the vehicle, or
-  a one-line stub: a `.cmd` echoing `gui build abc1234-dirty` passed as `-Exe`. Recorded as owed
-  rather than counted, because a check never seen to refuse is a habit, not a guard.
+**The `-dirty` refusal splits in two, and BOTH halves are now walked — separately, and the join
+is sound rather than assumed:**
+- **`build.rs` PRODUCES `-dirty` on a dirty tree — OBSERVED** twice during this story's own dev:
+  `gui build fa5701a-dirty` and `gui build cdc5770-dirty` are in the session's run logs.
+- **The launcher REFUSES that stamp — OBSERVED** on the vehicle, driven by a one-line `.cmd` stub
+  echoing `gui build abc1234-dirty` as `-Exe`, so no dirty build was needed:
+  `the binary is stamped 'abc1234-dirty' — it was built from an UNCOMMITTED tree…`
+
+**Why the two halves compose.** No single run went dirty-build → refusal end to end. It does not
+need to: the seam between the halves is a STRING, the stub emits exactly the shape the real dirty
+binaries were observed emitting, and the launcher's only interaction with it is a regex match.
+Naming which half was proven where is the difference between a composed proof and an assumed one.
 
 **`.bin/` is gitignored, and that is load-bearing rather than tidiness.** `build.rs` derives
 `-dirty` from `git status --porcelain`, which counts UNTRACKED files, so an un-ignored drop

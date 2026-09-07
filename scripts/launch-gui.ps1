@@ -59,10 +59,11 @@
     ./launch-gui.ps1 -Exe D:\drop\gui.exe -Port 7451
 
 .NOTES
-    UNRUN ON WINDOWS AT AUTHORING TIME. Written in a Linux devpod with no Windows and no display,
-    so it has never been executed. The RED to walk before its green is trusted, and the exact
-    expected output, are in the story's Verification section. A check that has never been seen to
-    refuse is a habit, not a guard.
+    WALKED ON WINDOWS 2026-09-07. Written in a Linux devpod with no Windows and no display, so it
+    shipped unrun — and was then exercised at the seat: the happy path, MISMATCH (on a genuinely
+    stale binary, not a staged one), `unrecognised stamp`, the diverged-checkout refusal, and the
+    `-dirty` refusal. A check that has never been seen to refuse is a habit rather than a guard;
+    these have now been seen. Transcripts are in the story's Verification section.
 #>
 
 [CmdletBinding()]
