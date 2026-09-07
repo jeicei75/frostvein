@@ -13,7 +13,7 @@ use std::{
 use bevy_ecs::{
     component::Component,
     entity::Entity,
-    query::With,
+    query::{With, Without},
     resource::Resource,
     schedule::{IntoScheduleConfigs, Schedule},
     system::{Commands, Query, Res, ResMut},
@@ -359,8 +359,10 @@ fn claim_jobs(
     zones: Res<Zones>,
     mut jobs: ResMut<Jobs>,
     stones: Query<(&Id, &Pos), With<Item>>,
+    emitters: Query<&Pos, With<Emitter>>,
     mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying)>,
 ) {
+    let blocked = blocked_cells(emitters.iter());
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
     dwarves.sort_by_key(|(_, id, _, _, _)| **id);
     let mut claimed: BTreeSet<_> = dwarves
@@ -403,15 +405,20 @@ fn claim_jobs(
                         .saturating_add(reaction_delay(seed.0, **id, job.id))
             {
                 attempted = true;
-                let path =
-                    match astar_with_budget(&terrain, **pos, &goals, &mut astar_nodes_remaining) {
-                        (Some(path), false) => path,
-                        (None, false) => continue,
-                        (None, true) => break 'jobs,
-                        (Some(_), true) => {
-                            unreachable!("a completed search cannot exhaust its budget")
-                        }
-                    };
+                let path = match astar_with_budget(
+                    &terrain,
+                    &blocked,
+                    **pos,
+                    &goals,
+                    &mut astar_nodes_remaining,
+                ) {
+                    (Some(path), false) => path,
+                    (None, false) => continue,
+                    (None, true) => break 'jobs,
+                    (Some(_), true) => {
+                        unreachable!("a completed search cannot exhaust its budget")
+                    }
+                };
                 current.0 = Some(job.id);
                 commands
                     .entity(*entity)
@@ -505,7 +512,31 @@ impl Terrain {
     }
 }
 
-fn astar_neighbours(terrain: &Terrain, from: Pos) -> Vec<Pos> {
+/// Can a dwarf stand here — the ONE rule both movement paths ask.
+///
+/// Standable terrain, and not a cell a fire occupies. Both halves matter and they are deliberately
+/// in one function: job routing (`astar_neighbours`) and idle movement (`wander`) previously each
+/// carried their own `is_standable` check, and a rule added to one of them would have been a rule
+/// the other quietly ignored. A dwarf that cannot be routed through a fire but can wander into one
+/// is not fixed. See issue #74.
+fn is_walkable(terrain: &Terrain, blocked: &BTreeSet<Pos>, candidate: Pos) -> bool {
+    terrain.is_standable(candidate) && !blocked.contains(&candidate)
+}
+
+/// The cells a dwarf must not enter: every emitter's own tile.
+///
+/// `spawn_dwarves` already refuses to PLACE a dwarf on one; nothing stopped a dwarf walking through
+/// afterwards, which is what Wolf saw from the seat — dwarves crossing the campfire, their shadows
+/// swinging through a large angle as they passed the point light's own position.
+///
+/// NOTE: emitters are static after worldgen (`spawn_emitters` is the only producer), but this is
+/// derived from the live query rather than cached in a resource, so an emitter added later is
+/// blocked without anyone remembering to invalidate anything.
+fn blocked_cells<'a>(positions: impl Iterator<Item = &'a Pos>) -> BTreeSet<Pos> {
+    positions.copied().collect()
+}
+
+fn astar_neighbours(terrain: &Terrain, blocked: &BTreeSet<Pos>, from: Pos) -> Vec<Pos> {
     const DIRECTIONS: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
     let mut neighbours = Vec::with_capacity(12);
     for (dx, dy) in DIRECTIONS {
@@ -514,7 +545,7 @@ fn astar_neighbours(terrain: &Terrain, from: Pos) -> Vec<Pos> {
             y: from.y + dy,
             z: from.z,
         };
-        if terrain.is_standable(candidate) {
+        if is_walkable(terrain, blocked, candidate) {
             neighbours.push(candidate);
         }
     }
@@ -530,7 +561,7 @@ fn astar_neighbours(terrain: &Terrain, from: Pos) -> Vec<Pos> {
             } else {
                 from
             };
-            if terrain.is_standable(candidate)
+            if is_walkable(terrain, blocked, candidate)
                 && matches!(
                     terrain.tile(Pos {
                         z: lower.z - 1,
@@ -559,6 +590,7 @@ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
 
 fn astar_with_budget(
     terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
     from: Pos,
     goals: &BTreeSet<Pos>,
     nodes_remaining: &mut usize,
@@ -590,7 +622,7 @@ fn astar_with_budget(
             return (Some(path), false);
         }
 
-        for neighbour in astar_neighbours(terrain, current) {
+        for neighbour in astar_neighbours(terrain, blocked, current) {
             let next_cost = current_cost + 1;
             if next_cost < costs.get(&neighbour).copied().unwrap_or(u32::MAX) {
                 costs.insert(neighbour, next_cost);
@@ -605,9 +637,14 @@ fn astar_with_budget(
     (None, false)
 }
 
-fn astar(terrain: &Terrain, from: Pos, goals: &BTreeSet<Pos>) -> Option<Vec<Pos>> {
+fn astar(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    from: Pos,
+    goals: &BTreeSet<Pos>,
+) -> Option<Vec<Pos>> {
     let mut nodes_remaining = MAX_ASTAR_NODES;
-    astar_with_budget(terrain, from, goals, &mut nodes_remaining).0
+    astar_with_budget(terrain, blocked, from, goals, &mut nodes_remaining).0
 }
 
 /// `items` holds UNCARRIED stones only — a stone in transit occupies no tile, so a carrier
@@ -757,6 +794,13 @@ fn clear_paths(ecs: &mut EcsWorld) {
 
 /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
 fn execute_jobs(ecs: &mut EcsWorld) {
+    // Built once, before the loop borrows the world for terrain.
+    let blocked = blocked_cells(
+        ecs.query_filtered::<&Pos, With<Emitter>>()
+            .iter(ecs)
+            .collect::<Vec<_>>()
+            .into_iter(),
+    );
     let mut dwarves: Vec<_> = ecs
         .iter_entities()
         .filter(|entity| entity.contains::<Dwarf>())
@@ -797,7 +841,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 .unwrap_or_default();
             if path.is_empty() {
                 let terrain = ecs.resource::<Terrain>();
-                let Some(computed) = astar(terrain, pos, &work_positions) else {
+                let Some(computed) = astar(terrain, &blocked, pos, &work_positions) else {
                     retry_claim(ecs, entity, job.id);
                     continue;
                 };
@@ -958,8 +1002,14 @@ fn advance_tick(mut tick: ResMut<Tick>) {
 fn wander(
     mut rng: ResMut<WanderRng>,
     terrain: Res<Terrain>,
-    mut dwarves: Query<(&Id, &mut Pos, &mut Wander, &mut JobState, &CurrentJob)>,
+    emitters: Query<&Pos, With<Emitter>>,
+    // `Without<Emitter>` is what makes this disjoint from the emitter query above: this one takes
+    // `&mut Pos` and that one takes `&Pos`, and bevy_ecs rejects the pair (B0001) unless a filter
+    // proves no entity can be in both. Nothing is ever both a dwarf and a fire, so it costs
+    // nothing to say so.
+    mut dwarves: Query<(&Id, &mut Pos, &mut Wander, &mut JobState, &CurrentJob), Without<Emitter>>,
 ) {
+    let blocked = blocked_cells(emitters.iter());
     // AD-7: query iteration is archetype order, not Id order, and all dwarves draw from
     // one stream. Draw order is a sim outcome, so sort before touching the RNG.
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
@@ -990,7 +1040,7 @@ fn wander(
             .filter(|p| {
                 (p.x - wander.home.x).abs() <= WANDER_RADIUS
                     && (p.y - wander.home.y).abs() <= WANDER_RADIUS
-                    && terrain.is_standable(*p)
+                    && is_walkable(&terrain, &blocked, *p)
             })
             .collect();
         wander.cooldown = WANDER_REST_TICKS;
@@ -1601,6 +1651,11 @@ fn camp_emitters(camp: Pos) -> [(Pos, LightKind); 5] {
 
 #[cfg(test)]
 mod tests {
+    /// No fire on the map — the pathing tests below are about terrain, not about issue #74's rule.
+    /// Named rather than an inline empty set so a test that MEANS to place a fire reads differently
+    /// from one that never considered it.
+    static NO_FIRE: std::sync::LazyLock<BTreeSet<Pos>> = std::sync::LazyLock::new(BTreeSet::new);
+
     use std::{
         collections::{BTreeMap, BTreeSet},
         time::Instant,
@@ -2766,8 +2821,14 @@ mod tests {
             Pos { x: 4, y: 0, z: 1 },
         ];
 
-        assert_eq!(super::astar(&terrain, from, &goals), Some(expected.clone()));
-        assert_eq!(super::astar(&terrain, from, &goals), Some(expected));
+        assert_eq!(
+            super::astar(&terrain, &NO_FIRE, from, &goals),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            super::astar(&terrain, &NO_FIRE, from, &goals),
+            Some(expected)
+        );
     }
 
     /// Manual resolution instrument for story 10.6.  It uses the existing private A* directly,
@@ -2784,7 +2845,7 @@ mod tests {
                 z: 1,
             };
             let started = Instant::now();
-            let path = super::astar(&terrain, from, &BTreeSet::from([goal]));
+            let path = super::astar(&terrain, &NO_FIRE, from, &BTreeSet::from([goal]));
             println!(
                 "resolution-astar sim_k={k} edge={edge} path_found={} elapsed_seconds={:.6}",
                 path.is_some(),
@@ -2809,7 +2870,7 @@ mod tests {
         let from = Pos { x: 0, y: 1, z: 1 };
         let goal = Pos { x: 4, y: 1, z: 1 };
 
-        let path = super::astar(&terrain, from, &BTreeSet::from([goal]))
+        let path = super::astar(&terrain, &NO_FIRE, from, &BTreeSet::from([goal]))
             .expect("dwarf can walk around a tree");
 
         assert_eq!(path.last(), Some(&goal));
@@ -2824,7 +2885,7 @@ mod tests {
         let goal = Pos { x: 2, y: 2, z: 1 };
 
         assert_eq!(
-            super::astar(&terrain, from, &BTreeSet::from([goal])),
+            super::astar(&terrain, &NO_FIRE, from, &BTreeSet::from([goal])),
             Some(vec![
                 Pos { x: 0, y: 1, z: 1 },
                 Pos { x: 0, y: 2, z: 1 },
@@ -2849,12 +2910,12 @@ mod tests {
         let higher = Pos { x: 1, y: 0, z: 2 };
 
         assert_eq!(
-            super::astar(&terrain, lower, &BTreeSet::from([higher])),
+            super::astar(&terrain, &NO_FIRE, lower, &BTreeSet::from([higher])),
             Some(vec![higher])
         );
         terrain.tiles[super::worldgen::index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
         assert_eq!(
-            super::astar(&terrain, lower, &BTreeSet::from([higher])),
+            super::astar(&terrain, &NO_FIRE, lower, &BTreeSet::from([higher])),
             None
         );
     }
@@ -2903,7 +2964,12 @@ mod tests {
         let goal = Pos { x: 2, y: 0, z: 3 };
 
         assert_eq!(
-            super::astar(&terrain, Pos { x: 1, y: 2, z: 2 }, &BTreeSet::from([goal]),),
+            super::astar(
+                &terrain,
+                &NO_FIRE,
+                Pos { x: 1, y: 2, z: 2 },
+                &BTreeSet::from([goal]),
+            ),
             Some(vec![
                 Pos { x: 2, y: 2, z: 1 },
                 Pos { x: 2, y: 1, z: 2 },
@@ -2921,6 +2987,7 @@ mod tests {
         assert_eq!(
             super::astar(
                 &terrain,
+                &NO_FIRE,
                 Pos { x: 0, y: 0, z: 1 },
                 &BTreeSet::from([Pos { x: 2, y: 0, z: 1 }]),
             ),
@@ -2934,7 +3001,7 @@ mod tests {
         let center = Pos { x: 1, y: 1, z: 1 };
 
         assert_eq!(
-            super::astar_neighbours(&terrain, center),
+            super::astar_neighbours(&terrain, &NO_FIRE, center),
             vec![
                 Pos { x: 0, y: 1, z: 1 },
                 Pos { x: 2, y: 1, z: 1 },
@@ -2960,6 +3027,7 @@ mod tests {
         assert_eq!(
             super::astar(
                 &terrain,
+                &NO_FIRE,
                 Pos { x: 0, y: 0, z: 1 },
                 &BTreeSet::from([Pos {
                     x: 223,
@@ -2980,6 +3048,7 @@ mod tests {
 
         let path = super::astar(
             &terrain,
+            &NO_FIRE,
             Pos { x: 0, y: 0, z: 1 },
             &BTreeSet::from([Pos { x: 5, y: 5, z: 1 }]),
         )
@@ -3405,6 +3474,48 @@ mod tests {
         for index in 1..5 {
             assert_eq!(after[index].1, before[index].1);
             assert_eq!(after[index].2, JobState::Idle);
+        }
+    }
+
+    /// Issue #74. A dwarf must never stand in a fire — the OBSERVABLE outcome, checked against the
+    /// running sim rather than against either movement path's internals.
+    ///
+    /// WHY IT RUNS THE WORLD AND NOT `astar_neighbours`. There are two writers of a dwarf's
+    /// position — job routing and `wander` — and a unit test of either would pass while the other
+    /// walked dwarves through the campfire. That is the shape this project shipped before, where a
+    /// draw offset applied at the spawn was rewritten by the blend on the very next frame. Only
+    /// ticking the world exercises both.
+    ///
+    /// It also pins the SPAWN, because `spawn_dwarves` excluding emitters was already true and is
+    /// the half that would silently carry the assertion if movement regressed on tick one.
+    #[test]
+    fn a_dwarf_never_stands_in_a_fire() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let fires: BTreeSet<Pos> = world
+            .emitters()
+            .into_iter()
+            .map(|(_, pos, _)| pos)
+            .collect();
+        assert!(
+            fires.len() >= 5,
+            "the camp must actually have emitters, or this test asserts nothing: {fires:?}"
+        );
+
+        for (_, pos, _, _) in world.dwarves() {
+            assert!(
+                !fires.contains(&pos),
+                "a dwarf SPAWNED in a fire at {pos:?}"
+            );
+        }
+
+        for tick in 0..200 {
+            world.step();
+            for (id, pos, _, _) in world.dwarves() {
+                assert!(
+                    !fires.contains(&pos),
+                    "dwarf {id:?} walked into a fire at {pos:?} on tick {tick}"
+                );
+            }
         }
     }
 
