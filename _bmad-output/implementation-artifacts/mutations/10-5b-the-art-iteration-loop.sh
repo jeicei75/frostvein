@@ -145,3 +145,61 @@ old = '    if print_version_and_exit_if_asked() {\n        return Ok(());\n    }
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 ROW
+
+# --- Added at the joint code review, 2026-09-07 ------------------------------------------------
+# Rows 14-18. Each pins a fix for a review finding, and each was RED-checked by hand before being
+# written down: the mutation was applied, the named test observed to fail, and the fix restored.
+
+# THE REVIEW'S HEADLINE DEFECT. `record_perf_frame` runs in `Last` and read `ProjectionWork
+# ::dirty_tiles`, which `reconcile_projection` had already drained with `mem::take` back in
+# `Update` -- so the column was pinned to 0 on every row of every real run, and AC10's steady/edit
+# split could never fire. `perf.rs`'s own tests could not see it: they inject `FrameCounts`
+# directly and never exercise the schedule. Only a test that runs BOTH systems can.
+mutation "the perf row reads the drained set instead of the drained count" gui the_perf_row_reports_the_tiles_the_reconcile_actually_drained <<'ROW'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = 'dirty_tiles: work.map_or(0, |work| work.drained_tiles),'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'dirty_tiles: work.map_or(0, |work| work.dirty_tiles.len()),'))
+ROW
+
+# The other half of the same fix: without the assignment the count is never captured at all.
+mutation "the reconcile stops recording what it drained" gui the_perf_row_reports_the_tiles_the_reconcile_actually_drained <<'ROW'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    work.drained_tiles = changes.len();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+ROW
+
+# AC9's header clause. Without the preamble a vehicle log cannot say which build, which asset tree,
+# which subdivision, or whether a vsync cap meant the run measured the monitor.
+mutation "the log stops naming the run that produced it" gui the_perf_log_names_the_run_that_produced_it ignored <<'ROW'
+import pathlib
+p = pathlib.Path('crates/gui/src/perf.rs'); s = p.read_text()
+old = '        let preamble = self.run.take().map(|run| run.line(counts));\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let preamble: Option<String> = None;\n'))
+ROW
+
+# `--perf-log`'s wiring, which lived in `run()` where no test could reach it -- the project's own
+# named antipattern. Deleting the insertion must now fail something.
+mutation "--perf-log parses and then reaches nothing" gui the_perf_log_names_the_run_that_produced_it ignored <<'ROW'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    if let Some(path) = args.perf_log.clone() {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if false && let Some(path) = args.perf_log.clone() {'))
+ROW
+
+# `--static-world` was honoured on the no-`--at-tick` arm only, so combining the two flags asserted
+# motion on a world the operator had deliberately stopped. The fixture holds a DWARF on purpose:
+# `motion_assertions_apply` is false for an entity-less mirror, so a dwarf-free fixture would take
+# the pre-existing skip branch and pass with this fix reverted.
+mutation "--static-world is ignored when --at-tick is given" gui static_world_skips_the_motion_assertions_on_an_at_tick_capture <<'ROW'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '                if capture.static_world {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                if false {'))
+ROW
