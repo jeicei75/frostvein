@@ -148,10 +148,38 @@ so that authoring a creature is a loop I can turn, not a cross-compile I have to
    vehicle** and compared it against that artifact. Per AD-17, `gui --capture` output serves the
    closing half and never replaces the opening half.
 
+### The measurement — RULED 2026-09-07
+
+**What it is, in Wolf's words: performance written to a log so it can be read AFTER a live run,
+instead of squinting at an on-screen counter during one.** Scope ruled the same day: frametime plus
+content counters, **no CPU/GPU split** (that needs `RenderDiagnosticsPlugin` and GPU timestamp
+queries, which `llvmpipe` here cannot exercise — vehicle-only and untestable in the devpod, so it
+is not bought until something asks for it).
+
+9. **`--perf-log <path>` writes one CSV row per frame, and every row carries the CONTENT beside the
+    TIME.** Columns: `frame, t_ms, frametime_ms, draws, tris, remesh_chunks`. A timing column with
+    no content column beside it cannot be told apart from a broken instrument — **~140 fps once
+    survived a 39% triangle cut here because the terrain was never rasterised**
+    ([[fps-that-does-not-move]]). The header names the run: build stamp, asset source, `--subdiv`,
+    dwarf/tree counts, and **whether vsync was on**, because a capped run measures the monitor.
+10. **The summary splits STEADY-STATE frames from EDIT frames, and the summariser is tested here
+    against a synthetic CSV with hand-computed percentiles.** Report `p50/p95/p99/p99.9`
+    frametime in ms, the hitch count (frames over 2× median, and an absolute >50 ms bucket), and
+    the two populations **separately** — `remesh_chunks == 0` against `remesh_chunks > 0`.
+    Averaged together the edit cost disappears, which is exactly how 10.6 measured a still scene
+    and missed that one dug tile re-meshes the world ([[static-measurement-misses-edit-cost]]).
+    **If "1% low" appears anywhere it names its definition in the header** — the two conventions in
+    the wild (worst-1%-averaged vs the 99th-percentile frame) are not the same number.
+    The summariser is a pure function over the CSV, so it gets a RED **on this devpod** before any
+    real data is trusted to it; the numbers themselves come from the vehicle.
+11. **A key at the seat dumps the last N frames on demand** (Wolf's ruling — the flag serves a
+    scripted run, the key catches "that felt bad just now", which a scripted run never reproduces).
+    Off unless asked, like `--capture` and `--static-world`.
+
 ### Scope
 
-9. `_bmad-output/implementation-artifacts/mutations/10-5b-the-art-iteration-loop.sh` carries at
-   least **three rows the mutation run kills**, one of them AC7's palette-loop-bound row.
+12. `_bmad-output/implementation-artifacts/mutations/10-5b-the-art-iteration-loop.sh` carries at
+    least **three rows the mutation run kills**, one of them AC7's palette-loop-bound row.
 
 ## Tasks / Subtasks
 
@@ -182,9 +210,19 @@ so that authoring a creature is a loop I can turn, not a cross-compile I have to
       constant — a second hardcoded list is the abstraction this project's YAGNI rule forbids.
 - [ ] **Task 6 — UX-DR22 (AC8).** Wolf's time on the vehicle. `authored_bench.py` renders authored
       assets in situ and is the opening artifact's machinery — extend it, do not start over.
-- [ ] **Task 7 — the performance probe.** **SCOPE UNRULED — see the open question at the foot of
-      this file. Do not start it without Wolf's answer.**
-- [ ] **Task 8 — mutations (AC9), then the full gate (AC1).**
+- [ ] **Task 7 — the performance log (AC9, AC10, AC11).** RULED 2026-09-07; scope in the ACs.
+  - [ ] `--perf-log <path>` in `parse_args_from` (`ingest.rs:676`), and the on-demand key beside
+        `toggle_overlay` (`ingest.rs:1299`) / `toggle_pause`.
+  - [ ] **`FrameTimeDiagnosticsPlugin` is currently added on the WINDOWED path only**
+        (`ingest.rs:323`) — the headless arm (`:309-320`) does not have it. Wire whichever arm the
+        flag is used from, and say in a `// NOTE:` that headless timings on this devpod are
+        `llvmpipe` and are **not** a performance statement.
+  - [ ] `remesh_chunks` is the discriminating column and it is the one that does not exist yet —
+        source it from the same place `dirty_tiles` drives the rebuild (`ingest.rs:1328-1390`).
+  - [ ] The summariser is a **separate stdlib-only script** under `scripts/bench/` (Blender uses
+        the uv python, so numpy is invisible — [[gfx-bench-venue]]), tested from
+        `scripts/tests/` like `check_asset.py` is.
+- [ ] **Task 8 — mutations (AC12), then the full gate (AC1).**
 
 ## Dev Notes
 
@@ -239,6 +277,8 @@ so that authoring a creature is a loop I can turn, not a cross-compile I have to
 | `scripts/tests/test_check_asset.py` | UPDATE | ten-colour fixture; pines' seven unchanged |
 | `crates/gui/tests/headless.rs` | UPDATE | `--assets` seam, watcher-off, instrument-line tests |
 | `scripts/launch-gui.ps1` | NEW | Task 4, closes issue #46 |
+| `scripts/bench/perf_summary.py` | NEW | Task 7's summariser — stdlib only, percentiles + the steady/edit split |
+| `scripts/tests/test_perf_summary.py` | NEW | AC10's RED: synthetic CSV, hand-computed percentiles |
 | `_bmad-output/implementation-artifacts/mutations/10-5b-the-art-iteration-loop.sh` | NEW | AC9 |
 
 ### References
@@ -322,6 +362,8 @@ covers Part A and Part B together, after B.
 | Date | Change |
 |---|---|
 | 2026-09-07 | Story created. **Part A over-delivered and that redefined B**: the authored dwarf is already shipped and embedded, so "Part B cannot start until Wolf has a model" is spent and B is the loop, the checker and the sign-off. Seven premises verified on `cb45817`, three of them correcting the record: `check_asset.py` does not reject the dwarf, it **silently under-reads his palette by three cells** including the flame `#F0A63C` (all 16 cells decoded, table in premise 2); `notify-debouncer-full` **cross-compiles AND LINKS** to `x86_64-pc-windows-gnu`, closing Part A's one unclaimed risk with a 13 MB `.exe`; and `source=embedded` is a **hardcoded literal in both instrument lines**, so the line B must change is itself the project's worst instrument shape. Also settled from vendored source: an absolute `AssetPlugin.file_path` replaces the base path via `Path::join`, so option A needs nothing stamped into the binary, and `file_watcher` turns watching on globally unless overridden — AC5. Task 7's scope is UNRULED and carries an open question. |
+| 2026-09-07 | **Task 7 RULED, and it is not a "probe".** Wolf: *"one of my requests was to get performance measured to log or something so it's easier to check it after a live run instead of trying to see it from the screen."* So it is a **performance LOG**, read after the fact, not a bench and not an overlay. Scope ruled the same sitting: **frametime + content counters, flag-gated `--perf-log <path>` PLUS an on-demand key at the seat**; the **CPU/GPU split was considered and NOT bought** (it needs `RenderDiagnosticsPlugin` and GPU timestamp queries that `llvmpipe` cannot exercise here — vehicle-only and untestable in the devpod). New AC9/AC10/AC11; mutations moved 9 → 12. The industry framing that decided the columns: average FPS is a mean of reciprocals and hides stutter, so the summary is **percentile frametime** (p50/p95/p99/p99.9) plus a hitch count — and, because of this project's own history, content counters sit on the same row as the time and the summary splits steady-state from edit frames. Also found while scoping it: **`FrameTimeDiagnosticsPlugin` is on the WINDOWED path only** (`ingest.rs:323`); the headless arm never had it. |
+| 2026-09-07 | **Wolf ruled the story runs WHOLE, Tasks 1-7**, against the recommendation to split 6-7 off. Open question 2 is closed by that ruling; question 1 is closed by the Task 7 entry above. Question 3 (issue #74) remains OPEN. |
 
 ## Dev Agent Record
 
@@ -335,21 +377,23 @@ covers Part A and Part B together, after B.
 
 ### Review Findings
 
-## Open questions for Wolf — raised at story creation, not blocking Task 1
+## Open questions for Wolf
 
-1. **The performance probe (Task 7) is recorded nowhere.** It is in the agent's memory as your
-   ruling that it belongs to Part B, but it is absent from `epics.md`, Part A's story file,
-   `deferred-work.md` and every open issue. **What is it measuring?** The candidate that fits the
-   evidence is the edit-cost question 10.6 missed: five 14,398-triangle authored dwarves against
-   the cubes they replaced, measured on a frame where something *changes* rather than a still one.
-   Naming it settles Task 7's size; leaving it unnamed is how a task becomes a story.
+### Closed 2026-09-07
 
-2. **This story is larger than one dev session, and the split line is Task 6/7.** Tasks 1-5 are the
-   loop and the checker — machine-verifiable, one session, no vehicle. Tasks 6-7 are your time at
-   the Windows seat plus an unruled measurement. The epic split 10.5 once already on exactly this
-   shape. **Recommend: run 1-5 now, and let 6-7 be their own story** — but that is your call, and
-   the story is written whole so the choice is yours rather than mine.
+1. ~~**The performance probe is recorded nowhere. What is it measuring?**~~ **ANSWERED.** It is a
+   performance **log**, written to a file so a live run can be read afterwards rather than watched
+   on screen. Full ruling in the Change Log; scope in AC9-AC11 and Task 7. My guess at story
+   creation — the 10.6 edit-cost question — was *part* of it but not the ask: the ask was about
+   **when you get to read the numbers**, not which numbers. Recorded because that distinction is
+   the reason the task was unrecoverable from the repo: nothing in it was about performance
+   *measurement*, it was about performance *reporting*.
+2. ~~**Split Tasks 6-7 into their own story?**~~ **NO — the story runs whole, Tasks 1-7** (Wolf,
+   2026-09-07), against my recommendation. Noted so a later retro can see the call was made
+   deliberately rather than by drift.
 
-3. **Issue #74 — dwarves path through the campfire and the authored mesh's shadow swings wildly —
+### Still open
+
+3. **Issue #74 — dwarves path through the campfire, and the authored mesh's shadow swings wildly —
    is open and route:undecided**, and it is about the dwarf this story finishes. Does it join
-   Task 6's vehicle session, or stay separate?
+   Task 6's vehicle session, or stay separate? **Not blocking Tasks 1-5, 7.**
