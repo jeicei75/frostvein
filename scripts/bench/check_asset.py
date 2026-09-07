@@ -38,10 +38,12 @@ JSON_CHUNK = 0x4E4F534A
 BIN_CHUNK = 0x004E4942
 COMPONENT_SIZE = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
 TYPE_COMPONENTS = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
-PALETTE_HEX = [
-    "#4A3B2E", "#6B5B49", "#2A3E34", "#364D3F", "#52715B", "#FFFFFF", "#D8E4EC",
-]
 ATLAS = 64
+CELL = 16
+# The atlas is a CELL-pixel grid; a cell that was never painted is left black, and that trailing
+# run of black is what says where a family's palette ends.
+CELLS_PER_ROW = ATLAS // CELL
+UNUSED_CELL = "#000000"
 
 
 class AssetError(ValueError):
@@ -150,7 +152,21 @@ def decode_png_rgb(png):
 
 
 def palette_from_glb(document, binary):
-    """Read the v1 pine atlas cells from the artifact, not the generator."""
+    """Read the atlas cells THIS asset actually carries, from the artifact, not the generator.
+
+    The bound used to be the PINES' seven-entry hex list, so a ten-colour dwarf reported seven and
+    its Wood Trunk, Hair and Lantern-flame cells were read by nothing anywhere in the repo -- the
+    flame being the one colour a pixel guard has an opinion about. The `palette=` figure is a
+    by-eye signoff comparison, so under-reporting is worse than rejecting: it cannot say "and
+    nothing else is here", and a reader comparing seven colours has no way to know three more
+    exist. Reading the whole grid and trimming the unpainted tail asks the ARTIFACT how many
+    colours it has instead of asking a constant that only ever described one family.
+
+    NOTE: the terminator is a trailing run of pure black, so a palette whose LAST colour is
+    #000000 would be trimmed and under-reported. No shipped family uses black (the darkest are
+    the dwarf's hair #34271C and the pines' needle #2A3E34), and the alternative -- a per-family
+    cell count -- is the second hardcoded list this change exists to remove.
+    """
     try:
         view = document["bufferViews"][document["images"][0]["bufferView"]]
         start = view.get("byteOffset", 0)
@@ -161,11 +177,13 @@ def palette_from_glb(document, binary):
     if width != ATLAS or height != ATLAS:
         raise AssetError(f"palette/material clause: expected a {ATLAS}x{ATLAS} V1 atlas")
     values = []
-    for index in range(len(PALETTE_HEX)):
-        column, row = index % 4, index // 4
-        x, y = column * 16 + 8, height - 1 - (row * 16 + 8)
+    for index in range(CELLS_PER_ROW * CELLS_PER_ROW):
+        column, row = index % CELLS_PER_ROW, index // CELLS_PER_ROW
+        x, y = column * CELL + CELL // 2, height - 1 - (row * CELL + CELL // 2)
         offset = (y * width + x) * channels
         values.append("#%02X%02X%02X" % tuple(pixels[offset:offset + 3]))
+    while values and values[-1] == UNUSED_CELL:
+        values.pop()
     return values
 
 

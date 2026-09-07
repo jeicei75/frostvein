@@ -76,6 +76,58 @@ class CheckAssetTests(unittest.TestCase):
             figures[3],
         )
 
+    def test_the_authored_dwarf_reports_all_ten_cells_not_the_pines_seven(self):
+        """The fixture is deliberately the DWARF, whose cell count DIFFERS from the pines'.
+
+        A seven-colour fixture cannot discriminate here: the bound used to be the pines' own
+        seven-entry list, so a pine reports the same figure whether the reader asks the constant
+        or the artifact. Only an asset with a different number of cells can tell those apart.
+
+        The three cells at stake are Wood Trunk, Hair and the Lantern flame. The flame is the one
+        that matters: `dwarf_miner.py` says it "is a COLOUR and never an emitter. A pixel guard
+        asserts that", and until this test the guard's subject was read by nothing on the artifact
+        side. The generator checking its own output is not independent verification of it.
+        """
+        result = check(ROOT / "assets/gltf/SM_VoxelDwarf_Miner01.glb")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        figures = [line for line in result.stdout.splitlines() if line.startswith("FIGURES ")]
+        self.assertEqual(len(figures), 1, result.stdout)
+        self.assertIn(
+            "size_m=1.2x1.2x0.8 min_y_m=0.000000 centre_x_m=0.000000 centre_z_m=0.000000 "
+            "palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50,"
+            "#6B5B49,#34271C,#F0A63C tris=14398 verts=28796",
+            figures[0],
+        )
+        # Named separately from the literal above, because the literal would still "pass" if the
+        # reader were re-hardcoded to a ten-entry dwarf list -- which is the same defect wearing
+        # the other family's clothes.
+        palette = figures[0].split("palette=")[1].split(" ")[0].split(",")
+        self.assertEqual(len(palette), 10, "the dwarf carries ten painted cells")
+        self.assertIn("#F0A63C", palette, "the lantern flame must be read from the artifact")
+
+    def test_a_palette_is_bounded_by_its_own_painted_cells_not_a_family_constant(self):
+        """Same reader, two families, two different counts -- from ONE code path.
+
+        This is the assertion that would fail if anyone re-introduced a per-family list.
+        """
+        dwarf = check(ROOT / "assets/gltf/SM_VoxelDwarf_Miner01.glb")
+        pine = check(SIGNOFF / "export/SM_VoxelPine_Tree01.glb")
+        self.assertEqual(dwarf.returncode, 0, dwarf.stderr)
+        self.assertEqual(pine.returncode, 0, pine.stderr)
+
+        def cells(result):
+            figure = next(l for l in result.stdout.splitlines() if l.startswith("FIGURES "))
+            return figure.split("palette=")[1].split(" ")[0].split(",")
+
+        self.assertEqual(len(cells(dwarf)), 10)
+        self.assertEqual(len(cells(pine)), 7)
+        self.assertNotEqual(
+            len(cells(dwarf)),
+            len(cells(pine)),
+            "one reader must report each family's OWN cell count; a shared constant cannot",
+        )
+
     def test_off_centre_stale_asset_names_the_origin_clause(self):
         result = check(SIGNOFF / "tree.glb")
 
