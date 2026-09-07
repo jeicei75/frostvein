@@ -731,6 +731,20 @@ Dismissed: it is Wolf-directed, consistently threaded through `simd`/`tui`/`gui`
 no live `7373` survives outside historical journal prose. The Feature Auditor independently listed
 it under "Not defects".
 
+### Review cost and scaffolding
+
+800 turns, 128,476,306 tokens processed, **97.4% of it cache read** — the review re-reads, it does
+not think, and cost is turns x accumulated context. Est. **$84.93** (Opus $73.53 / Sonnet $11.40).
+The four subagent transcripts are **52.6%** of the session, which is the fan-out this project's
+older ledger figures used to omit entirely. Against Epic 3's baseline of 862 turns and $45.52 per
+story: fewer turns, roughly double the money, for a review covering TWO stories and 2,731 lines of
+code with every layer executing binaries.
+
+Build scaffolding reaped afterwards, per the standing rule: **12 directories, 92.5 GB under /tmp,
+46.2 GB of free space reclaimed.** Four cold Bevy builds is what per-layer isolation costs, and it
+is paid every review — the `file_watcher` feature this story adds forces the ~400-crate rebuild in
+each of them.
+
 ### Evidence produced during review, that the story does not record
 
 **The loop turns.** The Feature Auditor ran one client with `--assets /tmp/hot`, overwrote
