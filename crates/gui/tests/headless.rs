@@ -64,6 +64,7 @@ fn headless_app(snapshot: Snapshot) -> App {
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: Default::default(),
+            ..Default::default()
         })
         .add_systems(bevy::app::Startup, setup_projection_assets);
     projection_systems(&mut app);
@@ -245,6 +246,43 @@ fn projected_marks(app: &mut App) -> Vec<([i32; 3], Option<&'static str>, [i32; 
     );
     marks.sort_unstable();
     marks
+}
+
+/// `--version` prints the build stamp and exits, touching nothing else.
+///
+/// WHY THIS TEST EXISTS, and it is not the obvious reason. The flag was added for
+/// `scripts/launch-gui.ps1`, verified BY HAND once, and then never pinned — so when it later
+/// appeared to be missing there was no way to tell a broken build from a broken memory, and I
+/// asserted it had never been committed when it had. A capability with no test is a capability
+/// nobody can answer questions about.
+///
+/// It also pins the CHICKEN-AND-EGG the launcher depends on: the SHA comparison is what reports a
+/// stale binary, and a binary too old to answer `--version` never reaches that comparison. So this
+/// flag is load-bearing for a guard, not a convenience.
+///
+/// No daemon, no window: `--version` must answer on a machine with neither, which is exactly the
+/// vehicle's situation when someone is checking what they just copied.
+#[test]
+fn version_prints_the_build_stamp_and_exits_without_a_daemon() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg("--version")
+        .output()
+        .expect("the client must run");
+
+    assert!(
+        output.status.success(),
+        "--version must exit 0 with no daemon and no window; got {:?} with stderr {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let first = stdout.lines().next().unwrap_or_default();
+    assert_eq!(
+        first,
+        format!("gui build {}", gui::BUILD_SHA),
+        "the launcher matches this line with ^gui build (\\S+)$ and compares the sha to the \
+         checkout HEAD; if the shape moves, the launcher stops being able to identify a binary"
+    );
 }
 
 #[test]
@@ -1011,6 +1049,179 @@ fn later_production_reconciliation_does_not_clobber_a_blended_translation() {
     );
 }
 
+/// AC3, and the frame AFTER the spawn is the one that matters.
+///
+/// The authored dwarf's origin is his feet (`min Y = 0` per the asset contract), so he is drawn on
+/// the cell FLOOR while cube kinds are drawn at the cell CENTRE. Placing him at the spawn alone is
+/// not enough: `apply_entity_blending` rewrites the translation of every projected entity on every
+/// subsequent frame, and it did so from a bare `world_to_render`. That left the dwarf correct for
+/// exactly one frame and half a cell in the air -- two thirds of his own height -- from the next
+/// one on. Wolf saw it from the seat; a spawn-only assertion could not.
+///
+/// The expected values below are HAND-WRITTEN from the convention, not computed from the code
+/// under test: `world_to_render([x, y, z]) = (x, z, -y)`, a dwarf at cell z stands on the solid
+/// block at z-1 whose unit-cube top is at render y = z - 0.5.
+#[test]
+fn the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend() {
+    let id = 91;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    // Cell z = 0, so the floor -- and his feet -- are at render y = -0.5.
+    assert_eq!(
+        projected_translation(&mut app, id),
+        bevy::prelude::Vec3::new(0.0, -0.5, 0.0),
+        "at spawn the dwarf's origin must sit on the cell floor, not its centre"
+    );
+
+    // Move him one cell and let the blend run to completion. This is the arm that was wrong.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(10.0);
+    app.update();
+    assert_eq!(
+        projected_translation(&mut app, id),
+        bevy::prelude::Vec3::new(2.0, -0.5, 0.0),
+        "after the blend rewrites it, the dwarf must STILL be on the floor. A bare \
+         world_to_render here lifts him half a cell on the frame after he appears."
+    );
+}
+
+/// The SPAWN arm's floor offset, pinned on its own.
+///
+/// `the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend` cannot see a broken spawn:
+/// `apply_entity_blending` rewrites the translation on the same frame, so it CORRECTS the spawn
+/// before any assertion runs. A mutation removing the spawn offset survived that test, which is the
+/// mutation table doing its job -- a green test that cannot fail pins nothing.
+///
+/// So this one runs `reconcile_projection` ALONE, on an entity that has just arrived, and reads the
+/// translation before the blend has ever touched it.
+#[test]
+fn the_spawn_arm_places_the_dwarf_on_the_floor_before_any_blend() {
+    let existing = 81;
+    let arriving = 82;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(existing, [0, 0, 0])],
+    ));
+    app.update();
+
+    // A second dwarf arrives on the wire. Reconciliation spawns it; nothing else runs.
+    apply_delta(
+        &mut app,
+        delta(
+            vec![],
+            vec![dwarf(existing, [0, 0, 0]), dwarf(arriving, [3, 0, 0])],
+        ),
+    );
+    app.world_mut()
+        .run_system_once(reconcile_projection)
+        .expect("production reconciliation must run");
+
+    assert_eq!(
+        projected_translation(&mut app, arriving),
+        bevy::prelude::Vec3::new(3.0, -0.5, 0.0),
+        "the spawn arm must place the dwarf on the cell floor itself, not lean on the blend \
+         writer to correct it a system later"
+    );
+}
+
+/// Facing follows travel, and HOLDS when the dwarf stops -- Wolf's ruling, 2026-09-06.
+///
+/// Asserted on the forward VECTOR, not on the quaternion. Two quats can be equal rotations and
+/// unequal bit patterns, and the forward vector is the thing anyone can actually see.
+///
+/// `world_to_render([x, y, z]) = (x, z, -y)`, so a step along sim +x is a step along render +x,
+/// and the model faces Bevy's forward, -Z. The expected vectors below are written from that, not
+/// read back from the code under test.
+#[test]
+fn the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops() {
+    let id = 95;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(id, [0, 0, 0])],
+    ));
+    app.update();
+
+    let forward = |app: &mut App| {
+        let mut query = app.world_mut().query::<(&WorldProjected, &Transform)>();
+        query
+            .iter(app.world())
+            .find_map(|(projected, transform)| {
+                (projected.0 == id).then(|| transform.rotation * bevy::prelude::Vec3::NEG_Z)
+            })
+            .expect("the wire entity must have a projection")
+    };
+
+    // Walk north FIRST: sim +y is render -z.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [0, 3, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(10.0);
+    app.update();
+    let north = forward(&mut app);
+    assert!(
+        north.z < -0.9 && north.y.abs() < 0.01,
+        "walking along sim +y must face render -z, got {north:?}"
+    );
+
+    // Then east, and stop facing EAST on purpose. Bevy's `looking_to` falls back to -Z when it is
+    // handed a zero direction, and -Z is exactly what walking north produces -- so stopping while
+    // facing north cannot tell "held his facing" from "snapped to the fallback". Ending on +x can.
+    // The first version of this test stopped facing north, and the sabotage that deletes the
+    // zero-delta guard SURVIVED it.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 3, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(10.0);
+    app.update();
+    let east = forward(&mut app);
+    assert!(
+        east.x > 0.9 && east.y.abs() < 0.01,
+        "walking along sim +x must face render +x and stay level, got {east:?}"
+    );
+
+    // STOP. The same position twice: nothing to face, so hold what is already there.
+    for _ in 0..3 {
+        apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 3, 0])]));
+        app.world_mut()
+            .resource_mut::<gui::blend::TickClock>()
+            .advance(10.0);
+        app.update();
+    }
+    let held = forward(&mut app);
+    assert!(
+        (held - east).length() < 0.001,
+        "a stopped dwarf must HOLD his last facing, not snap to a default: {east:?} -> {held:?}"
+    );
+}
+
+/// The floor drop is the dwarf's alone: a cube kind is drawn at the cell centre and must not move.
+#[test]
+fn the_floor_drop_does_not_move_the_cube_kinds() {
+    let id = 92;
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![Entity {
+            id,
+            kind: EntityKind::Torch,
+            pos: [0, 0, 0],
+            state: JobState::Idle,
+            light: None,
+        }],
+    ));
+    app.update();
+    assert_eq!(
+        projected_translation(&mut app, id),
+        bevy::prelude::Vec3::new(0.0, 0.0, 0.0),
+        "a unit cube's centre is its middle, so a torch stays at the cell centre"
+    );
+}
+
 #[test]
 fn a_wire_declared_dwarf_lantern_uses_the_shared_appearance_table() {
     let id = 77;
@@ -1152,7 +1363,10 @@ fn snapshot_rewind_snaps_at_a_mid_blend_clock() {
 
     assert_eq!(
         projected_translation(&mut app, id),
-        world_to_render([19, 0, 0]),
+        // The dwarf draws on the cell FLOOR, not its centre -- his origin is his feet. The drop
+        // is written out here rather than read from `entity_draw_offset`, so that changing the
+        // offset fails this test instead of moving with it.
+        world_to_render([19, 0, 0]) - bevy::prelude::Vec3::Y * 0.5,
         "a snapshot must snap even while the clock is half way through an interval"
     );
 }
@@ -1359,11 +1573,16 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         if terrain.is_some() && transform.translation == world_to_render([0, 0, 0]) {
             terrain_at_origin += 1;
         }
-        if terrain.is_none() && marker.0 == 0 && transform.translation == world_to_render([1, 0, 0])
+        // Dwarves sit on the cell floor; the literal drop keeps this independent of the code.
+        if terrain.is_none()
+            && marker.0 == 0
+            && transform.translation == world_to_render([1, 0, 0]) - bevy::prelude::Vec3::Y * 0.5
         {
             dwarf_at_position += 1;
         }
-        if terrain.is_none() && marker.0 == 1 && transform.translation == world_to_render([0, 0, 0])
+        if terrain.is_none()
+            && marker.0 == 1
+            && transform.translation == world_to_render([0, 0, 0]) - bevy::prelude::Vec3::Y * 0.5
         {
             second_dwarf_at_position += 1;
         }
@@ -2102,6 +2321,7 @@ fn live_app(
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: Default::default(),
+            ..Default::default()
         })
         .insert_resource(IngestReceiver::new(receiver));
     client_systems(&mut app);
@@ -3512,5 +3732,67 @@ fn the_hint_bar_names_the_mode_that_will_commit() {
         read_hint(&mut app),
         designation_hint(DesignateMode::Stockpile, true),
         "the bar must switch to its dragging text while a drag is live"
+    );
+}
+
+/// The perf log's `dirty_tiles` column, read through the SCHEDULE rather than by calling
+/// `record_perf_frame` by hand.
+///
+/// This shape is the only one that can see the defect it exists for. `reconcile_projection` drains
+/// `ProjectionWork::dirty_tiles` in `Update` and `record_perf_frame` writes the row in `Last`,
+/// which Bevy always runs afterwards -- so the column read an already-emptied set and reported `0`
+/// on every row of every real run, while `perf.rs`'s own tests passed because they inject
+/// `FrameCounts` directly and never exercise the ordering. The assertion is on the FILE, because
+/// the file is the whole point: a vehicle run is read from it after the fact.
+///
+/// Both directions, deliberately: an edit frame must report a non-zero count, and the steady frame
+/// after it must fall back to zero rather than inherit the edit's.
+#[test]
+fn the_perf_row_reports_the_tiles_the_reconcile_actually_drained() {
+    let path =
+        std::env::temp_dir().join(format!("frostvein-perf-drained-{}.csv", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+
+    let (mut app, _sender) = live_app(snapshot(
+        vec![Tile::Solid(Material::Stone), Tile::Empty],
+        Vec::new(),
+    ));
+    app.insert_resource(gui::perf::PerfLog::new(path.clone()));
+    app.update();
+
+    apply_delta(
+        &mut app,
+        delta(
+            vec![TileChange {
+                pos: [1, 0, 0],
+                tile: Tile::Solid(Material::Stone),
+            }],
+            Vec::new(),
+        ),
+    );
+    app.update();
+    app.update();
+
+    let written = std::fs::read_to_string(&path).expect("the perf log must be on disk");
+    let _ = std::fs::remove_file(&path);
+    let dirty = written
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with('#') && !line.starts_with("frame"))
+        .map(|line| {
+            line.split(',')
+                .nth(6)
+                .expect("every row carries a dirty_tiles column")
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        dirty.iter().any(|tiles| tiles != "0"),
+        "no row recorded the dug tile, so the summariser's edit population can never fill: {dirty:?}"
+    );
+    assert_eq!(
+        dirty.last().map(String::as_str),
+        Some("0"),
+        "the steady frame after an edit must report zero, not inherit the edit's count: {dirty:?}"
     );
 }

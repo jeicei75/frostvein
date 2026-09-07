@@ -62,6 +62,10 @@ pub struct TreeCaptureVerification {
     /// (which is already at Bevy's system-param ceiling). This is the independent oracle's input:
     /// it must come from the entities that exist, never from `tree_meshes`.
     bases: Vec<[i32; 3]>,
+    /// The asset source actually resolved, carried for the same reason `bases` is: the capture's
+    /// `trees:` line printed the literal word `embedded` regardless, and `capture_after_frames`
+    /// has no parameter slot left to read the resource for itself.
+    source: String,
 }
 
 impl DrawStats {
@@ -209,6 +213,7 @@ pub fn update_tree_capture_verification(
     trees: Query<&TreeMesh>,
     assets: Option<Res<ProjectionAssets>>,
     asset_server: Option<Res<AssetServer>>,
+    scene_source: Option<Res<crate::project::SceneSource>>,
 ) {
     let (Some(mut verification), Some(mirror), Some(slice)) = (verification, mirror, slice) else {
         return;
@@ -228,6 +233,7 @@ pub fn update_tree_capture_verification(
     verification.scenes_loaded = assets
         .zip(asset_server)
         .is_some_and(|(assets, asset_server)| assets.tree_scenes_loaded(&asset_server));
+    verification.source = scene_source.as_deref().cloned().unwrap_or_default().label();
 }
 
 /// The tree oracle that routes through NEITHER `tree_meshes` nor the spawn path.
@@ -261,9 +267,10 @@ fn assert_no_tree_is_undrawn(
 fn assert_tree_capture(expected: usize, spawned: usize, scenes_loaded: bool) {
     assert!(
         scenes_loaded,
-        "capture tree scenes failed to load from the embedded asset source; the pines are \
-         compiled into this binary, so a failure here is a decode or registration fault, never \
-         a missing file"
+        "capture tree scenes failed to load. Under no `--assets` flag the pines are compiled into \
+         this binary, so that is a decode or registration fault and never a missing file -- but \
+         under `--assets` they are read from a directory, where a missing or unreadable file is \
+         exactly what this can mean. The `trees:` line above names the source actually resolved."
     );
     assert_eq!(
         spawned, expected,
@@ -365,6 +372,9 @@ pub struct CaptureState {
     requested: bool,
     failed: bool,
     expect_work: bool,
+    /// The world is deliberately still (`--static-world`), so the motion instrument's assertions
+    /// are false positives rather than findings. See the parse site for why it is never a default.
+    static_world: bool,
     motion: MotionStats,
     lantern: LanternStats,
 }
@@ -719,6 +729,7 @@ impl CaptureState {
             requested: false,
             failed: false,
             expect_work,
+            static_world: false,
             motion: MotionStats::default(),
             lantern: LanternStats::default(),
         }
@@ -734,6 +745,15 @@ impl CaptureState {
         let mut capture = Self::new(path, frames, expect_work);
         capture.at_tick = Some((start_tick, ticks_after_start));
         capture
+    }
+
+    /// A SETTER rather than a fifth positional bool. Every existing construction site is a test
+    /// that does not care about this flag, and threading it through all of them would have made
+    /// the call sites less readable to express a default.
+    #[must_use]
+    pub fn with_static_world(mut self, static_world: bool) -> Self {
+        self.static_world = static_world;
+        self
     }
 
     pub fn requested(&self) -> bool {
@@ -947,11 +967,17 @@ pub fn capture_after_frames(
             draw.level, draw.terrain_tiles, draw.cut_face_tiles, draw.expected_cut_face, draw.level
         );
         if let Some(tree_verification) = tree_verification {
+            // `source=` was the literal word `embedded`, printed with `--assets` pointed
+            // anywhere. Every AC2 sign-off capture on this branch was taken under `--assets` and
+            // carries that line, so the committed measurement artifacts state a source that was
+            // not the one read. Resolved from the same resource the startup lines read, because
+            // deciding it twice is how a client reports one tree and reads another.
             println!(
-                "trees: meshes={} of {} scenes_loaded={} source=embedded",
+                "trees: meshes={} of {} scenes_loaded={} source={}",
                 tree_verification.spawned,
                 tree_verification.expected,
                 tree_verification.scenes_loaded,
+                tree_verification.source,
             );
             assert_tree_capture(
                 tree_verification.expected,
@@ -1001,7 +1027,14 @@ pub fn capture_after_frames(
         // empty both when the slice legitimately hides them AND when entity projection is broken
         // entirely, so keying off it alone made every non-top capture — which is every capture
         // this story takes — exit 0 on a total lantern regression.
-        if lantern_assertions_apply(&mirror.0, slice.level()) {
+        if capture.static_world {
+            // Announced, never silent: a record showing a clean capture must not hide that the
+            // motion half of the instrument was switched off for it.
+            println!(
+                "static-world: the simulation is paused, so the lantern-movement and motion \
+                 assertions are SKIPPED. The range, black-frame and uniform-frame checks still run."
+            );
+        } else if lantern_assertions_apply(&mirror.0, slice.level()) {
             capture.lantern.assert_valid();
         } else {
             println!(
@@ -1022,7 +1055,18 @@ pub fn capture_after_frames(
             // the OBSERVATION instead would be the trap that rule already exists to avoid — it is
             // empty both when there is nothing to see and when the instrument is broken.
             Some((_, ticks_after_start)) => {
-                if motion_assertions_apply(&mirror.0) {
+                if capture.static_world {
+                    // `--static-world` was honoured in the `None` arm below and nowhere else, so
+                    // combining it with `--at-tick` -- freeze the sim, then screenshot at a
+                    // controlled point, which is the natural way to use both -- asserted motion
+                    // anyway and panicked every time on a world the operator had deliberately
+                    // stopped. The flag means "do not demand motion from this capture"; it cannot
+                    // mean that in only one of the two arms that demand it.
+                    println!(
+                        "motion: --static-world -- motion assertions skipped for this \
+                         --at-tick capture"
+                    );
+                } else if motion_assertions_apply(&mirror.0) {
                     capture.motion.assert_tick_floor(ticks_after_start as usize);
                     capture.motion.assert_motion(capture.expect_work);
                 } else {
@@ -1032,6 +1076,7 @@ pub fn capture_after_frames(
                     );
                 }
             }
+            None if capture.static_world => {}
             None => capture.motion.assert_valid(capture.expect_work),
         }
         capture.requested = true;

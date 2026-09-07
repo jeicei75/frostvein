@@ -26,14 +26,14 @@ get: `export PATH="$HOME/.cargo/bin:$PATH"`.
 ## Run
 
 ```bash
-cargo run -p simd          # prints: listening on 127.0.0.1:7373
+cargo run -p simd          # prints: listening on 127.0.0.1:7451
 cargo run -p simd -- 0     # 0 = OS-assigned port, printed on stdout
 ```
 
 Then, in another shell, behold it:
 
 ```bash
-cargo run -p tui           # connects to 127.0.0.1:7373
+cargo run -p tui           # connects to 127.0.0.1:7451
 cargo run -p tui -- 7999   # optional arg: the port simd is listening on
 ```
 
@@ -117,7 +117,7 @@ To see the raw wire instead — a newline-terminated snapshot (~7.4 MB), then on
 per tick, forever:
 
 ```bash
-bash -c 'head -c 300 < /dev/tcp/127.0.0.1/7373'
+bash -c 'head -c 300 < /dev/tcp/127.0.0.1/7451'
 ```
 
 (`/dev/tcp` is a bash builtin, hence the `bash -c` — it does not work from zsh.)

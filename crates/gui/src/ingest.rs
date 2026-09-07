@@ -16,7 +16,7 @@ use anyhow::{Context, bail};
 use bevy::{
     app::PluginGroup,
     app::ScheduleRunnerPlugin,
-    asset::{Assets, Handle},
+    asset::{AssetPlugin, Assets, Handle},
     camera::RenderTarget,
     image::Image,
     render::render_resource::{TextureFormat, TextureUsages},
@@ -61,7 +61,7 @@ use crate::{
     pick::{PickedTile, update_pick},
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
-        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery,
+        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, SceneSource, TerrainQuery,
         TerrainSubdivision, TerrainTile, TreeMeshQuery, WorldProjected, blend_entities,
         flicker_lights, has_terrain_above, reconcile, setup_projection_assets, sync_drag_preview,
         sync_hover_highlight,
@@ -211,6 +211,14 @@ impl IngestReceiver {
 pub struct ProjectionWork {
     pub snapshot: bool,
     pub dirty_tiles: BTreeSet<[i32; 3]>,
+    /// How many tiles the last reconcile DRAINED, kept because the count outlives the set.
+    ///
+    /// `dirty_tiles` is emptied by `reconcile_projection` in `Update`; the perf row is written by
+    /// `record_perf_frame` in `Last`, which Bevy always runs afterwards. Reading the set there
+    /// therefore always reads an empty one, and the column that exists to separate edit frames
+    /// from steady ones reported `0` on every row of every run. Set unconditionally on each
+    /// reconcile, so a steady frame resets it rather than inheriting the last edit's count.
+    pub drained_tiles: usize,
 }
 
 /// The four pines, compiled INTO the binary and served from the `embedded://` asset source.
@@ -258,6 +266,16 @@ pub fn tree_asset_summary() -> (usize, usize) {
     (embedded, TREE_ASSETS.iter().map(|(_, b)| b.len()).sum())
 }
 
+/// The authored dwarf, embedded the same way the pines are.
+///
+/// Kept as its own const rather than appended to `TREE_ASSETS`: that array is indexed by
+/// `TreeVariant` order and `tree_asset_paths_match_the_loader` pins it to `TREE_SCENE_PATHS`,
+/// so a fifth entry would silently break both.
+pub const DWARF_ASSET: (&str, &[u8]) = (
+    "gltf/SM_VoxelDwarf_Miner01.glb",
+    include_bytes!("../../../assets/gltf/SM_VoxelDwarf_Miner01.glb"),
+);
+
 /// Publish the embedded pines into the `embedded://` source before anything loads them.
 ///
 /// `AssetPlugin::build` creates the registry and registers the source, so this must run AFTER
@@ -266,12 +284,15 @@ fn register_tree_assets(app: &mut App) {
     let registry = app
         .world_mut()
         .resource_mut::<bevy::asset::io::embedded::EmbeddedAssetRegistry>();
-    for (path, bytes) in TREE_ASSETS {
+    for &(path, bytes) in TREE_ASSETS.iter().chain(std::iter::once(&DWARF_ASSET)) {
         registry.insert_asset(PathBuf::new(), Path::new(path), bytes);
     }
 }
 
 pub fn run() -> anyhow::Result<()> {
+    if print_version_and_exit_if_asked() {
+        return Ok(());
+    }
     let args = parse_args()?;
     // M2-7. FIRST line out, before the connect can fail: a session that cannot reach the daemon
     // still learns which binary it is holding, and that is exactly the case where the answer
@@ -288,6 +309,18 @@ pub fn run() -> anyhow::Result<()> {
     );
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
+    // The asset source is decided ONCE, here, and both the plugin config and the startup lines
+    // read that one decision. Deciding it twice is how a client reports one source and reads
+    // another.
+    let scene_source = match &args.assets {
+        None => SceneSource::Embedded,
+        Some(dir) => SceneSource::Disk(dir.clone()),
+    };
+    // SECOND LINE OUT, beside the build stamp, and for the same reason: a session must be able to
+    // SEE which asset tree it read rather than be told which one it should have read. Two candidate
+    // asset trees is the stale-artifact shape this project keeps paying for.
+    eprintln!("gui assets: source={}", scene_source.label());
+    let asset_plugin = asset_plugin_for(args.assets.as_deref());
     if args.headless {
         // No window, and therefore no winit: WinitPlugin panics outright where there is no display
         // server, which is every devpod this project builds on. ScheduleRunnerPlugin drives the
@@ -303,19 +336,28 @@ pub fn run() -> anyhow::Result<()> {
                     exit_condition: ExitCondition::DontExit,
                     ..Default::default()
                 })
+                .set(asset_plugin)
                 .disable::<WinitPlugin>(),
         )
         .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO))
         // The overlay plugin wants a window; its config resource is all the client systems read.
         .init_resource::<FpsOverlayConfig>();
     } else {
-        app.add_plugins(DefaultPlugins)
+        app.add_plugins(DefaultPlugins.set(asset_plugin))
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(FpsOverlayPlugin {
                 config: overlay_config_off(),
             });
     }
+    // Registered on BOTH paths, deliberately. The embedded blobs cost nothing to publish and the
+    // `--assets` prefix simply stops naming them, so the disk path does not depend on this being
+    // skipped -- which keeps one code path rather than two.
+    // NOTE: this is NOT a fallback, and it used to say it was. Under `SceneSource::Disk` the load
+    // prefix is `""`, so a missing file on the disk tree simply fails to load; nothing reaches for
+    // the embedded copy. The other limitation is unchanged: a disk run cannot prove the embedded
+    // copy is absent, only that it was not the thing read, and AC2 measures the bytes.
     register_tree_assets(&mut app);
+    app.insert_resource(scene_source);
     configure_client_app(&mut app, mirror, receiver, writer, args);
     // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
     // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
@@ -382,6 +424,7 @@ fn configure_client_app(
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: BTreeSet::new(),
+            ..Default::default()
         })
         .insert_resource(ClearColor(night_lighting().sky));
     if args.headless {
@@ -389,6 +432,36 @@ fn configure_client_app(
     }
     if let Some(subdiv) = args.subdiv {
         app.insert_resource(TerrainSubdivision(subdiv));
+    }
+    // MOVED OUT OF `run()`, where it was the project's own named antipattern: the flag parsed,
+    // validated and then reached the app from a place no test could drive, so deleting the two
+    // lines left the entire suite green. It belongs with the other resources the extracted builder
+    // stands up.
+    if let Some(path) = args.perf_log.clone() {
+        eprintln!("gui perf-log: recording to {}", path.display());
+        // The asset label is READ from the resource rather than recomputed from `args`: deciding
+        // the source twice is exactly how a client reports one tree and reads another.
+        let assets = app
+            .world()
+            .get_resource::<crate::project::SceneSource>()
+            .cloned()
+            .unwrap_or_default()
+            .label();
+        app.insert_resource(
+            crate::perf::PerfLog::new(path).with_run(crate::perf::RunProvenance {
+                build: crate::BUILD_SHA.to_string(),
+                assets,
+                // With the flag absent no `TerrainSubdivision` resource is inserted at all and
+                // the client draws one `TerrainTile` per exposed cell, which IS subdivision 1.
+                // Recorded as the number rather than left blank, so the line never omits the fact
+                // that decides how much geometry the frametime beside it was paying for.
+                subdiv: args.subdiv.unwrap_or(1),
+                // Headless has no window and therefore no present mode. A windowed run takes
+                // Bevy's default, which is `PresentMode::Fifo` -- vsync ON, and the reason a
+                // frametime from the seat can be measuring the monitor rather than the scene.
+                vsync: !args.headless,
+            }),
+        );
     }
     // UNCONDITIONAL, and inserted BEFORE `client_systems`/`projection_systems` so their
     // idempotent `init_resource` finds it already there. Unconditional because a wiring step that
@@ -418,7 +491,8 @@ fn configure_client_app(
                 args.expect_work,
             ),
             None => CaptureState::new(capture, args.frames, args.expect_work),
-        };
+        }
+        .with_static_world(args.static_world);
         app.insert_resource(capture);
         capture_systems(app);
     }
@@ -493,6 +567,7 @@ pub fn client_systems(app: &mut App) {
     app.init_resource::<PickedTile>()
         .init_resource::<crate::project::DragPreviewCells>()
         .init_resource::<crate::command::PendingCommands>()
+        .init_resource::<crate::command::SimPaused>()
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
@@ -519,6 +594,7 @@ pub fn client_systems(app: &mut App) {
             light_controls,
             update_fog_from_camera,
             toggle_overlay,
+            crate::perf::mark_perf_frame_on_key,
             fall_snow,
         ),
     )
@@ -530,10 +606,15 @@ pub fn client_systems(app: &mut App) {
             sync_hover_highlight.after(update_pick),
             designation_input.after(update_pick),
             sync_drag_preview.after(designation_input),
+            // Before `send_commands`, so a space press reaches the daemon on the same frame it is
+            // read rather than the next one.
+            crate::command::toggle_pause.after(update_pick),
             send_commands.after(designation_input),
             update_designate_hint.after(designation_input),
         ),
-    );
+    )
+    // `Last`, so the row describes a frame that has actually been drawn.
+    .add_systems(bevy::app::Last, record_perf_frame);
 }
 
 /// The capture instrument's registration, including the ordering edge that keeps it reading the
@@ -582,6 +663,7 @@ struct Args {
     capture: Option<PathBuf>,
     frames: u32,
     expect_work: bool,
+    static_world: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
     cursor: Option<Vec2>,
@@ -590,6 +672,11 @@ struct Args {
     headless: bool,
     subdiv: Option<u32>,
     lights_off: Vec<LightSource>,
+    /// `--assets <dir>`: read glTF scenes from this directory instead of the embedded blobs.
+    /// Dev-only, absolute, and never a default.
+    assets: Option<PathBuf>,
+    /// `--perf-log <path>`: append one CSV row per frame, to be read after the run.
+    perf_log: Option<PathBuf>,
 }
 
 /// Present only under `--headless`: the offscreen texture the camera draws into, and which the
@@ -653,8 +740,44 @@ enum ScriptedDragStage {
     Done,
 }
 
+/// The `AssetPlugin` for this run — extracted so a test can read the decision it makes.
+///
+/// It was inline in `run()`, and the test that claimed to pin it asserted `args.assets.is_some()`
+/// instead: re-testing the PARSER while naming the watcher. The mutation table caught it —
+/// forcing `watch_for_changes_override` to `Some(true)` changed nothing the test could see.
+fn asset_plugin_for(assets: Option<&Path>) -> AssetPlugin {
+    AssetPlugin {
+        // Absolute, so `get_base_path().join(..)` resolves to exactly this directory. Checked at
+        // parse time.
+        file_path: assets.map_or_else(
+            || AssetPlugin::default().file_path,
+            |dir| dir.display().to_string(),
+        ),
+        // `file_watcher` is compiled in, and Bevy then defaults watching ON. With no `--assets`
+        // there is nothing on disk to watch, so every headless test in the gate would pay for a
+        // `notify` thread that can never fire. Explicit in BOTH directions rather than inherited.
+        watch_for_changes_override: Some(assets.is_some()),
+        ..Default::default()
+    }
+}
+
 fn parse_args() -> anyhow::Result<Args> {
     parse_args_from(std::env::args_os().skip(1))
+}
+
+/// `--version` prints the build stamp and exits, WITHOUT connecting to a daemon or opening a window.
+///
+/// It exists for the pwsh launcher (`scripts/launch-gui.ps1`, M2-7 / issue #46), which must compare
+/// the running binary's commit against the checkout it is about to serve as `--assets`. The stamp is
+/// already printed at startup, but reading it there means starting the client, parsing stderr and
+/// killing it — a race, on the one check whose whole job is to be trustworthy. Handled before
+/// `parse_args` so it works on a machine with no daemon at all.
+fn print_version_and_exit_if_asked() -> bool {
+    if std::env::args_os().skip(1).any(|arg| arg == "--version") {
+        println!("gui build {}", crate::BUILD_SHA);
+        return true;
+    }
+    false
 }
 
 fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<Args> {
@@ -662,6 +785,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut capture = None;
     let mut frames = None;
     let mut expect_work = false;
+    let mut static_world = false;
     let mut slice_level = None;
     let mut distance = None;
     let mut cursor = None;
@@ -670,6 +794,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut headless = false;
     let mut subdiv = None;
     let mut lights_off = Vec::new();
+    let mut assets = None;
+    let mut perf_log = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -683,6 +809,34 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                     .parse()
                     .context("invalid --frames count")?,
             );
+        } else if arg == "--static-world" {
+            // For capturing a PAUSED world. The motion instrument exists to catch a client that
+            // has stopped updating, and a deliberately still world is a false positive for it.
+            // Explicit and never a default, so it cannot silently disable the guard on a run that
+            // was supposed to be moving.
+            static_world = true;
+        } else if arg == "--assets" {
+            // Dev-only disk loading, so an authored asset can be iterated on without a
+            // cross-compile. ABSOLUTE ONLY: Bevy resolves a relative `AssetPlugin::file_path`
+            // against `get_base_path()` -- BEVY_ASSET_ROOT, then CARGO_MANIFEST_DIR, then the
+            // EXE'S OWN DIRECTORY -- so a relative path quietly means something different on the
+            // Windows vehicle than it does here. An absolute path replaces that base outright
+            // (`Path::join`), which is the whole mechanism. Refusing is better than resolving
+            // against a base the operator never stated.
+            let dir = PathBuf::from(args.next().context("--assets requires a directory")?);
+            if !dir.is_absolute() {
+                bail!(
+                    "--assets requires an ABSOLUTE directory; got {}",
+                    dir.display()
+                );
+            }
+            assets = Some(dir);
+        } else if arg == "--perf-log" {
+            // Off unless asked, like --capture and --static-world. A run that was not asked to
+            // measure itself writes no file and pays nothing.
+            perf_log = Some(PathBuf::from(
+                args.next().context("--perf-log requires a path")?,
+            ));
         } else if arg == "--expect-work" {
             expect_work = true;
         } else if arg == "--headless" {
@@ -786,6 +940,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         capture,
         frames: frames.unwrap_or(DEFAULT_AT_TICK_FRAME_BUDGET),
         expect_work,
+        static_world,
         slice_level,
         distance,
         cursor,
@@ -794,6 +949,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         headless,
         subdiv,
         lights_off,
+        assets,
+        perf_log,
     })
 }
 
@@ -1272,6 +1429,38 @@ fn update_fog_from_camera(mut cameras: Query<(&CameraRig, &mut DistanceFog)>) {
     }
 }
 
+/// One CSV row per frame, if `--perf-log` asked for it.
+///
+/// Runs in `Last` so the row describes a frame that has actually been drawn, and reads the same
+/// queries the startup instrument counts -- one source for both, so the log and the console cannot
+/// disagree about what was on screen.
+fn record_perf_frame(
+    log: Option<ResMut<crate::perf::PerfLog>>,
+    terrain_tiles: Query<&TerrainTile>,
+    terrain_chunks: Query<&crate::project::TerrainChunk>,
+    trees: Query<&crate::project::TreeMesh>,
+    dwarves: Query<&bevy::world_serialization::WorldAssetRoot, With<WorldProjected>>,
+    work: Option<Res<ProjectionWork>>,
+) {
+    let Some(mut log) = log else {
+        return;
+    };
+    log.record(
+        std::time::Instant::now(),
+        crate::perf::FrameCounts {
+            terrain: terrain_tiles.iter().count() + terrain_chunks.iter().count(),
+            trees: trees.iter().count(),
+            dwarves: dwarves.iter().count(),
+            // The DRAINED count, not the live set. `reconcile_projection` empties `dirty_tiles`
+            // in `Update` and this runs in `Last`, so the set is always empty by now -- reading it
+            // pinned this column to 0 on every row and left AC10's steady/edit split unable to
+            // fire. `the_perf_row_reports_the_tiles_the_reconcile_actually_drained` runs both
+            // systems in one schedule, which is the only place the ordering is visible.
+            dirty_tiles: work.map_or(0, |work| work.drained_tiles),
+        },
+    );
+}
+
 fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut config: ResMut<FpsOverlayConfig>) {
     if keys.just_pressed(KeyCode::F3) {
         let enabled = !config.enabled;
@@ -1366,6 +1555,8 @@ pub fn reconcile_projection(
     let changes = std::mem::take(&mut work.dirty_tiles)
         .into_iter()
         .collect::<Vec<_>>();
+    // The perf row is written in `Last`, after this drain, so the count has to survive it.
+    work.drained_tiles = changes.len();
     // A chunk mesh is a whole surface, not a set of mutable per-cell entities, so a terrain delta
     // cannot be edited in place the way a cube entity can -- but it does not need the WORLD
     // rebuilt either. `reconcile` rebuilds only the chunks the changed cells can reach. This line
@@ -1632,6 +1823,99 @@ mod tests {
                 "a capture must carry its tree accounting (headless={headless})"
             );
         }
+    }
+
+    /// `--assets` is a RESOLVER: it decides which of two asset trees the client reads. The
+    /// decision must be CONSUMED, not merely parsed, so this asserts the branch-changing path in
+    /// both directions -- the load prefix and the reported label move together, and neither moves
+    /// when the flag is absent.
+    ///
+    /// The relative-path refusal is the half that would otherwise rot silently: Bevy resolves a
+    /// relative `file_path` against `get_base_path()`, whose last fallback is THE EXE'S OWN
+    /// DIRECTORY. A relative `--assets` would therefore mean one directory here and a different
+    /// one on the Windows vehicle, and neither would be the one the operator typed.
+    #[test]
+    fn assets_switches_the_scene_source_and_refuses_a_relative_directory() {
+        let default = super::parse_args_from([std::ffi::OsString::from("7451")])
+            .expect("no --assets must parse");
+        assert_eq!(
+            default.assets, None,
+            "--assets must never be a silent default"
+        );
+
+        let disk = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--assets"),
+            std::ffi::OsString::from("/tmp/frostvein-checkout"),
+        ])
+        .expect("an absolute --assets must parse");
+        assert_eq!(
+            disk.assets,
+            Some(std::path::PathBuf::from("/tmp/frostvein-checkout"))
+        );
+
+        // `Args` is deliberately not `Debug`, so match rather than `expect_err`.
+        let refused = match super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--assets"),
+            std::ffi::OsString::from("some/relative/dir"),
+        ]) {
+            Ok(_) => panic!(
+                "a relative --assets must stop the run, not resolve against an unstated base"
+            ),
+            Err(error) => error,
+        };
+        assert_eq!(
+            refused.to_string(),
+            "--assets requires an ABSOLUTE directory; got some/relative/dir"
+        );
+
+        // The decision is CONSUMED. Hand-written expectations, not derived from the code under
+        // test: embedded scenes carry the `embedded://` scheme and disk scenes carry none.
+        let embedded = super::SceneSource::Embedded;
+        let on_disk = super::SceneSource::Disk(std::path::PathBuf::from("/tmp/frostvein-checkout"));
+        assert_eq!(embedded.prefix(), "embedded://");
+        assert_eq!(on_disk.prefix(), "");
+        assert_eq!(embedded.label(), "embedded");
+        assert_eq!(on_disk.label(), "disk:/tmp/frostvein-checkout");
+        assert_ne!(
+            embedded.label(),
+            on_disk.label(),
+            "the reported source must MOVE when the source moves; `source=embedded` was a literal"
+        );
+    }
+
+    /// AC5. `file_watcher` is compiled in, and Bevy then defaults watching ON -- so the cost of a
+    /// `notify` thread would land on every headless test in the gate for a capability nothing
+    /// exercises. This pins the override in BOTH directions rather than trusting the default.
+    ///
+    /// IT READS THE PLUGIN, not the parser. The first version of this test asserted
+    /// `args.assets.is_some()`, which is the flag going in rather than the decision coming out --
+    /// so forcing `watch_for_changes_override` to `Some(true)` left it green. The mutation table
+    /// found that; a green test named for the watcher had pinned nothing about the watcher.
+    #[test]
+    fn the_file_watcher_is_armed_only_when_there_is_a_disk_tree_to_watch() {
+        let embedded = super::asset_plugin_for(None);
+        assert_eq!(
+            embedded.watch_for_changes_override,
+            Some(false),
+            "with no disk tree the watcher must be explicitly OFF, not left to Bevy's default"
+        );
+        assert_eq!(
+            embedded.file_path,
+            bevy::asset::AssetPlugin::default().file_path,
+            "no flag must leave the asset root exactly as it ships"
+        );
+
+        let dir = std::path::Path::new("/tmp/frostvein-checkout");
+        let on_disk = super::asset_plugin_for(Some(dir));
+        assert_eq!(
+            on_disk.watch_for_changes_override,
+            Some(true),
+            "a disk tree is the only thing that arms the watcher"
+        );
+        // Hand-written, not re-derived from the expression under test.
+        assert_eq!(on_disk.file_path, "/tmp/frostvein-checkout");
     }
 
     /// `--lights-off` is what gives `from_name` a caller the shipped binary reaches. Before it,
@@ -3098,6 +3382,7 @@ mod tests {
             .insert_resource(ProjectionWork {
                 snapshot: false,
                 dirty_tiles: [[1, 0, 0]].into_iter().collect(),
+                ..Default::default()
             })
             .init_resource::<TickClock>()
             .add_systems(Update, ingest_messages);

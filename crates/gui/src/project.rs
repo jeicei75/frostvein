@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
     time::Instant,
 };
 
@@ -95,6 +96,18 @@ pub type TerrainQuery<'w, 's> = Query<
 >;
 
 pub type TreeMeshQuery<'w, 's> = Query<'w, 's, (BevyEntity, &'static TreeMesh)>;
+
+/// Entities AD-14's partition does not reach. See `report_tree_meshes_once`.
+pub type UnmarkedQuery<'w, 's> = Query<
+    'w,
+    's,
+    BevyEntity,
+    (
+        With<Transform>,
+        Without<WorldProjected>,
+        Without<ClientLocal>,
+    ),
+>;
 
 pub type DynamicProjectionQuery<'w, 's> = Query<
     'w,
@@ -241,12 +254,22 @@ pub struct ProjectionAssets {
     zone_mark: Handle<StandardMaterial>,
     hover_highlight: Handle<StandardMaterial>,
     trees: [Handle<WorldAsset>; 4],
+    dwarf_scene: Handle<WorldAsset>,
 }
 
 /// Scene paths in `TreeVariant` order, served from the `embedded://` source.
 ///
 /// The bytes live in `ingest::TREE_ASSETS`; this is the order `tree_scene` indexes by, and
 /// `ingest::tree_asset_paths_match_the_loader` pins the two together.
+/// The authored dwarf's scene, served from the same `embedded://` source as the pines.
+/// Bytes in `ingest::DWARF_ASSET`.
+pub const DWARF_SCENE_PATH: &str = "gltf/SM_VoxelDwarf_Miner01.glb";
+
+/// Authored assets are modelled in METRES; render space is simulation CELLS at 1.6 m each.
+/// The pines carried this as a bare 0.625 at their one call site; the dwarf is the second, so it
+/// gets a name. A 1.20 m dwarf therefore draws 0.75 cells tall without any per-kind scale.
+pub const METRES_TO_CELLS: f32 = 0.625;
+
 pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree01.glb",
     "trees/SM_VoxelPine_Tree02.glb",
@@ -254,12 +277,60 @@ pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree04R.glb",
 ];
 
+/// Where the client reads its glTF scenes from — the shipped blobs, or a directory on disk.
+///
+/// `Disk` is the dev-only `--assets <dir>` path, and it exists so an authored asset can be
+/// iterated on without a cross-compile. It is NEVER a default: absent the flag this resource is
+/// `Embedded` and the binary behaves exactly as it does with no disk support at all.
+///
+/// NOT a compile-time stamp, which is the distinction that matters. `GUI_WORKSPACE_ROOT` and
+/// `resolve_asset_root` were deleted for baking *this machine's* absolute Linux path into a binary
+/// that gets copied to Windows (`build.rs:20-25`). Here the path arrives as an argument at run
+/// time, and Bevy resolves it at run time too.
+#[derive(Resource, Debug, Clone, PartialEq, Eq, Default)]
+pub enum SceneSource {
+    #[default]
+    Embedded,
+    Disk(PathBuf),
+}
+
+impl SceneSource {
+    /// The `asset_server.load()` scheme for this source.
+    ///
+    /// Embedded scenes are served by `EmbeddedAssetRegistry` behind `embedded://`. Disk scenes are
+    /// resolved relative to `AssetPlugin::file_path`, which is already the `--assets` directory, so
+    /// they carry no scheme at all.
+    pub fn prefix(&self) -> &'static str {
+        match self {
+            SceneSource::Embedded => "embedded://",
+            SceneSource::Disk(_) => "",
+        }
+    }
+
+    /// What the startup lines print after `source=`.
+    ///
+    /// This replaces a HARDCODED `source=embedded` that printed the same word whatever the client
+    /// had actually read. A line that cannot report the other case is not an instrument — see
+    /// 10.1's constant guard, which stayed green while the bench camera was rolled 110 degrees.
+    pub fn label(&self) -> String {
+        match self {
+            SceneSource::Embedded => "embedded".to_string(),
+            SceneSource::Disk(dir) => format!("disk:{}", dir.display()),
+        }
+    }
+}
+
 pub fn setup_projection_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Option<Res<AssetServer>>,
+    // Same `Option<Res<..>>` shape as the AssetServer above, and for the same reason: every
+    // MinimalPlugins test builds an app without it and must still run.
+    scene_source: Option<Res<SceneSource>>,
 ) {
+    let scene_source = scene_source.as_deref().cloned().unwrap_or_default();
+    let prefix = scene_source.prefix();
     let cube = meshes.add(Mesh::from(Cuboid::default()));
     let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
     let mark_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
@@ -288,13 +359,68 @@ pub fn setup_projection_assets(
         ))),
         zone_mark: materials.add(terrain_standard_material(zone_color())),
         hover_highlight: materials.add(terrain_standard_material(hover_highlight_color())),
-        trees: asset_server.map_or_else(
+        trees: asset_server.as_ref().map_or_else(
             || std::array::from_fn(|_| Handle::default()),
             |asset_server| {
-                TREE_SCENE_PATHS.map(|path| asset_server.load(format!("embedded://{path}#Scene0")))
+                TREE_SCENE_PATHS.map(|path| asset_server.load(format!("{prefix}{path}#Scene0")))
             },
         ),
+        // Same fallback, and it is load-bearing: every MinimalPlugins test runs without an
+        // AssetServer and must get Handle::default() rather than panicking.
+        dwarf_scene: asset_server
+            .as_ref()
+            .map_or_else(Handle::default, |asset_server| {
+                asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Scene0"))
+            }),
     });
+}
+
+/// The draw offset an entity kind needs on top of its cell position.
+///
+/// Cube kinds are drawn at the cell CENTRE, which is right for a unit cube. The authored dwarf
+/// conforms to the asset contract's `min Y = 0`, so its origin is its feet and it must sit on the
+/// cell FLOOR instead.
+///
+/// This exists as a function, and not as a term at the spawn site, because the spawn is NOT the
+/// only writer of a dwarf's translation: `apply_entity_blending` overwrites it on every frame
+/// after. Applying the drop only at the spawn left the dwarf correctly placed for exactly one
+/// frame and levitating half a cell -- two thirds of his own height -- from the next one on. Wolf
+/// saw it from the seat; no test here did. `item_translation` carries the same warning for items
+/// and for the same reason.
+pub fn entity_draw_offset(kind: EntityKind) -> Vec3 {
+    match kind {
+        EntityKind::Dwarf => -Vec3::Y * 0.5,
+        _ => Vec3::ZERO,
+    }
+}
+
+/// The yaw an entity should be drawn at, or `None` to HOLD the rotation it already carries.
+///
+/// `None` is what makes "hold the last direction" free: a stationary dwarf keeps the rotation
+/// already on his `Transform`, so no per-entity facing state has to exist anywhere. The Transform
+/// IS the memory.
+///
+/// Derived from the two wire positions the blend already reads, so facing never becomes wire state
+/// (AD-16). `astar_neighbours` is four-directional, so this is four yaws, not arbitrary angles.
+///
+/// Cube kinds always get `None`. A cube has no front, and a torch that swung to face its own
+/// flicker would be a change nobody asked for.
+pub fn entity_draw_rotation(
+    kind: EntityKind,
+    previous: Option<[i32; 3]>,
+    current: [i32; 3],
+) -> Option<bevy::prelude::Quat> {
+    if kind != EntityKind::Dwarf {
+        return None;
+    }
+    let delta = world_to_render(current) - world_to_render(previous?);
+    // Yaw only: a dwarf walking up a ramp must not pitch forward.
+    let heading = Vec3::new(delta.x, 0.0, delta.z);
+    if heading.length_squared() <= f32::EPSILON {
+        return None;
+    }
+    // The authored model faces glTF -Z, which is Bevy's forward, so `looking_to` IS the yaw.
+    Some(Transform::default().looking_to(heading, Vec3::Y).rotation)
 }
 
 /// Keeps one presentation-only hover slab in lockstep with the latest camera pick.
@@ -1485,12 +1611,39 @@ pub fn reconcile(
             if let Some(assets) = assets {
                 if let Some(mirror_entity) = mirror_entity {
                     let appearance = entity_appearance(mirror_entity.kind);
-                    entity.insert((
-                        Mesh3d(assets.cube.clone()),
-                        MeshMaterial3d(assets.entity_material(mirror_entity.kind)),
-                        Transform::from_translation(world_to_render(position))
-                            .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
-                    ));
+                    if mirror_entity.kind == EntityKind::Dwarf {
+                        // The authored model, not the shared cube. Placed at the cell FLOOR like
+                        // the trees (`- Vec3::Y * 0.5`), not the cell centre: the asset contract
+                        // puts an asset's base at min Y = 0, so a conforming model dropped on the
+                        // entity path's centred placement stands half a cell in the air. The cube
+                        // only looked right because a unit cube's centre is its middle.
+                        entity.insert((
+                            WorldAssetRoot(assets.dwarf_scene.clone()),
+                            Transform::from_translation(
+                                world_to_render(position) + entity_draw_offset(mirror_entity.kind),
+                            )
+                            // `unwrap_or_default()` is identity, and identity is right HERE: at
+                            // the spawn there is no previous facing to hold. Written at both
+                            // writers anyway, because the offset taught this story that the spawn
+                            // being the easy half does not make it the only half.
+                            .with_rotation(
+                                entity_draw_rotation(
+                                    mirror_entity.kind,
+                                    mirror.previous_entity(id).map(|previous| previous.pos),
+                                    position,
+                                )
+                                .unwrap_or_default(),
+                            )
+                            .with_scale(bevy::prelude::Vec3::splat(METRES_TO_CELLS)),
+                        ));
+                    } else {
+                        entity.insert((
+                            Mesh3d(assets.cube.clone()),
+                            MeshMaterial3d(assets.entity_material(mirror_entity.kind)),
+                            Transform::from_translation(world_to_render(position))
+                                .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
+                        ));
+                    }
                     if let Some(light) = mirror_entity.light {
                         entity.insert((point_light(light), ProjectedLight(light)));
                     }
@@ -1718,13 +1871,17 @@ pub fn blend_entities(
         .collect::<std::collections::BTreeMap<_, _>>();
     for (marker, mut transform) in projected.iter_mut() {
         if let Some(entity) = entities.get(&marker.0) {
-            transform.translation = blended_translation(
-                mirror
-                    .previous_entity(marker.0)
-                    .map(|previous| previous.pos),
-                entity.pos,
-                clock.factor(),
-            );
+            let previous = mirror
+                .previous_entity(marker.0)
+                .map(|previous| previous.pos);
+            transform.translation = blended_translation(previous, entity.pos, clock.factor())
+                + entity_draw_offset(entity.kind);
+            // Rotation is written HERE as well as at the spawn, for the same reason the offset is:
+            // this is the sole writer after the spawn frame, so a facing set only at the spawn
+            // would be correct for exactly one frame. `None` means hold what is already there.
+            if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {
+                transform.rotation = rotation;
+            }
         } else if let Some(position) = items.get(&marker.0) {
             // Items have no previous wire state; snapping is the only wire-true presentation.
             // Must go through `item_translation` for the same reason the spawn does: this is the
@@ -1936,6 +2093,10 @@ impl ProjectionAssets {
         self.trees
             .iter()
             .all(|scene| asset_server.is_loaded_with_dependencies(scene.id()))
+    }
+
+    pub fn dwarf_scene_loaded(&self, asset_server: &AssetServer) -> bool {
+        asset_server.is_loaded_with_dependencies(self.dwarf_scene.id())
     }
 }
 
@@ -2208,6 +2369,11 @@ const YAW_SALT: u32 = 0x5941_5721;
 #[derive(Resource, Default)]
 pub struct TreeReportState {
     reported: bool,
+    /// Tracked separately from `reported` ON PURPOSE. Sharing one flag gated the dwarf line on the
+    /// TREES' readiness, and measured at `--z 0` and `--z 5` -- where no tree is above the cut --
+    /// the dwarf line then never printed at all, though five dwarves were drawn. An instrument
+    /// that goes quiet exactly when the scene is unusual is worse than none.
+    dwarves_reported: bool,
     frames: u32,
 }
 
@@ -2220,23 +2386,58 @@ pub struct TreeReportState {
 pub fn report_tree_meshes_once(
     mut state: ResMut<TreeReportState>,
     trees: Query<&TreeMesh>,
+    // Scene-drawn PROJECTED entities are exactly the dwarves: trees carry `WorldAssetRoot` too but
+    // are client-local and never `WorldProjected`, so this counts what it says without a mirror.
+    scene_entities: Query<&WorldAssetRoot, With<WorldProjected>>,
+    // AD-14 says every drawable entity is either `WorldProjected` or `ClientLocal`. Scene children
+    // are neither: `WorldAssetRoot` spawns them at runtime and `classify_client_local` runs once at
+    // `PostStartup`, so nothing ever reaches them. Counted here because the two partition tests
+    // cannot see it -- both fixtures are `MinimalPlugins` with no `AssetServer`, so no scene ever
+    // loads and no child is ever spawned in them.
+    unmarked: UnmarkedQuery,
     assets: Option<Res<ProjectionAssets>>,
     asset_server: Option<Res<AssetServer>>,
+    scene_source: Option<Res<SceneSource>>,
 ) {
-    if state.reported {
+    if state.reported && state.dwarves_reported {
         return;
     }
     state.frames += 1;
-    let loaded = assets
+    let (loaded, dwarf_loaded) = assets
         .zip(asset_server)
-        .is_some_and(|(assets, asset_server)| assets.tree_scenes_loaded(&asset_server));
+        .map_or((false, false), |(a, server)| {
+            (a.tree_scenes_loaded(&server), a.dwarf_scene_loaded(&server))
+        });
     let spawned = trees.iter().count();
+    let dwarves = scene_entities.iter().count();
+    // Read from the resource rather than printed as a literal. The previous `source=embedded` said
+    // the same word with `--assets` pointed anywhere, which is the shape of a guard that reads text
+    // the mechanism cannot move.
+    let source = scene_source.as_deref().cloned().unwrap_or_default().label();
     // Report on success, or give up and report the FAILURE rather than staying silent: a line
     // that only ever appears when things worked is not an instrument.
-    if (loaded && spawned > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES {
+    // The dwarf's counterpart, on its OWN readiness. Wolf's first vehicle run of the seam printed
+    // the tree line and nothing about the dwarf, so the output could not say whether the authored
+    // scene had loaded at all.
+    if !state.dwarves_reported
+        && ((dwarf_loaded && dwarves > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES)
+    {
+        state.dwarves_reported = true;
+        eprintln!("gui dwarves: meshes={dwarves} scenes_loaded={dwarf_loaded} source={source}");
+        // MEASURED 2026-09-06 at the boot slice: 1075 = 265 trees x 4 + 5 dwarves x 3, base 0.
+        // The pines have carried this since 10.4; the dwarf adds 15 of it, 1.4%. Printed rather
+        // than asserted because fixing it is a design change to how scene children are classified,
+        // and that is bigger than the story that made it visible. An unmeasured hole gets argued
+        // about; a printed one gets closed.
+        eprintln!(
+            "gui partition: unmarked={} (transform-bearing entities with neither marker)",
+            unmarked.iter().count()
+        );
+    }
+    if !state.reported && ((loaded && spawned > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES) {
         state.reported = true;
         eprintln!(
-            "gui trees: meshes={spawned} scenes_loaded={loaded} source=embedded frames={}",
+            "gui trees: meshes={spawned} scenes_loaded={loaded} source={source} frames={}",
             state.frames
         );
     }

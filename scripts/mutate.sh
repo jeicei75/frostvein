@@ -28,6 +28,28 @@ MUTATIONS="${1:?mutations file required — see the usage comment in this script
 cd "$(dirname "$0")/.." || exit 1
 export PATH="$HOME/.cargo/bin:$PATH"
 
+# BUILD PARALLELISM IS CAPPED BY MEMORY, NOT BY CORES, and that is the whole point of this block.
+#
+# Cargo defaults to one rustc per core. This devpod has 32 cores and 23 GB, which is roughly 700 MB
+# per process before anything else is running -- and Bevy's crates are far hungrier than that. A
+# mutation run makes it worse in two ways nothing else does: every row rebuilds, and every row EDITS
+# A SOURCE FILE, which wakes rust-analyzer into a second full check against its own `target/
+# flycheck0`. Two 32-way builds at once is what nearly took the machine down on 2026-09-07, during a
+# 13-row table that had run fine on previous days -- the difference being branch switches across a
+# `bevy` feature boundary, each of which invalidates the entire dependency graph.
+#
+# Derived from total memory rather than hardcoded so it stays right on a different machine. Override
+# with CARGO_BUILD_JOBS if you know better than this arithmetic.
+if [ -z "${CARGO_BUILD_JOBS:-}" ]; then
+  mem_gb=$(awk '/MemTotal/ {print int($2 / 1024 / 1024)}' /proc/meminfo 2>/dev/null || echo 8)
+  cores=$(nproc 2>/dev/null || echo 4)
+  jobs=$((mem_gb / 2))
+  [ "$jobs" -lt 2 ] && jobs=2
+  [ "$jobs" -gt "$cores" ] && jobs="$cores"
+  export CARGO_BUILD_JOBS="$jobs"
+  echo "mutate.sh: capping cargo at ${CARGO_BUILD_JOBS} jobs (${mem_gb} GB / ${cores} cores)"
+fi
+
 BACKUP=$(mktemp -d)
 trap 'restore_all; rm -rf "$BACKUP"' EXIT
 
@@ -62,8 +84,12 @@ survivors=0
 # straight through to the KILLED branch having run no test at all.
 PACKAGES=$(rg -N '^name = "' crates/*/Cargo.toml | sed 's/.*"\(.*\)"/\1/')
 
+# A fourth argument of `ignored` runs the test with `-- --ignored`. Without it a row naming an
+# `#[ignore]`d test silently collects ZERO tests, exits 0, and reports SURVIVED -- "your test is not
+# pinning what it claims" when the truth is "your test never ran". Story 10.5 hit exactly that with
+# its AC10 row, which targets a test that drives the real binary and is therefore ignored by default.
 mutation() {
-  local name="$1" tier="$2" test="$3"
+  local name="$1" tier="$2" test="$3" mode="${4:-}"
   local script; script=$(cat)
 
   printf '\n=== %s ===\n' "$name"
@@ -83,7 +109,11 @@ mutation() {
   if [ "$tier" = "py" ]; then
     out=$(python3 -m unittest "$test" 2>&1); rc=$?
   else
-    out=$(cargo test --offline -p "$tier" "$test" 2>&1); rc=$?
+    if [ "$mode" = "ignored" ]; then
+      out=$(cargo test --offline -p "$tier" "$test" -- --ignored 2>&1); rc=$?
+    else
+      out=$(cargo test --offline -p "$tier" "$test" 2>&1); rc=$?
+    fi
   fi
   restore_all
 
@@ -116,6 +146,25 @@ mutation() {
     survivors=$((survivors + 1))
     echo "  test SKIPPED or not collected — proves nothing, treating as a survivor"
     printf '%s\n' "$out" | rg -N 'skipped|Ran 0 tests' | head -3
+  elif [ "$tier" != "py" ] && [ "$rc" -eq 0 ] && ! printf '%s' "$out" | rg -N '^test .* \.\.\. ok$' | rg -qNF "$test"; then
+    # The py tier has had this guard since three Blender-gated rows landed in SURVIVED; the cargo
+    # tier did not, and an `#[ignore]`d target hits it the same way: every test binary reports
+    # "0 passed; 0 failed; N filtered out", cargo exits 0, and the row reads SURVIVED having judged
+    # nothing. Guarded on rc==0 so a genuine failure -- which also shows no passing test -- still
+    # reaches the KILLED branch below.
+    #
+    # THE NAMED TEST, NOT ANY TEST. This asked `rg '[1-9][0-9]* passed'` of the COMBINED output of
+    # every test binary in the package -- each integration-test file compiles to its own binary and
+    # prints its own summary. A filter that collected nothing in the target's binary but happened to
+    # match a passing test in a sibling file satisfied the old check on that sibling's "1 passed",
+    # and the row went back to judging nothing while claiming otherwise. Matching the test's OWN
+    # `test <name> ... ok` line cannot be satisfied by a different binary. `-F` because a row's test
+    # name is a literal, not a pattern.
+    RESULTS+=("NOT-RUN")
+    survivors=$((survivors + 1))
+    echo "  cargo collected NO tests — proves nothing, treating as a survivor"
+    echo "  (an #[ignore]d target needs a fourth argument: mutation \"...\" <tier> <test> ignored)"
+    printf '%s\n' "$out" | rg -N 'test result|filtered out' | head -2
   elif [ "$rc" -ne 0 ]; then
     RESULTS+=("KILLED")
     printf '%s\n' "$out" | rg -N 'panicked at|AssertionError|assertion|test result: FAILED' | head -4

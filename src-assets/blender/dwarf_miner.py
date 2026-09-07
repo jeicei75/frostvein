@@ -894,9 +894,13 @@ def main():
           "expected exactly 1 embedded palette image, got %d" % len(gj.get("images", [])))
     # Guards a real regression: Image.pack() with no data silently ships a black
     # atlas, which every check above still passes. ALL TEN cells are read back
-    # here, including 8 and 9, which check_asset.py cannot see: its PALETTE_HEX is
-    # hardcoded to the pine's seven and it iterates range(len(PALETTE_HEX)). This
-    # is the only mechanical check those two cells get anywhere.
+    # here, including 8 and 9.
+    # NO LONGER THE ONLY CHECK THOSE TWO CELLS GET, and this comment said it was:
+    # check_asset.py's PALETTE_HEX was deleted in story 10.5b and it now reads every
+    # painted cell off the artifact, so it reports all ten too -- and refuses an
+    # atlas that is entirely unpainted, which is exactly the Image.pack() regression
+    # this check was written for. The two are now independent readings of the same
+    # cells, which is worth more than either alone.
     check(shipped_palette == PALETTE_HEX,
           "shipped palette %s != this module's palette %s"
           % (",".join(shipped_palette), ",".join(PALETTE_HEX)))

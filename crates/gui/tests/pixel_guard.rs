@@ -204,11 +204,165 @@ impl Daemon {
     }
 }
 
+impl Daemon {
+    /// One real client run, returning its `gui dwarves:` line. Stderr is captured rather than
+    /// discarded, which is where the startup instrument prints.
+    ///
+    /// THE EXIT STATUS IS ASSERTED, NOT DISCARDED. It was discarded, and that hid a client which
+    /// panicked on every run of both callers below: they passed `--frames 60` while the capture's
+    /// own floor demands 100 delivered ticks, so the process died moments after printing the line
+    /// these tests grep for. Every assertion passed on the output of a crashed process, which is
+    /// manufactured evidence rather than a missing test -- the worse of the two.
+    fn dwarf_report(&self, extra: &[&str]) -> String {
+        // The scratch name is derived from `extra`, which carries an ABSOLUTE PATH under
+        // `--assets`. Joining that raw put `/` inside the file NAME, so `PathBuf::join` addressed
+        // directories that do not exist and the screenshot was silently never written.
+        let slug = extra
+            .join("_")
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect::<String>();
+        let out = std::env::temp_dir().join(format!(
+            "frostvein-dwarf-report-{}-{slug}.png",
+            std::process::id(),
+        ));
+        let result = Command::new(env!("CARGO_BIN_EXE_gui"))
+            .arg(self.port.to_string())
+            .args([
+                "--headless",
+                "--capture",
+                out.to_str().expect("a utf-8 path"),
+            ])
+            .args(extra)
+            .stdout(Stdio::null())
+            .output()
+            .expect("the client must run");
+        let _ = std::fs::remove_file(&out);
+        let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
+        assert!(
+            result.status.success(),
+            "the client must exit cleanly for its startup line to be evidence of anything; it \
+             exited {:?} with args {extra:?}\n{stderr}",
+            result.status.code()
+        );
+        stderr
+            .lines()
+            .find(|line| line.starts_with("gui dwarves:"))
+            .unwrap_or("<no dwarf line printed>")
+            .to_string()
+    }
+}
+
 impl Drop for Daemon {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+/// AC10: the dwarf's startup line, driven through the real binary and proved to MOVE.
+///
+/// A well-formedness assertion would pass against a hardcoded string. The state this varies is the
+/// slice: the dwarves stand at z 9, so a run cut at z 5 draws none of them. Same binary, same
+/// daemon, one flag apart.
+///
+/// The zero case is the one worth having. Reporting `meshes=0` is the instrument admitting it drew
+/// nothing; going SILENT there is what it did before the tree and dwarf reports were given separate
+/// readiness flags, and a line that only appears when things worked is not an instrument.
+///
+/// It costs a 600-frame run: below the cut there are no dwarves, so the report waits out
+/// `TREE_REPORT_DEADLINE_FRAMES` rather than firing on success.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
+    let daemon = Daemon::spawn();
+
+    let above = daemon.dwarf_report(&["--subdiv", "1", "--z", "9", "--frames", FRAMES]);
+    // `--static-world` because this capture is not about motion and CANNOT be: cut below the
+    // dwarves, none of them is drawn, so `mid_blend_frames` and `position_changes` both stay 0 and
+    // the motion instrument fails on a frame that is exactly what the test came to see. This run
+    // has panicked on every execution since Part A; nothing noticed, because `dwarf_report`
+    // discarded the exit status. The underlying defect is that `motion_assertions_apply` keys off
+    // dwarves in the MIRROR rather than dwarves within the captured SLICE -- issue #77 -- and it
+    // is deliberately not fixed here: narrowing that predicate touches every capture in the suite.
+    let below = daemon.dwarf_report(&[
+        "--subdiv",
+        "1",
+        "--z",
+        "5",
+        "--frames",
+        "700",
+        "--static-world",
+    ]);
+    println!("AC10 dwarf line: above the cut {above:?} / below {below:?}");
+
+    assert_eq!(
+        above, "gui dwarves: meshes=5 scenes_loaded=true source=embedded",
+        "with the slice at the dwarves' own level the line must name all five and say the \
+         authored scene loaded"
+    );
+    assert_eq!(
+        below, "gui dwarves: meshes=0 scenes_loaded=true source=embedded",
+        "cut below them the line must still appear and report ZERO. Silence here would mean the \
+         instrument only speaks when it has good news."
+    );
+    assert_ne!(
+        above, below,
+        "the line must change with the state it claims to report"
+    );
+}
+
+/// AC6: the startup line reports the RESOLVED asset source, and it MOVES.
+///
+/// `source=embedded` used to be a hardcoded word. It printed `embedded` with `--assets` pointed
+/// anywhere, which is the same shape as 10.1's constant guard that stayed green while the bench
+/// camera was rolled 110 degrees: text the mechanism cannot move.
+///
+/// THE ASSERTION THAT MATTERS IS `scenes_loaded=true` ON THE DISK RUN, not the changed label. A
+/// label can be made to move by printing a different string; `scenes_loaded=true` can only be true
+/// if the client actually resolved and decoded a `.glb` through the disk path. The directory is
+/// this repo's own `assets/`, so the BYTES are identical to the embedded ones and the only thing
+/// under test is where they were read from -- AC2 is the separate measurement that different bytes
+/// produce a different frame.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn the_startup_line_reports_the_resolved_asset_source() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets")
+        .canonicalize()
+        .expect("the repo's own assets/ directory must exist");
+    let daemon = Daemon::spawn();
+
+    let embedded = daemon.dwarf_report(&["--subdiv", "1", "--z", "9", "--frames", FRAMES]);
+    let from_disk = daemon.dwarf_report(&[
+        "--subdiv",
+        "1",
+        "--z",
+        "9",
+        "--frames",
+        FRAMES,
+        "--assets",
+        assets.to_str().expect("a utf-8 path"),
+    ]);
+    println!("AC6 source line: embedded {embedded:?} / disk {from_disk:?}");
+
+    assert_eq!(
+        embedded, "gui dwarves: meshes=5 scenes_loaded=true source=embedded",
+        "with no flag the client must read the blobs compiled into it, and say so"
+    );
+    assert_eq!(
+        from_disk,
+        format!(
+            "gui dwarves: meshes=5 scenes_loaded=true source=disk:{}",
+            assets.display()
+        ),
+        "under --assets the line must name the directory actually read -- and `scenes_loaded=true` \
+         is the half that cannot be faked by printing a different string"
+    );
+    assert_ne!(
+        embedded, from_disk,
+        "the line must change when the source changes; it used to print `embedded` either way"
+    );
 }
 
 /// AC11, on the frame rather than on the flag.
@@ -312,5 +466,90 @@ fn the_fine_mesher_leaves_no_sky_showing_through_the_terrain() {
         holes <= ENCLOSED_SKY_CEILING,
         "sky is showing through the terrain at --subdiv 2: {holes} enclosed-sky pixels, above the \
          {ENCLOSED_SKY_CEILING} ceiling."
+    );
+}
+
+/// AC9's header clause, on the real binary.
+///
+/// This is also the ONLY thing pinning `--perf-log`'s wiring. The `PerfLog` resource was inserted
+/// in `run()`, outside the extracted builder, so deleting the two lines left the entire suite
+/// green while the flag parsed, validated and reached nothing — the project's own named
+/// antipattern, ruled closed at the root after five Milestone 2 instances, and this was a sixth.
+///
+/// The preamble is asserted FIELD BY FIELD rather than as a whole line. A log is read on a
+/// different day and a different machine than it was written on, and each of these is a fact the
+/// numbers below it are meaningless without: which build, which asset tree, how much geometry per
+/// cell, and whether a vsync cap meant the run measured the monitor rather than the scene.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn the_perf_log_names_the_run_that_produced_it() {
+    let daemon = Daemon::spawn();
+    let log = std::env::temp_dir().join(format!("frostvein-perf-run-{}.csv", std::process::id()));
+    let out = std::env::temp_dir().join(format!("frostvein-perf-run-{}.png", std::process::id()));
+    let _ = std::fs::remove_file(&log);
+
+    let result = Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg(daemon.port.to_string())
+        .args([
+            "--headless",
+            "--capture",
+            out.to_str().expect("a utf-8 path"),
+            "--subdiv",
+            "1",
+            "--z",
+            "9",
+            "--frames",
+            FRAMES,
+            "--perf-log",
+            log.to_str().expect("a utf-8 path"),
+        ])
+        .stdout(Stdio::null())
+        .output()
+        .expect("the client must run");
+    let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
+    let _ = std::fs::remove_file(&out);
+    assert!(
+        result.status.success(),
+        "the client must exit cleanly; it exited {:?}\n{stderr}",
+        result.status.code()
+    );
+
+    let written = std::fs::read_to_string(&log).expect("--perf-log must have written a file");
+    let _ = std::fs::remove_file(&log);
+    println!(
+        "AC9 preamble: {:?}",
+        written.lines().find(|line| line.starts_with("# run:"))
+    );
+
+    assert_eq!(
+        written.lines().next(),
+        Some(gui::perf::CSV_HEADER),
+        "a file that exists must always be a file with a schema, on its very first line"
+    );
+    let preamble = written
+        .lines()
+        .find(|line| line.starts_with("# run:"))
+        .expect("the log must name the run that produced it (AC9)");
+    for field in [
+        "build=",
+        "assets=embedded",
+        "subdiv=1",
+        "vsync=off",
+        "terrain=",
+        "trees=",
+        "dwarves=",
+    ] {
+        assert!(
+            preamble.contains(field),
+            "the run preamble must carry {field:?}; got {preamble:?}"
+        );
+    }
+    let rows = written
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.starts_with("frame"))
+        .count();
+    assert!(
+        rows > 1,
+        "a {FRAMES}-frame run must leave more than one measured row; got {rows}"
     );
 }

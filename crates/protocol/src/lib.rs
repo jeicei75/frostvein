@@ -4,7 +4,13 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_PORT: u16 = 7373;
+/// The port every binary defaults to: `simd` binds it, `tui` and `gui` connect to it.
+///
+/// Changed 7373 -> 7451 on 2026-09-07 (Wolf) so the default matches the port actually used here.
+/// 7451 was already the habitual one in practice — `scripts/task6-designate.py` defaults to it and
+/// the gui tests use it throughout — so the constant was the odd one out, and a default nobody
+/// uses is a default that sends a fresh session to the wrong socket.
+pub const DEFAULT_PORT: u16 = 7451;
 
 /// Wire message discriminator. `Delta` joins in Story 2.1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

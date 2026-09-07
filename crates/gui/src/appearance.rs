@@ -277,9 +277,19 @@ pub fn rim_dissolved_color(base: Color, level: usize) -> Color {
 
 pub fn entity_appearance(kind: EntityKind) -> EntityAppearance {
     match kind {
+        // 1.20 m / 1.6 m per cell = 0.75. Corrected from a stale 0.65 by story 10.5, which the
+        // resolution contract had been owed since it fixed the dwarf's height
+        // (`docs/tech-art-guidelines.md`, "dwarves target 0.0125 m (96 voxels = 1.20 m =
+        // 0.75 cells)").
+        //
+        // NOTE: the authored dwarf no longer reads this. He is drawn from a glTF scene modelled in
+        // METRES and scaled by `METRES_TO_CELLS`, so his 0.75 comes from his own geometry. This
+        // value still drives `valley_bench.py`, which draws him as a cube, and it is still pinned
+        // by `bench_contract.rs` on both sides -- so the two must move in ONE commit or the
+        // contract goes red.
         EntityKind::Dwarf => EntityAppearance {
             color: Color::srgb_u8(151, 116, 96),
-            scale: 0.65,
+            scale: 0.75,
         },
         EntityKind::Torch => EntityAppearance {
             color: Color::srgb_u8(255, 140, 62),
@@ -407,7 +417,7 @@ mod tests {
         assert_eq!(lighting.directional_illuminance, 22_000.0);
 
         let entities = [
-            (EntityKind::Dwarf, [151, 116, 96], 0.65),
+            (EntityKind::Dwarf, [151, 116, 96], 0.75),
             (EntityKind::Torch, [255, 140, 62], 0.28),
             (EntityKind::Campfire, [255, 173, 92], 0.55),
         ];

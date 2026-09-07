@@ -470,17 +470,25 @@ and other appearance values never become wire state (AD-16).
   `TEXCOORD_0` values inside 0–1, flat, single-sided (`doubleSided` absent or false)
   metallic-roughness material and neither `extensionsUsed` nor `extensionsRequired`.
   **Mechanically-checkable:** `scripts/bench/check_asset.py` enforces the count, atlas dimension,
-  filter, wrap, UV-range, single-sided and extension clauses, and **publishes the seven sampled
-  palette cells on the `FIGURES` line** so the role comparison below has something to read
-  against. The intended role read and future multi-material mapping are **eye-only** until a
+  filter, wrap, UV-range, single-sided and extension clauses, and **publishes every painted
+  palette cell the asset actually carries on the `FIGURES` line** so the role comparison below has
+  something to read against. It reads the grid and trims the unpainted tail rather than iterating a
+  hardcoded list, so a ten-colour dwarf reports ten and a seven-colour pine still reports seven;
+  an atlas with no paint at all, or with a hole between painted cells, is REFUSED rather than
+  reported as an empty or black-containing palette (story 10.5b, AC7). The intended role read and future multi-material mapping are **eye-only** until a
   concrete second format exists.
 
   **Scope, and it is load-bearing:** every clause in this bullet is **V1-voxel-asset only**, and
   `check_asset.py` applies them to any `.glb` it is handed. An asset class with two materials, no
-  texture, or a different atlas size — an authored dwarf, for instance — will be REJECTED with
+  texture, or a different atlas size will be REJECTED with
   `one-mesh/material/image clause (V1 voxel assets only)`. That is a **scope mismatch, not a
-  contract violation**: story 10.5 introduces the second asset family and owns generalising these
-  clauses. Do not "fix" a conforming asset to satisfy a pine rule.
+  contract violation**. Do not "fix" a conforming asset to satisfy a pine rule.
+
+  **The authored dwarf is NOT such a case, and this bullet used to say it was.** It was written
+  before the asset existed and predicted a rejection that does not happen:
+  `SM_VoxelDwarf_Miner01.glb` is a single-mesh, single-material, 64×64-atlas V1 asset and
+  `check_asset.py` ACCEPTS it, reporting ten palette cells including the lantern flame `#F0A63C`.
+  Story 10.5b generalised the palette clause; the remaining clauses never needed it.
 - **Topology.** V1 voxel assets are greedy-meshed, unwelded quad soup: triangles are pairs of
   quads and `verts == tris/2 × 4`. They are flat-shaded and do not accept adjacency-based
   smoothing, decimation or auto-LOD. **Mechanically-checkable:**

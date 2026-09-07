@@ -110,8 +110,8 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
         ),
         (
             &appearance,
-            "EntityKind::Dwarf => EntityAppearance { color: Color::srgb_u8(151, 116, 96), scale: 0.65,",
-            "\"dwarf\": ((151, 116, 96), 0.65)",
+            "EntityKind::Dwarf => EntityAppearance { color: Color::srgb_u8(151, 116, 96), scale: 0.75,",
+            "\"dwarf\": ((151, 116, 96), 0.75)",
         ),
         (
             &appearance,

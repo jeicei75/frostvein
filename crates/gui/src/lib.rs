@@ -8,6 +8,7 @@ pub mod capture;
 pub mod command;
 pub mod designate;
 pub mod ingest;
+pub mod perf;
 pub mod pick;
 pub mod project;
 pub mod slice;

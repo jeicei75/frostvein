@@ -44,6 +44,13 @@ glTF at `assets/gltf/<published-name>.glb`, and **promoting it there is a separa
 the forge side — not yours.** Two committed copies of one asset is how a bench and a client come
 to draw different trees.
 
+> **The running client will NOT see your export until it is promoted.** `--assets` points at
+> `<checkout>/assets`, and `scripts/launch-gui.ps1` watches that directory and no other, so the
+> hot-reload loop reloads `assets/gltf/SM_VoxelDwarf_Miner01.glb` — never `src-assets/export/`.
+> The copy between the two is the one manual step in the loop and it is deliberate, so that a
+> half-finished export cannot reach a running seat by accident. If you change the dwarf and the
+> client does not move, this is why.
+
 **Why this rule exists**, because the alternative sounds harmless: v1 wrote its `.glb` to
 `assets/gltf/` — correct per the contract, outside `src-assets/` in practice. The commit was made
 from inside `src-assets/`, so `git add .` could not reach it and the `-a` that swept up an
@@ -149,10 +156,16 @@ The sheet's `B` and `8` are the same glyph at 1024 px — provably, because `Woo
 by sampling either; the residuals do not clear the noise floor. They ship as-is. **Only the
 original art file settles them.**
 
-**`check_asset.py` reads only SEVEN palette cells** — `PALETTE_HEX` is hardcoded to the pine's
-seven and it iterates `range(len(PALETTE_HEX))`. Cells 8 and 9 are **not mechanically checked by
-anything but your own generator.** Do not read its acceptance as validation of them; say so in
-your report.
+**CORRECTED 2026-09-07 (story 10.5b) — `check_asset.py` now reads every painted cell.** It walks
+the whole 4x4 grid and trims the unpainted black tail, so it asks the artifact how many colours it
+has rather than a constant that only described the pines. The dwarf's `FIGURES` line reports all
+**ten**, Wood Trunk, Hair and Lantern flame included, and a test pins that count against the pines'
+seven from the one code path.
+
+*Superseded, kept so the change is legible:* it used to read only SEVEN — `PALETTE_HEX` was
+hardcoded to the pine's seven and it iterated `range(len(PALETTE_HEX))`, so cells 7, 8 and 9 were
+checked by nothing but the generator itself. That is no longer true, and its acceptance now DOES
+cover them.
 
 ### The flame is a colour, never an emitter
 
