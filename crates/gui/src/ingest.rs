@@ -282,6 +282,9 @@ fn register_tree_assets(app: &mut App) {
 }
 
 pub fn run() -> anyhow::Result<()> {
+    if print_version_and_exit_if_asked() {
+        return Ok(());
+    }
     let args = parse_args()?;
     // M2-7. FIRST line out, before the connect can fail: a session that cannot reach the daemon
     // still learns which binary it is holding, and that is exactly the case where the answer
@@ -715,6 +718,21 @@ enum ScriptedDragStage {
 
 fn parse_args() -> anyhow::Result<Args> {
     parse_args_from(std::env::args_os().skip(1))
+}
+
+/// `--version` prints the build stamp and exits, WITHOUT connecting to a daemon or opening a window.
+///
+/// It exists for the pwsh launcher (`scripts/launch-gui.ps1`, M2-7 / issue #46), which must compare
+/// the running binary's commit against the checkout it is about to serve as `--assets`. The stamp is
+/// already printed at startup, but reading it there means starting the client, parsing stderr and
+/// killing it — a race, on the one check whose whole job is to be trustworthy. Handled before
+/// `parse_args` so it works on a machine with no daemon at all.
+fn print_version_and_exit_if_asked() -> bool {
+    if std::env::args_os().skip(1).any(|arg| arg == "--version") {
+        println!("gui build {}", crate::BUILD_SHA);
+        return true;
+    }
+    false
 }
 
 fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<Args> {
