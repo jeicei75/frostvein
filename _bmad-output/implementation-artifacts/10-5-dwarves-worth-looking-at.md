@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.5: Dwarves Worth Looking At — Part A, the seam
 
-Status: ready-for-dev
+Status: done — implemented 2026-09-06, reviewed jointly with Part B 2026-09-07. NOT merged, no PR yet.
 
 **THE EPIC'S OWN SPLIT LINE IS TAKEN, and this story is the first half.** `epics.md:1591-1593`
 names it: *"if this overruns a dev session, 'feature enablement + a stand-in glTF rendering on the

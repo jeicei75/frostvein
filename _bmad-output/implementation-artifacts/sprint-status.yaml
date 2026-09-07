@@ -1858,7 +1858,17 @@ development_status:
                           # mean=0.000/dark=100%, so a blank capture cannot pass as a lit valley.
                           # Same-build noise floor re-measured on 47139fa: 0.107 mean (the Y=200
                           # probe's 13.3 is 124x it). Full gate GREEN, 9/9, no skips.
-  10-5-dwarves-worth-looking-at: review
+  10-5-dwarves-worth-looking-at: done
+                          # 2026-09-07 JOINT REVIEW WITH PART B, four layers, full house, no
+                          # timeouts and no coverage holes. Four of the review's findings were
+                          # Part A's: --static-world was ignored under --at-tick with zero test
+                          # coverage anywhere; the below-the-cut capture in its AC10 test has
+                          # PANICKED on every gate run since Part A (issue #77, hidden because the
+                          # helper discarded the exit status); the story still specified a pine
+                          # stand-in and forbade committing a dwarf model with Task 2 ticked
+                          # against it; and its Verification named `gui build 4b01a58` for control
+                          # frames replaced under the same filenames at cc66a49. All patched.
+                          # Full gate re-run by the reviewer, GREEN 597s -- not inherited.
                           # 2026-09-06 PART A IMPLEMENTED, 14 commits, pushed as
                           # `10-5-dwarves-worth-looking-at` at cb45817. NOT merged, NO PR, and
                           # NOT yet reviewed -- status moved backlog->review 2026-09-07 because
@@ -1899,7 +1909,32 @@ development_status:
                           # check_asset.py is deliberately NOT touched here: it rejects an authored
                           # dwarf on its first clause BY DESIGN (V1 voxel assets only), and
                           # generalising it without the real asset means guessing.
-  10-5b-the-art-iteration-loop: review
+  10-5b-the-art-iteration-loop: done
+                          # 2026-09-07 JOINT REVIEW OF PART A + PART B (Wolf's ruling: one review
+                          # covers both). Four layers, FULL HOUSE -- second on record. 32 findings
+                          # triaged: 3 decision-needed (all ruled by Wolf and implemented), 18
+                          # patched, 10 LOW deferred, 1 dismissed. Full gate GREEN 597s, run by
+                          # the reviewer.
+                          # THE THREE THAT MATTERED, and all three are the same shape -- an
+                          # instrument reporting success while measuring nothing, under a green
+                          # gate: (1) `dirty_tiles` was STRUCTURALLY always 0 -- drained in
+                          # `Update`, read in `Last` -- so AC10's steady/edit split could never
+                          # fire and the column written to catch 10.6's missed edit cost was blind
+                          # to it; its justifying comment cited a function that does not exist.
+                          # (2) AC6's mandated test drove a binary that PANICKED every run,
+                          # passing because `dwarf_report` read only stderr and never the exit
+                          # status. (3) AC9's provenance-header clause was NOT IMPLEMENTED AT ALL
+                          # -- `rg -i vsync` returned nothing in the repo -- while the story read
+                          # 12 of 12.
+                          # THE REVIEW ALSO SUPPLIED THE STORY'S MISSING EVIDENCE: the headline
+                          # outcome (change the dwarf, see it without a rebuild) had no AC, no
+                          # test and no recorded observation. It was watched working headless --
+                          # asset swapped under a running client, `Reloaded` logged 2s later, the
+                          # dwarf window converging on the pine control to 24 of 1,200 px. THE
+                          # WINDOWS LEG (ReadDirectoryChangesW) HAS STILL NEVER BEEN SEEN TO FIRE.
+                          # Mutation table 12 -> 18 rows; the 13th had shipped at 703bb94 with no
+                          # recorded verdict while three places said 12.
+                          # NOT MERGED, NO PR YET -- awaiting Wolf.
                           # 2026-09-07 ALL 12 ACs MET. AC8/UX-DR22 closed on the vehicle: Wolf
                           # "dwarves look like the model in blender", judged against the glTF
                           # read from the CHECKOUT (source=disk:), not the embedded copy.

@@ -5,7 +5,7 @@ model: claude-opus-5[1m]  # Opus default; the 1M-context variant, recorded so th
 
 # Story 10.5b: Dwarves Worth Looking At — Part B, the art-iteration loop
 
-Status: dev-done, 12/12 ACs met — awaiting the joint code review with Part A
+Status: done — joint code review with Part A complete 2026-09-07 (3 decisions ruled, 18 patches applied, 10 LOW deferred, full gate GREEN 597s). NOT merged, no PR yet.
 
 **Part A took the epic's named split line and shipped the seam. This is the other half.**
 Part A (`10-5-dwarves-worth-looking-at`, 14 commits, `cb45817`) is **implemented and pushed but
