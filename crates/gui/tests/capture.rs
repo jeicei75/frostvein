@@ -412,6 +412,7 @@ fn draw_count_instrument_follows_projected_marks_from_live_ingest() {
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: Default::default(),
+            ..Default::default()
         })
         .insert_resource(SliceLevel::pinned(dims, 1))
         .add_systems(bevy::app::Startup, setup_projection_assets);
@@ -553,6 +554,7 @@ fn the_capture_fails_when_the_mirror_holds_marks_the_scene_does_not_draw() {
         .insert_resource(ProjectionWork {
             snapshot: true,
             dirty_tiles: Default::default(),
+            ..Default::default()
         })
         .insert_resource(SliceLevel::pinned(dims, 1))
         .add_systems(bevy::app::Startup, setup_projection_assets);
@@ -683,4 +685,73 @@ fn the_lantern_sweep_sees_terrain_that_exists_only_as_chunk_meshes() {
         "the lantern sweep lit {lit} tiles in a world whose terrain exists only as chunk meshes; \
          querying TerrainTile alone reports zero here and panics every subdiv>1 capture"
     );
+}
+
+/// `--static-world` must silence the motion instrument on BOTH capture arms.
+///
+/// It was wired into the no-`--at-tick` arm only, so "freeze the sim, then screenshot at a
+/// controlled tick" -- the natural way to use the two flags together, and one the parser accepts
+/// without complaint -- asserted motion on a world the operator had deliberately stopped and
+/// panicked every time.
+///
+/// THE MIRROR HOLDS A DWARF ON PURPOSE. `motion_assertions_apply` is what the fix short-circuits,
+/// and it returns false for an entity-less mirror -- so a fixture with no dwarf would take the
+/// pre-existing skip branch, pass identically with the fix reverted, and prove nothing.
+#[test]
+fn static_world_skips_the_motion_assertions_on_an_at_tick_capture() {
+    let dims = Dims { x: 1, y: 1, z: 1 };
+    let dwarf = protocol::Entity {
+        id: 1,
+        kind: protocol::EntityKind::Dwarf,
+        pos: [0, 0, 0],
+        state: protocol::JobState::Idle,
+        light: None,
+    };
+    let snapshot = Snapshot {
+        msg_type: MessageType::Snapshot,
+        dims,
+        tiles: vec![Tile::Solid(protocol::Material::Stone)],
+        entities: vec![dwarf],
+        designations: Vec::new(),
+        zones: Vec::new(),
+        items: Vec::new(),
+        speed: Speed::Normal,
+        tick: 7,
+    };
+    let out = env::temp_dir().join(format!(
+        "frostvein-static-at-tick-{}.png",
+        std::process::id()
+    ));
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
+        .insert_resource(SliceLevel::pinned(dims, 0))
+        .insert_resource(CaptureState::at_tick(out.clone(), 8, 7, 3, false).with_static_world(true))
+        .add_systems(Update, capture_after_frames);
+    app.world_mut().spawn((TerrainTile([0, 0, 0]),));
+
+    app.update();
+    app.world_mut()
+        .resource_mut::<MirrorResource>()
+        .0
+        .apply_delta(Delta {
+            msg_type: MessageType::Delta,
+            tick: 10,
+            tiles: Vec::new(),
+            entities: vec![dwarf],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+        });
+    // The assertions run at the moment the capture is requested. Reaching this line at all is the
+    // result: with the flag honoured on one arm only, this update panicked.
+    app.update();
+
+    assert!(
+        app.world().resource::<CaptureState>().requested(),
+        "tick 10 must still trigger the at-tick capture -- --static-world silences the motion \
+         assertions, it does not cancel the capture"
+    );
+    let _ = fs::remove_file(&out);
 }
