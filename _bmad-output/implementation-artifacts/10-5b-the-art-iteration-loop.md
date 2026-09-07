@@ -64,7 +64,16 @@ so that authoring a creature is a loop I can turn, not a cross-compile I have to
    reports seven with nothing to say three more are there. It cannot answer "and nothing else".
 
 3. **`notify` CROSS-COMPILES AND LINKS TO WINDOWS — settled here, with a binary.** Part A left
-   this as its one unclaimed risk. Probed 2026-09-07 in a scratch crate off-repo:
+   this as its one unclaimed risk.
+
+   **UPGRADED at dev time, and the upgrade matters:** the first probe was a *scratch crate*, which
+   proves the crate builds but not that THIS workspace does with `file_watcher` actually on.
+   `cargo build -p gui --target x86_64-pc-windows-gnu` on `d3bd25b` → **exit 0, a real
+   `gui.exe`**, and `notify` / `ReadDirectoryChangesW` symbols are present in it, so the watcher is
+   linked rather than feature-gated away. **NOTE: the debug artifact is 1.8 GB** — a vehicle copy
+   wants `--release`.
+
+   The original scratch-crate probe, kept because it is what settled the risk before any code:
    `notify-debouncer-full 0.7.0` (pulling `notify 8.2.0`, `notify-types 2.1.0`),
    `cargo build --target x86_64-pc-windows-gnu` → **exit 0, a 13,127,158-byte `.exe`**. The
    constructor is called in `main`, so it is linked rather than compiled away. Target and
@@ -218,8 +227,16 @@ is not bought until something asks for it).
       Decide what "every cell the asset carries" means from the ARTIFACT (a trailing run of
       `#000000` is the terminator the dwarf's atlas already uses) rather than from a per-family
       constant — a second hardcoded list is the abstraction this project's YAGNI rule forbids.
-- [ ] **Task 6 — UX-DR22 (AC8) — OPEN, WOLF'S SEAT.** Wolf's time on the vehicle. `authored_bench.py` renders authored
-      assets in situ and is the opening artifact's machinery — extend it, do not start over.
+- [ ] **Task 6 — UX-DR22 (AC8) + issue #74 — OPEN, WOLF'S SEAT.** Wolf's time on the vehicle.
+      `authored_bench.py` renders authored assets in situ and is the opening artifact's machinery —
+      extend it, do not start over.
+  - [ ] **Issue #74 joins this sitting (Wolf, 2026-09-07):** dwarves path THROUGH the campfire, and
+        the authored mesh's shadow swings wildly. Same dwarf, same seat, so one judgement covers
+        both rather than two vehicle sessions.
+  - [ ] **Walk `scripts/launch-gui.ps1`'s RED before trusting its check** — it has never been
+        executed. The refusals to observe: a binary built at a different commit than the checkout
+        (expect `MISMATCH` and exit 1), and a `-dirty` stamp (expect the dirty refusal and exit 1).
+        A check that has never been seen to refuse is a habit, not a guard.
 - [x] **Task 7 — the performance log (AC9, AC10, AC11).** RULED 2026-09-07; scope in the ACs.
   - [ ] `--perf-log <path>` in `parse_args_from` (`ingest.rs:676`), and the on-demand key beside
         `toggle_overlay` (`ingest.rs:1299`) / `toggle_pause`.
@@ -374,6 +391,7 @@ covers Part A and Part B together, after B.
 | 2026-09-07 | Story created. **Part A over-delivered and that redefined B**: the authored dwarf is already shipped and embedded, so "Part B cannot start until Wolf has a model" is spent and B is the loop, the checker and the sign-off. Seven premises verified on `cb45817`, three of them correcting the record: `check_asset.py` does not reject the dwarf, it **silently under-reads his palette by three cells** including the flame `#F0A63C` (all 16 cells decoded, table in premise 2); `notify-debouncer-full` **cross-compiles AND LINKS** to `x86_64-pc-windows-gnu`, closing Part A's one unclaimed risk with a 13 MB `.exe`; and `source=embedded` is a **hardcoded literal in both instrument lines**, so the line B must change is itself the project's worst instrument shape. Also settled from vendored source: an absolute `AssetPlugin.file_path` replaces the base path via `Path::join`, so option A needs nothing stamped into the binary, and `file_watcher` turns watching on globally unless overridden — AC5. Task 7's scope is UNRULED and carries an open question. |
 | 2026-09-07 | **Task 7 RULED, and it is not a "probe".** Wolf: *"one of my requests was to get performance measured to log or something so it's easier to check it after a live run instead of trying to see it from the screen."* So it is a **performance LOG**, read after the fact, not a bench and not an overlay. Scope ruled the same sitting: **frametime + content counters, flag-gated `--perf-log <path>` PLUS an on-demand key at the seat**; the **CPU/GPU split was considered and NOT bought** (it needs `RenderDiagnosticsPlugin` and GPU timestamp queries that `llvmpipe` cannot exercise here — vehicle-only and untestable in the devpod). New AC9/AC10/AC11; mutations moved 9 → 12. The industry framing that decided the columns: average FPS is a mean of reciprocals and hides stutter, so the summary is **percentile frametime** (p50/p95/p99/p99.9) plus a hitch count — and, because of this project's own history, content counters sit on the same row as the time and the summary splits steady-state from edit frames. Also found while scoping it: **`FrameTimeDiagnosticsPlugin` is on the WINDOWED path only** (`ingest.rs:323`); the headless arm never had it. |
 | 2026-09-07 | **Wolf ruled the story runs WHOLE, Tasks 1-7**, against the recommendation to split 6-7 off. Open question 2 is closed by that ruling; question 1 is closed by the Task 7 entry above. Question 3 (issue #74) remains OPEN. |
+| 2026-09-07 | **Issue #74 JOINS Task 6's vehicle sitting** (Wolf) — dwarves pathing through the campfire and the authored mesh's swinging shadow are about the dwarf this story finishes, so one judgement covers both rather than two vehicle sessions. All three questions raised at story creation are now answered. |
 
 ## Dev Agent Record
 
@@ -466,6 +484,10 @@ the first recorded frame.
 
 ### Still open
 
-3. **Issue #74 — dwarves path through the campfire, and the authored mesh's shadow swings wildly —
-   is open and route:undecided**, and it is about the dwarf this story finishes. Does it join
-   Task 6's vehicle session, or stay separate? **Not blocking Tasks 1-5, 7.**
+3. ~~**Issue #74 — does it join Task 6's vehicle session?**~~ **YES — Wolf, 2026-09-07.** It is
+   about the dwarf this story finishes, so the same sitting judges it: dwarves pathing through the
+   campfire, and the authored mesh's shadow swinging wildly. Added to Task 6.
+
+### Nothing open
+
+All three questions raised at story creation are answered.
