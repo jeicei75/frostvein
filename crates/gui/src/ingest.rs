@@ -16,7 +16,7 @@ use anyhow::{Context, bail};
 use bevy::{
     app::PluginGroup,
     app::ScheduleRunnerPlugin,
-    asset::{Assets, Handle},
+    asset::{AssetPlugin, Assets, Handle},
     camera::RenderTarget,
     image::Image,
     render::render_resource::{TextureFormat, TextureUsages},
@@ -61,7 +61,7 @@ use crate::{
     pick::{PickedTile, update_pick},
     project::{
         ClientLocal, DigChipQuery, DynamicProjectionQuery, ProjectedDesignation,
-        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, TerrainQuery,
+        ProjectedDesignationKind, ProjectedZone, ProjectionAssets, SceneSource, TerrainQuery,
         TerrainSubdivision, TerrainTile, TreeMeshQuery, WorldProjected, blend_entities,
         flicker_lights, has_terrain_above, reconcile, setup_projection_assets, sync_drag_preview,
         sync_hover_highlight,
@@ -298,6 +298,31 @@ pub fn run() -> anyhow::Result<()> {
     );
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
+    // The asset source is decided ONCE, here, and both the plugin config and the startup lines
+    // read that one decision. Deciding it twice is how a client reports one source and reads
+    // another.
+    let scene_source = match &args.assets {
+        None => SceneSource::Embedded,
+        Some(dir) => SceneSource::Disk(dir.clone()),
+    };
+    // SECOND LINE OUT, beside the build stamp, and for the same reason: a session must be able to
+    // SEE which asset tree it read rather than be told which one it should have read. Two candidate
+    // asset trees is the stale-artifact shape this project keeps paying for.
+    eprintln!("gui assets: source={}", scene_source.label());
+    let asset_plugin = AssetPlugin {
+        // Absolute, so `get_base_path().join(..)` resolves to exactly this directory. Checked at
+        // parse time.
+        file_path: args
+            .assets
+            .as_ref()
+            .map(|dir| dir.display().to_string())
+            .unwrap_or_else(|| AssetPlugin::default().file_path),
+        // `file_watcher` is compiled in, and Bevy then defaults watching ON. With no `--assets`
+        // there is nothing on disk to watch, so every headless test in the gate would pay for a
+        // `notify` thread that can never fire. Explicit in BOTH directions rather than inherited.
+        watch_for_changes_override: Some(args.assets.is_some()),
+        ..Default::default()
+    };
     if args.headless {
         // No window, and therefore no winit: WinitPlugin panics outright where there is no display
         // server, which is every devpod this project builds on. ScheduleRunnerPlugin drives the
@@ -313,19 +338,26 @@ pub fn run() -> anyhow::Result<()> {
                     exit_condition: ExitCondition::DontExit,
                     ..Default::default()
                 })
+                .set(asset_plugin)
                 .disable::<WinitPlugin>(),
         )
         .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO))
         // The overlay plugin wants a window; its config resource is all the client systems read.
         .init_resource::<FpsOverlayConfig>();
     } else {
-        app.add_plugins(DefaultPlugins)
+        app.add_plugins(DefaultPlugins.set(asset_plugin))
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(FpsOverlayPlugin {
                 config: overlay_config_off(),
             });
     }
+    // Registered on BOTH paths, deliberately. The embedded blobs cost nothing to publish and the
+    // `--assets` prefix simply stops naming them, so the disk path does not depend on this being
+    // skipped -- which keeps one code path rather than two, and keeps a fallback available if a
+    // disk tree is missing a file. NOTE: the limitation is that a disk run cannot prove the
+    // embedded copy is absent, only that it was not the thing read; AC2 measures the bytes.
     register_tree_assets(&mut app);
+    app.insert_resource(scene_source);
     configure_client_app(&mut app, mirror, receiver, writer, args);
     // `App::run()` RETURNS the exit status and `AppExit` is not `#[must_use]`, so discarding it
     // compiles clean under `-D warnings` and silently turns every capture failure into exit 0.
@@ -606,6 +638,9 @@ struct Args {
     headless: bool,
     subdiv: Option<u32>,
     lights_off: Vec<LightSource>,
+    /// `--assets <dir>`: read glTF scenes from this directory instead of the embedded blobs.
+    /// Dev-only, absolute, and never a default.
+    assets: Option<PathBuf>,
 }
 
 /// Present only under `--headless`: the offscreen texture the camera draws into, and which the
@@ -687,6 +722,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut headless = false;
     let mut subdiv = None;
     let mut lights_off = Vec::new();
+    let mut assets = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
@@ -706,6 +742,22 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             // Explicit and never a default, so it cannot silently disable the guard on a run that
             // was supposed to be moving.
             static_world = true;
+        } else if arg == "--assets" {
+            // Dev-only disk loading, so an authored asset can be iterated on without a
+            // cross-compile. ABSOLUTE ONLY: Bevy resolves a relative `AssetPlugin::file_path`
+            // against `get_base_path()` -- BEVY_ASSET_ROOT, then CARGO_MANIFEST_DIR, then the
+            // EXE'S OWN DIRECTORY -- so a relative path quietly means something different on the
+            // Windows vehicle than it does here. An absolute path replaces that base outright
+            // (`Path::join`), which is the whole mechanism. Refusing is better than resolving
+            // against a base the operator never stated.
+            let dir = PathBuf::from(args.next().context("--assets requires a directory")?);
+            if !dir.is_absolute() {
+                bail!(
+                    "--assets requires an ABSOLUTE directory; got {}",
+                    dir.display()
+                );
+            }
+            assets = Some(dir);
         } else if arg == "--expect-work" {
             expect_work = true;
         } else if arg == "--headless" {
@@ -818,6 +870,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         headless,
         subdiv,
         lights_off,
+        assets,
     })
 }
 
@@ -1654,6 +1707,88 @@ mod tests {
                     .get_resource::<crate::capture::TreeCaptureVerification>()
                     .is_some(),
                 "a capture must carry its tree accounting (headless={headless})"
+            );
+        }
+    }
+
+    /// `--assets` is a RESOLVER: it decides which of two asset trees the client reads. The
+    /// decision must be CONSUMED, not merely parsed, so this asserts the branch-changing path in
+    /// both directions -- the load prefix and the reported label move together, and neither moves
+    /// when the flag is absent.
+    ///
+    /// The relative-path refusal is the half that would otherwise rot silently: Bevy resolves a
+    /// relative `file_path` against `get_base_path()`, whose last fallback is THE EXE'S OWN
+    /// DIRECTORY. A relative `--assets` would therefore mean one directory here and a different
+    /// one on the Windows vehicle, and neither would be the one the operator typed.
+    #[test]
+    fn assets_switches_the_scene_source_and_refuses_a_relative_directory() {
+        let default = super::parse_args_from([std::ffi::OsString::from("7451")])
+            .expect("no --assets must parse");
+        assert_eq!(
+            default.assets, None,
+            "--assets must never be a silent default"
+        );
+
+        let disk = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--assets"),
+            std::ffi::OsString::from("/tmp/frostvein-checkout"),
+        ])
+        .expect("an absolute --assets must parse");
+        assert_eq!(
+            disk.assets,
+            Some(std::path::PathBuf::from("/tmp/frostvein-checkout"))
+        );
+
+        // `Args` is deliberately not `Debug`, so match rather than `expect_err`.
+        let refused = match super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            std::ffi::OsString::from("--assets"),
+            std::ffi::OsString::from("some/relative/dir"),
+        ]) {
+            Ok(_) => panic!(
+                "a relative --assets must stop the run, not resolve against an unstated base"
+            ),
+            Err(error) => error,
+        };
+        assert_eq!(
+            refused.to_string(),
+            "--assets requires an ABSOLUTE directory; got some/relative/dir"
+        );
+
+        // The decision is CONSUMED. Hand-written expectations, not derived from the code under
+        // test: embedded scenes carry the `embedded://` scheme and disk scenes carry none.
+        let embedded = super::SceneSource::Embedded;
+        let on_disk = super::SceneSource::Disk(std::path::PathBuf::from("/tmp/frostvein-checkout"));
+        assert_eq!(embedded.prefix(), "embedded://");
+        assert_eq!(on_disk.prefix(), "");
+        assert_eq!(embedded.label(), "embedded");
+        assert_eq!(on_disk.label(), "disk:/tmp/frostvein-checkout");
+        assert_ne!(
+            embedded.label(),
+            on_disk.label(),
+            "the reported source must MOVE when the source moves; `source=embedded` was a literal"
+        );
+    }
+
+    /// AC5. `file_watcher` is compiled in, and Bevy then defaults watching ON -- so the cost of a
+    /// `notify` thread would land on every headless test in the gate for a capability nothing
+    /// exercises. This pins the override in BOTH directions rather than trusting the default.
+    #[test]
+    fn the_file_watcher_is_armed_only_when_there_is_a_disk_tree_to_watch() {
+        for (flag, expected) in [(None, false), (Some("/tmp/frostvein-checkout"), true)] {
+            let mut argv = vec![std::ffi::OsString::from("7451")];
+            if let Some(dir) = flag {
+                argv.push(std::ffi::OsString::from("--assets"));
+                argv.push(std::ffi::OsString::from(dir));
+            }
+            let args = super::parse_args_from(argv).expect("must parse");
+            // The same expression `run()` builds the plugin from, asserted against a hand-written
+            // expectation rather than re-deriving it.
+            assert_eq!(
+                args.assets.is_some(),
+                expected,
+                "watch_for_changes_override must follow --assets, not the feature flag"
             );
         }
     }

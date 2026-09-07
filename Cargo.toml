@@ -18,9 +18,21 @@ anyhow = "1.0.104"
 bevy_ecs = "0.19.0"
 # Bevy is the story 5.3 renderer.  Its explicit feature trim avoids the devpods'
 # unavailable Wayland, audio, gamepad, and system-library dependencies.
+#
+# `file_watcher` is the one addition to that trim, and it is added AGAINST the trim's recorded
+# reasons rather than in spite of them (story 10.5b, Task 1's ruling).  The trim exists to keep out
+# features needing system libraries the devpods lack; this one needs none.  It pulls
+# `notify-debouncer-full` -> `notify`, which is pure Rust on both targets — verified by building it
+# for `x86_64-pc-windows-gnu` and LINKING a binary, not by reading the manifest.  It is a BUILD-time
+# choice, not a machine one, so it cross-compiles into `gui.exe` and the watcher runs against the
+# Windows checkout at run time; no Windows toolchain appears and the single-build-venue property is
+# untouched.  Watching is turned ON only under `--assets` (`ingest.rs`, `watch_for_changes_override`)
+# — Bevy would otherwise default it on and every headless test in the gate would pay for a thread
+# that can never fire.
 bevy = { version = "0.19.0", default-features = false, features = [
     "std", "default_app", "3d_bevy_render", "ui_api", "ui_bevy_render",
     "default_font", "bevy_winit", "multi_threaded", "x11", "bevy_dev_tools",
+    "file_watcher",
 ] }
 # Declared solely to switch on wgpu's `gles` backend, which the `bevy` facade does
 # not re-export on native (bevy_render has `gles = ["wgpu/gles"]`; bevy_internal

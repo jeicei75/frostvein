@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
     time::Instant,
 };
 
@@ -276,12 +277,60 @@ pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree04R.glb",
 ];
 
+/// Where the client reads its glTF scenes from — the shipped blobs, or a directory on disk.
+///
+/// `Disk` is the dev-only `--assets <dir>` path, and it exists so an authored asset can be
+/// iterated on without a cross-compile. It is NEVER a default: absent the flag this resource is
+/// `Embedded` and the binary behaves exactly as it does with no disk support at all.
+///
+/// NOT a compile-time stamp, which is the distinction that matters. `GUI_WORKSPACE_ROOT` and
+/// `resolve_asset_root` were deleted for baking *this machine's* absolute Linux path into a binary
+/// that gets copied to Windows (`build.rs:20-25`). Here the path arrives as an argument at run
+/// time, and Bevy resolves it at run time too.
+#[derive(Resource, Debug, Clone, PartialEq, Eq, Default)]
+pub enum SceneSource {
+    #[default]
+    Embedded,
+    Disk(PathBuf),
+}
+
+impl SceneSource {
+    /// The `asset_server.load()` scheme for this source.
+    ///
+    /// Embedded scenes are served by `EmbeddedAssetRegistry` behind `embedded://`. Disk scenes are
+    /// resolved relative to `AssetPlugin::file_path`, which is already the `--assets` directory, so
+    /// they carry no scheme at all.
+    pub fn prefix(&self) -> &'static str {
+        match self {
+            SceneSource::Embedded => "embedded://",
+            SceneSource::Disk(_) => "",
+        }
+    }
+
+    /// What the startup lines print after `source=`.
+    ///
+    /// This replaces a HARDCODED `source=embedded` that printed the same word whatever the client
+    /// had actually read. A line that cannot report the other case is not an instrument — see
+    /// 10.1's constant guard, which stayed green while the bench camera was rolled 110 degrees.
+    pub fn label(&self) -> String {
+        match self {
+            SceneSource::Embedded => "embedded".to_string(),
+            SceneSource::Disk(dir) => format!("disk:{}", dir.display()),
+        }
+    }
+}
+
 pub fn setup_projection_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Option<Res<AssetServer>>,
+    // Same `Option<Res<..>>` shape as the AssetServer above, and for the same reason: every
+    // MinimalPlugins test builds an app without it and must still run.
+    scene_source: Option<Res<SceneSource>>,
 ) {
+    let scene_source = scene_source.as_deref().cloned().unwrap_or_default();
+    let prefix = scene_source.prefix();
     let cube = meshes.add(Mesh::from(Cuboid::default()));
     let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
     let mark_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
@@ -313,7 +362,7 @@ pub fn setup_projection_assets(
         trees: asset_server.as_ref().map_or_else(
             || std::array::from_fn(|_| Handle::default()),
             |asset_server| {
-                TREE_SCENE_PATHS.map(|path| asset_server.load(format!("embedded://{path}#Scene0")))
+                TREE_SCENE_PATHS.map(|path| asset_server.load(format!("{prefix}{path}#Scene0")))
             },
         ),
         // Same fallback, and it is load-bearing: every MinimalPlugins test runs without an
@@ -321,7 +370,7 @@ pub fn setup_projection_assets(
         dwarf_scene: asset_server
             .as_ref()
             .map_or_else(Handle::default, |asset_server| {
-                asset_server.load(format!("embedded://{DWARF_SCENE_PATH}#Scene0"))
+                asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Scene0"))
             }),
     });
 }
@@ -2348,6 +2397,7 @@ pub fn report_tree_meshes_once(
     unmarked: UnmarkedQuery,
     assets: Option<Res<ProjectionAssets>>,
     asset_server: Option<Res<AssetServer>>,
+    scene_source: Option<Res<SceneSource>>,
 ) {
     if state.reported && state.dwarves_reported {
         return;
@@ -2360,6 +2410,10 @@ pub fn report_tree_meshes_once(
         });
     let spawned = trees.iter().count();
     let dwarves = scene_entities.iter().count();
+    // Read from the resource rather than printed as a literal. The previous `source=embedded` said
+    // the same word with `--assets` pointed anywhere, which is the shape of a guard that reads text
+    // the mechanism cannot move.
+    let source = scene_source.as_deref().cloned().unwrap_or_default().label();
     // Report on success, or give up and report the FAILURE rather than staying silent: a line
     // that only ever appears when things worked is not an instrument.
     // The dwarf's counterpart, on its OWN readiness. Wolf's first vehicle run of the seam printed
@@ -2369,7 +2423,7 @@ pub fn report_tree_meshes_once(
         && ((dwarf_loaded && dwarves > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES)
     {
         state.dwarves_reported = true;
-        eprintln!("gui dwarves: meshes={dwarves} scenes_loaded={dwarf_loaded} source=embedded");
+        eprintln!("gui dwarves: meshes={dwarves} scenes_loaded={dwarf_loaded} source={source}");
         // MEASURED 2026-09-06 at the boot slice: 1075 = 265 trees x 4 + 5 dwarves x 3, base 0.
         // The pines have carried this since 10.4; the dwarf adds 15 of it, 1.4%. Printed rather
         // than asserted because fixing it is a design change to how scene children are classified,
@@ -2383,7 +2437,7 @@ pub fn report_tree_meshes_once(
     if !state.reported && ((loaded && spawned > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES) {
         state.reported = true;
         eprintln!(
-            "gui trees: meshes={spawned} scenes_loaded={loaded} source=embedded frames={}",
+            "gui trees: meshes={spawned} scenes_loaded={loaded} source={source} frames={}",
             state.frames
         );
     }

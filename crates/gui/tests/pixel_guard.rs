@@ -277,6 +277,59 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
     );
 }
 
+/// AC6: the startup line reports the RESOLVED asset source, and it MOVES.
+///
+/// `source=embedded` used to be a hardcoded word. It printed `embedded` with `--assets` pointed
+/// anywhere, which is the same shape as 10.1's constant guard that stayed green while the bench
+/// camera was rolled 110 degrees: text the mechanism cannot move.
+///
+/// THE ASSERTION THAT MATTERS IS `scenes_loaded=true` ON THE DISK RUN, not the changed label. A
+/// label can be made to move by printing a different string; `scenes_loaded=true` can only be true
+/// if the client actually resolved and decoded a `.glb` through the disk path. The directory is
+/// this repo's own `assets/`, so the BYTES are identical to the embedded ones and the only thing
+/// under test is where they were read from -- AC2 is the separate measurement that different bytes
+/// produce a different frame.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn the_startup_line_reports_the_resolved_asset_source() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets")
+        .canonicalize()
+        .expect("the repo's own assets/ directory must exist");
+    let daemon = Daemon::spawn();
+
+    let embedded = daemon.dwarf_report(&["--subdiv", "1", "--z", "9", "--frames", "60"]);
+    let from_disk = daemon.dwarf_report(&[
+        "--subdiv",
+        "1",
+        "--z",
+        "9",
+        "--frames",
+        "60",
+        "--assets",
+        assets.to_str().expect("a utf-8 path"),
+    ]);
+    println!("AC6 source line: embedded {embedded:?} / disk {from_disk:?}");
+
+    assert_eq!(
+        embedded, "gui dwarves: meshes=5 scenes_loaded=true source=embedded",
+        "with no flag the client must read the blobs compiled into it, and say so"
+    );
+    assert_eq!(
+        from_disk,
+        format!(
+            "gui dwarves: meshes=5 scenes_loaded=true source=disk:{}",
+            assets.display()
+        ),
+        "under --assets the line must name the directory actually read -- and `scenes_loaded=true` \
+         is the half that cannot be faked by printing a different string"
+    );
+    assert_ne!(
+        embedded, from_disk,
+        "the line must change when the source changes; it used to print `embedded` either way"
+    );
+}
+
 /// AC11, on the frame rather than on the flag.
 ///
 /// The permanent component test proves the toggles reach the values the renderer READS. It cannot
