@@ -127,6 +127,65 @@ night, so this story's approved frame is the night Epic 11 builds on.
 **Fixed, not owed:** the sun's elevation `+17.66°` and azimuth `40.0398°` stay
 (`atmosphere.rs:35,39`; Wolf, 2026-09-03). `the_approved_sun_lights_downward` stays as is.
 
+### RECORDED at the opening sitting — Wolf, 2026-09-08
+
+Handed to Wolf: the k=4 control frame and its range-check line, the k=1/k=4 flank pair, the
+figures with their noise floor, Premise 2's dates, and "The frame, read at creation". Answers
+given in two messages while the Task 6c mutation run was live, **verbatim**:
+
+> *"while mutation runs answers to ruling: 1) Night and moonlight 2) How snow works really.. in
+> dream case there would be a separate layer of snow growing to some extend over time ..if digged
+> then ofc under that should be stone.. so maybe yes flank-k4 is closer to target but maybe snow
+> layer it bit too thick? 3) cannot see fog, snowfall does not start from the top of the screen
+> depending view angle and maybe flakes could be smaller, the rim dissolve?"*
+
+> *"1 intensities 3 actually maybe rim is connected to fog.. visible terrain cut off is too sharp
+> so could it fanish to fog so that it looks like world continues and is not just diorama visible
+> atm? but visible area of terrain is ok right now until we will get other things in shape at
+> least"*
+
+**Ruling 1 — NIGHT KEY, MOONLIGHT. Knob family: INTENSITIES.** The key is not a sun. The table
+is re-derived toward the PRD's dark night. The knob is the light table
+(`night_lighting()` / `light_properties()`); **no `Exposure` component is added** — that stays
+Epic 11.1's mechanism. How bright the night key may be is deliberately NOT ruled in words: Wolf
+chooses it from Task 3's candidate frames, which is what AC4 exists for.
+
+**Ruling 2 — THE k=4 FLANK RULE WINS.** Stone flanks under a snow cap. The k=1 slab path is the
+loser and is made to match (AC14). Wolf's *"maybe snow layer it bit too thick"* is answered by
+mechanism, not by a constant: at k=4 settled snow is **paint on the top faces with no thickness at
+all** (`project.rs:940-975`), so the apparent thickness is the detail carving, which
+`project.rs:1159` labels a **MEASUREMENT STAND-IN** for 10.4's authored terrain. **Nothing in
+10.8 tunes it.** Wolf's dream case — a settled snow LAYER that accretes over time and reveals
+stone when dug — is a sim-side feature, recorded in `deferred-work.md`, not built here.
+
+**Ruling 3 — FOUR DEFECTS NAMED**, each opening exactly one thing and nothing else:
+
+| # | Defect, in Wolf's words | Opens |
+|---|---|---|
+| a | *"cannot see fog"* | `fog_falloff` (`ingest.rs:1412`): 70→210 at the boot framing |
+| b | *"snowfall does not start from the top of the screen depending view angle"* | the flake spawn band: height `11.0 + SNOWFLAKE_FALL_SPAN 20.0` over `SNOWFLAKE_DISC_RADIUS 48.0` (`atmosphere.rs:182-196`) |
+| c | *"maybe flakes could be smaller"* | `snowflake_scale` (`atmosphere.rs:214`), today `0.3 + 0.18` |
+| d | *"visible terrain cut off is too sharp … not just diorama"* | the rim dissolve (`RIM_WIDTH 26`, `RIM_LEVELS 13`, `rim_level` `project.rs:1948`, `rim_dissolved_color` `appearance.rs:266`) **together with** the fog |
+
+**NOT opened by Ruling 3:** how much terrain is visible. Wolf: *"visible area of terrain is ok
+right now until we will get other things in shape at least"*. The sky colour, the aurora and the
+star shell carry no named defect and do not move. Ruling 4's scope is these four rows.
+
+**ORCHESTRATOR FINDING, derived from source at the sitting — NOT yet measured, Task 6b must test
+it against frames before acting on it.** Defects (a) and (d) plausibly share ONE cause, which is
+why Wolf's *"maybe rim is connected to fog"* is likely right. Both the fog colour and the rim's
+target colour are pinned to `night_lighting().sky` = `srgb_u8(5, 12, 28)`, a very dark navy. But
+the sky actually VISIBLE at the horizon is the aurora curtain, `srgb_u8(73, 157, 144)` at up to
+`AURORA_PEAK_ALPHA 0.55`. So distant terrain and the world edge both fade toward a colour DARKER
+than what is behind them: the dissolve cannot make the edge vanish, it can only turn it into a
+dark band against a bright horizon, which is exactly a diorama edge. `docs/tech-art-guidelines.md`
+§ Edge treatment currently forbids splitting them — *"The fog colour and the rim's target colour
+MUST both be exactly the sky colour. A haze colour only becomes available once the sky itself
+carries a vertical gradient; until then these three colours move together or not at all."* The
+aurora curtain gives the horizon a gradient in APPEARANCE but not in the sky CONSTANT. If the
+frames confirm the mechanism, **the doc rule is what changes**, in the same commit, with the
+before/after pair that showed it.
+
 ## Acceptance Criteria
 
 ### The gate
@@ -219,16 +278,16 @@ night, so this story's approved frame is the night Epic 11 builds on.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — Ship k=4, then re-take the control** (AC: 13; FIRST)
-  - [ ] `ingest.rs:458` `unwrap_or(1)` → `4`; `:433-434` insert `TerrainSubdivision` unconditionally.
+- [x] **Task 0 — Ship k=4, then re-take the control** (AC: 13; FIRST)
+  - [x] `ingest.rs:458` `unwrap_or(1)` → `4`; `:433-434` insert `TerrainSubdivision` unconditionally.
         `rg -n '"--capture"' crates/gui/tests` and make every k=1 caller explicit.
-  - [ ] Re-capture the control ×2 at the new default (same recipe as Verification); these replace
+  - [x] Re-capture the control ×2 at the new default (same recipe as Verification); these replace
         the k=1 control as this story's noise floor and as the `creation-control` in AC6. Keep the
         k=1 frames; the AC6 discrimination test may use either as the "above ceiling" frame.
-  - [ ] Also capture the k=1 / k=4 side-by-side for Ruling 2, same framing, both filed.
-  - [ ] Doc row + deferred-work entry corrected in the same commit.
+  - [x] Also capture the k=1 / k=4 side-by-side for Ruling 2, same framing, both filed.
+  - [x] Doc row + deferred-work entry corrected in the same commit.
 
-- [ ] **Task 1 — The rulings sitting** (AC: 2)
+- [x] **Task 1 — The rulings sitting** (AC: 2) — Rulings 1–4 recorded above, 2026-09-08
   - [ ] Hand Wolf: the k=4 control frame, its range-check line, Premise 2's dates, "The frame, read
         at creation", the k=1/k=4 pair, and Rulings 1–3 as questions. Record the answers verbatim.
   - [ ] **Stop here until Ruling 1 is recorded.** No lighting constant moves before it.
@@ -280,14 +339,15 @@ night, so this story's approved frame is the night Epic 11 builds on.
   - [ ] For each Ruling 3 defect: change the constant, file the before/after pair with figures,
         correct the pin that names it.
 
-- [ ] **Task 6c — The instrument's own defects** (AC: 16, 17)
-  - [ ] #72: reproduce with `pixel_guard.rs`'s all-off run until "wrote no PNG" appears (it is a
-        race — record how many runs it took); fix so the write completes before exit; five green
-        full-tier runs.
-  - [ ] #77: reproduce with `--z 5 --capture` (below the dwarves) → motion panic; make
+- [~] **Task 6c — The instrument's own defects** (AC: 16, 17) — code complete, AC16's five-run
+      evidence OWED (see Completion Notes)
+  - [~] #72: the ordering fix landed and is pinned by a deterministic test, but the RACE ITSELF was
+        never reproduced and the five green full-tier runs were NOT taken — the dev session was
+        cut off by a Codex quota exhaustion mid-run. AC16 is NOT satisfied.
+  - [x] #77: reproduced with `--z 5 --capture` (below the dwarves) → motion panic, exit 101; made
         `motion_assertions_apply` read the captured slice; RED then green.
-  - [ ] Do not close the issues from a commit keyword — a keyword closes the WHOLE issue on merge;
-        say "Fixes #72" only when all of #72 is fixed, and let the PR do it.
+  - [x] Do not close the issues from a commit keyword — no commit on this branch names a closing
+        keyword; `git log main..HEAD --grep='Closes #\|Fixes #'` is empty.
 
 - [ ] **Task 7 — Mutation table** (AC: 11)
   - [ ] ≥4 rows, format per `mutations/10-7-the-sun-lights-the-valley.sh`. **Commit the fix before
@@ -457,6 +517,9 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **Rulings 1–4 recorded at the opening sitting** (AC2), verbatim: night moonlight key with the INTENSITIES knob, the k=4 flank rule wins, and four named atmosphere defects (fog invisible, snowfall not reaching the top of frame, flakes too large, the terrain cut-off too sharp / diorama). Orchestrator finding filed with them: fog and rim both fade toward the dark sky constant while the visible horizon is the bright aurora, which would explain two of the four defects at once — unmeasured, Task 6b must test it. |
+| 2026-09-08 | **Task 6c part done.** Issue #77 fixed: `motion_assertions_apply` now asks whether a dwarf lies within the CAPTURED SLICE, on both arms; RED reproduced first, `--static-world` workaround removed. Issue #72's ordering fix landed and is pinned deterministically, but **AC16 is NOT met** — the race was never reproduced and the five full-tier runs were not taken, the dev session dying on Codex quota exhaustion. Mutation table opened with four rows; one SURVIVED because the test compared against the constant the sabotage moved, fixed by pinning the literal, then 4/4 KILLED. |
+| 2026-09-08 | **Task 0 done: `--subdiv 4` is the shipped default.** One `DEFAULT_TERRAIN_SUBDIV` constant feeds both the resource and the perf provenance; every k=1 test caller is now explicit. Control re-taken ×2 at the new default (near-white 2.5000 / 2.4554 %, exit 101, noise floor 0.0446 pp) plus the k=1/k=4 flank pair for Ruling 2. Doc rows superseded and the `deferred-work.md` "no owner" entry closed in the same commit. |
 | 2026-09-08 | **Extended on Wolf's rulings at creation:** `--subdiv 4` becomes the shipped default and lands first (Task 0); the snow-flank rule, atmosphere constants (on named defects), issue #62 and the instrument bugs #72/#77 are IN (ACs 13–17). Day/night and the art-shot post stack are split into **Epic 11** (three stories, after this one, before 8.3), booting at night. Tonemapping premise verified: LUTs are on through `3d_api`. |
 | 2026-09-08 | Story created on Wolf's instruction ("lighting and overall atmosphere/style story first"), ahead of 8.3. Seven premises verified against source; the control frame captured twice on `3ed269c` (near-white 2.1686 / 2.2088 %, exit 101) plus two probes — torches off alone reads 1.3342 % and EXITS 0, sun off stays red; the dated finding that the directional's 22,000 lux was set the day after the light stopped reaching any surface. Epic entry corrected at creation: the capture ceilings are re-calibrated on the approved frame, not frozen. Status → ready-for-dev. |
 
@@ -464,8 +527,120 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 ### Agent Model Used
 
+- **Dev (delegated):** `gpt-5.6-terra`, `model_reasoning_effort: high` — read off the run banners,
+  not self-reported. Two sessions: `01a07f75-e501-7970-b2a0-7fc145ea0851` (Task 0) and
+  `01a07f91-8992-71c2-8181-822c5cf527a1` (Task 6c, mutations).
+- **Orchestrator:** `claude-fable-5-1` for the handoffs and Task 0 verification; the harness
+  switched the session to `claude-opus-5[1m]` mid-run, which wrote the rulings and this record.
+
 ### Debug Log References
+
+**RED — Task 0, the shipped default (AC13).** The resource test before the default existed:
+
+```
+test ingest::tests::absent_subdiv_flag_installs_the_shipped_default_four ... FAILED
+thread '...' panicked at crates/gui/src/ingest.rs:2419:25
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 144 filtered out
+```
+
+**Task 0 captures.** Build stamped `gui build 25f217b`, HEAD `25f217b`, no `-dirty`. Boot framing,
+`--frames 160`, no `--z`. Full figures in `10-8-signoff/task-0-control.md`:
+
+```
+control-k4-25f217b-a  warm-lit=27338 ground-median=126 near-white=2.5000% blown-pool=1.2994% p99=233.6  exit 101
+control-k4-25f217b-b  warm-lit=26944 ground-median=126 near-white=2.4554% blown-pool=1.2551% p99=233.4  exit 101
+flank-k1-25f217b      warm-lit=21690 ground-median=135 near-white=2.1978% blown-pool=1.1287% p99=229.9  exit 101
+flank-k4-25f217b      warm-lit=27301 ground-median=125 near-white=2.4263% blown-pool=1.2428% p99=231.4  exit 101
+```
+
+Noise floor, worst of the k=4 control pair: mean `0.074` · near-white `0.0446 pp` · warm-lit
+`394 px`. Exit 101 throughout is the shipped near-white ceiling, still red as Premise 1 recorded;
+the PNG is written first, so no evidence is lost. **k=4 is darker whole-frame (mean −6.7, ~90×
+the floor) yet hotter at the camp (warm-lit +5,600 px, near-white +0.23 pp).**
+
+**RED — issue #77 (AC17).** `gui <port> --headless --capture <png> --subdiv 1 --z 5 --frames 700`:
+
+```
+thread 'Compute Task Pool' panicked at crates/gui/src/capture.rs:445:9:
+capture rendered no mid-blend entities
+a capture below every dwarf must exit cleanly; it exited Some(101)
+test a_capture_below_the_dwarves_skips_motion_but_still_writes_a_png ... FAILED
+```
+
+Then green after narrowing `motion_assertions_apply` to dwarves at or below the cut, and the
+`--static-world` workaround was removed from `the_dwarf_startup_line_reports_what_was_actually_drawn`.
+
+**Mutation round (AC11), `scripts/mutate.sh` run alone.** First pass:
+
+```
+restore the shipped terrain subdivision default to one       SURVIVED
+make motion assertions ignore the captured slice again       KILLED
+validate a captured frame before its PNG is written          KILLED
+demand motion below a dwarf-free captured slice again        KILLED
+1 mutation(s) did not KILL.
+```
+
+**The SURVIVED row is the finding, and it is [[sabotage-blind-when-fixture-matches-constant]]
+again:** the test asserted `resource == DEFAULT_TERRAIN_SUBDIV`, so a sabotage that moves the
+constant moves the expectation with it and pins nothing. Fixed in `ab33fa9` by asserting the
+literal `4`. Re-run, all four KILLED:
+
+```
+restore the shipped terrain subdivision default to one       KILLED
+make motion assertions ignore the captured slice again       KILLED
+validate a captured frame before its PNG is written          KILLED
+demand motion below a dwarf-free captured slice again        KILLED
+```
+
+Binary rebuilt to the clean `31f1417` stamp afterwards — a mutant build outlives the source
+restore.
 
 ### Completion Notes List
 
+**DONE**
+
+- **Task 0 / AC13.** `DEFAULT_TERRAIN_SUBDIV = 4` in `ingest.rs`; `TerrainSubdivision` is now
+  inserted unconditionally and the perf-provenance line reads the same constant, so the two sites
+  cannot disagree. Every test caller that meant k=1 says `--subdiv 1`. Control re-taken ×2 at the
+  new default, flank pair filed, `docs/tech-art-guidelines.md` rows superseded in the doc's own
+  style and the `deferred-work.md` "no constant and no owner" entry closed, all in the same commit.
+- **Task 1 / AC2.** Rulings 1–4 recorded above with Wolf's words verbatim and the date. **No
+  lighting constant was changed before it** — the only code commits before the sitting were the
+  subdiv default and the two instrument fixes, none of which touch `appearance.rs`.
+- **Issue #77 / AC17.** RED reproduced, predicate narrowed to the captured slice on BOTH arms,
+  unit test covers dwarf-at-cut / dwarf-above-cut / empty-mirror, integration test drives the real
+  binary below the cut. The `--static-world` workaround is gone.
+
+**NOT DONE, and why**
+
+- **AC16 is NOT satisfied.** The #72 ordering fix landed (`f25f337`: the PNG is encoded and written
+  synchronously inside `save_then_validate` instead of relying on Bevy's async `save_to_disk`
+  observer) and is pinned by a deterministic test that panics the validator and then asserts a
+  decodable PNG on disk. But **the race itself was never reproduced**, and **the five consecutive
+  green full-tier runs were not taken** — the Codex session was cut off mid-run by quota
+  exhaustion (`You've hit your usage limit … try again at 10:20 AM`). AC16 asks for both. Owed.
+  Note `crates/gui/Cargo.toml` moves `image` from a dev-dependency to a dependency for this,
+  same version and features, no lockfile change.
+- **Tasks 2, 3, 4, 5, 6, 6b, 8 are not started.** They were blocked on Ruling 1 at handoff time
+  and are now unblocked: the key is a night moonlight and the knob is the light table. Task 6b
+  additionally carries Ruling 3's four named defects and the orchestrator's fog/rim colour finding
+  above, which must be tested against frames before the doc rule is touched.
+- **Status stays `in-progress`.** This is a partial story.
+
 ### File List
+
+| File | Change |
+|---|---|
+| `crates/gui/src/ingest.rs` | `DEFAULT_TERRAIN_SUBDIV = 4`, unconditional `TerrainSubdivision`, provenance reads the constant, new + corrected tests |
+| `crates/gui/src/capture.rs` | #72 synchronous PNG write before validation; #77 slice-aware `motion_assertions_apply` on both arms; two new unit tests |
+| `crates/gui/tests/pixel_guard.rs` | explicit `--subdiv 1` callers, corrected `capture()` comment, `--static-world` workaround removed, below-the-cut integration test |
+| `crates/gui/Cargo.toml` | `image` moved dev-dependency → dependency (PNG encode now ships) |
+| `docs/tech-art-guidelines.md` | "Terrain, shipped default" row and "Adopted is not shipped" bullet superseded to k=4 |
+| `_bmad-output/implementation-artifacts/deferred-work.md` | the k=4 "no constant and no owner" entry closed |
+| `_bmad-output/implementation-artifacts/mutations/10-8-…-under-the-sun.sh` | NEW, four rows, all KILLED |
+| `_bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh` | renamed test reference |
+| `_bmad-output/implementation-artifacts/10-8-signoff/control-k4-25f217b-{a,b}.png` | NEW, the k=4 control pair |
+| `_bmad-output/implementation-artifacts/10-8-signoff/flank-k{1,4}-25f217b.png` | NEW, the Ruling 2 pair |
+| `_bmad-output/implementation-artifacts/10-8-signoff/task-0-control.md` | NEW, figures and noise floor |
+| `_bmad-output/implementation-artifacts/sprint-status.yaml` | 10.8 → in-progress |
+| `_bmad-output/implementation-artifacts/10-8-…-under-the-sun.md` | this file |
