@@ -1870,6 +1870,27 @@ named thing, so it got the attention; the ring outweighed it 2:1 in lumens and n
 project could see it. **Before tuning an emitter, switch off everything else that emits nearby** —
 that is now one keypress.
 
+## Raised at 10.8's opening sitting: SNOW AS AN ACCRETING LAYER, NOT A SURFACE RULE (2026-09-08)
+
+- **Settled snow should be a layer that grows over time and reveals stone when dug.** Wolf, ruling
+  on 10.8's Ruling 2 (verbatim): *"How snow works really.. in dream case there would be a separate
+  layer of snow growing to some extend over time ..if digged then ofc under that should be
+  stone.. so maybe yes flank-k4 is closer to target but maybe snow layer it bit too thick?"*
+  **This is a SIM-SIDE feature, not a client look constant, which is why 10.8 did not take it:**
+  today snow is a rendering decision made per exposed face — at k=1 a `snow_cap_mesh` slab
+  (`project.rs:335, 1937`) and at k>1 a material painted on top faces (`project.rs:940-975`) — and
+  neither is a tile, so neither can be dug, accumulate, or sit above stone as a distinct
+  substance. A real layer means depth in the world state, which is `sim-core` and `protocol` work,
+  a new tile or a per-column snow depth, and only then a client rule that draws it.
+  **What 10.8 DID settle:** Ruling 2 adopted the k=4 flank rule, stone flanks under a snow cap,
+  and the k=1 slab path is made to match. The *"bit too thick"* half is explicitly NOT a constant:
+  at k=4 the snow has no thickness at all, and the depth the eye reads is the detail carving that
+  `project.rs:1159` labels a **MEASUREMENT STAND-IN** for authored terrain. Tuning it would be
+  tuning a placeholder — see the standing lesson that a placeholder can set the budget.
+  **Revisit trigger:** the first M3 story that touches terrain materials in the simulation, or any
+  story that gives a tile a depth or a covering. Not before authored terrain lands, because until
+  then the thing being judged is the stand-in.
+
 ## Found at 10.7's second sitting: THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S FLANKS (2026-09-03)
 
 **DEFERRED BY WOLF, 2026-09-03: *"need to think how snow and rock will work together in some other
