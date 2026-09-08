@@ -366,8 +366,7 @@ before/after pair that showed it.
         mean · Δmean vs all-on · ×noise. Torches and campfire rows state the marginal with the
         other OFF. Commit as `10-8-signoff/AC3-marginals.md` with the PNGs.
 
-- [~] **Task 3 — Candidates, captured by the client** (AC: 4) — candidates built and filed;
-      **AWAITING WOLF'S CHOICE**
+- [x] **Task 3 — Candidates, captured by the client** (AC: 4) — two rounds; Wolf chose at round 2
   - [x] Each candidate = an edit to `night_lighting()` / `light_properties()`, built, captured at
         the boot framing ×2, **reverted** (tree verified clean between candidates; nothing landed).
         Ruling 1 chose intensities, so no `Exposure` component was added. PNGs named by what
@@ -378,26 +377,26 @@ before/after pair that showed it.
   - [ ] **STOPPED HERE — Wolf has not chosen.** Record the choice with filename and figures.
         Tasks 4, 5, 6, 6b and 8 all wait on it.
 
-- [ ] **Task 3b — Widen the camp** (AC: 18; lands BEFORE Task 4's figures are taken)
+- [x] **Task 3b — Widen the camp** (AC: 18; lands BEFORE Task 4's figures are taken)
   - [x] `camp_emitters` ±2 → ±8 behind a named constant carrying the measurement in its doc
         comment; re-pin `generated_world_has_sorted_camp_emitters` to the ruled offsets, shown RED
         against the shipped ±2 first. **No "outside the campfire range" test** — see AC18.
-  - [ ] Re-take `AC3-marginals.md` at the approved treatment; supersede the old table in place
+  - [x] Re-take `AC3-marginals.md` at the approved treatment; supersede the old table in place
         rather than deleting it, stating that its figures predate the widened camp.
 
-- [ ] **Task 4 — Land the table, client and bench together** (AC: 5, 7, 8)
+- [x] **Task 4 — Land the table, client and bench together** (AC: 5, 7, 8)
   - [x] `crates/gui/src/appearance.rs`: `night_lighting()` `:40-50`, `light_properties()` `:52-90`.
         Correct the two tests at `:317` and `:571` to the new values. If a colour changes:
         `scripts/bench/valley_bench.py:46-47` and the light-colour literals, plus
         `crates/gui/tests/bench_contract.rs:88-108` — ONE commit.
-  - [ ] Two consecutive boot captures exit 0; paste both range-check lines.
+  - [x] Two consecutive boot captures exit 0; paste both range-check lines.
 
-- [ ] **Task 5 — Re-calibrate the capture constants on the approved frame** (AC: 6)
-  - [ ] Commit both approved-treatment runs as `10-8-signoff/approved-<what>-<sha>-{a,b}.png`.
+- [x] **Task 5 — Re-calibrate the capture constants on the approved frame** (AC: 6)
+  - [x] Commit both approved-treatment runs as `10-8-signoff/approved-<what>-<sha>-{a,b}.png`.
         Measure them with the production functions (`near_white_area_fraction`,
         `largest_blown_pool_fraction`, the ground median); set each constant in `capture.rs:560-596`
         to worst-of-two plus the pair's swing, and write both readings into the doc comment.
-  - [ ] Extend `crates/gui/tests/capture.rs:158`: approved ≤ ceiling, creation control > ceiling,
+  - [x] Extend `crates/gui/tests/capture.rs:158`: approved ≤ ceiling, creation control > ceiling,
         then the pin. Run it RED first by leaving the constant at the boot7 figure.
 
 - [x] **Task 6 — The docs move with the code** (AC: 9, 10)
@@ -422,8 +421,8 @@ before/after pair that showed it.
   - [x] Do not close the issues from a commit keyword — no commit on this branch names a closing
         keyword; `git log main..HEAD --grep='Closes #\|Fixes #'` is empty.
 
-- [ ] **Task 7 — Mutation table** (AC: 11)
-  - [ ] ≥4 rows, format per `mutations/10-7-the-sun-lights-the-valley.sh`. **Commit the fix before
+- [x] **Task 7 — Mutation table** (AC: 11)
+  - [x] ≥4 rows, format per `mutations/10-7-the-sun-lights-the-valley.sh`. **Commit the fix before
         mutating**; run `scripts/mutate.sh` ALONE; re-mutate after any strengthening; record KILLED
         per row naming the mutation. Run `gui --version` afterwards — a mutant build outlives the
         source restore.
@@ -590,6 +589,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **FULL GATE GREEN, 707s, every tier** on the landed treatment. Tasks 3b, 4, 5 and 7 closed. Two prior full-gate attempts were harness-killed rather than failed; the tell is a stalled log mtime with no processes, which elapsed time alone cannot distinguish from a slow run. Dev cost for this leg: $0.56 for the blocked first attempt plus $4.94 for the run that landed it, 8pp of the weekly window. |
 | 2026-09-08 | **The approved treatment LANDED and AC5 is met: exit 0 on two consecutive runs** (near-white 0.7959 / 0.7670 % against a ceiling of 0.946072 % re-derived from those very frames). Ten commits from the delegated dev plus the orchestrator's tail. **Marginals re-taken and the story's own premise inverted: the LANTERNS now carry 55.5 % of near-white and 86.4 % of the blown pool**, because the torches moved out to ±8 and the lanterns did not. All 8 mutation rows KILLED. The gate caught 8 stranded rows in stories 5.4, 6.2 and 9.1 whose literals this table moved; each re-pointed. |
 | 2026-09-08 | **PART 3 (partial):** landed Wolf's approved F table and ±8-cell torch ring, lockstepped the two bench colours, documented the treatment, and filed the two approved captures. Capture guards now derive from their pair (pool 0.62380647%, area 0.94607202%); the old control remains above the new area ceiling. The headless runner did not return the two range-check lines, the camp marginals were not re-taken, and the mutation runner was terminated mid-table, so Tasks 3b, 4 and 7 remain open. |
 | 2026-09-08 | **AC18 corrected: its own requirement was false and the dev agent caught it.** The AC demanded a test that the torches lie outside the campfire's `range`; ±8 cells is 18.10 m against an approved range of 20.0 m, so the ruled spacing sits INSIDE it and the test stayed correctly RED. Codex stopped and left the tree clean rather than fudge it. Fixed by removing the invented geometric proxy, not by moving Wolf's ruled spacing: `range` is the falloff cutoff, not the radius of what reads as lit, and the approved frame shows four separate torches at 18.10 m inside a 20 m cutoff. The pinned offsets and the committed frames are the evidence. |
@@ -826,6 +826,27 @@ pins NOTHING, however green its story record reads."* Each was re-pointed at the
 with its sabotage unchanged, and every row now applies. This is [[stale-sabotage-literal]] and the
 gate's guard for it working exactly as intended.
 
+**FULL GATE GREEN — 707s, run by the orchestrator on the landed treatment**
+(HEAD `b54e261`). Every tier, no skips:
+
+```
+cargo fmt --check           ok    1s
+cargo clippy -D warnings    ok    0s
+cargo test                  ok   70s
+cargo test (pixel guards)   ok  603s
+tui / client-core / gui have no sim-core edge   ok
+metrics ledger tests        ok    0s
+bench tests                 ok   18s
+mutation tables still apply ok    4s
+GATE GREEN  707s
+```
+
+**Two earlier full-gate attempts were KILLED by the harness, not failed** — no result file, no
+further log writes, every process gone. The tell is a log whose mtime stops while the wrapper is
+absent; a `ps` check at the moment of death still showed it alive, so elapsed time alone does not
+distinguish a kill from a slow run. Re-run with `CARGO_BUILD_JOBS=6 RUST_TEST_THREADS=2` and a
+watcher that reports death separately from failure. See [[delegated-runs-get-killed]].
+
 ### Completion Notes List
 
 **DONE**
@@ -852,9 +873,14 @@ gate's guard for it working exactly as intended.
   exhaustion (`You've hit your usage limit … try again at 10:20 AM`). AC16 asks for both. Owed.
   Note `crates/gui/Cargo.toml` moves `image` from a dev-dependency to a dependency for this,
   same version and features, no lockfile change.
-- **Task 2 / AC3 is DONE** and **Task 3 / AC4's candidates are BUILT AND FILED** (see the Debug
-  Log). **Task 3 is STOPPED at its own gate: Wolf has not chosen a table.** Tasks 4, 5, 6, 6b and
-  8 all depend on that choice and are not started. They were blocked on Ruling 1 at handoff time
+- **DONE: Tasks 0, 1, 2, 3, 3b, 4, 5, 6, 7 and issue #77.** The approved treatment is landed,
+  the guard is green on it, all 8 mutation rows KILL and the full gate is GREEN at 707s.
+- **NOT DONE, and owed:** **Task 6b** (AC14 the flank rule, AC15 the four Ruling-3 atmosphere
+  defects — including the fog/rim colour finding recorded above, which must be tested against
+  frames before the doc rule moves). **Task 8** (AC1's own verification recipe, AC12's closing
+  sitting on the vehicle, the two inherited eye-checks). **AC16** stays owed from Task 6c: issue
+  #72's race was never reproduced and its five consecutive full-tier runs were never taken —
+  three full gates have now run green on this branch, but that is not the same evidence. They were blocked on Ruling 1 at handoff time
   and are now unblocked: the key is a night moonlight and the knob is the light table. Task 6b
   additionally carries Ruling 3's four named defects and the orchestrator's fog/rim colour finding
   above, which must be tested against frames before the doc rule is touched.
