@@ -1,4 +1,12 @@
-# AC3 — Per-emitter marginals, at the shipped k=4 default
+# AC3 — Per-emitter marginals, at the shipped k=4 default  **(SUPERSEDED)**
+
+> **SUPERSEDED 2026-09-08 by `AC3v2-marginals-approved.md`.** Every figure below was measured
+> against the OLD camp — the four torches at ±2 cells — and the OLD shipped lighting table. Story
+> 10.8 then moved both: the approved treatment dims the whole table and widens the torch ring to
+> ±8 cells. **The conclusions below are reversed by that change**: the torch ring no longer owns
+> the blown core, and the LANTERNS turn out to carry 55.5 % of near-white and 86.4 % of the blown
+> pool. Kept in place because a measurement record is history, not a draft; read the v2 file for
+> anything current.
 
 **Executed 2026-09-08.** Build stamped `gui build c7bfb00`, equal to `git rev-parse --short HEAD`,
 no `-dirty`. One daemon (`simd 0`, port 43593) for all eight captures. Boot framing, `--frames 160`,
