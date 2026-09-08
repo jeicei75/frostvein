@@ -1665,8 +1665,8 @@ mod tests {
     use protocol::{Delta, Dims, MessageType, Snapshot, Speed, Tile, TileChange};
 
     use super::{
-        ClientLocal, DEFAULT_TERRAIN_SUBDIV, IngestReceiver, MirrorResource, ProjectionWork,
-        WireMessage, classify_client_local, fog_falloff, fog_fraction, force_capture_overlay_off,
+        ClientLocal, IngestReceiver, MirrorResource, ProjectionWork, WireMessage,
+        classify_client_local, fog_falloff, fog_fraction, force_capture_overlay_off,
         ingest_messages,
     };
     use crate::blend::TickClock;
@@ -2417,8 +2417,8 @@ mod tests {
 
         assert_eq!(
             app.world().resource::<TerrainSubdivision>().0,
-            DEFAULT_TERRAIN_SUBDIV,
-            "starting the client without --subdiv must install the shipped terrain subdivision"
+            4,
+            "starting the client without --subdiv must install the ruled shipped subdivision of four"
         );
     }
 
