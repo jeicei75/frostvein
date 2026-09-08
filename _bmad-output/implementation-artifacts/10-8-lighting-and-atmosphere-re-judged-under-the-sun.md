@@ -311,13 +311,25 @@ before/after pair that showed it.
 
 18. **The camp is widened to ±8 cells (RULED 2026-09-08, joined into this story).**
     `camp_emitters` (`crates/sim-core/src/lib.rs:1614`) places the four torches at ±8 cells
-    diagonally from the campfire instead of ±2 — 18.1 m instead of 4.5 m, outside the campfire's
-    own pool. `generated_world_has_sorted_camp_emitters` (`:1706`) is **re-pinned to the ruled
-    offsets, not loosened**, and a test shows the torches lie outside the campfire's `range`.
-    Determinism is unaffected: the positions stay a pure function of the camp origin.
+    diagonally from the campfire instead of ±2 — **18.10 m instead of 4.53 m**. The offset is a
+    NAMED constant whose doc comment carries the measurement that chose it (near-white
+    1.2713 % → 0.7235 %, ground median 69 → 82, at F's lighting held constant).
+    `generated_world_has_sorted_camp_emitters` (`:1706`) is **re-pinned to the ruled offsets, not
+    loosened**, and shown RED against the shipped ±2 first. Determinism is unaffected: the
+    positions stay a pure function of the camp origin.
     **Because this moves the camp, `AC3-marginals.md` is RE-TAKEN at the approved treatment** and
     the stale table is superseded in place, with the reason stated — every emitter figure in it was
     measured against the old camp.
+
+    **DO NOT add a test that the torches lie outside the campfire's `range`.** This AC asked for
+    exactly that on 2026-09-08 and **the requirement was false**: ±8 cells is 18.10 m and the
+    approved campfire `range` is 20.0 m, so the ruled spacing sits INSIDE it and the test stayed
+    correctly RED. The dev agent stopped rather than fudge it, which was right. The proxy was
+    wrong, not the ruling — Bevy's `range` is the falloff CUTOFF at which a point light stops
+    contributing, **not the radius of what reads as lit**, and the approved frame shows four
+    plainly separate torches at 18.10 m inside a 20 m cutoff. The pinned offsets plus the committed
+    frames and the re-taken marginals ARE the evidence; a geometric law invented on top of them can
+    only contradict the artifact Wolf approved.
 
 ### Sign-off
 
@@ -367,9 +379,9 @@ before/after pair that showed it.
         Tasks 4, 5, 6, 6b and 8 all wait on it.
 
 - [ ] **Task 3b — Widen the camp** (AC: 18; lands BEFORE Task 4's figures are taken)
-  - [ ] `camp_emitters` ±2 → ±8; re-pin `generated_world_has_sorted_camp_emitters` to the ruled
-        offsets; add a test that each torch lies outside the campfire's `range`, RED first against
-        the shipped ±2.
+  - [ ] `camp_emitters` ±2 → ±8 behind a named constant carrying the measurement in its doc
+        comment; re-pin `generated_world_has_sorted_camp_emitters` to the ruled offsets, shown RED
+        against the shipped ±2 first. **No "outside the campfire range" test** — see AC18.
   - [ ] Re-take `AC3-marginals.md` at the approved treatment; supersede the old table in place
         rather than deleting it, stating that its figures predate the widened camp.
 
@@ -578,6 +590,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **AC18 corrected: its own requirement was false and the dev agent caught it.** The AC demanded a test that the torches lie outside the campfire's `range`; ±8 cells is 18.10 m against an approved range of 20.0 m, so the ruled spacing sits INSIDE it and the test stayed correctly RED. Codex stopped and left the tree clean rather than fudge it. Fixed by removing the invented geometric proxy, not by moving Wolf's ruled spacing: `range` is the falloff cutoff, not the radius of what reads as lit, and the approved frame shows four separate torches at 18.10 m inside a 20 m cutoff. The pinned offsets and the committed frames are the evidence. |
 | 2026-09-08 | **RULING 5: the torch spacing is joined into the story (AC18) and the treatment is APPROVED.** Wolf on the ±8-cell frame: *"looks good to me .. join torch spacing"*. The approved treatment is candidate F's lighting AT ±8 cells, stated explicitly because he approved a frame carrying both changes. The spacing is the lever dimming was not: it drops near-white 1.2713 → 0.7235 % while RAISING the ground median 69 → 82, where dimming lowered both and shortening the reach starved the floor to 68. Two colours move, so AC8's bench lockstep is live. |
 | 2026-09-08 | **Task 3 / AC4: three candidate night-key tables built, captured ×2 each, and REVERTED** — nothing landed. A one-variable ladder (cold fill dimmed → moon-coloured key → emitters trimmed) filed with frames and figures in `AC4-candidates.md`. **Dimming the cold fill is the whole picture** (149× noise on frame mean); **recolouring the key moves near-white 0.6× noise, below the floor**, so B's case is an eye case and cannot be made on metrics, which matters because a colour move forces AC8's bench lockstep. Awaiting Wolf's choice; Tasks 4, 5, 6, 6b and 8 wait on it. |
 | 2026-09-08 | **Task 2 / AC3 done: per-emitter marginals at the k=4 shipped default.** Eight captures, one daemon, stamp `c7bfb00`. Torches out-weigh the campfire **6.4:1** on warm-lit with the other off. **Two findings:** Premise 8 is FALSE at the shipped default — torches off alone now reads 1.6046 % and stays RED, and only campfire+torches together clears the ceiling; and the **ambient is the dominant illuminant**, costing the frame 404× noise against the directional's 59×, so Ruling 1's re-derivation is mostly an ambient decision. Instrument caveat filed: warm-lit counts red-over-blue, so switching off a COOL source inflates it. |
