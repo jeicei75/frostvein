@@ -292,14 +292,14 @@ before/after pair that showed it.
         at creation", the k=1/k=4 pair, and Rulings 1–3 as questions. Record the answers verbatim.
   - [ ] **Stop here until Ruling 1 is recorded.** No lighting constant moves before it.
 
-- [ ] **Task 2 — Per-emitter marginals** (AC: 3)
-  - [ ] Check the stamp first: `target/debug/gui --version` must print the branch HEAD with no
+- [x] **Task 2 — Per-emitter marginals** (AC: 3)
+  - [x] Check the stamp first: `target/debug/gui --version` must print the branch HEAD with no
         `-dirty`; `touch crates/gui/build.rs` before the build if it lags.
-  - [ ] Captures, one daemon (`simd 0`, read the port from its `listening on` line):
+  - [x] Captures, one daemon (`simd 0`, read the port from its `listening on` line):
         all-on ×2, then `--lights-off` for `sun`, `ambient`, `campfire`, `torches`, `lanterns`,
         `campfire,torches`. Read each with
         `python3 _bmad-output/implementation-artifacts/10-7-signoff/lumstats.py <png>=<label>`.
-  - [ ] Table: source off · warm-lit · ground median · near-white · blown pool (diagnostic only) ·
+  - [x] Table: source off · warm-lit · ground median · near-white · blown pool (diagnostic only) ·
         mean · Δmean vs all-on · ×noise. Torches and campfire rows state the marginal with the
         other OFF. Commit as `10-8-signoff/AC3-marginals.md` with the PNGs.
 
@@ -517,6 +517,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **Task 2 / AC3 done: per-emitter marginals at the k=4 shipped default.** Eight captures, one daemon, stamp `c7bfb00`. Torches out-weigh the campfire **6.4:1** on warm-lit with the other off. **Two findings:** Premise 8 is FALSE at the shipped default — torches off alone now reads 1.6046 % and stays RED, and only campfire+torches together clears the ceiling; and the **ambient is the dominant illuminant**, costing the frame 404× noise against the directional's 59×, so Ruling 1's re-derivation is mostly an ambient decision. Instrument caveat filed: warm-lit counts red-over-blue, so switching off a COOL source inflates it. |
 | 2026-09-08 | **Rulings 1–4 recorded at the opening sitting** (AC2), verbatim: night moonlight key with the INTENSITIES knob, the k=4 flank rule wins, and four named atmosphere defects (fog invisible, snowfall not reaching the top of frame, flakes too large, the terrain cut-off too sharp / diorama). Orchestrator finding filed with them: fog and rim both fade toward the dark sky constant while the visible horizon is the bright aurora, which would explain two of the four defects at once — unmeasured, Task 6b must test it. |
 | 2026-09-08 | **Task 6c part done.** Issue #77 fixed: `motion_assertions_apply` now asks whether a dwarf lies within the CAPTURED SLICE, on both arms; RED reproduced first, `--static-world` workaround removed. Issue #72's ordering fix landed and is pinned deterministically, but **AC16 is NOT met** — the race was never reproduced and the five full-tier runs were not taken, the dev session dying on Codex quota exhaustion. Mutation table opened with four rows; one SURVIVED because the test compared against the constant the sabotage moved, fixed by pinning the literal, then 4/4 KILLED. |
 | 2026-09-08 | **Task 0 done: `--subdiv 4` is the shipped default.** One `DEFAULT_TERRAIN_SUBDIV` constant feeds both the resource and the perf provenance; every k=1 test caller is now explicit. Control re-taken ×2 at the new default (near-white 2.5000 / 2.4554 %, exit 101, noise floor 0.0446 pp) plus the k=1/k=4 flank pair for Ruling 2. Doc rows superseded and the `deferred-work.md` "no owner" entry closed in the same commit. |
@@ -595,6 +596,44 @@ demand motion below a dwarf-free captured slice again        KILLED
 Binary rebuilt to the clean `31f1417` stamp afterwards — a mutant build outlives the source
 restore.
 
+**Task 2 / AC3 — per-emitter marginals, at the shipped k=4 default.** Build stamped
+`gui build c7bfb00` = HEAD, no `-dirty`; one daemon, port 43593; eight captures at the boot
+framing with no `--subdiv` flag. Full table, marginals and frames in `10-8-signoff/AC3-marginals.md`.
+Noise floor, worst of the all-on pair: warm-lit `164 px` · near-white `0.0474 pp` · mean `0.116`.
+
+```
+all-on a           warm-lit=27664 ground-median=126 near-white=2.4398% blown-pool=1.2082% p99=232.4  mean 94.472  exit 101
+all-on b           warm-lit=27500 ground-median=126 near-white=2.4872% blown-pool=1.2735% p99=233.7  mean 94.588  exit 101
+sun off            warm-lit=28370 ground-median=117 near-white=2.1296% blown-pool=1.2203% p99=233.6  mean 87.689  exit 101
+ambient off        warm-lit=71855 ground-median= 69 near-white=1.7812% blown-pool=1.1502% p99=229.7  mean 47.616  exit 101
+campfire off       warm-lit=26643 ground-median=123 near-white=2.2784% blown-pool=1.2615% p99=229.9  mean 94.142  exit 101
+torches off        warm-lit= 9449 ground-median=117 near-white=1.6046% blown-pool=0.7369% p99=211.8  mean 92.584  exit 101
+lanterns off       warm-lit=30197 ground-median=125 near-white=2.1650% blown-pool=1.0310% p99=223.1  mean 94.187  exit 101
+campfire+torches   warm-lit= 6257 ground-median=115 near-white=1.3102% blown-pool=0.5679% p99=207.8  mean 91.904  exit 0
+```
+
+**TWO FINDINGS THE REST OF THE STORY MUST BE READ AGAINST.**
+
+1. **PREMISE 8 IS FALSE AT THE SHIPPED DEFAULT.** The story records that torches off ALONE takes
+   the guard to exit 0 (near-white 1.3342 % vs the 1.5630 % ceiling). That was `--subdiv 1`. At
+   k=4 torches off alone reads **1.6046 %, still above the ceiling, exit 101**; the smallest
+   switch-off that clears it is now **campfire AND torches together** (1.3102 %). k=4 lifts
+   near-white by ~0.28 pp across the board, about 6× the floor. Premise 8's text is left as
+   written because a premise records what was true when measured — `AC3-marginals.md` is the
+   correction, and no lighting decision may cite Premise 8's exit-0 claim.
+2. **THE AMBIENT, NOT THE DIRECTIONAL, LIGHTS THIS VALLEY.** Ambient off moves the frame mean
+   −46.914 (**404× noise**, dark pixels 17.5 % → 54.95 %); the directional off moves it −6.841
+   (59×). Premise 2 says the directional's 22,000 lux was never judged as light; this adds that it
+   is **not the dominant term either**. Under Ruling 1 the night-key re-derivation is mostly an
+   AMBIENT decision, and a candidate that moves only `directional_illuminance` will move the
+   picture far less than its number suggests.
+
+**INSTRUMENT CAVEAT recorded with them:** `warm_lit_pixels` (`capture.rs:548`) counts
+`red − blue > 30`, a purely relative test, so switching off a COOL source INFLATES it — ambient
+off reads 71,855 warm-lit (2.6× all-on) and lanterns off reads above all-on. Warm-lit is only
+meaningful for warm emitters with the cool fill held constant; judge a cool source on ground
+median and frame mean.
+
 ### Completion Notes List
 
 **DONE**
@@ -621,7 +660,7 @@ restore.
   exhaustion (`You've hit your usage limit … try again at 10:20 AM`). AC16 asks for both. Owed.
   Note `crates/gui/Cargo.toml` moves `image` from a dev-dependency to a dependency for this,
   same version and features, no lockfile change.
-- **Tasks 2, 3, 4, 5, 6, 6b, 8 are not started.** They were blocked on Ruling 1 at handoff time
+- **Task 2 / AC3 is DONE** (see the Debug Log). **Tasks 3, 4, 5, 6, 6b, 8 are not started.** They were blocked on Ruling 1 at handoff time
   and are now unblocked: the key is a night moonlight and the knob is the light table. Task 6b
   additionally carries Ruling 3's four named defects and the orchestrator's fog/rim colour finding
   above, which must be tested against frames before the doc rule is touched.
