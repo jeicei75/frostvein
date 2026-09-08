@@ -83,7 +83,17 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
         },
         LightKind::Lantern => LightProperties {
             color: Color::srgb_u8(255, 195, 110),
-            intensity: 3_000_000.0,
+            // RULED 2026-09-08 (Wolf): "lanterns are now still way too strong", then a sixth,
+            // then a third once the measurement showed a sixth stops CASTING. At the approved
+            // treatment the lanterns carried 55.5% of near-white and 86.4% of the blown pool --
+            // not because they got brighter but because the torches moved out to +/-8 cells and
+            // these did not, so whatever sat at the camp centre inherited the bright core.
+            // A third takes near-white 0.7814 -> 0.3493 % and the blown pool 0.4544 -> 0.2154 %
+            // while the valley floor barely moves (82.5 -> 81), so it is surgical. A SIXTH was
+            // measured and rejected: its warm spread falls BELOW the noise floor (warm-lit 1.0x,
+            // near-white 0.3x), leaving a bright speck that is largely the emissive face rather
+            // than light it casts. This value sits exactly on LANTERN_VISIBLE_INTENSITY_FLOOR.
+            intensity: 1_000_000.0,
             range: 10.0,
             flicker_amplitude: 0.05,
             flicker_hz: 1.3,
@@ -342,7 +352,7 @@ mod tests {
             (LightKind::Campfire, [255, 173, 92], 14_000_000.0, 20.0),
             // Dropped from 11M/16 on 2026-08-20: five moving lanterns over five static
             // emitters read blown out on the vehicle, which no range check can see.
-            (LightKind::Lantern, [255, 195, 110], 3_000_000.0, 10.0),
+            (LightKind::Lantern, [255, 195, 110], 1_000_000.0, 10.0),
         ];
         for (kind, rgb, intensity, range) in lights {
             let actual = light_properties(kind);
