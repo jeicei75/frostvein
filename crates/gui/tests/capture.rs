@@ -162,12 +162,23 @@ fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
         ("approved-b", repo.join("_bmad-output/implementation-artifacts/10-8-signoff/approved-moonlit-camp-3479a43-b.png")),
     ];
     for (name, path) in approved {
-        let image = image::open(path).expect("the approved moonlit camp vista must decode").to_rgba8();
+        let image = image::open(path)
+            .expect("the approved moonlit camp vista must decode")
+            .to_rgba8();
         let pixels = image.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
-        let pool = largest_blown_pool_fraction(&pixels, image.width(), image.height(), gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD);
+        let pool = largest_blown_pool_fraction(
+            &pixels,
+            image.width(),
+            image.height(),
+            gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+        );
         let area = near_white_area_fraction(&pixels, gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD);
         let ground = median_ground_luminance(&pixels, image.width(), image.height());
-        println!("approved {name}: pool={:.8}% area={:.8}% ground={ground}", pool * 100.0, area * 100.0);
+        println!(
+            "approved {name}: pool={:.8}% area={:.8}% ground={ground}",
+            pool * 100.0,
+            area * 100.0
+        );
         assert!(pool <= gui::capture::BLOWN_POOL_FRACTION_CEILING);
         assert!(area <= gui::capture::NEAR_WHITE_AREA_CEILING);
         assert!(ground >= gui::capture::GROUND_LUMINANCE_FLOOR);
@@ -225,8 +236,14 @@ fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
     let creation_control = image::open(repo.join("_bmad-output/implementation-artifacts/10-8-signoff/creation-control-main-3ed269c-boot-a.png"))
         .expect("the 10.8 creation control must decode")
         .to_rgba8();
-    let creation_control_pixels = creation_control.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
-    let creation_control_area = near_white_area_fraction(&creation_control_pixels, gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD);
+    let creation_control_pixels = creation_control
+        .pixels()
+        .map(|pixel| pixel.0)
+        .collect::<Vec<_>>();
+    let creation_control_area = near_white_area_fraction(
+        &creation_control_pixels,
+        gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+    );
     assert!(creation_control_area > gui::capture::NEAR_WHITE_AREA_CEILING);
     assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_238_064_7);
     assert_eq!(gui::capture::NEAR_WHITE_AREA_CEILING, 0.009_460_72);
