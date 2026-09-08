@@ -1719,3 +1719,125 @@ does not.
 **Given** the milestone eye,
 **Then** Wolf signs the sun off live on the vehicle against the approved artifact (UX-DR22 closing
 half).
+
+### Story 10.8: Lighting and Atmosphere, Re-judged Under the Sun
+
+As the boss,
+I want the valley's light and air re-judged under the sun the game actually ships with,
+So that the look I sign Milestone 2 off against was tuned for this lighting, and not for a
+world lit by something else.
+
+**Added 2026-09-08 on Wolf's instruction — *"I think we will create lighting and overall
+atmosphere/style story first"* — and it runs BEFORE 8.3.** The 2026-08-28 ruling already put the
+look work ahead of the milestone sign-off; this story is the last of it. Its defect is concrete
+and recorded twice, which is what the standing art rule (2026-08-22) requires: **issue #75** —
+Wolf at the seat, 2026-09-06, build `1528360`: *"lighting is still way off"* — and the capture's
+own `NEAR_WHITE_AREA_CEILING` clause, **RED on `main` since before 10.7**: at the boot framing
+the near-white area reads 2.2135 % (2026-09-06) against the 1.5630 % ceiling calibrated on the
+approved boot7 frame, so `gui --headless --capture` exits 101 on every clean `main`.
+**Re-measured at creation, 2026-09-08, on `main` 3ed269c with a build stamped 3ed269c:** near-white
+2.1686 %, ground median 135, blown pool 1.1077 % (printed, not asserted), p99 229.4, exit 101 —
+control frame and reading filed under `10-8-signoff/`. The cause on record (10.7): every look constant older than 10.7 — 9.1's blow-out work, 9.4's tree colours,
+10.3's rules of the look, 10.4's tree judgement — was tuned with the sun **under the map**
+(elevation −6.42°; deleting the light moved the frame less than same-build noise). 10.7 fixed the
+sun and, by Wolf's ruling, re-tuned nothing else. **This is the re-tuning, and it is a
+re-JUDGEMENT, not a tweak:** the numbers are re-derived from measurement under the new sun, with
+the guard as the acceptance instrument rather than as a known red.
+
+**The frame, read at creation (the control above, by eye):** the valley reads as a BRIGHT,
+hard-shadowed daylight snowfield under a night sky — pale blue ground, long tree shadows, a
+camp floor blown to flat white — while the PRD's frame is *"a dark blue night world"* whose sky
+is the illuminant and whose snow *"stays midtone blue-grey; only emissive light approaches
+white"*. That is not a taste note; it follows from the dates. The below-horizon aim landed on
+2026-08-15 (`7e08862`) and the directional's 22,000 lux was set the NEXT DAY (`10c06e1`,
+2026-08-16) — so the key light's strength was chosen while the light reached no surface, and
+nobody has judged it as light on the world until 10.7 raised the sun on 2026-09-03 with
+everything else held. The tech-art doc still describes that light as a *"green-blue directional
+light [that lets] the aurora catch snow and ice"* — a night key, not a sun. **Whether the key is
+a sun or aurora-light, and how bright a night key may be, is the first ruling this story asks
+of Wolf**, before any table is drafted; the story must not inherit "sun" from 10.7's title as a
+decision.
+
+**In scope, and why each is a defect rather than a preference:**
+
+1. **The light budget.** Ambient `(120,140,165)` at 4,500, directional `(150,190,180)` at 22,000,
+   campfire 25M lm (35M at the 1.40 peak), torch 14M, lantern 5M — all sized against the boot3 and
+   boot7 measurements, both taken with the sun off. The calibration basis no longer exists.
+2. **The emitters are sized by the sum, not per emitter.** 10.7 measured the four torches nobody
+   could switch off outweighing the campfire 4.5:1 on the near-white metric. F5–F9 now toggle
+   sun, campfire, lanterns, ambient and torches, so each marginal contribution can be measured
+   with the confounders OFF for the first time.
+3. **The atmosphere in the same frame** — sky `(5,12,28)`, aurora, distance fog opening at 75 and
+   saturating at 155, the rim dissolve — is judged at the same sitting, because the value ladder
+   (dark sky and flanks, midtone snow and ice, warm pools, near-white emitter faces ONLY) is one
+   ladder and the sun moved its bottom rungs. Each is **changed only where Wolf names a defect at
+   the artifact sitting**, recorded with the frame that shows it.
+4. **Epic 10's two inherited eye-checks** (above, from 9.2 and 9.3) are taken at this story's
+   closing sitting. They were parked behind "the withheld-levers story runs first; if it dims the
+   fire, this may close for free" and have never been taken — no 10.x record carries them. The
+   hover slab's measured constraint (luminance 189.5 against a pool above 200) is a lighting
+   question first.
+
+**Parked, with Wolf's ruling owed at the opening sitting — not pre-decided here:**
+
+- **The snow-flank question** (deferred-work.md, 2026-09-03: *"need to think how snow and rock will
+  work together in some other story not this"*): a snow cell's vertical faces are snow at
+  `--subdiv 1` and stone at `--subdiv > 1`, and nobody decided they should differ. It is a MATERIAL
+  rule, not a light. Recommended OUT unless Wolf has decided what he wants; the slot is here.
+- **Issue #62** (pin `docs/tech-art-guidelines.md`'s Critical values against the code, anchored
+  rows in `bench_contract.rs`, ~10 rows): this story rewrites exactly those rows. Recommended IN.
+- **The sun stays where Wolf put it.** Elevation +17.66° and azimuth 40.0398° were chosen from bench
+  candidates on 2026-09-03 and are not re-opened; the guard `the_approved_sun_lights_downward`
+  stays as is.
+
+**Method, decided at creation:** the UX-DR22 opening artifact is rendered by **the client itself**
+— `gui --headless --capture` at the boot framing on the devpod, one PNG per candidate lighting
+table plus the shipped table as control. Lavapipe renders real pixels here (measured 2026-08-29),
+and the Blender bench cannot serve: its ambient strength and sun energy share no units with
+Bevy's brightness and illuminance (`valley_bench.py` records "NEITHER number converts"), so a
+bench frame can show composition but cannot calibrate a Bevy intensity. The bench stays pinned
+through `bench_contract.rs` for colours and aim. **Every figure travels with its noise floor** —
+the unchanged build captured twice, WORST difference taken (10.4 once published a delta smaller
+than its noise) — and **a delta is never read as a level** (10.7 shipped 54 holes that way).
+Near-white itself swings ~0.1 pp between runs from dwarf motion alone; say which run.
+
+**Acceptance Criteria:**
+
+**Given** the shipped lighting table and at least two candidate tables,
+**When** each is captured headless at the boot framing on this story's own build,
+**Then** Wolf chooses from those frames before any client change lands (UX-DR22 opening half),
+and every frame is filed with its `capture range check:` line and the same-build noise floor.
+
+**Given** the chosen table lands in the client,
+**Then** `gui --headless --capture` at the boot framing **exits 0** with `NEAR_WHITE_AREA_CEILING`,
+`BLOWN_POOL_FRACTION_CEILING`, `GROUND_LUMINANCE_FLOOR`/`CEILING` and `WARM_PIXEL_FLOOR` all at
+their shipped values — the guard goes green because the FRAME changed, and no ceiling moves
+(10.7's AC7 stands). The two known instrument defects on this path, #72 (the PNG write racing the
+panic exit) and #77 (motion assertions below the cut), are fixed here or the run is repeated;
+neither is read around.
+
+**Given** one campfire and four torches,
+**When** each emitter is captured with every other source OFF through the F5–F9 toggles on the
+headless path,
+**Then** the record states each one's marginal contribution to near-white area and ground median,
+and the table is sized per emitter and not by their sum.
+
+**Given** the contrast band (campfire-to-cold-fill 1.2×–6.0×) and the chromatic term (every
+light's R/B at least twice the ambient's),
+**Then** both still hold on the new table, `appearance_tables_pin_the_cold_boot_palette` and
+`campfire_keeps_local_contrast_over_the_midtone_cold_fill` are corrected to the new values rather
+than loosened, and every rule of the look that changes changes in `docs/tech-art-guidelines.md`
+in the same commit.
+
+**Given** the sky, fog and rim,
+**Then** none changes without a defect Wolf named at the opening sitting, recorded with the frame
+that shows it; "the numbers could be nicer" is not a defect.
+
+**Given** the two inherited eye-checks,
+**When** Wolf views the built result live,
+**Then** each is closed on the record or reopened as evidence — not parked a third time.
+
+**Given** the milestone eye,
+**Then** Wolf signs the table off live on the vehicle against the approved frame (UX-DR22 closing
+half), and states whether *"lighting is still way off"* is still true. If it is, that is this
+story's finding, and 8.3 does not start.

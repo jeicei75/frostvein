@@ -2001,6 +2001,17 @@ development_status:
                           # timestamps here. AC9/10/11 added; mutations moved 9 -> 12.
                           # WOLF RULED THE STORY RUNS WHOLE, Tasks 1-7, against the advice to
                           # split 6-7 off. Still open: issue #74's routing.
+  10-8-lighting-and-atmosphere-re-judged-under-the-sun: backlog
+                          # ADDED 2026-09-08 on Wolf's instruction ("lighting and overall
+                          # atmosphere/style story first") and RUNS BEFORE 8.3 -- the 2026-08-28
+                          # ruling (look work ahead of the six-bar sign-off) still governs, and
+                          # the board's numeric order does NOT: 8.3 stays backlog behind this.
+                          # Defect on record: issue #75 ("lighting is still way off", 2026-09-06)
+                          # plus NEAR_WHITE_AREA_CEILING red on every clean main since before
+                          # 10.7. Re-measured at creation on main 3ed269c, debug build stamped
+                          # 3ed269c, boot framing: near-white 2.1686% vs 1.5630% ceiling, exit 101.
+                          # Every look constant older than 10.7 was tuned with the sun under the
+                          # map; 10.7 re-tuned nothing by ruling. Epic text in epics.md.
   epic-10-retrospective: optional
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).
