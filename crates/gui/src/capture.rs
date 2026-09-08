@@ -12,7 +12,7 @@ use bevy::{
         With, Without,
     },
     render::render_resource::TextureFormat,
-    render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
+    render::view::screenshot::{Screenshot, ScreenshotCaptured},
 };
 use client_core::Mirror;
 use protocol::{EntityKind, JobState, LightKind, Tile};
@@ -33,6 +33,7 @@ use crate::{
 };
 use bevy::ecs::change_detection::DetectChanges;
 use bevy::window::PrimaryWindow;
+use image::ImageFormat;
 
 #[derive(Debug, Clone, Copy)]
 pub struct DrawStats {
@@ -1250,16 +1251,10 @@ fn exit_after_capture(_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit
 
 /// Writes the PNG and only THEN validates it, in one observer.
 ///
-/// These were two observers on the same entity — `save_to_disk` registered first, the range
-/// checks second — and Bevy runs entity observers for one event in an unspecified order. It
-/// consistently ran the checks first, so a failing range check panicked before the file was
-/// ever written: the run whose frame most needed looking at was the one run that produced no
-/// frame. Measured on the vehicle 2026-08-20, and visible in every passing run's log too, where
-/// `capture range check:` prints above `Screenshot saved to`.
-///
-/// Sequencing them inside a single observer is the fix; registration order cannot express it.
+/// The range check deliberately panics on a bad frame, which may end the process before an
+/// independent observer gets a chance to finish its work. Encode and write here so returning from
+/// the save closure means the PNG is already on disk before validation is allowed to panic.
 fn save_then_validate(path: PathBuf, slice: SliceLevel) -> impl FnMut(On<ScreenshotCaptured>) {
-    let mut save = save_to_disk(path);
     move |event: On<ScreenshotCaptured>| {
         let bytes = event
             .image
@@ -1269,22 +1264,39 @@ fn save_then_validate(path: PathBuf, slice: SliceLevel) -> impl FnMut(On<Screens
             .to_vec();
         let format = event.image.texture_descriptor.format;
         let size = event.image.texture_descriptor.size;
-        // The saver consumes the event, so the pixels are taken first. It is synchronous: it
-        // writes the file and logs before returning, so the PNG exists by the next line.
-        save_before_validate(
-            || save(event),
-            || {
-                validate_capture_ranges(
-                    &bytes,
-                    format,
-                    size.width,
-                    size.height,
-                    range_band_applies(slice),
-                    slice.level(),
-                )
-            },
-        );
+        write_png_before_validate(&path, event.image.clone(), || {
+            validate_capture_ranges(
+                &bytes,
+                format,
+                size.width,
+                size.height,
+                range_band_applies(slice),
+                slice.level(),
+            )
+        });
     }
+}
+
+/// Encodes the captured image synchronously, so a successful return is a durable PNG rather than
+/// a request another observer might lose to the panic exit.
+fn write_capture_png(path: &std::path::Path, screenshot: bevy::image::Image) {
+    screenshot
+        .try_into_dynamic()
+        .expect("capture screenshot must use a PNG-encodable pixel format")
+        // Screenshot alpha stores HDR brightness; match Bevy's own helper and preserve the
+        // visible RGB frame the range checks just judged.
+        .to_rgb8()
+        .save_with_format(path, ImageFormat::Png)
+        .unwrap_or_else(|error| panic!("capture PNG write to {} failed: {error}", path.display()));
+}
+
+/// Runs validation only after a synchronously encoded capture exists on disk.
+fn write_png_before_validate(
+    path: &std::path::Path,
+    screenshot: bevy::image::Image,
+    validate: impl FnOnce(),
+) {
+    save_before_validate(|| write_capture_png(path, screenshot), validate);
 }
 
 /// Writes first, judges second — the ordering itself, split out so it can be tested.
@@ -1473,6 +1485,54 @@ mod tests {
             "the PNG must be written before the range checks can panic, or a failing capture \
              destroys the frame that would explain it"
         );
+    }
+
+    /// AC16's contract is a real file, not an in-memory "saved" flag: a range-check panic must
+    /// leave a decodable PNG behind for the operator to inspect.
+    #[test]
+    fn a_failed_range_check_leaves_the_capture_png_on_disk() {
+        use bevy::{
+            asset::RenderAssetUsages,
+            image::Image,
+            render::render_resource::{Extent3d, TextureDimension},
+        };
+        use image::GenericImageView;
+
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-capture-before-validate-{}.png",
+            std::process::id()
+        ));
+        let screenshot = Image::new_fill(
+            Extent3d {
+                width: 2,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[42, 80, 120, 255],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::MAIN_WORLD,
+        );
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            write_png_before_validate(&path, screenshot, || {
+                panic!("capture contains fewer than 3000 warm-lit pixels")
+            });
+        }));
+        std::panic::set_hook(previous);
+
+        assert!(
+            outcome.is_err(),
+            "the failed range check must still end the capture"
+        );
+        assert!(
+            path.exists(),
+            "the PNG must be on disk before a range-check panic can end the process"
+        );
+        let decoded = image::open(&path).expect("the saved capture must be a decodable PNG");
+        assert_eq!(decoded.dimensions(), (2, 1));
+        std::fs::remove_file(path).expect("the temporary capture must be removable");
     }
 
     /// Hand-written oracle: a 4x4 frame whose centre window is exactly the four pixels at

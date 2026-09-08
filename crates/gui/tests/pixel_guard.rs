@@ -170,11 +170,12 @@ impl Daemon {
         Self { child, port }
     }
 
-    /// One real client run, decoded. The exit status is deliberately NOT asserted: the capture's
-    /// near-white range check has been breached on `main` since before story 10.7 and exits 101,
-    /// and `save_before_validate` writes the PNG before validating it. Asserting success here would
-    /// make this guard fail for a reason that has nothing to do with the pixels it came to read --
-    /// and "raise the ceiling so my run goes green" is exactly what 10.7's AC7 forbids.
+    /// One real client run, decoded. The exit status is deliberately NOT asserted: the all-off
+    /// capture always exits 101 because its intentional darkness trips `WARM_PIXEL_FLOOR`
+    /// ("capture contains fewer than 3000 warm-lit pixels"), not the near-white ceiling.
+    /// `write_png_before_validate` leaves its PNG on disk first. Asserting success here would make
+    /// this guard fail for a reason that has nothing to do with the pixels it came to read -- and
+    /// "raise the ceiling so my run goes green" is exactly what 10.7's AC7 forbids.
     fn capture(&self, label: &str, extra: &[&str]) -> (Vec<[u8; 4]>, usize, usize) {
         let out = std::env::temp_dir().join(format!(
             "frostvein-pixel-guard-{}-{label}.png",
