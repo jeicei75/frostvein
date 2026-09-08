@@ -171,6 +171,47 @@ stone when dug — is a sim-side feature, recorded in `deferred-work.md`, not bu
 right now until we will get other things in shape at least"*. The sky colour, the aurora and the
 star shell carry no named defect and do not move. Ruling 4's scope is these four rows.
 
+### RULING 5 — the camp is widened, and the treatment is approved (Wolf, 2026-09-08)
+
+After round 2 (`10-8-signoff/AC4-round2.md`), Wolf on the ±8-cell spacing frame, **verbatim**:
+
+> *"±8 cells, 18.1 m · near-white 0.7235 % · ground median 82 · exit 0 / Four separate lights
+> around a lit clearing. The terraced dig reads as a place rather than a glare. looks good to me ..
+> join torch spacing"*
+
+**RULED: the torch spacing is JOINED INTO THIS STORY** (it had been probed as out-of-scope, since it
+edits `sim-core` and the guardrails exclude composition). AC18 below carries it.
+
+**THE APPROVED TREATMENT is the frame he pointed at**, which is candidate **F's lighting** at the
+**±8-cell** spacing — `probe-torch-spacing-8cells-4d45ca9.png`. Stated explicitly because he
+approved a FRAME, and that frame carries both changes:
+
+| term | shipped | approved |
+|---|---|---|
+| `ambient` | `(120,140,165)` | `(108,128,170)` |
+| `ambient_brightness` | 4,500 | **1,500** |
+| `directional` | `(150,190,180)` | `(178,200,240)` |
+| `directional_illuminance` | 22,000 | **7,000** |
+| torch | 14.0M, range 20 | **7.0M, range 14** |
+| campfire | 25.0M, range 28 | **14.0M, range 20** (peak 19.6M, under `APPROVED_PEAK`) |
+| lantern | 5.0M, range 14 | **3.0M, range 10** |
+| torch positions | ±2 cells (4.5 m) | **±8 cells (18.1 m)** |
+
+Two ambient/directional COLOURS move, so AC8's bench lockstep is live: `valley_bench.py:46-47` and
+the two `bench_contract.rs:88-96` anchors move in the SAME commit.
+
+**Why the spacing is the lever and dimming was not** — every other knob traded the blown core
+against the dark ground; this one moves both the right way, because four torches stacked on the
+fire were summing into one saturated core while lighting almost none of the ground around it:
+
+```
+shipped camp   near-white 1.2713 %   ground median 69   exit 101 (FLOOR breached, not the ceiling)
+dim emitters   near-white 1.1780 %   ground median 79   peak down, ground down with it
+shorten reach  near-white 1.2853 %   ground median 68   ground STARVED below its floor
+spread 11.3 m  near-white 1.0727 %   ground median 77   both improve
+spread 18.1 m  near-white 0.7235 %   ground median 82   both improve  <- APPROVED
+```
+
 **ORCHESTRATOR FINDING, derived from source at the sitting — NOT yet measured, Task 6b must test
 it against frames before acting on it.** Defects (a) and (d) plausibly share ONE cause, which is
 why Wolf's *"maybe rim is connected to fog"* is likely right. Both the fog colour and the rim's
@@ -268,6 +309,16 @@ before/after pair that showed it.
     slice, not whether the mirror holds one; a below-the-cut capture (`--z` under the dwarves)
     exits without a motion panic — reproduced RED first.
 
+18. **The camp is widened to ±8 cells (RULED 2026-09-08, joined into this story).**
+    `camp_emitters` (`crates/sim-core/src/lib.rs:1614`) places the four torches at ±8 cells
+    diagonally from the campfire instead of ±2 — 18.1 m instead of 4.5 m, outside the campfire's
+    own pool. `generated_world_has_sorted_camp_emitters` (`:1706`) is **re-pinned to the ruled
+    offsets, not loosened**, and a test shows the torches lie outside the campfire's `range`.
+    Determinism is unaffected: the positions stay a pure function of the camp origin.
+    **Because this moves the camp, `AC3-marginals.md` is RE-TAKEN at the approved treatment** and
+    the stale table is superseded in place, with the reason stated — every emitter figure in it was
+    measured against the old camp.
+
 ### Sign-off
 
 12. **Closing half (UX-DR22).** Wolf views the built result live on the vehicle against the
@@ -314,6 +365,13 @@ before/after pair that showed it.
         runs as the noise floor. Presented side by side in `10-8-signoff/AC4-candidates.md`.
   - [ ] **STOPPED HERE — Wolf has not chosen.** Record the choice with filename and figures.
         Tasks 4, 5, 6, 6b and 8 all wait on it.
+
+- [ ] **Task 3b — Widen the camp** (AC: 18; lands BEFORE Task 4's figures are taken)
+  - [ ] `camp_emitters` ±2 → ±8; re-pin `generated_world_has_sorted_camp_emitters` to the ruled
+        offsets; add a test that each torch lies outside the campfire's `range`, RED first against
+        the shipped ±2.
+  - [ ] Re-take `AC3-marginals.md` at the approved treatment; supersede the old table in place
+        rather than deleting it, stating that its figures predate the widened camp.
 
 - [ ] **Task 4 — Land the table, client and bench together** (AC: 5, 7, 8)
   - [ ] `crates/gui/src/appearance.rs`: `night_lighting()` `:40-50`, `light_properties()` `:52-90`.
@@ -520,6 +578,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **RULING 5: the torch spacing is joined into the story (AC18) and the treatment is APPROVED.** Wolf on the ±8-cell frame: *"looks good to me .. join torch spacing"*. The approved treatment is candidate F's lighting AT ±8 cells, stated explicitly because he approved a frame carrying both changes. The spacing is the lever dimming was not: it drops near-white 1.2713 → 0.7235 % while RAISING the ground median 69 → 82, where dimming lowered both and shortening the reach starved the floor to 68. Two colours move, so AC8's bench lockstep is live. |
 | 2026-09-08 | **Task 3 / AC4: three candidate night-key tables built, captured ×2 each, and REVERTED** — nothing landed. A one-variable ladder (cold fill dimmed → moon-coloured key → emitters trimmed) filed with frames and figures in `AC4-candidates.md`. **Dimming the cold fill is the whole picture** (149× noise on frame mean); **recolouring the key moves near-white 0.6× noise, below the floor**, so B's case is an eye case and cannot be made on metrics, which matters because a colour move forces AC8's bench lockstep. Awaiting Wolf's choice; Tasks 4, 5, 6, 6b and 8 wait on it. |
 | 2026-09-08 | **Task 2 / AC3 done: per-emitter marginals at the k=4 shipped default.** Eight captures, one daemon, stamp `c7bfb00`. Torches out-weigh the campfire **6.4:1** on warm-lit with the other off. **Two findings:** Premise 8 is FALSE at the shipped default — torches off alone now reads 1.6046 % and stays RED, and only campfire+torches together clears the ceiling; and the **ambient is the dominant illuminant**, costing the frame 404× noise against the directional's 59×, so Ruling 1's re-derivation is mostly an ambient decision. Instrument caveat filed: warm-lit counts red-over-blue, so switching off a COOL source inflates it. |
 | 2026-09-08 | **Rulings 1–4 recorded at the opening sitting** (AC2), verbatim: night moonlight key with the INTENSITIES knob, the k=4 flank rule wins, and four named atmosphere defects (fog invisible, snowfall not reaching the top of frame, flakes too large, the terrain cut-off too sharp / diorama). Orchestrator finding filed with them: fog and rim both fade toward the dark sky constant while the visible horizon is the bright aurora, which would explain two of the four defects at once — unmeasured, Task 6b must test it. |
