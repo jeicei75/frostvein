@@ -1870,6 +1870,34 @@ named thing, so it got the attention; the ring outweighed it 2:1 in lumens and n
 project could see it. **Before tuning an emitter, switch off everything else that emits nearby** —
 that is now one keypress.
 
+## Raised at 10.8: A BIGGER WORLD, AND THE TWO VERY DIFFERENT COSTS OF ONE (2026-09-08)
+
+- **Wolf, on hiding the world edge: "yes eventually just need to make bigger world I think".**
+  He is right that distance solves it, and the numbers say it is a NEAR MISS rather than a wild
+  mismatch — which is the useful part:
+
+  ```
+  128x128x32    524,288 cells   205 m across   far edge ~192 m from the boot camera
+  192x192x32  1,179,648 cells   307 m across   far edge ~244 m
+  256x256x32  2,097,152 cells   410 m across   far edge ~295 m
+  fog saturates at 210 (code) or 155 (what docs/tech-art-guidelines.md:251-254 claims)
+  ```
+
+  At 128 the far edge lands at ~192 m against a fog that finishes at 210. **It shows because it
+  misses by about 18 m.** Either lever closes it: grow the world past the fog, or fix the fog to
+  finish before the world (the doc's own 155 already does, and that discrepancy is its own open
+  finding — see 10.8's record).
+
+  **THE COST SPLITS IN TWO AND ONLY ONE HALF IS EXPENSIVE.** A bigger SIMULATED world is 2.25x
+  cells at 192 and 4x at 256, and the protocol sends TILES in the snapshot on connect (AD-3), so
+  the wire cost, worldgen, pathfinding and mirror memory all scale with it. A bigger VISUAL world
+  — a non-simulated backdrop skirt beyond the play area — costs triangles and nothing else, and
+  **the edge problem only needs the visual half.** Deciding which one is wanted is the actual
+  question; "bigger world" reads as one thing and is two.
+  **Revisit trigger:** whoever picks up Ruling 3's diorama defect, or the first story that wants
+  more play area for its own sake. Not before the fog doc-vs-code disagreement is settled, because
+  that decides whether any world growth is needed at all.
+
 ## Raised at 10.8's opening sitting: SNOW AS AN ACCRETING LAYER, NOT A SURFACE RULE (2026-09-08)
 
 - **Settled snow should be a layer that grows over time and reveals stone when dug.** Wolf, ruling
