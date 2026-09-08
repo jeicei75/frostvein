@@ -1092,7 +1092,7 @@ pub fn capture_after_frames(
         }
         capture.requested = true;
         // Headless runs have no window to screenshot; they draw into an offscreen texture and the
-        // shot is taken from that instead. Everything downstream -- save_to_disk, the range checks
+        // shot is taken from that instead. Everything downstream -- the PNG write, the range checks
         // and the pixel instruments -- is identical, which is the point: the instrument does not
         // change when the surface does.
         let shot = match headless.as_deref() {
@@ -1470,7 +1470,14 @@ mod tests {
     /// were two observers on one event, Bevy runs those in an unspecified order, and it picked the
     /// checks first. Measured on the vehicle — a z 9 capture panicked on the ground-luminance floor
     /// and wrote no PNG — and visible in every passing run's log too, where `capture range check:`
-    /// prints above `Screenshot saved to`.
+    /// printed above `Screenshot saved to`.
+    ///
+    /// ↳ Sequencing them inside ONE observer fixed that, and it was not enough: `save_to_disk`
+    /// only QUEUES the write on Bevy's async screenshot task, so under the full tier's concurrent
+    /// llvmpipe load the flush could still lose to the panic exit (issue #72). Story 10.8 replaced
+    /// the queued saver with a synchronous encode, so returning from the save half means the PNG
+    /// is already on disk. `Screenshot saved to` no longer appears in a capture's log — this crate
+    /// writes the file itself.
     ///
     /// The validation must still fail loudly. The point is only that the evidence survives it.
     #[test]
