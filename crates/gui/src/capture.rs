@@ -572,14 +572,16 @@ pub const GROUND_LUMINANCE_CEILING: u8 = 180;
 /// luminance. The star shell (192.9 luma) stays below it, so the measure follows the pool.
 pub const BLOWN_POOL_LUMINANCE_THRESHOLD: u8 = 200;
 
-/// `boot7.png`, the 5.4 Bevy frame Wolf approved, measures a 0.6651% largest near-white pool.
-pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651_476;
+/// `approved-moonlit-camp-3479a43-a.png` measures a 0.47916669% largest near-white pool and
+/// `approved-moonlit-camp-3479a43-b.png` measures 0.33452690%; worst plus the 0.14463979 pp
+/// same-build swing is 0.62380647%.
+pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_238_064_7;
 
 /// Fraction of the frame at or above [`BLOWN_POOL_LUMINANCE_THRESHOLD`], **counted rather than
-/// connected**. Calibrated the same way as the pool ceiling — on `boot7.png`, the frame Wolf
-/// approved, which measures 1.5630426 % (14,405 of 921,600 pixels) against the rejected `7-2-marks-vista.png` at
-/// 1.8395 %. Like the pool ceiling it is boot7's own figure to the digit, so the approved frame
-/// sits exactly AT the bar with no tolerance — deliberate, and the same rule the pool follows.
+/// connected**. `approved-moonlit-camp-3479a43-a.png` measures 0.82899302% and
+/// `approved-moonlit-camp-3479a43-b.png` measures 0.71191406%; worst plus the 0.11707896 pp
+/// same-build swing is 0.94607202%. This makes room for the approved pair's observed jitter
+/// instead of requiring a frame to sit exactly at the bar.
 ///
 /// WHY THIS EXISTS, measured 2026-08-29 while closing 9.1's AC13. `largest_blown_pool_fraction`
 /// measures a CONNECTED component, and connectivity has a cliff: a near-white region fragments at
@@ -597,7 +599,7 @@ pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651_476;
 ///
 /// So: **area is what is asserted**, because it survives both renderers; the pool stays as a
 /// reported diagnostic and must not be read off a headless frame.
-pub const NEAR_WHITE_AREA_CEILING: f32 = 0.015_630_426;
+pub const NEAR_WHITE_AREA_CEILING: f32 = 0.009_460_72;
 
 fn luminance(pixel: [u8; 4]) -> f32 {
     0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32
