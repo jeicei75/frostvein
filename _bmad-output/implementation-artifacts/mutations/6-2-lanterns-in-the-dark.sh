@@ -1,4 +1,6 @@
 # Story 6.2 sabotage table. Run alone with scripts/mutate.sh.
+# NOTE: re-pointed 2026-09-08 by story 10.8, which moved this literal. The row's SABOTAGE
+# is unchanged; only the value it starts from moved. A row that cannot apply pins nothing.
 
 mutation "snapshot dwarf arm drops lanterns" simd every_dwarf_carries_a_lantern_in_snapshot_and_delta_without_duplication <<'PY'
 import pathlib
@@ -115,7 +117,7 @@ p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
 # NOTE: retargeted 2026-08-20 with the intensity drop below. A row naming a tuned literal goes
 # silently dead the moment the knob moves -- see the flicker row in 6.1's table, dead from
 # 04e6de5 until it was caught.
-old = '            intensity: 5_000_000.0,\n'
+old = '            intensity: 3_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 0.0,\n', 1))
 PY

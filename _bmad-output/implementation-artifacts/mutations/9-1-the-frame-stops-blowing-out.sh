@@ -1,4 +1,6 @@
 # Story 9.1 sabotage table. Run alone: scripts/mutate.sh <this file>
+# NOTE: re-pointed 2026-09-08 by story 10.8, which moved this literal. The row's SABOTAGE
+# is unchanged; only the value it starts from moved. A row that cannot apply pins nothing.
 
 mutation "campfire shadows return to Bevy's default" gui campfire_light_casts_shadows_and_is_not_rewritten_by_a_later_reconciliation <<'PY'
 import pathlib
@@ -29,7 +31,7 @@ PY
 mutation "blown-pool ceiling rises past today's frame" gui committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
-old = 'pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651_476;\n'
+old = 'pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_238_064_7;\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.010_000_000;\n'))
 PY
@@ -76,7 +78,7 @@ PY
 mutation "the near-white area ceiling rises past the rejected frame" gui committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
-old = 'pub const NEAR_WHITE_AREA_CEILING: f32 = 0.015_630_426;\n'
+old = 'pub const NEAR_WHITE_AREA_CEILING: f32 = 0.009_460_72;\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'pub const NEAR_WHITE_AREA_CEILING: f32 = 0.020_000_000;\n'))
 PY
