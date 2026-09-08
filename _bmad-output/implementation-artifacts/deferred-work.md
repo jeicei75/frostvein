@@ -1444,7 +1444,8 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
   Materials table is a placeholder-era reading. Revisit the whole document — values, budgets and
   the eye-only marks — once 10.4/10.5 land authored terrain, trees and dwarves. Related: the
   standing ruling that art gates visual judgement (Wolf, 2026-08-22).
-- **The adopted terrain `k = 4` has no constant and no owner.** `docs/tech-art-guidelines.md`
+- ~~**The adopted terrain `k = 4` has no constant and no owner.**~~ **CLOSED 2026-09-08 by Story
+  10.8, commit `25f217b`:** `DEFAULT_TERRAIN_SUBDIV` now ships `k = 4`. `docs/tech-art-guidelines.md`
   records 0.4 m terrain visual voxels as an ADOPTED DECISION, but the shipped default is `k = 1`
   — `TerrainSubdivision` is inserted only under `--subdiv` [`crates/gui/src/ingest.rs:203`] and
   consumers fall back via `subdivision.map_or(1, ..)` [`crates/gui/src/project.rs:1108`, `:1184`,

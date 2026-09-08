@@ -130,7 +130,7 @@ and the per-class budgets are recorded measured decisions, not mechanical checks
 | Simulation cell | 1.6 m | measured decision (10.6) |
 | Project/authored voxel | 0.1 m → 16 per cell | measured decision |
 | Terrain visual subdivision | adopted `k = 4` (0.4 m) | measured decision |
-| Terrain, shipped default | `k = 1` — needs `--subdiv 4` | `deferred-work.md`, no owner |
+| Terrain, shipped default | `k = 4` (0.4 m); ↳ before `k = 1` — needs `--subdiv 4` **(superseded)** | `DEFAULT_TERRAIN_SUBDIV` (`ingest.rs`) |
 | Trees | 0.2 m (2x the project voxel) | `check_asset.py` bounds |
 | Dwarves | 0.1 m — 12 voxels = 1.20 m = 0.75 cells | eye-only until 10.5 |
 | Terrain triangle bracket | 80,120–928,884 at k=4 | measured decision |
@@ -343,10 +343,9 @@ solid cut face and the absence of hatch or simulation state are **eye-only** unt
 - Terrain has a separate served resolution and budget from authored assets. The **adopted decision**
   is **0.4 m terrain visual voxels**: visual subdivision **`k = 4`** of one 1.6 m simulation cell,
   while the simulation remains `k = 1`.
-- **Adopted is not shipped.** The default build serves terrain at `k = 1`; reaching the adopted
-  resolution today requires `--subdiv 4`. Putting the adopted `k` behind one constant is **owed work
-  with no owner yet** — see `deferred-work.md`, "The adopted terrain `k = 4` has no constant and no
-  owner".
+- **Adopted is shipped.** The default build serves terrain at `k = 4` through
+  `DEFAULT_TERRAIN_SUBDIV` in `ingest.rs`. ↳ before: the default build served terrain at `k = 1` and
+  required `--subdiv 4` **(superseded)**.
 - The terrain budget is **80,120–928,884 chunk-mesh triangles at k=4**. The ceiling excludes about
   54k triangles from the 4,501 tree-foliage cube entities, because it counts chunk meshes only.
 - Terrain is served at 0.4 m (a 32× multiple); trees remain authored at their declared 0.2 m
