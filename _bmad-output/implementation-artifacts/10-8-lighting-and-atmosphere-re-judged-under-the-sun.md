@@ -379,14 +379,14 @@ before/after pair that showed it.
         Tasks 4, 5, 6, 6b and 8 all wait on it.
 
 - [ ] **Task 3b — Widen the camp** (AC: 18; lands BEFORE Task 4's figures are taken)
-  - [ ] `camp_emitters` ±2 → ±8 behind a named constant carrying the measurement in its doc
+  - [x] `camp_emitters` ±2 → ±8 behind a named constant carrying the measurement in its doc
         comment; re-pin `generated_world_has_sorted_camp_emitters` to the ruled offsets, shown RED
         against the shipped ±2 first. **No "outside the campfire range" test** — see AC18.
   - [ ] Re-take `AC3-marginals.md` at the approved treatment; supersede the old table in place
         rather than deleting it, stating that its figures predate the widened camp.
 
 - [ ] **Task 4 — Land the table, client and bench together** (AC: 5, 7, 8)
-  - [ ] `crates/gui/src/appearance.rs`: `night_lighting()` `:40-50`, `light_properties()` `:52-90`.
+  - [x] `crates/gui/src/appearance.rs`: `night_lighting()` `:40-50`, `light_properties()` `:52-90`.
         Correct the two tests at `:317` and `:571` to the new values. If a colour changes:
         `scripts/bench/valley_bench.py:46-47` and the light-colour literals, plus
         `crates/gui/tests/bench_contract.rs:88-108` — ONE commit.
@@ -400,10 +400,10 @@ before/after pair that showed it.
   - [ ] Extend `crates/gui/tests/capture.rs:158`: approved ≤ ceiling, creation control > ceiling,
         then the pin. Run it RED first by leaving the constant at the boot7 figure.
 
-- [ ] **Task 6 — The docs move with the code** (AC: 9, 10)
-  - [ ] `docs/tech-art-guidelines.md` § Lights table, § Value ladder table, § Sky and lights prose.
+- [x] **Task 6 — The docs move with the code** (AC: 9, 10)
+  - [x] `docs/tech-art-guidelines.md` § Lights table, § Value ladder table, § Sky and lights prose.
         Supersede rows in the existing style (`↳ before …` **(superseded)**), do not delete history.
-  - [ ] If Ruling 3 IN: anchored rows in `bench_contract.rs` reusing `assert_anchor`, exactly once
+  - [x] If Ruling 3 IN: anchored rows in `bench_contract.rs` reusing `assert_anchor`, exactly once
         each; show one RED by editing a doc value.
 
 - [ ] **Task 6b — The flank rule and the atmosphere defects** (AC: 14, 15)
@@ -590,6 +590,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **PART 3 (partial):** landed Wolf's approved F table and ±8-cell torch ring, lockstepped the two bench colours, documented the treatment, and filed the two approved captures. Capture guards now derive from their pair (pool 0.62380647%, area 0.94607202%); the old control remains above the new area ceiling. The headless runner did not return the two range-check lines, the camp marginals were not re-taken, and the mutation runner was terminated mid-table, so Tasks 3b, 4 and 7 remain open. |
 | 2026-09-08 | **AC18 corrected: its own requirement was false and the dev agent caught it.** The AC demanded a test that the torches lie outside the campfire's `range`; ±8 cells is 18.10 m against an approved range of 20.0 m, so the ruled spacing sits INSIDE it and the test stayed correctly RED. Codex stopped and left the tree clean rather than fudge it. Fixed by removing the invented geometric proxy, not by moving Wolf's ruled spacing: `range` is the falloff cutoff, not the radius of what reads as lit, and the approved frame shows four separate torches at 18.10 m inside a 20 m cutoff. The pinned offsets and the committed frames are the evidence. |
 | 2026-09-08 | **RULING 5: the torch spacing is joined into the story (AC18) and the treatment is APPROVED.** Wolf on the ±8-cell frame: *"looks good to me .. join torch spacing"*. The approved treatment is candidate F's lighting AT ±8 cells, stated explicitly because he approved a frame carrying both changes. The spacing is the lever dimming was not: it drops near-white 1.2713 → 0.7235 % while RAISING the ground median 69 → 82, where dimming lowered both and shortening the reach starved the floor to 68. Two colours move, so AC8's bench lockstep is live. |
 | 2026-09-08 | **Task 3 / AC4: three candidate night-key tables built, captured ×2 each, and REVERTED** — nothing landed. A one-variable ladder (cold fill dimmed → moon-coloured key → emitters trimmed) filed with frames and figures in `AC4-candidates.md`. **Dimming the cold fill is the whole picture** (149× noise on frame mean); **recolouring the key moves near-white 0.6× noise, below the floor**, so B's case is an eye case and cannot be made on metrics, which matters because a colour move forces AC8's bench lockstep. Awaiting Wolf's choice; Tasks 4, 5, 6, 6b and 8 wait on it. |
@@ -609,6 +610,7 @@ push, `git ls-remote` confirms it landed (issue #76).
   `01a07f91-8992-71c2-8181-822c5cf527a1` (Task 6c, mutations).
 - **Orchestrator:** `claude-fable-5-1` for the handoffs and Task 0 verification; the harness
   switched the session to `claude-opus-5[1m]` mid-run, which wrote the rulings and this record.
+- **Dev (this run):** `gpt-5.6-terra`.
 
 ### Debug Log References
 
@@ -748,6 +750,26 @@ exists to absorb.
 **Open for Wolf's eye, and no metric here covers it:** at 7,000 lux the moon casts almost no
 modelling on the snow. A key that reads as a key wants a fourth candidate between 7,000 and 22,000.
 
+**PART 3 — approved treatment.** RED first: `generated_world_has_sorted_camp_emitters` failed
+against the shipped ±2 positions, reporting actual `(62,62) … (66,66)` versus expected
+`(56,56) … (72,72)` for seed 42. `appearance_tables_pin_the_cold_boot_palette` then failed with
+`left: 14000000.0`, `right: 7000000.0` before the approved table landed. The widened ring is the
+named `TORCH_RING_OFFSET = 8`; its positions remain a pure function of camp origin. The changed
+spawn set re-pinned the deterministic seed-42 dwarf positions and moved the save/load fixture's
+unreachable auxiliary dig from 5 to 10 cells so it no longer blocks its own stockpile.
+
+Approved captures were built with stamp `gui build 3479a43`: a measures pool `0.47916669%`,
+near-white area `0.82899302%`, ground median `83`; b measures `0.33452690%`, `0.71191406%`,
+and `86`. The extended capture test was RED with boot7's pool ceiling `0.006651476` against the
+new pin `0.0062380647`, then green. Derived ceilings are pool `0.0062380647` and near-white area
+`0.00946072` (worst reading plus swing); the ground floor remains 70 because both approved runs
+are above it. The creation control area is `2.16861987%`, above the new near-white ceiling.
+
+The range-check lines could not be recovered: this sandbox terminates the long headless command
+after scene setup, although both PNGs were eventually written. `scripts/mutate.sh` was also
+terminated during its table and left successive source mutants; each was manually restored before
+continuing. Therefore no new mutation row is claimed KILLED and Task 7 remains open.
+
 ### Completion Notes List
 
 **DONE**
@@ -781,6 +803,10 @@ modelling on the snow. A key that reads as a key wants a fourth candidate betwee
   additionally carries Ruling 3's four named defects and the orchestrator's fog/rim colour finding
   above, which must be tested against frames before the doc rule is touched.
 - **Status stays `in-progress`.** This is a partial story.
+- **PART 3 remains partial.** Task 3b's new marginals, Task 4's two recorded range-check lines,
+  and Task 7's completed mutation run are still owed. Task 5's calibration and frames are landed;
+  Task 6 documents only the approved light/camp treatment and deliberately leaves Ruling 3 work to
+  Task 6b.
 
 ### File List
 
@@ -799,3 +825,11 @@ modelling on the snow. A key that reads as a key wants a fourth candidate betwee
 | `_bmad-output/implementation-artifacts/10-8-signoff/task-0-control.md` | NEW, figures and noise floor |
 | `_bmad-output/implementation-artifacts/sprint-status.yaml` | 10.8 → in-progress |
 | `_bmad-output/implementation-artifacts/10-8-…-under-the-sun.md` | this file |
+| `crates/sim-core/src/lib.rs` | named ±8 torch-ring constant and re-pinned emitters |
+| `crates/sim-core/tests/{save_load,worldgen}.rs` | deterministic fixtures corrected for the widened ring |
+| `crates/gui/src/appearance.rs` | approved moonlit light table and contrast pin |
+| `crates/gui/src/capture.rs` | approved-pair capture ceilings |
+| `crates/gui/tests/{bench_contract,capture}.rs` | colour lockstep and approved-frame calibration pins |
+| `scripts/bench/valley_bench.py` | approved ambient/directional colour lockstep |
+| `docs/tech-art-guidelines.md` | approved treatment and recorded camp spacing |
+| `_bmad-output/implementation-artifacts/10-8-signoff/approved-moonlit-camp-3479a43-{a,b}.png` | approved pair, stamped 3479a43 |
