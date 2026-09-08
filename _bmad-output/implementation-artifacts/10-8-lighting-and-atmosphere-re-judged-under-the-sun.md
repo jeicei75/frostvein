@@ -251,6 +251,46 @@ eye-checks (hover slab on a vertical face near the fire; the three marks apart a
 neither closed nor reopened on the record, and no vehicle card was written. Do not read this as a
 full sign-off.
 
+### Ruling 3 defects (a) and (d) — PROBED, CONFIRMED, and DEFERRED by Wolf (2026-09-08)
+
+Wolf, after seeing the probe: *"so how we can hide edge.. volumetric fog :)"*, then **"ok ..fine
+let's not mess with fog now.."**. **NOTHING LANDED. The probe was reverted and the tree is clean.**
+Frames kept: `probe-P1-haze-colour-6d051a3.png`, `probe-P2-haze-colour-and-nearer-6d051a3.png`.
+
+**The hypothesis is CONFIRMED, and it is one cause behind BOTH defects.** The fog colour
+(`ingest.rs:1137`) and the rim dissolve's target (`appearance.rs:283`) are not merely related —
+they are the SAME constant, `night_lighting().sky`:
+
+```
+what fog and the rim fade toward   (5, 12, 28)    luma 11
+what the eye sees at the horizon   (42, 92, 92)   luma 77   (aurora (73,157,144) at 0.55 over sky)
+```
+
+The world's edge fades **66 luma DARKER than its own backdrop**. A dissolve ending darker than the
+background cannot hide an edge; it paints a dark band against a bright sky, which is the diorama.
+The same mismatch makes haze read as a wall rather than distance. Measured: fading toward the
+horizon colour instead took dark pixels 209,201 → 190,990, and both probes still exit 0.
+
+**A SECOND, INDEPENDENT DEFECT was found while answering "how do we hide the edge", and it is a
+DOC-VERSUS-CODE DISAGREEMENT:**
+
+```
+docs/tech-art-guidelines.md:251-254   opens at 75, saturates at 155,
+                                      "just past the deepest in-frame terrain at 148"
+fog_falloff(90.0) actually computes   opens at 70, saturates at 210
+```
+
+`fog_end` is floored at `210.0_f32.max(camera_distance * 1.7)`, so at the boot framing it saturates
+**62 m past where the visible terrain ends**. The terrain at the frame's edge is therefore only ever
+PARTIALLY fogged — **the edge cannot be hidden by construction, whatever colour the fog is.** That
+is why P2 (saturating at 153) read better than P1: it is the first setting where the fog finishes
+before the world does, which is precisely what the doc already claims the code does.
+**Which of the two moved is UNVERIFIED** — do not pick a value before establishing that.
+
+**Volumetric fog is NOT the answer here** and would be building an Epic 11.2 mechanism to cover a
+constant that is simply wrong. It buys light scattering in air (shafts, glow hanging in the
+atmosphere); it does not hide a world edge.
+
 **ORCHESTRATOR FINDING, derived from source at the sitting — NOT yet measured, Task 6b must test
 it against frames before acting on it.** Defects (a) and (d) plausibly share ONE cause, which is
 why Wolf's *"maybe rim is connected to fog"* is likely right. Both the fog colour and the rim's
@@ -628,6 +668,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **Ruling 3's fog and rim defects PROBED and CONFIRMED, then DEFERRED by Wolf ("let's not mess with fog now"). Nothing landed; probe reverted, frames kept.** The rim and the fog are the SAME constant, and it is 66 luma darker than the horizon behind it, so the edge cannot fade out — one cause behind both defects. Separately found: `fog_falloff` saturates at 210 while `docs/tech-art-guidelines.md` claims 155 "just past the deepest in-frame terrain at 148", so the fog finishes 62 m after the terrain does and the edge is unhideable by construction. Which of doc or code moved is UNVERIFIED. |
 | 2026-09-08 | **RULING 6: lanterns to a third, and Wolf's first vehicle look is HAPPY.** He picked a sixth first; measuring it showed the warm spread falls below the noise floor there, leaving a speck that is largely the emissive face, so a third is ruled — exactly on `LANTERN_VISIBLE_INTENSITY_FLOOR`, which was NOT moved to let a value pass even though its own comment admits it was never judged. Branch pushed and verified at `76c7c47`, full gate GREEN 469s. **Issue #75's "lighting is still way off" is answered: no longer true.** AC12's two inherited eye-checks and the vehicle card remain open. |
 | 2026-09-08 | **FULL GATE GREEN, 707s, every tier** on the landed treatment. Tasks 3b, 4, 5 and 7 closed. Two prior full-gate attempts were harness-killed rather than failed; the tell is a stalled log mtime with no processes, which elapsed time alone cannot distinguish from a slow run. Dev cost for this leg: $0.56 for the blocked first attempt plus $4.94 for the run that landed it, 8pp of the weekly window. |
 | 2026-09-08 | **The approved treatment LANDED and AC5 is met: exit 0 on two consecutive runs** (near-white 0.7959 / 0.7670 % against a ceiling of 0.946072 % re-derived from those very frames). Ten commits from the delegated dev plus the orchestrator's tail. **Marginals re-taken and the story's own premise inverted: the LANTERNS now carry 55.5 % of near-white and 86.4 % of the blown pool**, because the torches moved out to ±8 and the lanterns did not. All 8 mutation rows KILLED. The gate caught 8 stranded rows in stories 5.4, 6.2 and 9.1 whose literals this table moved; each re-pointed. |
