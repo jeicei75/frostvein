@@ -303,14 +303,17 @@ before/after pair that showed it.
         mean · Δmean vs all-on · ×noise. Torches and campfire rows state the marginal with the
         other OFF. Commit as `10-8-signoff/AC3-marginals.md` with the PNGs.
 
-- [ ] **Task 3 — Candidates, captured by the client** (AC: 4)
-  - [ ] Each candidate = an edit to `night_lighting()` / `light_properties()` (and, if Ruling 1
-        chose exposure, one `Exposure { ev100 }` on the camera at `ingest.rs:1124`), built,
-        captured at the boot framing ×2, **reverted**. Name PNGs by what changed
-        (`candidate-<what>-a.png`), never by verdict.
-  - [ ] Every PNG filed with its range-check line and lumstats figures; the control's two runs give
-        the noise floor. Present side by side; record Wolf's choice with filename and figures.
-  - [ ] **Stop here until Wolf has chosen.**
+- [~] **Task 3 — Candidates, captured by the client** (AC: 4) — candidates built and filed;
+      **AWAITING WOLF'S CHOICE**
+  - [x] Each candidate = an edit to `night_lighting()` / `light_properties()`, built, captured at
+        the boot framing ×2, **reverted** (tree verified clean between candidates; nothing landed).
+        Ruling 1 chose intensities, so no `Exposure` component was added. PNGs named by what
+        changed, never by verdict: `candidate-{A-cold-fill-dimmed,B-moon-coloured-key,
+        C-emitters-trimmed}-d04e59f-{a,b}.png`.
+  - [x] Every PNG filed with its range-check line and lumstats figures, beside the control's two
+        runs as the noise floor. Presented side by side in `10-8-signoff/AC4-candidates.md`.
+  - [ ] **STOPPED HERE — Wolf has not chosen.** Record the choice with filename and figures.
+        Tasks 4, 5, 6, 6b and 8 all wait on it.
 
 - [ ] **Task 4 — Land the table, client and bench together** (AC: 5, 7, 8)
   - [ ] `crates/gui/src/appearance.rs`: `night_lighting()` `:40-50`, `light_properties()` `:52-90`.
@@ -517,6 +520,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **Task 3 / AC4: three candidate night-key tables built, captured ×2 each, and REVERTED** — nothing landed. A one-variable ladder (cold fill dimmed → moon-coloured key → emitters trimmed) filed with frames and figures in `AC4-candidates.md`. **Dimming the cold fill is the whole picture** (149× noise on frame mean); **recolouring the key moves near-white 0.6× noise, below the floor**, so B's case is an eye case and cannot be made on metrics, which matters because a colour move forces AC8's bench lockstep. Awaiting Wolf's choice; Tasks 4, 5, 6, 6b and 8 wait on it. |
 | 2026-09-08 | **Task 2 / AC3 done: per-emitter marginals at the k=4 shipped default.** Eight captures, one daemon, stamp `c7bfb00`. Torches out-weigh the campfire **6.4:1** on warm-lit with the other off. **Two findings:** Premise 8 is FALSE at the shipped default — torches off alone now reads 1.6046 % and stays RED, and only campfire+torches together clears the ceiling; and the **ambient is the dominant illuminant**, costing the frame 404× noise against the directional's 59×, so Ruling 1's re-derivation is mostly an ambient decision. Instrument caveat filed: warm-lit counts red-over-blue, so switching off a COOL source inflates it. |
 | 2026-09-08 | **Rulings 1–4 recorded at the opening sitting** (AC2), verbatim: night moonlight key with the INTENSITIES knob, the k=4 flank rule wins, and four named atmosphere defects (fog invisible, snowfall not reaching the top of frame, flakes too large, the terrain cut-off too sharp / diorama). Orchestrator finding filed with them: fog and rim both fade toward the dark sky constant while the visible horizon is the bright aurora, which would explain two of the four defects at once — unmeasured, Task 6b must test it. |
 | 2026-09-08 | **Task 6c part done.** Issue #77 fixed: `motion_assertions_apply` now asks whether a dwarf lies within the CAPTURED SLICE, on both arms; RED reproduced first, `--static-world` workaround removed. Issue #72's ordering fix landed and is pinned deterministically, but **AC16 is NOT met** — the race was never reproduced and the five full-tier runs were not taken, the dev session dying on Codex quota exhaustion. Mutation table opened with four rows; one SURVIVED because the test compared against the constant the sabotage moved, fixed by pinning the literal, then 4/4 KILLED. |
@@ -634,6 +638,44 @@ off reads 71,855 warm-lit (2.6× all-on) and lanterns off reads above all-on. Wa
 meaningful for warm emitters with the cool fill held constant; judge a cool source on ground
 median and frame mean.
 
+**Task 3 / AC4 — three candidate tables, built, captured ×2 each, and REVERTED.** Ruling 1's
+knob only: ambient and directional strength, plus emitter intensities in C. Sky, aurora and star
+shell untouched. Full table, per-knob decomposition and the eye reading in
+`10-8-signoff/AC4-candidates.md`. A one-variable-at-a-time ladder — A dims the cold fill, B adds a
+moon-coloured key, C adds trimmed emitters:
+
+```
+control   near-white 2.4635 %   mean 94.530   ground median 126
+A         near-white 1.9529 %   mean 77.183   ground median 100.5
+B         near-white 1.9240 %   mean 74.900   ground median  97
+C         near-white 1.5766 %   mean 74.148   ground median  94
+noise floor from the control pair: near-white 0.0474 pp, mean 0.116
+```
+
+**What each knob did, and one of the three answers is a surprise:**
+
+```
+control -> A  cold fill dimmed     near-white -0.5105 pp (10.8x)   mean -17.347 (149.5x)
+A -> B        key recoloured       near-white -0.0289 pp ( 0.6x)   mean  -2.282 ( 19.7x)
+B -> C        emitters trimmed     near-white -0.3475 pp ( 7.3x)   mean  -0.753 (  6.5x)
+```
+
+**RECOLOURING THE KEY IS BELOW THE NOISE FLOOR on near-white (0.6×)** — the instrument cannot see
+it. It is a value change (mean, ground median), not a highlight change. Since a colour move forces
+lockstep edits to `valley_bench.py` and both `bench_contract.rs` anchors under AC8, **B's case has
+to be made by eye or not at all**; no capture metric here supports it.
+
+**The exit column is informational, not a verdict.** Candidates were judged against the SHIPPED
+`NEAR_WHITE_AREA_CEILING = 1.5630 %`, which Premise 3 records as calibrated on a sun-under-the-map
+frame. AC6 re-derives it from the APPROVED pair. What AC6 requires is that the control still sits
+ABOVE the re-derived ceiling, and all three satisfy that (A 2.0479 %, B 1.9656 %, C 1.6775 %,
+control 2.4635 %). C is the only one that would also clear the OLD ceiling, and it STRADDLES it —
+1.5429 % then 1.6102 % across a 0.0673 pp swing — which is exactly the run-to-run behaviour AC6
+exists to absorb.
+
+**Open for Wolf's eye, and no metric here covers it:** at 7,000 lux the moon casts almost no
+modelling on the snow. A key that reads as a key wants a fourth candidate between 7,000 and 22,000.
+
 ### Completion Notes List
 
 **DONE**
@@ -660,7 +702,9 @@ median and frame mean.
   exhaustion (`You've hit your usage limit … try again at 10:20 AM`). AC16 asks for both. Owed.
   Note `crates/gui/Cargo.toml` moves `image` from a dev-dependency to a dependency for this,
   same version and features, no lockfile change.
-- **Task 2 / AC3 is DONE** (see the Debug Log). **Tasks 3, 4, 5, 6, 6b, 8 are not started.** They were blocked on Ruling 1 at handoff time
+- **Task 2 / AC3 is DONE** and **Task 3 / AC4's candidates are BUILT AND FILED** (see the Debug
+  Log). **Task 3 is STOPPED at its own gate: Wolf has not chosen a table.** Tasks 4, 5, 6, 6b and
+  8 all depend on that choice and are not started. They were blocked on Ruling 1 at handoff time
   and are now unblocked: the key is a night moonlight and the knob is the light table. Task 6b
   additionally carries Ruling 3's four named defects and the orchestrator's fog/rim colour finding
   above, which must be tested against frames before the doc rule is touched.
