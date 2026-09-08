@@ -46,3 +46,37 @@ new = '''            None => {
             None => println!('''
 p.write_text(s.replace(old, new))
 PY
+
+mutation "restore the shipped directional illuminance" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = 'directional_illuminance: 7_000.0,'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'directional_illuminance: 22_000.0,'))
+PY
+
+mutation "diverge the bench ambient colour from the client" gui bench_literals_match_the_client_palette_lights_and_boot_camera <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/valley_bench.py'); s = p.read_text()
+old = 'AMBIENT_RGB = (108, 128, 170)'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'AMBIENT_RGB = (120, 140, 165)'))
+PY
+
+mutation "restore the shipped two-cell torch spacing" sim-core generated_world_has_sorted_camp_emitters <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old_minus_x = 'x: camp.x - TORCH_RING_OFFSET,'
+old_plus_x = 'x: camp.x + TORCH_RING_OFFSET,'
+old_minus_y = 'y: camp.y - TORCH_RING_OFFSET,'
+old_plus_y = 'y: camp.y + TORCH_RING_OFFSET,'
+assert s.count(old_minus_x) == 2
+assert s.count(old_plus_x) == 2
+assert s.count(old_minus_y) == 2
+assert s.count(old_plus_y) == 2
+s = s.replace(old_minus_x, 'x: camp.x - 2,')
+s = s.replace(old_plus_x, 'x: camp.x + 2,')
+s = s.replace(old_minus_y, 'y: camp.y - 2,')
+s = s.replace(old_plus_y, 'y: camp.y + 2,')
+p.write_text(s)
+PY
