@@ -54,9 +54,14 @@ lit by something else.
 5. **Exposure and tonemapping are Bevy's defaults, set by nobody.** The camera is
    `Camera3d::default()` (`ingest.rs:1124`) with no `Exposure` or `Tonemapping` component, so the
    frame runs at `Exposure::BLENDER` = EV100 9.7 (`bevy_camera-0.19.0/src/camera.rs:263,279-283`)
-   through `Tonemapping::TonyMcMapface` (`bevy_core_pipeline-0.19.0/src/tonemapping/mod.rs:157`).
-   Lux reaches a pixel only through exposure; a lighting table and an exposure are two knobs for
-   one picture, and this story must say which it turns (Ruling 1).
+   through `Tonemapping::TonyMcMapface` (`bevy_core_pipeline-0.19.0/src/tonemapping/mod.rs:157`)
+   with real LUTs — `tonemapping_luts` is not in the workspace feature list (`Cargo.toml:32-36`)
+   but `cargo tree -p gui -e features -i bevy_core_pipeline` shows it enabled transitively through `3d_api`, and no
+   frame is magenta (the placeholder LUT Bevy would substitute, `tonemapping/mod.rs:446`). Lux
+   reaches a pixel only through exposure and the tone curve; a lighting table, an exposure and a
+   tonemapper are three knobs for one picture, and this story must say which it turns (Ruling 1).
+   Do NOT add `tonemapping_luts` to `Cargo.toml` "to be safe" — it is already on, and any change
+   to the `bevy` feature list rebuilds ~400 crates.
 6. **The Blender bench cannot be the artifact venue for intensities.** `valley_bench.py:83-97`
    records that Bevy's brightness/illuminance and Cycles' strength/energy *"share no units"*; the
    bench's `AMBIENT_STRENGTH = 3.3` / `SUN_ENERGY = 21.0` were set by eye. The bench stays pinned
