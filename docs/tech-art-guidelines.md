@@ -53,10 +53,16 @@ Ruled in [Sky and lights](#sky-and-lights), except the last row. Pinned by
 
 | Identifier | Colour | Hex | Intensity | Range / shadow | Flicker |
 | --- | --- | --- | --- | --- | --- |
-| `night_lighting().ambient` | `(120, 140, 165)` | `#788CA5` | 4,500 | cold fill | static |
-| `night_lighting().directional` | `(150, 190, 180)` | `#96BEB4` | 22,000 | key light | static |
-| `LightKind::Torch` | — | — | 14M lm | — | bounded, deterministic |
-| `LightKind::Campfire` | — | — | 25M lm | only shadow caster | 1.40 peak → 35M |
+| `night_lighting().ambient` | `(108, 128, 170)` | `#6C80AA` | 1,500 | cold fill | static |
+| ↳ before 10.8 | `(120, 140, 165)` **(superseded)** | `#788CA5` | 4,500 | — | — |
+| `night_lighting().directional` | `(178, 200, 240)` | `#B2C8F0` | 7,000 | moonlight key | static |
+| ↳ before 10.8 | `(150, 190, 180)` **(superseded)** | `#96BEB4` | 22,000 | — | — |
+| `LightKind::Torch` | — | — | 7M lm | 14 m | bounded, deterministic |
+| ↳ before 10.8 | — | — | 14M lm **(superseded)** | 20 m | — |
+| `LightKind::Campfire` | — | — | 14M lm | 20 m; only shadow caster | 1.40 peak → 19.6M |
+| ↳ before 10.8 | — | — | 25M lm **(superseded)** | 28 m | 1.40 peak → 35M |
+| `LightKind::Lantern` | — | — | 3M lm | 10 m | bounded, deterministic |
+| ↳ before 10.8 | — | — | 5M lm **(superseded)** | 14 m | — |
 | ↳ rejected | — | — | 72M lm **(rejected)** | blew a ~9-tile pool white | — |
 | moving light | table-driven by `LightKind` | — | table-driven | table-driven | eye-only |
 
@@ -112,6 +118,9 @@ artifact camp/field readings, which are ruled in [Sky and lights](#sky-and-light
 | Caught — round-4 capture | 21, a black field | eye-only |
 | Caught — boot3 capture | 156, p05 87, washed white | eye-only |
 | Contrast band | 1.2x–6.0x campfire-to-cold-fill | `appearance_tables_pin_the_cold_boot_palette` |
+| Approved cold fill | 8,500 (1,500 ambient + 7,000 moonlight) | `campfire_keeps_local_contrast_over_the_midtone_cold_fill` |
+| ↳ before 10.8 | 26,500 (4,500 + 22,000) **(superseded)** | — |
+| Approved campfire contrast | 5.097119x | `campfire_keeps_local_contrast_over_the_midtone_cold_fill` |
 | Chromatic term | every light's R/B ≥ 2x the ambient's | `appearance_tables_pin_the_cold_boot_palette` |
 | Contrast, before | a bare 3x floor, no ceiling **(superseded)** | passed by both a black frame and a blown camp |
 | Bench floor | `MIN_TERRAIN_LUMA = 20.0`, one-sided | `pixel_figures` in `valley_bench.py` |
@@ -179,8 +188,10 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
 
 ## Sky and lights
 
-- The sky is an illuminant. Cold ambient fill and a green-blue directional light let the aurora
-  catch snow and ice.
+- The sky is an illuminant. The approved night table uses `(108, 128, 170)` ambient at 1,500 and
+  `(178, 200, 240)` moonlight at 7,000; ↳ before 10.8, `(120, 140, 165)` / 4,500 ambient and
+  `(150, 190, 180)` / 22,000 directional light are **(superseded)**. This is a light-table ruling:
+  the sky `(5, 12, 28)`, aurora, fog and rim dissolve do not change with it.
 - The aurora MUST be a **curtain on a ring** around the world, not a set of billboards.
 - Its shape comes entirely from a procedurally generated RGBA gradient — the table's aurora colour
   throughout, with alpha forced to exactly zero at the top and bottom edges of the strip by a
@@ -199,7 +210,11 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
   faces go genuinely dark; a desaturated cool directional carries the lit faces. Both tints sit
   near neutral because light colour MULTIPLIES onto already-blue materials. The values are in
   [Lights](#lights).
-- Torches are 14M lm and the campfire 25M lm (35M at its 1.40 flicker peak).
+- Torches are 7M lm at 14 m, the campfire is 14M lm at 20 m (19.6M at its unchanged 1.40
+  flicker peak), and lanterns are 3M lm at 10 m. ↳ before 10.8: torches 14M/20 m, campfire
+  25M/28 m (35M peak), lanterns 5M/14 m **(superseded)**.
+- The four static camp torches sit diagonally at ±8 simulation cells (18.10 m) from the campfire.
+  This is a look-bearing `sim-core` value, not a claim about the campfire's 20 m falloff cutoff.
 - **Warm against cold is carried by hue, not by a large luminance ratio.** The contrast oracle is a
   *band* — campfire-to-cold-fill between 1.2× and 6.0× — plus a chromatic term: every light's R/B
   at least twice the ambient's.
