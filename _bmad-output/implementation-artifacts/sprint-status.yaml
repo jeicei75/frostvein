@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-07
+last_updated: 2026-09-08
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2001,7 +2001,7 @@ development_status:
                           # timestamps here. AC9/10/11 added; mutations moved 9 -> 12.
                           # WOLF RULED THE STORY RUNS WHOLE, Tasks 1-7, against the advice to
                           # split 6-7 off. Still open: issue #74's routing.
-  10-8-lighting-and-atmosphere-re-judged-under-the-sun: backlog
+  10-8-lighting-and-atmosphere-re-judged-under-the-sun: ready-for-dev
                           # ADDED 2026-09-08 on Wolf's instruction ("lighting and overall
                           # atmosphere/style story first") and RUNS BEFORE 8.3 -- the 2026-08-28
                           # ruling (look work ahead of the six-bar sign-off) still governs, and

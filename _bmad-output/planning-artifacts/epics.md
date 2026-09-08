@@ -1766,7 +1766,8 @@ decision.
 2. **The emitters are sized by the sum, not per emitter.** 10.7 measured the four torches nobody
    could switch off outweighing the campfire 4.5:1 on the near-white metric. F5–F9 now toggle
    sun, campfire, lanterns, ambient and torches, so each marginal contribution can be measured
-   with the confounders OFF for the first time.
+   with the confounders OFF for the first time. **Probed at creation on `3ed269c`: torches off
+   alone takes the shipped guard to exit 0 (near-white 1.3342 %); sun off does not (1.7378 %).**
 3. **The atmosphere in the same frame** — sky `(5,12,28)`, aurora, distance fog opening at 75 and
    saturating at 155, the rim dissolve — is judged at the same sitting, because the value ladder
    (dark sky and flanks, midtone snow and ice, warm pools, near-white emitter faces ONLY) is one
@@ -1809,12 +1810,17 @@ Near-white itself swings ~0.1 pp between runs from dwarf motion alone; say which
 and every frame is filed with its `capture range check:` line and the same-build noise floor.
 
 **Given** the chosen table lands in the client,
-**Then** `gui --headless --capture` at the boot framing **exits 0** with `NEAR_WHITE_AREA_CEILING`,
-`BLOWN_POOL_FRACTION_CEILING`, `GROUND_LUMINANCE_FLOOR`/`CEILING` and `WARM_PIXEL_FLOOR` all at
-their shipped values — the guard goes green because the FRAME changed, and no ceiling moves
-(10.7's AC7 stands). The two known instrument defects on this path, #72 (the PNG write racing the
-panic exit) and #77 (motion assertions below the cut), are fixed here or the run is repeated;
-neither is read around.
+**Then** `gui --headless --capture` at the boot framing **exits 0 on two consecutive runs**, and
+every capture constant that moves — `NEAR_WHITE_AREA_CEILING`, `BLOWN_POOL_FRACTION_CEILING`,
+`GROUND_LUMINANCE_FLOOR`/`CEILING`, `WARM_PIXEL_FLOOR` — is derived ONLY from the approved
+treatment's own two same-build runs (worst reading plus that pair's swing — headless near-white
+moves ~0.1 pp between runs, so 9.1's to-the-digit rule cannot hold two runs in a row), in the same
+commit as the table, the way 9.1 calibrated them on `boot7.png`. Their calibration frame
+was rendered with the sun under the map (deferred-work.md, "the near-white ceiling's calibration
+frame is gone"), so re-deriving them on Wolf's approved frame is the fix; raising one to clear a
+panic is not, and 10.7's AC7 still forbids it. The two known instrument defects on this path, #72
+(the PNG write racing the panic exit) and #77 (motion assertions below the cut), are fixed here or
+the run is repeated; neither is read around.
 
 **Given** one campfire and four torches,
 **When** each emitter is captured with every other source OFF through the F5–F9 toggles on the
