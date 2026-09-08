@@ -279,7 +279,11 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
     let daemon = Daemon::spawn();
 
     let above = daemon.dwarf_report(&["--subdiv", "1", "--z", "9", "--frames", FRAMES]);
-    let below = daemon.dwarf_report(&["--subdiv", "1", "--z", "5", "--frames", "700"]);
+    // Was 700 frames. Below the cut there is no dwarf to report on, so this run cannot fire on
+    // success and must wait out the report deadline -- which used to be counted only in FRAMES and
+    // so cost this software renderer over three minutes (0.313 s/frame, measured 2026-09-08). The
+    // deadline now also trips on wall clock, so FRAMES is past it with room to spare.
+    let below = daemon.dwarf_report(&["--subdiv", "1", "--z", "5", "--frames", FRAMES]);
     println!("AC10 dwarf line: above the cut {above:?} / below {below:?}");
 
     assert_eq!(
@@ -311,7 +315,9 @@ fn a_capture_below_the_dwarves_skips_motion_but_still_writes_a_png() {
         .arg(daemon.port.to_string())
         .args(["--headless", "--capture"])
         .arg(out.to_str().expect("a utf-8 scratch path"))
-        .args(["--subdiv", "1", "--z", "5", "--frames", "700"])
+        // FRAMES, not 700: the report deadline now trips on wall clock too. See the note in
+        // `the_dwarf_startup_line_reports_what_was_actually_drawn`.
+        .args(["--subdiv", "1", "--z", "5", "--frames", FRAMES])
         .output()
         .expect("the client must run");
     let stderr = String::from_utf8_lossy(&result.stderr);

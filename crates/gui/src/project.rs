@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use bevy::prelude::{
@@ -2375,6 +2375,9 @@ pub struct TreeReportState {
     /// that goes quiet exactly when the scene is unusual is worse than none.
     dwarves_reported: bool,
     frames: u32,
+    /// Set on the first frame this system runs, so the wall-clock half of the deadline measures
+    /// the wait itself rather than process start.
+    started: Option<Instant>,
 }
 
 /// Reports what the client ACTUALLY drew, once, on EVERY run -- windowed included.
@@ -2403,6 +2406,8 @@ pub fn report_tree_meshes_once(
         return;
     }
     state.frames += 1;
+    let elapsed = state.started.get_or_insert_with(Instant::now).elapsed();
+    let deadline_reached = report_deadline_reached(state.frames, elapsed);
     let (loaded, dwarf_loaded) = assets
         .zip(asset_server)
         .map_or((false, false), |(a, server)| {
@@ -2419,9 +2424,7 @@ pub fn report_tree_meshes_once(
     // The dwarf's counterpart, on its OWN readiness. Wolf's first vehicle run of the seam printed
     // the tree line and nothing about the dwarf, so the output could not say whether the authored
     // scene had loaded at all.
-    if !state.dwarves_reported
-        && ((dwarf_loaded && dwarves > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES)
-    {
+    if !state.dwarves_reported && ((dwarf_loaded && dwarves > 0) || deadline_reached) {
         state.dwarves_reported = true;
         eprintln!("gui dwarves: meshes={dwarves} scenes_loaded={dwarf_loaded} source={source}");
         // MEASURED 2026-09-06 at the boot slice: 1075 = 265 trees x 4 + 5 dwarves x 3, base 0.
@@ -2434,7 +2437,7 @@ pub fn report_tree_meshes_once(
             unmarked.iter().count()
         );
     }
-    if !state.reported && ((loaded && spawned > 0) || state.frames >= TREE_REPORT_DEADLINE_FRAMES) {
+    if !state.reported && ((loaded && spawned > 0) || deadline_reached) {
         state.reported = true;
         eprintln!(
             "gui trees: meshes={spawned} scenes_loaded={loaded} source={source} frames={}",
@@ -2446,6 +2449,24 @@ pub fn report_tree_meshes_once(
 /// Long enough for the embedded scenes to decode on a software renderer, short enough that a
 /// human sees the verdict during a sitting.
 const TREE_REPORT_DEADLINE_FRAMES: u32 = 600;
+
+/// The SAME intent as the frame deadline, expressed in the unit that intent is actually about.
+///
+/// "Short enough that a human sees the verdict during a sitting" is a claim about TIME, but it was
+/// only ever enforced in FRAMES, so its real cost scaled with how fast the machine renders. On the
+/// vehicle 600 frames is ten seconds; on this devpod's software renderer it is over three minutes
+/// (0.313 s/frame, measured 2026-09-08). Two below-the-cut pixel guards have no dwarves to report
+/// on, so they cannot fire on success and must sit out the whole deadline — 44% of every full
+/// gate's rendered frames went on waiting for a line that says "I drew nothing".
+///
+/// Whichever limit trips first ends the wait, so the vehicle is unchanged and the slow renderer
+/// stops paying frame-rate tax on a wall-clock promise.
+const TREE_REPORT_DEADLINE: Duration = Duration::from_secs(12);
+
+/// Extracted so the deadline can be tested without standing up the whole render world.
+fn report_deadline_reached(frames: u32, elapsed: Duration) -> bool {
+    frames >= TREE_REPORT_DEADLINE_FRAMES || elapsed >= TREE_REPORT_DEADLINE
+}
 
 fn spawn_tree_meshes(
     commands: &mut Commands,
@@ -2592,6 +2613,33 @@ mod tests {
     use protocol::{Dims, MessageType, Snapshot, Speed, Tile};
 
     use super::*;
+
+    /// The startup report's deadline is a promise about a HUMAN'S wait, so it must hold in
+    /// seconds as well as frames. Enforced only in frames, it cost this devpod over three minutes
+    /// per below-the-cut capture for a line that says "I drew nothing", while the vehicle reached
+    /// the same verdict in ten seconds.
+    #[test]
+    fn the_report_deadline_trips_on_wall_clock_as_well_as_frames() {
+        // The frame limit still stands on its own, unchanged for a fast renderer.
+        assert!(
+            !report_deadline_reached(TREE_REPORT_DEADLINE_FRAMES - 1, Duration::ZERO),
+            "a fast renderer short of the frame deadline must keep waiting"
+        );
+        assert!(
+            report_deadline_reached(TREE_REPORT_DEADLINE_FRAMES, Duration::ZERO),
+            "the frame deadline must still fire on its own"
+        );
+        // The wall-clock limit is what a slow renderer actually reaches first.
+        assert!(
+            report_deadline_reached(10, TREE_REPORT_DEADLINE),
+            "a slow renderer must report once the human-facing deadline has passed, whatever \
+             frame it is on"
+        );
+        assert!(
+            !report_deadline_reached(10, TREE_REPORT_DEADLINE - Duration::from_millis(1)),
+            "the wall-clock deadline must not fire early"
+        );
+    }
 
     /// The invariant Wolf's eye caught on the vehicle and no instrument could: a stone item must
     /// not swallow the debris chips that share its tile. At the scale-1.0 the item branch used to

@@ -88,3 +88,12 @@ old = 'pub const NEAR_WHITE_AREA_CEILING: f32 = 0.009_460_72;'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'pub const NEAR_WHITE_AREA_CEILING: f32 = 0.015_630_426;'))
 PY
+
+mutation "count the report deadline in frames only" gui the_report_deadline_trips_on_wall_clock_as_well_as_frames <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    frames >= TREE_REPORT_DEADLINE_FRAMES || elapsed >= TREE_REPORT_DEADLINE\n'
+assert s.count(old) == 1
+new = '    let _ = elapsed;\n    frames >= TREE_REPORT_DEADLINE_FRAMES\n'
+p.write_text(s.replace(old, new))
+PY
