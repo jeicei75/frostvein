@@ -279,22 +279,7 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
     let daemon = Daemon::spawn();
 
     let above = daemon.dwarf_report(&["--subdiv", "1", "--z", "9", "--frames", FRAMES]);
-    // `--static-world` because this capture is not about motion and CANNOT be: cut below the
-    // dwarves, none of them is drawn, so `mid_blend_frames` and `position_changes` both stay 0 and
-    // the motion instrument fails on a frame that is exactly what the test came to see. This run
-    // has panicked on every execution since Part A; nothing noticed, because `dwarf_report`
-    // discarded the exit status. The underlying defect is that `motion_assertions_apply` keys off
-    // dwarves in the MIRROR rather than dwarves within the captured SLICE -- issue #77 -- and it
-    // is deliberately not fixed here: narrowing that predicate touches every capture in the suite.
-    let below = daemon.dwarf_report(&[
-        "--subdiv",
-        "1",
-        "--z",
-        "5",
-        "--frames",
-        "700",
-        "--static-world",
-    ]);
+    let below = daemon.dwarf_report(&["--subdiv", "1", "--z", "5", "--frames", "700"]);
     println!("AC10 dwarf line: above the cut {above:?} / below {below:?}");
 
     assert_eq!(
@@ -311,6 +296,35 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
         above, below,
         "the line must change with the state it claims to report"
     );
+}
+
+/// Issue #77: a capture cut below every dwarf must not demand motion its own slice cannot draw.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn a_capture_below_the_dwarves_skips_motion_but_still_writes_a_png() {
+    let daemon = Daemon::spawn();
+    let out = std::env::temp_dir().join(format!(
+        "frostvein-below-dwarf-capture-{}.png",
+        std::process::id()
+    ));
+    let result = Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg(daemon.port.to_string())
+        .args(["--headless", "--capture"])
+        .arg(out.to_str().expect("a utf-8 scratch path"))
+        .args(["--subdiv", "1", "--z", "5", "--frames", "700"])
+        .output()
+        .expect("the client must run");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        result.status.success(),
+        "a capture below every dwarf must exit cleanly; it exited {:?}\n{stderr}",
+        result.status.code()
+    );
+    assert!(
+        out.exists(),
+        "the below-dwarf capture must leave its requested PNG on disk"
+    );
+    std::fs::remove_file(out).expect("the temporary capture must be removable");
 }
 
 /// AC6: the startup line reports the RESOLVED asset source, and it MOVES.

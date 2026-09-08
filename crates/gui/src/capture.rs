@@ -329,12 +329,15 @@ fn collect_draw_stats(
 /// MIRROR whether any dwarf sits at or below the cut: an empty observation means "the slice hides
 /// them" AND "entity projection is broken", and keying off the observation alone let every capture
 /// below the top — which is every capture this story takes — exit 0 on a total lantern regression.
-/// Whether this world can move at all. A mirror with no dwarves cannot report a position change
-/// or a mid-blend frame, so the motion instrument has nothing to say about it.
-fn motion_assertions_apply(mirror: &Mirror) -> bool {
+/// Whether the captured slice can draw a dwarf that the motion instrument could observe.
+///
+/// Ask the MIRROR rather than the projection: an empty projection means either that the requested
+/// cut correctly hides every dwarf or that entity projection has regressed altogether. The slice
+/// still matters, though — only a drawn dwarf can contribute a position change or mid-blend frame.
+fn motion_assertions_apply(mirror: &Mirror, slice_level: i32) -> bool {
     mirror
         .entities()
-        .any(|entity| entity.kind == EntityKind::Dwarf)
+        .any(|entity| entity.kind == EntityKind::Dwarf && entity.pos[2] <= slice_level)
 }
 
 fn lantern_assertions_apply(mirror: &Mirror, level: i32) -> bool {
@@ -1067,18 +1070,25 @@ pub fn capture_after_frames(
                         "motion: --static-world -- motion assertions skipped for this \
                          --at-tick capture"
                     );
-                } else if motion_assertions_apply(&mirror.0) {
+                } else if motion_assertions_apply(&mirror.0, slice.level()) {
                     capture.motion.assert_tick_floor(ticks_after_start as usize);
                     capture.motion.assert_motion(capture.expect_work);
                 } else {
                     println!(
-                        "motion: the mirror holds no dwarves — motion assertions skipped for \
-                         this --at-tick capture"
+                        "motion: no dwarf sits at or below z {} — motion assertions skipped for \
+                         this --at-tick capture",
+                        slice.level()
                     );
                 }
             }
             None if capture.static_world => {}
-            None => capture.motion.assert_valid(capture.expect_work),
+            None if motion_assertions_apply(&mirror.0, slice.level()) => {
+                capture.motion.assert_valid(capture.expect_work);
+            }
+            None => println!(
+                "motion: no dwarf sits at or below z {} — motion assertions skipped for this capture",
+                slice.level()
+            ),
         }
         capture.requested = true;
         // Headless runs have no window to screenshot; they draw into an offscreen texture and the
@@ -1702,6 +1712,36 @@ mod tests {
         assert!(
             lantern_assertions_apply(&mirror_with_dwarf_at(0), 1),
             "a dwarf BELOW the cut is visible, so a missing lantern there is a real defect"
+        );
+    }
+
+    #[test]
+    fn motion_assertions_apply_only_when_a_dwarf_is_drawn_in_the_captured_slice() {
+        assert!(
+            motion_assertions_apply(&mirror_with_dwarf_at(1), 1),
+            "a dwarf at the cut is drawn and must keep the motion health checks live"
+        );
+        assert!(
+            !motion_assertions_apply(&mirror_with_dwarf_at(2), 1),
+            "a dwarf above the cut is not drawn, so it cannot produce a mid-blend frame"
+        );
+
+        use protocol::{Dims, Snapshot, Speed};
+        let empty = Mirror::from_snapshot(Snapshot {
+            msg_type: protocol::MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 3 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone); 3],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .expect("an empty hand-built snapshot must load");
+        assert!(
+            !motion_assertions_apply(&empty, 2),
+            "an empty mirror has no drawable dwarf and cannot report motion"
         );
     }
 
