@@ -80,3 +80,11 @@ s = s.replace(old_minus_y, 'y: camp.y - 2,')
 s = s.replace(old_plus_y, 'y: camp.y + 2,')
 p.write_text(s)
 PY
+
+mutation "restore the boot7 near-white ceiling" gui committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = 'pub const NEAR_WHITE_AREA_CEILING: f32 = 0.009_460_72;'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'pub const NEAR_WHITE_AREA_CEILING: f32 = 0.015_630_426;'))
+PY
