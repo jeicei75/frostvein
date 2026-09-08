@@ -80,6 +80,20 @@ lit by something else.
    campfire's own share is not isolated here (AC3 does it, torches off). Start the table at the
    torch ring, as `deferred-work.md` already advised.
 
+9. **The subdiv default lives in two lines.** `args.subdiv.unwrap_or(1)` (`ingest.rs:458`) and the
+   guarded `TerrainSubdivision` insert at `:433-434`; `MAX_SUBDIV = 16` (`project.rs:167`). k=4 was
+   RULED 2026-09-01 for dig smoothness (5–13 ms a dig vs 38–78 at k=8; `10-6-signoff/decision.md`),
+   the k=16 reopening WITHDRAWN there, and the vehicle read >130 fps at k=4 (`vehicle-fps.md`).
+   Every pixel-guard capture passes `--subdiv 1` explicitly (`pixel_guard.rs:380-388, 280, 336,
+   496-497`), so the default flip changes no existing test's path — verify with
+   `rg -n '"--capture"' crates/gui/tests` before trusting that.
+10. **The two flank paths.** k=1 draws the whole cell in its material plus a `snow_cap_mesh` slab
+    (`project.rs:335, 1937`); k>1 paints snow on top faces only, pinned by
+    `a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else` (`project.rs:3015`) down
+    to "covered terrain keeps its dark flank" (`:3633`). The fine path's detail carving is a
+    self-labelled MEASUREMENT STAND-IN (`project.rs:1159`), so part of what the eye reads at k=4 is
+    placeholder by its own admission — say so on the card.
+
 ## The frame, read at creation
 
 The control frame reads as a **bright, hard-shadowed daylight snowfield under a night sky**: pale
@@ -89,19 +103,26 @@ light approaches white"*. The tech-art doc still describes the key as a *"green-
 light [that lets] the aurora catch snow and ice"* — a night key, not a sun. Premise 2 says why: the
 key's strength was never chosen as light.
 
-## Rulings owed from Wolf — the opening sitting, BEFORE any table is drafted
+## Rulings — 2026-09-08
+
+**RULED at creation (Wolf, 2026-09-08), extending the story:** the snow-and-rock flank rule is IN
+(Ruling 2); issue #62 is IN (Ruling 3); sky, aurora, fog, rim and snowfall are OPEN for change on
+named defects (Ruling 4); **the shipped terrain default becomes `--subdiv 4` and lands FIRST**;
+issues #72 and #77 are fixed here. Day/night and the art-shot post stack are NOT here — they are
+Epic 11 (`epics.md` § Epic 11), which runs after this story and before 8.3; the cycle boots at
+night, so this story's approved frame is the night Epic 11 builds on.
+
+**Still owed at the opening sitting, BEFORE any table is drafted:**
 
 1. **Is the key light a SUN or NIGHT LIGHT (aurora/moon), and how bright may a night key be?**
    This decides whether the table is re-derived toward the PRD's dark night or toward the daylit
    read the control shows. Also: intensities or one `Exposure` component — pick ONE knob family.
-   Do not inherit "sun" from 10.7's title as a decision; 10.7 ruled elevation only.
-2. **The snow-flank question** (`deferred-work.md` § "THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S
-   FLANKS"): IN or OUT. It is a material rule, not a light. Recommended OUT unless Wolf has decided
-   what he wants.
-3. **Issue #62** (pin `docs/tech-art-guidelines.md` Critical values in `bench_contract.rs`, ~10
-   anchored rows): IN or OUT. Recommended IN — this story rewrites exactly those rows.
-4. **Sky, fog, rim: which defects, if any, does Wolf name on the control frame?** Only a named
-   defect with the frame that shows it opens one of these for change (AC9).
+   Do not inherit "sun" from 10.7's title as a decision; 10.7 ruled elevation only. Epic 11.3
+   will make this light a sun by day and a moon by night — so what is ruled here is the NIGHT key.
+2. **Which winter?** From the k=1 / k=4 same-framing side-by-side (Task 0): snow on vertical faces
+   or stone flanks under a snow cap. The losing path is made to match.
+3. **Which sky, aurora, fog, rim or snowfall defects, if any, does Wolf name on the k=4 control
+   frame?** Each named defect opens that constant, with the frame that shows it.
 
 **Fixed, not owed:** the sun's elevation `+17.66°` and azimuth `40.0398°` stay
 (`atmosphere.rs:35,39`; Wolf, 2026-09-03). `the_approved_sun_lights_downward` stays as is.
@@ -165,6 +186,29 @@ key's strength was never chosen as light.
     off the approved figure (killed by AC6's test); diverge a bench colour from the client (killed
     by `bench_contract.rs`).
 
+### The extensions (ruled 2026-09-08)
+
+13. **`--subdiv 4` is the shipped default and lands first.** A client started with no `--subdiv`
+    builds terrain at k=4 (`ingest.rs:433-434, 458`); every figure in this story is taken at that
+    default; every test that meant k=1 says `--subdiv 1`; the tech-art doc's "shipped default"
+    row and the `deferred-work.md` "no owner" entry are corrected in the same commit. The vehicle
+    card re-reads fps and one dig's cost at the default against 10.6's figures.
+14. **The flank rule.** After Ruling 2, both meshers paint one pinned snow-capped cell's vertical
+    faces the same material; a test compares the two paths' face materials for that cell and is
+    shown RED against the unfixed loser; `a_capped_cell_paints_snow_on_its_top_faces_and_rock_
+    everywhere_else` is corrected to the ruling, not deleted.
+15. **Atmosphere constants change only on Ruling 3's named defects**, each change citing its
+    frame; the pins (`the_aurora_curtain_hugs_the_horizon_beyond_the_world`,
+    `the_star_shell_fills_the_visible_sky_wedge`,
+    `the_rim_dissolve_runs_from_the_untouched_material_to_the_bare_sky`) are corrected, not
+    loosened; UX-DR10 holds (night snow midtone, only emissive approaches white).
+16. **Issue #72 fixed:** the capture's PNG is on disk before any range-check panic can end the
+    process — reproduced RED first with the all-off pixel guard, then green on five consecutive
+    full-tier runs.
+17. **Issue #77 fixed:** `motion_assertions_apply` asks whether any dwarf is DRAWN in the captured
+    slice, not whether the mirror holds one; a below-the-cut capture (`--z` under the dwarves)
+    exits without a motion panic — reproduced RED first.
+
 ### Sign-off
 
 12. **Closing half (UX-DR22).** Wolf views the built result live on the vehicle against the
@@ -175,9 +219,18 @@ key's strength was never chosen as light.
 
 ## Tasks / Subtasks
 
+- [ ] **Task 0 — Ship k=4, then re-take the control** (AC: 13; FIRST)
+  - [ ] `ingest.rs:458` `unwrap_or(1)` → `4`; `:433-434` insert `TerrainSubdivision` unconditionally.
+        `rg -n '"--capture"' crates/gui/tests` and make every k=1 caller explicit.
+  - [ ] Re-capture the control ×2 at the new default (same recipe as Verification); these replace
+        the k=1 control as this story's noise floor and as the `creation-control` in AC6. Keep the
+        k=1 frames; the AC6 discrimination test may use either as the "above ceiling" frame.
+  - [ ] Also capture the k=1 / k=4 side-by-side for Ruling 2, same framing, both filed.
+  - [ ] Doc row + deferred-work entry corrected in the same commit.
+
 - [ ] **Task 1 — The rulings sitting** (AC: 2)
-  - [ ] Hand Wolf: the control frame, its range-check line, Premise 2's dates, "The frame, read at
-        creation", and Rulings 1–4 as questions. Record the answers verbatim with the date.
+  - [ ] Hand Wolf: the k=4 control frame, its range-check line, Premise 2's dates, "The frame, read
+        at creation", the k=1/k=4 pair, and Rulings 1–3 as questions. Record the answers verbatim.
   - [ ] **Stop here until Ruling 1 is recorded.** No lighting constant moves before it.
 
 - [ ] **Task 2 — Per-emitter marginals** (AC: 3)
@@ -221,6 +274,21 @@ key's strength was never chosen as light.
   - [ ] If Ruling 3 IN: anchored rows in `bench_contract.rs` reusing `assert_anchor`, exactly once
         each; show one RED by editing a doc value.
 
+- [ ] **Task 6b — The flank rule and the atmosphere defects** (AC: 14, 15)
+  - [ ] Make the losing path match Ruling 2 (`project.rs:335/1937` slab path or `:3015` top-face
+        rule); write the two-path agreement test RED first; correct the existing pin.
+  - [ ] For each Ruling 3 defect: change the constant, file the before/after pair with figures,
+        correct the pin that names it.
+
+- [ ] **Task 6c — The instrument's own defects** (AC: 16, 17)
+  - [ ] #72: reproduce with `pixel_guard.rs`'s all-off run until "wrote no PNG" appears (it is a
+        race — record how many runs it took); fix so the write completes before exit; five green
+        full-tier runs.
+  - [ ] #77: reproduce with `--z 5 --capture` (below the dwarves) → motion panic; make
+        `motion_assertions_apply` read the captured slice; RED then green.
+  - [ ] Do not close the issues from a commit keyword — a keyword closes the WHOLE issue on merge;
+        say "Fixes #72" only when all of #72 is fixed, and let the PR do it.
+
 - [ ] **Task 7 — Mutation table** (AC: 11)
   - [ ] ≥4 rows, format per `mutations/10-7-the-sun-lights-the-valley.sh`. **Commit the fix before
         mutating**; run `scripts/mutate.sh` ALONE; re-mutate after any strengthening; record KILLED
@@ -241,8 +309,10 @@ key's strength was never chosen as light.
 ### Scope guardrails — do NOT
 
 - **Do not move the sun.** Elevation, azimuth, `the_approved_sun_lights_downward` stay.
-- **Do not touch the snow-flank rule unless Ruling 2 is IN**; do not touch camera, composition or
-  `fog_falloff` unless Ruling 4 named a defect.
+- **Do not build any Epic 11 mechanism here** — no AO, bloom, exposure component, depth of field,
+  volumetric fog, clock or moon. Ruling 1 may pick `Exposure` as the ONE knob; that is the only
+  exception, and it is one constant.
+- **Do not touch camera or composition**; `fog_falloff` and the rim only on a Ruling 3 defect.
 - **Do not raise a capture ceiling to clear a panic.** A constant moves to a frame's figure or not
   at all (AC6).
 - **Do not use the Blender bench as the artifact** for intensities (Premise 6). Colours and aim
@@ -302,13 +372,15 @@ key's strength was never chosen as light.
 | `crates/gui/src/appearance.rs` | UPDATE | `night_lighting()`, `light_properties()`, the two pin tests |
 | `crates/gui/src/capture.rs` | UPDATE | ceilings re-calibrated on the approved frame, doc comments name it |
 | `crates/gui/tests/capture.rs` | UPDATE | `:158` extended: approved ≤, control >, then pin |
-| `crates/gui/src/ingest.rs` | UPDATE only if Ruling 1 chose exposure | one `Exposure` on the camera at `:1124` |
+| `crates/gui/src/ingest.rs` | UPDATE | `:433-434, 458` subdiv default → 4; `motion_assertions_apply` for #77; one `Exposure` at `:1124` only if Ruling 1 chose it |
+| `crates/gui/src/project.rs` | UPDATE | the losing flank path (`:335/1937` or `:3015`), per Ruling 2 |
+| `crates/gui/tests/pixel_guard.rs` | UPDATE | #72 reproduction and the fixed write ordering |
 | `scripts/bench/valley_bench.py` | UPDATE if a colour changes | lockstep with the client |
 | `crates/gui/tests/bench_contract.rs` | UPDATE | anchors move; #62 rows if Ruling 3 IN |
 | `docs/tech-art-guidelines.md` | UPDATE | Lights, Value ladder, Sky and lights |
 | `_bmad-output/implementation-artifacts/10-8-signoff/` | UPDATE | marginals, candidates, approved frame, vehicle card |
 | `_bmad-output/implementation-artifacts/mutations/10-8-lighting-and-atmosphere-re-judged-under-the-sun.sh` | NEW | ≥4 rows |
-| `_bmad-output/implementation-artifacts/deferred-work.md` | UPDATE | strike the near-white calibration entry when AC6 lands |
+| `_bmad-output/implementation-artifacts/deferred-work.md` | UPDATE | strike the near-white calibration, the k=4 "no owner" and the snow-flank entries as each lands |
 
 ### References
 
@@ -385,6 +457,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **Extended on Wolf's rulings at creation:** `--subdiv 4` becomes the shipped default and lands first (Task 0); the snow-flank rule, atmosphere constants (on named defects), issue #62 and the instrument bugs #72/#77 are IN (ACs 13–17). Day/night and the art-shot post stack are split into **Epic 11** (three stories, after this one, before 8.3), booting at night. Tonemapping premise verified: LUTs are on through `3d_api`. |
 | 2026-09-08 | Story created on Wolf's instruction ("lighting and overall atmosphere/style story first"), ahead of 8.3. Seven premises verified against source; the control frame captured twice on `3ed269c` (near-white 2.1686 / 2.2088 %, exit 101) plus two probes — torches off alone reads 1.3342 % and EXITS 0, sun off stays red; the dated finding that the directional's 22,000 lux was set the day after the light stopped reaching any surface. Epic entry corrected at creation: the capture ceilings are re-calibrated on the approved frame, not frozen. Status → ready-for-dev. |
 
 ## Dev Agent Record
