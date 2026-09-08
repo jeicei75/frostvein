@@ -5,7 +5,7 @@ model: claude-fable-5-1  # the session's harness model, not the Opus default; re
 
 # Story 10.8: Lighting and Atmosphere, Re-judged Under the Sun
 
-Status: ready-for-dev
+Status: in-progress
 
 **RUNS BEFORE 8.3.** Wolf, 2026-09-08: *"I think we will create lighting and overall
 atmosphere/style story first."* The 2026-08-28 ruling (look work ahead of the six-bar sign-off)
