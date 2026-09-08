@@ -212,6 +212,45 @@ spread 11.3 m  near-white 1.0727 %   ground median 77   both improve
 spread 18.1 m  near-white 0.7235 %   ground median 82   both improve  <- APPROVED
 ```
 
+### RULING 6 — the lanterns, and Wolf's first look on the vehicle (2026-09-08)
+
+**Verbatim:** *"lanterns are now still way too strong"*, then **`sixth`** off a four-level ladder,
+then — once the measurement below was put to him — *"ok then"* for a third, and after pulling and
+running the branch on the vehicle: **"ok I think I am happy now"**.
+
+**RULED: lantern intensity 3.0M → 1.0M** (a third). Range, colour and every other emitter stay.
+
+**A SIXTH WAS PICKED FIRST AND MEASURED OUT.** It is recorded because the measurement is the
+interesting part: at 500k the lanterns' warm spread falls BELOW the noise floor — warm-lit 1.0×,
+near-white 0.3× — while the blown pool still reads 7.3×. What survives is largely the EMISSIVE
+FACE, not light the lantern casts (a `--lights-off` toggle blacks the face as well as zeroing the
+light, so the two cannot be separated by that probe). A sixth is a bright speck, not a lamp.
+
+**The guard that caught it was itself unjudged, and was NOT moved to let the value pass.**
+`LANTERN_VISIBLE_INTENSITY_FLOOR = 1_000_000` (`crates/gui/tests/headless.rs:9`) rejected 500k. Its
+own comment admits its derivation — *"deliberately far below the shipped 5,000,000 so it constrains
+only the dark end and never has to move when the look is tuned"* — i.e. a fraction of a value this
+story deleted, exactly the defect class Premise 2 describes, one level down. The right response was
+to measure whether a sixth still reads, not to lower the floor; it does not, so the floor's WORDING
+turned out right even though its number was picked carelessly. **The ruled third sits exactly on
+that floor.** If a future story wants the speck, it must change what the floor MEANS, with a frame.
+
+| lantern | near-white | blown pool | ground median |
+|---|---:|---:|---:|
+| 3.0M as approved | 0.7814 % | 0.4544 % | 82.5 |
+| **1.0M RULED** | **0.3493 %** | **0.2154 %** | **81** |
+| 0.5M measured out | 0.2969 % | 0.1303 % | 81 |
+
+Surgical: the valley floor moves 82.5 → 81 across the whole ladder, so this takes white out of the
+camp without darkening the world — the opposite of what dimming the ambient would do.
+
+**AC12, partially discharged.** Wolf pulled `76c7c47` and ran it on the vehicle: *"ok I think I am
+happy now"*. That answers AC12's central question — **"lighting is still way off" is NO LONGER
+TRUE**, which is issue #75's defect. It does NOT yet close AC12's other halves: the two inherited
+eye-checks (hover slab on a vertical face near the fire; the three marks apart at working zoom) are
+neither closed nor reopened on the record, and no vehicle card was written. Do not read this as a
+full sign-off.
+
 **ORCHESTRATOR FINDING, derived from source at the sitting — NOT yet measured, Task 6b must test
 it against frames before acting on it.** Defects (a) and (d) plausibly share ONE cause, which is
 why Wolf's *"maybe rim is connected to fog"* is likely right. Both the fog colour and the rim's
@@ -589,6 +628,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-08 | **RULING 6: lanterns to a third, and Wolf's first vehicle look is HAPPY.** He picked a sixth first; measuring it showed the warm spread falls below the noise floor there, leaving a speck that is largely the emissive face, so a third is ruled — exactly on `LANTERN_VISIBLE_INTENSITY_FLOOR`, which was NOT moved to let a value pass even though its own comment admits it was never judged. Branch pushed and verified at `76c7c47`, full gate GREEN 469s. **Issue #75's "lighting is still way off" is answered: no longer true.** AC12's two inherited eye-checks and the vehicle card remain open. |
 | 2026-09-08 | **FULL GATE GREEN, 707s, every tier** on the landed treatment. Tasks 3b, 4, 5 and 7 closed. Two prior full-gate attempts were harness-killed rather than failed; the tell is a stalled log mtime with no processes, which elapsed time alone cannot distinguish from a slow run. Dev cost for this leg: $0.56 for the blocked first attempt plus $4.94 for the run that landed it, 8pp of the weekly window. |
 | 2026-09-08 | **The approved treatment LANDED and AC5 is met: exit 0 on two consecutive runs** (near-white 0.7959 / 0.7670 % against a ceiling of 0.946072 % re-derived from those very frames). Ten commits from the delegated dev plus the orchestrator's tail. **Marginals re-taken and the story's own premise inverted: the LANTERNS now carry 55.5 % of near-white and 86.4 % of the blown pool**, because the torches moved out to ±8 and the lanterns did not. All 8 mutation rows KILLED. The gate caught 8 stranded rows in stories 5.4, 6.2 and 9.1 whose literals this table moved; each re-pointed. |
 | 2026-09-08 | **PART 3 (partial):** landed Wolf's approved F table and ±8-cell torch ring, lockstepped the two bench colours, documented the treatment, and filed the two approved captures. Capture guards now derive from their pair (pool 0.62380647%, area 0.94607202%); the old control remains above the new area ceiling. The headless runner did not return the two range-check lines, the camp marginals were not re-taken, and the mutation runner was terminated mid-table, so Tasks 3b, 4 and 7 remain open. |
