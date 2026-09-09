@@ -1,12 +1,32 @@
 #!/usr/bin/env bash
-# Runs the frostvein gate before every push, scoped to what the push actually carries.
+# Runs the FAST tier of the frostvein gate before every push, scoped to what the push carries.
 #
 # ENABLE (once per clone):  git config core.hooksPath .githooks
 #
-# This is the tier that runs crates/simd/tests/serve.rs — 61 integration tests against a
-# real daemon over a real socket — and the pixel guards, which the pre-commit hook defers
-# for speed. Nothing here is new coverage; it is the coverage the fast tier openly declares
-# it skipped.
+# CHANGED 2026-09-08 (Wolf: "it runs gate and timeouts because it takes forever ... and I think
+# it does the same when committing so double work"). He is right on both counts, and the scope
+# block in gate.sh had already flagged this as "a separate call". MEASURED that day:
+#
+#   pre-commit (fast tier)   50-95 s
+#   pre-push   (full gate)   707 s, of which 603 s was the pixel guards
+#
+# and the full gate RE-RAN fmt, clippy, every non-serve test, both Python suites and the
+# mutation audit — all of which the commit hook had just run. So a push paid ~90 s of pure
+# duplication and then several minutes more for the heavy tier, inside a hook, where no
+# interactive git client will wait for it.
+#
+# It was also actively breaking pushes: issue #76 records GitHub closing the connection
+# mid-hook, leaving a GREEN gate and an UNPUSHED branch. A multi-minute pre-push hook is not
+# a stricter gate, it is a flakier one.
+#
+# WHAT NOW COVERS THE HEAVY TIER: `scripts/gate.sh` with no arguments, run explicitly. Every
+# story already requires it green before it can be called done, and the dev workflow runs it
+# at the end of a story rather than on every push of a work-in-progress branch. The coverage
+# did not move out of the project; it moved out of the keystroke.
+#
+# THE TRADE, stated plainly so it is a decision and not a drift: a push can now happen whose
+# tip never saw serve.rs or the pixel guards. What holds the line is the story gate plus this
+# repo's standing rule that push and PR need Wolf's explicit yes.
 #
 # `git push --no-verify` still bypasses it, deliberately and visibly.
 #
@@ -50,9 +70,9 @@ if [ "$refs" -eq 0 ] && [ "$deletions" -gt 0 ]; then
   exit 0
 fi
 
-if [ "$refs" -eq 1 ] && [ -n "$push_remote" ] && [ "$push_remote" != "$zero" ] \
-   && git cat-file -e "${push_remote}^{commit}" 2>/dev/null; then
-  exec "$gate" --range "$push_remote" "$push_local"
-fi
-
-exec "$gate"
+# `--fast` IS a scope decision, so gate.sh refuses it alongside `--range`. The range parsing
+# above is kept because it is the right question and the heavy tier may return here if the
+# heavy checks ever get cheap enough to hold a push open for.
+echo "frostvein gate: FAST tier on push -- serve.rs and the pixel guards are NOT run here."
+echo "  Run 'scripts/gate.sh' with no arguments before calling a story done."
+exec "$gate" --fast

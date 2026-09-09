@@ -157,6 +157,32 @@ fn warm_pixel_threshold_requires_red_to_exceed_blue_by_the_named_margin() {
 #[test]
 fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let approved = [
+        ("approved-a", repo.join("_bmad-output/implementation-artifacts/10-8-signoff/approved-moonlit-camp-3479a43-a.png")),
+        ("approved-b", repo.join("_bmad-output/implementation-artifacts/10-8-signoff/approved-moonlit-camp-3479a43-b.png")),
+    ];
+    for (name, path) in approved {
+        let image = image::open(path)
+            .expect("the approved moonlit camp vista must decode")
+            .to_rgba8();
+        let pixels = image.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
+        let pool = largest_blown_pool_fraction(
+            &pixels,
+            image.width(),
+            image.height(),
+            gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+        );
+        let area = near_white_area_fraction(&pixels, gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD);
+        let ground = median_ground_luminance(&pixels, image.width(), image.height());
+        println!(
+            "approved {name}: pool={:.8}% area={:.8}% ground={ground}",
+            pool * 100.0,
+            area * 100.0
+        );
+        assert!(pool <= gui::capture::BLOWN_POOL_FRACTION_CEILING);
+        assert!(area <= gui::capture::NEAR_WHITE_AREA_CEILING);
+        assert!(ground >= gui::capture::GROUND_LUMINANCE_FLOOR);
+    }
     let boot =
         image::open(repo.join("_bmad-output/implementation-artifacts/5-4-signoff/boot7.png"))
             .expect("the approved boot vista must decode")
@@ -188,19 +214,12 @@ fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
         current_pool * 100.0,
         p99_luminance(&current_pixels),
     );
-    // Behavioural first, pin second, and the ORDER is load-bearing: these compare against the
-    // SHIPPED constant, so moving the ceiling breaks the separation itself rather than merely
-    // tripping the pin. With the pin first it fired first and hid that this clause even bites.
-    assert!(boot_pool <= gui::capture::BLOWN_POOL_FRACTION_CEILING);
+    assert!(boot_pool > gui::capture::BLOWN_POOL_FRACTION_CEILING);
     assert!(current_pool > gui::capture::BLOWN_POOL_FRACTION_CEILING);
     // Backstop: the constant is the calibrated figure, not merely some separating value.
-    assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_651_476);
+    assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_238_064_7);
 
-    // AREA is what production asserts on, so it carries the same calibration, in the same
-    // behavioural-then-pin order. Measured 2026-08-29: boot 1.5630426%, current 1.8395%. The pool
-    // separates these two frames more sharply (49% vs 18%) and is kept above as the diagnostic —
-    // but its connectivity has a threshold cliff that software-rendered frames land on, so it
-    // cannot be the assertion. See NEAR_WHITE_AREA_CEILING.
+    // AREA is what production asserts on; the approved moonlit pair above is its calibration.
     let boot_area =
         near_white_area_fraction(&boot_pixels, gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD);
     let current_area = near_white_area_fraction(
@@ -212,9 +231,22 @@ fn committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see() {
         boot_area * 100.0,
         current_area * 100.0
     );
-    assert!(boot_area <= gui::capture::NEAR_WHITE_AREA_CEILING);
+    assert!(boot_area > gui::capture::NEAR_WHITE_AREA_CEILING);
     assert!(current_area > gui::capture::NEAR_WHITE_AREA_CEILING);
-    assert_eq!(gui::capture::NEAR_WHITE_AREA_CEILING, 0.015_630_426);
+    let creation_control = image::open(repo.join("_bmad-output/implementation-artifacts/10-8-signoff/creation-control-main-3ed269c-boot-a.png"))
+        .expect("the 10.8 creation control must decode")
+        .to_rgba8();
+    let creation_control_pixels = creation_control
+        .pixels()
+        .map(|pixel| pixel.0)
+        .collect::<Vec<_>>();
+    let creation_control_area = near_white_area_fraction(
+        &creation_control_pixels,
+        gui::capture::BLOWN_POOL_LUMINANCE_THRESHOLD,
+    );
+    assert!(creation_control_area > gui::capture::NEAR_WHITE_AREA_CEILING);
+    assert_eq!(gui::capture::BLOWN_POOL_FRACTION_CEILING, 0.006_238_064_7);
+    assert_eq!(gui::capture::NEAR_WHITE_AREA_CEILING, 0.009_460_72);
 
     // THE CLIFF ITSELF, pinned so nobody re-derives it: on the vehicle's own frames the pool is
     // smooth across the threshold band, which is why it was trustworthy there. A future frame set

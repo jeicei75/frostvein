@@ -85,13 +85,13 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
         ),
         (
             &appearance,
-            "ambient: Color::srgb_u8(120, 140, 165)",
-            "AMBIENT_RGB = (120, 140, 165)",
+            "ambient: Color::srgb_u8(108, 128, 170)",
+            "AMBIENT_RGB = (108, 128, 170)",
         ),
         (
             &appearance,
-            "directional: Color::srgb_u8(150, 190, 180)",
-            "DIRECTIONAL_RGB = (150, 190, 180)",
+            "directional: Color::srgb_u8(178, 200, 240)",
+            "DIRECTIONAL_RGB = (178, 200, 240)",
         ),
         (
             &appearance,

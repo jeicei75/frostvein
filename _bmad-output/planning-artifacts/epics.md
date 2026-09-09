@@ -317,6 +317,7 @@ items, two of 8.2's AC halves, and the standing art rule all pointed at it, and 
 plan. Meanwhile 8.3 closes M2 on Wolf's judgement of all six anti-requirement bars, a judgement
 Wolf has twice refused to make against placeholder material. RULED 2026-08-28 (Wolf): the gfx
 pass runs **before 8.3** — order is Epic 9, Epic 10, then 8.3 closes the milestone.
+**AMENDED 2026-09-08 (Wolf): Epic 11 joins the pass — order is Epic 9, Epic 10, Epic 11, then 8.3.**
 
 **The story cap, stated honestly:** M2 was planned at 10–14 stories and sits at 11. These two
 epics add nine, which the original cap never contemplated. This is added scope ruled by Wolf, not
@@ -346,6 +347,16 @@ expected first case") plus UX-DR22's opening-artifact obligation gaining repeata
 **RULED 2026-08-28 (Wolf): the pipeline is Blender → glTF via Bevy's native loader** — this
 supersedes the addendum's recorded MagicaVoxel/`bevy_vox_scene` path (note added there). Game
 first; the pipeline is an outcome, not the goal. Standalone: builds on Epic 9's legible client.
+
+### Epic 11: The Art-Shot Look
+**Added 2026-09-08 (Wolf), out of 10.8's creation.** The reference art (`docs/17d7215b….jpg`,
+`docs/a9d4e72b….jpg`) is a night diorama with soft contact shadows, glowing emitters, a shallow
+focus plane and haze in the air; the client has none of those mechanisms, and it has no clock.
+Three stories give it the mechanisms — ambient occlusion, bloom and exposure; depth of field and
+volumetric haze; a day/night cycle that boots at night — each judged bench-then-eye under UX-DR22.
+**FRs covered:** none new — added scope ruled by Wolf. NFR5's carve-out governs the cycle (pure
+atmosphere, client-side, never sim meaning); NFR6 governs every effect (60 fps at working zoom on
+the vehicle, measured with `--perf-log`, not eyeballed). Runs after 10.8, before 8.3.
 
 ---
 
@@ -1719,3 +1730,288 @@ does not.
 **Given** the milestone eye,
 **Then** Wolf signs the sun off live on the vehicle against the approved artifact (UX-DR22 closing
 half).
+
+### Story 10.8: Lighting and Atmosphere, Re-judged Under the Sun
+
+As the boss,
+I want the valley's light and air re-judged under the sun the game actually ships with,
+So that the look I sign Milestone 2 off against was tuned for this lighting, and not for a
+world lit by something else.
+
+**Added 2026-09-08 on Wolf's instruction — *"I think we will create lighting and overall
+atmosphere/style story first"* — and it runs BEFORE 8.3.** The 2026-08-28 ruling already put the
+look work ahead of the milestone sign-off; this story is the last of it. Its defect is concrete
+and recorded twice, which is what the standing art rule (2026-08-22) requires: **issue #75** —
+Wolf at the seat, 2026-09-06, build `1528360`: *"lighting is still way off"* — and the capture's
+own `NEAR_WHITE_AREA_CEILING` clause, **RED on `main` since before 10.7**: at the boot framing
+the near-white area reads 2.2135 % (2026-09-06) against the 1.5630 % ceiling calibrated on the
+approved boot7 frame, so `gui --headless --capture` exits 101 on every clean `main`.
+**Re-measured at creation, 2026-09-08, on `main` 3ed269c with a build stamped 3ed269c:** near-white
+2.1686 %, ground median 135, blown pool 1.1077 % (printed, not asserted), p99 229.4, exit 101 —
+control frame and reading filed under `10-8-signoff/`. The cause on record (10.7): every look constant older than 10.7 — 9.1's blow-out work, 9.4's tree colours,
+10.3's rules of the look, 10.4's tree judgement — was tuned with the sun **under the map**
+(elevation −6.42°; deleting the light moved the frame less than same-build noise). 10.7 fixed the
+sun and, by Wolf's ruling, re-tuned nothing else. **This is the re-tuning, and it is a
+re-JUDGEMENT, not a tweak:** the numbers are re-derived from measurement under the new sun, with
+the guard as the acceptance instrument rather than as a known red.
+
+**The frame, read at creation (the control above, by eye):** the valley reads as a BRIGHT,
+hard-shadowed daylight snowfield under a night sky — pale blue ground, long tree shadows, a
+camp floor blown to flat white — while the PRD's frame is *"a dark blue night world"* whose sky
+is the illuminant and whose snow *"stays midtone blue-grey; only emissive light approaches
+white"*. That is not a taste note; it follows from the dates. The below-horizon aim landed on
+2026-08-15 (`7e08862`) and the directional's 22,000 lux was set the NEXT DAY (`10c06e1`,
+2026-08-16) — so the key light's strength was chosen while the light reached no surface, and
+nobody has judged it as light on the world until 10.7 raised the sun on 2026-09-03 with
+everything else held. The tech-art doc still describes that light as a *"green-blue directional
+light [that lets] the aurora catch snow and ice"* — a night key, not a sun. **Whether the key is
+a sun or aurora-light, and how bright a night key may be, is the first ruling this story asks
+of Wolf**, before any table is drafted; the story must not inherit "sun" from 10.7's title as a
+decision.
+
+**In scope, and why each is a defect rather than a preference:**
+
+1. **The light budget.** Ambient `(120,140,165)` at 4,500, directional `(150,190,180)` at 22,000,
+   campfire 25M lm (35M at the 1.40 peak), torch 14M, lantern 5M — all sized against the boot3 and
+   boot7 measurements, both taken with the sun off. The calibration basis no longer exists.
+2. **The emitters are sized by the sum, not per emitter.** 10.7 measured the four torches nobody
+   could switch off outweighing the campfire 4.5:1 on the near-white metric. F5–F9 now toggle
+   sun, campfire, lanterns, ambient and torches, so each marginal contribution can be measured
+   with the confounders OFF for the first time. **Probed at creation on `3ed269c`: torches off
+   alone takes the shipped guard to exit 0 (near-white 1.3342 %); sun off does not (1.7378 %).**
+3. **The atmosphere in the same frame** — sky `(5,12,28)`, aurora, distance fog opening at 75 and
+   saturating at 155, the rim dissolve — is judged at the same sitting, because the value ladder
+   (dark sky and flanks, midtone snow and ice, warm pools, near-white emitter faces ONLY) is one
+   ladder and the sun moved its bottom rungs. Each is **changed only where Wolf names a defect at
+   the artifact sitting**, recorded with the frame that shows it.
+4. **Epic 10's two inherited eye-checks** (above, from 9.2 and 9.3) are taken at this story's
+   closing sitting. They were parked behind "the withheld-levers story runs first; if it dims the
+   fire, this may close for free" and have never been taken — no 10.x record carries them. The
+   hover slab's measured constraint (luminance 189.5 against a pool above 200) is a lighting
+   question first.
+
+**EXTENDED 2026-09-08 (Wolf, at creation): five more items are IN, and one of them goes first.**
+
+5. **The shipped terrain default becomes `--subdiv 4`, and it lands BEFORE any lighting capture.**
+   10.6 adopted k=4 (ruled 2026-09-01 for dig smoothness: 5–13 ms a dig against 38–78 at k=8; the
+   k=16 reopening WITHDRAWN) and the tech-art doc has carried "shipped default `k = 1` — needs
+   `--subdiv 4`, no owner" since. Every look judgement so far was made on k=1 cubes. Judging the
+   light on the fidelity the game will not ship is 10.4's bench-vs-client defect again.
+6. **The snow-and-rock flank rule is decided here.** A snow cell's vertical faces are snow at
+   k=1 and stone at k>1 (`deferred-work.md` § "THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S FLANKS");
+   Wolf deferred it on 2026-09-03 to "some other story" — this is that story. His eye picks the
+   intended winter from a side-by-side; the losing path is made to match.
+7. **Sky, aurora, fog, rim and snowfall are OPEN for change**, not only for judgement — still on a
+   named defect with the frame that shows it, never on "nicer numbers" (UX-DR10 stands: night snow
+   stays midtone).
+8. **Issue #62** — the tech-art doc's Critical values anchored in `bench_contract.rs`.
+9. **Issues #72 and #77** — the capture instrument's two open defects (the PNG write racing the
+   panic exit; motion assertions firing below the cut) are FIXED here, since every figure in this
+   story passes through that instrument.
+
+**Still parked:**
+
+- **The sun stays where Wolf put it.** Elevation +17.66° and azimuth 40.0398° were chosen from bench
+  candidates on 2026-09-03 and are not re-opened; the guard `the_approved_sun_lights_downward`
+  stays as is.
+
+**Method, decided at creation:** the UX-DR22 opening artifact is rendered by **the client itself**
+— `gui --headless --capture` at the boot framing on the devpod, one PNG per candidate lighting
+table plus the shipped table as control. Lavapipe renders real pixels here (measured 2026-08-29),
+and the Blender bench cannot serve: its ambient strength and sun energy share no units with
+Bevy's brightness and illuminance (`valley_bench.py` records "NEITHER number converts"), so a
+bench frame can show composition but cannot calibrate a Bevy intensity. The bench stays pinned
+through `bench_contract.rs` for colours and aim. **Every figure travels with its noise floor** —
+the unchanged build captured twice, WORST difference taken (10.4 once published a delta smaller
+than its noise) — and **a delta is never read as a level** (10.7 shipped 54 holes that way).
+Near-white itself swings ~0.1 pp between runs from dwarf motion alone; say which run.
+
+**Acceptance Criteria:**
+
+**Given** the shipped lighting table and at least two candidate tables,
+**When** each is captured headless at the boot framing on this story's own build,
+**Then** Wolf chooses from those frames before any client change lands (UX-DR22 opening half),
+and every frame is filed with its `capture range check:` line and the same-build noise floor.
+
+**Given** the chosen table lands in the client,
+**Then** `gui --headless --capture` at the boot framing **exits 0 on two consecutive runs**, and
+every capture constant that moves — `NEAR_WHITE_AREA_CEILING`, `BLOWN_POOL_FRACTION_CEILING`,
+`GROUND_LUMINANCE_FLOOR`/`CEILING`, `WARM_PIXEL_FLOOR` — is derived ONLY from the approved
+treatment's own two same-build runs (worst reading plus that pair's swing — headless near-white
+moves ~0.1 pp between runs, so 9.1's to-the-digit rule cannot hold two runs in a row), in the same
+commit as the table, the way 9.1 calibrated them on `boot7.png`. Their calibration frame
+was rendered with the sun under the map (deferred-work.md, "the near-white ceiling's calibration
+frame is gone"), so re-deriving them on Wolf's approved frame is the fix; raising one to clear a
+panic is not, and 10.7's AC7 still forbids it. The two known instrument defects on this path, #72
+(the PNG write racing the panic exit) and #77 (motion assertions below the cut), are fixed here or
+the run is repeated; neither is read around.
+
+**Given** one campfire and four torches,
+**When** each emitter is captured with every other source OFF through the F5–F9 toggles on the
+headless path,
+**Then** the record states each one's marginal contribution to near-white area and ground median,
+and the table is sized per emitter and not by their sum.
+
+**Given** the contrast band (campfire-to-cold-fill 1.2×–6.0×) and the chromatic term (every
+light's R/B at least twice the ambient's),
+**Then** both still hold on the new table, `appearance_tables_pin_the_cold_boot_palette` and
+`campfire_keeps_local_contrast_over_the_midtone_cold_fill` are corrected to the new values rather
+than loosened, and every rule of the look that changes changes in `docs/tech-art-guidelines.md`
+in the same commit.
+
+**Given** the sky, fog and rim,
+**Then** none changes without a defect Wolf named at the opening sitting, recorded with the frame
+that shows it; "the numbers could be nicer" is not a defect.
+
+**Given** the two inherited eye-checks,
+**When** Wolf views the built result live,
+**Then** each is closed on the record or reopened as evidence — not parked a third time.
+
+**Given** a client started with no `--subdiv`,
+**Then** it builds terrain at k=4, every 10.8 figure is taken at that default, and every test that
+meant k=1 says `--subdiv 1` explicitly; the vehicle card re-reads fps and one dig's cost at the
+new default against 10.6's figures.
+
+**Given** the two terrain meshers and one snow-capped cell,
+**When** Wolf has chosen the intended winter from a same-framing side-by-side,
+**Then** both paths paint that cell's vertical faces the same material, a test pins the agreement,
+and `a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else` is corrected, not
+deleted.
+
+**Given** the capture instrument's two open defects,
+**Then** #72 and #77 are reproduced RED first and fixed — the frame is on disk before any panic can
+end the process, and the motion assertions ask about the captured slice, not the mirror.
+
+**Given** the milestone eye,
+**Then** Wolf signs the table off live on the vehicle against the approved frame (UX-DR22 closing
+half), and states whether *"lighting is still way off"* is still true. If it is, that is this
+story's finding, and Epic 11 does not start on a look nobody believes.
+
+---
+
+## Epic 11: The Art-Shot Look
+
+Wolf looks at the client and sees the reference art's night: contact shadows in the creases,
+emitters that glow, a shallow plane of focus over a haze-softened valley, and a sky that turns.
+Nothing here changes what the sim does; everything here changes what the eye reads.
+
+**Added 2026-09-08 (Wolf), out of 10.8's creation.** Wolf's words: *"I would actually like to make
+day/night cycle .. sun during the day / moon during the night.. and overall mood should be during
+the night like in original art shots... and what about ambient occlusion and all things to make the
+scene look more like a art shots?"* RULED the same day: these are FEATURES, not re-tuning, so they
+are their own epic behind 10.8; the day/night cycle **boots at night** — the cold-boot frame stays
+the PRD's night scene and day comes later.
+
+**Execution order, and why it is not Wolf's listing order:** 11.1 (occlusion, bloom, exposure) →
+11.2 (focus and haze) → 11.3 (the cycle). The post stack changes how every frame reads, so the
+night look is finished under it before the cycle multiplies the frames to judge; the cycle is last
+because it turns one judged table into a family. Wolf may reorder at 10.8's closing sitting.
+
+**Mechanisms, verified in the pinned Bevy 0.19.0 source (all already compiled into the workspace
+through `3d_bevy_render`; no `bevy` feature change, so no 400-crate rebuild):**
+`ScreenSpaceAmbientOcclusion` (`bevy_pbr/src/ssao/mod.rs:113`, requires `DepthPrepass` +
+`NormalPrepass` and `Msaa::Off` — the client runs Bevy's default MSAA today, so AO costs the
+anti-aliasing and `bevy_anti_alias`'s TAA is the replacement); `Bloom` (`bevy_post_process/src/
+bloom/settings.rs:32`, requires `Hdr` on the camera); `Exposure` (`bevy_camera/src/camera.rs:232`,
+default EV100 9.7); `DepthOfField` (`bevy_post_process/src/dof/mod.rs:79-115`);
+`VolumetricFog` + `FogVolume` + `VolumetricLight` (`bevy_light/src/volumetric.rs:16-130`, the light
+needs a shadow map, which the sun has). **Whether any of these runs under lavapipe is unknown** —
+each story's first task is that probe, and if a mechanism cannot render headless, its opening
+artifact comes from the vehicle and says so.
+
+**Every story: UX-DR22 both halves; the opening artifact is the client's own headless capture;
+every figure carries its same-build noise floor; no capture ceiling is raised to pass; every effect
+is switchable from the seat and from the CLI the way F5–F9 / `--lights-off` already are, so a frame
+is never judged without knowing what was on; and NFR6 is re-read on the vehicle with `--perf-log`
+after each effect lands.**
+
+### Story 11.1: The Air Has Depth
+
+As the boss,
+I want creases and contacts to darken and emitters to glow,
+So that the diorama reads as lit objects in a space, not as coloured cubes on a plane.
+
+**Acceptance Criteria:**
+
+**Given** ambient occlusion on the camera,
+**When** the boot frame is captured with it on and off,
+**Then** the creases (cell edges, trunk bases, the dig terraces) darken by more than the noise
+floor while the open snow's median does not move — and the AC names the instrument that reads a
+crease, not the whole frame.
+
+**Given** bloom on an HDR camera,
+**Then** only emitter faces and their immediate halo brighten; `NEAR_WHITE_AREA_CEILING` and the
+blown-pool figure stay inside 10.8's re-calibrated ceilings, because glow is not blow-out.
+
+**Given** exposure is now a set constant rather than Bevy's default,
+**Then** it is one hardcoded `Exposure` on the camera, named in the tech-art doc beside the light
+table, and the story records the EV100 chosen and why.
+
+**Given** the anti-aliasing AO takes away,
+**Then** TAA (or Wolf's ruled alternative) is on, and the frame is not visibly more aliased than
+before — judged by eye at the sitting, with the same-framing pair filed.
+
+**Given** the vehicle,
+**Then** `--perf-log` at working zoom reads at or above 60 fps p50 with every effect on, or the
+story records which effect costs what and Wolf rules.
+
+**Given** the milestone eye,
+**Then** Wolf signs off both halves against the reference art beside the frame.
+
+### Story 11.2: The Miniature
+
+As the boss,
+I want the valley to read as a small lit world in a lens,
+So that the frame looks like the art shots — a focus plane on the camp, the far valley softening
+into air — instead of a uniformly sharp render.
+
+**Acceptance Criteria:**
+
+**Given** depth of field on the camera,
+**Then** the camp at boot framing is in focus and the far ridge is not, with a pinned cell in each
+measured for sharpness (edge contrast) on and off, beyond the noise floor; the focal distance
+follows the camera rig so orbit and zoom do not lose focus on the world.
+
+**Given** volumetric haze,
+**Then** a fog volume over the valley and `VolumetricLight` on the sun produce visible aerial
+depth that the existing `DistanceFog` did not, without swallowing the aurora or the stars (sky
+materials keep `fog_enabled: false`) — and the rim dissolve still owns the world edge.
+
+**Given** the vehicle,
+**Then** NFR6 is re-read with both effects on, as in 11.1.
+
+**Given** the milestone eye,
+**Then** Wolf signs off both halves against the reference art beside the frame.
+
+### Story 11.3: Night Falls, Day Breaks
+
+As the boss,
+I want a sun by day and a moon by night, on a slow clock, with the game booting at night,
+So that the valley is a place where time passes, and the night I judged everything under is still
+the night I see when I start.
+
+**Acceptance Criteria:**
+
+**Given** the client's clock,
+**Then** time of day derives from the wire `tick` alone (`protocol::Snapshot.tick`,
+`Delta.tick`), with a hardcoded day length Wolf rules; no `sim-core` or `protocol` file changes
+(`git diff --stat` on both crates is empty) — NFR5's carve-out, made checkable.
+
+**Given** boot,
+**Then** the first frame is the night scene 10.8 approved: the clock starts at a night hour, and
+the boot captures every guard is calibrated on are unchanged.
+
+**Given** the sun and the moon,
+**Then** the key light's direction and colour follow the clock — sun above the horizon by day,
+a cool dim moon by night — the aurora and stars fade by day and return by night, the sky colour
+follows, and `the_approved_sun_lights_downward` becomes a pinned-time guard rather than a constant
+one.
+
+**Given** any capture,
+**Then** it pins the clock (`--clock <hour>`), and the story's figures are taken at at least two
+pinned hours — the night boot hour and noon — each with its own noise floor and range check. A
+capture that does not pin the clock is not evidence.
+
+**Given** the vehicle,
+**Then** Wolf watches one full cycle at fast-forward and signs off both halves: the night against
+10.8's approved frame, the day against an artifact he approved before it was built.

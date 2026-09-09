@@ -408,6 +408,8 @@ fn connect_to_daemon(
 /// defect had moved one level out, not closed. `run()` needs a socket and a window and can
 /// never be entered by a test; this can, so the wiring below is executable rather than merely
 /// readable. What remains uncovered is the three lines of `run()` itself.
+const DEFAULT_TERRAIN_SUBDIV: u32 = 4;
+
 fn configure_client_app(
     app: &mut App,
     mirror: Mirror,
@@ -430,9 +432,9 @@ fn configure_client_app(
     if args.headless {
         app.insert_resource(HeadlessRequested);
     }
-    if let Some(subdiv) = args.subdiv {
-        app.insert_resource(TerrainSubdivision(subdiv));
-    }
+    app.insert_resource(TerrainSubdivision(
+        args.subdiv.unwrap_or(DEFAULT_TERRAIN_SUBDIV),
+    ));
     // MOVED OUT OF `run()`, where it was the project's own named antipattern: the flag parsed,
     // validated and then reached the app from a place no test could drive, so deleting the two
     // lines left the entire suite green. It belongs with the other resources the extracted builder
@@ -451,11 +453,9 @@ fn configure_client_app(
             crate::perf::PerfLog::new(path).with_run(crate::perf::RunProvenance {
                 build: crate::BUILD_SHA.to_string(),
                 assets,
-                // With the flag absent no `TerrainSubdivision` resource is inserted at all and
-                // the client draws one `TerrainTile` per exposed cell, which IS subdivision 1.
                 // Recorded as the number rather than left blank, so the line never omits the fact
                 // that decides how much geometry the frametime beside it was paying for.
-                subdiv: args.subdiv.unwrap_or(1),
+                subdiv: args.subdiv.unwrap_or(DEFAULT_TERRAIN_SUBDIV),
                 // Headless has no window and therefore no present mode. A windowed run takes
                 // Bevy's default, which is `PresentMode::Fifo` -- vsync ON, and the reason a
                 // frametime from the seat can be measuring the monitor rather than the scene.
@@ -708,7 +708,11 @@ pub struct HeadlessRequested;
 /// The capture resolution, matched to the vehicle's committed PNGs (`boot7.png` and every other
 /// signoff frame are 1280x720) so a headless frame and a vehicle frame are the same shape and the
 /// pixel-region instruments read the same way on both.
-const HEADLESS_SIZE: (u32, u32) = (1280, 720);
+///
+/// DERIVED, not restated: `capture::CAPTURE_SIZE` is the same contract, and a windowed capture is
+/// now REFUSED unless it matches. Two literals could disagree, and the headless side would keep
+/// passing while the vehicle silently measured a different frame.
+const HEADLESS_SIZE: (u32, u32) = crate::capture::CAPTURE_SIZE;
 
 #[derive(Resource)]
 pub struct CaptureDistance(pub f32);
@@ -2412,13 +2416,26 @@ mod tests {
     }
 
     #[test]
-    fn subdiv_flag_reaches_the_rendered_terrain_and_one_keeps_the_shipped_scene() {
+    fn absent_subdiv_flag_installs_the_shipped_default_four() {
+        let (app, _, _) = configured_app(&[]);
+
+        assert_eq!(
+            app.world().resource::<TerrainSubdivision>().0,
+            4,
+            "starting the client without --subdiv must install the ruled shipped subdivision of four"
+        );
+    }
+
+    #[test]
+    fn subdiv_flag_reaches_the_rendered_terrain_and_four_keeps_the_shipped_scene() {
         let (mut default, _, _) = configured_app(&[]);
         let (mut one, _, _) = configured_app(&["--subdiv", "1"]);
         let (mut two, _, _) = configured_app(&["--subdiv", "2"]);
+        let (mut four, _, _) = configured_app(&["--subdiv", "4"]);
         default.update();
         one.update();
         two.update();
+        four.update();
 
         let terrain_tiles = |app: &mut App| {
             let mut tiles = app
@@ -2455,21 +2472,14 @@ mod tests {
             caps
         };
         assert_eq!(
-            terrain_tiles(&mut one),
+            terrain_tiles(&mut four),
             terrain_tiles(&mut default),
-            "--subdiv 1 must retain the hand-written per-cell scene byte-for-byte"
+            "--subdiv 4 must retain the shipped fine terrain scene byte-for-byte"
         );
         assert_eq!(
-            snow_caps(&mut one),
+            snow_caps(&mut four),
             snow_caps(&mut default),
-            "--subdiv 1 must retain the snow-cap scene byte-for-byte"
-        );
-        assert!(
-            default
-                .world()
-                .get_resource::<TerrainSubdivision>()
-                .is_none(),
-            "no flag must not even install the opt-in terrain resource"
+            "--subdiv 4 must retain the shipped snow-cap scene byte-for-byte"
         );
         assert_eq!(
             one.world().resource::<TerrainSubdivision>().0,
@@ -2530,7 +2540,11 @@ mod tests {
     /// every subdivision: every `SnowCap` sits on a solid or ramp cell with nothing solid above.
     #[test]
     fn a_dug_tile_takes_its_snow_cap_with_it() {
-        for args in [vec!["--subdiv", "1"], vec!["--subdiv", "2"], vec![]] {
+        for args in [
+            vec!["--subdiv", "1"],
+            vec!["--subdiv", "2"],
+            vec!["--subdiv", "4"],
+        ] {
             let (mut app, sender, _server) = configured_app_with_snapshot(&args, wide_snapshot());
             app.update();
             let dug = [8, 1, 1];
@@ -2541,7 +2555,7 @@ mod tests {
                     .map(|cap| cap.0)
                     .collect::<std::collections::BTreeSet<_>>()
             };
-            let fine = args.contains(&"2");
+            let fine = args[1] != "1";
             if fine {
                 // The fine path paints snow onto the top faces instead of spawning slabs, so
                 // there is nothing to leave floating. That IS the fix; assert it rather than

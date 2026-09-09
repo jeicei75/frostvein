@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-07
+last_updated: 2026-09-08
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -1330,7 +1330,8 @@ development_status:
 
   # ---- the gfx pass (epics 9 + 10, added to epics.md 2026-08-28) ----
   # EXECUTION ORDER IS NOT NUMERIC ORDER. RULED 2026-08-28 (Wolf): Epic 9, then Epic 10,
-  # THEN 8.3 closes the milestone. 8.3 asks Wolf to sign off all six anti-requirement bars,
+  # THEN 8.3 closes the milestone. AMENDED 2026-09-08 (Wolf): Epic 11 runs after 10.8 and
+  # BEFORE 8.3 as well. 8.3 asks Wolf to sign off all six anti-requirement bars,
   # a judgement he has twice refused to make against placeholder material -- so the look work
   # runs first and 8.3 stays `backlog` behind it, not because it is blocked by code.
   # SCOPE, STATED HONESTLY: M2 was planned at 10-14 stories and sits at 11. These nine are
@@ -2001,7 +2002,44 @@ development_status:
                           # timestamps here. AC9/10/11 added; mutations moved 9 -> 12.
                           # WOLF RULED THE STORY RUNS WHOLE, Tasks 1-7, against the advice to
                           # split 6-7 off. Still open: issue #74's routing.
+  10-8-lighting-and-atmosphere-re-judged-under-the-sun: in-progress
+                          # ADDED 2026-09-08 on Wolf's instruction ("lighting and overall
+                          # atmosphere/style story first") and RUNS BEFORE 8.3 -- the 2026-08-28
+                          # ruling (look work ahead of the six-bar sign-off) still governs, and
+                          # the board's numeric order does NOT: 8.3 stays backlog behind this.
+                          # Defect on record: issue #75 ("lighting is still way off", 2026-09-06)
+                          # plus NEAR_WHITE_AREA_CEILING red on every clean main since before
+                          # 10.7. Re-measured at creation on main 3ed269c, debug build stamped
+                          # 3ed269c, boot framing: near-white 2.1686% vs 1.5630% ceiling, exit 101.
+                          # Every look constant older than 10.7 was tuned with the sun under the
+                          # map; 10.7 re-tuned nothing by ruling. Epic text in epics.md.
+                          # 2026-09-08 STORY CREATED -> ready-for-dev, then EXTENDED on Wolf's
+                          # rulings the same day: --subdiv 4 becomes the shipped default and lands
+                          # FIRST; snow/rock flank rule, atmosphere constants (on named defects),
+                          # #62, #72 and #77 are IN. Day/night + post stack split to Epic 11.
+                          # DEV CANNOT START until Wolf answers Ruling 1 at the opening sitting:
+                          # SUN or NIGHT KEY, and which knob (intensities or one Exposure).
+                          # Creation probes on 3ed269c AT --subdiv 1: torches off ALONE -> exit 0
+                          # (near-white 1.3342%); sun off stays red (1.7378%). THAT DIED WITH THE
+                          # k=4 DEFAULT -- Task 2, 2026-09-08: torches off alone now reads 1.6046%
+                          # and stays RED; only campfire+torches together clears (1.3102%). And the
+                          # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
+                          # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
   epic-10-retrospective: optional
+
+  epic-11: backlog
+  # THE ART-SHOT LOOK. Added 2026-09-08 (Wolf) out of 10.8's creation. FEATURES, not re-tuning:
+  # ambient occlusion + bloom + exposure (11.1), depth of field + volumetric haze (11.2), a
+  # day/night cycle that BOOTS AT NIGHT (11.3). EXECUTION ORDER IS NOT NUMERIC ORDER for the
+  # milestone: Epic 10 (10.8) -> Epic 11 -> 8.3. Inside the epic the numbering IS the order
+  # (post stack first, cycle last) and Wolf may reorder at 10.8's closing sitting.
+  # Every mechanism is already compiled in via 3d_bevy_render (verified in the pinned 0.19.0
+  # source) -- no bevy feature change. Whether any renders under lavapipe is UNKNOWN; each
+  # story's first task is that probe. NFR6 re-read with --perf-log after every effect.
+  11-1-the-air-has-depth: backlog
+  11-2-the-miniature: backlog
+  11-3-night-falls-day-breaks: backlog
+  epic-11-retrospective: optional
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).
 #

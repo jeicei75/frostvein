@@ -1444,7 +1444,8 @@ so they are recorded, not built. **Issues are NOT opened — that is Wolf's call
   Materials table is a placeholder-era reading. Revisit the whole document — values, budgets and
   the eye-only marks — once 10.4/10.5 land authored terrain, trees and dwarves. Related: the
   standing ruling that art gates visual judgement (Wolf, 2026-08-22).
-- **The adopted terrain `k = 4` has no constant and no owner.** `docs/tech-art-guidelines.md`
+- ~~**The adopted terrain `k = 4` has no constant and no owner.**~~ **CLOSED 2026-09-08 by Story
+  10.8, commit `25f217b`:** `DEFAULT_TERRAIN_SUBDIV` now ships `k = 4`. `docs/tech-art-guidelines.md`
   records 0.4 m terrain visual voxels as an ADOPTED DECISION, but the shipped default is `k = 1`
   — `TerrainSubdivision` is inserted only under `--subdiv` [`crates/gui/src/ingest.rs:203`] and
   consumers fall back via `subdivision.map_or(1, ..)` [`crates/gui/src/project.rs:1108`, `:1184`,
@@ -1868,6 +1869,99 @@ single-light reasoning and to any measurement that cannot switch them off. The c
 named thing, so it got the attention; the ring outweighed it 2:1 in lumens and nothing in the
 project could see it. **Before tuning an emitter, switch off everything else that emits nearby** —
 that is now one keypress.
+
+## Raised at 10.8: A BIGGER WORLD, AND THE TWO VERY DIFFERENT COSTS OF ONE (2026-09-08)
+
+- **Wolf, on hiding the world edge: "yes eventually just need to make bigger world I think".**
+  He is right that distance solves it, and the numbers say it is a NEAR MISS rather than a wild
+  mismatch — which is the useful part:
+
+  ```
+  128x128x32    524,288 cells   205 m across   far edge ~192 m from the boot camera
+  192x192x32  1,179,648 cells   307 m across   far edge ~244 m
+  256x256x32  2,097,152 cells   410 m across   far edge ~295 m
+  fog saturates at 210 (code) or 155 (what docs/tech-art-guidelines.md:251-254 claims)
+  ```
+
+  At 128 the far edge lands at ~192 m against a fog that finishes at 210. **It shows because it
+  misses by about 18 m.** Either lever closes it: grow the world past the fog, or fix the fog to
+  finish before the world (the doc's own 155 already does, and that discrepancy is its own open
+  finding — see 10.8's record).
+
+  **THE COST SPLITS IN TWO AND ONLY ONE HALF IS EXPENSIVE.** A bigger SIMULATED world is 2.25x
+  cells at 192 and 4x at 256, and the protocol sends TILES in the snapshot on connect (AD-3), so
+  the wire cost, worldgen, pathfinding and mirror memory all scale with it. A bigger VISUAL world
+  — a non-simulated backdrop skirt beyond the play area — costs triangles and nothing else, and
+  **the edge problem only needs the visual half.** Deciding which one is wanted is the actual
+  question; "bigger world" reads as one thing and is two.
+  **Revisit trigger:** whoever picks up Ruling 3's diorama defect, or the first story that wants
+  more play area for its own sake. Not before the fog doc-vs-code disagreement is settled, because
+  that decides whether any world growth is needed at all.
+
+## Ruled out of 10.8 as a MECHANISM: SNOWFALL THAT FILLS THE VIEW AT ANY ANGLE (2026-09-09)
+
+- **Ruling 3 defect (b), *"snowfall does not start from the top of the screen depending view
+  angle"*, cannot be fixed by moving a constant.** Wolf asked directly: *"possible from all view
+  angles?"* — **no.** Flakes spawn in a FIXED disc (`atmosphere.rs:182-196`): radius
+  `SNOWFLAKE_DISC_RADIUS 48.0` around `CAMP_FOCUS`, heights `11.0` to `11.0 +
+  SNOWFLAKE_FALL_SPAN 20.0`. Any camera that looks above that ceiling or past that edge sees the
+  field END, and that is the mechanism rather than a badly chosen number. Widening the disc and
+  the band buys more angles and costs density, because the same `SNOWFLAKE_COUNT 96` then has a
+  larger volume to fill — so it trades one defect for a thinner snowfall.
+  **Making it true at ANY angle means anchoring the field to the CAMERA** so it always fills the
+  frustum, which is how weather is normally done and is a mechanism, not a constant. AC15
+  authorises constants only, which is why 10.8 recorded it instead of building it.
+  **Revisit trigger: Epic 11.2** (DoF and volumetric haze), which is where the atmosphere
+  mechanisms live. If a cheaper answer is wanted first, Wolf naming the framings he actually uses
+  would let the disc and band be sized to cover those — that IS a constant change, and it closes
+  the defect for the views that matter without pretending to close it for all of them.
+
+## Raised at 10.8's opening sitting: SNOW AS AN ACCRETING LAYER, NOT A SURFACE RULE (2026-09-08)
+
+- **Settled snow should be a layer that grows over time and reveals stone when dug.** Wolf, ruling
+  on 10.8's Ruling 2 (verbatim): *"How snow works really.. in dream case there would be a separate
+  layer of snow growing to some extend over time ..if digged then ofc under that should be
+  stone.. so maybe yes flank-k4 is closer to target but maybe snow layer it bit too thick?"*
+  **This is a SIM-SIDE feature, not a client look constant, which is why 10.8 did not take it:**
+  today snow is a rendering decision made per exposed face — at k=1 a `snow_cap_mesh` slab
+  (`project.rs:335, 1937`) and at k>1 a material painted on top faces (`project.rs:940-975`) — and
+  neither is a tile, so neither can be dug, accumulate, or sit above stone as a distinct
+  substance. A real layer means depth in the world state, which is `sim-core` and `protocol` work,
+  a new tile or a per-column snow depth, and only then a client rule that draws it.
+  **What 10.8 DID settle:** Ruling 2 adopted the k=4 flank rule, stone flanks under a snow cap,
+  and the k=1 slab path was made to match (AC14, `990a65a`).
+
+  **CORRECTION, 2026-09-09 — Ruling 2's answer to the *"bit too thick"* half was INCOMPLETE, and
+  the correction is the reason Wolf called for a separate terrain story.** The ruling said the
+  cap has no thickness and concluded the depth the eye reads is therefore the detail carving
+  (`project.rs:1159`, a MEASUREMENT STAND-IN). The first clause is true and now verified — the
+  k>1 mesher's lateral faces take `owner`, the cell's own slot, and never `SnowCap`, so the cap
+  is genuinely paint with zero thickness. **The conclusion does not follow.** The dominant cause
+  is in the SIM, not the renderer:
+
+  ```
+  worldgen.rs:100   let surface = if rng.random::<bool>() { Material::Snow } else { Material::Ice };
+                    tiles[index(dims, x, y, height)] = Tile::Solid(surface);
+  ```
+
+  **Every surface tile is a full solid cell of Snow or Ice**, one whole cell thick (~2.26 m), on a
+  coin flip. So the thickness Wolf sees is a real one-cell snow layer that no 10.8 constant can
+  thin and no renderer change can fix — and `has_snow_cap` then puts a snow cap on top of it,
+  because it explicitly allows snow to settle on snow. The same fact explains the *"silvered
+  walls"* he saw at `--subdiv 1` on 2026-09-09: those are the snow CELL's own cube faces, not the
+  cap's, so AC14 removing the cap's four snow sides could not and did not change them. **Nothing
+  was lost; the cap fix is intact and pinned.**
+
+  Note how close the shipped world already is to the dream case: the layer exists, and digging it
+  does reveal soil and then stone (`worldgen.rs:92-96`). What is missing is that it is generated
+  once rather than accreting.
+
+  **WOLF'S CALL, 2026-09-09: this gets its own terrain story** — *"I think we need to have a
+  separate terrain story anyway"*, immediately after *"even with 4 the layer that looks like snow
+  is too thick"* and *"but no need to fix it now"*. **Nothing is to be tuned before that story.**
+  **Revisit trigger:** that story being written, or the first M3 story that touches terrain
+  materials in the simulation. It now has a concrete first question — whether the surface layer
+  should be a full cell at all — which is a worldgen decision, not a look constant.
 
 ## Found at 10.7's second sitting: THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S FLANKS (2026-09-03)
 

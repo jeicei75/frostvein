@@ -1,4 +1,6 @@
 # Story 5.4 sabotage table. Run alone with scripts/mutate.sh.
+# NOTE: re-pointed 2026-09-08 by story 10.8, which moved this literal. The row's SABOTAGE
+# is unchanged; only the value it starts from moved. A row that cannot apply pins nothing.
 
 mutation "snow cap leaves bare top" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
@@ -61,7 +63,7 @@ PY
 mutation "light budget collapses" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 25_000_000.0,\n'
+old = '            intensity: 14_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 5_000.0,\n'))
 PY
@@ -246,7 +248,7 @@ PY
 mutation "light budget slides back to the dark table" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '        ambient_brightness: 4_500.0,\n'
+old = '        ambient_brightness: 1_500.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        ambient_brightness: 30_000.0,\n'))
 PY
@@ -254,7 +256,7 @@ PY
 mutation "campfire blows the camp to white" gui campfire_keeps_local_contrast_over_the_midtone_cold_fill <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '            intensity: 25_000_000.0,\n'
+old = '            intensity: 14_000_000.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            intensity: 7_200_000_000.0,\n'))
 PY
@@ -262,9 +264,9 @@ PY
 mutation "cold fill turns warm" gui the_cold_fill_is_chromatically_cold_and_the_camp_is_chromatically_warm <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '        ambient: Color::srgb_u8(120, 140, 165),\n'
+old = '        ambient: Color::srgb_u8(108, 128, 170),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        ambient: Color::srgb_u8(165, 140, 120),\n'))
+p.write_text(s.replace(old, '        ambient: Color::srgb_u8(170, 128, 108),\n'))
 PY
 
 mutation "ground value check reads the mean" gui the_ground_median_reads_the_valley_floor_and_ignores_the_sky <<'PY'
@@ -295,7 +297,7 @@ PY
 mutation "directional tint goes unpinned" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = '        directional: Color::srgb_u8(150, 190, 180),\n'
+old = '        directional: Color::srgb_u8(178, 200, 240),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        directional: Color::srgb_u8(73, 157, 144),\n'))
 PY

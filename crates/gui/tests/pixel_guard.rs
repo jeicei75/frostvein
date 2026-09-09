@@ -170,11 +170,12 @@ impl Daemon {
         Self { child, port }
     }
 
-    /// One real client run, decoded. The exit status is deliberately NOT asserted: the capture's
-    /// near-white range check has been breached on `main` since before story 10.7 and exits 101,
-    /// and `save_before_validate` writes the PNG before validating it. Asserting success here would
-    /// make this guard fail for a reason that has nothing to do with the pixels it came to read --
-    /// and "raise the ceiling so my run goes green" is exactly what 10.7's AC7 forbids.
+    /// One real client run, decoded. The exit status is deliberately NOT asserted: the all-off
+    /// capture always exits 101 because its intentional darkness trips `WARM_PIXEL_FLOOR`
+    /// ("capture contains fewer than 3000 warm-lit pixels"), not the near-white ceiling.
+    /// `write_png_before_validate` leaves its PNG on disk first. Asserting success here would make
+    /// this guard fail for a reason that has nothing to do with the pixels it came to read -- and
+    /// "raise the ceiling so my run goes green" is exactly what 10.7's AC7 forbids.
     fn capture(&self, label: &str, extra: &[&str]) -> (Vec<[u8; 4]>, usize, usize) {
         let out = std::env::temp_dir().join(format!(
             "frostvein-pixel-guard-{}-{label}.png",
@@ -278,22 +279,11 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
     let daemon = Daemon::spawn();
 
     let above = daemon.dwarf_report(&["--subdiv", "1", "--z", "9", "--frames", FRAMES]);
-    // `--static-world` because this capture is not about motion and CANNOT be: cut below the
-    // dwarves, none of them is drawn, so `mid_blend_frames` and `position_changes` both stay 0 and
-    // the motion instrument fails on a frame that is exactly what the test came to see. This run
-    // has panicked on every execution since Part A; nothing noticed, because `dwarf_report`
-    // discarded the exit status. The underlying defect is that `motion_assertions_apply` keys off
-    // dwarves in the MIRROR rather than dwarves within the captured SLICE -- issue #77 -- and it
-    // is deliberately not fixed here: narrowing that predicate touches every capture in the suite.
-    let below = daemon.dwarf_report(&[
-        "--subdiv",
-        "1",
-        "--z",
-        "5",
-        "--frames",
-        "700",
-        "--static-world",
-    ]);
+    // Was 700 frames. Below the cut there is no dwarf to report on, so this run cannot fire on
+    // success and must wait out the report deadline -- which used to be counted only in FRAMES and
+    // so cost this software renderer over three minutes (0.313 s/frame, measured 2026-09-08). The
+    // deadline now also trips on wall clock, so FRAMES is past it with room to spare.
+    let below = daemon.dwarf_report(&["--subdiv", "1", "--z", "5", "--frames", FRAMES]);
     println!("AC10 dwarf line: above the cut {above:?} / below {below:?}");
 
     assert_eq!(
@@ -310,6 +300,37 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
         above, below,
         "the line must change with the state it claims to report"
     );
+}
+
+/// Issue #77: a capture cut below every dwarf must not demand motion its own slice cannot draw.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn a_capture_below_the_dwarves_skips_motion_but_still_writes_a_png() {
+    let daemon = Daemon::spawn();
+    let out = std::env::temp_dir().join(format!(
+        "frostvein-below-dwarf-capture-{}.png",
+        std::process::id()
+    ));
+    let result = Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg(daemon.port.to_string())
+        .args(["--headless", "--capture"])
+        .arg(out.to_str().expect("a utf-8 scratch path"))
+        // FRAMES, not 700: the report deadline now trips on wall clock too. See the note in
+        // `the_dwarf_startup_line_reports_what_was_actually_drawn`.
+        .args(["--subdiv", "1", "--z", "5", "--frames", FRAMES])
+        .output()
+        .expect("the client must run");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        result.status.success(),
+        "a capture below every dwarf must exit cleanly; it exited {:?}\n{stderr}",
+        result.status.code()
+    );
+    assert!(
+        out.exists(),
+        "the below-dwarf capture must leave its requested PNG on disk"
+    );
+    std::fs::remove_file(out).expect("the temporary capture must be removable");
 }
 
 /// AC6: the startup line reports the RESOLVED asset source, and it MOVES.

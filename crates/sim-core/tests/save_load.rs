@@ -65,13 +65,13 @@ fn save_load_then_tick_matches_never_saved() {
     // with solid below. Wall the four orthogonal neighbours in and no standing position exists,
     // so the job is queued and retried forever and the designation never dies. That is the same
     // mechanism the 7.2 vehicle session saw live as a permanent field of blue marks.
-    let dy = if worker.y + 5 < saved.dims().y as i32 {
+    let dy = if worker.y + 10 < saved.dims().y as i32 {
         1
     } else {
         -1
     };
     let buried_pos = Pos {
-        y: worker.y + dy * 5,
+        y: worker.y + dy * 10,
         ..worker
     };
     for world in [&mut saved, &mut control] {

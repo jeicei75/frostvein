@@ -1611,37 +1611,41 @@ impl World {
     }
 }
 
+/// At F's lighting, moving the torch ring from ±2 to ±8 cells reduced near-white from 1.2713%
+/// to 0.7235% and raised the ground median from 69 to 82; dimming lowered both instead.
+const TORCH_RING_OFFSET: i32 = 8;
+
 fn camp_emitters(camp: Pos) -> [(Pos, LightKind); 5] {
     [
         (camp, LightKind::Campfire),
         (
             Pos {
-                x: camp.x - 2,
-                y: camp.y - 2,
+                x: camp.x - TORCH_RING_OFFSET,
+                y: camp.y - TORCH_RING_OFFSET,
                 ..camp
             },
             LightKind::Torch,
         ),
         (
             Pos {
-                x: camp.x + 2,
-                y: camp.y - 2,
+                x: camp.x + TORCH_RING_OFFSET,
+                y: camp.y - TORCH_RING_OFFSET,
                 ..camp
             },
             LightKind::Torch,
         ),
         (
             Pos {
-                x: camp.x - 2,
-                y: camp.y + 2,
+                x: camp.x - TORCH_RING_OFFSET,
+                y: camp.y + TORCH_RING_OFFSET,
                 ..camp
             },
             LightKind::Torch,
         ),
         (
             Pos {
-                x: camp.x + 2,
-                y: camp.y + 2,
+                x: camp.x + TORCH_RING_OFFSET,
+                y: camp.y + TORCH_RING_OFFSET,
                 ..camp
             },
             LightKind::Torch,
@@ -1715,8 +1719,8 @@ mod tests {
                 (
                     super::Id(6),
                     Pos {
-                        x: camp.x - 2,
-                        y: camp.y - 2,
+                        x: camp.x - 8,
+                        y: camp.y - 8,
                         ..camp
                     },
                     super::LightKind::Torch,
@@ -1724,8 +1728,8 @@ mod tests {
                 (
                     super::Id(7),
                     Pos {
-                        x: camp.x + 2,
-                        y: camp.y - 2,
+                        x: camp.x + 8,
+                        y: camp.y - 8,
                         ..camp
                     },
                     super::LightKind::Torch,
@@ -1733,8 +1737,8 @@ mod tests {
                 (
                     super::Id(8),
                     Pos {
-                        x: camp.x - 2,
-                        y: camp.y + 2,
+                        x: camp.x - 8,
+                        y: camp.y + 8,
                         ..camp
                     },
                     super::LightKind::Torch,
@@ -1742,8 +1746,8 @@ mod tests {
                 (
                     super::Id(9),
                     Pos {
-                        x: camp.x + 2,
-                        y: camp.y + 2,
+                        x: camp.x + 8,
+                        y: camp.y + 8,
                         ..camp
                     },
                     super::LightKind::Torch,

@@ -41,11 +41,11 @@ pub fn night_lighting() -> NightLighting {
     NightLighting {
         sky: Color::srgb_u8(5, 12, 28),
         star: Color::srgb_u8(173, 196, 220),
-        ambient: Color::srgb_u8(120, 140, 165),
-        ambient_brightness: 4_500.0,
+        ambient: Color::srgb_u8(108, 128, 170),
+        ambient_brightness: 1_500.0,
         aurora: Color::srgb_u8(73, 157, 144),
-        directional: Color::srgb_u8(150, 190, 180),
-        directional_illuminance: 22_000.0,
+        directional: Color::srgb_u8(178, 200, 240),
+        directional_illuminance: 7_000.0,
     }
 }
 
@@ -56,8 +56,8 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
         // keeps white for the emitter faces alone (AC9).
         LightKind::Torch => LightProperties {
             color: Color::srgb_u8(255, 140, 62),
-            intensity: 14_000_000.0,
-            range: 20.0,
+            intensity: 7_000_000.0,
+            range: 14.0,
             flicker_amplitude: 0.30,
             flicker_hz: 1.7,
         },
@@ -73,15 +73,28 @@ pub fn light_properties(kind: LightKind) -> LightProperties {
             // sqrt(intensity), shrinks ~12%. Rejected: amplitude -> 0.25, which leaves the peak
             // 12.6% high and the blown pool only 5.5% smaller -- it treats the still frame, which
             // was never the complaint.
-            intensity: 25_000_000.0,
-            range: 28.0,
+            // Superseded by 10.8's approved moonlit camp: the 14.0M base keeps the unchanged
+            // flicker and peak within the standing APPROVED_PEAK while the widened torch ring
+            // prevents the emitters from pooling at the fire.
+            intensity: 14_000_000.0,
+            range: 20.0,
             flicker_amplitude: 0.40,
             flicker_hz: 0.9,
         },
         LightKind::Lantern => LightProperties {
             color: Color::srgb_u8(255, 195, 110),
-            intensity: 5_000_000.0,
-            range: 14.0,
+            // RULED 2026-09-08 (Wolf): "lanterns are now still way too strong", then a sixth,
+            // then a third once the measurement showed a sixth stops CASTING. At the approved
+            // treatment the lanterns carried 55.5% of near-white and 86.4% of the blown pool --
+            // not because they got brighter but because the torches moved out to +/-8 cells and
+            // these did not, so whatever sat at the camp centre inherited the bright core.
+            // A third takes near-white 0.7814 -> 0.3493 % and the blown pool 0.4544 -> 0.2154 %
+            // while the valley floor barely moves (82.5 -> 81), so it is surgical. A SIXTH was
+            // measured and rejected: its warm spread falls BELOW the noise floor (warm-lit 1.0x,
+            // near-white 0.3x), leaving a bright speck that is largely the emissive face rather
+            // than light it casts. This value sits exactly on LANTERN_VISIBLE_INTENSITY_FLOOR.
+            intensity: 1_000_000.0,
+            range: 10.0,
             flicker_amplitude: 0.05,
             flicker_hz: 1.3,
         },
@@ -335,11 +348,11 @@ mod tests {
         }
 
         let lights = [
-            (LightKind::Torch, [255, 140, 62], 14_000_000.0, 20.0),
-            (LightKind::Campfire, [255, 173, 92], 25_000_000.0, 28.0),
+            (LightKind::Torch, [255, 140, 62], 7_000_000.0, 14.0),
+            (LightKind::Campfire, [255, 173, 92], 14_000_000.0, 20.0),
             // Dropped from 11M/16 on 2026-08-20: five moving lanterns over five static
             // emitters read blown out on the vehicle, which no range check can see.
-            (LightKind::Lantern, [255, 195, 110], 5_000_000.0, 14.0),
+            (LightKind::Lantern, [255, 195, 110], 1_000_000.0, 10.0),
         ];
         for (kind, rgb, intensity, range) in lights {
             let actual = light_properties(kind);
@@ -403,18 +416,18 @@ mod tests {
         );
         assert_eq!(
             lighting.ambient.to_srgba().to_u8_array_no_alpha(),
-            [120, 140, 165]
+            [108, 128, 170]
         );
         assert_eq!(
             lighting.directional.to_srgba().to_u8_array_no_alpha(),
-            [150, 190, 180]
+            [178, 200, 240]
         );
         assert_eq!(
             lighting.aurora.to_srgba().to_u8_array_no_alpha(),
             [73, 157, 144]
         );
-        assert_eq!(lighting.ambient_brightness, 4_500.0);
-        assert_eq!(lighting.directional_illuminance, 22_000.0);
+        assert_eq!(lighting.ambient_brightness, 1_500.0);
+        assert_eq!(lighting.directional_illuminance, 7_000.0);
 
         let entities = [
             (EntityKind::Dwarf, [151, 116, 96], 0.75),
@@ -582,6 +595,12 @@ mod tests {
         let lighting = night_lighting();
         let cold_fill = lighting.ambient_brightness + lighting.directional_illuminance;
         let ratio = warm_camp_lux / cold_fill;
+
+        // The approved table changes both addends of cold fill (4,500 + 22,000 -> 1,500 +
+        // 7,000), so the old 2.93 ratio is no longer the expectation; 14M at the unchanged
+        // 1.40 peak yields 5.10.
+        const APPROVED_RATIO: f32 = 5.097_119;
+        assert!((ratio - APPROVED_RATIO).abs() < 0.000_1, "ratio {ratio}");
 
         // The band above is a broad sanity range and, on its own, STILL would not have caught
         // 6.1's raise -- 44.8M sits at ratio 3.74, comfortably inside 6.0. What was missing is a

@@ -12,7 +12,7 @@ use bevy::{
         With, Without,
     },
     render::render_resource::TextureFormat,
-    render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
+    render::view::screenshot::{Screenshot, ScreenshotCaptured},
 };
 use client_core::Mirror;
 use protocol::{EntityKind, JobState, LightKind, Tile};
@@ -33,6 +33,7 @@ use crate::{
 };
 use bevy::ecs::change_detection::DetectChanges;
 use bevy::window::PrimaryWindow;
+use image::ImageFormat;
 
 #[derive(Debug, Clone, Copy)]
 pub struct DrawStats {
@@ -328,12 +329,15 @@ fn collect_draw_stats(
 /// MIRROR whether any dwarf sits at or below the cut: an empty observation means "the slice hides
 /// them" AND "entity projection is broken", and keying off the observation alone let every capture
 /// below the top — which is every capture this story takes — exit 0 on a total lantern regression.
-/// Whether this world can move at all. A mirror with no dwarves cannot report a position change
-/// or a mid-blend frame, so the motion instrument has nothing to say about it.
-fn motion_assertions_apply(mirror: &Mirror) -> bool {
+/// Whether the captured slice can draw a dwarf that the motion instrument could observe.
+///
+/// Ask the MIRROR rather than the projection: an empty projection means either that the requested
+/// cut correctly hides every dwarf or that entity projection has regressed altogether. The slice
+/// still matters, though — only a drawn dwarf can contribute a position change or mid-blend frame.
+fn motion_assertions_apply(mirror: &Mirror, slice_level: i32) -> bool {
     mirror
         .entities()
-        .any(|entity| entity.kind == EntityKind::Dwarf)
+        .any(|entity| entity.kind == EntityKind::Dwarf && entity.pos[2] <= slice_level)
 }
 
 fn lantern_assertions_apply(mirror: &Mirror, level: i32) -> bool {
@@ -568,14 +572,16 @@ pub const GROUND_LUMINANCE_CEILING: u8 = 180;
 /// luminance. The star shell (192.9 luma) stays below it, so the measure follows the pool.
 pub const BLOWN_POOL_LUMINANCE_THRESHOLD: u8 = 200;
 
-/// `boot7.png`, the 5.4 Bevy frame Wolf approved, measures a 0.6651% largest near-white pool.
-pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651_476;
+/// `approved-moonlit-camp-3479a43-a.png` measures a 0.47916669% largest near-white pool and
+/// `approved-moonlit-camp-3479a43-b.png` measures 0.33452690%; worst plus the 0.14463979 pp
+/// same-build swing is 0.62380647%.
+pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_238_064_7;
 
 /// Fraction of the frame at or above [`BLOWN_POOL_LUMINANCE_THRESHOLD`], **counted rather than
-/// connected**. Calibrated the same way as the pool ceiling — on `boot7.png`, the frame Wolf
-/// approved, which measures 1.5630426 % (14,405 of 921,600 pixels) against the rejected `7-2-marks-vista.png` at
-/// 1.8395 %. Like the pool ceiling it is boot7's own figure to the digit, so the approved frame
-/// sits exactly AT the bar with no tolerance — deliberate, and the same rule the pool follows.
+/// connected**. `approved-moonlit-camp-3479a43-a.png` measures 0.82899302% and
+/// `approved-moonlit-camp-3479a43-b.png` measures 0.71191406%; worst plus the 0.11707896 pp
+/// same-build swing is 0.94607202%. This makes room for the approved pair's observed jitter
+/// instead of requiring a frame to sit exactly at the bar.
 ///
 /// WHY THIS EXISTS, measured 2026-08-29 while closing 9.1's AC13. `largest_blown_pool_fraction`
 /// measures a CONNECTED component, and connectivity has a cliff: a near-white region fragments at
@@ -593,7 +599,7 @@ pub const BLOWN_POOL_FRACTION_CEILING: f32 = 0.006_651_476;
 ///
 /// So: **area is what is asserted**, because it survives both renderers; the pool stays as a
 /// reported diagnostic and must not be read off a headless frame.
-pub const NEAR_WHITE_AREA_CEILING: f32 = 0.015_630_426;
+pub const NEAR_WHITE_AREA_CEILING: f32 = 0.009_460_72;
 
 fn luminance(pixel: [u8; 4]) -> f32 {
     0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32
@@ -1066,22 +1072,29 @@ pub fn capture_after_frames(
                         "motion: --static-world -- motion assertions skipped for this \
                          --at-tick capture"
                     );
-                } else if motion_assertions_apply(&mirror.0) {
+                } else if motion_assertions_apply(&mirror.0, slice.level()) {
                     capture.motion.assert_tick_floor(ticks_after_start as usize);
                     capture.motion.assert_motion(capture.expect_work);
                 } else {
                     println!(
-                        "motion: the mirror holds no dwarves — motion assertions skipped for \
-                         this --at-tick capture"
+                        "motion: no dwarf sits at or below z {} — motion assertions skipped for \
+                         this --at-tick capture",
+                        slice.level()
                     );
                 }
             }
             None if capture.static_world => {}
-            None => capture.motion.assert_valid(capture.expect_work),
+            None if motion_assertions_apply(&mirror.0, slice.level()) => {
+                capture.motion.assert_valid(capture.expect_work);
+            }
+            None => println!(
+                "motion: no dwarf sits at or below z {} — motion assertions skipped for this capture",
+                slice.level()
+            ),
         }
         capture.requested = true;
         // Headless runs have no window to screenshot; they draw into an offscreen texture and the
-        // shot is taken from that instead. Everything downstream -- save_to_disk, the range checks
+        // shot is taken from that instead. Everything downstream -- the PNG write, the range checks
         // and the pixel instruments -- is identical, which is the point: the instrument does not
         // change when the surface does.
         let shot = match headless.as_deref() {
@@ -1250,16 +1263,10 @@ fn exit_after_capture(_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit
 
 /// Writes the PNG and only THEN validates it, in one observer.
 ///
-/// These were two observers on the same entity — `save_to_disk` registered first, the range
-/// checks second — and Bevy runs entity observers for one event in an unspecified order. It
-/// consistently ran the checks first, so a failing range check panicked before the file was
-/// ever written: the run whose frame most needed looking at was the one run that produced no
-/// frame. Measured on the vehicle 2026-08-20, and visible in every passing run's log too, where
-/// `capture range check:` prints above `Screenshot saved to`.
-///
-/// Sequencing them inside a single observer is the fix; registration order cannot express it.
+/// The range check deliberately panics on a bad frame, which may end the process before an
+/// independent observer gets a chance to finish its work. Encode and write here so returning from
+/// the save closure means the PNG is already on disk before validation is allowed to panic.
 fn save_then_validate(path: PathBuf, slice: SliceLevel) -> impl FnMut(On<ScreenshotCaptured>) {
-    let mut save = save_to_disk(path);
     move |event: On<ScreenshotCaptured>| {
         let bytes = event
             .image
@@ -1269,22 +1276,42 @@ fn save_then_validate(path: PathBuf, slice: SliceLevel) -> impl FnMut(On<Screens
             .to_vec();
         let format = event.image.texture_descriptor.format;
         let size = event.image.texture_descriptor.size;
-        // The saver consumes the event, so the pixels are taken first. It is synchronous: it
-        // writes the file and logs before returning, so the PNG exists by the next line.
-        save_before_validate(
-            || save(event),
-            || {
-                validate_capture_ranges(
-                    &bytes,
-                    format,
-                    size.width,
-                    size.height,
-                    range_band_applies(slice),
-                    slice.level(),
-                )
-            },
-        );
+        write_png_before_validate(&path, event.image.clone(), || {
+            // Shape first: a wrong-shape frame makes every figure below incomparable, and the
+            // percentages would not show it. The PNG is already written by the time this runs.
+            assert_calibrated_frame_shape(size.width, size.height);
+            validate_capture_ranges(
+                &bytes,
+                format,
+                size.width,
+                size.height,
+                range_band_applies(slice),
+                slice.level(),
+            )
+        });
     }
+}
+
+/// Encodes the captured image synchronously, so a successful return is a durable PNG rather than
+/// a request another observer might lose to the panic exit.
+fn write_capture_png(path: &std::path::Path, screenshot: bevy::image::Image) {
+    screenshot
+        .try_into_dynamic()
+        .expect("capture screenshot must use a PNG-encodable pixel format")
+        // Screenshot alpha stores HDR brightness; match Bevy's own helper and preserve the
+        // visible RGB frame the range checks just judged.
+        .to_rgb8()
+        .save_with_format(path, ImageFormat::Png)
+        .unwrap_or_else(|error| panic!("capture PNG write to {} failed: {error}", path.display()));
+}
+
+/// Runs validation only after a synchronously encoded capture exists on disk.
+fn write_png_before_validate(
+    path: &std::path::Path,
+    screenshot: bevy::image::Image,
+    validate: impl FnOnce(),
+) {
+    save_before_validate(|| write_capture_png(path, screenshot), validate);
 }
 
 /// Writes first, judges second — the ordering itself, split out so it can be tested.
@@ -1312,6 +1339,39 @@ fn save_before_validate(save: impl FnOnce(), validate: impl FnOnce()) {
 /// capture stories 6.1 and 6.2 take — is judged exactly as before.
 fn range_band_applies(slice: SliceLevel) -> bool {
     slice.level() >= slice.top()
+}
+
+/// The one frame shape every calibrated capture constant was measured at.
+///
+/// `--headless` forces it (`ingest::HEADLESS_SIZE` derives from this constant so the two cannot
+/// drift). A WINDOWED capture does not: it takes whatever size the window happens to be, so an
+/// operator who drags the window mid-session silently changes the shape the pixel-region
+/// instruments read. `near-white-area` is a percentage, which makes a wrong-shape frame look
+/// perfectly comparable while the emissive highlights it counts occupy a different fraction of
+/// it -- exactly the kind of number this repo keeps having to withdraw.
+pub const CAPTURE_SIZE: (u32, u32) = (1280, 720);
+
+/// Refuses a capture that is not the shape the constants were calibrated at.
+///
+/// Deliberately a panic and not a warning: the ceilings are judged in percentages, so a
+/// wrong-shape frame produces a figure that reads as comparable and is not. Called from inside
+/// the post-write closure, so **the PNG is already on disk** when this fires (issue #72) and the
+/// frame can still be looked at.
+///
+/// NOTE: cannot be exercised end-to-end in the devpod -- there is no window, so every capture here
+/// is headless and already the right shape. The unit test below is the whole of its coverage.
+fn assert_calibrated_frame_shape(width: u32, height: u32) {
+    assert_eq!(
+        (width, height),
+        CAPTURE_SIZE,
+        "capture range check: this frame is {}x{}, but every calibrated constant was measured at \
+         {}x{}. A percentage over a different frame shape is not the same measurement. Restore the \
+         window size or run --headless; the PNG is on disk and readable.",
+        width,
+        height,
+        CAPTURE_SIZE.0,
+        CAPTURE_SIZE.1
+    );
 }
 
 pub fn validate_capture_ranges(
@@ -1351,7 +1411,8 @@ fn validate_capture_ranges_with_report(
     let p99 = p99_luminance(&pixels);
     report(&format!(
         "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \
-         near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1}",
+         near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1} \
+         resolution={width}x{height}",
         near_white * 100.0,
         blown_pool * 100.0
     ));
@@ -1448,7 +1509,14 @@ mod tests {
     /// were two observers on one event, Bevy runs those in an unspecified order, and it picked the
     /// checks first. Measured on the vehicle — a z 9 capture panicked on the ground-luminance floor
     /// and wrote no PNG — and visible in every passing run's log too, where `capture range check:`
-    /// prints above `Screenshot saved to`.
+    /// printed above `Screenshot saved to`.
+    ///
+    /// ↳ Sequencing them inside ONE observer fixed that, and it was not enough: `save_to_disk`
+    /// only QUEUES the write on Bevy's async screenshot task, so under the full tier's concurrent
+    /// llvmpipe load the flush could still lose to the panic exit (issue #72). Story 10.8 replaced
+    /// the queued saver with a synchronous encode, so returning from the save half means the PNG
+    /// is already on disk. `Screenshot saved to` no longer appears in a capture's log — this crate
+    /// writes the file itself.
     ///
     /// The validation must still fail loudly. The point is only that the evidence survives it.
     #[test]
@@ -1473,6 +1541,54 @@ mod tests {
             "the PNG must be written before the range checks can panic, or a failing capture \
              destroys the frame that would explain it"
         );
+    }
+
+    /// AC16's contract is a real file, not an in-memory "saved" flag: a range-check panic must
+    /// leave a decodable PNG behind for the operator to inspect.
+    #[test]
+    fn a_failed_range_check_leaves_the_capture_png_on_disk() {
+        use bevy::{
+            asset::RenderAssetUsages,
+            image::Image,
+            render::render_resource::{Extent3d, TextureDimension},
+        };
+        use image::GenericImageView;
+
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-capture-before-validate-{}.png",
+            std::process::id()
+        ));
+        let screenshot = Image::new_fill(
+            Extent3d {
+                width: 2,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[42, 80, 120, 255],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::MAIN_WORLD,
+        );
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            write_png_before_validate(&path, screenshot, || {
+                panic!("capture contains fewer than 3000 warm-lit pixels")
+            });
+        }));
+        std::panic::set_hook(previous);
+
+        assert!(
+            outcome.is_err(),
+            "the failed range check must still end the capture"
+        );
+        assert!(
+            path.exists(),
+            "the PNG must be on disk before a range-check panic can end the process"
+        );
+        let decoded = image::open(&path).expect("the saved capture must be a decodable PNG");
+        assert_eq!(decoded.dimensions(), (2, 1));
+        std::fs::remove_file(path).expect("the temporary capture must be removable");
     }
 
     /// Hand-written oracle: a 4x4 frame whose centre window is exactly the four pixels at
@@ -1597,9 +1713,66 @@ mod tests {
             reported.get(),
             "the metrics must be reported before the ceiling panics"
         );
+
         assert!(
             outcome.is_err(),
             "the ceiling must still make the observer panic"
+        );
+    }
+
+    /// A windowed capture at the wrong size is refused, not reported.
+    ///
+    /// The vehicle's window does not start maximised and the operator resizes it freely, so this
+    /// is reachable in normal use. `near-white-area` is a PERCENTAGE, so a 2560x1440 frame yields
+    /// a figure that reads as directly comparable to a 1280x720 ceiling and is not -- the
+    /// emissive highlights it counts occupy a different fraction of a differently-shaped frame.
+    #[test]
+    fn a_capture_at_the_wrong_frame_shape_is_refused() {
+        assert_calibrated_frame_shape(CAPTURE_SIZE.0, CAPTURE_SIZE.1);
+
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcomes =
+            [(2560, 1440), (1920, 1080), (1280, 721), (1281, 720)].map(|(width, height)| {
+                let outcome =
+                    std::panic::catch_unwind(move || assert_calibrated_frame_shape(width, height));
+                (width, height, outcome.is_err())
+            });
+        std::panic::set_hook(previous);
+
+        for (width, height, refused) in outcomes {
+            assert!(
+                refused,
+                "{width}x{height} is not the calibrated shape and must be refused"
+            );
+        }
+    }
+
+    /// The reported line names the frame shape it measured.
+    ///
+    /// Without it a capture and its figures are unfalsifiable after the fact: every committed
+    /// range-check line in this repo was taken on trust that the frame was 1280x720, and the
+    /// windowed path never enforced it.
+    #[test]
+    fn the_range_check_line_reports_the_frame_shape() {
+        // Neither black nor uniform: both are asserted after the report line is emitted, and a
+        // panic there would end the run before this test could read what was reported.
+        let bytes = (0..64 * 64 * 4)
+            .map(|index| 90u8.wrapping_add((index % 7) as u8))
+            .collect::<Vec<_>>();
+        let mut lines = Vec::new();
+        validate_capture_ranges_with_report(
+            &bytes,
+            TextureFormat::Rgba8Unorm,
+            64,
+            64,
+            false,
+            9,
+            |line| lines.push(line.to_string()),
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("resolution=64x64")),
+            "the range check must name the frame shape it measured; got {lines:?}"
         );
     }
 
@@ -1642,6 +1815,36 @@ mod tests {
         assert!(
             lantern_assertions_apply(&mirror_with_dwarf_at(0), 1),
             "a dwarf BELOW the cut is visible, so a missing lantern there is a real defect"
+        );
+    }
+
+    #[test]
+    fn motion_assertions_apply_only_when_a_dwarf_is_drawn_in_the_captured_slice() {
+        assert!(
+            motion_assertions_apply(&mirror_with_dwarf_at(1), 1),
+            "a dwarf at the cut is drawn and must keep the motion health checks live"
+        );
+        assert!(
+            !motion_assertions_apply(&mirror_with_dwarf_at(2), 1),
+            "a dwarf above the cut is not drawn, so it cannot produce a mid-blend frame"
+        );
+
+        use protocol::{Dims, Snapshot, Speed};
+        let empty = Mirror::from_snapshot(Snapshot {
+            msg_type: protocol::MessageType::Snapshot,
+            dims: Dims { x: 1, y: 1, z: 3 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone); 3],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .expect("an empty hand-built snapshot must load");
+        assert!(
+            !motion_assertions_apply(&empty, 2),
+            "an empty mirror has no drawable dwarf and cannot report motion"
         );
     }
 

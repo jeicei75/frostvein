@@ -300,7 +300,7 @@ fn spawn_positions_for_seed_42_are_pinned() {
         positions,
         vec![
             Pos {
-                x: 64,
+                x: 65,
                 y: 65,
                 z: 25
             },
@@ -315,7 +315,7 @@ fn spawn_positions_for_seed_42_are_pinned() {
                 z: 25
             },
             Pos {
-                x: 67,
+                x: 66,
                 y: 66,
                 z: 25
             },
