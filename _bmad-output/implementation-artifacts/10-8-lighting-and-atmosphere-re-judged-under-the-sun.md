@@ -525,11 +525,13 @@ Issue #75's *"lighting is still way off"* is **no longer true**, which is UX-DR2
         field to the CAMERA, which is a mechanism and belongs in Epic 11.2, not in a
         constants-only AC. Recorded, not built.
 
-- [~] **Task 6c — The instrument's own defects** (AC: 16, 17) — code complete, AC16's five-run
-      evidence OWED (see Completion Notes)
-  - [~] #72: the ordering fix landed and is pinned by a deterministic test, but the RACE ITSELF was
-        never reproduced and the five green full-tier runs were NOT taken — the dev session was
-        cut off by a Codex quota exhaustion mid-run. AC16 is NOT satisfied.
+- [~] **Task 6c — The instrument's own defects** (AC: 16, 17) — **five-run evidence TAKEN
+      2026-09-09 (5/5 green); AC16's RED half is NOT reproducible in the devpod (3 attempts)**
+  - [~] #72: the ordering fix landed and is pinned by a deterministic test. **The five green
+        full-tier runs ARE now taken (2026-09-09, 5/5, zero `wrote no PNG`).** The RACE ITSELF is
+        still not reproduced: reverting to the async `save_to_disk` and running the all-off guard
+        three times left the PNG on disk every time. **AC16 remains NOT satisfied as written**, and
+        the reason is now measured rather than owed — see the Dev Agent Record.
   - [x] #77: reproduced with `--z 5 --capture` (below the dwarves) → motion panic, exit 101; made
         `motion_assertions_apply` read the captured slice; RED then green.
   - [x] Do not close the issues from a commit keyword — no commit on this branch names a closing
@@ -543,9 +545,10 @@ Issue #75's *"lighting is still way off"* is **no longer true**, which is UX-DR2
 
 - [~] **Task 8 — Verification and the closing sitting** (AC: 1, 12) — the card is WRITTEN and
       waiting on Wolf; the sitting itself is not walked
-  - [ ] Execute the Verification recipe, RED first; paste outputs into the Dev Agent Record.
-  - [ ] Full `scripts/gate.sh` green, pasted. If `pixel_guard.rs` fails with "wrote no PNG", that
-        is issue #72 — re-run the guard alone and record both; never read around it.
+  - [x] Verification recipe executed 2026-09-09, RED then GREEN, pasted in the Dev Agent Record
+        above (AC5's two exit-0 runs, AC6's RED at the boot7 ceiling and its two findings).
+  - [x] Full `scripts/gate.sh` green — 486s at the push, plus 484s / 541s / 534s earlier the same
+        day. No `wrote no PNG` failure occurred in any of them, nor in AC16's five tier runs.
   - [x] Vehicle card WRITTEN 2026-09-09: `10-8-signoff/task-8-vehicle-runbook.md`, in the shape of
         `10-4-signoff/task-6-vehicle-runbook.md`, launched via `scripts/launch-gui.ps1` with
         `-GuiArgs @(...)` (its `--` forwarding is issue #81). Every figure in it was MEASURED at
@@ -713,6 +716,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-09 | **AC16's five consecutive full-tier runs TAKEN — 5/5 green, 6 tests each, zero `wrote no PNG`, ~29 min** (342/367/350/355/341 s). **AC16 is still NOT met as written, and the missing half is now a measured finding rather than an unpaid debt: the race does not reproduce here.** The fix was reverted in place — Bevy's async `save_to_disk` restored, the shape whose own comment wrongly called it synchronous — and the all-off pixel guard, which asserts `out.exists()` with a message written for this exact defect, was run against it three times at ~175 s each. **All three passed; the PNG was on disk every time.** The tier-level attempt under concurrency (the condition #72 was originally seen to flake in) was ABANDONED, and why matters more than the experiment: **while the sabotage sat in the shared working tree, Wolf built the vehicle's Windows `gui.exe` from it** and got a binary without the #72 fix, bound for a sitting where a failing capture would lose its PNG. **`gui --version` read `264bf7a` with NO `-dirty` the whole time** — the stamp only refreshes when `build.rs` is touched, so `launch-gui.ps1`'s SHA check would have passed it, and the only signal was two dead-code warnings. Tree restored and checksum-verified; probe not resumed in place. Rule adopted: announce an in-tree probe before and after, or run it in a worktree. **AC1 is discharged** — recipe executed RED then GREEN, pasted in the Dev Agent Record. |
 | 2026-09-09 | **AC6's RED taken, and it exposed that only a LITERAL holds the ceiling.** With `NEAR_WHITE_AREA_CEILING` put back to the boot7 figure (0.015630), `committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see` fails — **but only on the backstop `assert_eq!` at `capture.rs:249`** (`left: 0.01563, right: 0.00946072`). **Every separating assertion still PASSES at the loose ceiling**: approved 0.8290 / 0.7119 % stay under it, boot 1.5630 %, current 1.8395 % and the creation control 2.1686 % stay over it. So the test's power against a ceiling that has been LOOSENED rests entirely on a literal equality — the same shape as the standing "a literal guard misses the maths" lesson. Not changed here (it is a real backstop and it did its job), but recorded: a reviewer must not read the separation asserts as protection against loosening. **Second finding, corroborating the approved-pair outlier above:** re-measuring the committed approved frames from disk gives **near-white 0.8290 % (a) and 0.7119 % (b)**, not the **0.7959 / 0.7670** the record quotes — and the a/b order flips. The figures in the record are not reproducible from the committed artifacts. |
 | 2026-09-09 | **RULING 7 — flake size is HALF, and AC15 (c) is CLOSED.** Wolf, given the ladder and its figures: *"Flake size half"*, on his own direction *"at least half .. dwarves are small"* and his bound *"if we make too small flakes then those will disappear completely"*. `snowflake_scale` `0.3 + 0.18` → **`0.15 + 0.09`** (`atmosphere.rs:214`), citing `AC15c-flake-half-cc54b5e.png`. **The bound was measured BEFORE the value was picked and was not borne out:** the visible flake count holds at 18/15/14/14 from the old size down to a quarter, and only the size falls — a median blob of 24 px becoming 11, 6, then 4. Half keeps 15 of 18 flakes at an 11-px median. **`snowfall_scatters_through_the_camp_read_without_marching_in_rows` is RE-PINNED to the ruled value, not loosened to admit it** (`>= 0.14 && <= 0.25` against an actual 0.1500–0.2395), shown RED against the old bound first. Its "flake sizes must vary" threshold halved WITH the scale, 0.1 → 0.05, which keeps the claim at exactly its old strength (55.8% of the old spread, 55.9% of the new); left at 0.1 the pin would have failed a correctly ruled value, and dropped to a token it would have stopped seeing flakes stop varying. Doc row added. **Caveat carried into the doc: the vanishing point is measured on LAVAPIPE and unconfirmed on the GPU**, and small bright features are exactly where the venues diverge. Full gate GREEN 534s. |
 | 2026-09-09 | **Wolf checked §6 and asked "did we lose something". NOTHING WAS LOST — and the check found that Ruling 2's own explanation was incomplete.** He reported three things: `--subdiv 4` looks unchanged, `--subdiv 1` still shows "silvered walls", and "even with 4 the layer that looks like snow is too thick". Verified: AC14's fix is intact (`990a65a` is an ancestor of his `4738bd4` build, `snow_cap_mesh` is still the top-face quad, untouched since, both pins green). `-4` unchanged is CORRECT — AC14 only touched the k=1 loser. **The other two are one cause, and it is in the SIM:** `worldgen.rs:100` makes every surface tile a full solid cell of `Material::Snow` or `Ice` on a coin flip, one whole cell thick (~2.26 m). The silvered walls are that CELL's own cube faces, not the cap's, so removing the cap's four snow sides could not change them; the "too thick" layer is that cell, with a snow cap on top of it because `has_snow_cap` allows snow on snow. **Ruling 2 said the apparent thickness is the detail carving stand-in. The cap having zero thickness is true and now verified — the k>1 lateral faces take `owner` and never `SnowCap` — but the conclusion does not follow, and the record is corrected in `deferred-work.md`.** **Wolf: "I think we need to have a separate terrain story anyway" and "no need to fix it now"** — nothing tuned, entry re-pointed at that story with a concrete first question (should the surface layer be a full cell at all — a worldgen decision, not a look constant). |
@@ -979,6 +983,64 @@ further log writes, every process gone. The tell is a log whose mtime stops whil
 absent; a `ps` check at the moment of death still showed it alive, so elapsed time alone does not
 distinguish a kill from a slow run. Re-run with `CARGO_BUILD_JOBS=6 RUST_TEST_THREADS=2` and a
 watcher that reports death separately from failure. See [[delegated-runs-get-killed]].
+
+### AC1 and AC16 verification — executed 2026-09-09 at `264bf7a`
+
+**AC5 — two consecutive exit-0 runs at HEAD.** `--headless --frames 160`, one daemon, 1280x720:
+
+```
+capture range check: warm-lit pixels=32467 ground-median-luminance=82 near-white-area=0.4733% blown-pool=0.3011% p99-luminance=173.5   EXIT=0
+capture range check: warm-lit pixels=34686 ground-median-luminance=83 near-white-area=0.6047% blown-pool=0.3418% p99-luminance=180.1   EXIT=0
+```
+
+Filed as `10-8-signoff/head-990a65a-{a,b}.png`. Ceilings: near-white 0.946072 %, pool 0.623806 %.
+**Noise floor at HEAD, worst of the two: mean 0.307 · near-white 0.1314 pp · warm-lit 2,219 px** —
+3.3x the creation floor this story quotes elsewhere, which was measured on a brighter build.
+
+**AC6 — RED then GREEN.** With `NEAR_WHITE_AREA_CEILING` returned to the boot7 figure:
+
+```
+approved approved-a: pool=0.47916669% area=0.82899302% ground=83
+approved approved-b: pool=0.33452690% area=0.71191406% ground=86
+calibration: boot area=1.5630%; current area=1.8395%
+thread '...' panicked at crates/gui/tests/capture.rs:249:5:
+assertion `left == right` failed
+  left: 0.01563
+ right: 0.00946072                                                          FAILED
+```
+
+Restored, GREEN. **Two findings, both recorded in the Change Log:** only the backstop
+`assert_eq!` fails — every separating assertion still passes at the loosened ceiling — and the
+committed approved frames re-measure to 0.8290 / 0.7119 %, not the 0.7959 / 0.7670 in the record.
+
+**AC16 — the five-run half is DISCHARGED. The RED half is NOT, and could not be.**
+
+Five consecutive full-tier runs on the fixed build, all green, zero `wrote no PNG` failures:
+
+```
+run 1: exit=0 | 6 passed | 342.38s        run 4: exit=0 | 6 passed | 355.32s
+run 2: exit=0 | 6 passed | 366.85s        run 5: exit=0 | 6 passed | 340.72s
+run 3: exit=0 | 6 passed | 350.41s
+```
+
+**The race was NOT reproduced, and this is a finding rather than a formality.** The #72 fix was
+reverted in place — Bevy's async `save_to_disk` restored, exactly the shape whose own comment
+wrongly called it synchronous — and the all-off pixel guard run against it. That guard asserts
+`out.exists()` with a message written for this defect, so it is the right instrument. **Three runs,
+~175s each, all PASSED: the PNG was on disk every time.** A tier-level attempt (guards running
+concurrently, the condition under which #72 was originally seen to flake) was started and
+abandoned — see below. **So AC16 as written is NOT met**: the fix is pinned by a deterministic
+ordering test and by five green tier runs, but the race itself has never been observed here.
+Whether that closes AC16 is Wolf's call, not this record's.
+
+**Why the tier-level attempt was abandoned, and it matters more than the experiment.** While the
+sabotage sat in the shared working tree, **Wolf built the vehicle's Windows `gui.exe` from it** and
+got a binary WITHOUT the #72 fix. `gui --version` read `264bf7a` with **no `-dirty`** throughout,
+because the stamp only refreshes when `build.rs` is touched — so `launch-gui.ps1`'s SHA check, the
+guard that exists to refuse a stale binary, would have passed it. The only signal was two
+dead-code warnings. The tree was restored and verified by checksum, and the probe was not
+resumed in place. **Any future in-tree probe must be announced before and after, or run in a
+worktree.**
 
 ### Completion Notes List
 
