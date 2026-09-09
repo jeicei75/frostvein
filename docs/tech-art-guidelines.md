@@ -300,6 +300,15 @@ stays below both (`crates/gui/src/atmosphere.rs`).
   sequences).
 - The same rule covers snowfall: scattered disc positions, per-flake fall speeds and
   phase-preserving respawn.
+- **Flake size is `0.15 + 0.09` (RULED 2026-09-09, Ruling 3 defect (c)).** Wolf: *"flake size at
+  least half .. dwarves are small"*, against the shipped `0.3 + 0.18`. His bound on it — *"if we
+  make too small flakes then those will disappear completely"* — was measured before the value was
+  picked, and is the reason a ladder exists rather than a guess: the visible flake COUNT holds at
+  18/15/14/14 from the old size down to a quarter, and only the size falls, a median blob of 24 px
+  becoming 11, 6, then 4. Half keeps 15 of 18 flakes at an 11-px median. Frames and method in
+  `10-8-signoff/AC15c-flake-size.md`. **Measured on lavapipe: the point at which a flake stops
+  rendering has NOT been confirmed on the delivery GPU**, and small bright features are exactly
+  where the two venues are known to diverge.
 
 Check: `GROUND_LUMINANCE_FLOOR` and `GROUND_LUMINANCE_CEILING` (`crates/gui/src/capture.rs`),
 tested by `the_ground_median_reads_the_valley_floor_and_ignores_the_sky`,

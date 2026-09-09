@@ -212,7 +212,7 @@ pub fn snowflake_speed(index: usize) -> f32 {
 }
 
 pub fn snowflake_scale(index: usize) -> f32 {
-    0.3 + 0.18 * (index as f32 * 0.381_966).fract()
+    0.15 + 0.09 * (index as f32 * 0.381_966).fract()
 }
 
 pub fn sun_direction() -> Vec3 {
@@ -621,10 +621,17 @@ mod tests {
         );
         assert!(speeds.iter().all(|speed| *speed >= 0.6 && *speed <= 1.8));
 
+        // RULED HALF by Wolf, 2026-09-09, on Ruling 3 defect (c) "maybe flakes could be smaller":
+        // "flake size at least half .. dwarves are small". Bounds re-pinned to the ruled value,
+        // NOT loosened to admit it -- `0.15 + 0.09` spans 0.1500 to 0.2395.
         let scales: Vec<f32> = (0..SNOWFLAKE_COUNT).map(snowflake_scale).collect();
-        assert!(scales.iter().all(|scale| *scale >= 0.28 && *scale <= 0.5));
+        assert!(scales.iter().all(|scale| *scale >= 0.14 && *scale <= 0.25));
         let smallest = scales.iter().copied().fold(f32::INFINITY, f32::min);
         let largest = scales.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        assert!(largest - smallest > 0.1, "flake sizes must vary");
+        // Halved WITH the scale, so the claim keeps exactly its old strength: 0.1 was 55.8% of the
+        // old 0.1791 spread, and 0.05 is 55.9% of the new 0.0895 one. Left at 0.1 this assertion
+        // would have failed on a correctly ruled value, which is a pin fighting a ruling; dropped
+        // to a token 0.01 it would have stopped being able to see flakes stop varying at all.
+        assert!(largest - smallest > 0.05, "flake sizes must vary");
     }
 }
