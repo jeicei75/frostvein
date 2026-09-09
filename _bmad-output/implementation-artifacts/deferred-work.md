@@ -1898,6 +1898,24 @@ that is now one keypress.
   more play area for its own sake. Not before the fog doc-vs-code disagreement is settled, because
   that decides whether any world growth is needed at all.
 
+## Ruled out of 10.8 as a MECHANISM: SNOWFALL THAT FILLS THE VIEW AT ANY ANGLE (2026-09-09)
+
+- **Ruling 3 defect (b), *"snowfall does not start from the top of the screen depending view
+  angle"*, cannot be fixed by moving a constant.** Wolf asked directly: *"possible from all view
+  angles?"* — **no.** Flakes spawn in a FIXED disc (`atmosphere.rs:182-196`): radius
+  `SNOWFLAKE_DISC_RADIUS 48.0` around `CAMP_FOCUS`, heights `11.0` to `11.0 +
+  SNOWFLAKE_FALL_SPAN 20.0`. Any camera that looks above that ceiling or past that edge sees the
+  field END, and that is the mechanism rather than a badly chosen number. Widening the disc and
+  the band buys more angles and costs density, because the same `SNOWFLAKE_COUNT 96` then has a
+  larger volume to fill — so it trades one defect for a thinner snowfall.
+  **Making it true at ANY angle means anchoring the field to the CAMERA** so it always fills the
+  frustum, which is how weather is normally done and is a mechanism, not a constant. AC15
+  authorises constants only, which is why 10.8 recorded it instead of building it.
+  **Revisit trigger: Epic 11.2** (DoF and volumetric haze), which is where the atmosphere
+  mechanisms live. If a cheaper answer is wanted first, Wolf naming the framings he actually uses
+  would let the disc and band be sized to cover those — that IS a constant change, and it closes
+  the defect for the views that matter without pretending to close it for all of them.
+
 ## Raised at 10.8's opening sitting: SNOW AS AN ACCRETING LAYER, NOT A SURFACE RULE (2026-09-08)
 
 - **Settled snow should be a layer that grows over time and reveals stone when dug.** Wolf, ruling
