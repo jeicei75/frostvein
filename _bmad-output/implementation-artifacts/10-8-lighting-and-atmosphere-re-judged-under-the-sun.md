@@ -510,12 +510,16 @@ before/after pair that showed it.
         per row naming the mutation. Run `gui --version` afterwards — a mutant build outlives the
         source restore.
 
-- [ ] **Task 8 — Verification and the closing sitting** (AC: 1, 12)
+- [~] **Task 8 — Verification and the closing sitting** (AC: 1, 12) — the card is WRITTEN and
+      waiting on Wolf; the sitting itself is not walked
   - [ ] Execute the Verification recipe, RED first; paste outputs into the Dev Agent Record.
   - [ ] Full `scripts/gate.sh` green, pasted. If `pixel_guard.rs` fails with "wrote no PNG", that
         is issue #72 — re-run the guard alone and record both; never read around it.
-  - [ ] Vehicle card in the shape of `10-4-signoff/task-6-vehicle-runbook.md`, launched via
-        `scripts/launch-gui.ps1` (do NOT use its `--` forwarding — issue #81). It asks for: the
+  - [x] Vehicle card WRITTEN 2026-09-09: `10-8-signoff/task-8-vehicle-runbook.md`, in the shape of
+        `10-4-signoff/task-6-vehicle-runbook.md`, launched via `scripts/launch-gui.ps1` with
+        `-GuiArgs @(...)` (its `--` forwarding is issue #81). Every figure in it was MEASURED at
+        HEAD in the devpod, not predicted, and it leads with the two traps that writing it found:
+        the `approved-*` frame predates Ruling 6, and its `-b` half is an outlier. It asks for: the
         six-word check on lighting, the hover slab on a cliff face near the fire, the three marks at
         working zoom.
   - [ ] **Added by AC14's close:** the k=1 control path at `--subdiv 1` now paints settled snow as
@@ -678,6 +682,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-09 | **Task 8's vehicle card written (`10-8-signoff/task-8-vehicle-runbook.md`), and writing it found that AC5's evidence pair contains an outlier.** `approved-moonlit-camp-3479a43-b.png` is **not the same look as its own pair-mate**: mean 70.967 against a's 65.526, shade-band 45.91 % against 55.32 %. Three same-conditions runs at HEAD sit inside mean 0.31 and `--frames 400` moves it 0.13, so this is neither noise nor animation phase. **Near-white could not see it** — the pair reads 0.7959 / 0.7670 %, which is why nothing flagged it — so the statistic AC5 was judged on is blind to whatever moved. What moved is UNIDENTIFIED; a and today's HEAD agree, so b is the odd frame. AC5's claim is not withdrawn (exit 0 twice is still exit 0 twice, and HEAD reproduces exit 0 three times) but its pair is no longer usable as a noise pair. **Second trap, and the card leads with it:** the frame named `approved-*` PREDATES Ruling 6, which cut the lanterns to a third at `76c7c47`. The frame that matches this build is `candidate-lantern-third-2b9a307.png` (mean 64.727 against HEAD's 64.993). A file called "approved" that no longer matches the build is the 10.7 filename trap again. **Third:** the noise floor this story quotes from creation (near-white 0.040 pp) understates HEAD by 3.3x — measured at HEAD it is 0.1314 pp on near-white, 2,219 px on warm-lit, 0.307 on mean. Any "Nx noise" claim taken on the approved build against the creation floor is overstated. Today's pair filed as `head-990a65a-{a,b}.png`, both exit 0. |
 | 2026-09-09 | **AC14 DONE — the flank rule reaches the losing path.** The k=1 control path drew settled snow as a `Cuboid::new(1.02, 0.08, 1.02)` slab, so four of its faces were snow: silvered trench walls, plus a 2 % overhang lying over whatever the neighbour was — the exact defect Ruling 2 gave to rock. It is now the cell's top face and nothing else, which is the fine path's own mechanism (paint, no thickness). `both_terrain_paths_paint_a_capped_cell_snow_on_its_top_face_only` compares the two meshers in RENDER space through the production mesher, and the answer they must agree on is derived from `world_vector_to_render`, not copied out of it. **Shown RED against the slab: control reported all six axis normals against the fine path's one.** The pre-existing pin `a_capped_cell_paints_snow_…` PASSED against that slab — it reads mask keys, which only the fine path has — so it was corrected to say which path it speaks for rather than deleted. Also corrected: `triangles_derived` multiplied EVERY k=1 entity by 12, which counted the slab; caps are one quad now. Full gate GREEN 484s. **Deliberately not filed: a k=1 before/after pixel pair** — no statistic isolates flank snow, and a changed-pixel count would need its own noise floor to say anything; the material claim is instrumented and the LOOK is carried to Task 8's card as an eye check. |
 | 2026-09-08 | **Ruling 3's fog and rim defects PROBED and CONFIRMED, then DEFERRED by Wolf ("let's not mess with fog now"). Nothing landed; probe reverted, frames kept.** The rim and the fog are the SAME constant, and it is 66 luma darker than the horizon behind it, so the edge cannot fade out — one cause behind both defects. Separately found: `fog_falloff` saturates at 210 while `docs/tech-art-guidelines.md` claims 155 "just past the deepest in-frame terrain at 148", so the fog finishes 62 m after the terrain does and the edge is unhideable by construction. Which of doc or code moved is UNVERIFIED. |
 | 2026-09-08 | **RULING 6: lanterns to a third, and Wolf's first vehicle look is HAPPY.** He picked a sixth first; measuring it showed the warm spread falls below the noise floor there, leaving a speck that is largely the emissive face, so a third is ruled — exactly on `LANTERN_VISIBLE_INTENSITY_FLOOR`, which was NOT moved to let a value pass even though its own comment admits it was never judged. Branch pushed and verified at `76c7c47`, full gate GREEN 469s. **Issue #75's "lighting is still way off" is answered: no longer true.** AC12's two inherited eye-checks and the vehicle card remain open. |
@@ -1021,3 +1026,5 @@ watcher that reports death separately from failure. See [[delegated-runs-get-kil
 | `docs/tech-art-guidelines.md` | approved treatment and recorded camp spacing |
 | `_bmad-output/implementation-artifacts/10-8-signoff/approved-moonlit-camp-3479a43-{a,b}.png` | approved pair, stamped 3479a43 |
 | `crates/gui/src/project.rs` | AC14: `snow_cap_mesh()` is a top-face quad not a slab, `SNOW_CAP_LIFT`, corrected `triangles_derived` arithmetic, the two-path agreement test, the existing pin's claim scoped to the fine path |
+| `_bmad-output/implementation-artifacts/10-8-signoff/task-8-vehicle-runbook.md` | NEW, Task 8's session card, every figure measured at HEAD |
+| `_bmad-output/implementation-artifacts/10-8-signoff/head-990a65a-{a,b}.png` | NEW, the HEAD pair that matches the shipped look, both exit 0 |
