@@ -32,8 +32,9 @@ own pair-mate and 9.6 pp off it on the shade band. Do not use it for anything.
 
 ## Expect these — they are not faults
 
-- **`exit=0`, not 101.** The ceilings were re-calibrated on the approved frame (AC6), so the
-  guard now passes at the shipped look. `exit=101` here IS the finding of the sitting.
+- **`exit=101` on near-white. WALKED 2026-09-09 AND THIS CARD WAS WRONG TO PREDICT exit 0.**
+  See §3 — the ceiling is a DEVPOD constant and the GPU reads the bright tail ~0.5 pp worse. Not a
+  regression, not a look defect.
 - **`touch crates/gui/build.rs` before every build.** Without it the stamp can lag a commit.
 - **Do NOT use `launch-gui.ps1 -- <flag>`** — that form is issue #81 and cannot work; `$Checkout`
   takes position 0 and swallows the flag. Name the parameter: `-GuiArgs @('--subdiv','1')`.
@@ -67,22 +68,55 @@ The script does the SHA check for you and refuses a stale or `-dirty` binary.
 .\scripts\launch-gui.ps1 -GuiArgs @('--capture','10-8-vehicle.png','--frames','20000')
 ```
 
-Measured at HEAD in the devpod, two consecutive runs, both **exit 0**:
+**WALKED ON THE VEHICLE 2026-09-09, build `c124615` — exit 101, and the prediction below was
+mine and it was WRONG.** Ceilings: near-white **0.946072 %**, blown pool **0.623806 %**.
 
-| run | warm-lit | ground median | near-white | blown pool | p99 | exit |
-|---|---:|---:|---:|---:|---:|---|
-| a | 32,467 | 82 | 0.4733 % | 0.3011 % | 173.5 | 0 |
-| b | 34,686 | 83 | 0.6047 % | 0.3418 % | 180.1 | 0 |
+| venue | build | warm-lit | ground median | near-white | blown pool | p99 | exit |
+|---|---|---:|---:|---:|---:|---:|---|
+| **RTX 4080, windowed** | `c124615` | 32,405 | 81 | **1.0930 %** | 0.2811 % | **205.7** | **101** |
+| lavapipe, headless a | `c124615` | 32,467 | 82 | 0.4733 % | 0.3011 % | 173.5 | 0 |
+| lavapipe, headless b | `c124615` | 34,686 | 83 | 0.6047 % | 0.3418 % | 180.1 | 0 |
 
-Ceilings: near-white **0.946072 %**, blown pool **0.623806 %**. Both runs sit under both.
+**THE CEILING IS A DEVPOD CONSTANT AND CANNOT HOLD ON THE GPU.** AC6 re-calibrated it on the
+approved frame, and the approved frame is a lavapipe frame. The gap is not noise and not the look:
 
-**Noise floor at HEAD, worst of the two: mean 0.307 · near-white 0.1314 pp · warm-lit 2,219 px.**
-This is 3.3x the near-white floor the story quotes from creation (0.040 pp) — the creation figure
-was measured on a brighter build and must not be used to judge deltas on this one.
+- **10.4 measured the same thing and wrote it down** — RTX 4080 2.2071 % against lavapipe 1.8159 %
+  on the same constant, `10-4-signoff/README.md` § "The near-white ceiling reads WORSE on the GPU".
+  That card predicted the GPU would come in UNDER the bar; this card predicted exit 0. Both were
+  wrong in the same way, from the same venue assumption.
+- **Two measurements, both an additive ~0.4–0.6 pp GPU penalty**: +0.39 pp at 10.4, +0.49 to
+  +0.62 pp here. Treat it as an OFFSET, not a multiplier — the ratios (1.22x, 1.81x) do not agree
+  and two points cannot support a law either way.
+- **It is confined to the bright tail.** Overall exposure barely moves (mean 66.50 vs 64.99/65.30,
+  shade-band 55.51 % vs 55.44/55.26 %) while p99 goes 180 -> 206 and near-white nearly doubles. A
+  real GPU's specular and emissive highlights are what the devpod is not reproducing.
+- **On the venue that matters the treatment HALVED near-white:** 2.2071 % at 10.4 to 1.0930 % now,
+  same hardware class. This run is evidence the look got better, not worse.
+
+**Do not raise the ceiling to absorb the venue gap** — that is 10.4's standing ruling, and adding
+~0.5 pp of headroom would blind the gate's own regression check by the same amount. The guard runs
+in the devpod, so a devpod ceiling is right for its job; what was wrong was this card expecting it
+to hold here.
+
+**Noise floor at HEAD (devpod), worst of the two: mean 0.307 · near-white 0.1314 pp · warm-lit
+2,219 px.** This is 3.3x the near-white floor the story quotes from creation (0.040 pp) — the
+creation figure was measured on a brighter build and must not be used to judge deltas on this one.
+
+**A vehicle noise floor does not exist:** one GPU capture has ever been taken at this build. A
+second run would say whether 1.0930 % is stable, and it is the cheapest thing left on this card.
 
 `capture range check:` ______________________________________  exit: ______
 
 ## 4. Your eye — AC12's closing half
+
+**RELAUNCH FIRST, WITHOUT `--capture`:**
+
+```powershell
+.\scripts\launch-gui.ps1
+```
+
+The §3 run ends in a panic on the range check, which takes the process with it — so §4 to §6 cannot
+be done in that same window. This card should have said so and did not.
 
 Open `candidate-lantern-third-2b9a307.png` beside the live client. **Not** the `approved-*` pair.
 
