@@ -1911,13 +1911,39 @@ that is now one keypress.
   substance. A real layer means depth in the world state, which is `sim-core` and `protocol` work,
   a new tile or a per-column snow depth, and only then a client rule that draws it.
   **What 10.8 DID settle:** Ruling 2 adopted the k=4 flank rule, stone flanks under a snow cap,
-  and the k=1 slab path is made to match. The *"bit too thick"* half is explicitly NOT a constant:
-  at k=4 the snow has no thickness at all, and the depth the eye reads is the detail carving that
-  `project.rs:1159` labels a **MEASUREMENT STAND-IN** for authored terrain. Tuning it would be
-  tuning a placeholder — see the standing lesson that a placeholder can set the budget.
-  **Revisit trigger:** the first M3 story that touches terrain materials in the simulation, or any
-  story that gives a tile a depth or a covering. Not before authored terrain lands, because until
-  then the thing being judged is the stand-in.
+  and the k=1 slab path was made to match (AC14, `990a65a`).
+
+  **CORRECTION, 2026-09-09 — Ruling 2's answer to the *"bit too thick"* half was INCOMPLETE, and
+  the correction is the reason Wolf called for a separate terrain story.** The ruling said the
+  cap has no thickness and concluded the depth the eye reads is therefore the detail carving
+  (`project.rs:1159`, a MEASUREMENT STAND-IN). The first clause is true and now verified — the
+  k>1 mesher's lateral faces take `owner`, the cell's own slot, and never `SnowCap`, so the cap
+  is genuinely paint with zero thickness. **The conclusion does not follow.** The dominant cause
+  is in the SIM, not the renderer:
+
+  ```
+  worldgen.rs:100   let surface = if rng.random::<bool>() { Material::Snow } else { Material::Ice };
+                    tiles[index(dims, x, y, height)] = Tile::Solid(surface);
+  ```
+
+  **Every surface tile is a full solid cell of Snow or Ice**, one whole cell thick (~2.26 m), on a
+  coin flip. So the thickness Wolf sees is a real one-cell snow layer that no 10.8 constant can
+  thin and no renderer change can fix — and `has_snow_cap` then puts a snow cap on top of it,
+  because it explicitly allows snow to settle on snow. The same fact explains the *"silvered
+  walls"* he saw at `--subdiv 1` on 2026-09-09: those are the snow CELL's own cube faces, not the
+  cap's, so AC14 removing the cap's four snow sides could not and did not change them. **Nothing
+  was lost; the cap fix is intact and pinned.**
+
+  Note how close the shipped world already is to the dream case: the layer exists, and digging it
+  does reveal soil and then stone (`worldgen.rs:92-96`). What is missing is that it is generated
+  once rather than accreting.
+
+  **WOLF'S CALL, 2026-09-09: this gets its own terrain story** — *"I think we need to have a
+  separate terrain story anyway"*, immediately after *"even with 4 the layer that looks like snow
+  is too thick"* and *"but no need to fix it now"*. **Nothing is to be tuned before that story.**
+  **Revisit trigger:** that story being written, or the first M3 story that touches terrain
+  materials in the simulation. It now has a concrete first question — whether the surface layer
+  should be a full cell at all — which is a worldgen decision, not a look constant.
 
 ## Found at 10.7's second sitting: THE TWO RENDER PATHS DISAGREE ABOUT SNOW'S FLANKS (2026-09-03)
 
