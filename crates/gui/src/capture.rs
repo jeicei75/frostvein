@@ -1277,6 +1277,9 @@ fn save_then_validate(path: PathBuf, slice: SliceLevel) -> impl FnMut(On<Screens
         let format = event.image.texture_descriptor.format;
         let size = event.image.texture_descriptor.size;
         write_png_before_validate(&path, event.image.clone(), || {
+            // Shape first: a wrong-shape frame makes every figure below incomparable, and the
+            // percentages would not show it. The PNG is already written by the time this runs.
+            assert_calibrated_frame_shape(size.width, size.height);
             validate_capture_ranges(
                 &bytes,
                 format,
@@ -1338,6 +1341,39 @@ fn range_band_applies(slice: SliceLevel) -> bool {
     slice.level() >= slice.top()
 }
 
+/// The one frame shape every calibrated capture constant was measured at.
+///
+/// `--headless` forces it (`ingest::HEADLESS_SIZE` derives from this constant so the two cannot
+/// drift). A WINDOWED capture does not: it takes whatever size the window happens to be, so an
+/// operator who drags the window mid-session silently changes the shape the pixel-region
+/// instruments read. `near-white-area` is a percentage, which makes a wrong-shape frame look
+/// perfectly comparable while the emissive highlights it counts occupy a different fraction of
+/// it -- exactly the kind of number this repo keeps having to withdraw.
+pub const CAPTURE_SIZE: (u32, u32) = (1280, 720);
+
+/// Refuses a capture that is not the shape the constants were calibrated at.
+///
+/// Deliberately a panic and not a warning: the ceilings are judged in percentages, so a
+/// wrong-shape frame produces a figure that reads as comparable and is not. Called from inside
+/// the post-write closure, so **the PNG is already on disk** when this fires (issue #72) and the
+/// frame can still be looked at.
+///
+/// NOTE: cannot be exercised end-to-end in the devpod -- there is no window, so every capture here
+/// is headless and already the right shape. The unit test below is the whole of its coverage.
+fn assert_calibrated_frame_shape(width: u32, height: u32) {
+    assert_eq!(
+        (width, height),
+        CAPTURE_SIZE,
+        "capture range check: this frame is {}x{}, but every calibrated constant was measured at \
+         {}x{}. A percentage over a different frame shape is not the same measurement. Restore the \
+         window size or run --headless; the PNG is on disk and readable.",
+        width,
+        height,
+        CAPTURE_SIZE.0,
+        CAPTURE_SIZE.1
+    );
+}
+
 pub fn validate_capture_ranges(
     bytes: &[u8],
     format: TextureFormat,
@@ -1375,7 +1411,8 @@ fn validate_capture_ranges_with_report(
     let p99 = p99_luminance(&pixels);
     report(&format!(
         "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \
-         near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1}",
+         near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1} \
+         resolution={width}x{height}",
         near_white * 100.0,
         blown_pool * 100.0
     ));
@@ -1676,9 +1713,66 @@ mod tests {
             reported.get(),
             "the metrics must be reported before the ceiling panics"
         );
+
         assert!(
             outcome.is_err(),
             "the ceiling must still make the observer panic"
+        );
+    }
+
+    /// A windowed capture at the wrong size is refused, not reported.
+    ///
+    /// The vehicle's window does not start maximised and the operator resizes it freely, so this
+    /// is reachable in normal use. `near-white-area` is a PERCENTAGE, so a 2560x1440 frame yields
+    /// a figure that reads as directly comparable to a 1280x720 ceiling and is not -- the
+    /// emissive highlights it counts occupy a different fraction of a differently-shaped frame.
+    #[test]
+    fn a_capture_at_the_wrong_frame_shape_is_refused() {
+        assert_calibrated_frame_shape(CAPTURE_SIZE.0, CAPTURE_SIZE.1);
+
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcomes =
+            [(2560, 1440), (1920, 1080), (1280, 721), (1281, 720)].map(|(width, height)| {
+                let outcome =
+                    std::panic::catch_unwind(move || assert_calibrated_frame_shape(width, height));
+                (width, height, outcome.is_err())
+            });
+        std::panic::set_hook(previous);
+
+        for (width, height, refused) in outcomes {
+            assert!(
+                refused,
+                "{width}x{height} is not the calibrated shape and must be refused"
+            );
+        }
+    }
+
+    /// The reported line names the frame shape it measured.
+    ///
+    /// Without it a capture and its figures are unfalsifiable after the fact: every committed
+    /// range-check line in this repo was taken on trust that the frame was 1280x720, and the
+    /// windowed path never enforced it.
+    #[test]
+    fn the_range_check_line_reports_the_frame_shape() {
+        // Neither black nor uniform: both are asserted after the report line is emitted, and a
+        // panic there would end the run before this test could read what was reported.
+        let bytes = (0..64 * 64 * 4)
+            .map(|index| 90u8.wrapping_add((index % 7) as u8))
+            .collect::<Vec<_>>();
+        let mut lines = Vec::new();
+        validate_capture_ranges_with_report(
+            &bytes,
+            TextureFormat::Rgba8Unorm,
+            64,
+            64,
+            false,
+            9,
+            |line| lines.push(line.to_string()),
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("resolution=64x64")),
+            "the range check must name the frame shape it measured; got {lines:?}"
         );
     }
 

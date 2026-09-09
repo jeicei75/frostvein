@@ -708,7 +708,11 @@ pub struct HeadlessRequested;
 /// The capture resolution, matched to the vehicle's committed PNGs (`boot7.png` and every other
 /// signoff frame are 1280x720) so a headless frame and a vehicle frame are the same shape and the
 /// pixel-region instruments read the same way on both.
-const HEADLESS_SIZE: (u32, u32) = (1280, 720);
+///
+/// DERIVED, not restated: `capture::CAPTURE_SIZE` is the same contract, and a windowed capture is
+/// now REFUSED unless it matches. Two literals could disagree, and the headless side would keep
+/// passing while the vehicle silently measured a different frame.
+const HEADLESS_SIZE: (u32, u32) = crate::capture::CAPTURE_SIZE;
 
 #[derive(Resource)]
 pub struct CaptureDistance(pub f32);
