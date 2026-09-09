@@ -6,8 +6,8 @@ use std::{
 
 use bevy::prelude::{
     AssetServer, Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, Or, PointLight, Query, Res, ResMut, Resource, StandardMaterial, Transform,
-    Vec3, With, Without,
+    MeshMaterial3d, Or, Plane3d, PointLight, Query, Res, ResMut, Resource, StandardMaterial,
+    Transform, Vec2, Vec3, With, Without,
 };
 use bevy::{
     asset::RenderAssetUsages,
@@ -332,7 +332,7 @@ pub fn setup_projection_assets(
     let scene_source = scene_source.as_deref().cloned().unwrap_or_default();
     let prefix = scene_source.prefix();
     let cube = meshes.add(Mesh::from(Cuboid::default()));
-    let snow_cap_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
+    let snow_cap_mesh = meshes.add(snow_cap_mesh());
     let mark_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
     let terrain = TERRAIN_SLOTS.map(|slot| {
         std::array::from_fn(|level| {
@@ -1404,13 +1404,15 @@ pub fn reconcile(
                 // snow-cap meshes, so its count is arithmetic over the entity list, while every
                 // k>1 row above is counted off the indices actually built. Putting the two under
                 // one name is exactly the blend AC6 forbids for Axis B.
+                // The two terms differ: a cube is 12 triangles, and a cap is the single quad
+                // `snow_cap_mesh` builds. One `* 12` over both counted the slab this replaced.
                 println!(
                     "subdiv 1: projected {} terrain cubes at z {} entities={} chunks=0 \
                      triangles_derived={} mesh_build_ms={}",
                     positions.len(),
                     slice.level(),
                     positions.len() + snow_caps,
-                    (positions.len() + snow_caps) * 12,
+                    positions.len() * 12 + snow_caps * 2,
                     started.elapsed().as_millis()
                 );
             }
@@ -1925,6 +1927,26 @@ pub fn foliage_scale(mirror: &Mirror, position: [i32; 3]) -> f32 {
     }
 }
 
+/// How far a cap sits above the cell top it paints, to stay off the cube's own top face.
+///
+/// The slab this replaced was 0.08 tall and centred 0.54 up, so it already occupied this band;
+/// the lift is what remains of it once the thickness is gone.
+const SNOW_CAP_LIFT: f32 = 0.01;
+
+/// Settled snow on the `--subdiv 1` control path: the cell's top face, and nothing else.
+///
+/// RULING 2 (story 10.8): stone flanks under a snow cap, and the k=4 fine path is the winner.
+/// This was a `Cuboid::new(1.02, 0.08, 1.02)` slab, and a slab's four vertical sides are snow --
+/// silvered walls on every trench, plus a 2% overhang lying over whatever the neighbour is. The
+/// fine path has no such faces because it PAINTS the top faces and adds no thickness at all
+/// (`build_chunk_meshes`), so the control path is made to do the same thing: one quad, one
+/// normal. `Vec3::Y` is `world_vector_to_render(Vec3::Z)`, which is the up-normal the fine
+/// mesher builds for a top face -- the two paths are pinned to agree in render space by
+/// `both_terrain_paths_paint_a_capped_cell_snow_on_its_top_face_only`.
+fn snow_cap_mesh() -> Mesh {
+    Mesh::from(Plane3d::new(Vec3::Y, Vec2::splat(0.5)))
+}
+
 fn spawn_snow_cap(
     commands: &mut Commands,
     assets: &ProjectionAssets,
@@ -1936,7 +1958,7 @@ fn spawn_snow_cap(
         ClientLocal,
         Mesh3d(assets.snow_cap_mesh.clone()),
         MeshMaterial3d(assets.slot(TerrainSlot::SnowCap, rim_level(position, mirror.dims()))),
-        Transform::from_translation(world_to_render(position) + Vec3::Y * 0.54),
+        Transform::from_translation(world_to_render(position) + Vec3::Y * (0.5 + SNOW_CAP_LIFT)),
     ));
 }
 
@@ -3059,6 +3081,13 @@ mod tests {
     /// The sides and bottom of a capped cell are still rock: a cap is settled snow lying on a
     /// surface, not a change of material. Getting this wrong would silver the walls of every
     /// trench. Asserted on the mask keys, which is where the material partition actually lives.
+    ///
+    /// RULING 2 (story 10.8) made this the rule for BOTH meshers, so read this pin for what it
+    /// is: the FINE path only, because mask keys are the fine path's partition and the control
+    /// path has none. The control path drew a snow slab with four snow sides until 10.8, and
+    /// this test could not see it. The other half is
+    /// `both_terrain_paths_paint_a_capped_cell_snow_on_its_top_face_only`; neither test is the
+    /// whole ruling on its own.
     #[test]
     fn a_capped_cell_paints_snow_on_its_top_faces_and_rock_everywhere_else() {
         let dims = Dims { x: 3, y: 3, z: 2 };
@@ -3101,6 +3130,87 @@ mod tests {
         }
         assert_eq!(tops, 36, "9 cells x 2x2 fine columns of top face");
         assert!(sides > 0, "the block must still have rock sides");
+    }
+
+    /// The distinct outward normals a mesh carries, in RENDER space, rounded to whole axes.
+    ///
+    /// Render space is the one space both paths can be compared in. The fine path stores faces
+    /// as world-axis mask keys and only becomes render-space geometry in `append_quad`; the
+    /// control path is a mesh from the start. Re-deriving the axis mapping here instead of
+    /// running the production mesher would let the test agree with itself while the two meshers
+    /// disagreed on screen.
+    fn face_normals(mesh: &Mesh) -> BTreeSet<[i32; 3]> {
+        mesh.attribute(Mesh::ATTRIBUTE_NORMAL)
+            .expect("a terrain mesh carries normals")
+            .as_float3()
+            .expect("normals are three floats")
+            .iter()
+            .map(|normal| normal.map(|value| value.round() as i32))
+            .collect()
+    }
+
+    /// RULING 2 (story 10.8): both meshers paint a capped cell's snow on the same faces.
+    ///
+    /// Wolf chose the k=4 flank rule -- stone flanks under a snow cap -- so the k=1 control path
+    /// is the loser and is made to match. RED against the slab it drew before this story: a
+    /// `Cuboid::new(1.02, 0.08, 1.02)` reports all six axis normals, four of them vertical snow
+    /// sides that silver the walls of a trench, against the fine path's single up-normal.
+    ///
+    /// The comparison is between the two paths, not against a literal, and the answer they must
+    /// agree on is derived from `world_vector_to_render` rather than copied out of it -- a
+    /// hand-written `[0, 1, 0]` would survive the y/z convention changing under both meshers.
+    #[test]
+    fn both_terrain_paths_paint_a_capped_cell_snow_on_its_top_face_only() {
+        let dims = Dims { x: 3, y: 3, z: 2 };
+        let mut tiles = vec![Tile::Empty; 18];
+        for y in 0..3 {
+            for x in 0..3 {
+                tiles[x + y * 3] = Tile::Solid(protocol::Material::Stone);
+            }
+        }
+        let mirror = world(dims, tiles);
+        let capped = [1, 1, 0];
+        assert!(
+            has_snow_cap(&mirror, capped),
+            "the fixture must cap {capped:?} or this proves nothing"
+        );
+
+        // The fine path, through the production mesher: the snow slot's own geometry.
+        let subdiv = 2;
+        let mut fine = MeshBuilder::default();
+        let positions = terrain_positions_at(&mirror, 1);
+        for (_, mesh) in build_chunk_meshes(
+            &mirror,
+            &positions,
+            subdiv,
+            1,
+            None,
+            &tree_cover_at(&mirror, 1),
+        ) {
+            for (key, mask) in mesh.masks {
+                if key.slot == TerrainSlot::SnowCap as usize {
+                    greedy_mask_into_mesh(&mut fine, key, &mask, subdiv);
+                }
+            }
+        }
+        let fine = face_normals(&fine.finish());
+        let control = face_normals(&snow_cap_mesh());
+
+        assert_eq!(
+            control, fine,
+            "the two meshers paint a capped cell's snow on different faces -- control {control:?} \
+             against fine {fine:?}; a normal that is not the up-axis is a snow FLANK, which \
+             Ruling 2 gives to rock"
+        );
+        let up = world_vector_to_render(Vec3::Z)
+            .to_array()
+            .map(|value| value.round() as i32);
+        assert_eq!(
+            fine,
+            BTreeSet::from([up]),
+            "both paths agree, but on the wrong face: settled snow is the cell's top and nothing \
+             else"
+        );
     }
 
     /// Every quad must be WOUND to face the way its own normal says it does.

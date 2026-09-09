@@ -484,11 +484,15 @@ before/after pair that showed it.
   - [x] If Ruling 3 IN: anchored rows in `bench_contract.rs` reusing `assert_anchor`, exactly once
         each; show one RED by editing a doc value.
 
-- [ ] **Task 6b — The flank rule and the atmosphere defects** (AC: 14, 15)
-  - [ ] Make the losing path match Ruling 2 (`project.rs:335/1937` slab path or `:3015` top-face
-        rule); write the two-path agreement test RED first; correct the existing pin.
+- [~] **Task 6b — The flank rule and the atmosphere defects** (AC: 14, 15) — **AC14 DONE**,
+      AC15 open (and two of its four defects are DEFERRED by Wolf)
+  - [x] Made the losing path match Ruling 2: the k=1 control path's snow slab
+        (`Cuboid::new(1.02, 0.08, 1.02)`) is now the cell's top face and nothing else, so its
+        flanks are rock. Two-path agreement test shown RED against the slab first; the existing
+        pin corrected, not deleted.
   - [ ] For each Ruling 3 defect: change the constant, file the before/after pair with figures,
-        correct the pin that names it.
+        correct the pin that names it. **(a) fog and (d) rim are DEFERRED by Wolf** — see the
+        Change Log; what is left open here is **(b) the flake spawn band** and **(c) flake size**.
 
 - [~] **Task 6c — The instrument's own defects** (AC: 16, 17) — code complete, AC16's five-run
       evidence OWED (see Completion Notes)
@@ -514,6 +518,12 @@ before/after pair that showed it.
         `scripts/launch-gui.ps1` (do NOT use its `--` forwarding — issue #81). It asks for: the
         six-word check on lighting, the hover slab on a cliff face near the fire, the three marks at
         working zoom.
+  - [ ] **Added by AC14's close:** the k=1 control path at `--subdiv 1` now paints settled snow as
+        the cell's top face instead of a slab. The MATERIAL claim is instrumented
+        (`both_terrain_paths_paint_a_capped_cell_snow_on_its_top_face_only`); whether the control
+        path READS right is an eye check, because no pixel statistic isolates flank snow from
+        slightly-less-snow-area. One `--subdiv 1` frame on the card, for the record only — k=4 is
+        the shipped default and this path is the fallback.
 
 ## Dev Notes
 
@@ -668,6 +678,7 @@ push, `git ls-remote` confirms it landed (issue #76).
 
 | Date | Change |
 |---|---|
+| 2026-09-09 | **AC14 DONE — the flank rule reaches the losing path.** The k=1 control path drew settled snow as a `Cuboid::new(1.02, 0.08, 1.02)` slab, so four of its faces were snow: silvered trench walls, plus a 2 % overhang lying over whatever the neighbour was — the exact defect Ruling 2 gave to rock. It is now the cell's top face and nothing else, which is the fine path's own mechanism (paint, no thickness). `both_terrain_paths_paint_a_capped_cell_snow_on_its_top_face_only` compares the two meshers in RENDER space through the production mesher, and the answer they must agree on is derived from `world_vector_to_render`, not copied out of it. **Shown RED against the slab: control reported all six axis normals against the fine path's one.** The pre-existing pin `a_capped_cell_paints_snow_…` PASSED against that slab — it reads mask keys, which only the fine path has — so it was corrected to say which path it speaks for rather than deleted. Also corrected: `triangles_derived` multiplied EVERY k=1 entity by 12, which counted the slab; caps are one quad now. Full gate GREEN 484s. **Deliberately not filed: a k=1 before/after pixel pair** — no statistic isolates flank snow, and a changed-pixel count would need its own noise floor to say anything; the material claim is instrumented and the LOOK is carried to Task 8's card as an eye check. |
 | 2026-09-08 | **Ruling 3's fog and rim defects PROBED and CONFIRMED, then DEFERRED by Wolf ("let's not mess with fog now"). Nothing landed; probe reverted, frames kept.** The rim and the fog are the SAME constant, and it is 66 luma darker than the horizon behind it, so the edge cannot fade out — one cause behind both defects. Separately found: `fog_falloff` saturates at 210 while `docs/tech-art-guidelines.md` claims 155 "just past the deepest in-frame terrain at 148", so the fog finishes 62 m after the terrain does and the edge is unhideable by construction. Which of doc or code moved is UNVERIFIED. |
 | 2026-09-08 | **RULING 6: lanterns to a third, and Wolf's first vehicle look is HAPPY.** He picked a sixth first; measuring it showed the warm spread falls below the noise floor there, leaving a speck that is largely the emissive face, so a third is ruled — exactly on `LANTERN_VISIBLE_INTENSITY_FLOOR`, which was NOT moved to let a value pass even though its own comment admits it was never judged. Branch pushed and verified at `76c7c47`, full gate GREEN 469s. **Issue #75's "lighting is still way off" is answered: no longer true.** AC12's two inherited eye-checks and the vehicle card remain open. |
 | 2026-09-08 | **FULL GATE GREEN, 707s, every tier** on the landed treatment. Tasks 3b, 4, 5 and 7 closed. Two prior full-gate attempts were harness-killed rather than failed; the tell is a stalled log mtime with no processes, which elapsed time alone cannot distinguish from a slow run. Dev cost for this leg: $0.56 for the blocked first attempt plus $4.94 for the run that landed it, 8pp of the weekly window. |
@@ -956,20 +967,33 @@ watcher that reports death separately from failure. See [[delegated-runs-get-kil
   same version and features, no lockfile change.
 - **DONE: Tasks 0, 1, 2, 3, 3b, 4, 5, 6, 7 and issue #77.** The approved treatment is landed,
   the guard is green on it, all 8 mutation rows KILL and the full gate is GREEN at 707s.
-- **NOT DONE, and owed:** **Task 6b** (AC14 the flank rule, AC15 the four Ruling-3 atmosphere
-  defects — including the fog/rim colour finding recorded above, which must be tested against
+- **AC14 / Task 6b, first half — DONE 2026-09-09.** Ruling 2 now reaches the path it named. The
+  k=1 control path's settled snow is the cell's top face, not a slab with four snow sides, and the
+  two meshers are pinned to agree in render space through the production mesher. RED first against
+  the slab (all six axis normals against one). The old pin could not see the defect — it reads mask
+  keys, and only the fine path has them — so it was corrected to name the path it speaks for.
+  `triangles_derived`'s `* 12` over every k=1 entity was counting the slab and is now two terms.
+  **Incidental finding, NOT fixed** (it is not this story's): `ingest.rs:2453`'s `snow_caps`
+  comparison went vacuous when Task 0 made k=4 the default — it compares `--subdiv 4` against the
+  default, both of which are now k=4, and snow-cap entities exist only at k=1, so both arms are
+  empty. It asserts nothing and nothing tells you.
+
+- **NOT DONE, and owed:** **Task 6b's second half** (AC15's atmosphere defects — including the fog/rim colour finding recorded above, which must be tested against
   frames before the doc rule moves). **Task 8** (AC1's own verification recipe, AC12's closing
   sitting on the vehicle, the two inherited eye-checks). **AC16** stays owed from Task 6c: issue
   #72's race was never reproduced and its five consecutive full-tier runs were never taken —
-  three full gates have now run green on this branch, but that is not the same evidence. They were blocked on Ruling 1 at handoff time
-  and are now unblocked: the key is a night moonlight and the knob is the light table. Task 6b
-  additionally carries Ruling 3's four named defects and the orchestrator's fog/rim colour finding
-  above, which must be tested against frames before the doc rule is touched.
+  FOUR full gates have now run green on this branch, but that is not the same evidence: AC16 asks
+  for the race reproduced and for five CONSECUTIVE full-tier runs, and a gate that happens to pass
+  is neither.
+  Of AC15's four named defects, **(a) fog and (d) rim are DEFERRED by Wolf** and nothing may land
+  on them; the fog/rim colour finding and the doc-versus-code disagreement stand recorded and
+  unmeasured against frames. What AC15 still has open is **(b) the flake spawn band** and **(c)
+  flake size**, both of which are Wolf's eye on a frame, not a metric.
 - **Status stays `in-progress`.** This is a partial story.
-- **PART 3 remains partial.** Task 3b's new marginals, Task 4's two recorded range-check lines,
-  and Task 7's completed mutation run are still owed. Task 5's calibration and frames are landed;
-  Task 6 documents only the approved light/camp treatment and deliberately leaves Ruling 3 work to
-  Task 6b.
+- **PART 3 is CLOSED** (superseded 2026-09-09, and it was stale as written): Task 3b's marginals,
+  Task 4's two range-check lines and Task 7's mutation run were all closed by the full-gate leg
+  recorded above. Task 6 documents only the approved light/camp treatment and deliberately left
+  Ruling 3's work to Task 6b, whose flank half is now closed too.
 
 ### File List
 
@@ -996,3 +1020,4 @@ watcher that reports death separately from failure. See [[delegated-runs-get-kil
 | `scripts/bench/valley_bench.py` | approved ambient/directional colour lockstep |
 | `docs/tech-art-guidelines.md` | approved treatment and recorded camp spacing |
 | `_bmad-output/implementation-artifacts/10-8-signoff/approved-moonlit-camp-3479a43-{a,b}.png` | approved pair, stamped 3479a43 |
+| `crates/gui/src/project.rs` | AC14: `snow_cap_mesh()` is a top-face quad not a slab, `SNOW_CAP_LIFT`, corrected `triangles_derived` arithmetic, the two-path agreement test, the existing pin's claim scoped to the fine path |
