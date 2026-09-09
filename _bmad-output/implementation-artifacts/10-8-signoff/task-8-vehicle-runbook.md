@@ -105,6 +105,13 @@ creation figure was measured on a brighter build and must not be used to judge d
 **A vehicle noise floor does not exist:** one GPU capture has ever been taken at this build. A
 second run would say whether 1.0930 % is stable, and it is the cheapest thing left on this card.
 
+**NEW since the walk (`bf8324c`): the line now ends `resolution=1280x720`, and a capture at any
+other shape is REFUSED rather than reported.** The window does not start maximised and you resize
+it freely, so a capture taken after a resize was silently measuring a differently-shaped frame
+against a 1280x720 ceiling. If you get `this frame is WxH, but every calibrated constant was
+measured at 1280x720`, that is the guard working — restore the window size or use `--headless`.
+The PNG is still written first, so the frame is on disk either way.
+
 `capture range check:` ______________________________________  exit: ______
 
 ## 4. Your eye — AC12's closing half
