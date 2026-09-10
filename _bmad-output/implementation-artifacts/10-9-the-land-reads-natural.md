@@ -74,16 +74,16 @@ measurement instrument's leftovers.
         met as literally written: `x=127` and `y=0` are entirely off-screen at the boot framing
         and partly behind the camera**, so they are identified by projection, not in the image.
         Full table in `10-9-signoff/AC1-edge-mapping.md`.
-- [ ] **Task 2 — Replace `detail_depth` with coherent, material-keyed relief (AC: 2, 3)**
-  - [ ] Same signature, same call sites: `detail_depth(plane, u, v, subdiv) -> i32` at
+- [x] **Task 2 — Replace `detail_depth` with coherent, material-keyed relief (AC: 2, 3)**
+  - [x] Same signature, same call sites: `detail_depth(plane, u, v, subdiv) -> i32` at
         `crates/gui/src/project.rs:1165`. Sample coherent noise in world space over several coarse
         cells rather than hashing each fine voxel independently.
-  - [ ] Key amplitude and wavelength to the cell's material — snow long and shallow, rock shorter
+  - [x] Key amplitude and wavelength to the cell's material — snow long and shallow, rock shorter
         and rougher, ice near-flat. `terrain_material(mirror, position)` already resolves it
         (`terrain_slot_at`, `project.rs:1149`).
-  - [ ] Replace the docstring: it currently declares the function a measurement stand-in that 10.4
+  - [x] Replace the docstring: it currently declares the function a measurement stand-in that 10.4
         will replace. That statement stops being true in this story.
-  - [ ] Record `triangles=` and `mesh_build_ms=` before and after in the Dev Agent Record.
+  - [x] Record `triangles=` and `mesh_build_ms=` before and after in the Dev Agent Record.
 - [ ] **Task 3 — Kill the snow/ice coin flip (AC: 4, 5)**
   - [ ] `crates/sim-core/src/worldgen.rs:99` — replace `rng.random::<bool>()` with a rule over
         local gradient and biome. `heights` is already in scope in `layered_terrain`.
@@ -242,15 +242,42 @@ would have been believed:
   (`10-9-signoff/AC1-edge-mapping.md`, `boot-baseline-5133a86-subdiv4.png`). Ridges target `x=0`
   and `y=127`, confirming the story's derivation.
 - **AC1 defect on the record:** only two of the four world edges are in frame at the boot framing.
+- **Task 2 (AC2, AC3) complete — `d8cf573`.** `detail_depth` now interpolates a noise field whose
+  corners span three coarse cells, keyed by material (snow long and shallow, rock a shorter
+  wavelength, ice flat). Fast gate green at the commit.
+- **AC2 MEASURED AND MET**, on the real recipe with the daemon running:
+
+  | | baseline `5133a86` | after `d8cf573` | AC2 bound |
+  |---|---|---|---|
+  | `triangles=` | 927,622 | **95,422** | `<= 231,905` and `> 60,000` — both met |
+  | `faces=` | 1,155,694 | 832,224 | (not an AC — does not discriminate) |
+  | `mesh_build_ms=` | 2,516 | 1,768 | — |
+  | entities | 2,164 | 2,098 | — |
+
+  89.7 % below baseline and 3.0x above the 31,968 flat floor. Frame committed as
+  `10-9-signoff/task2-relief-d8cf573.png` (`--frames 160`; near-white 0.3908 %, exit 0).
+- **The bench seam was nearly lost and is not.** The staged Task 2 deleted
+  `the_detail_rule_matches_the_benchs_pinned_vector`, the test holding
+  `crates/gui/src/project.rs` and `scripts/bench/resolution_bench.py` to ONE rule. Python still
+  pinned the OLD vector against itself, so it stayed green while the two implementations
+  diverged. `scripts/audit-mutations.py` caught it in the gate (row in
+  `mutations/10-6-how-fine-can-we-go.sh` naming a test that no longer existed). The new rule is
+  now ported to the bench, both sides re-pinned to the same new vector, and the row re-pointed.
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/10-9-signoff/AC1-edge-mapping.md` — NEW
 - `_bmad-output/implementation-artifacts/10-9-signoff/boot-baseline-5133a86-subdiv4.png` — NEW
+- `_bmad-output/implementation-artifacts/10-9-signoff/task2-relief-d8cf573.png` — NEW
+- `crates/gui/src/project.rs` — UPDATE (Task 2)
+- `scripts/bench/resolution_bench.py` — UPDATE (Task 2, the other half of the pinned rule)
+- `scripts/tests/test_resolution_bench.py` — UPDATE (Task 2, re-pinned vector)
+- `_bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh` — UPDATE (row re-pointed)
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-09-10 | Task 2 (AC2, AC3): coherent material-keyed relief replaces the per-voxel hash placeholder. `triangles=` 927,622 -> **95,422**, inside both AC2 bounds; `mesh_build_ms=` 2,516 -> 1,768. The Rust/Python rule pin was nearly lost in the rewrite and was restored — the gate's mutation audit caught it. |
 | 2026-09-10 | Task 1 (AC1): edge mapping measured and committed. `x=0` far upper-left, `y=127` far upper-right, meeting at screen `(683,205)`; `x=127` and `y=0` are off-screen at this framing, so AC1 cannot be met as literally written. Two instruments the story proposed were falsified first (`--cursor` is dead headless; the pixel diff has no noise floor under animated snowfall). |
 | 2026-09-10 | Story created. Scope settled with Wolf in conversation; baseline, deliberate RED and restore confirmation executed at creation on `main` c54b793. |
