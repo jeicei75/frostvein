@@ -5,6 +5,8 @@ use crate::{Dims, Material, Tile};
 
 const NOISE_SPACING: u32 = 32;
 pub(crate) const CAMP_RADIUS: u32 = 3;
+const RIDGE_BAND: u32 = 6;
+const RIDGE_RAISE: u32 = 4;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Biome {
@@ -142,6 +144,45 @@ pub(crate) fn apply_lake(dims: Dims, heights: &mut [u32]) {
         for x in 0..dims.x {
             if biome_at(dims, x, y) == Biome::Lake {
                 heights[(x + y * dims.x) as usize] = lake_height;
+            }
+        }
+    }
+    clamp_steps(dims, heights);
+}
+
+fn in_ridge_band(dims: Dims, x: u32, y: u32) -> bool {
+    x < RIDGE_BAND || y >= dims.y.saturating_sub(RIDGE_BAND)
+}
+
+#[cfg(test)]
+fn in_ridge_footprint(dims: Dims, x: u32, y: u32) -> bool {
+    let ripple = RIDGE_BAND + RIDGE_RAISE;
+    x < ripple || y >= dims.y.saturating_sub(ripple)
+}
+
+#[cfg(test)]
+fn in_lake_footprint(dims: Dims, x: u32, y: u32) -> bool {
+    // The lake's flat ice is its core. Its maximum four-level cut needs a four-cell stepped
+    // shore, which is part of the lake footprint rather than an unrelated terrain change.
+    (-4_i32..=4).any(|dy| {
+        (-4_i32..=4).any(|dx| {
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            nx >= 0
+                && ny >= 0
+                && nx < dims.x as i32
+                && ny < dims.y as i32
+                && biome_at(dims, nx as u32, ny as u32) == Biome::Lake
+        })
+    })
+}
+
+pub(crate) fn apply_ridges(dims: Dims, heights: &mut [u32]) {
+    for y in 0..dims.y {
+        for x in 0..dims.x {
+            if in_ridge_band(dims, x, y) {
+                let column = (x + y * dims.x) as usize;
+                heights[column] = heights[column].saturating_add(RIDGE_RAISE).min(dims.z - 2);
             }
         }
     }
@@ -293,6 +334,73 @@ pub(crate) fn place_trees(
                 }
             }
             trunks.push((x, y));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::SeedableRng;
+
+    use super::*;
+    use crate::{DEFAULT_SEED, STREAM_WORLDGEN};
+
+    #[test]
+    fn height_field_for_the_default_seed_stays_pinned_before_post_passes() {
+        let mut rng = ChaCha8Rng::seed_from_u64(DEFAULT_SEED ^ STREAM_WORLDGEN);
+        let heights = height_field(Dims::DEFAULT, &mut rng);
+
+        let samples = [(0, 0), (64, 64), (127, 127), (20, 92)];
+        let actual: Vec<_> = samples
+            .into_iter()
+            .map(|(x, y)| heights[(x + y * Dims::DEFAULT.x) as usize])
+            .collect();
+        assert_eq!(actual, vec![15, 8, 5, 18]);
+    }
+
+    #[test]
+    fn ridges_only_change_the_far_edge_footprint_and_lake() {
+        let mut rng = ChaCha8Rng::seed_from_u64(DEFAULT_SEED ^ STREAM_WORLDGEN);
+        let before = height_field(Dims::DEFAULT, &mut rng);
+        let mut after = before.clone();
+        apply_lake(Dims::DEFAULT, &mut after);
+        apply_ridges(Dims::DEFAULT, &mut after);
+
+        for y in 0..Dims::DEFAULT.y {
+            for x in 0..Dims::DEFAULT.x {
+                if !in_ridge_footprint(Dims::DEFAULT, x, y)
+                    && !in_lake_footprint(Dims::DEFAULT, x, y)
+                {
+                    assert_eq!(
+                        after[(x + y * Dims::DEFAULT.x) as usize],
+                        before[(x + y * Dims::DEFAULT.x) as usize],
+                        "post-passes reached ({x},{y}) outside their footprints"
+                    );
+                }
+            }
+        }
+
+        assert_eq!(after[0], before[0] + RIDGE_RAISE);
+        let upper_right = (Dims::DEFAULT.x - 1) as usize
+            + (Dims::DEFAULT.y - 1) as usize * Dims::DEFAULT.x as usize;
+        assert_eq!(after[upper_right], before[upper_right] + RIDGE_RAISE);
+    }
+
+    #[test]
+    fn camps_stay_outside_the_lake_for_the_default_seed_and_fifty_more() {
+        for seed in DEFAULT_SEED..DEFAULT_SEED + 51 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_WORLDGEN);
+            let mut heights = height_field(Dims::DEFAULT, &mut rng);
+            apply_lake(Dims::DEFAULT, &mut heights);
+            apply_ridges(Dims::DEFAULT, &mut heights);
+            let camp = camp_origin(Dims::DEFAULT, &heights);
+            assert_ne!(
+                biome_at(Dims::DEFAULT, camp.x as u32, camp.y as u32),
+                Biome::Lake
+            );
+            if seed == DEFAULT_SEED {
+                assert_eq!(camp, crate::Pos { x: 64, y: 64, z: 9 });
+            }
         }
     }
 }
