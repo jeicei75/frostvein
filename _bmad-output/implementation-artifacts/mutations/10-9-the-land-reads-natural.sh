@@ -22,7 +22,7 @@ PY
 mutation "snow ice coin flip breaks material coherence" sim-core surface_materials_are_coherent_and_snow_prefers_flat_ground <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/worldgen.rs'); s = p.read_text()
-old_signature = 'pub(crate) fn layered_terrain(dims: Dims, heights: &[u32], _rng: &mut ChaCha8Rng) -> Vec<Tile> {'
+old_signature = 'pub(crate) fn layered_terrain(dims: Dims, heights: &[u32]) -> Vec<Tile> {'
 assert s.count(old_signature) == 1
 old_surface = '''            let surface = surface_material(
                 biome_at(dims, x, y),
@@ -31,12 +31,16 @@ old_surface = '''            let surface = surface_material(
                 y,
             );'''
 assert s.count(old_surface) == 1
-new_surface = '''            let surface = if rng.random::<bool>() {
+new_surface = '''            let surface = if coin_rng.random::<bool>() {
                 Material::Snow
             } else {
                 Material::Ice
             };'''
-s = s.replace(old_signature, old_signature.replace('_rng', 'rng'))
+s = s.replace(
+    old_signature,
+    old_signature
+    + '\n    let mut coin_rng = <ChaCha8Rng as rand::SeedableRng>::seed_from_u64(0);',
+)
 p.write_text(s.replace(old_surface, new_surface))
 PY
 
@@ -104,8 +108,47 @@ PY
 mutation "offline ice relief stops matching the client's flat ice" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_ice_stays_flat_at_subdivision_like_the_client <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
-old = '    return 0\n\n\ndef _cell_heights'
+# Re-pointed at review: the dispatch gained named material sets and an exhaustive-guard raise,
+# so the old anchor (a bare trailing `return 0` before `_cell_heights`) no longer exists. Same
+# sabotage, same seam -- give the FLAT materials the drifting rule and ice stops being flat.
+old = '''    if material in FLAT_MATERIALS:
+        return 0'''
 assert s.count(old) == 1
-new = '    return detail_depth(WORLD_SEED, plane, u, v, k)\n\n\ndef _cell_heights'
+new = '''    if material in FLAT_MATERIALS:
+        return detail_depth(WORLD_SEED, plane, u, v, k)'''
 p.write_text(s.replace(old, new))
+PY
+
+mutation "subdiv one instrument reports a zero derived triangle count" gui ingest::tests::subdiv_one_still_spawns_terrain_and_reports_a_derived_triangle_count <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '''pub(crate) fn derived_triangle_count(cubes: usize, snow_caps: usize) -> usize {
+    cubes * 12 + snow_caps * 2
+}'''
+assert s.count(old) == 1
+new = '''pub(crate) fn derived_triangle_count(_cubes: usize, _snow_caps: usize) -> usize {
+    0
+}'''
+p.write_text(s.replace(old, new))
+PY
+
+mutation "lake ice stops being flat and the pinned AC3 floor moves" gui project::tests::material_keyed_relief_keeps_the_reported_triangle_count_well_above_flat_ice <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        Material::Ice | Material::TreeTrunk | Material::TreeFoliage => 0,'
+assert s.count(old) == 1
+new = '''        Material::Ice => coherent_detail_depth(plane, u, v, subdiv, 3),
+        Material::TreeTrunk | Material::TreeFoliage => 0,'''
+p.write_text(s.replace(old, new))
+PY
+
+mutation "python relief dispatch silently flattens an unknown material" py scripts.tests.test_resolution_bench.ResolutionSafetyTests.test_material_relief_refuses_a_material_it_has_no_rule_for <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = '''    raise ValueError(
+        f"no relief rule for material {material!r}; the client's match over Material is "
+        f"exhaustive, so add the arm on both sides. Known: {sorted(KNOWN_MATERIALS)}"
+    )'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    return 0'))
 PY

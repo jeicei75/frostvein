@@ -1158,6 +1158,15 @@ fn terrain_slot_at(mirror: &Mirror, position: [i32; 3]) -> TerrainSlot {
 /// A noise corner spans three coarse cells at the current subdivision, so adjacent fine voxels
 /// interpolate the same four values instead of each inventing a separate pit. The mesher keeps
 /// the resulting long, shallow snow drifts as geometry rather than measurement noise.
+/// The `subdiv 1` row's `triangles_derived=`, as arithmetic over the entity list.
+///
+/// Extracted from the `println!` at review so AC11's test can assert the REPORTED number rather
+/// than recompute the same expression beside it. A cube is 12 triangles; a snow cap is the single
+/// quad `snow_cap_mesh` builds, so 2.
+pub(crate) fn derived_triangle_count(cubes: usize, snow_caps: usize) -> usize {
+    cubes * 12 + snow_caps * 2
+}
+
 fn detail_depth(plane: i32, u: i32, v: i32, subdiv: i32) -> i32 {
     coherent_detail_depth(plane, u, v, subdiv, 3)
 }
@@ -1433,7 +1442,7 @@ pub fn reconcile(
                     positions.len(),
                     slice.level(),
                     positions.len() + snow_caps,
-                    positions.len() * 12 + snow_caps * 2,
+                    derived_triangle_count(positions.len(), snow_caps),
                     started.elapsed().as_millis()
                 );
             }
@@ -2781,11 +2790,29 @@ mod tests {
 
     /// The AC2 instrument is the real chunk mesher's triangle count, not its face count: a
     /// flat fine layer deliberately contains enough faces to look busy in that weaker measure.
+    ///
+    /// THE FLOOR IS PINNED, NOT DERIVED. Ice routes through `material_detail_depth` exactly like
+    /// snow does, so reading the flat reference off a live ice fixture lets the floor drift with
+    /// the very rule the ratio polices: a change that flattened snow AND roughened ice keeps the
+    /// ratio and passes. Pinning 352 makes the ice branch falsify this test on its own.
+    ///
+    /// The `< 10_000` bar is this fixture's LOCAL stand-in for AC2's world bound of 231,905
+    /// triangles at 128x128 -- it is not a scaled version of it. It sits above the coherent rule's
+    /// measured 5,140 and below what the per-voxel hash produces; the mutation row "per-voxel
+    /// relief hash breaks the AC2 triangle budget" is what proves the upper half discriminates.
     #[test]
     fn material_keyed_relief_keeps_the_reported_triangle_count_well_above_flat_ice() {
+        const FLAT_ICE_TRIANGLES: usize = 352;
+
         let (_, flat_triangles) = fine_geometry(&flat_or_snowfield(Material::Ice), 4);
         let (_, shipped_triangles) = fine_geometry(&flat_or_snowfield(Material::Snow), 4);
 
+        assert_eq!(
+            flat_triangles, FLAT_ICE_TRIANGLES,
+            "the flat ice reference moved to {flat_triangles}; the ratio below only means \
+             something against a known floor, so re-measure it deliberately rather than \
+             letting it follow the rule under test"
+        );
         assert!(
             shipped_triangles > flat_triangles * 10,
             "the real mesher reported only {shipped_triangles} triangles for snow against \

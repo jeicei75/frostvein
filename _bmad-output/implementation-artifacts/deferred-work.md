@@ -2125,3 +2125,41 @@ decision-needed items live in the story file's Review Findings section, not here
   through to the port branch (`crates/gui/src/ingest.rs:806`) and reports `invalid port`.
   `--assets`, `--perf-log` and `--version` appear only in the story file and `launch-gui.ps1`'s
   comment header; the README documents no `gui` flags at all.
+
+## Deferred from: code review of 10-9-the-land-reads-natural (2026-09-10)
+
+- **`apply_lake`'s `.expect("lake footprint is non-empty")` is a new, undocumented panic surface.**
+  `crates/sim-core/src/worldgen.rs:141`, reached from `crates/sim-core/src/lib.rs:1140`.
+  `World::generate`'s doc comment (`lib.rs:1122-1129`) deliberately enumerates the panics small
+  worlds hit and says small-world support "arrives when a scenario test actually needs one". This
+  adds a THIRD panic that fires EARLIER in the call order than both documented ones, and the list
+  was not updated. Demonstrated by sweeping `Dims { x: N, y: N, z: 32 }` in a release build:
+  `N=3,5,6` panic in the lake; `N=4,7,8` in the pre-existing camp clearing. No live impact —
+  `crates/simd/src/main.rs:88` always passes `Dims::DEFAULT`. Fix is one line in the doc list.
+- **AC6's ridge raise is pinned only at `(0,0)` and `(127,127)`, the two most protected cells.**
+  `crates/sim-core/tests/worldgen.rs`, `ridges_only_change_the_far_edge_footprint_and_lake`.
+  Both corners lie in BOTH ridge bands, so the re-run `clamp_steps` cannot pull them back — they
+  are the cells least able to falsify the raise. Live band means show the ridge does not out-rise
+  the world's own relief (`x<6` mean 16.2 vs 14.98 at x=10-20; `y>=122` mean 15.57 vs 17.56 at
+  y=100-110): it is a wedge that clamps flat toward the band's inner edge. No test pins the
+  mid-band raise. AC6 itself holds — an independent rebuild of `sim-core` at `5133a86` found
+  ZERO columns changed outside the band union the lake footprint.
+- **`apply_ridges` has an unguarded `dims.z - 2`.** `crates/sim-core/src/worldgen.rs:185`.
+  With `dims.z < 2` this underflows: panics in debug, wraps to a huge `u32` in release and defeats
+  the `.min` clamp entirely. `World::generate`'s `debug_assert!(dims.z >= 6)` guards the only live
+  caller, but `apply_ridges` is `pub(crate)` and tests already call it directly, bypassing that.
+- **The rock relief branch never executes in the frame the boss judges.**
+  `crates/gui/src/project.rs:1193`. Live world, cells whose top face is drawn, by material:
+  ice 2,038, snow 13,970, tree_foliage 2,328, **stone 0, soil 0**. `layered_terrain` always writes
+  a Snow/Ice tile at the surface, so no stone/soil top face exists until something digs. Task 2's
+  "rock a shorter wavelength" is real code (depth histogram over plane 40: {0:18415, 1:28851,
+  2:18220, 3:50}) exercised only by the `prism`/`staircase` unit fixtures. Becomes live with
+  AD-19's terrain-state epic.
+- **AC4/AC5's statistical thresholds cannot catch a patch-boundary error in the scour lattice.**
+  `crates/sim-core/tests/worldgen.rs:332-379` asserts `shared_fraction >= 0.85` and
+  `sloped_snow < flat_snow`. These aggregate assertions would still pass under a materially
+  different patch rule. The companion unit test
+  `biome_decision_is_consumed_by_the_surface_material_rule` uses a perfectly FLAT height field, so
+  `gradient` is always 0 and the scour branch never fires there at all. Patch-index arithmetic was
+  checked by hand for `x,y` in `0..128` and no boundary defect was found — this is a coverage gap,
+  not a confirmed defect.

@@ -45,14 +45,12 @@ def brute_force_faces(world, k, detail):
 
     solid = set()
 
+    # THIRD COPY REMOVED at review. This oracle exists to check the bench's face and quad
+    # ARITHMETIC independently, not to re-derive which material drifts and which stays flat --
+    # a hand-copied dispatch here was a third surface that could drift silently. The
+    # cross-language vector pin is what holds Python's `detail_depth` to the client's.
     def material_depth(material, plane, u, v):
-        if material == "snow":
-            return resolution_bench.detail_depth(resolution_bench.WORLD_SEED, plane, u, v, k)
-        if material in {"stone", "soil"}:
-            return resolution_bench.detail_depth(
-                resolution_bench.WORLD_SEED, plane, u, v, k, coarse_cells=1
-            )
-        return 0
+        return resolution_bench._material_detail_depth(material, plane, u, v, k)
 
     for z in range(dz):
         for y in range(dy):
@@ -132,19 +130,27 @@ class ResolutionGeometryTests(unittest.TestCase):
         )
 
     def test_detail_rule_changes_subdivided_counts_exactly_and_leaves_k_one_alone(self):
-        world = snapshot((2, 1, 1), [{"solid": "snow"}, {"solid": "snow"}])
-        # The two-cell fixture is smaller than one three-cell snow drift, so k=2 and k=4 stay
-        # flat here. It guards that coherent relief does not manufacture a per-voxel seam.
+        # SIX CELLS WIDE ON PURPOSE. The previous two-cell fixture was smaller than one
+        # three-coarse-cell snow drift, so k=2 and k=4 both pinned 6 quads / 12 triangles --
+        # IDENTICAL to k=1. A test called "detail rule changes subdivided counts exactly" was
+        # pinning the case where the detail rule changes nothing, and setting snow's depth to 0
+        # would have left it green. Six cells spans the wavelength, so k=4 now moves.
+        world = snapshot((6, 6, 1), [{"solid": "snow"}] * 36)
+        self.assertEqual(
+            resolution_bench.geometry_summary(world, k=1, detail=True),
+            {"exposed_faces": 96, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 36},
+        )
+        # k=2 is still flat and that is the rule's own doing, not the fixture's: the depth
+        # `value * (k - 1) / 255` cannot clear 1 at k=2 on this field. Pinned so a change that
+        # made k=2 erupt is caught too.
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=2, detail=True),
-            {"exposed_faces": 40, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 2},
+            {"exposed_faces": 384, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 36},
         )
+        # The discriminating row: 73 quads against k=1's 6, i.e. the relief is real.
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=4, detail=True),
-            {"exposed_faces": 136, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 2},
-        )
-        self.assertEqual(
-            resolution_bench.geometry_summary(world, k=1, detail=True)["greedy_quads"], 6
+            {"exposed_faces": 1484, "greedy_quads": 73, "triangles": 146, "chunks": 1, "cells": 36},
         )
 
     def test_a_stepped_world_matches_hand_written_counts(self):
@@ -190,9 +196,14 @@ class ResolutionGeometryTests(unittest.TestCase):
             "single": snapshot((1, 1, 1), [{"solid": "stone"}]),
             "prism": snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}]),
             "staircase": staircase(),
+            # "dirt" is not a `protocol::Material` variant -- the client can never emit it, and
+            # the dispatch's old catch-all silently gave it FLAT relief, so this fixture was
+            # quietly meshing one material against a rule no material has. `snow` is real AND
+            # takes a different arm from `stone`, so the pair now exercises two relief rules
+            # rather than one rule and one accident.
             "two materials": snapshot(
                 (2, 2, 1),
-                [{"solid": "stone"}, {"solid": "dirt"}, "empty", {"ramp": "stone"}],
+                [{"solid": "stone"}, {"solid": "snow"}, "empty", {"ramp": "stone"}],
             ),
         }
         for name, world in worlds.items():
@@ -324,6 +335,18 @@ class ResolutionSafetyTests(unittest.TestCase):
         resolution_bench.assert_workload_limit(48_000_000, 1, False)
         with self.assertRaisesRegex(ValueError, "48,000,001"):
             resolution_bench.assert_workload_limit(48_000_001, 1, False)
+
+    def test_material_relief_refuses_a_material_it_has_no_rule_for(self):
+        """The client's dispatch is an exhaustive `match`; this is Python's stand-in for it.
+
+        Without this the bench would hand any unknown material FLAT relief and stay green, which
+        is how a `dirt` fixture that no `protocol::Material` can produce sat in the oracle's
+        two-material world being meshed against a rule no material has.
+        """
+        with self.assertRaisesRegex(ValueError, "no relief rule for material 'dirt'"):
+            resolution_bench._material_detail_depth("dirt", 0, 0, 0, 4)
+        for material in resolution_bench.KNOWN_MATERIALS:
+            resolution_bench._material_detail_depth(material, 0, 0, 0, 4)
 
     def test_snapshot_size_guard_uses_the_explicit_wire_limit(self):
         with tempfile.TemporaryDirectory() as directory:

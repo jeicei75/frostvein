@@ -162,8 +162,16 @@ fn in_ridge_footprint(dims: Dims, x: u32, y: u32) -> bool {
 
 #[cfg(test)]
 fn in_lake_footprint(dims: Dims, x: u32, y: u32) -> bool {
-    // The lake's flat ice is its core. Its maximum four-level cut needs a four-cell stepped
-    // shore, which is part of the lake footprint rather than an unrelated terrain change.
+    // The lake's flat ice is its core; the dilation below covers the stepped shore `clamp_steps`
+    // leaves around it, which is part of the lake footprint rather than an unrelated terrain
+    // change.
+    //
+    // NOTE: the +/-4 is a GENEROUS BOUND, not a measurement. On `DEFAULT_SEED` the basin's actual
+    // cut is ONE level (pre-flatten heights inside the lake biome are 17..=18), so the real shore
+    // is one cell and this exempts four. Nothing in `apply_lake` bounds how far `lake_height` can
+    // sit below the rim -- that gap is whatever `height_field` produced for the seed -- so the
+    // constant cannot be derived the way `in_ridge_footprint`'s `RIDGE_BAND + RIDGE_RAISE` is.
+    // Raise it if a seed ever cuts deeper; do not read it as a proven maximum.
     (-4_i32..=4).any(|dy| {
         (-4_i32..=4).any(|dx| {
             let nx = x as i32 + dx;
@@ -189,7 +197,7 @@ pub(crate) fn apply_ridges(dims: Dims, heights: &mut [u32]) {
     clamp_steps(dims, heights);
 }
 
-pub(crate) fn layered_terrain(dims: Dims, heights: &[u32], _rng: &mut ChaCha8Rng) -> Vec<Tile> {
+pub(crate) fn layered_terrain(dims: Dims, heights: &[u32]) -> Vec<Tile> {
     let mut tiles = vec![Tile::Empty; dims.x as usize * dims.y as usize * dims.z as usize];
     for y in 0..dims.y {
         for x in 0..dims.x {
@@ -410,11 +418,9 @@ mod tests {
     #[test]
     fn biome_decision_is_consumed_by_the_surface_material_rule() {
         let height = 7;
-        let mut rng = ChaCha8Rng::seed_from_u64(DEFAULT_SEED ^ STREAM_WORLDGEN);
         let tiles = layered_terrain(
             Dims::DEFAULT,
             &vec![height; (Dims::DEFAULT.x * Dims::DEFAULT.y) as usize],
-            &mut rng,
         );
 
         for ((x, y), expected) in [((64, 64), Material::Snow), ((28, 92), Material::Ice)] {
@@ -451,7 +457,7 @@ mod tests {
         apply_lake(Dims::DEFAULT, &mut heights);
         apply_ridges(Dims::DEFAULT, &mut heights);
         let camp = camp_origin(Dims::DEFAULT, &heights);
-        let mut tiles = layered_terrain(Dims::DEFAULT, &heights, &mut terrain_rng);
+        let mut tiles = layered_terrain(Dims::DEFAULT, &heights);
         let mut tree_rng = ChaCha8Rng::seed_from_u64(DEFAULT_SEED ^ STREAM_TREES);
         place_trees(Dims::DEFAULT, &heights, &mut tiles, camp, &mut tree_rng);
 

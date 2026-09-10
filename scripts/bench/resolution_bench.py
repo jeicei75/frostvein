@@ -131,12 +131,29 @@ def _coarse_faces(snapshot):
     return total
 
 
+# The client mirror of this dispatch is an exhaustive `match` over `Material`
+# (`crates/gui/src/project.rs`, `material_detail_depth`), so the compiler refuses to build there
+# if a variant is ever added without an arm. Python has no such guard, and a bare `return 0`
+# catch-all would silently hand a new material FLAT relief -- the two rules would diverge with
+# every test still green, which is exactly how the Rust/Python seam was nearly lost in 10.9.
+# Name every material instead, and refuse the ones nobody has decided about.
+FLAT_MATERIALS = frozenset({"ice", "tree_trunk", "tree_foliage"})
+DRIFTING_MATERIALS = frozenset({"snow"})
+BREAKING_MATERIALS = frozenset({"stone", "soil"})
+KNOWN_MATERIALS = FLAT_MATERIALS | DRIFTING_MATERIALS | BREAKING_MATERIALS
+
+
 def _material_detail_depth(material, plane, u, v, k):
-    if material == "snow":
+    if material in DRIFTING_MATERIALS:
         return detail_depth(WORLD_SEED, plane, u, v, k)
-    if material in {"stone", "soil"}:
+    if material in BREAKING_MATERIALS:
         return detail_depth(WORLD_SEED, plane, u, v, k, coarse_cells=1)
-    return 0
+    if material in FLAT_MATERIALS:
+        return 0
+    raise ValueError(
+        f"no relief rule for material {material!r}; the client's match over Material is "
+        f"exhaustive, so add the arm on both sides. Known: {sorted(KNOWN_MATERIALS)}"
+    )
 
 
 def _cell_heights(x, y, z, k, material, carved, lattice=1):
