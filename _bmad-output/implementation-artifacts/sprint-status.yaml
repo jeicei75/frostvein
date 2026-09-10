@@ -2047,7 +2047,7 @@ development_status:
                           # and stays RED; only campfire+torches together clears (1.3102%). And the
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
-  10-9-the-land-reads-natural: in-progress
+  10-9-the-land-reads-natural: review
                           # ADDED 2026-09-10 out of 10.8's closing conversation, and it runs
                           # BEFORE Epic 11. THE TERRAIN STORY the 10.8 entry promised -- but note
                           # the scope MOVED during creation: the "too thick snow" that named it is

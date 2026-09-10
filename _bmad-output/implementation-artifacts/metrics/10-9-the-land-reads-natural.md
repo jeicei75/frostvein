@@ -11,3 +11,11 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-opus-5 | 210 | 420 | 463,342 | 27,516,763 | 284,625 | 28,265,150 | $23.77 | `f9fe7996-bcfc-43fa-a4f7-e00543b55687.jsonl` | 2026-09-10 07:22 UTC · rates 2026-08-31 | 199 | — |
+| dev | codex | gpt-5.6-terra | 1 | 8,783 | 0 | 11,008 | 7 | 19,798 | $0.02 | `rollout-2026-09-10T08-41-24-01a08a7a-961d-7b93-9176-500ab61d2e22.jsonl` | 2026-09-10 13:02 UTC · rates 2026-08-31 | 0 | 0pp |
+| dev | codex | gpt-5.6-terra | 9 | 81,242 | 0 | 396,032 | 4,156 | 481,430 | $0.29 | `rollout-2026-09-10T09-10-07-01a08a94-dfe1-7f43-acdb-c5993492e4d0.jsonl` | 2026-09-10 13:02 UTC · rates 2026-08-31 | 2 | 0pp |
+| dev | codex | gpt-5.6-terra | 8 | 77,767 | 0 | 350,208 | 3,956 | 431,931 | $0.27 | `rollout-2026-09-10T09-13-02-01a08a97-8bcd-70f1-b954-9121bcf8fcaf.jsonl` | 2026-09-10 13:02 UTC · rates 2026-08-31 | 1 | 0pp |
+| dev | codex | gpt-5.6-terra | 38 | 130,172 | 0 | 3,416,576 | 12,616 | 3,559,364 | $1.10 | `rollout-2026-09-10T09-16-20-01a08a9a-9000-74e0-81fb-59e9b1bf1edd.jsonl` | 2026-09-10 13:02 UTC · rates 2026-08-31 | 6 | 2pp |
+| dev | codex | gpt-5.6-terra | 29 | 98,129 | 0 | 1,997,568 | 10,459 | 2,106,156 | $0.72 | `rollout-2026-09-10T09-26-04-01a08aa3-78da-7f50-8d47-dfbf3985c7c0.jsonl` | 2026-09-10 13:02 UTC · rates 2026-08-31 | 6 | 1pp |
+| dev | codex | gpt-5.6-terra | 48 | 121,307 | 0 | 3,896,320 | 17,075 | 4,034,702 | $1.23 | `rollout-2026-09-10T09-48-44-01a08ab8-3954-7613-a296-1d4b8c2a1644.jsonl` | 2026-09-10 13:02 UTC · rates 2026-08-31 | 9 | 2pp |
+| dev | codex | gpt-5.6-terra | 189 | 559,659 | 0 | 24,189,440 | 48,143 | 24,797,242 | $6.53 | `rollout-2026-09-10T10-10-08-01a08acb-d317-75d1-bdfb-33ec31cda42b.jsonl` | 2026-09-10 13:02 UTC · rates 2026-08-31 | 40 | 8pp |
+| dev | codex | gpt-5.6-terra | 278 | 832,900 | 0 | 29,476,864 | 71,033 | 30,380,797 | $8.41 | `rollout-2026-09-10T11-11-09-01a08b03-afc4-7b23-bd72-14b4856bb8ef.jsonl` | 2026-09-10 13:02 UTC · rates 2026-08-31 | 85 | 13pp |

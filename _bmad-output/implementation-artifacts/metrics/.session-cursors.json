@@ -2192,5 +2192,165 @@
     "quota_last": 27.0,
     "schema": 2,
     "turns": 137
+  },
+  "rollout-2026-09-10T08-41-24-01a08a7a-961d-7b93-9176-500ab61d2e22.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 11008,
+        "input": 8783,
+        "output": 7
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 11008,
+    "input": 8783,
+    "last_ts": "2026-09-10T08:41:29.807Z",
+    "marked_at": null,
+    "output": 7,
+    "primary_only": false,
+    "quota_last": 29.0,
+    "schema": 2,
+    "turns": 1
+  },
+  "rollout-2026-09-10T09-10-07-01a08a94-dfe1-7f43-acdb-c5993492e4d0.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 396032,
+        "input": 81242,
+        "output": 4156
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 396032,
+    "input": 81242,
+    "last_ts": "2026-09-10T09:11:48.602Z",
+    "marked_at": null,
+    "output": 4156,
+    "primary_only": false,
+    "quota_last": 29.0,
+    "schema": 2,
+    "turns": 9
+  },
+  "rollout-2026-09-10T09-13-02-01a08a97-8bcd-70f1-b954-9121bcf8fcaf.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 350208,
+        "input": 77767,
+        "output": 3956
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 350208,
+    "input": 77767,
+    "last_ts": "2026-09-10T09:14:28.885Z",
+    "marked_at": null,
+    "output": 3956,
+    "primary_only": false,
+    "quota_last": 30.0,
+    "schema": 2,
+    "turns": 8
+  },
+  "rollout-2026-09-10T09-16-20-01a08a9a-9000-74e0-81fb-59e9b1bf1edd.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 3416576,
+        "input": 130172,
+        "output": 12616
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 3416576,
+    "input": 130172,
+    "last_ts": "2026-09-10T09:22:47.904Z",
+    "marked_at": null,
+    "output": 12616,
+    "primary_only": false,
+    "quota_last": 32.0,
+    "schema": 2,
+    "turns": 38
+  },
+  "rollout-2026-09-10T09-26-04-01a08aa3-78da-7f50-8d47-dfbf3985c7c0.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 1997568,
+        "input": 98129,
+        "output": 10459
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 1997568,
+    "input": 98129,
+    "last_ts": "2026-09-10T09:32:06.637Z",
+    "marked_at": null,
+    "output": 10459,
+    "primary_only": false,
+    "quota_last": 33.0,
+    "schema": 2,
+    "turns": 29
+  },
+  "rollout-2026-09-10T09-48-44-01a08ab8-3954-7613-a296-1d4b8c2a1644.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 3896320,
+        "input": 121307,
+        "output": 17075
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 3896320,
+    "input": 121307,
+    "last_ts": "2026-09-10T09:57:38.545Z",
+    "marked_at": null,
+    "output": 17075,
+    "primary_only": false,
+    "quota_last": 35.0,
+    "schema": 2,
+    "turns": 48
+  },
+  "rollout-2026-09-10T10-10-08-01a08acb-d317-75d1-bdfb-33ec31cda42b.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 24189440,
+        "input": 559659,
+        "output": 48143
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 24189440,
+    "input": 559659,
+    "last_ts": "2026-09-10T10:49:55.975Z",
+    "marked_at": null,
+    "output": 48143,
+    "primary_only": false,
+    "quota_last": 43.0,
+    "schema": 2,
+    "turns": 189
+  },
+  "rollout-2026-09-10T11-11-09-01a08b03-afc4-7b23-bd72-14b4856bb8ef.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 29476864,
+        "input": 832900,
+        "output": 71033
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 29476864,
+    "input": 832900,
+    "last_ts": "2026-09-10T12:36:40.811Z",
+    "marked_at": null,
+    "output": 71033,
+    "primary_only": false,
+    "quota_last": 56.0,
+    "schema": 2,
+    "turns": 278
   }
 }

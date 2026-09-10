@@ -4,7 +4,7 @@ baseline_commit: 5133a86f683134fb7105a4f276173268d26cb92c
 
 # Story 10.9: The Land Reads Natural
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -385,6 +385,7 @@ trust):
 | Date | Change |
 |---|---|
 | 2026-09-10 | Finishing verification: rebased the live export control to 62,586 faces / 12,322 quads / 24,644 triangles with its remeasured census and reason comment. Three self-review findings were fixed (benchmark material parity, lake tree exclusion, and biome emission-path coverage); the final full gate is green in 480s. |
+| 2026-09-10 | Tasks 3-7 delegated to Codex and committed; full gate GREEN (452 s) re-run independently by the orchestrator. Story to `review` with **Task 8 / AC12 outstanding** — it is a sitting with Wolf and cannot be closed by dev. AC1 also stands unmet as written. Dev cost: **9 Codex rollouts, $18.57, 27 percentage points of the weekly quota**, of which 4 rollouts ($2.38, ~3pp) were runs killed by the harness. |
 | 2026-09-10 | Task 2 (AC2, AC3): coherent material-keyed relief replaces the per-voxel hash placeholder. `triangles=` 927,622 -> **95,422**, inside both AC2 bounds; `mesh_build_ms=` 2,516 -> 1,768. The Rust/Python rule pin was nearly lost in the rewrite and was restored — the gate's mutation audit caught it. |
 | 2026-09-10 | Tasks 5–7: scoured ridges now occupy the confirmed far `x=0` / `y=127` edges; direct pins prove height-field preservation, bounded clamp ripple, lake flatness, and camp separation. Terrain-derived controls were rebased, every new/changed terrain test received executed mutation evidence, and AC2 re-measured at **94,208** triangles / 2,600 ms. Task 8/AC12 remains a human sitting and is intentionally uncompleted. |
 | 2026-09-10 | Task 1 (AC1): edge mapping measured and committed. `x=0` far upper-left, `y=127` far upper-right, meeting at screen `(683,205)`; `x=127` and `y=0` are off-screen at this framing, so AC1 cannot be met as literally written. Two instruments the story proposed were falsified first (`--cursor` is dead headless; the pixel diff has no noise floor under animated snowfall). |
