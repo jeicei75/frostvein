@@ -130,6 +130,24 @@ fn surface_material(biome: Biome, gradient: u32, x: u32, y: u32) -> Material {
     }
 }
 
+pub(crate) fn apply_lake(dims: Dims, heights: &mut [u32]) {
+    let lake_height = (0..dims.y)
+        .flat_map(|y| (0..dims.x).map(move |x| (x, y)))
+        .filter(|&(x, y)| biome_at(dims, x, y) == Biome::Lake)
+        .map(|(x, y)| heights[(x + y * dims.x) as usize])
+        .min()
+        .expect("lake footprint is non-empty");
+
+    for y in 0..dims.y {
+        for x in 0..dims.x {
+            if biome_at(dims, x, y) == Biome::Lake {
+                heights[(x + y * dims.x) as usize] = lake_height;
+            }
+        }
+    }
+    clamp_steps(dims, heights);
+}
+
 pub(crate) fn layered_terrain(dims: Dims, heights: &[u32], _rng: &mut ChaCha8Rng) -> Vec<Tile> {
     let mut tiles = vec![Tile::Empty; dims.x as usize * dims.y as usize * dims.z as usize];
     for y in 0..dims.y {

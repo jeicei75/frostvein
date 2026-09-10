@@ -1136,7 +1136,8 @@ impl World {
             dims.y
         );
         let mut rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_WORLDGEN);
-        let heights = worldgen::height_field(dims, &mut rng);
+        let mut heights = worldgen::height_field(dims, &mut rng);
+        worldgen::apply_lake(dims, &mut heights);
         let mut tiles = worldgen::layered_terrain(dims, &heights, &mut rng);
         worldgen::place_ramps(dims, &heights, &mut tiles);
         let camp_origin = worldgen::camp_origin(dims, &heights);

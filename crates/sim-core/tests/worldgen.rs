@@ -131,6 +131,20 @@ fn surface_materials_are_coherent_and_snow_prefers_flat_ground() {
 }
 
 #[test]
+fn frozen_lake_is_a_flat_contiguous_ice_region_away_from_camp() {
+    let world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let lake_height = surface_height(&world, 28, 92);
+    let flat_lake = (84..=100)
+        .flat_map(|y| (18..=38).map(move |x| (x, y)))
+        .filter(|&(x, y)| surface_material(&world, x, y) == Material::Ice)
+        .filter(|&(x, y)| surface_height(&world, x, y) == lake_height)
+        .count();
+    assert!(flat_lake >= 40, "only {flat_lake} same-height ice cells");
+    assert!((28 - camp.x).abs() > 3 || (92 - camp.y).abs() > 3);
+}
+
+#[test]
 fn generated_world_writes_no_tile_beyond_vertical_bounds() {
     // NOTE: the guard this test exists for is `place_trees`'s `crown_top >= dims.z` skip.
     // Remove it and `tiles[index(..)]` addresses past the grid, so generation panics — a
@@ -418,7 +432,7 @@ fn spawn_positions_for_seed_42_are_pinned() {
     // fingerprint folds every tile, it is the tightest tree-stream regression guard in the repo,
     // far tighter than the 230-300 density band, which only discriminates roll denominators
     // outside roughly 36..52. Re-pin it only alongside a stated, measured geometry change.
-    assert_eq!(terrain_fingerprint, 0x12b6_ea85_735f_d7a2);
+    assert_eq!(terrain_fingerprint, 0x1e0f_bb05_1f18_640e);
 }
 
 #[test]
