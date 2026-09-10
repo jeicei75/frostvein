@@ -420,4 +420,18 @@ mod tests {
             Material::Ice
         );
     }
+
+    #[test]
+    fn lake_post_pass_flattens_its_entire_ice_core() {
+        let mut rng = ChaCha8Rng::seed_from_u64(DEFAULT_SEED ^ STREAM_WORLDGEN);
+        let mut heights = height_field(Dims::DEFAULT, &mut rng);
+        apply_lake(Dims::DEFAULT, &mut heights);
+
+        let lake_heights: std::collections::BTreeSet<_> = (0..Dims::DEFAULT.y)
+            .flat_map(|y| (0..Dims::DEFAULT.x).map(move |x| (x, y)))
+            .filter(|&(x, y)| biome_at(Dims::DEFAULT, x, y) == Biome::Lake)
+            .map(|(x, y)| heights[(x + y * Dims::DEFAULT.x) as usize])
+            .collect();
+        assert_eq!(lake_heights.len(), 1, "lake core heights were {lake_heights:?}");
+    }
 }
