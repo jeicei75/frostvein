@@ -335,6 +335,34 @@ the full gate ran those checks green. No fourth review was run.
   re-pointed because Task 6 changed its measured literal.
 - **AC12 remains unmet by design.** Task 8 is Wolf’s in-person sign-off and was not attempted.
 
+**Orchestrator's independent verification at `b7be859`** (Codex's own report was not taken on
+trust):
+
+- **Full gate GREEN, 452 s**, re-run by the orchestrator: `cargo test` (the full arm, not the
+  fast set) 65 s, pixel guards 350 s, bench tests ok, mutation audit ok. No SKIPPED banner.
+- **AC2 re-measured at the tip with the daemon running:** `triangles=94,442` — inside both
+  bounds. `mesh_build_ms=1,715`. Frame committed as `10-9-signoff/boot-b7be859-subdiv4.png`.
+- **AC11 re-measured:** `--subdiv 1` renders, 55,167 entities, `triangles_derived=522,304`.
+- **AC9 verified in the DATA, not just by its test.** The exported live world was walked for
+  surface materials: 839 ice surface cells overall, but connected-component analysis finds
+  exactly ONE region of >= 40 cells — 181 cells at `x[20,36] y[86,98]`, ALL at `z=17`, clear of
+  the camp. AC9's contiguity, size, single-height and placement clauses all hold.
+  **First reading was wrong and is recorded because it nearly became a false negative:** the
+  lake was projected at `z=9` and the crop came back showing no lake at all. The lake is at
+  `z=17`; the crop had been taken ~56 px below it. Verified against the data before concluding.
+- **AC9's letter is met but the lake does not read as ice** at this lighting — flat, treeless
+  and contiguous, but reading as a snow clearing. Flagged for the sitting, not signed off here.
+- **AC5's scour rule is a fixed lattice** — `gradient > 0 && (x / 16 + y / 16) % 5 == 0` — i.e.
+  diagonal stripes of 16-cell blocks. Passes its test; flagged for the sitting as a possible
+  visible repeat.
+- **Codex used all THREE `codex review` passes and the third still found a real defect** (a
+  biome test that bypassed production emission, fixed in `81430cf`). Per the cap's rationale
+  that is information for the review: the self-gate was cut off while still finding things, not
+  because it had converged.
+- **`a0c612c` "Keep trees off the frozen lake" is behaviour no AC asked for.** It is sensible
+  and arrived via the self-gate, but it is scope beyond the ACs and should be confirmed at
+  review rather than pass unremarked.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/10-9-signoff/AC1-edge-mapping.md` — NEW
