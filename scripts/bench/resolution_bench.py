@@ -17,8 +17,9 @@ from pathlib import Path
 
 
 WORLD_SEED = 0xF005_7E1A
-CONTROL_FACES = 61_152
-CONTROL_QUADS = 12_132
+# Story 10.9's materials, lake, and far ridges raised this control +2.78% faces / +2.83% quads.
+CONTROL_FACES = 62_854
+CONTROL_QUADS = 12_475
 NEIGHBOURS = ((0, -1), (0, 1), (1, -1), (1, 1), (2, -1), (2, 1))
 SIDE_DELTAS = ((-1, 0), (1, 0), (0, -1), (0, 1))
 # Guard the process before Python object overhead can exhaust the devpod.  This is a benchmark

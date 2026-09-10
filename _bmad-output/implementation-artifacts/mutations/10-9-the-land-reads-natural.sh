@@ -86,7 +86,7 @@ PY
 mutation "rebased real-world control rejects a stale quad count" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_control_check_requires_the_real_world_literals <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
-old = 'CONTROL_QUADS = 12_132'
+old = 'CONTROL_QUADS = 12_475'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'CONTROL_QUADS = 12_131'))
+p.write_text(s.replace(old, 'CONTROL_QUADS = 12_474'))
 PY
