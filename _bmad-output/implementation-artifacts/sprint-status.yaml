@@ -2002,7 +2002,29 @@ development_status:
                           # timestamps here. AC9/10/11 added; mutations moved 9 -> 12.
                           # WOLF RULED THE STORY RUNS WHOLE, Tasks 1-7, against the advice to
                           # split 6-7 off. Still open: issue #74's routing.
-  10-8-lighting-and-atmosphere-re-judged-under-the-sun: in-progress
+  10-8-lighting-and-atmosphere-re-judged-under-the-sun: done
+                          # 2026-09-09 MERGED as PR #85 (merge dee3819), verified with
+                          # `git merge-base --is-ancestor a6494f0 origin/main`. Full gate GREEN
+                          # 485s at the tip; 54 commits.
+                          # DONE WITH ONE AC UNMET, AND THAT IS DELIBERATE: **AC16 is NOT
+                          # satisfied.** Its five consecutive full-tier runs were taken (5/5
+                          # green, zero "wrote no PNG"), but issue #72's RACE WAS NEVER
+                          # REPRODUCED -- reverting to the async `save_to_disk` and running the
+                          # all-off guard three times left the PNG on disk every time. The fix is
+                          # held by a deterministic ordering test and those five runs; the failure
+                          # it prevents has not been observed in this venue. The PR body said so
+                          # plainly and Wolf merged it, which is what accepted it. #72 stays OPEN.
+                          # RULINGS 1-7 recorded in the story with Wolf's words. DEFERRED BY WOLF,
+                          # not dropped: Ruling 3's fog and rim defects, the hover-slab defects,
+                          # and the snow layer's thickness -- the last gets ITS OWN TERRAIN STORY
+                          # ("I think we need to have a separate terrain story anyway"), because
+                          # the "too thick" layer is `worldgen.rs:100` making every surface tile a
+                          # FULL CELL of Snow or Ice, not the cap and not the renderer.
+                          # Snowfall at any view angle -> Epic 11.2: it needs a camera-anchored
+                          # field, a MECHANISM, and AC15 authorised constants only.
+                          # NEXT IS **NOT 8.3** -- Epic 11 runs first (2026-09-08 ruling), and the
+                          # terrain story is now also ahead of it. The board's numeric order has
+                          # overridden a prose ruling three times; do not let it a fourth.
                           # ADDED 2026-09-08 on Wolf's instruction ("lighting and overall
                           # atmosphere/style story first") and RUNS BEFORE 8.3 -- the 2026-08-28
                           # ruling (look work ahead of the six-bar sign-off) still governs, and
