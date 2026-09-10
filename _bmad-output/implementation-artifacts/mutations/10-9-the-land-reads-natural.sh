@@ -48,7 +48,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    if true {'))
 PY
 
-mutation "lake basin no longer flattens its ice" sim-core frozen_lake_is_a_flat_contiguous_ice_region_away_from_camp <<'PY'
+mutation "lake basin no longer flattens its ice" sim-core worldgen::tests::lake_post_pass_flattens_its_entire_ice_core <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/worldgen.rs'); s = p.read_text()
 old = '                heights[(x + y * dims.x) as usize] = lake_height;'
