@@ -283,6 +283,9 @@ pub(crate) fn place_trees(
 
     for y in 1..dims.y - 1 {
         for x in 1..dims.x - 1 {
+            if biome_at(dims, x, y) == Biome::Lake {
+                continue;
+            }
             if (x as i32 - camp.x).abs() <= camp_radius + 1
                 && (y as i32 - camp.y).abs() <= camp_radius + 1
             {
@@ -343,7 +346,7 @@ mod tests {
     use rand::SeedableRng;
 
     use super::*;
-    use crate::{DEFAULT_SEED, STREAM_WORLDGEN};
+    use crate::{DEFAULT_SEED, STREAM_TREES, STREAM_WORLDGEN};
 
     #[test]
     fn height_field_for_the_default_seed_stays_pinned_before_post_passes() {
@@ -437,5 +440,33 @@ mod tests {
             1,
             "lake core heights were {lake_heights:?}"
         );
+    }
+
+    #[test]
+    fn trees_do_not_grow_out_of_the_lake() {
+        let mut terrain_rng = ChaCha8Rng::seed_from_u64(DEFAULT_SEED ^ STREAM_WORLDGEN);
+        let mut heights = height_field(Dims::DEFAULT, &mut terrain_rng);
+        apply_lake(Dims::DEFAULT, &mut heights);
+        apply_ridges(Dims::DEFAULT, &mut heights);
+        let camp = camp_origin(Dims::DEFAULT, &heights);
+        let mut tiles = layered_terrain(Dims::DEFAULT, &heights, &mut terrain_rng);
+        let mut tree_rng = ChaCha8Rng::seed_from_u64(DEFAULT_SEED ^ STREAM_TREES);
+        place_trees(Dims::DEFAULT, &heights, &mut tiles, camp, &mut tree_rng);
+
+        for y in 0..Dims::DEFAULT.y {
+            for x in 0..Dims::DEFAULT.x {
+                if biome_at(Dims::DEFAULT, x, y) != Biome::Lake {
+                    continue;
+                }
+                let height = heights[(x + y * Dims::DEFAULT.x) as usize];
+                assert!(
+                    (height + 1..Dims::DEFAULT.z).all(|z| !matches!(
+                        tiles[index(Dims::DEFAULT, x, y, z)],
+                        Tile::Solid(Material::TreeTrunk)
+                    )),
+                    "lake column ({x},{y}) grew a tree"
+                );
+            }
+        }
     }
 }

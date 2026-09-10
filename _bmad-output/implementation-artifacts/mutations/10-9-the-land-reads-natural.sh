@@ -83,12 +83,22 @@ s = s.replace(old_x, '    let centre_x = dims.x as f64 * 0.50;')
 p.write_text(s.replace(old_y, '    let centre_y = dims.y as f64 * 0.50;'))
 PY
 
+mutation "lake exclusion no longer keeps trees off the ice" sim-core worldgen::tests::trees_do_not_grow_out_of_the_lake <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/worldgen.rs'); s = p.read_text()
+old = '''            if biome_at(dims, x, y) == Biome::Lake {
+                continue;
+            }'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false { continue; }'))
+PY
+
 mutation "rebased real-world control rejects a stale quad count" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_control_check_requires_the_real_world_literals <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
-old = 'CONTROL_QUADS = 12_475'
+old = 'CONTROL_QUADS = 12_322'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'CONTROL_QUADS = 12_474'))
+p.write_text(s.replace(old, 'CONTROL_QUADS = 12_321'))
 PY
 
 mutation "offline ice relief stops matching the client's flat ice" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_ice_stays_flat_at_subdivision_like_the_client <<'PY'

@@ -213,16 +213,16 @@ class ResolutionGeometryTests(unittest.TestCase):
         self.assertEqual(resolution_bench.geometry_summary(hollow, k=1)["chunks"], 1)
 
     def test_control_check_requires_the_real_world_literals(self):
-        resolution_bench.assert_control({"exposed_faces": 62854, "greedy_quads": 12475})
-        with self.assertRaisesRegex(ValueError, "62854"):
-            resolution_bench.assert_control({"exposed_faces": 62853, "greedy_quads": 12475})
+        resolution_bench.assert_control({"exposed_faces": 62586, "greedy_quads": 12322})
+        with self.assertRaisesRegex(ValueError, "62586"):
+            resolution_bench.assert_control({"exposed_faces": 62585, "greedy_quads": 12322})
 
 
 class ResolutionRealWorldControlTests(unittest.TestCase):
     """AC4's oracle, with a caller.
 
     `assert_control` was reachable only from `main()`, so every gate-run test meshed a synthetic
-    two-cell world and none meshed the real one. 62,854 / 12,475 are MEASUREMENTS of world
+    two-cell world and none meshed the real one. 62,586 / 12,322 are MEASUREMENTS of world
     content -- exactly the shape that went stale unnoticed in 9.4 -- and nothing went red when
     worldgen or the exposure rule moved. This is the caller.
     """
@@ -247,7 +247,7 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
             world = resolution_bench._load_snapshot(path)
         summary = resolution_bench.geometry_summary(world, k=1, detail=True)
         resolution_bench.assert_control(summary)
-        self.assertEqual(summary["triangles"], 24_950)
+        self.assertEqual(summary["triangles"], 24_644)
 
         # AC3a: the per-class split is a MEASUREMENT of the same draw set, so it is pinned
         # here rather than written by hand into a sign-off table. The previous table mixed
@@ -257,11 +257,11 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
         self.assertEqual(
             census,
             {
-                "tree_cells": 5_041,
-                "tree_faces": 13_641,
-                "terrain_cells": 40_982,
-                "terrain_faces": 49_213,
-                "trees": 265,
+                "tree_cells": 4_930,
+                "tree_faces": 13_339,
+                "terrain_cells": 40_990,
+                "terrain_faces": 49_247,
+                "trees": 259,
             },
         )
         # The split must be a split OF the control, not an independent count beside it.
