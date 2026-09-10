@@ -1,6 +1,10 @@
+---
+baseline_commit: 5133a86f683134fb7105a4f276173268d26cb92c
+---
+
 # Story 10.9: The Land Reads Natural
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -45,16 +49,31 @@ measurement instrument's leftovers.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Observe the edge mapping before placing anything (AC: 1)**
-  - [ ] Run `gui --headless --static-world --subdiv 4 --frames 2 --capture <path>` at the boot
+- [x] **Task 1 — Observe the edge mapping before placing anything (AC: 1)**
+  - [x] Run `gui --headless --static-world --subdiv 4 --frames 2 --capture <path>` at the boot
         framing; identify the four world edges in the resulting PNG.
-  - [ ] Method that works when the picture alone is ambiguous: rebuild with one edge band raised
+        **`--frames 2` does not capture** — the frame is still black and the run dies on
+        `capture is black`. Used `--frames 160` (the 10.8 signoff recipe); `triangles=` unaffected.
+  - [x] Method that works when the picture alone is ambiguous: rebuild with one edge band raised
         by ~8 levels, capture again, and diff — the changed pixels name that edge. Restore after.
-  - [ ] Record the mapping in the story and commit the capture under `10-9-signoff/`.
-  - [ ] NOTE: derivation says `x=0` and `y=127` are the FAR pair (upper-left, upper-right) and the
+        **The diff method was tried and does not work at this framing** — snowfall and stars are
+        animated, so same-build captures differ frame-wide and the bands are not separable
+        (15,830 / 24,574 changed px, smeared across all quadrants). `--cursor` was tried too and
+        cannot work headless (no `PrimaryWindow` → live pick always `None`). The mapping was taken
+        from `CameraRig::project_world_point_with_depth`, the capture's own oracle, verified first
+        against the picture: camp `[64,64,9]` → screen `(640.0, 561.2)`, where the campfire is.
+        All probe edits reverted; restore confirmed by re-running the control to `triangles=927622`.
+  - [x] Record the mapping in the story and commit the capture under `10-9-signoff/`.
+  - [x] NOTE: derivation says `x=0` and `y=127` are the FAR pair (upper-left, upper-right) and the
         pinned compass agrees (`north_on_screen` = "down-left", `camera.rs:172`), but a projection
         probe at creation returned ±2 px deltas for 128-cell distances — degenerate without a real
         viewport. Treat the derivation as unconfirmed until this capture confirms it.
+        **CONFIRMED.** `x=0` is upper-left (depth 95–141), `y=127` upper-right (depth 86–141), and
+        they meet at world `(0,127)` = screen `(683,205)`, the silhouette apex. The creation
+        probe's ±2 px does not reproduce — it was reading a default-sized window. **AC1 cannot be
+        met as literally written: `x=127` and `y=0` are entirely off-screen at the boot framing
+        and partly behind the camera**, so they are identified by projection, not in the image.
+        Full table in `10-9-signoff/AC1-edge-mapping.md`.
 - [ ] **Task 2 — Replace `detail_depth` with coherent, material-keyed relief (AC: 2, 3)**
   - [ ] Same signature, same call sites: `detail_depth(plane, u, v, subdiv) -> i32` at
         `crates/gui/src/project.rs:1165`. Sample coherent noise in world space over several coarse
@@ -196,14 +215,42 @@ Push and PR only on Wolf's explicit yes.
 
 ### Agent Model Used
 
+- Orchestration + verification: Claude Opus 5 (1M context).
+- Implementation (Tasks 2-7): Codex `gpt-5.6-terra`, reasoning effort high, via
+  `scripts/codex-handoff.sh`.
+
 ### Debug Log References
+
+**Control on the clean tree, before any edit** (`5133a86`, `--subdiv 4 --frames 2`):
+`subdiv 4: projected 45042 terrain cubes at z 31 entities=2164 chunks=118 faces=1155694
+triangles=927622 mesh_build_ms=2527` — reproduces the story's creation baseline exactly.
+
+**Task 1 probes (all reverted, nothing committed while sabotaged).** Three instruments were tried
+before one worked; the two that failed are recorded because each fails silently in a way that
+would have been believed:
+1. `--cursor` headless → `pick: cursor=(640,700) no tile picked`, four screen points, all None.
+2. Raise-a-band pixel diff → no noise floor at this framing (animated snowfall/stars).
+3. `CameraRig::project_world_point_with_depth` → deterministic, and cross-checked against the
+   committed frame before use.
+
+**Restore verified:** `git status` clean on `crates/`, rebuild with no warnings, control re-run to
+`triangles=927622` — the probe binary does not survive on disk.
 
 ### Completion Notes List
 
+- **Task 1 (AC1) complete.** Edge mapping taken and committed
+  (`10-9-signoff/AC1-edge-mapping.md`, `boot-baseline-5133a86-subdiv4.png`). Ridges target `x=0`
+  and `y=127`, confirming the story's derivation.
+- **AC1 defect on the record:** only two of the four world edges are in frame at the boot framing.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/10-9-signoff/AC1-edge-mapping.md` — NEW
+- `_bmad-output/implementation-artifacts/10-9-signoff/boot-baseline-5133a86-subdiv4.png` — NEW
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-09-10 | Task 1 (AC1): edge mapping measured and committed. `x=0` far upper-left, `y=127` far upper-right, meeting at screen `(683,205)`; `x=127` and `y=0` are off-screen at this framing, so AC1 cannot be met as literally written. Two instruments the story proposed were falsified first (`--cursor` is dead headless; the pixel diff has no noise floor under animated snowfall). |
 | 2026-09-10 | Story created. Scope settled with Wolf in conversation; baseline, deliberate RED and restore confirmation executed at creation on `main` c54b793. |
