@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-08
+last_updated: 2026-09-10
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2047,6 +2047,39 @@ development_status:
                           # and stays RED; only campfire+torches together clears (1.3102%). And the
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
+  10-9-the-land-reads-natural: ready-for-dev
+                          # ADDED 2026-09-10 out of 10.8's closing conversation, and it runs
+                          # BEFORE Epic 11. THE TERRAIN STORY the 10.8 entry promised -- but note
+                          # the scope MOVED during creation: the "too thick snow" that named it is
+                          # NOT here. That is a full-cell worldgen fact needing a cover depth on
+                          # the tile model, i.e. AD-19's terrain-STATE epic. What IS here is the
+                          # terrain LOOK: Wolf 2026-09-10, "with subdiv 4 the whole landscape is
+                          # blocky all around.. small blocks all the places like noise".
+                          # CAUSE FOUND AND MEASURED: `detail_depth` (gui/src/project.rs:1165) is
+                          # uncorrelated per-fine-voxel hash noise whose OWN docstring calls it "a
+                          # MEASUREMENT STAND-IN for 10.4's authored terrain look, not a visual
+                          # decision ... 10.4 owns the real look and this is the copy it will
+                          # replace". 10.4 never replaced it and 10.8 made --subdiv 4 the shipped
+                          # DEFAULT -- so a measurement placeholder is the game's default look.
+                          # This is 10.4's unpaid debt, which is why it is Epic 10 and not 11.
+                          # MEASURED AT CREATION on main c54b793: subdiv 4 triangles=927,622;
+                          # deliberate RED with detail_depth forced to 0 -> triangles=31,968.
+                          # THE NOISE IS 96.6% OF THE TRIANGLE BUDGET. The RED also corrected the
+                          # instrument: faces= moved only -33% and does NOT discriminate;
+                          # triangles= moved -96.6% and does. Restore was re-measured to
+                          # triangles=927622 exactly, so no mutant binary survived.
+                          # SEED DOES NOT CHANGE: layered_terrain is the LAST consumer of
+                          # STREAM_WORLDGEN, so the material rewrite leaves heights, ramps, camp,
+                          # trees and dwarves bit-identical; material has no gameplay meaning
+                          # (is_standable never reads it). Ridges and the frozen lake DO move
+                          # heights and are LOCAL POST-PASSES, never a change to height_field.
+                          # Frozen lake is in on Wolf's explicit call -- "I want to test biomes
+                          # and introduce concept" -- so it is a biome PILOT and AC10 makes the
+                          # biome decision prove it is CONSUMED, not merely produced.
+                          # --subdiv 1 STAYS (Wolf ruled it; I had over-read an earlier remark).
+                          # NOT here and deliberately: the rim dissolve and fog (10.8 Ruling 3
+                          # defect (d), still deferred -- same defect, different lever, so they
+                          # must be judged one at a time).
   epic-10-retrospective: optional
 
   epic-11: backlog
