@@ -95,17 +95,17 @@ measurement instrument's leftovers.
   - [ ] Blend the INPUT, not the output: threshold one low-frequency field so borders come out
         soft without a border-blending system.
   - [ ] Place the lake outside the camp; carve its basin flat as a post-pass on `heights`.
-- [ ] **Task 5 — Scoured ridges on the two far edges (AC: 6, 7, 8)**
-  - [ ] Post-pass on `heights` after `height_field` returns, before `clamp_steps`, bounded to a
+- [x] **Task 5 — Scoured ridges on the two far edges (AC: 6, 7, 8)**
+  - [x] Post-pass on `heights` after `height_field` returns, before `clamp_steps`, bounded to a
         band along the AC1 edges.
-  - [ ] Re-run `clamp_steps` after the post-pass and assert the ripple stays within the band plus
+  - [x] Re-run `clamp_steps` after the post-pass and assert the ripple stays within the band plus
         the raise amount.
-- [ ] **Task 6 — Rebase the material fixtures (AC: 13)**
-  - [ ] ~39 assertions across `sim-core/tests/worldgen.rs`, `sim-core/tests/scenario.rs`,
+- [x] **Task 6 — Rebase the material fixtures (AC: 13)**
+  - [x] ~39 assertions across `sim-core/tests/worldgen.rs`, `sim-core/tests/scenario.rs`,
         `tui/tests/client.rs`, `client-core/tests/mirror.rs`, `gui/tests/headless.rs`,
         `gui/tests/bench_contract.rs` reference `Snow`/`Ice`. Most construct tiles rather than
         assert worldgen output — change only those that assert.
-- [ ] **Task 7 — Mutation rows** — at minimum: revert `detail_depth` to the hash (AC2 must fail);
+- [x] **Task 7 — Mutation rows** — at minimum: revert `detail_depth` to the hash (AC2 must fail);
       restore the coin flip (AC4 must fail); return a constant biome (AC10 must fail); shift the
       ridge band off the far edges (AC6 must fail).
 - [ ] **Task 8 — The sitting (AC: 12)** — present the boot frame with fog and rim unchanged.
@@ -236,6 +236,43 @@ would have been believed:
 **Restore verified:** `git status` clean on `crates/`, rebuild with no warnings, control re-run to
 `triangles=927622` — the probe binary does not survive on disk.
 
+**Task 5 RED then green.** Before the ridge post-pass existed, the new unit tests did not compile:
+`cannot find function apply_ridges in this scope` and `cannot find function
+in_ridge_footprint in this scope`. With the minimal post-pass in place, all three passed. The
+default `height_field` samples are independently pinned at `(0,0)=15`, `(64,64)=8`,
+`(127,127)=5`, and `(20,92)=18` before either post-pass. Ridges raise only the confirmed far
+edges `x < 6` / `y >= 122` by four levels; the direct test permits the resulting clamp ripple only
+through `x < 10` / `y >= 118` (plus the lake core and its four-cell stepped shore), and found no
+outside change. The camp is `Pos { x: 64, y: 64, z: 9 }` on `DEFAULT_SEED`, and stayed outside the
+lake biome for `DEFAULT_SEED..DEFAULT_SEED + 51`.
+
+**Task 6 RED then green.** The first full `sim-core` run correctly failed its world fingerprint:
+`left: 628768409094364363`, `right: 2166155576459420686`. The real-world bench control then
+failed with `exposed_faces=61152 (expected 61142), greedy_quads=12132 (expected 19264)`. Rebased
+only those terrain-derived literals: fingerprint `0x08b9_d589_660e_9ccb`, control 61,152 faces /
+12,132 greedy quads / 24,264 triangles, and its per-class census. `cargo test -p sim-core --test
+worldgen` (16 tests) and `python3 -m unittest discover -s scripts/tests` (68 tests) then passed.
+
+**Task 5 AC2 re-measurement (after rebuilding following mutation):**
+`subdiv 4: projected 43458 terrain cubes at z 31 entities=1719 chunks=118 faces=802668
+triangles=94208 mesh_build_ms=2600`. Against the `5133a86` baseline (`triangles=927622`,
+`mesh_build_ms=2527`), 94,208 is `<= 231,905` and `> 60,000`; AC2 remains met. `faces=` is
+recorded only as diagnostic data, not an AC result.
+
+**Task 7 mutation evidence.** `scripts/mutate.sh
+_bmad-output/implementation-artifacts/mutations/10-9-the-land-reads-natural.sh` executed every
+row serially. KILLED: per-voxel relief hash (the AC2 budget test at `project.rs:2802`), snow/ice
+coin flip (`surface_materials_are_coherent_and_snow_prefers_flat_ground`), constant lake biome
+(`biome_decision_is_consumed_by_the_surface_material_rule`), shifted ridge band (outside-footprint
+failure at `(10,0)`), `NOISE_SPACING` 32→31 (the height-field pin), lake footprint moved over camp
+(`assertion left != right failed`), and the stale real-world quad control. The initial lake-basin
+row SURVIVED because the old rectangle test allowed the unflattened smooth field. It was
+strengthened with `lake_post_pass_flattens_its_entire_ice_core`, committed, and re-run alone via
+`scripts/mutate.sh`: KILLED with `lake core heights were {17, 18}`. The source was restored and
+`cargo build --offline -p simd -p gui` completed before the AC2 measurement. The mutation audit
+also exposed a stale 10.6 control row; it was re-pointed before mutation and now audits cleanly
+(527 rows).
+
 ### Completion Notes List
 
 - **Task 1 (AC1) complete.** Edge mapping taken and committed
@@ -263,6 +300,18 @@ would have been believed:
   diverged. `scripts/audit-mutations.py` caught it in the gate (row in
   `mutations/10-6-how-fine-can-we-go.sh` naming a test that no longer existed). The new rule is
   now ported to the bench, both sides re-pinned to the same new vector, and the row re-pointed.
+- **Task 5 (AC6, AC7, AC8) complete — `27965eb`.** A six-cell, four-level post-pass raises only
+  `x=0` and `y=127` edge bands, then re-runs `clamp_steps`. Unit pins show no height change beyond
+  the band plus its four-cell ripple and the lake footprint; they also pin `height_field` before
+  post-passes and camp safety across 51 seeds.
+- **Task 6 (AC13 fixture work) complete — `7dc83f8`.** Only worldgen-derived fingerprint and
+  bench-control literals moved. The control is now 61,152 exposed faces, 12,132 greedy quads and
+  24,264 triangles.
+- **Task 7 complete — `7e9fadd`, `db0186c`, `032f557`.** Eight story mutation rows executed;
+  seven killed on the first run. The lake row initially survived, so its test was strengthened in
+  `3a58eb4` and the row re-targeted in `032f557`; the re-run killed it. The 10.6 control row was
+  re-pointed because Task 6 changed its measured literal.
+- **AC12 remains unmet by design.** Task 8 is Wolf’s in-person sign-off and was not attempted.
 
 ### File List
 
@@ -273,11 +322,19 @@ would have been believed:
 - `scripts/bench/resolution_bench.py` — UPDATE (Task 2, the other half of the pinned rule)
 - `scripts/tests/test_resolution_bench.py` — UPDATE (Task 2, re-pinned vector)
 - `_bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh` — UPDATE (row re-pointed)
+- `crates/sim-core/src/lib.rs` — UPDATE (Task 5 ridge post-pass sequence)
+- `crates/sim-core/src/worldgen.rs` — UPDATE (Tasks 5 and 7 ridge, camp, lake and biome tests)
+- `crates/sim-core/tests/worldgen.rs` — UPDATE (Task 6 terrain fingerprint)
+- `crates/gui/src/project.rs` — UPDATE (Task 7 AC2 upper-budget assertion)
+- `scripts/bench/resolution_bench.py` — UPDATE (Task 6 real-world control)
+- `scripts/tests/test_resolution_bench.py` — UPDATE (Task 6 control/census literals)
+- `_bmad-output/implementation-artifacts/mutations/10-9-the-land-reads-natural.sh` — NEW (Task 7)
 
 ## Change Log
 
 | Date | Change |
 |---|---|
 | 2026-09-10 | Task 2 (AC2, AC3): coherent material-keyed relief replaces the per-voxel hash placeholder. `triangles=` 927,622 -> **95,422**, inside both AC2 bounds; `mesh_build_ms=` 2,516 -> 1,768. The Rust/Python rule pin was nearly lost in the rewrite and was restored — the gate's mutation audit caught it. |
+| 2026-09-10 | Tasks 5–7: scoured ridges now occupy the confirmed far `x=0` / `y=127` edges; direct pins prove height-field preservation, bounded clamp ripple, lake flatness, and camp separation. Terrain-derived controls were rebased, every new/changed terrain test received executed mutation evidence, and AC2 re-measured at **94,208** triangles / 2,600 ms. Task 8/AC12 remains a human sitting and is intentionally uncompleted. |
 | 2026-09-10 | Task 1 (AC1): edge mapping measured and committed. `x=0` far upper-left, `y=127` far upper-right, meeting at screen `(683,205)`; `x=127` and `y=0` are off-screen at this framing, so AC1 cannot be met as literally written. Two instruments the story proposed were falsified first (`--cursor` is dead headless; the pixel diff has no noise floor under animated snowfall). |
 | 2026-09-10 | Story created. Scope settled with Wolf in conversation; baseline, deliberate RED and restore confirmation executed at creation on `main` c54b793. |
