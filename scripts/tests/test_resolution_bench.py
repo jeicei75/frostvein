@@ -77,27 +77,27 @@ class ResolutionDetailRuleTests(unittest.TestCase):
     # The SAME vector is pinned in `crates/gui/src/project.rs`. Two literal tables in two
     # languages are the oracle for "both sides run one rule"; the comment that used to claim it
     # was tested by nothing, and the two rules had in fact diverged.
-    VECTOR = ((0, 0, 0), (1, 2, 3), (8, 5, 1), (9, 9, 9), (64, 17, 5))
+    VECTOR = ((0, 0, 0), (1, 2, 3), (8, 5, 1), (9, 9, 9), (4, 11, 7), (4, 12, 7), (64, 17, 5))
 
-    def test_detail_rule_is_seeded_and_has_a_hand_written_two_voxel_range(self):
+    def test_detail_rule_is_seeded_and_has_a_hand_written_corner_range(self):
         self.assertEqual(
-            [resolution_bench.detail_offset(resolution_bench.WORLD_SEED, *point) for point in self.VECTOR],
-            [-1, 0, -1, -1, -2],
+            [resolution_bench.detail_corner(resolution_bench.WORLD_SEED, *point) for point in self.VECTOR],
+            [197, 234, 40, 66, 244, 220, 208],
         )
-        offsets = [resolution_bench.detail_offset(resolution_bench.WORLD_SEED, x, 3, 7) for x in range(32)]
-        self.assertGreater(len(set(offsets)), 1)
-        self.assertTrue(all(-2 <= offset <= 2 for offset in offsets))
+        corners = [resolution_bench.detail_corner(resolution_bench.WORLD_SEED, x, 3, 7) for x in range(32)]
+        self.assertGreater(len(set(corners)), 1)
+        self.assertTrue(all(0 <= corner <= 255 for corner in corners))
 
     def test_detail_rule_stays_inside_32_bits(self):
         # The divergence that shipped: Python integers are unbounded, so an unmasked multiply
         # left the client's u32 rule and this one agreeing only at chance for k > 1.
         for point in ((0x7FFF_FFFF, 0x7FFF_FFFF, 0x7FFF_FFFF), (123_456_789, 987_654_321, 5)):
-            self.assertIn(resolution_bench.detail_offset(resolution_bench.WORLD_SEED, *point), range(-2, 3))
+            self.assertIn(resolution_bench.detail_corner(resolution_bench.WORLD_SEED, *point), range(256))
 
     def test_depth_is_clamped_by_the_fine_cell_height(self):
         self.assertEqual(
             [resolution_bench.detail_depth(resolution_bench.WORLD_SEED, *point, 4) for point in self.VECTOR],
-            [1, 0, 1, 1, 2],
+            [2, 1, 0, 1, 1, 1, 0],
         )
         # k=1 has no room for a pit, which is exactly why the k=1 control is blind to the rule.
         for point in self.VECTOR:
@@ -121,16 +121,15 @@ class ResolutionGeometryTests(unittest.TestCase):
 
     def test_detail_rule_changes_subdivided_counts_exactly_and_leaves_k_one_alone(self):
         world = snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}])
-        # Exact counts in BOTH directions. Detail removes carved side faces as well as adding
-        # connectors, so k=2 detailed is FEWER faces than k=2 flat (32 against 40) -- the
-        # reduction the analytic `coarse_faces * k * k` baseline could never express.
+        # The two-cell fixture is smaller than one three-cell snow drift, so k=2 and k=4 stay
+        # flat here. It guards that coherent relief does not manufacture a per-voxel seam.
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=2, detail=True),
-            {"exposed_faces": 32, "greedy_quads": 12, "triangles": 24, "chunks": 1, "cells": 2},
+            {"exposed_faces": 40, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 2},
         )
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=4, detail=True),
-            {"exposed_faces": 176, "greedy_quads": 72, "triangles": 144, "chunks": 1, "cells": 2},
+            {"exposed_faces": 136, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 2},
         )
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=1, detail=True)["greedy_quads"], 6
@@ -144,34 +143,32 @@ class ResolutionGeometryTests(unittest.TestCase):
         )
         self.assertEqual(
             resolution_bench.geometry_summary(staircase(), k=2, detail=True),
-            {"exposed_faces": 334, "greedy_quads": 77, "triangles": 154, "chunks": 1, "cells": 40},
+            {"exposed_faces": 336, "greedy_quads": 18, "triangles": 36, "chunks": 1, "cells": 38},
         )
         self.assertEqual(
             resolution_bench.geometry_summary(staircase(), k=4, detail=True),
-            {"exposed_faces": 1608, "greedy_quads": 463, "triangles": 926, "chunks": 1, "cells": 40},
+            {"exposed_faces": 1274, "greedy_quads": 54, "triangles": 108, "chunks": 1, "cells": 39},
         )
 
     def test_detail_lattice_makes_the_rule_coherent_without_changing_the_default(self):
-        """The knob that shows how much of the budget is the placeholder's incoherence.
+        """The offline coarsening knob leaves the coherent default explicit.
 
         `detail_lattice=1` must be the shipped rule exactly, or every committed figure moves.
-        Above 1 the SAME rule is sampled on a coarser grid, so blocks of fine columns share a
-        depth and the greedy mesher can merge them -- which is the whole point: the k=4 budget
-        turns out to be 96.8% a function of this one property.
+        Larger values are an offline-only experiment, not a second client rule.
         """
         world = staircase()
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=1),
             resolution_bench.geometry_summary(world, k=4, detail=True),
         )
-        # A lattice at or above k gives every column in a cell one depth, so a cell top is flat
-        # again and merges -- strictly fewer quads than the per-column noise.
+        # A lattice at or above k samples every cell on a coarser input grid, so its exact
+        # geometry must differ from the shipped relief while remaining simpler on this fixture.
         coherent = resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=4)
         noisy = resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=1)
         self.assertLess(coherent["greedy_quads"], noisy["greedy_quads"])
         self.assertEqual(
             coherent,
-            {"exposed_faces": 1304, "greedy_quads": 35, "triangles": 70, "chunks": 1, "cells": 39},
+            {"exposed_faces": 1256, "greedy_quads": 22, "triangles": 44, "chunks": 1, "cells": 38},
         )
         with self.assertRaises(ValueError):
             resolution_bench.geometry_summary(world, k=4, detail_lattice=0)

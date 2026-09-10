@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Offline geometry and simulation-resolution measurements for story 10.6.
 
-The benchmark intentionally uses only the Python standard library.  Its detail rule is a
-measurement stand-in, not game art: it gives an exposed sub-cell surface a small seeded height
-variation so the greedy mesher has real fine geometry to account for.
+The benchmark intentionally uses only the Python standard library. Its snowfield detail rule
+mirrors the client's coherent surface relief, so it measures a real non-flat terrain surface.
 """
 
 import argparse
@@ -35,32 +34,31 @@ FOLIAGE_MATERIAL = "tree_foliage"
 MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
 
 
-def detail_offset(seed, x, y, z):
-    """Return a deterministic exposed-surface displacement in fine voxels.
-
-    // NOTE: This is a measurement stand-in for 10.4's authored terrain look, not a visual
-    decision.  The small value-noise displacement deliberately breaks flat greedy runs.
-
-    Every step is masked to 32 bits because the client writes the same rule in u32
-    `wrapping_mul`.  Python integers are unbounded, so leaving the multiplies unmasked made
-    the two sides a DIFFERENT rule that agreed only at chance for k > 1 -- invisible at k=1,
-    where the depth clamp forces both to zero.  `scripts/tests/test_resolution_bench.py` and
-    `crates/gui/src/project.rs` pin the same vector so the claim is tested, not commented.
-    """
+def detail_corner(seed, plane, x, y):
+    """Return one deterministic coherent-noise corner in the client's u32 domain."""
     mask = 0xFFFFFFFF
     value = seed
-    value ^= (x & mask) * 0x9E3779B1 & mask
-    value ^= (y & mask) * 0x85EBCA77 & mask
-    value ^= (z & mask) * 0xC2B2AE3D & mask
+    value ^= (plane & mask) * 0x9E3779B1 & mask
+    value ^= (x & mask) * 0x85EBCA77 & mask
+    value ^= (y & mask) * 0xC2B2AE3D & mask
     value ^= value >> 16
     value = value * 0x7FEB352D & mask
     value ^= value >> 15
-    return value % 5 - 2
+    return value & 0xFF
 
 
-def detail_depth(seed, x, y, z, k):
-    """Return the depth of one closed top-surface pit, bounded by its fine cell height."""
-    return min(abs(detail_offset(seed, x, y, z)), k - 1)
+def detail_depth(seed, plane, u, v, k):
+    """Return the coherent snowfield depth of one fine column, bounded by its cell height."""
+    spacing = k * 3
+    x, y = u // spacing, v // spacing
+    fx, fy = u % spacing, v % spacing
+
+    def blend(start, end, fraction):
+        return start * (spacing - fraction) + end * fraction
+
+    top = blend(detail_corner(seed, plane, x, y), detail_corner(seed, plane, x + 1, y), fx)
+    bottom = blend(detail_corner(seed, plane, x, y + 1), detail_corner(seed, plane, x + 1, y + 1), fx)
+    return blend(top, bottom, fy) // (spacing * spacing) * (k - 1) // 255
 
 
 def _dims(snapshot):

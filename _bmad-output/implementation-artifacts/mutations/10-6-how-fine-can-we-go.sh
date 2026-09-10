@@ -36,12 +36,12 @@ p.write_text(s.replace(old, '''                    if not open_side:
                     other = None'''))
 PY
 
-mutation "unmasked multiply diverges from the client u32 rule" py scripts.tests.test_resolution_bench.ResolutionDetailRuleTests.test_detail_rule_is_seeded_and_has_a_hand_written_two_voxel_range <<'PY'
+mutation "unmasked coherent corner diverges from the client u32 rule" py scripts.tests.test_resolution_bench.ResolutionDetailRuleTests.test_detail_rule_stays_inside_32_bits <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
-old = '    value ^= (y & mask) * 0x85EBCA77 & mask'
+old = '    value = value * 0x7FEB352D & mask'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    value ^= (y & mask) * 0x85EBCA77'))
+p.write_text(s.replace(old, '    value = value * 0x7FEB352D'))
 PY
 
 mutation "chunk count collapses back to two dimensions" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_chunks_are_counted_in_three_dimensions_from_emitted_geometry <<'PY'
@@ -102,12 +102,12 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    ordered.sort_by_key(|&(u, v)| (u, v));'))
 PY
 
-mutation "the client detail rule drifts off the bench's pinned vector" gui project::tests::the_detail_rule_matches_the_benchs_pinned_vector <<'PY'
+mutation "the client snow relief drifts off the bench's pinned vector" gui project::tests::snow_relief_is_coherent_in_world_space <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        ^ (u as u32).wrapping_mul(0x85EB_CA77)'
+old = '    coherent_detail_depth(plane, u, v, subdiv, 3)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        ^ (u as u32).wrapping_mul(0x85EB_CA78)'))
+p.write_text(s.replace(old, '    coherent_detail_depth(plane, u, v, subdiv, 1)'))
 PY
 
 mutation "chunk cells go unrecorded and the capture oracle blinds again" gui project::tests::every_drawn_cell_is_recorded_on_exactly_one_chunk <<'PY'
