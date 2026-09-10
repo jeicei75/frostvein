@@ -1887,6 +1887,89 @@ end the process, and the motion assertions ask about the captured slice, not the
 half), and states whether *"lighting is still way off"* is still true. If it is, that is this
 story's finding, and Epic 11 does not start on a look nobody believes.
 
+### Story 10.9: The Land Reads Natural
+
+As the boss,
+I want the ground to read as a snowfield with weather on it rather than as blocky per-voxel noise,
+So that the terrain under every look judgement I have signed off is terrain someone chose, not a
+measurement instrument's leftovers.
+
+**Added 2026-09-10 (Wolf), out of 10.8's closing conversation.** The defect is named in Wolf's own
+words — *"with subdiv 4 the whole landscape is blocky all around... small blocks all the places
+like noise"* — and the cause is not a tuning value. `detail_depth` (`crates/gui/src/project.rs:1165`)
+is **uncorrelated hash noise**, one independent draw per fine voxel, depth in {0,1,2} biased toward
+pits (P(0)=1/5, P(1)=2/5, P(2)=2/5), and **material-blind** — rock, snow and ice are chewed
+identically. Its own docstring says what it is: *"a MEASUREMENT STAND-IN for 10.4's authored terrain
+look, not a visual decision... 10.4 owns the real look and this is the copy it will replace."*
+**10.4 shipped without replacing it, and 10.8 then made `--subdiv 4` the shipped default** — which
+promoted a measurement placeholder to the default look of the game. This story is 10.4's unpaid
+debt, which is why it is Epic 10 and not Epic 11 (Epic 11 is mechanisms — AO, bloom, DoF, haze,
+day/night; this story adds no mechanism).
+
+**Measured at creation, 2026-09-10, on `main` c54b793** (`gui --headless --static-world --subdiv 4
+--frames 2`, daemon on 127.0.0.1:7451):
+
+| condition | terrain cubes | faces | triangles | mesh_build_ms |
+|---|---|---|---|---|
+| shipped default (hash noise) | 45,042 | 1,155,694 | **927,622** | 2,516 |
+| deliberate RED, `detail_depth` forced to 0 | 40,148 | 767,232 | **31,968** | 1,743 |
+| `--subdiv 1` (cube path, no fine detail) | 40,148 | — | 498,066 (derived) | 25 |
+
+**So 96.6 % of the terrain triangle budget is the placeholder** — independently confirming the
+docstring's 96.8 % claim, from a direction the docstring did not measure. **The RED also corrected
+the instrument:** `faces` moved only −33 % and is NOT discriminating; `triangles` moved −96.6 % and
+is. Any AC keying off `faces` would have passed against unchanged noise. The RED was observed,
+restored, and the restored binary re-measured to `triangles=927622` exactly before this story was
+written.
+
+**The seed does not change, and does not need to.** `layered_terrain` is the LAST consumer of
+`STREAM_WORLDGEN` (`crates/sim-core/src/lib.rs:1139`); trees draw from `STREAM_TREES`, dwarves from
+`STREAM_SPAWN`, wander from `STREAM_WANDER`, and `place_ramps`/`camp_origin` are pure functions of
+`heights`. So **rewriting surface-material selection leaves heights, ramps, camp, trees and dwarves
+bit-identical.** Material also carries no gameplay meaning today — `is_standable` never reads it and
+`Material::Snow`/`Ice` appear in `sim-core/src` only at `worldgen.rs:100,102` — so the rewrite is
+look-only with no pathing consequence.
+
+**In scope:**
+
+1. **The fine layer stops being noise.** `detail_depth` becomes coherent relief sampled in world
+   space over several coarse cells, low amplitude, and **material-keyed** — snow long-wavelength and
+   shallow, rock shorter and rougher, ice near-flat. Wolf's target: *"a bit more like subdiv 1...
+   but not fully flat either"*.
+2. **The snow/ice coin flip dies.** `worldgen.rs:99` picks surface material by an independent
+   per-column `rng.random::<bool>()` — 16,384 dice rolls, salt-and-pepper. It becomes a rule with
+   spatial structure: local gradient (already derivable from `heights`) plus region. Snow does not
+   stick to steep faces.
+3. **Scoured ridges on the two FAR world edges**, to soften the terrain cut-off. Applied as a
+   **local post-pass on `heights`**, never as a change to `height_field`'s noise rule — the
+   distinction is the whole reason the landscape survives (AD-19).
+4. **A small frozen lake, as the biome pilot.** Wolf, explicitly: *"I want to test biomes and
+   introduce concept."* So the lake's job is to prove the mechanism, not only to look right.
+
+**The composition Wolf likes is real and now measured, so it can be an AC rather than a hope**
+(seed `DEFAULT_SEED` = 4026891802): camp at `(64,64)` floor **z=8** against an interior mean height
+of **17.5** — a bowl ~9.5 levels deep — with a **z=29** peak **23.8 cells** away, i.e. **21 levels of
+relief** beside it. Map height range z=5…31. **The two far edges are already the lowest ground on the
+map** (x=0 mean **13.2**, y=max mean **12.6**, against interior 17.5), which is exactly why the cut
+reads sharp there and why raising them works with the field instead of against it.
+
+**Two traps, both verified:**
+
+- **`camp_origin` FINDS a camp, it does not carve one** (`worldgen.rs:140`): it searches for a 7×7
+  region whose 49 heights are all equal, nearest to centre, and `.expect`s that one exists. The camp
+  currently sits at **exact centre, distance 0**, so nothing can displace it while the centre stays
+  flat — but that is a property of this seed, not of the code, and a flat lake near centre would
+  capture the camp on a seed where it is off-centre. Assert it, do not assume it.
+- **`clamp_steps` ripples.** Max slope is 1, so raising an edge by *h* forces a ramp *h* cells
+  inland. The far edges are 60+ cells from camp, so a modest ridge cannot reach it — but the story
+  must show that, not claim it.
+
+**NOT in scope:** `height_field`'s noise rule (changing it re-rolls the world and loses the
+composition); the rim dissolve and fog (10.8 Ruling 3 defect (d), *"visible terrain cut off is too
+sharp"*, still deferred — this story's ridges address the same defect with a different lever, so
+**each must be judged with the other held fixed**); cover depth, carve masks and any `Tile` or
+`protocol` change (AD-19's terrain-state epic); removing `--subdiv 1`, which Wolf has ruled **stays**.
+
 ---
 
 ## Epic 11: The Art-Shot Look
