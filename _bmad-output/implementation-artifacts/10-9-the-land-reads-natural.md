@@ -124,8 +124,8 @@ and ran the binaries. 4 decision-needed, 9 patch, 5 deferred, 0 dismissed.
 - [x] [Review][Decision — RESOLVED 2026-09-10: ACCEPT the scope] **Out-of-scope commit `a0c612c` "Keep trees off the frozen lake"** [auditor+feature, LOW-MED] — `crates/sim-core/src/worldgen.rs:285`. Behaviour no AC asked for; the dev record itself asks that it be confirmed at review. It is guarded by its own test and its own mutation row, and confirmed live (no trunk in any lake column). Cost: it moved four pinned control literals in the same story — `CONTROL_FACES 61,142 -> 62,586`, `CONTROL_QUADS 19,264 -> 12,322`, `triangles 38,528 -> 24,644`, `trees 265 -> 259` — so **no committed control now isolates the terrain rewrite from the tree exclusion**. Accept the scope, or revert it to a follow-up story.
 - [x] [Review][Decision — RESOLVED 2026-09-10: ACCEPT, the sitting settles it] **AC1's edge mapping is unconfirmed by any measurement that could discriminate it** [auditor+orchestrator, MED] — `10-9-signoff/AC1-edge-mapping.md`. The one empirical check is that camp `[64,64,9]` projects to `(640.0, 561.2)` where the campfire sits. World `(64,64)` is ON THE MAP DIAGONAL, so it projects to the same screen point under an `x=0`/`y=127` swap AND under a 180-degree yaw error swapping far for near — i.e. blind to both errors AC1 exists to resolve. The corroboration offered (`north_on_screen`, `camera.rs:172`) derives from the same `CameraRig`, not independently. "CONFIRMED" in Task 1 overstates what was measured. Orchestrator attempted the recommended silhouette comparison of the two committed frames and **falsified the instrument**: the frames differ by the entire terrain rewrite (927,622 -> 94,442 triangles), not by the ridge, so there is no control — measured "rise" is +61/+99/+24 px left/mid/right, largest in the MIDDLE, which carries no ridge. Isolating it needs a ridges-off build at the same tip (a mutation, forbidden in review). Risk is bounded for AC6 because ridges go on BOTH far edges, so a left/right swap changes nothing; only a far/near inversion would matter, and the Feature Auditor's direct look at a stepped rim on the TOP silhouette argues against that. Choice: accept and let the sitting settle it, or require a ridges-off control build first.
 
-- [ ] [Review][Patch] **AC11's required `gui` test does not exist** [auditor, HIGH] [`crates/gui/tests/headless.rs` — absent from the diff]
-- [ ] [Review][Patch] **`near-white-area` has risen AND its same-build swing now exceeds the jitter the ceiling was built for** [feature+orchestrator, HIGH] [`crates/gui/src/capture.rs:602`, asserted `:1455`]
+- [x] [Review][Patch] **AC11's required `gui` test does not exist** [auditor, HIGH] [`crates/gui/tests/headless.rs` — absent from the diff]
+- [x] [Review][Patch] **`near-white-area` has risen AND its same-build swing now exceeds the jitter the ceiling was built for** [feature+orchestrator, HIGH] [`crates/gui/src/capture.rs:602`, asserted `:1455`]
       MEASURED AT REVIEW, five runs of one build at the boot framing (`--subdiv 4 --frames 160 --capture`):
       **0.8181 / 0.6398 / 0.6917 / 0.7868 / 0.4890 %** — mean ~0.685 %, **spread 0.329 pp**.
       `NEAR_WHITE_AREA_CEILING` is 0.946072 %, and its own derivation allows only a **0.117 pp**
@@ -138,17 +138,17 @@ and ran the binaries. 4 decision-needed, 9 patch, 5 deferred, 0 dismissed.
       (~0.45 % to ~0.69 % at the mean) but it is not a doubling, and the headroom is a distribution,
       not a level. Nothing at `b7be859` recorded any of this; the story's last near-white figure is
       Task 2's 0.3908 %.
-- [ ] [Review][Patch] **The record's AC9 claim "exactly ONE ice region >= 40 cells" is false — there are 11** [auditor+feature, MED] [story record ~line 347]
-- [ ] [Review][Patch] **Two bench pins were re-based onto fixtures where the new relief rule does nothing** [auditor, MED] [`scripts/tests/test_resolution_bench.py`, `crates/gui/src/project.rs` `fine_geometry(&prism, 4)`]
-- [ ] [Review][Patch] **Three hand-copies of the material->depth dispatch; the Python catch-all returns 0 silently** [edge, MED] [`scripts/bench/resolution_bench.py:285-291`, `scripts/tests/test_resolution_bench.py:328-335`, `crates/gui/src/project.rs:1190-1196`]
-- [ ] [Review][Patch] **AC3's "flat fine layer" control is the function's own ice branch, and AC2's `< 10_000` proxy is undocumented** [auditor+feature+orchestrator, MED] [`crates/gui/src/project.rs:2785`]
-- [ ] [Review][Patch] **The three-pass self-gate cap was exceeded — four `codex review --base main` passes ran — and the record states the opposite** [orchestrator, MED] [story Dev Agent Record, "Final gate and self-review"]
+- [x] [Review][Patch] **The record's AC9 claim "exactly ONE ice region >= 40 cells" is false — there are 11** [auditor+feature, MED] [story record ~line 347]
+- [x] [Review][Patch] **Two bench pins were re-based onto fixtures where the new relief rule does nothing** [auditor, MED] [`scripts/tests/test_resolution_bench.py`, `crates/gui/src/project.rs` `fine_geometry(&prism, 4)`]
+- [x] [Review][Patch] **Three hand-copies of the material->depth dispatch; the Python catch-all returns 0 silently** [edge, MED] [`scripts/bench/resolution_bench.py:285-291`, `scripts/tests/test_resolution_bench.py:328-335`, `crates/gui/src/project.rs:1190-1196`]
+- [x] [Review][Patch] **AC3's "flat fine layer" control is the function's own ice branch, and AC2's `< 10_000` proxy is undocumented** [auditor+feature+orchestrator, MED] [`crates/gui/src/project.rs:2785`]
+- [x] [Review][Patch] **The three-pass self-gate cap was exceeded — four `codex review --base main` passes ran — and the record states the opposite** [orchestrator, MED] [story Dev Agent Record, "Final gate and self-review"]
       Cap: `_bmad/custom/bmad-dev-story.toml` — "a HARD CAP OF THREE `codex review --base main` passes (Wolf, 2026-08-06)". Four rollouts under `/workspace/.codex` each contain `codex review --base main` against `projects/frostvein`: `10-45-46`, `11-47-09`, `12-02-29`, `12-19-02`. Each precedes a fix commit — 10:45 -> `c3ee6a6` (11:12), 11:47 -> `7e3ef20` (11:53), 12:02 -> `a0c612c` (12:08), 12:19 -> `81430cf` (12:24). The record's "pass 1/2/3" numbering starts at the SECOND pass and its "No fourth review was run" is false. NOTE the quota WAS billed for all four (see the corrected item above), so the cost is visible — what is wrong is the count and the claim, and the orchestrator's verification note argues from "Codex used all THREE passes", which is a miscount.
-- [ ] [Review][Patch] **Change Log's Codex figures do not match the ledger: "9 rollouts ... 27 percentage points" vs 8 rows summing to 26pp** [orchestrator, LOW] [story Change Log; `metrics/10-9-the-land-reads-natural.md`]
+- [x] [Review][Patch] **Change Log's Codex figures do not match the ledger: "9 rollouts ... 27 percentage points" vs 8 rows summing to 26pp** [orchestrator, LOW] [story Change Log; `metrics/10-9-the-land-reads-natural.md`]
       RETRACTED AND CORRECTED IN REVIEW: this was first raised as "nine rollouts absent from the ledger, no row and no mark". That was WRONG. `session_tokens.py` nests a `codex review` sibling rollout into its parent dev row BY DESIGN, and it did: `10-10-08` alone is 175 turns / 23,451,392 cache read but its row reads 189 / 24,189,440 — exactly plus the `10-45` review pair; `11-11-09` alone is 227 / 26,378,752 against a row of 278 / 29,476,864 — exactly plus the `11-47`, `12-02` and `12-19` pairs. All four review passes ARE billed. The 17th rollout (`06-08-18`) is Asgard relay work (`RelaySelfReport`, `PROTOCOL_VERSION`, mypy/Ruff) sharing `/workspace/.codex`, and correctly has no row here. Nothing is unbilled; only the prose figures are off by one rollout and one percentage point.
-- [ ] [Review][Patch] **The lake footprint's "maximum four-level cut" comment is false for `DEFAULT_SEED`**
-- [ ] [Review][Patch] **Put AC5's quantified lattice finding on the AC12 sitting card** [from Decision 1, MED] [`10-9-signoff/AC12-sitting-card.md`]
-- [ ] [Review][Patch] **Drop `layered_terrain`'s dead `rng` parameter AND rewrite mutation row 2, which pins the old signature text** [from Decision 2, LOW] [`crates/sim-core/src/worldgen.rs:192`, `crates/sim-core/src/lib.rs:1142`, `mutations/10-9-the-land-reads-natural.sh` row 2] [blind+auditor, LOW] [`crates/sim-core/src/worldgen.rs` `in_lake_footprint`]
+- [x] [Review][Patch] **The lake footprint's "maximum four-level cut" comment is false for `DEFAULT_SEED`**
+- [x] [Review][Patch] **Put AC5's quantified lattice finding on the AC12 sitting card** [from Decision 1, MED] [`10-9-signoff/AC12-sitting-card.md`]
+- [x] [Review][Patch] **Drop `layered_terrain`'s dead `rng` parameter AND rewrite mutation row 2, which pins the old signature text** [from Decision 2, LOW] [`crates/sim-core/src/worldgen.rs:192`, `crates/sim-core/src/lib.rs:1142`, `mutations/10-9-the-land-reads-natural.sh` row 2] [blind+auditor, LOW] [`crates/sim-core/src/worldgen.rs` `in_lake_footprint`]
 
 - [x] [Review][Defer] **`apply_lake`'s `.expect` is a new panic surface missing from `World::generate`'s documented panic list** [blind, LOW] [`crates/sim-core/src/worldgen.rs:141`, doc at `crates/sim-core/src/lib.rs:1122-1129`] — deferred, no live caller passes non-default `Dims`
 - [x] [Review][Defer] **AC6's raise is pinned only at the two corners, the most protected cells** [feature, LOW] [`crates/sim-core/tests/worldgen.rs` `ridges_only_change_the_far_edge_footprint_and_lake`] — deferred, AC6 holds on measurement
@@ -351,6 +351,30 @@ and — the part that matters for the gate — the scene's run-to-run jitter is 
 ceiling was calibrated to absorb, so this guard can go red on a run where nothing changed.
 `triangles=94442` was identical across every run, so the variance is the animated snowfall and
 stars, not the terrain.
+
+**Review patch pass — mutation evidence, executed.** The five rows this review created or
+re-pointed were extracted to a scratch file and run through `scripts/mutate.sh`; **all five
+KILLED**:
+
+| row | status |
+|---|---|
+| snow ice coin flip breaks material coherence (rewritten for the dropped `rng` param) | KILLED |
+| subdiv one instrument reports a zero derived triangle count (NEW, AC11) | KILLED |
+| lake ice stops being flat and the pinned AC3 floor moves (NEW) | KILLED |
+| python relief dispatch silently flattens an unknown material (NEW) | KILLED |
+| offline ice relief stops matching the client's flat ice (RE-POINTED) | KILLED |
+
+The AC3 row is the one that mattered most and it died on the **new** assertion, not an older one
+absorbing it: `the flat ice reference moved to 5140`. Source restored (`git diff HEAD` empty) and
+both binaries rebuilt afterwards, so no mutant build survives on disk.
+
+**Full gate GREEN, 455 s**, run by the reviewer at the patched tip: `fmt` ok, `clippy -D warnings`
+ok, `cargo test` 66 s, pixel guards 352 s, three crate-edge probes ok, metrics ledger ok, bench
+tests ok, mutation audit ok (532 rows, all applying). The first attempt was RED and caught two real
+defects in the patch pass itself — a `fmt` violation and an APPLY-FAILED mutation row whose anchor
+the dispatch rewrite had moved. Note `scripts/gate.sh` had to be run with `RUST_TEST_THREADS=6`:
+at default parallelism the Bevy test apps exhausted the devpod's 23 GB and the run was killed three
+times. The script has no parallelism knob of its own.
 
 ### Completion Notes List
 
