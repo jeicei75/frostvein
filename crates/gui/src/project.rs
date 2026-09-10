@@ -2791,6 +2791,11 @@ mod tests {
             "the real mesher reported only {shipped_triangles} triangles for snow against \
              {flat_triangles} for a flat ice layer; AC2 needs a clearly non-flat surface"
         );
+        assert!(
+            shipped_triangles < 10_000,
+            "the coherent 32x32 snowfield used {shipped_triangles} triangles; a per-voxel \
+             hash must not meet AC2's relief budget"
+        );
     }
 
     /// A 40x4x4 stepped slab: wide enough to span three 16-cell chunks on x.
