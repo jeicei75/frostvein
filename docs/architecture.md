@@ -128,6 +128,68 @@ artifact (AD-17). Capture tests need a render surface and stay out of
 world + all dwarves + all lights, on the WSLg devpod, read from the
 frame-time overlay. Any client: command effect visible within ~200 ms.
 
+## Terrain representation (AD-19 — forward decision, no spine yet)
+
+**Status.** Taken 2026-09-10 while scoping story 10.9, ahead of the terrain-state
+epic that will implement it. No architecture spine ratifies it; it is recorded
+here so it is not silently re-litigated, and it should be folded into the next
+spine when one is cut. The spines still win over this doc where they speak.
+
+**The lattice is uniform and stays uniform.** One sim cell is one gameplay cell —
+pathing, occupancy, job targets, standability — and it never subdivides. Sub-cell
+detail is an *attribute of a cell*, never a refinement of the grid. Two
+representations carry it, kept separate on purpose because they answer different
+questions:
+
+**Cover depth** — additive from below: one cover material over a base, plus a
+depth scalar, per cell. Serves snow, pooled water, surface relief. One cover, not
+a stack. It cannot express solid-above-air, and that is not a defect: it is the
+whole reason the second representation exists.
+
+**Carve mask** — subtractive in any direction: a 4×4×4 bitmask in a sparse side
+map keyed by position, present only on cells being dug and dropped when a cell
+empties. Serves granular and progressive digging; expresses overhangs and
+tunnels. A cell stays `Solid` to the sim until its mask crosses the threshold,
+so digging becomes visible before it becomes traversable.
+
+**Rejected: a layer stack per cell** (`Vec<Layer>`). One real use, speculative
+others, and a heap allocation on each of 524,288 cells.
+
+**Rejected: adaptive / dynamic sim resolution** — refining dug cells into finer
+sim voxels. Every algorithm in the sim would gain a "leaf or children?" branch;
+the resolution *boundary* becomes a permanent special case in pathing,
+standability, fluid flow and the mesher; and determinism gains refinement order
+as saved state. Resolution boundaries are this project's most-paid-for bug class
+(AD-14's non-total partition, the chunk seam two cells from a dug cell, the
+leaf-only asset checker). *Trigger to revisit:* a world too large for uniform
+resolution — planet-scale streaming, not 128×128×32. Evidence, not a hunch.
+
+**Coupling to name once:** fixing the carve grid at 4×4×4 makes `--subdiv 4`
+semantically load-bearing rather than a quality knob — the renderer's fine grid
+must equal the sim's carve grid, or the dent drawn is not the dent dug.
+
+**Bridges to keep unburnt** (state verified 2026-09-10):
+
+- *Whole-world flat addressing is a wire contract, not merely an implementation.*
+  `x + y*dims.x + z*dims.x*dims.y` is documented at `protocol/src/lib.rs:146` and
+  independently restated in `gui/src/project.rs:2617` and `tui/src/view.rs:728`.
+  Interest management or streamed regions is therefore a protocol v1, not a
+  refactor. Already deferred below; this names the cost.
+- *The `Delta` channel is position-addressed and general* (tiles, entities,
+  designations, zones, items, speed). It is the streaming bridge and it is
+  intact: incremental world updates never touch the flat index.
+- *`SaveState` carries no version field* (`sim-core/src/save.rs`; decoded by
+  `serde_json::from_slice` at `simd/src/main.rs:255`). Adding a field or
+  reshaping `Tile` fails LOUDLY at decode, which is acceptable and needs no fix
+  now. **The one edit that would burn this: `#[serde(default)]` on a new
+  `SaveState` field without adding a version field first** — that converts a loud
+  decode failure into an old save loading silently with `cover: 0` everywhere.
+- *Material carries no gameplay meaning today.* `is_standable` never reads it and
+  `Material::Snow`/`Ice` appear in `sim-core/src` only at `worldgen.rs:100,102`,
+  so material selection is free to change with no pathing consequence. The day
+  cover depth affects standability, that stops being true and the decision
+  becomes gameplay-coupled.
+
 ## Conventions worth memorizing
 
 - z is vertical, 0 = lowest. Rects are inclusive of both corners, one
@@ -179,7 +241,10 @@ Windows `gui` build (Wolf calls for it; no unix-only code in `gui`/
 bevy_vox_scene (a story needs authored assets — dwarves expected first;
 re-verify the crate against current bevy then) · z-slice control & world-edge
 treatment (story-level design-and-test, PRD addendum) · golden-image CI
-(a driver-stable render path; not planned).
+(a driver-stable render path; not planned) · render LOD / world streaming
+(a world too large to hold and draw whole — not 128×128×32) · adaptive sim
+resolution (AD-19's trigger; render LOD is a separate question and does not
+imply it).
 
 *(The raycast 3D view entry is gone: withdrawn with FR24 at the 2026-08-08
 pivot — the 3D client is Bevy, above.)*
