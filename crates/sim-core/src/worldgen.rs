@@ -6,6 +6,12 @@ use crate::{Dims, Material, Tile};
 const NOISE_SPACING: u32 = 32;
 pub(crate) const CAMP_RADIUS: u32 = 3;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Biome {
+    Snowfield,
+    Lake,
+}
+
 pub(crate) fn index(dims: Dims, x: u32, y: u32, z: u32) -> usize {
     // NOTE: widened to usize before multiplying — the u32 product wraps silently in
     // release, which would address the wrong tile rather than fail.
@@ -83,7 +89,48 @@ fn clamp_steps(dims: Dims, heights: &mut [u32]) {
     }
 }
 
-pub(crate) fn layered_terrain(dims: Dims, heights: &[u32], rng: &mut ChaCha8Rng) -> Vec<Tile> {
+fn biome_at(dims: Dims, x: u32, y: u32) -> Biome {
+    // NOTE: this single low-frequency field is deliberately hardcoded until the world needs a
+    // third biome. The threshold shapes the input; materials are never border-blended.
+    let centre_x = dims.x as f64 * 0.22;
+    let centre_y = dims.y as f64 * 0.72;
+    let dx = (x as f64 - centre_x) / (dims.x as f64 * 0.075);
+    let dy = (y as f64 - centre_y) / (dims.y as f64 * 0.055);
+    let field = dx * dx + dy * dy + 0.12 * dx * dy;
+
+    if field <= 1.0 {
+        Biome::Lake
+    } else {
+        Biome::Snowfield
+    }
+}
+
+fn local_gradient(dims: Dims, heights: &[u32], x: u32, y: u32) -> u32 {
+    let height = heights[(x + y * dims.x) as usize];
+    [
+        (x as i32 - 1, y as i32),
+        (x as i32 + 1, y as i32),
+        (x as i32, y as i32 - 1),
+        (x as i32, y as i32 + 1),
+    ]
+    .into_iter()
+    .filter(|&(nx, ny)| nx >= 0 && ny >= 0 && nx < dims.x as i32 && ny < dims.y as i32)
+    .map(|(nx, ny)| height.abs_diff(heights[(nx as u32 + ny as u32 * dims.x) as usize]))
+    .max()
+    .unwrap_or(0)
+}
+
+fn surface_material(biome: Biome, gradient: u32, x: u32, y: u32) -> Material {
+    match biome {
+        Biome::Lake => Material::Ice,
+        // A coarse field keeps scouring in broad, readable patches instead of making each
+        // stepped cell flip independently. Only sloped ground can lose its snow cover.
+        Biome::Snowfield if gradient > 0 && (x / 16 + y / 16).is_multiple_of(5) => Material::Ice,
+        Biome::Snowfield => Material::Snow,
+    }
+}
+
+pub(crate) fn layered_terrain(dims: Dims, heights: &[u32], _rng: &mut ChaCha8Rng) -> Vec<Tile> {
     let mut tiles = vec![Tile::Empty; dims.x as usize * dims.y as usize * dims.z as usize];
     for y in 0..dims.y {
         for x in 0..dims.x {
@@ -96,11 +143,12 @@ pub(crate) fn layered_terrain(dims: Dims, heights: &[u32], rng: &mut ChaCha8Rng)
                 };
                 tiles[index(dims, x, y, z)] = Tile::Solid(material);
             }
-            let surface = if rng.random::<bool>() {
-                Material::Snow
-            } else {
-                Material::Ice
-            };
+            let surface = surface_material(
+                biome_at(dims, x, y),
+                local_gradient(dims, heights, x, y),
+                x,
+                y,
+            );
             tiles[index(dims, x, y, height)] = Tile::Solid(surface);
         }
     }

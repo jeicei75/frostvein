@@ -18,6 +18,17 @@ fn surface_height(world: &World, x: i32, y: i32) -> i32 {
         .expect("every column has terrain")
 }
 
+fn surface_material(world: &World, x: i32, y: i32) -> Material {
+    match world.tile(Pos {
+        x,
+        y,
+        z: surface_height(world, x, y),
+    }) {
+        Some(Tile::Solid(material) | Tile::Ramp(material)) => material,
+        tile => panic!("surface at ({x}, {y}) was not terrain: {tile:?}"),
+    }
+}
+
 fn is_standable(world: &World, pos: Pos) -> bool {
     world.tile(pos) == Some(Tile::Empty)
         && matches!(
@@ -67,6 +78,55 @@ fn default_world_has_mountainous_height_span() {
         maximum - minimum >= 16,
         "surface height span was only {} ({minimum}..={maximum})",
         maximum - minimum
+    );
+}
+
+#[test]
+fn surface_materials_are_coherent_and_snow_prefers_flat_ground() {
+    let world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+    let dims = world.dims();
+    let mut matching_neighbours = 0;
+    let mut neighbour_pairs = 0;
+    let mut flat_snow = 0;
+    let mut flat_columns = 0;
+    let mut sloped_snow = 0;
+    let mut sloped_columns = 0;
+
+    for y in 0..dims.y as i32 {
+        for x in 0..dims.x as i32 {
+            let height = surface_height(&world, x, y);
+            let material = surface_material(&world, x, y);
+            let mut steepest_difference = 0;
+            for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
+                if nx < 0 || ny < 0 || nx >= dims.x as i32 || ny >= dims.y as i32 {
+                    continue;
+                }
+                let neighbour_height = surface_height(&world, nx, ny);
+                steepest_difference = steepest_difference.max((height - neighbour_height).abs());
+                matching_neighbours += usize::from(material == surface_material(&world, nx, ny));
+                neighbour_pairs += 1;
+            }
+
+            if steepest_difference == 0 {
+                flat_columns += 1;
+                flat_snow += usize::from(material == Material::Snow);
+            } else {
+                sloped_columns += 1;
+                sloped_snow += usize::from(material == Material::Snow);
+            }
+        }
+    }
+
+    let shared_fraction = matching_neighbours as f64 / neighbour_pairs as f64;
+    let flat_snow_fraction = flat_snow as f64 / flat_columns as f64;
+    let sloped_snow_fraction = sloped_snow as f64 / sloped_columns as f64;
+    assert!(
+        shared_fraction >= 0.85,
+        "surface neighbours share material only {shared_fraction:.3} of the time"
+    );
+    assert!(
+        sloped_snow_fraction < flat_snow_fraction,
+        "snow fraction must fall from flat ({flat_snow_fraction:.3}) to sloped ({sloped_snow_fraction:.3}) ground"
     );
 }
 
@@ -358,7 +418,7 @@ fn spawn_positions_for_seed_42_are_pinned() {
     // fingerprint folds every tile, it is the tightest tree-stream regression guard in the repo,
     // far tighter than the 230-300 density band, which only discriminates roll denominators
     // outside roughly 36..52. Re-pin it only alongside a stated, measured geometry change.
-    assert_eq!(terrain_fingerprint, 0x4337_57ca_d2ba_77bc);
+    assert_eq!(terrain_fingerprint, 0x12b6_ea85_735f_d7a2);
 }
 
 #[test]
