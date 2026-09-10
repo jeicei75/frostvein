@@ -409,19 +409,21 @@ mod tests {
 
     #[test]
     fn biome_decision_is_consumed_by_the_surface_material_rule() {
-        let snowfield = (64, 64);
-        assert_eq!(
-            biome_at(Dims::DEFAULT, snowfield.0, snowfield.1),
-            Biome::Snowfield
+        let height = 7;
+        let mut rng = ChaCha8Rng::seed_from_u64(DEFAULT_SEED ^ STREAM_WORLDGEN);
+        let tiles = layered_terrain(
+            Dims::DEFAULT,
+            &vec![height; (Dims::DEFAULT.x * Dims::DEFAULT.y) as usize],
+            &mut rng,
         );
-        assert_eq!(
-            surface_material(Biome::Snowfield, 0, snowfield.0, snowfield.1),
-            Material::Snow
-        );
-        assert_eq!(
-            surface_material(Biome::Lake, 0, snowfield.0, snowfield.1),
-            Material::Ice
-        );
+
+        for ((x, y), expected) in [((64, 64), Material::Snow), ((28, 92), Material::Ice)] {
+            assert_eq!(
+                tiles[index(Dims::DEFAULT, x, y, height)],
+                Tile::Solid(expected),
+                "the biome lookup must select {expected:?} at ({x},{y})",
+            );
+        }
     }
 
     #[test]
