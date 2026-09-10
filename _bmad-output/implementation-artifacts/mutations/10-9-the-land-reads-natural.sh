@@ -90,3 +90,12 @@ old = 'CONTROL_QUADS = 12_475'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'CONTROL_QUADS = 12_474'))
 PY
+
+mutation "offline ice relief stops matching the client's flat ice" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_ice_stays_flat_at_subdivision_like_the_client <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/resolution_bench.py'); s = p.read_text()
+old = '    return 0\n\n\ndef _cell_heights'
+assert s.count(old) == 1
+new = '    return detail_depth(WORLD_SEED, plane, u, v, k)\n\n\ndef _cell_heights'
+p.write_text(s.replace(old, new))
+PY

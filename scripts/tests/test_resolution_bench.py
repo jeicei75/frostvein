@@ -44,23 +44,28 @@ def brute_force_faces(world, k, detail):
         return materials[x + y * dx + z * dx * dy]
 
     solid = set()
+
+    def material_depth(material, plane, u, v):
+        if material == "snow":
+            return resolution_bench.detail_depth(resolution_bench.WORLD_SEED, plane, u, v, k)
+        if material in {"stone", "soil"}:
+            return resolution_bench.detail_depth(
+                resolution_bench.WORLD_SEED, plane, u, v, k, coarse_cells=1
+            )
+        return 0
+
     for z in range(dz):
         for y in range(dy):
             for x in range(dx):
                 if at(x, y, z) is None:
                     continue
+                material = at(x, y, z)
                 carved = detail and k > 1 and at(x, y, z + 1) is None
                 for i in range(k):
                     for j in range(k):
                         height = k
                         if carved:
-                            height -= resolution_bench.detail_depth(
-                                resolution_bench.WORLD_SEED,
-                                (z + 1) * k,
-                                x * k + i,
-                                y * k + j,
-                                k,
-                            )
+                            height -= material_depth(material, (z + 1) * k, x * k + i, y * k + j)
                         for level in range(height):
                             solid.add((x * k + i, y * k + j, z * k + level))
     faces = 0
@@ -105,6 +110,13 @@ class ResolutionDetailRuleTests(unittest.TestCase):
 
 
 class ResolutionGeometryTests(unittest.TestCase):
+    def test_ice_stays_flat_at_subdivision_like_the_client(self):
+        world = snapshot((1, 1, 1), [{"solid": "ice"}])
+        self.assertEqual(
+            resolution_bench.geometry_summary(world, k=4, detail=True),
+            {"exposed_faces": 96, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 1},
+        )
+
     def test_greedy_mesher_merges_a_two_cell_prism_with_hand_written_counts(self):
         world = snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}])
         self.assertEqual(
@@ -120,7 +132,7 @@ class ResolutionGeometryTests(unittest.TestCase):
         )
 
     def test_detail_rule_changes_subdivided_counts_exactly_and_leaves_k_one_alone(self):
-        world = snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}])
+        world = snapshot((2, 1, 1), [{"solid": "snow"}, {"solid": "snow"}])
         # The two-cell fixture is smaller than one three-cell snow drift, so k=2 and k=4 stay
         # flat here. It guards that coherent relief does not manufacture a per-voxel seam.
         self.assertEqual(
@@ -147,7 +159,7 @@ class ResolutionGeometryTests(unittest.TestCase):
         )
         self.assertEqual(
             resolution_bench.geometry_summary(staircase(), k=4, detail=True),
-            {"exposed_faces": 1274, "greedy_quads": 54, "triangles": 108, "chunks": 1, "cells": 39},
+            {"exposed_faces": 1376, "greedy_quads": 159, "triangles": 318, "chunks": 1, "cells": 39},
         )
 
     def test_detail_lattice_makes_the_rule_coherent_without_changing_the_default(self):
@@ -168,7 +180,7 @@ class ResolutionGeometryTests(unittest.TestCase):
         self.assertLess(coherent["greedy_quads"], noisy["greedy_quads"])
         self.assertEqual(
             coherent,
-            {"exposed_faces": 1256, "greedy_quads": 22, "triangles": 44, "chunks": 1, "cells": 38},
+            {"exposed_faces": 1328, "greedy_quads": 47, "triangles": 94, "chunks": 1, "cells": 39},
         )
         with self.assertRaises(ValueError):
             resolution_bench.geometry_summary(world, k=4, detail_lattice=0)

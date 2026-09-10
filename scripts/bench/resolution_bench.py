@@ -48,9 +48,9 @@ def detail_corner(seed, plane, x, y):
     return value & 0xFF
 
 
-def detail_depth(seed, plane, u, v, k):
+def detail_depth(seed, plane, u, v, k, coarse_cells=3):
     """Return the coherent snowfield depth of one fine column, bounded by its cell height."""
-    spacing = k * 3
+    spacing = k * coarse_cells
     x, y = u // spacing, v // spacing
     fx, fy = u % spacing, v % spacing
 
@@ -131,7 +131,15 @@ def _coarse_faces(snapshot):
     return total
 
 
-def _cell_heights(x, y, z, k, carved, lattice=1):
+def _material_detail_depth(material, plane, u, v, k):
+    if material == "snow":
+        return detail_depth(WORLD_SEED, plane, u, v, k)
+    if material in {"stone", "soil"}:
+        return detail_depth(WORLD_SEED, plane, u, v, k, coarse_cells=1)
+    return 0
+
+
+def _cell_heights(x, y, z, k, material, carved, lattice=1):
     """Fine column heights inside one solid coarse cell, in fine voxels.
 
     A cell whose top is exposed carries the detail pits and is a heightfield; every other
@@ -147,8 +155,8 @@ def _cell_heights(x, y, z, k, carved, lattice=1):
     # a function of this one property -- see "how much of the budget is the placeholder" in
     # 10-6-signoff/axis-a-geometry.md.
     def at(u, v):
-        return k - detail_depth(
-            WORLD_SEED, plane, u // lattice * lattice, v // lattice * lattice, k
+        return k - _material_detail_depth(
+            material, plane, u // lattice * lattice, v // lattice * lattice, k
         )
 
     return [[at(x * k + i, y * k + j) for j in range(k)] for i in range(k)]
@@ -198,7 +206,9 @@ def geometry_summary(snapshot, k=1, detail=True, foliage_as_cubes=False, detail_
     def heights_at(x, y, z):
         key = (x, y, z)
         if key not in heights_cache:
-            heights_cache[key] = _cell_heights(x, y, z, k, carved_at(x, y, z), detail_lattice)
+            heights_cache[key] = _cell_heights(
+                x, y, z, k, material_at(x, y, z), carved_at(x, y, z), detail_lattice
+            )
         return heights_cache[key]
 
     masks = collections.defaultdict(dict)
