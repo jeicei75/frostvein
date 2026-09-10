@@ -432,6 +432,10 @@ mod tests {
             .filter(|&(x, y)| biome_at(Dims::DEFAULT, x, y) == Biome::Lake)
             .map(|(x, y)| heights[(x + y * Dims::DEFAULT.x) as usize])
             .collect();
-        assert_eq!(lake_heights.len(), 1, "lake core heights were {lake_heights:?}");
+        assert_eq!(
+            lake_heights.len(),
+            1,
+            "lake core heights were {lake_heights:?}"
+        );
     }
 }
