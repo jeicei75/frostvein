@@ -84,17 +84,17 @@ measurement instrument's leftovers.
   - [x] Replace the docstring: it currently declares the function a measurement stand-in that 10.4
         will replace. That statement stops being true in this story.
   - [x] Record `triangles=` and `mesh_build_ms=` before and after in the Dev Agent Record.
-- [ ] **Task 3 — Kill the snow/ice coin flip (AC: 4, 5)**
-  - [ ] `crates/sim-core/src/worldgen.rs:99` — replace `rng.random::<bool>()` with a rule over
+- [x] **Task 3 — Kill the snow/ice coin flip (AC: 4, 5)**
+  - [x] `crates/sim-core/src/worldgen.rs:99` — replace `rng.random::<bool>()` with a rule over
         local gradient and biome. `heights` is already in scope in `layered_terrain`.
-  - [ ] Keep `layered_terrain` the last consumer of `STREAM_WORLDGEN`; do not move draws into or
+  - [x] Keep `layered_terrain` the last consumer of `STREAM_WORLDGEN`; do not move draws into or
         out of `height_field`.
-- [ ] **Task 4 — Biome map and the frozen lake (AC: 9, 10)**
-  - [ ] Two or three hardcoded variants and a `match`. **No registry, no trait, no parameter
+- [x] **Task 4 — Biome map and the frozen lake (AC: 9, 10)**
+  - [x] Two or three hardcoded variants and a `match`. **No registry, no trait, no parameter
         table** — the abstraction is not earned yet and the repo policy forbids it.
-  - [ ] Blend the INPUT, not the output: threshold one low-frequency field so borders come out
+  - [x] Blend the INPUT, not the output: threshold one low-frequency field so borders come out
         soft without a border-blending system.
-  - [ ] Place the lake outside the camp; carve its basin flat as a post-pass on `heights`.
+  - [x] Place the lake outside the camp; carve its basin flat as a post-pass on `heights`.
 - [x] **Task 5 — Scoured ridges on the two far edges (AC: 6, 7, 8)**
   - [x] Post-pass on `heights` after `height_field` returns, before `clamp_steps`, bounded to a
         band along the AC1 edges.
@@ -273,6 +273,25 @@ strengthened with `lake_post_pass_flattens_its_entire_ice_core`, committed, and 
 also exposed a stale 10.6 control row; it was re-pointed before mutation and now audits cleanly
 (527 rows).
 
+**Finishing verification (Tasks 3, 4, and 6).** A fresh live-daemon export after the lake-tree
+exclusion measured `exposed_faces=62,586`, `greedy_quads=12,322`, `triangles=24,644`, `chunks=128`,
+and `cells=45,920`; its independent census measured `tree_cells=4,930`, `tree_faces=13,339`,
+`terrain_cells=40,990`, `terrain_faces=49,247`, and `trees=259`. These replace the stale Task 6
+control. The control comment names 10.9's terrain changes plus lake tree exclusion and records
+the +2.35% faces / +1.57% quads movement. The material-parity fixture was first RED (`ice` at
+`k=4`: 80 faces, expected 96), then fixed and its mutation was KILLED. The lake-tree test was RED
+at lake column `(26,88)` before the exclusion; its mutation was KILLED after restoration. The
+biome-emission-path test was added after review pass 3; forcing every biome to lake produced
+`left: Solid(Ice)`, `right: Solid(Snow)` at `(64,64)`, and the mutation was KILLED.
+
+**Final gate and self-review.** `scripts/gate.sh` with no arguments completed **GREEN in 480s**
+after the final review fix (Cargo 66s, pixel guards 373s, bench 18s, mutation audit 3s). Three
+`codex review --base main` passes ran, the permitted maximum: pass 1 found benchmark material
+parity (fixed in `7e3ef20`); pass 2 found lake tree trunks (fixed in `a0c612c`); pass 3 found the
+biome test bypassing the production emission path (fixed in `81430cf`). The reviewer sandbox could
+not bind local sockets (`Operation not permitted`), so its socket-test failures were environmental;
+the full gate ran those checks green. No fourth review was run.
+
 ### Completion Notes List
 
 - **Task 1 (AC1) complete.** Edge mapping taken and committed
@@ -304,10 +323,13 @@ also exposed a stale 10.6 control row; it was re-pointed before mutation and now
   `x=0` and `y=127` edge bands, then re-runs `clamp_steps`. Unit pins show no height change beyond
   the band plus its four-cell ripple and the lake footprint; they also pin `height_field` before
   post-passes and camp safety across 51 seeds.
-- **Task 6 (AC13 fixture work) complete — `7dc83f8`.** Only worldgen-derived fingerprint and
-  bench-control literals moved. The control is now 61,152 exposed faces, 12,132 greedy quads and
-  24,264 triangles.
-- **Task 7 complete — `7e9fadd`, `db0186c`, `032f557`.** Eight story mutation rows executed;
+- **Tasks 3–4 (AC4, AC5, AC9, AC10) complete.** The gradient/biome material rule replaces the
+  coin flip; the lake is a hardcoded biome with a flat post-pass. The final review strengthened
+  the AC10 test to observe tiles emitted through `layered_terrain`, not a direct helper call.
+- **Task 6 (AC13 fixture work) complete — `7dc83f8`, `c3ee6a6`, `a0c612c`.** The final live-world
+  control is 62,586 exposed faces, 12,322 greedy quads, and 24,644 triangles; its census is 4,930
+  tree cells / 13,339 tree faces / 40,990 terrain cells / 49,247 terrain faces / 259 trees.
+- **Task 7 complete — `7e9fadd`, `db0186c`, `032f557`.** Ten story mutation rows executed;
   seven killed on the first run. The lake row initially survived, so its test was strengthened in
   `3a58eb4` and the row re-targeted in `032f557`; the re-run killed it. The 10.6 control row was
   re-pointed because Task 6 changed its measured literal.
@@ -319,21 +341,22 @@ also exposed a stale 10.6 control row; it was re-pointed before mutation and now
 - `_bmad-output/implementation-artifacts/10-9-signoff/boot-baseline-5133a86-subdiv4.png` — NEW
 - `_bmad-output/implementation-artifacts/10-9-signoff/task2-relief-d8cf573.png` — NEW
 - `crates/gui/src/project.rs` — UPDATE (Task 2)
-- `scripts/bench/resolution_bench.py` — UPDATE (Task 2, the other half of the pinned rule)
-- `scripts/tests/test_resolution_bench.py` — UPDATE (Task 2, re-pinned vector)
+- `scripts/bench/resolution_bench.py` — UPDATE (Tasks 2 and 6; material parity and final live control)
+- `scripts/tests/test_resolution_bench.py` — UPDATE (Tasks 2 and 6; independent parity and control pins)
 - `_bmad-output/implementation-artifacts/mutations/10-6-how-fine-can-we-go.sh` — UPDATE (row re-pointed)
 - `crates/sim-core/src/lib.rs` — UPDATE (Task 5 ridge post-pass sequence)
-- `crates/sim-core/src/worldgen.rs` — UPDATE (Tasks 5 and 7 ridge, camp, lake and biome tests)
+- `crates/sim-core/src/worldgen.rs` — UPDATE (Tasks 3–5 and 7; ridge, camp, lake, biome, and tree exclusion)
 - `crates/sim-core/tests/worldgen.rs` — UPDATE (Task 6 terrain fingerprint)
 - `crates/gui/src/project.rs` — UPDATE (Task 7 AC2 upper-budget assertion)
-- `scripts/bench/resolution_bench.py` — UPDATE (Task 6 real-world control)
-- `scripts/tests/test_resolution_bench.py` — UPDATE (Task 6 control/census literals)
+- `scripts/bench/resolution_bench.py` — UPDATE (Task 6 final real-world control)
+- `scripts/tests/test_resolution_bench.py` — UPDATE (Task 6 final control/census literals)
 - `_bmad-output/implementation-artifacts/mutations/10-9-the-land-reads-natural.sh` — NEW (Task 7)
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-09-10 | Finishing verification: rebased the live export control to 62,586 faces / 12,322 quads / 24,644 triangles with its remeasured census and reason comment. Three self-review findings were fixed (benchmark material parity, lake tree exclusion, and biome emission-path coverage); the final full gate is green in 480s. |
 | 2026-09-10 | Task 2 (AC2, AC3): coherent material-keyed relief replaces the per-voxel hash placeholder. `triangles=` 927,622 -> **95,422**, inside both AC2 bounds; `mesh_build_ms=` 2,516 -> 1,768. The Rust/Python rule pin was nearly lost in the rewrite and was restored — the gate's mutation audit caught it. |
 | 2026-09-10 | Tasks 5–7: scoured ridges now occupy the confirmed far `x=0` / `y=127` edges; direct pins prove height-field preservation, bounded clamp ripple, lake flatness, and camp separation. Terrain-derived controls were rebased, every new/changed terrain test received executed mutation evidence, and AC2 re-measured at **94,208** triangles / 2,600 ms. Task 8/AC12 remains a human sitting and is intentionally uncompleted. |
 | 2026-09-10 | Task 1 (AC1): edge mapping measured and committed. `x=0` far upper-left, `y=127` far upper-right, meeting at screen `(683,205)`; `x=127` and `y=0` are off-screen at this framing, so AC1 cannot be met as literally written. Two instruments the story proposed were falsified first (`--cursor` is dead headless; the pixel diff has no noise floor under animated snowfall). |
