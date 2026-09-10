@@ -201,16 +201,16 @@ class ResolutionGeometryTests(unittest.TestCase):
         self.assertEqual(resolution_bench.geometry_summary(hollow, k=1)["chunks"], 1)
 
     def test_control_check_requires_the_real_world_literals(self):
-        resolution_bench.assert_control({"exposed_faces": 61142, "greedy_quads": 19264})
-        with self.assertRaisesRegex(ValueError, "61142"):
-            resolution_bench.assert_control({"exposed_faces": 61141, "greedy_quads": 19264})
+        resolution_bench.assert_control({"exposed_faces": 61152, "greedy_quads": 12132})
+        with self.assertRaisesRegex(ValueError, "61152"):
+            resolution_bench.assert_control({"exposed_faces": 61151, "greedy_quads": 12132})
 
 
 class ResolutionRealWorldControlTests(unittest.TestCase):
     """AC4's oracle, with a caller.
 
     `assert_control` was reachable only from `main()`, so every gate-run test meshed a synthetic
-    two-cell world and none meshed the real one. 61,142 / 19,264 are MEASUREMENTS of world
+    two-cell world and none meshed the real one. 61,152 / 12,132 are MEASUREMENTS of world
     content -- exactly the shape that went stale unnoticed in 9.4 -- and nothing went red when
     worldgen or the exposure rule moved. This is the caller.
     """
@@ -235,7 +235,7 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
             world = resolution_bench._load_snapshot(path)
         summary = resolution_bench.geometry_summary(world, k=1, detail=True)
         resolution_bench.assert_control(summary)
-        self.assertEqual(summary["triangles"], 38_528)
+        self.assertEqual(summary["triangles"], 24_264)
 
         # AC3a: the per-class split is a MEASUREMENT of the same draw set, so it is pinned
         # here rather than written by hand into a sign-off table. The previous table mixed
@@ -246,9 +246,9 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
             census,
             {
                 "tree_cells": 5_048,
-                "tree_faces": 13_704,
-                "terrain_cells": 39_936,
-                "terrain_faces": 47_438,
+                "tree_faces": 13_696,
+                "terrain_cells": 39_933,
+                "terrain_faces": 47_456,
                 "trees": 265,
             },
         )

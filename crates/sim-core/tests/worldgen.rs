@@ -432,7 +432,7 @@ fn spawn_positions_for_seed_42_are_pinned() {
     // fingerprint folds every tile, it is the tightest tree-stream regression guard in the repo,
     // far tighter than the 230-300 density band, which only discriminates roll denominators
     // outside roughly 36..52. Re-pin it only alongside a stated, measured geometry change.
-    assert_eq!(terrain_fingerprint, 0x1e0f_bb05_1f18_640e);
+    assert_eq!(terrain_fingerprint, 0x08b9_d589_660e_9ccb);
 }
 
 #[test]

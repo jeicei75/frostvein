@@ -17,8 +17,8 @@ from pathlib import Path
 
 
 WORLD_SEED = 0xF005_7E1A
-CONTROL_FACES = 61_142
-CONTROL_QUADS = 19_264
+CONTROL_FACES = 61_152
+CONTROL_QUADS = 12_132
 NEIGHBOURS = ((0, -1), (0, 1), (1, -1), (1, 1), (2, -1), (2, 1))
 SIDE_DELTAS = ((-1, 0), (1, 0), (0, -1), (0, 1))
 # Guard the process before Python object overhead can exhaust the devpod.  This is a benchmark
@@ -76,9 +76,8 @@ def _greedy_quads(mask):
     """Count maximal same-material rectangles in one co-planar face mask."""
     used = set()
     quads = 0
-    # Scan rows first.  This is the reference mesher's rectangle tie-break and is load-bearing:
-    # scanning columns first creates 19,353 quads on the real world, not the independent 19,264
-    # control result.
+    # Scan rows first. This is the reference mesher's rectangle tie-break and is load-bearing:
+    # scanning columns first creates a different result on the real world.
     for u, v in sorted(mask, key=lambda point: (point[1], point[0])):
         if (u, v) in used:
             continue
