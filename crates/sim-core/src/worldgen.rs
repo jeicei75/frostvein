@@ -403,4 +403,21 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn biome_decision_is_consumed_by_the_surface_material_rule() {
+        let snowfield = (64, 64);
+        assert_eq!(
+            biome_at(Dims::DEFAULT, snowfield.0, snowfield.1),
+            Biome::Snowfield
+        );
+        assert_eq!(
+            surface_material(Biome::Snowfield, 0, snowfield.0, snowfield.1),
+            Material::Snow
+        );
+        assert_eq!(
+            surface_material(Biome::Lake, 0, snowfield.0, snowfield.1),
+            Material::Ice
+        );
+    }
 }
