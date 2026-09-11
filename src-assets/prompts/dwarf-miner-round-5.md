@@ -16,9 +16,28 @@ the same directory the whole time. Four rounds measured the downstream artifact.
 So this round rebuilds on the real source. A model whose depths are measured rather than guessed is
 a different object from round 4, which is why it is a rebuild and not an edit.
 
-## Step 0 — RE-MEASURE, and report before you model
+## Run it through — no per-step approval this round
 
-**This is now the first step, and nothing is cut until Wolf has the numbers.**
+**Wolf, 2026-09-11: *"let's let it work now without asking my comments.. if we are close then we
+will have fixing round in the end of modelling.. if we are not close then we will have a new
+brief"*.** So:
+
+- **Do not stop and wait at any point.** Work through every part to a complete figure and deliver.
+- **Keep saving the `.blend` and writing a progress render at every step anyway.** Those are not the
+  gate; they are the crash insurance and the record. Four of six delegated runs in this project have
+  been killed by the harness.
+- **Still report every conflict, in the report, in writing.** Round 4's step-1 questions found two
+  real defects in the input documents. That behaviour is wanted — what is not wanted is it blocking
+  on an answer. When an input contradicts the reference, follow the reference, and write down what
+  you did and why.
+- **A fixing round follows if the result is close**, and a new brief if it is not. So **work
+  breadth-first: get every part present and the whole figure standing, and do not gold-plate one
+  part.** A complete figure that is 80 % right everywhere can be judged and fixed; three perfect
+  parts and a missing leg cannot.
+
+## Step 0 — RE-MEASURE and record it, then keep going
+
+**Measure first and put the table in your report. Do not wait for it to be approved.**
 
 Measure from `src-assets/references/dwarf-ortho/` (5x nearest-neighbour crops of the sheet, so every
 source pixel is a countable 5x5 block — read its README first):
@@ -30,7 +49,7 @@ source pixel is a countable 5x5 block — read its README first):
 - `back.png` — the back, pack straps and flap
 - `gear.png` — pickaxe **0.83x dwarf height**, lantern **0.33x**, from the sheet's own labels
 
-Report a table of proportions as fractions of dwarf height, the way
+Record a table of proportions as fractions of dwarf height in the report, the way
 `src-assets/references/dwarf-model-sheet.md` does — **and treat that file as PROVISIONAL. Every
 number in it was measured off the video and is superseded by anything you measure off the
 orthographic views.** Correct it rather than obeying it; step 1 of round 4 already proved that
@@ -68,9 +87,11 @@ the video hid them:
 - **Every triangle normal exactly ±X/±Y/±Z.** No bevels, smooth normals, rotated boxes, chamfers or
   cylinders. Round 4's exporter **fails the build** on a violation and reported 0 non-axis-aligned
   and 0 smooth-shaded faces. Keep that enforcement.
-- **The loop:** one part per step, and after every step **save the `.blend`**, write
-  `src-assets/renders/progress/NN-<part>.png` showing the WHOLE figure full-size *and* small, then
-  **STOP AND ASK.** Round 4 did this and it is why its mistakes were cheap.
+- **The artifacts of the loop, but NOT the stopping — see "Run it through" below.** One part per
+  step, and after every step **save the `.blend`** and write
+  `src-assets/renders/progress/NN-<part>.png` showing the WHOLE figure full-size *and* small. Keep
+  both; the saves are crash insurance and the renders are the audit trail. What changes this round
+  is that you do not wait for a reply.
 - **The zoom strip with its speckle metric** — round 4 invented `delta = mean |nearest - mip|` and
   reported 14.1 / 7.3 / 2.1 at 10/30/100 px. Keep the metric; it turns "does it read small" into a
   number.
