@@ -32,6 +32,16 @@ green. **Do not report a green gate you have not run.**
    scenario tests (build world → inject commands → tick N → assert) depend on it.
 4. **Small commits, imperative messages**, author `Völundr <jeicei75@gmail.com>`.
    One story = one branch = one PR; push/PR only after review, on Wolf's explicit yes.
+   **One carve-out, ruled 2026-09-11: a post-merge BOARD RECORD goes straight to `main`.**
+   That means a single commit which records a merge that has ALREADY happened, touches only
+   `_bmad-output/implementation-artifacts/sprint-status.yaml` and at most a story file's
+   `Status:` line, and changes nothing under `crates/`, `scripts/` or `assets/`. It is a
+   record, not a change, and a PR for it buys no review. Two conditions, both load-bearing:
+   the pre-push hook still runs the fast gate (it does, on every branch — nothing is
+   bypassed), and **get off `main` the moment it is pushed.** Wolf's merge has already left
+   the working copy sitting on `main`, and that is exactly how the NEXT commit lands there by
+   inertia. Anything wider than the carve-out — a rule change, a record that proposes work,
+   a story file edited beyond its status — is a branch and a PR like everything else.
 5. **Search with `rg`, find files with `fd`** — never `find .`/`grep -R`. Don't
    broad-search `target/`.
 6. **This repo is hosted in the Nidavellir forge but owns its process** — its own
