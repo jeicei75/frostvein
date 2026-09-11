@@ -1,7 +1,15 @@
 # AC12 — the sitting card for 10.9
 
-**Build:** `b7be859` (branch tip). Full gate GREEN, 452 s, run independently by the orchestrator
+**Build:** `b7be859`. Full gate GREEN, 452 s, run independently by the orchestrator
 after Codex reported its own — `cargo test` (not the fast set) and the pixel guards both ran.
+
+**The frame still speaks for the branch tip, re-checked 2026-09-11.** `b7be859` is no longer the
+tip — the review patches (`665ccdf`) landed after it and touched `worldgen.rs`, `project.rs` and
+`ingest.rs`. None of them can move the look: the `worldgen` edit drops a parameter that was already
+unused (`_rng`), `project.rs` extracts `derived_triangle_count` from an inline expression, and the
+`ingest.rs` change is a test. Re-measured on a fresh build at `9cea5b0`: `entities=1702`,
+`faces=830908`, `triangles=94442`, all three bit-identical to the tip column below. Not asserted by
+pixel diff — the snowfall animates, so a frame-to-frame diff here has no noise floor (see #90).
 
 **The frame:** `boot-b7be859-subdiv4.png` — boot framing, `--subdiv 4`, `--frames 160`, 1280x720.
 Fog and rim are UNCHANGED (10.8 Ruling 3 defect (d) stays deferred), so the ridge lever is being
