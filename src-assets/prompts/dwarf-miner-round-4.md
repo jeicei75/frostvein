@@ -62,9 +62,9 @@ script exports it. Two consequences, both stated plainly because one of them is 
    `blender --background` subprocess. Round 3 ran headless, so Wolf sat in front of an open Blender
    and watched nothing happen for an entire session. If a step is easier as a spawned background
    process, **it is still not allowed for authoring** — only the final export may run headless.
-2. **Work in parts, one step at a time, in this order:** proportions blockout — **at 64 AND at 96
-   voxels, for Wolf to choose between, see the resolution invariant** — then head → beard → hair →
-   torso → arms → legs → boots → belt → pack → tools.
+2. **Work in parts, one step at a time, in this order:** proportions blockout (boxes only, no
+   features — head mass, torso, arms, legs, and the beard's volume, because the beard is half the
+   silhouette) → head → beard → hair → torso → arms → legs → boots → belt → pack → tools.
 3. **After EVERY step, three things, in this order:**
    - **save the `.blend`** — this is the resume point, and it is not optional. If the session dies
      (four of six delegated runs in this project have been killed by the harness), everything since
@@ -88,47 +88,62 @@ script exports it. Two consequences, both stated plainly because one of them is 
 ## Invariants — not negotiable, and not Wolf's to relitigate mid-session
 
 - **`min Y = 0`**, the figure standing on the origin plane; **centred in X and Z**.
-- **Voxel-aligned geometry.** Every vertex on the authored voxel lattice. Model in voxels, not in
-  free-form mesh: box-shaped parts, axis-aligned faces, no bevels, no non-axis normals.
-- **VOXEL IS NOT UP FOR GRABS — but the RESOLUTION is decided in step 1, by eye, not by this
-  brief.** Two separate things, so take them separately.
+- **NOT A VOXEL GRID. BOX-MODEL IT.** This is a reversal of every previous round and it is the most
+  important line in the brief. Wolf, 2026-09-11: *"I don't think dwarf models need to be voxels as
+  such... trees can be still and everything what we want to generate procedural"*, and *"might be
+  exactly that voxel term in prompt actually limits modelling so that I won't be happy with the
+  result (not close to reference)"*. **He is right, and here is the mechanism:** the reference's belt
+  is thinner than a body unit, its buckle frame thinner still, its tunic has a hem lip. A strict
+  lattice cannot produce any of those without raising the global resolution — which is what the
+  shipped 96-unit asset did, and it read flatter, not richer. The blocky look we want comes from
+  **axis-aligned box forms and flat shading**, not from quantised positions.
 
-  **Why voxel stays:** the world he stands in is voxel — the terrain is cells, the pines are cells —
-  so a smooth-shaded dwarf would be the only non-voxel thing in every frame he appears in. The
-  reference Wolf is chasing is itself voxel. And the cheap parts of this pipeline all depend on it:
-  palette-cell colouring (a variant is 188 bytes), greedy meshing, rigid joints on unwelded quads.
-  What has already been dropped is procedural voxel *authoring* — the 948-line generator — not
-  voxel geometry. Do not reach for bevels, smooth normals, or a subdivision surface.
+  **So: model with rectangular boxes, at whatever size each form needs.** No global lattice, no
+  quantisation of positions or thicknesses. A thin belt is a thin box. A buckle frame is four thin
+  boxes. A beard lock is a slab that sticks out past its neighbour.
 
-  **Why the resolution is an open question:** measured off the reference at t=10 s, the `dwarf.mp4`
-  dwarf is roughly **60–65 voxels tall** with a **5-voxel** belt buckle, while the shipped asset is
-  **96** and still reads flatter. So 64 is known to be enough *at the framing the video uses* —
-  the character filling about 500 px of a 720p frame. It is NOT known to be enough at a tighter
-  shot, and nobody can answer that from a brief: **the closest shot Wolf actually intends is what
-  sets the resolution.**
+  **What must still be true, because this is where the look actually lives:**
+  - **Every face axis-aligned.** Every triangle normal is exactly ±X, ±Y or ±Z. No bevels, no
+    smooth normals, no subdivision, no rotated boxes, no chamfers, no cylinders. This — not the
+    lattice — is the mechanical guarantee of the blocky read, and it is checkable.
+  - **Flat shading, hard 90-degree edges**, colour per face from palette cells.
+  - **A FEATURE-SCALE FLOOR, which is what the old resolution rule was really protecting.** The
+    finest authored detail should be no finer than about **1/64 of his height** — roughly 2 cm on a
+    1.20 m dwarf, which is what the reference's own finest feature measures. Not because of a grid,
+    but because free zoom means the camera passes through every size: detail finer than that is
+    sub-pixel in the wide shot, and sub-pixel detail aliases and shimmers rather than politely
+    vanishing. Below the floor, put it in the palette instead of the geometry.
 
-  **So step 1 delivers the blockout TWICE — at 64 and at 96 voxels — rendered at the same framings,
-  including the tightest one Wolf names.** Same silhouette, same proportions, one lattice each, no
-  features. He picks, and the answer is then fixed for the rest of the round. This costs one extra
-  blockout and settles an argument that would otherwise be re-run at every part.
+  **Voxel stays everywhere else** — terrain, pines, anything procedurally generated. This change is
+  the dwarf's alone, and it is why the dwarf can stop being generated by a script at all.
 
-  **One thing that is NOT the answer either way: mixing lattices.** Do not model the face or hands
-  on a finer grid than the body — the parts then read at different scales and the character comes
-  apart. The reference gets its face from VALUE, not from resolution: its eyes are one or two voxels
-  with a painted sclera, and the brow is a shape. If the face needs to read better, that is a
-  palette-cell problem before it is ever a geometry problem.
+  **Expect the triangle count to COLLAPSE, and do not read that as a loss.** The shipped asset is
+  14,398 triangles because a voxelised body has to be greedy-meshed out of tens of thousands of
+  cubes. Twenty to fifty boxes is a few hundred triangles for a better-reading character. If your
+  count lands in the hundreds, that is the method working.
+
+  **One consequence for the checker, so nobody is surprised:** `check_asset.py`'s grid clause
+  (`PROJECT_GRID_METRES`) asserts every position sits on the authored lattice, and a box model will
+  FAIL it by design. Report the failure verbatim; do not quantise the model to satisfy it and do not
+  edit the checker. The replacement clause on this side is the axis-aligned-normal rule above,
+  which guards the look without constraining sizes — that is owed work here, not yours.
+
 - **NO SURFACE GROOVING.** Round 3's predecessor cut a 1-voxel channel every 3 voxels across the
   beard and tunic to add "detail"; at 96 voxels that is corduroy, and it is the "vertical voxel
   bands" Wolf rejected. Detail belongs in the **silhouette** (locks that notch the outline, a
   stepped hem, stepped cuffs) and in **value steps** — the reference's tunic carries at least three
   greens where ours carries one.
+- **The asset's NAME keeps `Voxel` in it** — `SM_VoxelDwarf_Miner01` — because that is the slot the
+  client loads by path and renaming it is code churn for nothing. The name describes the family's
+  look, not its construction method.
 - **One mesh, one material, one palette image.** Colour comes from palette cells in a small atlas,
   not from multiple materials. A cell's meaning is fixed by its coordinate, so a recolour is a table
   of hexes — that is what makes hundreds of variants nearly free, and the atlas is 188 bytes.
-- **Unwelded quads, and no quad may cross a joint.** Measured on the shipped asset: of 28,796
-  vertices, **zero** share position+normal+UV, so there is nothing to weld that would not also
-  average normals across hard voxel edges and destroy the voxel read. Keep parts separable at joint
-  planes — a quad spanning shoulder to wrist cannot bend, it can only shear.
+- **No face may cross a joint, and do not weld across hard edges.** With box modelling this is
+  nearly free — a box is naturally separable — but it still has to be true: a single face spanning
+  shoulder to wrist cannot bend, it can only shear. Measured on the shipped asset for the record: of
+  28,796 vertices, **zero** share position+normal+UV, so welding would have had to average normals
+  across hard edges and destroy the blocky read. Same rule here: hard edges stay split.
 - **Beard and hair must lift off.** Each is one part on one declared socket on the head, shaped so
   that removing it leaves a complete head underneath: no skin borrowed from the beard's volume, no
   hairline that only works with this hair. They are the first variant axes Wolf named, and the beard
