@@ -119,12 +119,31 @@ script exports it. Two consequences, both stated plainly because one of them is 
   joint nodes. That is the contract not having caught up. Report the failure text verbatim; do not
   loosen the checker and do not strip the skin to make it pass.
 
-## The reference
+## The references — TWO of them, with different jobs, and neither of them decides
 
-`src-assets/references/dwarf.mp4` is the authority — **the video, not the contact sheet.** Sample it
-with `ffmpeg -i dwarf.mp4 -vf fps=1` and hold the t=1/4/7/10 s frames beside your renders. What to
-take from it: chunky voxels, big value steps inside one material, detail in the silhouette, rigid
-posed limbs, a lantern that reads as the brightest thing on the character.
+Round 3's brief said "the video, not the contact sheet". That was about the quality target and it
+was too blunt: it reads as *ignore the sheet*, which would throw away the only approved source for
+what gear this dwarf has and what colours he is made of. Both references are live, and they answer
+different questions.
+
+- **`src-assets/references/dwarf-contact-sheet.jpg` — WHAT he is.** Authoritative for the gear
+  inventory (lantern, pickaxe, pack and bedroll, belt with buckle, boots) and for the **palette**.
+- **`src-assets/references/dwarf.mp4` — HOW he should read.** Authoritative for quality and
+  construction. Sample it with `ffmpeg -i dwarf.mp4 -vf fps=1` and hold the t=1/4/7/10 s frames
+  beside your renders. What to take: chunky voxels, big value steps inside one material, detail in
+  the silhouette, rigid posed limbs, a lantern that reads as the brightest thing on the character.
+
+**The palette carries over; it is not re-derived.** The ten approved cells are
+`#E9D2BB` skin, `#5E4632`, `#FFFFFF`, `#5F7A6A` tunic, `#474B41`, `#A9B2AC` metal, `#8B6B50` wood,
+`#6B5B49`, `#34271C` hair, `#F0A63C` flame — read off the SHEET and signed off. **Do not sample
+colours out of the video**: it is 10 s of h264 in 3.4 MB, every value in it has been through a lit
+scene and a view transform, and a palette read from it would be wrong in silence. What this round
+ADDS is value steps — two or three cells per major material so form is painted in rather than
+borrowed from the lighting — built around the approved hues, not replacing them.
+
+**And neither reference is the decider. Wolf is.** Where his live correction disagrees with a
+reference, he wins and you do not argue the sheet back at him. Where he has said nothing, the
+references are what you aim at.
 
 What NOT to take from it: the lighting. Soft shadows and the warm pool on the floor are the
 renderer's, not the asset's, and they are explicitly out of scope — Wolf: *"no need to worry about
