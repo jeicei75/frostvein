@@ -53,6 +53,48 @@ a gate run where nothing has changed.
   (250,540) reads (78,104,157), R/B 0.497, against adjacent snow at (430,600) (99,120,165), R/B
   0.60. Visible bottom-left and left of camp.
 
+## Which ice is which — every region placed on the frame
+
+Asked by Wolf at the sitting, 2026-09-11: *what are the same-coloured blocks as the lake, in the
+big hill and elsewhere?* **They are ice, the same material the lake is made of — AC5 scour, not
+lake.** The material rule gives ice ONE appearance, so a scour plate and the frozen lake are the
+same pixels by construction. Marked on `ice-regions-b7be859-annotated.png` (green = lake, red =
+scour); each box is the projected CENTROID cell of a region, not its outline.
+
+Every ice region of >= 40 cells, projected through the capture's own oracle
+(`CameraRig::project_world_point_with_depth`, camp `(64,64,9)` -> `(640.0, 561.2)` reproduced as
+the control):
+
+| rank | cells | world | heights | screen | where |
+|---|---|---|---|---|---|
+| 1 | 247 | `x[80,95] y[0,15]` | z 5–19 | `(-1693, 3236)` | off-screen, near-left |
+| 2 | 237 | `x[64,79] y[96,111]` | z 16–27 | `(1071, 284)` | **the big hill, upper right** |
+| 3 | 225 | `x[48,63] y[112,127]` | z 13–20 | `(978, 272)` | **the big hill, upper right** |
+| 4 | 217 | `x[80,95] y[80,95]` | z 11–19 | `(1176, 515)` | right flank, below the hill |
+| **5** | **213** | **`x[19,37] y[86,99]`** | **z 17 flat** | **`(624, 243)`** | **THE LAKE** |
+| 6 | 166 | `x[96,111] y[68,79]` | z 18–24 | `(1483, 701)` | off-screen right |
+| 7 | 154 | `x[0,15] y[80,95]` | z 16–23 | `(476, 203)` | upper left, on the skyline |
+| 8 | 119 | `x[0,15] y[0,15]` | z 13–19 | `(-414, 421)` | off-screen left |
+| 9 | 64 | `x[48,63] y[37,42]` | z 15–17 | `(201, 576)` | bottom left |
+| 10 | 53 | `x[48,63] y[44,47]` | z 13–15 | `(313, 560)` | bottom left |
+| 11 | 53 | `x[64,76] y[16,21]` | z 20–23 | `(-382, 934)` | off-screen, below-left |
+
+Re-derived independently of the review, from a live snapshot at `9cea5b0` (`export_world.py`,
+topmost non-tree tile per column, 4-neighbour components): 2,085 ice surface cells, 954 `Solid` +
+1,131 `Ramp`, 28 regions of which 11 are >= 40 cells. The review's figures reproduce exactly.
+
+**What separates the lake from the rest, in the data and not by eye.** The lake is the only region
+that is FLAT (all 213 cells at `z=17`; every other region spans 3 to 12 height levels) and the only
+one the lattice did not make — its cells sit at `(x/16 + y/16) % 5 ∈ {1,2,3}`, while all ten others
+are `% 5 == 0`, the scour rule's own residue. So the biome pilot's signature is *flatness*, and
+nothing about its material.
+
+**The consequence for ruling 3 below.** Six scour regions are in frame and **three of them are
+BIGGER than the lake** (237, 225, 217 cells against 213) — the lake is the fifth largest in the
+world and the fourth largest in shot. The frozen lake AC9 introduced as a biome pilot is not
+visually distinguishable from a by-product of the scour lattice; it is one of seven identical-
+looking ice patches, and not the largest.
+
 ## Three things the orchestrator will not sign off, for Wolf to rule on
 
 1. **AC1 is UNMET AS WRITTEN and no framing change was made to chase it.** Only `x=0` and
