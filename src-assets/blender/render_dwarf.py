@@ -1,9 +1,25 @@
 """Render the dwarf's orthographic turnaround, for comparison against the reference.
 
-    blender --background --python render_dwarf.py -- <out_dir>
+    blender --background --python render_dwarf.py -- <out_dir> [--engine E]
+                                                   [--reference REF.png]
 
 Builds the model by importing dwarf_miner -- NOT by loading a .blend -- so the
 renders are of the same geometry the generator ships and cannot drift from it.
+That includes the SKELETON: the swing views are the rigged mesh actually bent by
+its bones, not a second model posed by hand, which is the only way a render can
+say anything about whether the rig works.
+
+Three sets of output, and the third is a deliverable of round 3 rather than a
+convenience:
+
+  * five views x (flat, lit) in the neutral stance;
+  * the same five lit, in the mp4's swing pose;
+  * THE ZOOM STRIP, `dwarf-zoom-strip.png`: the lit front render downscaled
+    nearest-neighbour to 10, 30 and 100 px tall and blown back up so the pixels
+    are inspectable, beside the full-height frame. With free zoom the camera
+    passes through every one of those sizes, so a detail that dissolves into
+    speckle at 10 px is a defect and not a lost luxury -- and this is the frame
+    that shows it.
 
 Workbench, because it is deterministic and has no sampler noise. Two passes per
 view: `flat` is unlit albedo, which is the only honest way to read the palette,
@@ -41,18 +57,38 @@ VIEWS = [
 ]
 
 
-def build():
+def build(pose):
+    """The generator's own build, rig and pose -- imported, never reimplemented."""
     pine.wipe_scene()
-    vox, _parts = dwarf.build_voxels()
-    vox, _parts, _shift = dwarf.centre_voxels(vox, _parts)
-    verts, faces, uvs = dwarf.build_mesh(vox, dwarf.DEFAULT_VOXEL)
-    return dwarf.build_object(verts, faces, uvs)
+    ob, _arm = dwarf.build(dwarf.DEFAULT_VOXEL, pose)[:2]
+    return ob
 
 
-def add_camera(ob):
+def deformed_extent(ob):
+    """The posed mesh's half-extent, which is NOT ob.dimensions.
+
+    ob.dimensions measures the rest mesh; the armature modifier is a deformation
+    the depsgraph applies afterwards, so a swing that throws the pickaxe forward
+    is invisible to it and the camera crops the tool off. Evaluate and measure
+    what will actually be drawn.
+    """
+    graph = bpy.context.evaluated_depsgraph_get()
+    evaluated = ob.evaluated_get(graph)
+    mesh = evaluated.to_mesh()
+    try:
+        points = [ob.matrix_world @ v.co for v in mesh.vertices]
+    finally:
+        evaluated.to_mesh_clear()
+    lo = mathutils.Vector((min(p[i] for p in points) for i in range(3)))
+    hi = mathutils.Vector((max(p[i] for p in points) for i in range(3)))
+    return lo, hi
+
+
+def add_camera(extent):
+    lo, hi = extent
     cam_data = bpy.data.cameras.new("TurnaroundCam")
     cam_data.type = 'ORTHO'
-    cam_data.ortho_scale = max(ob.dimensions) * 1.06   # square frame: fits every view
+    cam_data.ortho_scale = max(hi[i] - lo[i] for i in range(3)) * 1.06   # fits every view
     cam = bpy.data.objects.new("TurnaroundCam", cam_data)
     bpy.context.collection.objects.link(cam)
     bpy.context.scene.camera = cam
@@ -130,18 +166,59 @@ def setup_cycles(scene):
     scene.world.node_tree.nodes["Background"].inputs[0].default_value = (0.16, 0.16, 0.17, 1.0)
 
 
-def main():
+# The pose the swing views are rendered in, and the sizes the zoom strip asks about.
+# 10 px is the wide end measured through the client's own projection oracle -- a 1.20 m
+# dwarf draws 8.74 px at the shipped boot framing -- and full height is the marketing
+# shot. With free zoom the camera passes through everything between, so both ends and
+# two points in the middle are what a detail has to survive.
+ZOOM_HEIGHTS = (10, 30, 100, RES[1])
+# Each panel is blown back up to the full render's own height, so the last panel is
+# native and the others are INTEGER magnifications of it -- 70x, 23x, 7x. A panel
+# smaller than the render would have forced the full-height frame through a
+# fractional downscale, which is the one filter this strip exists to avoid.
+ZOOM_PANEL = RES[1]
+ZOOM_GUTTER = 8
+
+
+def parse_argv():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    positional = [a for a in argv if not a.startswith("--")]
+    positional, flags, rest = [], {}, list(argv)
+    while rest:
+        item = rest.pop(0)
+        if item.startswith("--"):
+            flags[item] = rest.pop(0) if rest and not rest[0].startswith("--") else True
+        else:
+            positional.append(item)
+    return positional, flags
+
+
+def main():
+    positional, flags = parse_argv()
     out_dir = os.path.abspath(positional[0]) if positional else "renders"
-    engine = "workbench"
-    if "--engine" in argv:
-        engine = argv[argv.index("--engine") + 1]
+    engine = flags.get("--engine", "workbench")
+    reference = flags.get("--reference")
     if engine not in ("workbench", "cycles"):
         raise SystemExit("error: --engine must be workbench or cycles (got %r)" % engine)
     os.makedirs(out_dir, exist_ok=True)
 
-    ob = build()
+    written = []
+    for pose in ("neutral", "swing"):
+        written += render_pose(pose, engine, out_dir)
+
+    assert_flat_is_flat(out_dir)
+    extras = [zoom_strip(out_dir), contact_comparison(out_dir)]
+    if reference and reference is not True:
+        extras.append(reference_comparison(out_dir, os.path.abspath(reference)))
+    for path in written + extras:
+        print("RENDER %s" % path)
+    print("OK %d renders -> %s" % (len(written) + len(extras), out_dir))
+
+
+def render_pose(pose, engine, out_dir):
+    """One full turnaround of one pose. The scene is rebuilt per pose rather than
+    re-posed, because the camera has to be framed on the DEFORMED extent and the
+    flat/lit material swap is per-object state."""
+    ob = build(pose)
     scene = bpy.context.scene
     scene.render.engine = 'BLENDER_WORKBENCH'
     scene.render.resolution_x, scene.render.resolution_y = RES
@@ -156,16 +233,27 @@ def main():
     shading.show_object_outline = False
     shading.show_specular_highlight = False
 
-    target = mathutils.Vector((0.0, 0.0, ob.dimensions.z / 2.0))
-    cam = add_camera(ob)
+    # Aim at the DEFORMED bounding box's centre on all three axes. The neutral
+    # pose centres on X and Y by contract, so r2 could hardcode those to zero; a
+    # swing throws the pickaxe forward in Y and the frame slid off him.
+    lo, hi = deformed_extent(ob)
+    target = mathutils.Vector(tuple((lo[i] + hi[i]) / 2.0 for i in range(3)))
+    cam = add_camera((lo, hi))
 
     default_transform = scene.view_settings.view_transform   # before any engine setup moves it
 
+    flat_material = lit_material = None
     if engine == "cycles":
         setup_cycles(scene)
         add_studio_lights(target)
         lit_material = ob.data.materials[0]
         flat_material = make_flat_material(ob)
+
+    # The neutral pose carries both passes; the swing carries the lit one only. The
+    # flat pass exists to read the PALETTE, and the palette does not change when a
+    # bone turns -- a second set of flat views would be five more files saying the
+    # same thing, and assert_flat_is_flat already reads the neutral ones.
+    modes = (("flat", 'FLAT'), ("lit", 'STUDIO')) if pose == "neutral" else (("lit", 'STUDIO'),)
 
     # The flat pass is only "unlit albedo" if the VIEW TRANSFORM is Standard. Blender's default
     # (AgX) rolls highlights off and quietly rewrites every colour: measured on the Workbench flat
@@ -173,7 +261,7 @@ def main():
     # #E9D2BB read back as #BDB3AA -- so a palette read off that frame is wrong in silence. Set per
     # mode rather than globally so the lit pass keeps whatever look it was judged under.
     written = []
-    for mode, light in (("flat", 'FLAT'), ("lit", 'STUDIO')):
+    for mode, light in modes:
         shading.light = light
         scene.view_settings.view_transform = 'Standard' if mode == "flat" else default_transform
         if engine == "cycles":
@@ -183,17 +271,12 @@ def main():
             scene.cycles.samples = 1 if mode == "flat" else 24
         for name, azimuth, elevation in VIEWS:
             aim(cam, target, azimuth, elevation)
-            path = os.path.join(out_dir, "dwarf-%s-%s.png" % (mode, name))
+            stem = "dwarf-%s-%s" % (mode, name) if pose == "neutral"                 else "dwarf-swing-%s-%s" % (mode, name)
+            path = os.path.join(out_dir, "%s.png" % stem)
             scene.render.filepath = path
             bpy.ops.render.render(write_still=True)
             written.append(path)
-
-    assert_flat_is_flat(out_dir)
-
-    sheet = contact_comparison(out_dir)
-    for path in written + [sheet]:
-        print("RENDER %s" % path)
-    print("OK %d renders -> %s" % (len(written) + 1, out_dir))
+    return written
 
 
 def assert_flat_is_flat(out_dir):
@@ -273,6 +356,65 @@ def contact_comparison(out_dir):
     strip = [nearest_scale(tile, height) for tile in tiles]
     canvas = np.concatenate(strip, axis=1)
     path = os.path.join(out_dir, "dwarf-vs-contact-sheet.png")
+    write_png(path, canvas)
+    return path
+
+
+def zoom_strip(out_dir):
+    """The deliverable the round asks for: one render at four sizes, side by side.
+
+    Each panel is the lit front view downscaled NEAREST-NEIGHBOUR to its height --
+    the same filter the game's rasteriser approximates -- and then blown back up
+    by an integer factor so the pixels can be counted. The true-size image is
+    inset at the bottom left of its panel, because a 10 px dwarf blown up to 420
+    stops looking like 10 px and the point of the strip is what 10 px looks like.
+
+    Two questions it has to answer, and they are the two the brief asks: does the
+    silhouette still read as a bearded dwarf with a lantern at 10 px, and does any
+    surface detail turn to speckle there. A detail that dissolves at 10 px is a
+    defect and not a lost luxury -- with free zoom the camera passes through every
+    one of these sizes, and speckle that changes frame to frame shimmers.
+    """
+    full = read_png(os.path.join(out_dir, "dwarf-lit-front.png"))
+    panels = []
+    for height in ZOOM_HEIGHTS:
+        small = nearest_scale(full, height)
+        factor = max(1, ZOOM_PANEL // height)
+        blown = np.repeat(np.repeat(small, factor, axis=0), factor, axis=1)
+        panel = np.full((ZOOM_PANEL, ZOOM_PANEL, 3), 24, dtype=np.uint8)
+        oy, ox = (ZOOM_PANEL - blown.shape[0]) // 2, (ZOOM_PANEL - blown.shape[1]) // 2
+        panel[oy:oy + blown.shape[0], ox:ox + blown.shape[1]] = blown
+        if height < ZOOM_PANEL:
+            # the same frame at its TRUE size, inset bottom-left with a one-pixel
+            # rule. A 10 px dwarf blown up to 700 stops looking like 10 px, and
+            # what 10 px looks like is the whole question.
+            th, tw = small.shape[:2]
+            panel[ZOOM_PANEL - th - 9:ZOOM_PANEL - 9, 8:8 + tw] = small
+            panel[ZOOM_PANEL - th - 10, 7:9 + tw] = 200
+        panels.append(panel)
+        gutter = np.full((ZOOM_PANEL, ZOOM_GUTTER, 3), 90, dtype=np.uint8)
+        panels.append(gutter)
+    canvas = np.concatenate(panels[:-1], axis=1)
+    path = os.path.join(out_dir, "dwarf-zoom-strip.png")
+    write_png(path, canvas)
+    return path
+
+
+def reference_comparison(out_dir, reference):
+    """The five lit views beside a frame of the round's actual authority.
+
+    `references/dwarf.mp4` is a video and nothing in this script can decode one,
+    so the frame is passed in rather than extracted -- see ASSET_NOTES for the
+    one ffmpeg line that produces it. Passing it keeps the comparison
+    reproducible from the script plus a stated command, which the alternative
+    (a hand-made PNG committed with no recipe) does not.
+    """
+    tiles = [read_png(os.path.join(out_dir, "dwarf-lit-%s.png" % name))
+             for name, _a, _e in VIEWS]
+    tiles.append(read_png(reference))
+    height = max(tile.shape[0] for tile in tiles)
+    canvas = np.concatenate([nearest_scale(tile, height) for tile in tiles], axis=1)
+    path = os.path.join(out_dir, "dwarf-vs-dwarf-mp4.png")
     write_png(path, canvas)
     return path
 

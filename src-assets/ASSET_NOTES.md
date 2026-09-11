@@ -15,8 +15,10 @@ Wolf's ruling; what follows is the reconciled record.
 
 ```
 blender/     the generators, and the working .blend files
-prompts/     briefs for MCP/agent modelling sessions
-references/  the approved reference sheets and the mood art
+prompts/     briefs for MCP/agent modelling sessions, and their session records
+references/  the approved reference sheets, the mood art and dwarf.mp4
+renders/     the committed turnarounds, the zoom strip and the reference comparisons
+candidates/  authored GLBs that have NOT been promoted to assets/ -- see the dwarf below
 export/      LOCAL SCRATCH, gitignored -- see below
 ```
 
@@ -108,97 +110,204 @@ absolute path; folding it in on 2026-09-06 removed both the second script and th
 
 ## Generating the dwarf
 
-```
-blender --background --python blender/dwarf_miner.py -- <out.glb> [--voxel M] [--blend P]
-```
-
-**One generator, one variant**, and it refuses any basename but the published one, because
-the contract requires file basename == glTF mesh name == glTF node name and that string is
-compiled into the client. Write straight to `assets/gltf/`, the location
-`docs/tech-art-guidelines.md:463` contracts for a runtime glTF:
+**Revision r3 (2026-09-11) is the current authored round, and it is a CANDIDATE.** It is
+rigged, so it is not the same shape of asset r2 shipped; the session record is
+`prompts/dwarf-miner-round-3-report.md` and it is the thing to read before touching any of
+this. What follows describes r3. `assets/gltf/SM_VoxelDwarf_Miner01.glb` still holds r2.
 
 ```
-blender --background --python blender/dwarf_miner.py -- ../assets/gltf/SM_VoxelDwarf_Miner01.glb
+blender --background --python blender/dwarf_miner.py -- <out.glb>
+        [--voxel M] [--pose neutral|swing] [--beard NAME] [--hair NAME] [--blend P]
 ```
 
 It draws **no random numbers at all** — every voxel is placed by an explicit rule — so there
 is no `--seed` and determinism is by construction rather than by discipline.
 
-**Verified 2026-09-06** under Blender 5.2.1: two independent cold runs and the shipped file
-are byte-identical, and `scripts/bench/check_asset.py` accepts it with **no code change**.
+### Candidates, and the naming scheme (ruled by Wolf, round 3 §C)
+
+**The file path in `assets/gltf/` is a SLOT and does not churn.** `SM_VoxelDwarf_Miner01.glb`
+is what the client loads (`DWARF_SCENE_PATH`), and `01` denotes the ROLE — miner, as opposed
+to a future smith — never a version. It is never bumped to `Miner02` to mean "second attempt".
+
+**Internal names carry the revision, because they are what a stale binary shows about
+itself:** node and mesh `SM_VoxelDwarf_Miner01_r3`, material `M_VoxelDwarf_r3`, image
+`T_VoxelDwarf_Palette_r3`. The generator declares the same token as `REVISION` and prints it
+on the `FIGURES` line, so source and binary can be compared without opening Blender.
+
+**Candidates never enter `assets/gltf/`.** They live in `candidates/` and carry the revision
+in the basename too, so basename, mesh and node still agree and `check_asset.py`'s naming
+clause holds. Promotion is a copy plus the revision bump — and see the report §5 for what the
+checker will say about the copy, because that clause has **not** caught up with this scheme.
+
+```
+blender --background --python blender/dwarf_miner.py -- ../src-assets/candidates/SM_VoxelDwarf_Miner01_r3.glb
+blender --background --python blender/dwarf_miner.py -- ../src-assets/candidates/SM_VoxelDwarf_Miner01_r3_swing.glb
+```
+
+The basename is refused unless it names a pose of this revision: a posed GLB and a neutral one
+are different assets and must not share a name. `--pose` must agree with the basename.
+
+**Verified 2026-09-11** under Blender 5.2.1: two independent cold runs (with
+`blender/__pycache__` removed between them) and the committed files are byte-identical.
 
 | GLB | sha256 (first 16) | bytes | Size (m, XYZ) | Voxels | Tris | Verts |
 |---|---|---|---|---|---|---|
-| `SM_VoxelDwarf_Miner01.glb` | `3a87cbbd03660316` | 16,688 | 1.0 × 1.2 × 0.6 | 239 | 216 | 432 |
+| `candidates/SM_VoxelDwarf_Miner01_r3.glb` | `dd34c1b3154a4cba` | 1,399,040 | 1.25 × 1.20 × 0.80 | 150,340 | 11,058 | 22,116 |
+| `candidates/SM_VoxelDwarf_Miner01_r3_swing.glb` | `1c3a5a35242b41ea` | 1,400,936 | same | same | same | same |
 
-Gear is **baked into the one mesh** (Wolf's ruling, 2026-09-06) as voxel groups that touch
-the body only at the hands — body 216, pickaxe 11, lantern 12, reported on the `FIGURES`
-line. Since the mesh is unwelded quad soup, cutting the gear out for the mining-strike cycle
-later is a selection, not a remodel.
+The two poses share one mesh: a pose is node transforms, so the `POSITION` accessor is the
+rest mesh in both and both satisfy the grid, centring and volume clauses identically.
 
-### Palette
+### The skeleton, and the one topology rule
 
-Section A's swatch column, the sheet's `Needle Green` dropped (it is the tree's).
+Nineteen joints, rigid weights, **one mesh** — Wolf's ruling, round 3 §A. The names are the
+contract between this asset and every future one, because one animation clip has to drive
+every variant:
 
-| Cell | Hex | Role | Provenance |
-|---|---|---|---|
-| 0 | `#E9D2BB` | Skin | label legible, swatch agrees |
-| 1 | `#5E4632` | Beard — also the hair | label legible, swatch agrees |
-| 2 | `#FFFFFF` | Snow — **used as the lantern's glass pane** | confirmed: same value in the pine atlas |
-| 3 | `#5F7A6A` | Tunic | label legible, swatch agrees |
-| 4 | `#474B41` | Pants | **unresolved, see below** |
-| 5 | `#A9B2AC` | Metal | label legible, swatch agrees |
-| 6 | `#8B6B50` | Wood | **unresolved, see below** |
-| 7 | `#6B5B49` | Wood Trunk — belt, boots, backpack | confirmed: same value in the pine atlas |
+```
+root  hips  spine  chest  neck  head  beard
+shoulder.L/R  elbow.L/R  hand.L/R
+hip.L/R  knee.L/R  foot.L/R
+```
 
-The lantern's pane is **plain albedo and not emissive**. The client owns the lantern's light;
-a baked emissive face is a light nobody can switch off, which the pixel guards assert against.
+**THE RULE: no quad may cross a joint.** Greedy-merge within a part, never across one, so
+every quad's four vertices belong to exactly one joint. A quad spanning shoulder to wrist
+cannot bend — it can only shear into a parallelogram. It holds by construction (the mask a
+greedy run merges over is keyed by `(colour, joint)`) and is checked anyway against the
+written GLB, along with rigid weights and the joint-name set.
 
-### Three findings
+**Weights are rigid: every vertex 1.0 to one joint, no blending.** That is not a downgrade
+from soft skinning, it is what the reference does; soft weights on cubes smear the voxel read.
+The trade, stated because it is a decision: greedy meshing removes the interior vertices soft
+deformation needs, so choosing greedy quads and rigid weights is choosing rigid animation. A
+part that ever wants genuine soft motion needs welded, denser topology and will stop reading
+as voxels.
 
-**1. `Pants` and `Wood` cannot be settled from the sheet, and were carried from the brief.**
-`reference-sheet.jpg` is 1024×558 — that *is* its full resolution, not a downscale, so there
-is no better scan to re-read. At that size the sheet's `8` and `B` render as the same glyph:
-`Wood Trunk` reads `#685849` there while the pines demonstrably ship `#6B5B49`. Sampling the
-swatches cannot break the tie either. Absolute luminance is useless (measured bias −17..+1
-across the swatches), and channel differences, which cancel most of it, still carry up to
-**8.8/255** of error when calibrated against the three swatches whose truth is known — well
-over the **3/255** that separates `#474B41` from `#474841` and `#8B6B50` from `#8B6850`. Both
-values above are the brief's, **carried and not confirmed**; the residuals actually lean
-`#474841` for Pants and split for Wood. If the original art file exists, one look settles it.
+**Do not weld this mesh.** Measured on r2's shipped GLB: of 28,796 vertices, the number
+sharing position AND normal AND UV with another is **zero** — greedy meshing already
+performed every legal weld. Welding by position alone averages normals across hard voxel
+edges (the voxel read is the look), breaks the per-cell UVs, and makes rigid joints
+impossible, because one welded vertex can follow only one bone and drags the other part with
+it.
 
-**2. The pine's half-voxel lattice shift is off the project grid at a 0.1 m voxel.**
-`voxel_pine.greedy_mesh()` subtracts half a voxel in X and Y so an ODD-width trunk centres on
-the origin. At the pine's 0.2 m voxel that shift is 0.1 m and lands on the grid; at the
-dwarf's 0.1 m voxel it is **0.05 m**, and `check_asset.py`'s grid clause rejects every vertex.
-The dwarf is therefore **even-width in X and Y** and undoes the shift after meshing — a rigid
-translation, which is why the mesher itself is imported unedited. A consequence worth
-recording: the resolution contract's phrasing "every voxel centre lands on the 0.1 m lattice"
-and the checker's clause (POSITION on the 0.1 m grid) **cannot both hold at a 0.1 m voxel**.
-The checker is the mechanical gate, so it wins here; voxel centres land on the half-grid.
+### Palette: 23 cells, 8×8 grid
 
-**3. The sheet's Section A depicts roughly twice the resolution the contract allows, and
-that is a ruling, not a defect.** The contract fixes the dwarf at 12 voxels of 0.1 m
-(`docs/tech-art-guidelines.md:352`). Measured off the sheet's own back view — silhouette
-bounding box 29 × 92 px, modal edge-step 4–5 px — the **drawn** figure is about **20–23
-voxels tall and 7 wide**, and it is not voxel art at all: anti-aliased outlines, gradient
-shading and a curved organic pickaxe head. At 12 voxels the following are simply unavailable
-and were dropped:
+The atlas is still the contracted **64×64** image but is now an **8×8 grid of 8 px cells**,
+because 4×4 holds sixteen and this palette needs twenty-three. **`check_asset.py` samples the
+4×4 grid and therefore mis-reads this atlas — it reports 4 cells of 23 and exits 0.** That is
+a real, reproducible defect in a clause that has not caught up; see the report §5. Do not
+"fix" it by rearranging the atlas.
 
-- **eyes** — once hair frames it the face is 2 voxels wide, so a separated pair cannot be
-  drawn and an adjacent pair reads as a brow band
-- the moustache as a mass distinct from the beard; bracers; the tunic's layered panels;
-  boot cuffs
-- the pickaxe's **curved** pick and its hammer poll — it is a straight bar with two
-  turned-down ends, which is the least that still reads as a pickaxe rather than a hook
-- the lantern's frame and mullions — it is base / pane / cap, three voxels
+The ten ruled hexes are carried verbatim from r2 with their provenance unchanged. The thirteen
+new ones are **value steps computed from them by a stated factor** — `step()` scales a hex,
+keeping hue exactly, and raises rather than clamping; `tint()` mixes toward white and is used
+once, where a scale would clamp. They are derivations, not measurements, and the source says
+so.
 
-Nothing here is fixable by modelling harder. **0.1 m is the floor** the brief and the
-contract both set, so the only exits are to accept the coarse read (what ships today), or to
-raise the 1.20 m anchor — which re-labels every tree's dwarf-multiple on the sheet and moves
-`gui`'s `scale`. Wolf ratified 1.20 m on 2026-09-06, **before** this measurement existed.
+| Cell | Hex | Role | Cell | Hex | Role |
+|---|---|---|---|---|---|
+| 0 | `#E9D2BB` | Skin | 12 | `#CBD6CE` | Metal, highlight |
+| 1 | `#BAA896` | Skin, in shadow | 13 | `#707572` | Metal, underside |
+| 2 | `#5E4632` | Beard, mid | 14 | `#8B6B50` | Wood |
+| 3 | `#826145` | Beard, lit lock | 15 | `#AF8765` | Wood, lit face |
+| 4 | `#423123` | Beard, outline lock | 16 | `#6B5B49` | Leather, mid |
+| 5 | `#FFFFFF` | Snow / eye white | 17 | `#8F7A62` | Leather, cuff and top edge |
+| 6 | `#5F7A6A` | Tunic, mid field | 18 | `#493E32` | Leather, sole and shadow |
+| 7 | `#7DA18C` | Tunic, hem and lit band | 19 | `#34271C` | Hair / dark iron |
+| 8 | `#44584C` | Tunic, fold and sleeve | 20 | `#513C2B` | Hair, crown |
+| 9 | `#474B41` | Trouser / lantern iron | 21 | `#F0A63C` | Lantern flame |
+| 10 | `#63695B` | Trouser, lit | 22 | `#F7CE94` | Lantern flame, hot core |
+| 11 | `#A9B2AC` | Metal | | | |
 
-The full session record is `prompts/dwarf-miner-blender-mcp-report.md`.
+`Pants` and `Wood` remain **carried from the brief and not confirmed** — `reference-sheet.jpg`
+is 1024×558 at full resolution and its `8` and `B` render as the same glyph. `Hair` and
+`Flame` were derived in r2, not sampled clean.
+
+### The lantern flame is EMISSIVE, and nothing else is
+
+Wolf ruled it in for round 3 (§B). glTF emission is `emissiveFactor × emissiveTexture`, so a
+per-texel mask has to be black where nothing glows — which the base-colour atlas is not. The
+mask is therefore a **second UV set** (`TEXCOORD_1`) into the *same* image: the pane quads
+sample the flame cells, everything else samples cell 63, which is left black. One mesh, one
+material, one image all survive. Emission strength is held at **exactly 1.0**, because
+anything else makes the exporter write `KHR_materials_emissive_strength` and the asset would
+carry an extension.
+
+Costs 176,928 bytes, the whole second UV accessor. The rig costs 442,320 more (`JOINTS_0` +
+`WEIGHTS_0`), which is why the file grew to 1.37 MiB while the triangle count *fell* to
+11,058 — removing the grooves let big co-planar runs merge again.
+
+**Making the lantern LIGHT THE SCENE is a point light in the client and is not art work.**
+
+### Sockets and the variation scheme
+
+`SOCKETS` declares four anchor voxel coordinates and the four swappable parts are authored
+against them and nothing else: `beard` (0, 4, 74), `hair` (0, 0, 63), `hand.R` (31, 2, 33),
+`hand.L` (−31, 2, 33). The pickaxe hangs on `hand.R` and the lantern on `hand.L`, each
+weighted entirely to that hand, so splitting them into their own assets later is a file move.
+
+`BEARDS` and `HAIRS` are registries of builder functions keyed by name (`--beard`, `--hair`).
+One entry each; a second is a function with the same signature and a new key.
+
+**Removability is checked, not claimed.** `build_voxels()` takes `beard=None` / `hair=None`,
+and every build runs the body twice more — once without each part — and requires that no
+voxel outside the part goes missing or changes colour. The skull is a complete skin head to
+z 88; the hair is placed only into air, never over skin; the beard's moustache and sideburns
+are painted proud of the skull and do not replace it. That check found three real defects in
+this round, listed in the report §6.
+
+The remaining groups (torso, legs, belt, pack) are still absolute. They are not swap axes yet.
+
+### Rendering
+
+```
+blender --background --python blender/render_dwarf.py -- ../src-assets/renders
+        [--engine workbench|cycles] [--reference FRAME.png]
+```
+
+Builds the model by importing `dwarf_miner` — including the skeleton and the pose — so the
+renders cannot drift from what the generator ships. Writes five views × (flat, lit) neutral,
+five lit in the swing pose, and the **zoom strip**.
+
+**The zoom strip, `dwarf-zoom-strip.png`, is a round-3 deliverable and not a convenience.**
+The lit front view at 10, 30, 100 and 700 px, nearest-neighbour, each blown back up by an
+integer factor with the true-size frame inset. 10 px is the wide end measured through the
+client's own projection oracle — a 1.20 m dwarf draws 8.74 px at the shipped boot framing —
+and full height is the marketing shot. With free zoom the camera passes through everything
+between, so **a detail that dissolves into speckle at 10 px is a defect, not a lost luxury.**
+
+`--reference` takes a still, because nothing in the script can decode a video. The frame the
+report compares against:
+
+```
+ffmpeg -ss 9 -i references/dwarf.mp4 -frames:v 1 -vf "crop=340:560:400:120" dwarf-mp4-t9.png
+```
+
+`-ss 10` returns nothing: the file is 10.0 s at 24 fps, so there is no frame at t = 10.
+
+The flat pass proves itself every run — `FLAT-CHECK all 23 palette colours reach the PNG
+exactly`. Verified under **Workbench** on the art seat 2026-09-11, which is what round 2 left
+owed from this side.
+
+### What r3 changed about the body, and one flag for Wolf
+
+The groove passes are **gone** (`groove()` deleted, and a build-time check scans for any
+one-voxel channel repeating at a fixed stride). Detail moved into the outline: beard locks, a
+stepped crown, a stepped hairline, a stepped tunic hem, stepped boot cuffs, and a buckle that
+is a plate standing proud rather than a painted face.
+
+**The mid-body bands MOVED, and they are bands these notes previously recorded as measured
+from the approved reference sheet.** Measured off `dwarf.mp4` at t = 9 s against its own
+~10.3 px voxel pitch: the reference's belt centres at z 40 and its tunic hem lands at z 29.
+r2 had the belt at 20–26 and the hem at 19, so the belt sat *on* the hem and no trouser showed
+at all. The sheet and the video disagree here and round 3 resolved it to the video, on the
+brief's statement that the video is that round's authority. The boots already agreed and did
+not move. Recorded because it is a ratified number being changed — see the report §7A.
+
+Height is **held at 96** and cannot usefully move: the grid clause needs `1.20 / N` to be a
+multiple of 0.0125 m, so N must divide 96. The reference's ~60–65 is off the grid entirely,
+and 48 loses the eyes, the brow ledge and the nose.
+
 
 ## Trunk proportions
 
@@ -283,7 +392,15 @@ Printed as one `FIGURES` line, then asserted; any failure exits non-zero.
 - `tris == quads × 2`, `verts == quads × 4`
 - exactly 1 material, 1 primitive, 1 embedded image, no glTF extensions
 - material single-sided; all UVs inside 0–1
-- every palette cell decodes to its sheet hex; `magFilter` is `NEAREST`
+- every palette cell decodes to its declared hex; `magFilter` is `NEAREST`; sampler wrap is
+  `CLAMP_TO_EDGE`
+- **the dwarf, from r3, additionally:** exactly one skin whose joint names are the standing
+  list; every vertex weighted 1.0 to a single joint; **no quad crossing a joint**, checked
+  against the written GLB rather than trusted from the mesher; an `emissiveTexture` on UV
+  set 1 with `emissiveFactor [1,1,1]` covering the lantern panes and nothing else; every
+  internal name carrying the revision token; basename, mesh and node agreeing on the pose;
+  no one-voxel channel repeating at a fixed stride anywhere on the body; and the beard and
+  the hair each removable without changing a voxel that is not theirs
 - `--voxel` must be > 0. Zero is the dangerous one: it collapses the mesh to a point AND
   scales the expected height and volume by the same zero, so every closure check passes
   vacuously and the script reports OK on nothing.
@@ -300,14 +417,25 @@ arrived here predated both guards.
 
 - `blender/voxel_pine.py` — **the** generator, and the only source of truth for all four
   tree variants.
-- `blender/dwarf_miner.py` — the dwarf generator. Imports `voxel_pine` for the greedy
-  mesher, the material, the exporter, the GLB reader and the volume oracle, and **does not
-  edit it**; only the body, the palette and the atlas are its own.
+- `blender/dwarf_miner.py` — the dwarf generator, **r3**. Still imports `voxel_pine` and
+  still **does not edit it**, but owns two things it used to borrow: the **mesher**, because
+  greedy runs must break at a joint boundary and because the dwarf needs a second UV set and
+  an 8 px cell grid; and the **exporter**, because it must select the armature, pass
+  `export_skins`, and pass `export_rest_position_armature=False` for a posed GLB. The
+  material scaffolding, the GLB reader, the PNG decoder and the volume oracle are still the
+  pine's.
+- `blender/render_dwarf.py` — the turnaround, both poses, and the zoom strip. Builds by
+  importing the generator, so a render cannot drift from what ships.
+- `candidates/SM_VoxelDwarf_Miner01_r3.glb`, `candidates/SM_VoxelDwarf_Miner01_r3_swing.glb`
+  — r3's deliverable. **Not promoted**; `assets/gltf/` still holds r2.
+- `prompts/dwarf-miner-round-3-report.md` — r3's session record: figures, the byte-identical
+  proof, what `check_asset.py` actually said, and the flags Wolf is owed a ruling on.
 - `blender/dwarf.blend` — the dwarf's editable source, saved by the generator's `--blend`.
   Regenerated, never hand-edited: the `.glb` is the deliverable and the script is the
   durable record.
-- `prompts/dwarf-miner-blender-mcp-report.md` — the session record answering that folder's
-  dwarf brief: figures, reproduction proof, the checker's verdict and the three findings.
+- `prompts/dwarf-miner-blender-mcp-report.md` — the v1 session record: figures, reproduction
+  proof, the checker's verdict and the three findings. Superseded on the asset, kept for the
+  provenance of the palette.
 - `references/reference-sheet.jpg` — the **approved** modelling sheet, Sections A (dwarf)
   and B (trees). See the caveat below.
 - `references/dwarf-animation-reference.jpg`, `references/dwarf-contact-sheet.jpg`,
