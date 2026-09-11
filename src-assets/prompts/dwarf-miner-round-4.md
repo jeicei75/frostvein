@@ -174,13 +174,20 @@ different questions.
   beside your renders. What to take: chunky voxels, big value steps inside one material, detail in
   the silhouette, rigid posed limbs, a lantern that reads as the brightest thing on the character.
 
-**The palette carries over; it is not re-derived.** The ten approved cells are
+**THE PALETTE IS AN INPUT, NOT WORK. Inherit r3's 23 cells as they are.** Ruled by Wolf
+2026-09-11 — the approved palette stands until Epic 11's lighting is finished, and r3's value-step
+expansion is the one aesthetic ask that landed, so it is handed to you rather than asked of you.
+Take the cell list from `src-assets/references/dwarf-model-sheet.md`, keep each cell's MEANING fixed
+by its coordinate, and spend none of this round re-deriving colour. If a cell seems wrong, say so
+and leave it.
+
+The ten approved cells underneath them are
 `#E9D2BB` skin, `#5E4632`, `#FFFFFF`, `#5F7A6A` tunic, `#474B41`, `#A9B2AC` metal, `#8B6B50` wood,
 `#6B5B49`, `#34271C` hair, `#F0A63C` flame — read off the SHEET and signed off. **Do not sample
 colours out of the video**: it is 10 s of h264 in 3.4 MB, every value in it has been through a lit
-scene and a view transform, and a palette read from it would be wrong in silence. What this round
-ADDS is value steps — two or three cells per major material so form is painted in rather than
-borrowed from the lighting — built around the approved hues, not replacing them.
+scene and a view transform, and a palette read from it would be wrong in silence. The value steps that
+paint form in rather than borrowing it from the lighting already exist — r3 built them, 23 cells in
+total, and they are listed in the model sheet. **Reuse, do not rebuild.**
 
 **And neither reference is the decider. Wolf is.** Where his live correction disagrees with a
 reference, he wins and you do not argue the sheet back at him. Where he has said nothing, the

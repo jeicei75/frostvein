@@ -90,16 +90,22 @@ r3 expanded these correctly to **23 cells** by adding value steps (`#BAA896`, `#
 `#7DA18C`, `#44584C`, `#63695B`, `#CBD6CE`, `#707572`, `#AF8765`, `#8F7A62`, `#493E32`, `#513C2B`,
 `#F7CE94`) — that ask landed and should not be redone.
 
-**OPEN, for Wolf, and it cannot be settled by measurement:** the video reads **warmer and more
-saturated** than the approved palette — its tunic is an olive-yellow where `#5F7A6A` is a
-desaturated green at saturation 0.22. Since the video is lit and compressed, the true albedo is not
-recoverable from it, so this is a look call, not a reading:
+**RULED 2026-09-11 — Wolf: *"we can keep approved palette right now.. let's see after epic 11 will
+we change the palette"*.** The approved hues stand, and the 23 cells above are the palette a round
+inherits. The question that prompted this stays on the record because it will come back: the video
+reads warmer and more saturated than the approved cells — its tunic is an olive-yellow where
+`#5F7A6A` is a desaturated green at saturation 0.22 — and since the video is lit and compressed, the
+true albedo is not recoverable from it.
 
-- **(a)** keep the approved hues and let the renderer's lighting carry the warmth, or
-- **(b)** warm and saturate the palette toward the video, by eye, live.
+**Why deferring is the right call and not just a delay.** Epic 11 adds ambient occlusion, bloom,
+exposure, depth of field and a day/night cycle. Every one of those changes how an albedo reads, so a
+palette warmed now would be tuned against a renderer that is about to change underneath it. This
+project has already paid that bill once: issue **#75** records that every look constant predating
+10.7 was tuned with the sun under the map.
 
-Until this is ruled, a round should not silently re-derive colours from the video — that is exactly
-how a palette gets read off a lit frame and is wrong in silence.
+**Revisit trigger:** Epic 11 complete, then re-judge the dwarf's palette under the finished
+lighting. Until then a round must not re-derive colours from the video — that is how a palette gets
+read off a lit frame and is wrong in silence.
 
 ## Budget and LODs — RECORDED FOR LATER, AND EXPLICITLY NOT A CONSTRAINT ON THIS ROUND
 
