@@ -94,9 +94,11 @@ pattern, while the reference spends its lower resolution on form, value and pose
    stepped cuffs; shapes that survive being seen from ten metres.
 4. **Hold the voxel height at 96 or come down toward the reference's ~60.** Your call with a
    render to justify it — but state which you did and why, and do not go up.
-5. **Pose and limbs** — see decision A below. If A says V2, deliver him in the mp4's swing pose
-   rather than a neutral stance, because that is what the reference is judged on.
-6. **The lantern** — see decision B.
+5. **Rig him to a skeleton with rigid weights, keeping ONE mesh** — ruled, see A below, including
+   the one topology rule that makes it work (no quad may cross a joint). Deliver him in the mp4's
+   swing pose as well as a neutral stance, because the swing is what the reference is judged on.
+6. **The lantern's flame cell may be emissive** — ruled, see B. Author the lantern and the pickaxe
+   as parts on hand sockets so they can become separate assets later without a remodel.
 7. **Prove it at BOTH ends of the zoom, and make that a deliverable.** Alongside the five full-size
    views, commit a strip of the same asset rendered at **10 px, 30 px, 100 px and full height**
    (nearest-neighbour downscale of the full render is fine — it is the same filter the game's
@@ -135,38 +137,83 @@ work that will happen, so **do not design the variation scheme around an offline
 A variant must be expressible as data the client could pick at spawn: a part list plus a table of
 hexes.
 
-## Three decisions for Wolf — they change the CONTRACT, not just the model
+## RULED by Wolf, 2026-09-11 — these are decisions, not questions
 
-The v1 contract in `check_asset.py` is explicit that it is v1: *"one-mesh/material/image clause
-(V1 voxel assets only)"*. Round 3 as described does not fit it, and the checker should gain a v2
-profile rather than have the clause quietly loosened.
+### A. A SKELETON with rigid weights. One mesh stays. No separate limb meshes, no soft skinning.
 
-- **A. One mesh, or separate limbs and a rig?** V1 requires exactly one mesh, one material, one
-  image, one primitive, one node, no glTF extensions. The mp4's poses need separate limbs. Because
-  the game is the renderer, **a V2 profile is not a render-only escape hatch -- it is the contract
-  the game itself will load**, and the client's dwarf path is written against a single-node scene
-  (the spawn transform, `apply_entity_blending` rewriting the translation every frame, the yaw-only
-  facing rule). Ruling needed, and it is the expensive one: V2 with separate limbs now, or hold the
-  single mesh this round and take posing when the animation work happens.
-- **B. Emissive, or a real light?** V1 forbids emissive at any colour, and that rule came out of
-  the game's lighting work. In the reference the lantern is the brightest thing in frame and throws
-  a warm pool on the ground -- which a marketing shot taken from the game needs. The two are not
-  the same fix: an emissive material makes the lantern GLOW, a **point light parented to the
-  lantern** makes it LIGHT the scene, and only the first is asset work. Ruling needed on the asset
-  half: does the flame cell get emissive or not.
-- **C. It replaces the shipped asset, so the NAME has to be handled rather than inherited.** There
-  is no second family any more -- the zoom answer settles that -- so this round overwrites
-  `assets/gltf/SM_VoxelDwarf_Miner01.glb`. Keep the file name and **move the internal mesh name
-  with the content**: this project has already shipped two different meshes both called
-  `SM_VoxelPine_Tree02` and spent a story working out which binary was which. If the round produces
-  a candidate rather than a replacement it stays in `src-assets/` under a name that says candidate,
-  and never lands in `assets/gltf/`.
+Wolf: *"A probably skeleton .. I think what matters is topology of polygons? I would not probably
+create separate limbs? Unless we don't want soft body animation at all?"*
 
+**Yes, topology is exactly what matters, and it is one specific property — not vertex density.**
+Measured on the shipped GLB: 14,398 triangles over 28,796 vertices, which is 7,199 quads x 4
+vertices each. **Nothing is welded between quads**; greedy meshing merges coplanar voxel faces into
+big quads, so a single quad can span the whole outer arm.
+
+That gives one hard rule and one honest trade:
+
+- **THE RULE: no quad may cross a joint.** Greedy-merge *within* a part and never across parts, so
+  every quad's four vertices belong to exactly one joint. A quad spanning shoulder to wrist cannot
+  bend — it can only shear into a parallelogram, which is what a "bending" voxel arm looks like
+  when it goes wrong. This is mechanically checkable and should be checked, not trusted.
+- **Rigid weights: every vertex 1.0 to one joint, no blending.** That is not a downgrade from soft
+  skinning, it is what the reference does — look at t=1/4/7/10 s and the limbs rotate as solid
+  blocks. Soft weights on cubes smear the voxel read, which is the look we are buying.
+- **You do NOT need separate limb meshes for this.** A skeleton deforms one mesh through vertex
+  groups, so **one mesh, one material, one palette image all survive** — the GLB gains a `skin`
+  with named joints (and later animation clips), and nothing else about the contract moves.
+- **The trade, stated so it is a decision and not a surprise:** greedy meshing removes the interior
+  vertices that soft deformation needs. Choosing greedy quads and rigid weights is choosing rigid
+  animation. If a part ever wants genuine soft motion — a cloak, a beard sway — that part needs
+  welded, denser topology and will stop reading as voxels. Nothing here forecloses it; it just will
+  not be free later.
+
+**Name the joints now and keep them stable**, because a skeleton's real payoff is that one
+animation clip drives every variant: `root, hips, spine, chest, neck, head, shoulder.L/R,
+elbow.L/R, hand.L/R, hip.L/R, knee.L/R, foot.L/R`, plus `beard` if you want it to move. Those names
+are the contract between this asset and every future one.
+
+### B. Emissive on the flame cell: YES. Items become separate assets later.
+
+Wolf: *"B yes .. and lanter and other items should be separate in the future at least"*
+
+So the flame cell may be emissive in this round. And because the lantern and the pickaxe are going
+to be split into their own assets later, **author them now as their own parts on declared hand
+sockets** — `hand.L` holds the lantern, `hand.R` the pickaxe — so splitting them out is a file
+move rather than a remodel. Do not fuse a tool into the torso geometry.
+
+**Lighting is explicitly not your problem this round** (Wolf: *"no need to worry about lighting etc
+.. just model first"*). An emissive flame makes the lantern glow; making it *light the scene* is a
+point light in the client, and that is engine work for another day.
+
+### C. The naming scheme — proposed here, correct it if you disagree
+
+The problem being solved: this project has shipped two different meshes both called
+`SM_VoxelPine_Tree02`, and a stale binary carrying the right internal name authenticates itself.
+Today the dwarf's GLB holds node `SM_VoxelDwarf_Miner01`, mesh `SM_VoxelDwarf_Miner01`, material
+`M_VoxelDwarf`, image `T_VoxelDwarf_Palette` — **nothing in it says which round produced it.**
+
+1. **The file path is a SLOT and does not churn.** `assets/gltf/SM_VoxelDwarf_Miner01.glb` stays;
+   the client loads it by path (`DWARF_SCENE_PATH`). `01` denotes the ROLE, not a version — miner
+   as opposed to a future smith. Never bump it to `Miner02` to mean "second attempt".
+2. **Internal names carry the revision, because they are what a stale binary shows:** node and mesh
+   `SM_VoxelDwarf_Miner01_r3`, material `M_VoxelDwarf_r3`, image `T_VoxelDwarf_Palette_r3`. Bump
+   `rN` on every authored round that changes content.
+3. **The generator declares the same token** (`REVISION = "r3"`) and prints it in its `FIGURES`
+   line, so the source and the binary can be compared without opening Blender.
+4. **`check_asset.py` asserts they agree** — every internal name ends with the same `rN`, and it
+   matches the generator's constant. A stale GLB then FAILS the checker instead of passing it.
+5. **Candidates never enter `assets/gltf/`.** They live at
+   `src-assets/candidates/SM_VoxelDwarf_Miner01_r3.glb`; promotion is a copy plus the revision bump.
+6. **Variants get no file names at all.** A palette variant is a table of hexes; a part-swapped
+   variant is a manifest entry. Only the skeleton and the parts library are files — otherwise
+   "hundreds of variations" becomes hundreds of binaries nobody can tell apart, which is the
+   original defect at scale.
 ## Everything else in the standing brief holds unchanged
 
 `src-assets/` only — never write outside it. `min Y = 0`, even width in X and Z, grid-aligned
-positions, the greedy-meshed unwelded quad soup, the `FIGURES` line printed by the generator, and
-the **byte-identical cold-run proof** as the finishing condition: the committed generator must
+positions, one mesh / one material / one palette image, the greedy-meshed unwelded quad soup —
+**now merged within a part only, never across a joint** — the `FIGURES` line printed by the
+generator, and the **byte-identical cold-run proof** as the finishing condition: the committed generator must
 regenerate the committed GLB exactly, on a cold Blender, or the deliverable is the transcript
 rather than the asset.
 
