@@ -1,5 +1,10 @@
 # AC12 — the sitting card for 10.9
 
+**SIGNED OFF 2026-09-11.** Wolf, on the `df0f722` frame: *"cool ... I think we are done with the
+story"*. AC12 met; the story is `done`. Ruling 1 below was closed by that sign-off without a
+framing change, so AC1 stands on its projection mapping — the orchestrator's reading, recorded so
+it can be contradicted. Rulings 2 and 3 were ruled explicitly and are recorded under their items.
+
 **Build:** `df0f722`. Full gate GREEN, **505 s**, run in the foreground at
 `RUST_TEST_THREADS=6` — `cargo test` (the full arm, 80 s) and the pixel guards (383 s) both ran.
 

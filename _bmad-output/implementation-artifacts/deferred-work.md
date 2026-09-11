@@ -2148,6 +2148,13 @@ decision-needed items live in the story file's Review Findings section, not here
   With `dims.z < 2` this underflows: panics in debug, wraps to a huge `u32` in release and defeats
   the `.min` clamp entirely. `World::generate`'s `debug_assert!(dims.z >= 6)` guards the only live
   caller, but `apply_ridges` is `pub(crate)` and tests already call it directly, bypassing that.
+- **RESOLVED 2026-09-11 by Wolf's ruling at 10.9's sitting — do not revisit this as open work.**
+  Scoured ground now emits `Material::Stone`, so 1,872 stone surface columns exist at boot and the
+  branch below executes in the judged frame: `triangles=` moved 94,442 -> 123,644, and that +31 %
+  IS this branch. The census in the entry is stale with it — the live world now reads snow 14,299
+  columns / stone 1,872 / ice 213. What remains true is the SOIL half (soil still never surfaces)
+  and the closing sentence about AD-19. Left in place unstruck because the measurement method is
+  worth keeping; the original text follows.
 - **The rock relief branch never executes in the frame the boss judges.**
   `crates/gui/src/project.rs:1193`. Live world, cells whose top face is drawn, by material:
   ice 2,038, snow 13,970, tree_foliage 2,328, **stone 0, soil 0**. `layered_terrain` always writes

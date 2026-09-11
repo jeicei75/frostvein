@@ -4,7 +4,7 @@ baseline_commit: 5133a86f683134fb7105a4f276173268d26cb92c
 
 # Story 10.9: The Land Reads Natural
 
-Status: review
+Status: done
 
 ## Story
 
@@ -108,7 +108,10 @@ measurement instrument's leftovers.
 - [x] **Task 7 — Mutation rows** — at minimum: revert `detail_depth` to the hash (AC2 must fail);
       restore the coin flip (AC4 must fail); return a constant biome (AC10 must fail); shift the
       ridge band off the far edges (AC6 must fail).
-- [ ] **Task 8 — The sitting (AC: 12)** — present the boot frame with fog and rim unchanged.
+- [x] **Task 8 — The sitting (AC: 12)** — held 2026-09-11, across two frames. The first
+      (`b7be859`, scour on ice) produced two rulings; the second (`df0f722`, scour on stone,
+      capped) was signed off with *"cool ... I think we are done with the story"*. Fog and rim
+      were unchanged throughout, so the ridge lever was judged alone as AC12 requires.
 
 ### Review Findings
 
@@ -417,7 +420,13 @@ times. The script has no parallelism knob of its own.
   seven killed on the first run. The lake row initially survived, so its test was strengthened in
   `3a58eb4` and the row re-targeted in `032f557`; the re-run killed it. The 10.6 control row was
   re-pointed because Task 6 changed its measured literal.
-- **AC12 remains unmet by design.** Task 8 is Wolf’s in-person sign-off and was not attempted.
+- **AC12 was unmet by design at `review`** — Task 8 is Wolf's in-person sign-off and dev could
+  not attempt it. **MET 2026-09-11** at the sitting; see the Change Log's closing row.
+- **AC1 closed at the sitting by acceptance, not by a framing change.** Ruling 1 on the card asked
+  whether to re-frame to bring `x=127` and `y=0` into shot; the sitting closed the story without
+  one, so the AC stands satisfied by the projection mapping in `AC1-edge-mapping.md`. That reading
+  of the closing sign-off is the orchestrator's, and it is recorded here so it can be contradicted
+  rather than assumed.
 
 **Orchestrator's independent verification at `b7be859`** (Codex's own report was not taken on
 trust):
@@ -483,6 +492,7 @@ trust):
 
 | Date | Change |
 |---|---|
+| 2026-09-11 | **STORY DONE.** Wolf signed off the `df0f722` frame at the closing sitting — *"cool ... I think we are done with the story"* — which meets AC12, the last AC outstanding. Ruling 1 (AC1's two off-screen edges) was closed by that same sign-off without a framing change, so AC1 stands on its projection mapping; that inference is stated in the Completion Notes so it can be contradicted. All 13 ACs met. Full gate GREEN at 505 s on the signed-off tip. PR #91 is OPEN and unmerged at the moment this row was written — the merge belongs to Wolf, and the board records it when it lands. |
 | 2026-09-11 | **First sitting held with Wolf; two of the three open rulings closed and one implemented.** Ruling 2 (the lake does not read as ice): *"keep the lake don't touch it"* — accepted as it stands, lake code path untouched, no follow-up. Ruling 3 (the scour lattice): *"areas of that ice scour are too flat (looks like artificial plate more) .. maybe it could be stone instead of ice"*, then, shown a capped and a bare variant, *"capped stone is probably ok at this point"*. Implemented: `surface_material`'s snowfield arm emits `Material::Stone`; `has_snow_cap` deliberately untouched, so the cap stays on the rock. The flatness was the whole defect — `material_detail_depth` gives `Ice` relief depth 0 (right for a lake, wrong on a slope) and `Stone` depth 1 — so this is the rock relief branch executing at boot for the first time. `triangles=` 94,442 -> **123,644**, inside both AC2 bounds with ~1.9x of headroom left. **Ice is now the lake's exclusive material** (export: snow 14,299 columns / stone 1,872 / ice 213 in exactly ONE region), which is the uniqueness AC9 claimed and had to retract at review; asserted world-wide with an executed mutation row that puts the ice back. Seed 42's terrain fingerprint re-pinned (1,872 columns re-labelled; the dwarf and camp pins did NOT move, which is the claim that material carries no gameplay meaning) and `surface_is_icy` widened to accept scoured rock while still refusing soil. Full gate GREEN, **505 s**, foreground at `RUST_TEST_THREADS=6`. New sitting frame `boot-df0f722-subdiv4.png`; both frames kept, the first superseded by a ruling and not by a defect. **AC12 still outstanding** — ruling 1 (AC1's two off-screen edges) is open and the new frame has not been signed off. |
 | 2026-09-11 | Sitting preparation, before the ruling: the card's frame was re-checked against the branch tip (`665ccdf` had landed after it; a rebuild reproduced `entities=1702 faces=830908 triangles=94442` bit-identical), and every ice region of >= 40 cells was placed on the frame through `CameraRig::project_world_point_with_depth` with the camp as its control, answering Wolf's question about the lake-coloured blocks in the big hill. That measurement is what produced ruling 3: three in-frame scour regions were LARGER than the lake, and the lake was only the fifth largest ice region in the world. |
 | 2026-09-10 | **Four-layer code review + in-session patch pass.** 18 findings, zero coverage holes; 5 raised independently by two or more layers. 4 decisions taken by Wolf (accept the AC5 lattice for the sitting, DROP the dead `rng` param, accept `a0c612c`'s scope, accept AC1's mapping). 11 patches applied, 5 deferred. Two review findings were RETRACTED on verification and the retractions are on the record: the "nine unbilled Codex rollouts" claim (the ledger nests review siblings by design — nothing was unbilled) and the near-white "doubling" (single samples of a metric with a 0.33 pp spread). Real new findings: AC11's required `gui` test did not exist and now does; AC9's "exactly ONE ice region" was false (11 regions — the count dropped `Tile::Ramp`); a Python pin sat on a fixture where the relief rule was inert; the bench's material dispatch had a silent catch-all that was flattening a `dirt` fixture no `Material` can produce; and FOUR `codex review` passes ran against a hard cap of three. Issue #90 filed for the near-white guard's swing. |
