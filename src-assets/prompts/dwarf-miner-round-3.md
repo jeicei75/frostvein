@@ -123,6 +123,15 @@ axes, cheapest first:
   voxel coordinate declared in the generator**. Any head then fits any torso by construction. The
   generator already groups voxels by part (`groups=` in its FIGURES line), so this is a matter of
   making the anchors explicit and stable, not of restructuring.
+  **BEARD AND HAIR ARE THE FIRST SWAP AXES — Wolf named them, so design for them from the start.**
+  *"just remember that for variants we need to have different beards, hair etc in the future"*.
+  Concretely, for this round: the beard and the hair must each be **one part, mounted on one
+  declared socket on the head, weighted to a single joint, and shaped so that removing it leaves a
+  complete head underneath** — no skin voxels borrowed from the beard's volume, no hairline that
+  only works with this hair. Round 2 called the beard the largest single read on the character, so
+  it is also the highest-value axis: a dwarf with a different beard reads as a different dwarf at
+  a fraction of the work. If you deliver only one beard and one hair this round, deliver them as
+  if the second and third already existed.
 - **Two or three scalars:** overall height, girth, beard length index.
 
 Six heads x eight beards x four tunic palettes x three packs is 576 dwarves from about twenty
@@ -166,6 +175,29 @@ That gives one hard rule and one honest trade:
   animation. If a part ever wants genuine soft motion — a cloak, a beard sway — that part needs
   welded, denser topology and will stop reading as voxels. Nothing here forecloses it; it just will
   not be free later.
+
+#### Welding the mesh: no, and there is nothing to weld anyway
+
+Wolf asked whether a welded mesh is a good idea regardless. **Measured on the shipped GLB, not
+reasoned about:** of its 28,796 vertices, the number that share position AND normal AND UV with
+another is **zero**. So a weld that preserves the flat-shaded voxel look and the palette UVs would
+save **0 bytes** — greedy meshing has already banked every legal weld, because merging coplanar
+same-material faces is exactly what it does.
+
+The only weld left is the illegal one. Welding by position alone would collapse 28,796 vertices to
+**9,108** (~615 KiB of a 986 KiB file, and the file is essentially all vertex data — the palette
+PNG is **188 bytes**), but it would:
+
+- **average normals across hard voxel edges**, turning crisp cube faces into smooth shading — the
+  voxel read is gone;
+- **break the palette UVs**, because a corner shared by a skin face and a tunic face can carry only
+  one cell coordinate; and
+- **make rigid joints impossible.** At a joint seam the two sides currently hold separate vertices,
+  so each follows its own bone and the seam opens and closes cleanly. A single welded vertex can
+  only follow one bone, and it drags the other part with it.
+
+So the unwelded quad soup is not a legacy compromise — **it is the property that makes rigid
+voxel joints work.** Weld only if the look changes to smooth-shaded, which is a different game.
 
 **Name the joints now and keep them stable**, because a skeleton's real payoff is that one
 animation clip drives every variant: `root, hips, spine, chest, neck, head, shoulder.L/R,
