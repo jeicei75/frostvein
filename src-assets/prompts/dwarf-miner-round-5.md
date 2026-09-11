@@ -165,9 +165,25 @@ the video hid them:
 ## Keep every one of these from round 4 — they are not in question
 
 - **Box modelling, no lattice.** Rectangular boxes at whatever size the form needs.
-- **Every triangle normal exactly ±X/±Y/±Z.** No bevels, smooth normals, rotated boxes, chamfers or
-  cylinders. Round 4's exporter **fails the build** on a violation and reported 0 non-axis-aligned
-  and 0 smooth-shaded faces. Keep that enforcement.
+- **ROTATED BOXES ARE NOW ALLOWED. Ruled by Wolf, 2026-09-11:** *"maybe we get rid of no rotated
+  boxes limit … that came from voxels look I think"*. He is right about its provenance — the
+  axis-aligned clause was invented as the replacement for the voxel lattice when that was dropped,
+  so it is a descendant of the same requirement. And it was costing real things: round 4's report
+  named four features it blocked outright — the slung bedroll, the diagonal chest straps, the pickaxe
+  head's arc, and the tilt and asymmetry of the stance that "reads as alive".
+
+  **What replaces it, because rotation is not the thing that protects the look:**
+  - **A rotated box is still a box.** Hard edges and flat faces are what read as blocky, and a box
+    tilted 30 degrees has both. Rotation is orthogonal to blockiness.
+  - **STILL FORBIDDEN, and this is the clause that actually guards the style: no smooth normals, no
+    curved surfaces.** No subdivision, no bevels or chamfers, no cylinders, spheres or cones, no
+    shade-smooth anywhere. Every face stays flat-shaded and planar, and normals are never averaged
+    across an edge. The exporter must fail the build on a smooth-shaded or non-planar face, exactly
+    as it currently fails on a non-axis-aligned one — **replace the check, do not delete it.**
+  - **Axis-aligned stays the DEFAULT.** Rotate for a stated reason — a strap that follows the body, a
+    slung bedroll, the pick head's arc, a stance with weight in it — and say in the report which
+    parts you rotated and why. A model where everything is slightly rotated has lost the discipline
+    as surely as one that could not rotate at all.
 - **The artifacts of the loop, but NOT the stopping — see "Run it through" above.** One part per
   step, and after every step **save the `.blend`** and write
   `src-assets/renders/progress/NN-<part>.png` showing the WHOLE figure full-size *and* small. Keep
