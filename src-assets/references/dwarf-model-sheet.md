@@ -303,6 +303,39 @@ Two properties that fall out of that shape for free, which is how you know it is
 every variant shares one mesh set, so they instance; and a dwarf costs eight bytes to store and
 name, so "your dwarf" is reproducible anywhere from an identifier.
 
+## Check 4 — SILHOUETTE STEP DENSITY, the measure of "more detail"
+
+Added 2026-09-11 after round 5, because Wolf's *"resolution could be higher with more details"* had
+no number behind it and every unnumbered ask in this project has failed to converge.
+
+**The measure:** walk the figure's left and right silhouette edges row by row and count the rows
+where the edge MOVES. Normalise by figure height as steps per 100 rows, so renders of different
+sizes compare. It needs no palette, no classifier and no lighting — just the silhouette.
+
+| view | reference (from `dwarf-ortho/`) | r5 measured |
+|---|---|---|
+| side | **10.3** steps / 100 rows | 7.1 |
+| front | **11.2** steps / 100 rows | 6.3 |
+
+**So r5 carries about 60 % of the reference's detail density.** That is the honest content of "more
+detail", and — critically — **it is NOT an argument for a lattice or a finer grid.** It is an
+argument for MORE AND SMALLER BOXES where the sheet shows a step we do not have: the stepped crown,
+the brow, the nose, the pack standing off the back, boot layers, strap plates.
+
+**And the sharper finding, which the density figure alone hides: r5's edges are asymmetric.** Side
+view L33 / R12 steps; front L13 / R27. The reference is near-symmetric — L33/R36 and L37/R38. **One
+side of r5 is a straight slab**, which is exactly what "a flat blocky stick" describes. Both figures
+include held props on one edge, so the asymmetry is not purely the body — but a 3:1 ratio is not
+props.
+
+**The targets:**
+
+1. **>= 10 silhouette steps per 100 rows** on both the front and the side view.
+2. **Neither edge below 70 % of the other** on the same view.
+
+There is no triangle budget this round, and r5 spent 1,214 against an eventual LOD0 ceiling of
+4,000 — so the headroom for this exists three times over. Spend it on steps, not on smoothness.
+
 ## What round 4 is checked against
 
 Numeric, on our own render, which is exactly measurable:
