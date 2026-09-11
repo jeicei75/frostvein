@@ -206,6 +206,13 @@ Numeric, on our own render, which is exactly measurable:
 2. **The tunic family owns at least four of the ten height bands** (r3: one) — a chest-coverage
    consequence of check 1, not an independent target.
 3. **Visible skin is at least 10 % of figure pixels** (r3: 6.8 %) — the face has to read.
+   **MEASURE IT BY NEAREST PALETTE CELL, NOT BY EXACT COLOUR MATCH.** Corrected 2026-09-11 after
+   round 4 recorded this check as a miss at 7.4 %: the "flat" pass is antialiased, so each cell is
+   smeared across dozens of near-duplicate values (`#E9D2BB`, `#E9D2BA`, `#EAD2BB`, `#E9D1BA`…) and
+   an exact match counts only the pure core of every region. Classifying each figure pixel to its
+   nearest cell instead — and discarding the 0.4 % that are background blends — gives **13.9 %**,
+   and the check PASSES. The model was never short of skin; the instrument was. Any future share
+   measured off a render must cluster to cells the same way.
 4. Feature sizes within the table above — **advisory this round, not a gate.**
 5. Every mechanical clause of the asset contract, which r3 already proves the seat can hit.
 
