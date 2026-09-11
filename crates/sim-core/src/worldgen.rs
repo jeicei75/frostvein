@@ -127,7 +127,15 @@ fn surface_material(biome: Biome, gradient: u32, x: u32, y: u32) -> Material {
         Biome::Lake => Material::Ice,
         // A coarse field keeps scouring in broad, readable patches instead of making each
         // stepped cell flip independently. Only sloped ground can lose its snow cover.
-        Biome::Snowfield if gradient > 0 && (x / 16 + y / 16).is_multiple_of(5) => Material::Ice,
+        //
+        // Scoured ground is ROCK, not ice. It emitted ice until 10.9's closing sitting, where the
+        // patches read as artificial plates: ice is the one material the client draws dead flat
+        // (`material_detail_depth`, relief depth 0 -- which is what a frozen lake wants), so a
+        // scour patch was a mirror-smooth slab laid over a slope. Stone takes relief depth 1 and
+        // breaks up. It also leaves ice as the LAKE's exclusive material, which is the uniqueness
+        // AC9 claimed. Wolf ruled 2026-09-11 that the snow cap stays on stone: `has_snow_cap`
+        // excludes ice and soil but not stone, and that rule was left alone.
+        Biome::Snowfield if gradient > 0 && (x / 16 + y / 16).is_multiple_of(5) => Material::Stone,
         Biome::Snowfield => Material::Snow,
     }
 }

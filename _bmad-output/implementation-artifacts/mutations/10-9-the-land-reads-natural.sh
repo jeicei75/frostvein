@@ -152,3 +152,12 @@ old = '''    raise ValueError(
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    return 0'))
 PY
+
+mutation "scoured ground goes back to ice and counterfeits the lake" sim-core frozen_lake_is_a_flat_contiguous_ice_region_away_from_camp <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/worldgen.rs'); s = p.read_text()
+old = 'Biome::Snowfield if gradient > 0 && (x / 16 + y / 16).is_multiple_of(5) => Material::Stone,'
+assert s.count(old) == 1
+new = 'Biome::Snowfield if gradient > 0 && (x / 16 + y / 16).is_multiple_of(5) => Material::Ice,'
+p.write_text(s.replace(old, new))
+PY

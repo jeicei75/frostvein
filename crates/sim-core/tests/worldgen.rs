@@ -142,6 +142,25 @@ fn frozen_lake_is_a_flat_contiguous_ice_region_away_from_camp() {
         .count();
     assert!(flat_lake >= 40, "only {flat_lake} same-height ice cells");
     assert!((28 - camp.x).abs() > 3 || (92 - camp.y).abs() > 3);
+
+    // Ice is the LAKE's material and nothing else's, from 2026-09-11: scoured ground emits
+    // `Stone`. This is the uniqueness AC9 claimed, lost, and has now earned -- at review the
+    // claim had to be retracted because the scour lattice was emitting ice too, in ten more
+    // regions, four of them LARGER than the lake. Asserted across the whole world rather than
+    // inside the window above, so a scour patch anywhere in the map fails it, and stated as a
+    // material property so it does not restate the lattice rule that produces the patches.
+    let stray_ice: Vec<(i32, i32)> = (0..world.dims().y as i32)
+        .flat_map(|y| (0..world.dims().x as i32).map(move |x| (x, y)))
+        .filter(|&(x, y)| surface_material(&world, x, y) == Material::Ice)
+        .filter(|&(x, y)| !(18..=38).contains(&x) || !(84..=100).contains(&y))
+        .collect();
+    assert!(
+        stray_ice.is_empty(),
+        "{} ice surface cells sit outside the lake window, first at {:?} -- ice is the lake's \
+         exclusive material and every other icy-looking patch should be scoured rock",
+        stray_ice.len(),
+        stray_ice.first()
+    );
 }
 
 #[test]
@@ -432,7 +451,13 @@ fn spawn_positions_for_seed_42_are_pinned() {
     // fingerprint folds every tile, it is the tightest tree-stream regression guard in the repo,
     // far tighter than the 230-300 density band, which only discriminates roll denominators
     // outside roughly 36..52. Re-pin it only alongside a stated, measured geometry change.
-    assert_eq!(terrain_fingerprint, 0x68b5_4ab4_602c_d171);
+    //
+    // MOVED A THIRD TIME, 2026-09-11, and this one is a MATERIAL change, not a geometry change:
+    // scoured ground emits `Stone` instead of `Ice` (`worldgen::surface_material`, Wolf's ruling
+    // at 10.9's sitting). On `DEFAULT_SEED` that re-labels 1,872 surface columns, so the folded
+    // codes move 3 -> 1 and 7 -> 5 and the hash moves with them. The dwarf and camp positions
+    // asserted above did NOT move, which is the claim that material carries no gameplay meaning.
+    assert_eq!(terrain_fingerprint, 0xe5fa_e10f_6708_cc79);
 }
 
 #[test]
@@ -526,13 +551,20 @@ fn surface_is_icy() {
             }
             assert!(seen_soil, "column ({x},{y}) has no soil layer");
 
+            // `Stone` joined this set on 2026-09-11: scoured ground emits rock rather than ice
+            // (`worldgen::surface_material`). Soil is still refused, which is what this clause
+            // guards -- that the layering never surfaces the middle layer. WHICH columns may be
+            // stone is deliberately not restated here; the gradient correlation and coherence
+            // tests are the rule's own guards, and repeating the rule in its own assertion is
+            // how this repo has produced self-referential tests before.
             assert!(
                 matches!(
                     world.tile(Pos { x, y, z: top }),
-                    Some(Tile::Solid(Material::Ice | Material::Snow))
-                        | Some(Tile::Ramp(Material::Ice | Material::Snow))
+                    Some(Tile::Solid(
+                        Material::Ice | Material::Snow | Material::Stone
+                    )) | Some(Tile::Ramp(Material::Ice | Material::Snow | Material::Stone))
                 ),
-                "column ({x},{y}) top is not an icy surface"
+                "column ({x},{y}) top is neither snow, lake ice nor scoured rock"
             );
 
             for z in top + 1..world.dims().z as i32 {
