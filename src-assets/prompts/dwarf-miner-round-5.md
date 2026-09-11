@@ -35,6 +35,41 @@ brief"*.** So:
   part.** A complete figure that is 80 % right everywhere can be judged and fixed; three perfect
   parts and a missing leg cannot.
 
+## ONLY THE GEOMETRY IS NEW. Inherit the whole setup from round 4 — do not rediscover it
+
+**Added mid-session, because the round spent its first fifteen minutes "finding palette and
+settings". That is my error: "from scratch" was meant to mean the SHAPE, never the scaffolding.**
+Round 4's files are already in this branch's working tree — it was branched off round 4 — so take
+them and go:
+
+- **The palette is SOLVED. Copy round 4's atlas and its cell coordinates verbatim**, rename the
+  image datablock to `r5`, and change nothing else. In atlas order, 15 of 16 cells:
+  `#E9D2BB, #5E4632, #FFFFFF, #5F7A6A, #474B41, #A9B2AC, #8B6B50, #6B5B49, #34271C, #F0A63C,
+  #BAA896, #826145, #7DA18C, #44584C, #63695B`, one slot **unspent**. Cells 10–14 are, in order:
+  skin shadow plane, beard highlight, tunic lit plane, tunic turned-away plane, trouser lit plane.
+  Round 4 also found three values free by reusing approved cells cross-purpose (`#34271C` as beard
+  and boot shadow and buckle interior, `#5E4632` as the hair's highlight, `#8B6B50`/`#6B5B49` for
+  all leather) so boots, belt, pack, lantern and pickaxe cost **zero** slots. **Do not re-derive any
+  of this and do not go looking for hexes.**
+- **The material is solved.** Reuse round 4's `M_VoxelDwarf` setup unchanged, including the fix that
+  mattered: **Specular IOR Level must stay at its 0.5 default** — a 0 there emits
+  `KHR_materials_specular` and the no-extensions clause rejects the export. Backface culling on, so
+  `doubleSided` is false.
+- **The exporter is solved.** Reuse `src-assets/blender/export_dwarf.py` as it stands; it already
+  joins the part objects into one mesh, enforces the axis-aligned-normal rule and fails the build on
+  a violation. The command, from the repo root:
+
+      blender --background src-assets/blender/SM_VoxelDwarf_Miner01.blend \
+              --python src-assets/blender/export_dwarf.py
+
+- **The render settings are solved.** Round 4's flat and lit passes, on `#6F7073`, at the same
+  paths and names. Reuse them; do not re-tune a renderer.
+- **What IS new: the geometry, and only the geometry** — measured off the orthographic views, with a
+  stepped crown, a neck, shoulder caps, real depths and long boots.
+
+If any inherited piece genuinely blocks you, say so in the report and work around it — but the
+default is reuse, and time spent rebuilding solved scaffolding is time not spent on form.
+
 ## Step 0 — RE-MEASURE and record it, then keep going
 
 **Measure first and put the table in your report. Do not wait for it to be approved.**
