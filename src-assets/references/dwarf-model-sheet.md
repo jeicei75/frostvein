@@ -11,6 +11,16 @@ then check the model against it.
 
 ## The instruments, and what each can honestly measure
 
+**MEASURE FROM `src-assets/references/dwarf-frames/`, NOT from t=10 s.** Added 2026-09-11 after
+round 4: every proportion in this sheet was measured from ONE frame, t=10 s, because that is what an
+`fps=1` sample handed me — and it is among the worst frames in the file. The video holds 240 frames
+including brightly-lit near-front and **near-pure side** views. `f088` is the depth authority (every
+Y dimension round 4 had to estimate), `f104` the front authority, `f084` shows the head's **domed,
+stepped crown**, and `f140`/`f164` show the **neck and shoulder caps** that t=10 s hides. See that
+directory's README. **Round 4's flat side profile and featureless head are downstream of this, not of
+its modelling.** The numbers below still stand where they were cross-checked, but re-measure against
+`f088`/`f104` before trusting any of them.
+
 **`src-assets/references/dwarf.mp4` — the look authority, and a poor measuring surface.** It is
 10 s of h264 in 3.4 MB, lit, in perspective, in a dark mine. Landmark heights read to about **±4 %**
 off a gridded frame. Albedo, saturation and silhouette share **cannot** be recovered from it: the
