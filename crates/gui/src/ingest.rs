@@ -2426,6 +2426,52 @@ mod tests {
         );
     }
 
+    /// AC11: `--subdiv 1` still renders, and its own instrument still reports a real number.
+    ///
+    /// The sibling test above proves the FLAG reaches the mesher. This one is about the subdiv-1
+    /// path's shape surviving 10.9: `TerrainTile` entities are spawned, no chunk mesh is built
+    /// (`chunks=0` is literal in that row), and `triangles_derived=` is non-zero. It asserts the
+    /// production helper the `println!` itself calls, not a copy of its arithmetic.
+    #[test]
+    fn subdiv_one_still_spawns_terrain_and_reports_a_derived_triangle_count() {
+        let (mut app, _, _) = configured_app(&["--subdiv", "1"]);
+        app.update();
+
+        let tiles = app
+            .world_mut()
+            .query::<&TerrainTile>()
+            .iter(app.world())
+            .count();
+        let caps = app
+            .world_mut()
+            .query::<&SnowCap>()
+            .iter(app.world())
+            .count();
+        let chunks = app
+            .world_mut()
+            .query::<&crate::project::TerrainChunk>()
+            .iter(app.world())
+            .count();
+
+        assert!(tiles > 0, "--subdiv 1 spawned no TerrainTile entities");
+        assert_eq!(
+            chunks, 0,
+            "--subdiv 1 built {chunks} chunk meshes; that path reports chunks=0 and draws shared \
+             unit cuboids instead"
+        );
+
+        let derived = crate::project::derived_triangle_count(tiles, caps);
+        assert!(
+            derived > 0,
+            "--subdiv 1 reported triangles_derived=0 from {tiles} cubes and {caps} snow caps"
+        );
+        assert!(
+            derived >= tiles * 12,
+            "triangles_derived={derived} is below the {} triangles {tiles} cubes alone contribute",
+            tiles * 12
+        );
+    }
+
     #[test]
     fn subdiv_flag_reaches_the_rendered_terrain_and_four_keeps_the_shipped_scene() {
         let (mut default, _, _) = configured_app(&[]);

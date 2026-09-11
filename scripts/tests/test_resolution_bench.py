@@ -44,23 +44,26 @@ def brute_force_faces(world, k, detail):
         return materials[x + y * dx + z * dx * dy]
 
     solid = set()
+
+    # THIRD COPY REMOVED at review. This oracle exists to check the bench's face and quad
+    # ARITHMETIC independently, not to re-derive which material drifts and which stays flat --
+    # a hand-copied dispatch here was a third surface that could drift silently. The
+    # cross-language vector pin is what holds Python's `detail_depth` to the client's.
+    def material_depth(material, plane, u, v):
+        return resolution_bench._material_detail_depth(material, plane, u, v, k)
+
     for z in range(dz):
         for y in range(dy):
             for x in range(dx):
                 if at(x, y, z) is None:
                     continue
+                material = at(x, y, z)
                 carved = detail and k > 1 and at(x, y, z + 1) is None
                 for i in range(k):
                     for j in range(k):
                         height = k
                         if carved:
-                            height -= resolution_bench.detail_depth(
-                                resolution_bench.WORLD_SEED,
-                                (z + 1) * k,
-                                x * k + i,
-                                y * k + j,
-                                k,
-                            )
+                            height -= material_depth(material, (z + 1) * k, x * k + i, y * k + j)
                         for level in range(height):
                             solid.add((x * k + i, y * k + j, z * k + level))
     faces = 0
@@ -77,27 +80,27 @@ class ResolutionDetailRuleTests(unittest.TestCase):
     # The SAME vector is pinned in `crates/gui/src/project.rs`. Two literal tables in two
     # languages are the oracle for "both sides run one rule"; the comment that used to claim it
     # was tested by nothing, and the two rules had in fact diverged.
-    VECTOR = ((0, 0, 0), (1, 2, 3), (8, 5, 1), (9, 9, 9), (64, 17, 5))
+    VECTOR = ((0, 0, 0), (1, 2, 3), (8, 5, 1), (9, 9, 9), (4, 11, 7), (4, 12, 7), (64, 17, 5))
 
-    def test_detail_rule_is_seeded_and_has_a_hand_written_two_voxel_range(self):
+    def test_detail_rule_is_seeded_and_has_a_hand_written_corner_range(self):
         self.assertEqual(
-            [resolution_bench.detail_offset(resolution_bench.WORLD_SEED, *point) for point in self.VECTOR],
-            [-1, 0, -1, -1, -2],
+            [resolution_bench.detail_corner(resolution_bench.WORLD_SEED, *point) for point in self.VECTOR],
+            [197, 234, 40, 66, 244, 220, 208],
         )
-        offsets = [resolution_bench.detail_offset(resolution_bench.WORLD_SEED, x, 3, 7) for x in range(32)]
-        self.assertGreater(len(set(offsets)), 1)
-        self.assertTrue(all(-2 <= offset <= 2 for offset in offsets))
+        corners = [resolution_bench.detail_corner(resolution_bench.WORLD_SEED, x, 3, 7) for x in range(32)]
+        self.assertGreater(len(set(corners)), 1)
+        self.assertTrue(all(0 <= corner <= 255 for corner in corners))
 
     def test_detail_rule_stays_inside_32_bits(self):
         # The divergence that shipped: Python integers are unbounded, so an unmasked multiply
         # left the client's u32 rule and this one agreeing only at chance for k > 1.
         for point in ((0x7FFF_FFFF, 0x7FFF_FFFF, 0x7FFF_FFFF), (123_456_789, 987_654_321, 5)):
-            self.assertIn(resolution_bench.detail_offset(resolution_bench.WORLD_SEED, *point), range(-2, 3))
+            self.assertIn(resolution_bench.detail_corner(resolution_bench.WORLD_SEED, *point), range(256))
 
     def test_depth_is_clamped_by_the_fine_cell_height(self):
         self.assertEqual(
             [resolution_bench.detail_depth(resolution_bench.WORLD_SEED, *point, 4) for point in self.VECTOR],
-            [1, 0, 1, 1, 2],
+            [2, 1, 0, 1, 1, 1, 0],
         )
         # k=1 has no room for a pit, which is exactly why the k=1 control is blind to the rule.
         for point in self.VECTOR:
@@ -105,6 +108,13 @@ class ResolutionDetailRuleTests(unittest.TestCase):
 
 
 class ResolutionGeometryTests(unittest.TestCase):
+    def test_ice_stays_flat_at_subdivision_like_the_client(self):
+        world = snapshot((1, 1, 1), [{"solid": "ice"}])
+        self.assertEqual(
+            resolution_bench.geometry_summary(world, k=4, detail=True),
+            {"exposed_faces": 96, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 1},
+        )
+
     def test_greedy_mesher_merges_a_two_cell_prism_with_hand_written_counts(self):
         world = snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}])
         self.assertEqual(
@@ -120,20 +130,27 @@ class ResolutionGeometryTests(unittest.TestCase):
         )
 
     def test_detail_rule_changes_subdivided_counts_exactly_and_leaves_k_one_alone(self):
-        world = snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}])
-        # Exact counts in BOTH directions. Detail removes carved side faces as well as adding
-        # connectors, so k=2 detailed is FEWER faces than k=2 flat (32 against 40) -- the
-        # reduction the analytic `coarse_faces * k * k` baseline could never express.
+        # SIX CELLS WIDE ON PURPOSE. The previous two-cell fixture was smaller than one
+        # three-coarse-cell snow drift, so k=2 and k=4 both pinned 6 quads / 12 triangles --
+        # IDENTICAL to k=1. A test called "detail rule changes subdivided counts exactly" was
+        # pinning the case where the detail rule changes nothing, and setting snow's depth to 0
+        # would have left it green. Six cells spans the wavelength, so k=4 now moves.
+        world = snapshot((6, 6, 1), [{"solid": "snow"}] * 36)
+        self.assertEqual(
+            resolution_bench.geometry_summary(world, k=1, detail=True),
+            {"exposed_faces": 96, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 36},
+        )
+        # k=2 is still flat and that is the rule's own doing, not the fixture's: the depth
+        # `value * (k - 1) / 255` cannot clear 1 at k=2 on this field. Pinned so a change that
+        # made k=2 erupt is caught too.
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=2, detail=True),
-            {"exposed_faces": 32, "greedy_quads": 12, "triangles": 24, "chunks": 1, "cells": 2},
+            {"exposed_faces": 384, "greedy_quads": 6, "triangles": 12, "chunks": 1, "cells": 36},
         )
+        # The discriminating row: 73 quads against k=1's 6, i.e. the relief is real.
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=4, detail=True),
-            {"exposed_faces": 176, "greedy_quads": 72, "triangles": 144, "chunks": 1, "cells": 2},
-        )
-        self.assertEqual(
-            resolution_bench.geometry_summary(world, k=1, detail=True)["greedy_quads"], 6
+            {"exposed_faces": 1484, "greedy_quads": 73, "triangles": 146, "chunks": 1, "cells": 36},
         )
 
     def test_a_stepped_world_matches_hand_written_counts(self):
@@ -144,34 +161,32 @@ class ResolutionGeometryTests(unittest.TestCase):
         )
         self.assertEqual(
             resolution_bench.geometry_summary(staircase(), k=2, detail=True),
-            {"exposed_faces": 334, "greedy_quads": 77, "triangles": 154, "chunks": 1, "cells": 40},
+            {"exposed_faces": 336, "greedy_quads": 18, "triangles": 36, "chunks": 1, "cells": 38},
         )
         self.assertEqual(
             resolution_bench.geometry_summary(staircase(), k=4, detail=True),
-            {"exposed_faces": 1608, "greedy_quads": 463, "triangles": 926, "chunks": 1, "cells": 40},
+            {"exposed_faces": 1376, "greedy_quads": 159, "triangles": 318, "chunks": 1, "cells": 39},
         )
 
     def test_detail_lattice_makes_the_rule_coherent_without_changing_the_default(self):
-        """The knob that shows how much of the budget is the placeholder's incoherence.
+        """The offline coarsening knob leaves the coherent default explicit.
 
         `detail_lattice=1` must be the shipped rule exactly, or every committed figure moves.
-        Above 1 the SAME rule is sampled on a coarser grid, so blocks of fine columns share a
-        depth and the greedy mesher can merge them -- which is the whole point: the k=4 budget
-        turns out to be 96.8% a function of this one property.
+        Larger values are an offline-only experiment, not a second client rule.
         """
         world = staircase()
         self.assertEqual(
             resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=1),
             resolution_bench.geometry_summary(world, k=4, detail=True),
         )
-        # A lattice at or above k gives every column in a cell one depth, so a cell top is flat
-        # again and merges -- strictly fewer quads than the per-column noise.
+        # A lattice at or above k samples every cell on a coarser input grid, so its exact
+        # geometry must differ from the shipped relief while remaining simpler on this fixture.
         coherent = resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=4)
         noisy = resolution_bench.geometry_summary(world, k=4, detail=True, detail_lattice=1)
         self.assertLess(coherent["greedy_quads"], noisy["greedy_quads"])
         self.assertEqual(
             coherent,
-            {"exposed_faces": 1304, "greedy_quads": 35, "triangles": 70, "chunks": 1, "cells": 39},
+            {"exposed_faces": 1328, "greedy_quads": 47, "triangles": 94, "chunks": 1, "cells": 39},
         )
         with self.assertRaises(ValueError):
             resolution_bench.geometry_summary(world, k=4, detail_lattice=0)
@@ -181,9 +196,14 @@ class ResolutionGeometryTests(unittest.TestCase):
             "single": snapshot((1, 1, 1), [{"solid": "stone"}]),
             "prism": snapshot((2, 1, 1), [{"solid": "stone"}, {"solid": "stone"}]),
             "staircase": staircase(),
+            # "dirt" is not a `protocol::Material` variant -- the client can never emit it, and
+            # the dispatch's old catch-all silently gave it FLAT relief, so this fixture was
+            # quietly meshing one material against a rule no material has. `snow` is real AND
+            # takes a different arm from `stone`, so the pair now exercises two relief rules
+            # rather than one rule and one accident.
             "two materials": snapshot(
                 (2, 2, 1),
-                [{"solid": "stone"}, {"solid": "dirt"}, "empty", {"ramp": "stone"}],
+                [{"solid": "stone"}, {"solid": "snow"}, "empty", {"ramp": "stone"}],
             ),
         }
         for name, world in worlds.items():
@@ -204,16 +224,16 @@ class ResolutionGeometryTests(unittest.TestCase):
         self.assertEqual(resolution_bench.geometry_summary(hollow, k=1)["chunks"], 1)
 
     def test_control_check_requires_the_real_world_literals(self):
-        resolution_bench.assert_control({"exposed_faces": 61142, "greedy_quads": 19264})
-        with self.assertRaisesRegex(ValueError, "61142"):
-            resolution_bench.assert_control({"exposed_faces": 61141, "greedy_quads": 19264})
+        resolution_bench.assert_control({"exposed_faces": 62586, "greedy_quads": 12322})
+        with self.assertRaisesRegex(ValueError, "62586"):
+            resolution_bench.assert_control({"exposed_faces": 62585, "greedy_quads": 12322})
 
 
 class ResolutionRealWorldControlTests(unittest.TestCase):
     """AC4's oracle, with a caller.
 
     `assert_control` was reachable only from `main()`, so every gate-run test meshed a synthetic
-    two-cell world and none meshed the real one. 61,142 / 19,264 are MEASUREMENTS of world
+    two-cell world and none meshed the real one. 62,586 / 12,322 are MEASUREMENTS of world
     content -- exactly the shape that went stale unnoticed in 9.4 -- and nothing went red when
     worldgen or the exposure rule moved. This is the caller.
     """
@@ -238,7 +258,7 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
             world = resolution_bench._load_snapshot(path)
         summary = resolution_bench.geometry_summary(world, k=1, detail=True)
         resolution_bench.assert_control(summary)
-        self.assertEqual(summary["triangles"], 38_528)
+        self.assertEqual(summary["triangles"], 24_644)
 
         # AC3a: the per-class split is a MEASUREMENT of the same draw set, so it is pinned
         # here rather than written by hand into a sign-off table. The previous table mixed
@@ -248,11 +268,11 @@ class ResolutionRealWorldControlTests(unittest.TestCase):
         self.assertEqual(
             census,
             {
-                "tree_cells": 5_048,
-                "tree_faces": 13_704,
-                "terrain_cells": 39_936,
-                "terrain_faces": 47_438,
-                "trees": 265,
+                "tree_cells": 4_930,
+                "tree_faces": 13_339,
+                "terrain_cells": 40_990,
+                "terrain_faces": 49_247,
+                "trees": 259,
             },
         )
         # The split must be a split OF the control, not an independent count beside it.
@@ -315,6 +335,18 @@ class ResolutionSafetyTests(unittest.TestCase):
         resolution_bench.assert_workload_limit(48_000_000, 1, False)
         with self.assertRaisesRegex(ValueError, "48,000,001"):
             resolution_bench.assert_workload_limit(48_000_001, 1, False)
+
+    def test_material_relief_refuses_a_material_it_has_no_rule_for(self):
+        """The client's dispatch is an exhaustive `match`; this is Python's stand-in for it.
+
+        Without this the bench would hand any unknown material FLAT relief and stay green, which
+        is how a `dirt` fixture that no `protocol::Material` can produce sat in the oracle's
+        two-material world being meshed against a rule no material has.
+        """
+        with self.assertRaisesRegex(ValueError, "no relief rule for material 'dirt'"):
+            resolution_bench._material_detail_depth("dirt", 0, 0, 0, 4)
+        for material in resolution_bench.KNOWN_MATERIALS:
+            resolution_bench._material_detail_depth(material, 0, 0, 0, 4)
 
     def test_snapshot_size_guard_uses_the_explicit_wire_limit(self):
         with tempfile.TemporaryDirectory() as directory:

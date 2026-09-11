@@ -18,6 +18,17 @@ fn surface_height(world: &World, x: i32, y: i32) -> i32 {
         .expect("every column has terrain")
 }
 
+fn surface_material(world: &World, x: i32, y: i32) -> Material {
+    match world.tile(Pos {
+        x,
+        y,
+        z: surface_height(world, x, y),
+    }) {
+        Some(Tile::Solid(material) | Tile::Ramp(material)) => material,
+        tile => panic!("surface at ({x}, {y}) was not terrain: {tile:?}"),
+    }
+}
+
 fn is_standable(world: &World, pos: Pos) -> bool {
     world.tile(pos) == Some(Tile::Empty)
         && matches!(
@@ -67,6 +78,88 @@ fn default_world_has_mountainous_height_span() {
         maximum - minimum >= 16,
         "surface height span was only {} ({minimum}..={maximum})",
         maximum - minimum
+    );
+}
+
+#[test]
+fn surface_materials_are_coherent_and_snow_prefers_flat_ground() {
+    let world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+    let dims = world.dims();
+    let mut matching_neighbours = 0;
+    let mut neighbour_pairs = 0;
+    let mut flat_snow = 0;
+    let mut flat_columns = 0;
+    let mut sloped_snow = 0;
+    let mut sloped_columns = 0;
+
+    for y in 0..dims.y as i32 {
+        for x in 0..dims.x as i32 {
+            let height = surface_height(&world, x, y);
+            let material = surface_material(&world, x, y);
+            let mut steepest_difference = 0;
+            for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
+                if nx < 0 || ny < 0 || nx >= dims.x as i32 || ny >= dims.y as i32 {
+                    continue;
+                }
+                let neighbour_height = surface_height(&world, nx, ny);
+                steepest_difference = steepest_difference.max((height - neighbour_height).abs());
+                matching_neighbours += usize::from(material == surface_material(&world, nx, ny));
+                neighbour_pairs += 1;
+            }
+
+            if steepest_difference == 0 {
+                flat_columns += 1;
+                flat_snow += usize::from(material == Material::Snow);
+            } else {
+                sloped_columns += 1;
+                sloped_snow += usize::from(material == Material::Snow);
+            }
+        }
+    }
+
+    let shared_fraction = matching_neighbours as f64 / neighbour_pairs as f64;
+    let flat_snow_fraction = flat_snow as f64 / flat_columns as f64;
+    let sloped_snow_fraction = sloped_snow as f64 / sloped_columns as f64;
+    assert!(
+        shared_fraction >= 0.85,
+        "surface neighbours share material only {shared_fraction:.3} of the time"
+    );
+    assert!(
+        sloped_snow_fraction < flat_snow_fraction,
+        "snow fraction must fall from flat ({flat_snow_fraction:.3}) to sloped ({sloped_snow_fraction:.3}) ground"
+    );
+}
+
+#[test]
+fn frozen_lake_is_a_flat_contiguous_ice_region_away_from_camp() {
+    let world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let lake_height = surface_height(&world, 28, 92);
+    let flat_lake = (84..=100)
+        .flat_map(|y| (18..=38).map(move |x| (x, y)))
+        .filter(|&(x, y)| surface_material(&world, x, y) == Material::Ice)
+        .filter(|&(x, y)| surface_height(&world, x, y) == lake_height)
+        .count();
+    assert!(flat_lake >= 40, "only {flat_lake} same-height ice cells");
+    assert!((28 - camp.x).abs() > 3 || (92 - camp.y).abs() > 3);
+
+    // Ice is the LAKE's material and nothing else's, from 2026-09-11: scoured ground emits
+    // `Stone`. This is the uniqueness AC9 claimed, lost, and has now earned -- at review the
+    // claim had to be retracted because the scour lattice was emitting ice too, in ten more
+    // regions, four of them LARGER than the lake. Asserted across the whole world rather than
+    // inside the window above, so a scour patch anywhere in the map fails it, and stated as a
+    // material property so it does not restate the lattice rule that produces the patches.
+    let stray_ice: Vec<(i32, i32)> = (0..world.dims().y as i32)
+        .flat_map(|y| (0..world.dims().x as i32).map(move |x| (x, y)))
+        .filter(|&(x, y)| surface_material(&world, x, y) == Material::Ice)
+        .filter(|&(x, y)| !(18..=38).contains(&x) || !(84..=100).contains(&y))
+        .collect();
+    assert!(
+        stray_ice.is_empty(),
+        "{} ice surface cells sit outside the lake window, first at {:?} -- ice is the lake's \
+         exclusive material and every other icy-looking patch should be scoured rock",
+        stray_ice.len(),
+        stray_ice.first()
     );
 }
 
@@ -358,7 +451,13 @@ fn spawn_positions_for_seed_42_are_pinned() {
     // fingerprint folds every tile, it is the tightest tree-stream regression guard in the repo,
     // far tighter than the 230-300 density band, which only discriminates roll denominators
     // outside roughly 36..52. Re-pin it only alongside a stated, measured geometry change.
-    assert_eq!(terrain_fingerprint, 0x4337_57ca_d2ba_77bc);
+    //
+    // MOVED A THIRD TIME, 2026-09-11, and this one is a MATERIAL change, not a geometry change:
+    // scoured ground emits `Stone` instead of `Ice` (`worldgen::surface_material`, Wolf's ruling
+    // at 10.9's sitting). On `DEFAULT_SEED` that re-labels 1,872 surface columns, so the folded
+    // codes move 3 -> 1 and 7 -> 5 and the hash moves with them. The dwarf and camp positions
+    // asserted above did NOT move, which is the claim that material carries no gameplay meaning.
+    assert_eq!(terrain_fingerprint, 0xe5fa_e10f_6708_cc79);
 }
 
 #[test]
@@ -452,13 +551,20 @@ fn surface_is_icy() {
             }
             assert!(seen_soil, "column ({x},{y}) has no soil layer");
 
+            // `Stone` joined this set on 2026-09-11: scoured ground emits rock rather than ice
+            // (`worldgen::surface_material`). Soil is still refused, which is what this clause
+            // guards -- that the layering never surfaces the middle layer. WHICH columns may be
+            // stone is deliberately not restated here; the gradient correlation and coherence
+            // tests are the rule's own guards, and repeating the rule in its own assertion is
+            // how this repo has produced self-referential tests before.
             assert!(
                 matches!(
                     world.tile(Pos { x, y, z: top }),
-                    Some(Tile::Solid(Material::Ice | Material::Snow))
-                        | Some(Tile::Ramp(Material::Ice | Material::Snow))
+                    Some(Tile::Solid(
+                        Material::Ice | Material::Snow | Material::Stone
+                    )) | Some(Tile::Ramp(Material::Ice | Material::Snow | Material::Stone))
                 ),
-                "column ({x},{y}) top is not an icy surface"
+                "column ({x},{y}) top is neither snow, lake ice nor scoured rock"
             );
 
             for z in top + 1..world.dims().z as i32 {

@@ -2047,7 +2047,30 @@ development_status:
                           # and stays RED; only campfire+torches together clears (1.3102%). And the
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
-  10-9-the-land-reads-natural: ready-for-dev
+  10-9-the-land-reads-natural: done
+                          # DONE 2026-09-11 at the closing sitting: Wolf signed off the `df0f722`
+                          # frame ("cool ... I think we are done with the story"), which met AC12 --
+                          # the last AC outstanding. PR #91 was OPEN AND UNMERGED when this was
+                          # written; the merge is Wolf's, and whoever sees it land should record the
+                          # merge commit here and re-check `git merge-base --is-ancestor`, because
+                          # a merge mid-session lands the working copy on main.
+                          # TWO RULINGS CAME OUT OF THE SITTING, both on the card. Ruling 2 (the
+                          # lake does not read as ice): "keep the lake don't touch it" -- accepted
+                          # as it stands. Ruling 3 (the scour lattice): the patches read as
+                          # ARTIFICIAL PLATES, and the cause was that ice is the one material drawn
+                          # dead flat (`material_detail_depth` depth 0 -- right for a lake, wrong on
+                          # a slope). Scour now emits `Stone` (depth 1) with the snow cap LEFT ON,
+                          # Wolf's choice between two built-and-captured variants. Side effect worth
+                          # carrying forward: ice is now the LAKE's exclusive material, the
+                          # uniqueness AC9 claimed and had to retract at review.
+                          # WHAT THE RULING DID NOT FIX, so Epic 11 does not inherit a false
+                          # premise: the lattice is still a fixed 16-cell grid on 19.0% of sloped
+                          # columns, and with the cap on NOTHING in the frame reads as exposed rock
+                          # -- the patches read as snow-covered broken ground. Neither is filed.
+                          # Ruling 1 (AC1's `x=127` / `y=0` off-screen) was closed by the sign-off
+                          # WITHOUT a framing change, so AC1 stands on its projection mapping. That
+                          # is the orchestrator's reading of "we are done", recorded so it can be
+                          # contradicted rather than assumed.
                           # ADDED 2026-09-10 out of 10.8's closing conversation, and it runs
                           # BEFORE Epic 11. THE TERRAIN STORY the 10.8 entry promised -- but note
                           # the scope MOVED during creation: the "too thick snow" that named it is

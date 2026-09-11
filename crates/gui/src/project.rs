@@ -767,8 +767,8 @@ fn occludes_terrain(mirror: &Mirror, position: [i32; 3], level: i32, cover: &Tre
 
 /// Fine column heights inside one coarse cell, in fine voxels, or `None` for a full cube.
 ///
-/// This is the same heightfield `scripts/bench/resolution_bench.py` measures: a cell whose top
-/// is drawn carries the detail pits, every other cell is solid to its ceiling. Both sides pin
+/// This is the snowfield heightfield `scripts/bench/resolution_bench.py` measures: a cell whose
+/// top is drawn carries coherent relief, every other cell is solid to its ceiling. Both sides pin
 /// the same `detail_depth` vector, which is what makes "one rule" a test rather than a comment.
 fn column_heights(
     mirror: &Mirror,
@@ -790,12 +790,14 @@ fn column_heights(
         return None;
     }
     let plane = (position[2] + 1) * subdiv;
+    let material = terrain_material(mirror, position);
     let mut heights = Vec::with_capacity((subdiv * subdiv) as usize);
     for du in 0..subdiv {
         for dv in 0..subdiv {
             heights.push(
                 subdiv
-                    - detail_depth(
+                    - material_detail_depth(
+                        material,
                         plane,
                         position[0] * subdiv + du,
                         position[1] * subdiv + dv,
@@ -848,9 +850,6 @@ fn push_face(
 /// Builds the opt-in fine terrain from the client mirror. The coarse cells are still the only
 /// authority: every fine face begins with the same visible-cell set the shipped cube path uses.
 ///
-/// NOTE: the small deterministic top pits are a measurement stand-in for 10.4's authored terrain
-/// look, not a visual decision. They make `--subdiv N` measure non-flat fine surfaces rather than
-/// merely tessellating an otherwise identical plane.
 /// The chunks a set of changed cells can alter.
 ///
 /// A changed cell alters its own faces and those of its six neighbours — the neighbour's face
@@ -1154,24 +1153,55 @@ fn terrain_slot_at(mirror: &Mirror, position: [i32; 3]) -> TerrainSlot {
     }
 }
 
-/// Hash-compatible with the measurement instrument's small value-noise rule.
+/// Coherent snow relief, sampled in fine world coordinates.
 ///
-// NOTE: This is a MEASUREMENT STAND-IN for 10.4's authored terrain look, not a visual
-/// decision. It exists only so a flat cell top stops being one greedy quad and fineness
-/// becomes measurable; 10.4 owns the real look and this is the copy it will replace. The
-/// figure it drives is placeholder-dominated -- uncorrelated noise is 96.8% of the adopted
-/// k=4 triangle budget, and sampling the same rule coherently over a cell moves that budget
-/// 11.5x -- so no number derived from it may be read as the cost of authored terrain.
+/// A noise corner spans three coarse cells at the current subdivision, so adjacent fine voxels
+/// interpolate the same four values instead of each inventing a separate pit. The mesher keeps
+/// the resulting long, shallow snow drifts as geometry rather than measurement noise.
+/// The `subdiv 1` row's `triangles_derived=`, as arithmetic over the entity list.
+///
+/// Extracted from the `println!` at review so AC11's test can assert the REPORTED number rather
+/// than recompute the same expression beside it. A cube is 12 triangles; a snow cap is the single
+/// quad `snow_cap_mesh` builds, so 2.
+pub(crate) fn derived_triangle_count(cubes: usize, snow_caps: usize) -> usize {
+    cubes * 12 + snow_caps * 2
+}
+
 fn detail_depth(plane: i32, u: i32, v: i32, subdiv: i32) -> i32 {
-    let mut value = DETAIL_SEED
-        ^ (plane as u32).wrapping_mul(0x9E37_79B1)
-        ^ (u as u32).wrapping_mul(0x85EB_CA77)
-        ^ (v as u32).wrapping_mul(0xC2B2_AE3D);
-    value ^= value >> 16;
-    value = value.wrapping_mul(0x7FEB_352D);
-    value ^= value >> 15;
-    let offset = (value % 5) as i32 - 2;
-    offset.abs().min(subdiv - 1)
+    coherent_detail_depth(plane, u, v, subdiv, 3)
+}
+
+fn coherent_detail_depth(plane: i32, u: i32, v: i32, subdiv: i32, coarse_cells: i32) -> i32 {
+    let spacing = subdiv * coarse_cells;
+    let x = u.div_euclid(spacing);
+    let y = v.div_euclid(spacing);
+    let fx = u.rem_euclid(spacing);
+    let fy = v.rem_euclid(spacing);
+    let corner = |x, y| {
+        let mut value = DETAIL_SEED
+            ^ (plane as u32).wrapping_mul(0x9E37_79B1)
+            ^ (x as u32).wrapping_mul(0x85EB_CA77)
+            ^ (y as u32).wrapping_mul(0xC2B2_AE3D);
+        value ^= value >> 16;
+        value = value.wrapping_mul(0x7FEB_352D);
+        value ^= value >> 15;
+        (value & 0xff) as i32
+    };
+    let blend = |start, end, fraction| start * (spacing - fraction) + end * fraction;
+    let top = blend(corner(x, y), corner(x + 1, y), fx);
+    let bottom = blend(corner(x, y + 1), corner(x + 1, y + 1), fx);
+    let value = blend(top, bottom, fy) / (spacing * spacing);
+    value * (subdiv - 1) / 255
+}
+
+/// Material decides the surface character without adding terrain state: snow drifts slowly,
+/// exposed rock breaks at a shorter wavelength, and lake ice remains flat.
+fn material_detail_depth(material: Material, plane: i32, u: i32, v: i32, subdiv: i32) -> i32 {
+    match material {
+        Material::Snow => detail_depth(plane, u, v, subdiv),
+        Material::Stone | Material::Soil => coherent_detail_depth(plane, u, v, subdiv, 1),
+        Material::Ice | Material::TreeTrunk | Material::TreeFoliage => 0,
+    }
 }
 
 #[derive(Default)]
@@ -1412,7 +1442,7 @@ pub fn reconcile(
                     positions.len(),
                     slice.level(),
                     positions.len() + snow_caps,
-                    positions.len() * 12 + snow_caps * 2,
+                    derived_triangle_count(positions.len(), snow_caps),
                     started.elapsed().as_millis()
                 );
             }
@@ -2753,6 +2783,48 @@ mod tests {
         (faces, triangles)
     }
 
+    fn flat_or_snowfield(material: Material) -> Mirror {
+        let dims = Dims { x: 32, y: 32, z: 1 };
+        world(dims, vec![Tile::Solid(material); 32 * 32])
+    }
+
+    /// The AC2 instrument is the real chunk mesher's triangle count, not its face count: a
+    /// flat fine layer deliberately contains enough faces to look busy in that weaker measure.
+    ///
+    /// THE FLOOR IS PINNED, NOT DERIVED. Ice routes through `material_detail_depth` exactly like
+    /// snow does, so reading the flat reference off a live ice fixture lets the floor drift with
+    /// the very rule the ratio polices: a change that flattened snow AND roughened ice keeps the
+    /// ratio and passes. Pinning 352 makes the ice branch falsify this test on its own.
+    ///
+    /// The `< 10_000` bar is this fixture's LOCAL stand-in for AC2's world bound of 231,905
+    /// triangles at 128x128 -- it is not a scaled version of it. It sits above the coherent rule's
+    /// measured 5,140 and below what the per-voxel hash produces; the mutation row "per-voxel
+    /// relief hash breaks the AC2 triangle budget" is what proves the upper half discriminates.
+    #[test]
+    fn material_keyed_relief_keeps_the_reported_triangle_count_well_above_flat_ice() {
+        const FLAT_ICE_TRIANGLES: usize = 352;
+
+        let (_, flat_triangles) = fine_geometry(&flat_or_snowfield(Material::Ice), 4);
+        let (_, shipped_triangles) = fine_geometry(&flat_or_snowfield(Material::Snow), 4);
+
+        assert_eq!(
+            flat_triangles, FLAT_ICE_TRIANGLES,
+            "the flat ice reference moved to {flat_triangles}; the ratio below only means \
+             something against a known floor, so re-measure it deliberately rather than \
+             letting it follow the rule under test"
+        );
+        assert!(
+            shipped_triangles > flat_triangles * 10,
+            "the real mesher reported only {shipped_triangles} triangles for snow against \
+             {flat_triangles} for a flat ice layer; AC2 needs a clearly non-flat surface"
+        );
+        assert!(
+            shipped_triangles < 10_000,
+            "the coherent 32x32 snowfield used {shipped_triangles} triangles; a per-voxel \
+             hash must not meet AC2's relief budget"
+        );
+    }
+
     /// A 40x4x4 stepped slab: wide enough to span three 16-cell chunks on x.
     fn wide_terrain() -> Mirror {
         let dims = Dims { x: 40, y: 4, z: 4 };
@@ -3256,19 +3328,24 @@ mod tests {
         }
     }
 
-    /// The detail rule is a MEASUREMENT STAND-IN shared with `scripts/bench/resolution_bench.py`,
-    /// and the two sides are only one rule if they agree bit for bit. They did not: this side
-    /// `wrapping_mul`s in u32 and the bench multiplied unbounded Python integers, so the two
-    /// agreed at chance for every k > 1 while k=1 — where the clamp forces every depth to zero —
-    /// stayed identical. The same vector is pinned in that file's test suite.
+    /// A few independently written world-space probes pin the snow drift field. They cross two
+    /// coarse cells, so replacing it with a per-fine-voxel hash cannot satisfy the vector.
     #[test]
-    fn the_detail_rule_matches_the_benchs_pinned_vector() {
-        let vector = [[0, 0, 0], [1, 2, 3], [8, 5, 1], [9, 9, 9], [64, 17, 5]];
+    fn snow_relief_is_coherent_in_world_space() {
+        let vector = [
+            [0, 0, 0],
+            [1, 2, 3],
+            [8, 5, 1],
+            [9, 9, 9],
+            [4, 11, 7],
+            [4, 12, 7],
+            [64, 17, 5],
+        ];
         let depths: Vec<i32> = vector
             .iter()
             .map(|point| detail_depth(point[0], point[1], point[2], 4))
             .collect();
-        assert_eq!(depths, vec![1, 0, 1, 1, 2]);
+        assert_eq!(depths, vec![2, 1, 0, 1, 1, 1, 0]);
         for point in vector {
             assert_eq!(
                 detail_depth(point[0], point[1], point[2], 1),
@@ -3292,8 +3369,8 @@ mod tests {
             Tile::Solid(protocol::Material::Stone),
         ]);
         assert_eq!(fine_geometry(&prism, 1), (10, 12));
-        assert_eq!(fine_geometry(&prism, 2), (32, 24));
-        assert_eq!(fine_geometry(&prism, 4), (176, 144));
+        assert_eq!(fine_geometry(&prism, 2), (40, 12));
+        assert_eq!(fine_geometry(&prism, 4), (136, 24));
     }
 
     /// The client mesher agrees with the offline bench on a world with rim levels in it.
@@ -3320,7 +3397,7 @@ mod tests {
         // still leaving it above the unpartitioned bench figure. An inequality that every
         // plausible regression satisfies pins nothing.
         for (subdiv, faces, bench_triangles, client_triangles) in
-            [(1, 84, 36, 60), (2, 334, 154, 174), (4, 1608, 926, 942)]
+            [(1, 84, 36, 60), (2, 336, 36, 60), (4, 1376, 108, 364)]
         {
             let (drawn, triangles) = fine_geometry(&staircase(), subdiv);
             assert_eq!(

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Offline geometry and simulation-resolution measurements for story 10.6.
 
-The benchmark intentionally uses only the Python standard library.  Its detail rule is a
-measurement stand-in, not game art: it gives an exposed sub-cell surface a small seeded height
-variation so the greedy mesher has real fine geometry to account for.
+The benchmark intentionally uses only the Python standard library. Its snowfield detail rule
+mirrors the client's coherent surface relief, so it measures a real non-flat terrain surface.
 """
 
 import argparse
@@ -18,8 +17,9 @@ from pathlib import Path
 
 
 WORLD_SEED = 0xF005_7E1A
-CONTROL_FACES = 61_142
-CONTROL_QUADS = 19_264
+# Story 10.9's terrain changes and lake tree exclusion set this control +2.35% faces / +1.57% quads.
+CONTROL_FACES = 62_586
+CONTROL_QUADS = 12_322
 NEIGHBOURS = ((0, -1), (0, 1), (1, -1), (1, 1), (2, -1), (2, 1))
 SIDE_DELTAS = ((-1, 0), (1, 0), (0, -1), (0, 1))
 # Guard the process before Python object overhead can exhaust the devpod.  This is a benchmark
@@ -35,32 +35,31 @@ FOLIAGE_MATERIAL = "tree_foliage"
 MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
 
 
-def detail_offset(seed, x, y, z):
-    """Return a deterministic exposed-surface displacement in fine voxels.
-
-    // NOTE: This is a measurement stand-in for 10.4's authored terrain look, not a visual
-    decision.  The small value-noise displacement deliberately breaks flat greedy runs.
-
-    Every step is masked to 32 bits because the client writes the same rule in u32
-    `wrapping_mul`.  Python integers are unbounded, so leaving the multiplies unmasked made
-    the two sides a DIFFERENT rule that agreed only at chance for k > 1 -- invisible at k=1,
-    where the depth clamp forces both to zero.  `scripts/tests/test_resolution_bench.py` and
-    `crates/gui/src/project.rs` pin the same vector so the claim is tested, not commented.
-    """
+def detail_corner(seed, plane, x, y):
+    """Return one deterministic coherent-noise corner in the client's u32 domain."""
     mask = 0xFFFFFFFF
     value = seed
-    value ^= (x & mask) * 0x9E3779B1 & mask
-    value ^= (y & mask) * 0x85EBCA77 & mask
-    value ^= (z & mask) * 0xC2B2AE3D & mask
+    value ^= (plane & mask) * 0x9E3779B1 & mask
+    value ^= (x & mask) * 0x85EBCA77 & mask
+    value ^= (y & mask) * 0xC2B2AE3D & mask
     value ^= value >> 16
     value = value * 0x7FEB352D & mask
     value ^= value >> 15
-    return value % 5 - 2
+    return value & 0xFF
 
 
-def detail_depth(seed, x, y, z, k):
-    """Return the depth of one closed top-surface pit, bounded by its fine cell height."""
-    return min(abs(detail_offset(seed, x, y, z)), k - 1)
+def detail_depth(seed, plane, u, v, k, coarse_cells=3):
+    """Return the coherent snowfield depth of one fine column, bounded by its cell height."""
+    spacing = k * coarse_cells
+    x, y = u // spacing, v // spacing
+    fx, fy = u % spacing, v % spacing
+
+    def blend(start, end, fraction):
+        return start * (spacing - fraction) + end * fraction
+
+    top = blend(detail_corner(seed, plane, x, y), detail_corner(seed, plane, x + 1, y), fx)
+    bottom = blend(detail_corner(seed, plane, x, y + 1), detail_corner(seed, plane, x + 1, y + 1), fx)
+    return blend(top, bottom, fy) // (spacing * spacing) * (k - 1) // 255
 
 
 def _dims(snapshot):
@@ -78,9 +77,8 @@ def _greedy_quads(mask):
     """Count maximal same-material rectangles in one co-planar face mask."""
     used = set()
     quads = 0
-    # Scan rows first.  This is the reference mesher's rectangle tie-break and is load-bearing:
-    # scanning columns first creates 19,353 quads on the real world, not the independent 19,264
-    # control result.
+    # Scan rows first. This is the reference mesher's rectangle tie-break and is load-bearing:
+    # scanning columns first creates a different result on the real world.
     for u, v in sorted(mask, key=lambda point: (point[1], point[0])):
         if (u, v) in used:
             continue
@@ -133,7 +131,32 @@ def _coarse_faces(snapshot):
     return total
 
 
-def _cell_heights(x, y, z, k, carved, lattice=1):
+# The client mirror of this dispatch is an exhaustive `match` over `Material`
+# (`crates/gui/src/project.rs`, `material_detail_depth`), so the compiler refuses to build there
+# if a variant is ever added without an arm. Python has no such guard, and a bare `return 0`
+# catch-all would silently hand a new material FLAT relief -- the two rules would diverge with
+# every test still green, which is exactly how the Rust/Python seam was nearly lost in 10.9.
+# Name every material instead, and refuse the ones nobody has decided about.
+FLAT_MATERIALS = frozenset({"ice", "tree_trunk", "tree_foliage"})
+DRIFTING_MATERIALS = frozenset({"snow"})
+BREAKING_MATERIALS = frozenset({"stone", "soil"})
+KNOWN_MATERIALS = FLAT_MATERIALS | DRIFTING_MATERIALS | BREAKING_MATERIALS
+
+
+def _material_detail_depth(material, plane, u, v, k):
+    if material in DRIFTING_MATERIALS:
+        return detail_depth(WORLD_SEED, plane, u, v, k)
+    if material in BREAKING_MATERIALS:
+        return detail_depth(WORLD_SEED, plane, u, v, k, coarse_cells=1)
+    if material in FLAT_MATERIALS:
+        return 0
+    raise ValueError(
+        f"no relief rule for material {material!r}; the client's match over Material is "
+        f"exhaustive, so add the arm on both sides. Known: {sorted(KNOWN_MATERIALS)}"
+    )
+
+
+def _cell_heights(x, y, z, k, material, carved, lattice=1):
     """Fine column heights inside one solid coarse cell, in fine voxels.
 
     A cell whose top is exposed carries the detail pits and is a heightfield; every other
@@ -149,8 +172,8 @@ def _cell_heights(x, y, z, k, carved, lattice=1):
     # a function of this one property -- see "how much of the budget is the placeholder" in
     # 10-6-signoff/axis-a-geometry.md.
     def at(u, v):
-        return k - detail_depth(
-            WORLD_SEED, plane, u // lattice * lattice, v // lattice * lattice, k
+        return k - _material_detail_depth(
+            material, plane, u // lattice * lattice, v // lattice * lattice, k
         )
 
     return [[at(x * k + i, y * k + j) for j in range(k)] for i in range(k)]
@@ -200,7 +223,9 @@ def geometry_summary(snapshot, k=1, detail=True, foliage_as_cubes=False, detail_
     def heights_at(x, y, z):
         key = (x, y, z)
         if key not in heights_cache:
-            heights_cache[key] = _cell_heights(x, y, z, k, carved_at(x, y, z), detail_lattice)
+            heights_cache[key] = _cell_heights(
+                x, y, z, k, material_at(x, y, z), carved_at(x, y, z), detail_lattice
+            )
         return heights_cache[key]
 
     masks = collections.defaultdict(dict)
