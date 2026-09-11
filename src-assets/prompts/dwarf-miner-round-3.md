@@ -207,6 +207,20 @@ different game, and then weld per-part rather than wholesale.
 data — the palette PNG is 188 bytes, which is separately why palette-swap variants are nearly
 free.)*
 
+#### `check_asset.py` WILL REJECT a rigged deliverable, and that is expected
+
+The v1 contract requires one node and no glTF extensions; a skin adds joint nodes. So the moment
+you add a skeleton, `scripts/bench/check_asset.py` fails with the one-mesh/node clause. **That is
+the checker being right about a contract that has not caught up yet, not a defect in your asset.**
+
+What to do: run it anyway, **paste the exact failure text into your report**, and carry on. Do NOT
+loosen the checker — it lives outside `src-assets/` and this round may not write there — and do not
+strip the skin to make it pass. The V2 profile is owed work on this side and it is tracked; a
+workaround smuggled in from the art seat is how a contract quietly stops meaning anything.
+
+Everything the checker *can* still tell you remains worth having, so report its figures if it gets
+far enough to print them: size, `min Y`, centring, the palette list, triangle and vertex counts.
+
 **Name the joints now and keep them stable**, because a skeleton's real payoff is that one
 animation clip drives every variant: `root, hips, spine, chest, neck, head, shoulder.L/R,
 elbow.L/R, hand.L/R, hip.L/R, knee.L/R, foot.L/R`, plus `beard` if you want it to move. Those names
