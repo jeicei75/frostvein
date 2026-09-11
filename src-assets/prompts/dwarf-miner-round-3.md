@@ -176,28 +176,36 @@ That gives one hard rule and one honest trade:
   welded, denser topology and will stop reading as voxels. Nothing here forecloses it; it just will
   not be free later.
 
-#### Welding the mesh: no, and there is nothing to weld anyway
+#### Welding the mesh: it is a topology question, and the topology says no
 
-Wolf asked whether a welded mesh is a good idea regardless. **Measured on the shipped GLB, not
-reasoned about:** of its 28,796 vertices, the number that share position AND normal AND UV with
-another is **zero**. So a weld that preserves the flat-shaded voxel look and the palette UVs would
-save **0 bytes** — greedy meshing has already banked every legal weld, because merging coplanar
-same-material faces is exactly what it does.
+Wolf asked whether a welded mesh is a good idea regardless. It is a question about topology, not
+about file size, so here is the topology answer first.
 
-The only weld left is the illegal one. Welding by position alone would collapse 28,796 vertices to
-**9,108** (~615 KiB of a 986 KiB file, and the file is essentially all vertex data — the palette
-PNG is **188 bytes**), but it would:
+**A weld is only legal where two vertices agree on position, normal AND UV.** On a voxel surface
+they almost never do: adjacent quads meet at a hard 90-degree edge, so their normals differ, and
+the palette atlas gives each material its own cell, so a corner shared by a skin face and a tunic
+face cannot carry one UV. **Measured on the shipped GLB rather than assumed: of 28,796 vertices,
+the number sharing position AND normal AND UV with another is ZERO.** Greedy meshing already
+performed every legal weld — merging coplanar same-material faces is exactly what it does — so
+there is no welded version of this topology that keeps the look.
 
-- **average normals across hard voxel edges**, turning crisp cube faces into smooth shading — the
-  voxel read is gone;
-- **break the palette UVs**, because a corner shared by a skin face and a tunic face can carry only
-  one cell coordinate; and
-- **make rigid joints impossible.** At a joint seam the two sides currently hold separate vertices,
-  so each follows its own bone and the seam opens and closes cleanly. A single welded vertex can
-  only follow one bone, and it drags the other part with it.
+**Welding anyway, by position alone, costs three things and buys none of them back:**
 
-So the unwelded quad soup is not a legacy compromise — **it is the property that makes rigid
-voxel joints work.** Weld only if the look changes to smooth-shaded, which is a different game.
+- **It averages normals across hard voxel edges.** Crisp cube faces become smooth shading and the
+  voxel read is gone. This is the whole look, not a detail.
+- **It breaks the per-cell UVs**, so a welded corner can only belong to one material.
+- **It makes rigid joints impossible.** At a joint seam the two sides currently hold separate
+  vertices, so each follows its own bone and the seam opens and closes cleanly. One welded vertex
+  can follow only one bone, and it drags the other part with it.
+
+So the unwelded quad soup is not a legacy compromise to be tidied up — **it is the property that
+makes rigid voxel joints work at all.** Weld only if the look becomes smooth-shaded, which is a
+different game, and then weld per-part rather than wholesale.
+
+*(The size angle, for completeness and not as the argument: welding by position would collapse
+28,796 vertices to 9,108, roughly 615 KiB of a 986 KiB file. The asset is essentially all vertex
+data — the palette PNG is 188 bytes, which is separately why palette-swap variants are nearly
+free.)*
 
 **Name the joints now and keep them stable**, because a skeleton's real payoff is that one
 animation clip drives every variant: `root, hips, spine, chest, neck, head, shoulder.L/R,
