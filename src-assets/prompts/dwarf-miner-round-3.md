@@ -10,8 +10,17 @@
 > models from the scratch."
 
 So: **`src-assets/references/dwarf.mp4` is the authority for this round**, not
-`dwarf-contact-sheet.jpg`. The judge is a **rendered shot**, not the game frame. Game optimisation
-is explicitly a later pass and is not your problem in this round.
+`dwarf-contact-sheet.jpg`.
+
+**And the judge is the GAME, at every zoom level.** Wolf, immediately after the above:
+
+> "sure but plan is to be able to zoom in zoom out freely.. and my ambitious target is to actually
+> take shots from game and use game as a rendering engine also for 'marketing' material"
+
+That settles something this brief originally got wrong. There is **no hero-versus-game split and no
+second asset family**: one asset has to hold from a handful of pixels to filling the frame, because
+the same renderer produces both the gameplay view and the marketing shot. "Optimise for the game
+later" means tune cost later — it does not mean a throwaway model now.
 
 ## Verified here on the shipped GLB, independently — do not redo any of this
 
@@ -27,12 +36,19 @@ buckle plate, the lantern has a cage with the flame visible between bars, the bo
 simply does not appear in a front render. **The asset did what round 2 asked. Round 2 asked for the
 wrong thing.**
 
-**One number that should stop any argument about game performance in this round.** At the shipped
-boot framing a dwarf draws **8.74 px tall** — measured through the client's own projection oracle
+**One number, and read it as the FLOOR of a range rather than as the target.** At the shipped boot
+framing a dwarf draws **8.74 px tall** — measured through the client's own projection oracle
 (`CameraRig::project_world_point_with_depth`): 11.66 px per terrain cell at the camp, and a 1.20 m
-dwarf draws 0.75 cells (`crates/gui/src/project.rs:270`). A 4.3 m pine gets 31 px. So none of
-round 2's detail is resolvable in the game frame, and none of round 3's will be either. That is
-fine — Wolf has ruled this round is for rendered shots. Do not trade look for triangles here.
+dwarf draws 0.75 cells (`crates/gui/src/project.rs:270`). A 4.3 m pine gets 31 px. Today that is
+the only framing there is; with free zoom it becomes the wide end of the range and the close end is
+the whole screen.
+
+**This is why the brief below is a constraint and not a compromise.** A detail has to work at both
+ends. Grooves at 96 voxels are sub-pixel at 8.74 px — they do not merely vanish, they **alias**,
+and an aliasing surface shimmers as the camera moves. Big value steps and silhouette notches, which
+is what the reference uses, survive downsampling into readable shape. **The same fix serves the
+close-up and the wide shot.** Do not trade look for triangles here, and do not trade the wide shot
+for the close-up either.
 
 ## What the video actually shows, measured rather than admired
 
@@ -81,6 +97,14 @@ pattern, while the reference spends its lower resolution on form, value and pose
 5. **Pose and limbs** — see decision A below. If A says V2, deliver him in the mp4's swing pose
    rather than a neutral stance, because that is what the reference is judged on.
 6. **The lantern** — see decision B.
+7. **Prove it at BOTH ends of the zoom, and make that a deliverable.** Alongside the five full-size
+   views, commit a strip of the same asset rendered at **10 px, 30 px, 100 px and full height**
+   (nearest-neighbour downscale of the full render is fine — it is the same filter the game's
+   rasteriser approximates). Two questions it has to answer: does the silhouette still read as a
+   bearded dwarf with a lantern at 10 px, and does any surface detail turn to noise there? **A
+   detail that dissolves into speckle at 10 px is a defect, not a lost luxury** — with free zoom
+   the camera will pass through every one of those sizes, and speckle that changes frame to frame
+   shimmers.
 
 ## Hundreds of variations without modelling each one
 
@@ -103,11 +127,13 @@ Six heads x eight beards x four tunic palettes x three packs is 576 dwarves from
 authored parts. **What makes it work is the sockets being declared and stable**; what breaks it is
 a part that only fits the torso it was drawn against.
 
-**One honest limit, so nobody is surprised later.** For rendered shots this is trivial. In the
-*game* the client currently loads one GLB for `EntityKind::Dwarf`
-(`DWARF_SCENE_PATH`, `crates/gui/src/project.rs:266`) and gives every dwarf the same material, so
-hundreds of live palette variants would need per-instance materials in the client. That is game
-work, it is not in this round, and Wolf has already put it after this one.
+**One honest limit, and it is now roadmap rather than someday.** The client loads a single GLB for
+`EntityKind::Dwarf` (`DWARF_SCENE_PATH`, `crates/gui/src/project.rs:266`) and hands every dwarf the
+same material, so hundreds of *live* palette variants need per-instance materials in the client.
+That is engine work and not this round's — but since the game is also the marketing renderer, it is
+work that will happen, so **do not design the variation scheme around an offline assembly step.**
+A variant must be expressible as data the client could pick at spawn: a part list plus a table of
+hexes.
 
 ## Three decisions for Wolf — they change the CONTRACT, not just the model
 
@@ -115,17 +141,26 @@ The v1 contract in `check_asset.py` is explicit that it is v1: *"one-mesh/materi
 (V1 voxel assets only)"*. Round 3 as described does not fit it, and the checker should gain a v2
 profile rather than have the clause quietly loosened.
 
-- **A. One mesh, or a rigged multi-part hero?** V1 requires exactly one mesh, one material, one
-  image, one primitive, one node, no glTF extensions. The mp4's poses need separate limbs and a
-  rig. Ruling needed: a **V2 profile** for a posed hero asset, with V1 left intact for anything
-  the game loads.
-- **B. Emissive.** V1 forbids emissive at any colour, and that rule came out of the game's
-  lighting work. The reference's lantern is the character's brightest read. Ruling needed: allow
-  emissive on the flame cell for a render-only asset, or accept a lantern that does not glow.
-- **C. Does this replace the shipped asset or sit beside it?** If the hero dwarf is a second
-  family, it needs **its own name and its own internal mesh name**. This project has already
-  shipped two different meshes called `SM_VoxelPine_Tree02` and spent a story working out which
-  binary was which. Ruling needed before export.
+- **A. One mesh, or separate limbs and a rig?** V1 requires exactly one mesh, one material, one
+  image, one primitive, one node, no glTF extensions. The mp4's poses need separate limbs. Because
+  the game is the renderer, **a V2 profile is not a render-only escape hatch -- it is the contract
+  the game itself will load**, and the client's dwarf path is written against a single-node scene
+  (the spawn transform, `apply_entity_blending` rewriting the translation every frame, the yaw-only
+  facing rule). Ruling needed, and it is the expensive one: V2 with separate limbs now, or hold the
+  single mesh this round and take posing when the animation work happens.
+- **B. Emissive, or a real light?** V1 forbids emissive at any colour, and that rule came out of
+  the game's lighting work. In the reference the lantern is the brightest thing in frame and throws
+  a warm pool on the ground -- which a marketing shot taken from the game needs. The two are not
+  the same fix: an emissive material makes the lantern GLOW, a **point light parented to the
+  lantern** makes it LIGHT the scene, and only the first is asset work. Ruling needed on the asset
+  half: does the flame cell get emissive or not.
+- **C. It replaces the shipped asset, so the NAME has to be handled rather than inherited.** There
+  is no second family any more -- the zoom answer settles that -- so this round overwrites
+  `assets/gltf/SM_VoxelDwarf_Miner01.glb`. Keep the file name and **move the internal mesh name
+  with the content**: this project has already shipped two different meshes both called
+  `SM_VoxelPine_Tree02` and spent a story working out which binary was which. If the round produces
+  a candidate rather than a replacement it stays in `src-assets/` under a name that says candidate,
+  and never lands in `assets/gltf/`.
 
 ## Everything else in the standing brief holds unchanged
 
