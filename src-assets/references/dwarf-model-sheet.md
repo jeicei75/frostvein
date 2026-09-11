@@ -29,20 +29,28 @@ approved ten palette cells were read from, and it stays the authority for WHAT g
 
 Heights as a percentage of total figure height, measured down from the crown.
 
-| landmark | reference (±4 %) | r3 measured | delta |
+**CORRECTED 2026-09-11, and the correction came from the art seat.** The first edition of this table
+carried one row reading "head + beard mass ends — `ref≈ 24 %`" against r3's 48.5 %. That row
+compared **two different quantities**: 24 % is where the HEAD ends (the shoulder line), and 48.5 %
+was a row-majority measure, which is a measure of the beard's **WIDTH**, not its length. The seat
+measured the reference itself, got the head at 24.7 % — matching — and the **beard tip at 42.8 %**,
+hanging to just above the belt. Re-verified here independently: in the t=10 s frame the olive tunic
+does not appear until source y≈323 and the beard mass runs to ~350, with the buckle at ~425. **The
+reference's beard is long. r3's fault was that it was WIDE.**
+
+| landmark | reference (±4 %) | r3 measured | verdict |
 |---|---|---|---|
-| **head + beard mass ends** | `ref≈ 24 %` | **48.5 %** | **+24 pp — the single biggest error in the asset** |
-| belt / buckle centre | `ref≈ 56 %` | ~50 % | close |
+| head mass ends (shoulder line) | **24.7 %** | ~25 % | fine — never the problem |
+| **beard tip** | **42.8 %** | ~43 % | **fine — do NOT shorten it** |
+| **beard width vs head width** | **0.25 m against a 0.34 m head — NARROWER than the head** | crosses the chest | **THE fault** |
+| belt / buckle centre | `ref≈ 53–56 %` | ~50 % | close |
 | tunic hem | `ref≈ 67 %` | ~62 % | close |
 | boot top | `ref≈ 83 %` | ~80 % | close |
 | ground | 100 % | 100 % | — |
 
-**Read that first row again: our dwarf is half beard.** Measured on r3's own lit render, down the
-body centre band (x 300–470 of 700, excluding the held pickaxe and lantern), the tunic does not
-outnumber beard/hair pixels until **48.5 %** of the way down the figure. In the reference the tunic,
-belt and buckle all read clearly because the beard stops at roughly a quarter. This is why r3 reads
-as "a beard with legs" rather than as the reference, and it is a single number a round can be
-checked against.
+**So the check is a width check, not a length check.** A beard that reaches the belt is correct and
+matches the video; a beard wider than the head is what made r3 read as "a beard with legs" and hid
+the tunic, belt and buckle that give the character its colour. Keep the length, take the width in.
 
 Per-tenth breakdown of r3's body band, brown (beard/hair/leather/boots) against tunic:
 
@@ -59,8 +67,10 @@ Per-tenth breakdown of r3's body band, brown (beard/hair/leather/boots) against 
 | 80–90 % | 84.2 % | 0.0 % |
 | 90–100 % | 99.2 % | 0.4 % |
 
-The tunic owns exactly one band of ten. **Target: the tunic should own roughly 25–60 % of height**,
-i.e. four bands, which is what "the beard ends at a quarter" implies.
+The tunic owns exactly one band of ten. **Read this as a CHEST-COVERAGE measure and nothing else** —
+it answers "does something cover the chest", not "how long is the beard". The target it implies:
+the tunic should win most bands between roughly 25 % and 60 % of height, which happens when the
+beard is narrow, regardless of how far down it hangs.
 
 Whole-figure colour-family shares, r3, exact: **brown 59.2 %, tunic 22.5 %, grey 11.5 %, skin
 6.8 %** of 259,172 figure pixels. The reference's shares are deliberately NOT quoted — they are not
@@ -91,8 +101,24 @@ r3 expanded these correctly to **23 cells** by adding value steps (`#BAA896`, `#
 `#F7CE94`) — that ask landed and should not be redone.
 
 **RULED 2026-09-11 — Wolf: *"we can keep approved palette right now.. let's see after epic 11 will
-we change the palette"*.** The approved hues stand, and the 23 cells above are the palette a round
-inherits. The question that prompted this stays on the record because it will come back: the video
+we change the palette"*.** The approved hues stand.
+
+**AND A CORRECTION, also from the art seat: "inherit r3's 23 cells" was not reachable.** Two reasons,
+both mine:
+
+1. **The 23 cells live on the `dwarf-round-3-brief` branch** — in its candidate GLB and in that
+   branch's `dwarf_miner.py`. Round 4's branch came off `main`, so the seat is looking at the
+   shipped r2 asset (10 cells) and main's generator, where the 13 value steps do not exist. The
+   hexes are listed in this sheet, but the **atlas layout** — which cell sits at which coordinate —
+   is not, and that is what a palette actually is.
+2. **The contract as ENFORCED allows 16 cells, not 23.** `check_asset.py` fixes the atlas at 64 px
+   with 16 px cells, so 16 is the ceiling. r3's atlas used 8 px cells and 23 colours and passed
+   anyway — **because the palette clause reads only 4 of them.** The ceiling the seat ran into is an
+   artifact of the same broken clause that reported `palette=` with four entries.
+
+So the 16-cell ceiling is real until the clause is fixed, and fixing it is owed work on this side,
+not the seat's. Until then: **build on the 10 approved cells, which round-trip exactly, and propose
+which of the 13 value steps earn the 6 spare slots as the parts that need them arrive.** The question that prompted this stays on the record because it will come back: the video
 reads warmer and more saturated than the approved cells — its tunic is an olive-yellow where
 `#5F7A6A` is a desaturated green at saturation 0.22 — and since the video is lit and compressed, the
 true albedo is not recoverable from it.
@@ -174,8 +200,11 @@ name, so "your dwarf" is reproducible anywhere from an identifier.
 
 Numeric, on our own render, which is exactly measurable:
 
-1. **Head + beard mass ends by 30 % of height** (r3: 48.5 %). The one that matters most.
-2. **The tunic family owns at least four of the ten height bands** (r3: one).
+1. **The beard is no wider than the head** (reference: 0.25 m beard against a 0.34 m head; r3:
+   crossed the chest). This replaces the withdrawn "head + beard ends by 30 %" check, which was
+   measuring the wrong thing — **the beard's LENGTH should match the video's 42.8 %, not be cut.**
+2. **The tunic family owns at least four of the ten height bands** (r3: one) — a chest-coverage
+   consequence of check 1, not an independent target.
 3. **Visible skin is at least 10 % of figure pixels** (r3: 6.8 %) — the face has to read.
 4. Feature sizes within the table above — **advisory this round, not a gate.**
 5. Every mechanical clause of the asset contract, which r3 already proves the seat can hit.
