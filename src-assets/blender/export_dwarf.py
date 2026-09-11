@@ -33,7 +33,7 @@ import sys
 import bpy
 from mathutils import Vector
 
-REV = "r4"
+REV = "r5"        # round 5: the ONLY line this round changed in this file
 ASSET = "SM_VoxelDwarf_Miner01"
 COLLECTION = f"{ASSET}_{REV}"
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "export")

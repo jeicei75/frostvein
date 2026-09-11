@@ -55,7 +55,86 @@ approved ten palette cells were read from, and it stays the authority for WHAT g
 
 ## Proportions — the sheet's core
 
-Heights as a percentage of total figure height, measured down from the crown.
+> **SUPERSEDED 2026-09-11 by round 5.** Everything below this box was measured off `dwarf.mp4`, a
+> lit, perspective, h264 render two generations downstream of the orthographic sheet. Round 5
+> measured `src-assets/references/dwarf-ortho/` instead — 5x nearest-neighbour crops of
+> `reference-sheet.jpg`, where every source pixel is a countable 5x5 block — and the table in the
+> next section replaces this one. The old numbers are kept because the *reasoning* about the beard
+> (a width check, not a length check) still holds and because two of them turned out close.
+
+### Measured off the orthographic views — round 5, and this is the authority
+
+The figure spans **rows 7 (crown) to 147 (sole)** in both `front.png` and `side-left.png`, so
+**140 source pixels = 1.00 H** and one source pixel is 8.571 mm on a 1.20 m dwarf. `back.png` is
+123 px for the same figure and its pixels are scaled by 140/123 before use. `front.png` column 77 is
+the centre line; `side-left.png` column 58 is the depth centre, +Y forward.
+
+**Heights, as a fraction of figure height measured UP FROM THE SOLE** (the video table below measures
+down from the crown; they are complements):
+
+| landmark | z / H | source |
+|---|---|---|
+| crown | 1.000 | front rows 7 |
+| crown step 2 / step 1 / main skull top | 0.979 / 0.964 / 0.943 | front rows 10 / 12 / 15 |
+| brow | 0.879 | front row 24 |
+| eye line | 0.807 | front rows 30–34 |
+| ear top / ear bottom | 0.850 / 0.729 | front rows 28 / 45 |
+| nose tip (lowest) | 0.750 | front row 42 |
+| head + hair mass ends | **0.707** | front row 48, back row 44 — the two agree to 0.2 % |
+| shoulder line (top of the sleeve cap) | **0.700** | back row 45 |
+| sleeve cuff, bare forearm begins | 0.566 | back row 61 |
+| **beard tip** | **0.464** | front row 82 |
+| belt top / belt bottom | 0.421 / 0.343 | front rows 88 / 99 |
+| pack bottom | ~0.35 | side row 95, back row 90 |
+| hand bottom | 0.330 | back row 90 |
+| **tunic hem** | **0.207** | front row 118, back row 106 — the two agree to 0.5 % |
+| boot cuff top / bottom | 0.164 / 0.107 | front rows 124 / 132 |
+| sole | 0.000 | front row 147 |
+
+**Widths, as a fraction of figure height:**
+
+| feature | width / H | source |
+|---|---|---|
+| head, with hair | **0.336** | front cols 54–100; back 0.341, so the two agree to 1.5 % |
+| head, ear to ear | 0.383 | front cols 51–104; back 0.382 |
+| crown steps, top down | 0.164 / 0.229 / 0.286 / 0.336 | front rows 7 / 10 / 12 / 15 |
+| beard, widest | 0.343 | front rows 44–56 — essentially the head's own width |
+| chest, tunic only | 0.317 | back, between the sleeve seams |
+| **shoulders, over the sleeve caps** | **0.528** | back cols 26–90 |
+| waist / tunic skirt | 0.439 | back cols 32–85; front 0.440 |
+| arm span, hands out (the sheet is POSED) | 0.772 | back cols 11–105 |
+| stance, boot outer to boot outer | 0.398 | front cols 50–105; back 0.398 |
+| one leg / one boot | 0.164 | front, each leg |
+| boot cuff | 0.200 | front rows 125–132 |
+
+**Depths, as a fraction of figure height, +Y forward, measured on `side-left.png`:**
+
+| feature | depth / H | source |
+|---|---|---|
+| head, back to front of the hair | 0.336 | cols 36–83 — the head is very nearly a cube |
+| nose tip, past the back of the head | 0.379 | col 89 |
+| beard front | 0.357 | col 86 |
+| torso | 0.286 | cols 38–78 |
+| tunic skirt | 0.300 | cols 37–79 |
+| pack, behind the torso back | 0.186 | cols 12–38 |
+| shin | 0.164 | cols 47–70 |
+| **boot, sole length** | **0.214** | cols 47–76 — the toe projects 0.057 H past the shin front |
+| whole figure, pack to nose | 0.550 | cols 12–89 |
+
+**The shoulder-against-head number is the one that matters most**, and it is the one the video could
+not give: a 0.528 H shoulder against a 0.336 H head leaves **0.096 H of shoulder outboard of the
+skull on each side**. Round 4 measured 0.336 m of head against 0.350 m of torso, left 7 mm of
+shoulder, and had nowhere to route the over-shoulder strap the sheet plainly draws. The sheet
+settles it: the torso is not the thing that carries the shoulder — the sleeve caps are.
+
+**Two labels on the sheet are decorative and must not be obeyed.** The front view's vertical
+dimension reads `0.8x dwarf height` against the dwarf's own height, and `12 Voxels` across the body
+would imply a 15-voxel-tall figure the artwork plainly exceeds. The horizontal labels ARE consistent
+with the art: the front view including the pickaxe measures 1.079 H against its `1.0x` label, and
+each side view measures 0.643 H against its `0.67x`. Measure the art; read the labels as a sanity
+check only.
+
+---
 
 **CORRECTED 2026-09-11, and the correction came from the art seat.** The first edition of this table
 carried one row reading "head + beard mass ends — `ref≈ 24 %`" against r3's 48.5 %. That row
