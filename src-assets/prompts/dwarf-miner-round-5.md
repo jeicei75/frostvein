@@ -87,7 +87,7 @@ the video hid them:
 - **Every triangle normal exactly ±X/±Y/±Z.** No bevels, smooth normals, rotated boxes, chamfers or
   cylinders. Round 4's exporter **fails the build** on a violation and reported 0 non-axis-aligned
   and 0 smooth-shaded faces. Keep that enforcement.
-- **The artifacts of the loop, but NOT the stopping — see "Run it through" below.** One part per
+- **The artifacts of the loop, but NOT the stopping — see "Run it through" above.** One part per
   step, and after every step **save the `.blend`** and write
   `src-assets/renders/progress/NN-<part>.png` showing the WHOLE figure full-size *and* small. Keep
   both; the saves are crash insurance and the renders are the audit trail. What changes this round
