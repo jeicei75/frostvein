@@ -75,11 +75,21 @@ default is reuse, and time spent rebuilding solved scaffolding is time not spent
 **Two corrections, added 30 minutes into the first attempt because Wolf was watching an empty
 viewport: *"30mins and it builds with python... nothing on screen"*. Both are mine.**
 
-1. **Never author in a `blender --background` subprocess.** Every geometry call goes through the MCP
-   addon into the instance Wolf has open, so the viewport fills as you work. Only the final export
-   may run headless. Round 3 ran entirely headless and Wolf watched nothing happen for a whole
-   session; round 4's own report (section 9.9) found the same gravity pulling it back toward a
-   generator.
+1. **Never author in a `blender --background` subprocess, and PROVE you are not before your first
+   edit.** Every geometry call goes through the MCP addon into the instance Wolf has open, so the
+   viewport fills as you work. Only the final export may run headless.
+
+   **The verification, and it is not optional:** before creating anything, query the live scene and
+   **report what was already in it** — the objects present, the current filepath. A subprocess
+   starts from an empty or default scene; the instance Wolf is sitting in front of does not. If you
+   cannot reach the live instance, **stop and say so in the report. Do not fall back to writing a
+   `.blend` from a subprocess** — that is the failure mode this clause exists for: a file appears on
+   disk, the work looks done, and **Blender never reloads a file that changed underneath it**, so
+   the operator sees an unchanged viewport and the session looks broken when it is merely invisible.
+
+   Round 3 ran entirely headless and Wolf watched nothing happen for a whole session; round 4's own
+   report (section 9.9) found the same gravity pulling it back toward a generator; the first attempt
+   at round 5 did it again and wrote a `.blend` Wolf's open Blender could not see.
 2. **Do not measure everything before building anything.** The instruction below used to be a
    geometry-free prologue, and combined with "do not stop and ask" it means nothing appears for a
    long time. **Interleave instead:**
