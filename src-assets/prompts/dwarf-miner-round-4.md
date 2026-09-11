@@ -62,8 +62,9 @@ script exports it. Two consequences, both stated plainly because one of them is 
    `blender --background` subprocess. Round 3 ran headless, so Wolf sat in front of an open Blender
    and watched nothing happen for an entire session. If a step is easier as a spawned background
    process, **it is still not allowed for authoring** — only the final export may run headless.
-2. **Work in parts, one step at a time, in this order:** proportions blockout (a featureless
-   silhouette) → head → beard → hair → torso → arms → legs → boots → belt → pack → tools.
+2. **Work in parts, one step at a time, in this order:** proportions blockout — **at 64 AND at 96
+   voxels, for Wolf to choose between, see the resolution invariant** — then head → beard → hair →
+   torso → arms → legs → boots → belt → pack → tools.
 3. **After EVERY step, three things, in this order:**
    - **save the `.blend`** — this is the resume point, and it is not optional. If the session dies
      (four of six delegated runs in this project have been killed by the harness), everything since
@@ -89,10 +90,33 @@ script exports it. Two consequences, both stated plainly because one of them is 
 - **`min Y = 0`**, the figure standing on the origin plane; **centred in X and Z**.
 - **Voxel-aligned geometry.** Every vertex on the authored voxel lattice. Model in voxels, not in
   free-form mesh: box-shaped parts, axis-aligned faces, no bevels, no non-axis normals.
-- **DO NOT RAISE THE RESOLUTION.** Measured off the reference at t=10 s: the `dwarf.mp4` dwarf is
-  roughly **60–65 voxels tall** and its belt buckle is about **5 voxels** across. The shipped asset
-  is **96 voxels** — already finer than the target, and still reading flatter. Work at or below the
-  reference's resolution. If you want a number, 64 voxels tall is a good default.
+- **VOXEL IS NOT UP FOR GRABS — but the RESOLUTION is decided in step 1, by eye, not by this
+  brief.** Two separate things, so take them separately.
+
+  **Why voxel stays:** the world he stands in is voxel — the terrain is cells, the pines are cells —
+  so a smooth-shaded dwarf would be the only non-voxel thing in every frame he appears in. The
+  reference Wolf is chasing is itself voxel. And the cheap parts of this pipeline all depend on it:
+  palette-cell colouring (a variant is 188 bytes), greedy meshing, rigid joints on unwelded quads.
+  What has already been dropped is procedural voxel *authoring* — the 948-line generator — not
+  voxel geometry. Do not reach for bevels, smooth normals, or a subdivision surface.
+
+  **Why the resolution is an open question:** measured off the reference at t=10 s, the `dwarf.mp4`
+  dwarf is roughly **60–65 voxels tall** with a **5-voxel** belt buckle, while the shipped asset is
+  **96** and still reads flatter. So 64 is known to be enough *at the framing the video uses* —
+  the character filling about 500 px of a 720p frame. It is NOT known to be enough at a tighter
+  shot, and nobody can answer that from a brief: **the closest shot Wolf actually intends is what
+  sets the resolution.**
+
+  **So step 1 delivers the blockout TWICE — at 64 and at 96 voxels — rendered at the same framings,
+  including the tightest one Wolf names.** Same silhouette, same proportions, one lattice each, no
+  features. He picks, and the answer is then fixed for the rest of the round. This costs one extra
+  blockout and settles an argument that would otherwise be re-run at every part.
+
+  **One thing that is NOT the answer either way: mixing lattices.** Do not model the face or hands
+  on a finer grid than the body — the parts then read at different scales and the character comes
+  apart. The reference gets its face from VALUE, not from resolution: its eyes are one or two voxels
+  with a painted sclera, and the brow is a shape. If the face needs to read better, that is a
+  palette-cell problem before it is ever a geometry problem.
 - **NO SURFACE GROOVING.** Round 3's predecessor cut a 1-voxel channel every 3 voxels across the
   beard and tunic to add "detail"; at 96 voxels that is corduroy, and it is the "vertical voxel
   bands" Wolf rejected. Detail belongs in the **silhouette** (locks that notch the outline, a
