@@ -11,7 +11,25 @@ then check the model against it.
 
 ## The instruments, and what each can honestly measure
 
-**MEASURE FROM `src-assets/references/dwarf-frames/`, NOT from t=10 s.** Added 2026-09-11 after
+**MEASURE FROM `src-assets/references/dwarf-ortho/` — THE ORTHOGRAPHIC SHEET. Everything below
+that was measured off the video is PROVISIONAL.** Found 2026-09-11, after four rounds:
+`reference-sheet.jpg` in the same directory is the **modelling reference sheet the video was
+rendered from**, and it carries orthographic **front, both sides and back** views plus a gear
+breakdown and the palette with hex codes. Rounds 1–4 measured `dwarf.mp4` instead — a lit,
+perspective, compressed render two generations downstream of it. So:
+
+- **every depth dimension round 4 had to estimate is directly measurable**, and the back it had to
+  invent is drawn;
+- the ±4 % caveat this sheet carries was never necessary;
+- the palette swatches on the reference sheet **are** our approved ten (`Tunic #5F7A6A`), which
+  closes "the reference looks warmer" as an artifact of the single dim frame it was asked about;
+- **re-measure every proportion below against `dwarf-ortho/front.png` and `side-left.png` before
+  trusting it.**
+
+Measure the ART, not the sheet's annotations — at least one is incoherent (its front view labels the
+dwarf's own height `0.6x dwarf height`).
+
+**Secondary: `src-assets/references/dwarf-frames/`, not t=10 s.** Added 2026-09-11 after
 round 4: every proportion in this sheet was measured from ONE frame, t=10 s, because that is what an
 `fps=1` sample handed me — and it is among the worst frames in the file. The video holds 240 frames
 including brightly-lit near-front and **near-pure side** views. `f088` is the depth authority (every
