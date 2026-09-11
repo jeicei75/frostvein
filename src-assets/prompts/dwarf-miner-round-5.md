@@ -70,12 +70,42 @@ them and go:
 If any inherited piece genuinely blocks you, say so in the report and work around it — but the
 default is reuse, and time spent rebuilding solved scaffolding is time not spent on form.
 
-## Step 0 — RE-MEASURE and record it, then keep going
+## Author INSIDE Wolf's running Blender, and get geometry on screen within minutes
 
-**Measure first and put the table in your report. Do not wait for it to be approved.**
+**Two corrections, added 30 minutes into the first attempt because Wolf was watching an empty
+viewport: *"30mins and it builds with python... nothing on screen"*. Both are mine.**
+
+1. **Never author in a `blender --background` subprocess.** Every geometry call goes through the MCP
+   addon into the instance Wolf has open, so the viewport fills as you work. Only the final export
+   may run headless. Round 3 ran entirely headless and Wolf watched nothing happen for a whole
+   session; round 4's own report (section 9.9) found the same gravity pulling it back toward a
+   generator.
+2. **Do not measure everything before building anything.** The instruction below used to be a
+   geometry-free prologue, and combined with "do not stop and ask" it means nothing appears for a
+   long time. **Interleave instead:**
+   - measure the FRONT view only — heights, widths, the head-against-shoulder ratio;
+   - **block the whole figure out immediately** from those numbers, so a recognisable dwarf stands
+     in the viewport within the first few minutes;
+   - then measure each part's DEPTH off `side-left.png` as you come to that part, and refine it.
+
+   Same measurements, same rigour, but the figure exists early and every later number lands on
+   something visible. If you find yourself thirty minutes in with no boxes, you are doing this
+   wrong.
+
+## Step 0 — measure the FRONT view, block out, then measure depth per part
+
+**Record what you measure in the report as you go. Do not wait for any of it to be approved.**
 
 Measure from `src-assets/references/dwarf-ortho/` (5x nearest-neighbour crops of the sheet, so every
-source pixel is a countable 5x5 block — read its README first):
+source pixel is a countable 5x5 block — read its README first). A note from the first attempt, which
+was right: the crops are blown up from a JPEG, so a nearest-cell colour classifier is noisy on the
+compression blends. **Work at source resolution and read the views as an ASCII map** — for a
+box-modelled asset that is a better instrument than any classifier, because it makes the structure
+countable instead of inferred, and a wrong map looks wrong. Trust the interior blocks more than the
+silhouette edge, where the ringing is worst, and cross-check ambiguous depth against the sheet's
+four 3/4 poses.
+
+The views:
 
 - `front.png` — front proportions, the face, **shoulder width against head width**
 - `side-left.png` — **every depth dimension**: head and beard projection, torso depth, pack
