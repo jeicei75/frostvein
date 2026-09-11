@@ -2050,10 +2050,13 @@ development_status:
   10-9-the-land-reads-natural: done
                           # DONE 2026-09-11 at the closing sitting: Wolf signed off the `df0f722`
                           # frame ("cool ... I think we are done with the story"), which met AC12 --
-                          # the last AC outstanding. PR #91 was OPEN AND UNMERGED when this was
-                          # written; the merge is Wolf's, and whoever sees it land should record the
-                          # merge commit here and re-check `git merge-base --is-ancestor`, because
-                          # a merge mid-session lands the working copy on main.
+                          # the last AC outstanding. MERGED 2026-09-11 06:09Z as PR #91, merge
+                          # commit `6e5f472`; `origin/main` is `6e5f472` and `git merge-base
+                          # --is-ancestor ab6e7d7 origin/main` passes, so the story tip really is in
+                          # main. The merge landed the working copy on `main` mid-session for the
+                          # SIXTH time -- this record was written from a `10-9-closure` branch off
+                          # main for that reason. Nothing was stacked on #91, so no base pointer
+                          # needed retargeting.
                           # TWO RULINGS CAME OUT OF THE SITTING, both on the card. Ruling 2 (the
                           # lake does not read as ice): "keep the lake don't touch it" -- accepted
                           # as it stands. Ruling 3 (the scour lattice): the patches read as
