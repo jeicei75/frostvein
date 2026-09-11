@@ -122,7 +122,13 @@ The views:
   projection, boot length forward
 - `side-right.png` — cross-check, and the lantern arm
 - `back.png` — the back, pack straps and flap
-- `gear.png` — pickaxe **0.83x dwarf height**, lantern **0.33x**, from the sheet's own labels
+- `gear.png` — the gear. **CORRECTED after round 5: measure the gear AS DRAWN, not from the
+  labels.** This brief told round 5 to take the proportions from the sheet's own labels, which
+  contradicted the ortho README's own warning not to trust them, and the labels are wrong: the
+  breakdown says the pickaxe is 0.83 H when the figure draws it at **~1.04 H**, and says the head
+  span is 0.89 of its length when the drawing shows **~0.54**; the lantern is labelled 0.33 H and
+  drawn at **0.26 H**. Round 5 followed the labels and its pickaxe is the weakest part of the figure
+  as a direct result. Measure the art.
 
 Record a table of proportions as fractions of dwarf height in the report, the way
 `src-assets/references/dwarf-model-sheet.md` does — **and treat that file as PROVISIONAL. Every
@@ -178,10 +184,10 @@ the video hid them:
   image datablock names. Never write to `assets/gltf/`.
 - **Parts as separate objects in the `.blend`**, joined into one mesh by `export_dwarf.py`. The
   beard and hair must lift off and leave a complete head underneath.
-- **The palette is an input:** the approved ten cells, which the reference sheet's own swatches
-  confirm (`Tunic #5F7A6A`). 16 cells is the enforced ceiling, so **6 spare slots** — propose which
-  value steps earn them as parts need them. Do not re-derive colour, and do not sample it from the
-  video.
+- **The palette is an input:** the fifteen cells listed above, inherited from round 4. 16 is the
+  enforced ceiling, so **ONE slot is spare, not six** — corrected after round 5 caught the
+  arithmetic: an earlier line here said six, which was true only before round 4's five value steps
+  were inherited. Do not re-derive colour, and do not sample it from the video.
 
 ## Three corrections to the documents you were given
 
