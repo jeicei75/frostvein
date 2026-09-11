@@ -160,6 +160,16 @@ script exports it. Two consequences, both stated plainly because one of them is 
   joint nodes. That is the contract not having caught up. Report the failure text verbatim; do not
   loosen the checker and do not strip the skin to make it pass.
 
+## When the model sheet and the reference disagree, the REFERENCE wins — and say so
+
+`src-assets/references/dwarf-model-sheet.md` is derived, measured by the orchestrator off a dark
+compressed video, and it has already been wrong once: its headline check compared the head's
+shoulder line against a width measure and would have had you cut a beard that the reference gives to
+the belt. **Step 1 caught that by measuring the reference instead of obeying the sheet, and that is
+exactly the right behaviour.** Do it again whenever they conflict: measure, follow the reference,
+and report the conflict with your numbers. A sheet that survives contact because nobody checked it
+is worse than no sheet.
+
 ## The references — TWO of them, with different jobs, and neither of them decides
 
 Round 3's brief said "the video, not the contact sheet". That was about the quality target and it
@@ -174,12 +184,18 @@ different questions.
   beside your renders. What to take: chunky voxels, big value steps inside one material, detail in
   the silhouette, rigid posed limbs, a lantern that reads as the brightest thing on the character.
 
-**THE PALETTE IS AN INPUT, NOT WORK. Inherit r3's 23 cells as they are.** Ruled by Wolf
-2026-09-11 — the approved palette stands until Epic 11's lighting is finished, and r3's value-step
-expansion is the one aesthetic ask that landed, so it is handed to you rather than asked of you.
-Take the cell list from `src-assets/references/dwarf-model-sheet.md`, keep each cell's MEANING fixed
-by its coordinate, and spend none of this round re-deriving colour. If a cell seems wrong, say so
-and leave it.
+**THE PALETTE IS AN INPUT, NOT WORK — the 10 approved cells, with 6 spare slots.** Ruled by Wolf
+2026-09-11: the approved palette stands until Epic 11's lighting is finished, so spend none of this
+round re-deriving colour, and keep each cell's MEANING fixed by its coordinate.
+
+**Corrected after step 1, because an earlier version of this line said "inherit r3's 23 cells" and
+that was not reachable from this branch.** Round 4 branches off `main`, where the shipped asset has
+the 10 approved cells and the generator has none of r3's 13 value steps — those live on
+`dwarf-round-3-brief`. And the contract as ENFORCED allows only 16 cells (`check_asset.py` fixes
+16 px cells in a 64 px atlas), so 23 was never available: r3's 8 px atlas passed only because that
+clause reads 4 of 23 cells, which is a filed bug on the orchestrator's side. So: **build on the 10,
+and when a part needs a value step, propose which of the 13 in the model sheet earns one of the 6
+spare slots.**
 
 The ten approved cells underneath them are
 `#E9D2BB` skin, `#5E4632`, `#FFFFFF`, `#5F7A6A` tunic, `#474B41`, `#A9B2AC` metal, `#8B6B50` wood,
