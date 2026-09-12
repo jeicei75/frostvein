@@ -22,8 +22,10 @@ one object:
   * the figure is centred in Blender X and Y and set to min Z = 0, which after the
     Z-up -> Y-up conversion is the contract's "min Y = 0, centred in X and Z";
   * sockets, cameras and lights never reach the GLB;
-  * every face is flat-shaded and planar -- rotated boxes are allowed since
-    2026-09-11, curved or smoothed surfaces are not;
+  * the mesh is fit to rig and ship -- no n-gons, manifold, no loose or degenerate
+    geometry, consistent winding, UVs present, no unapplied modifiers, and at most
+    TRI_BUDGET triangles. The style clauses (axis-aligned, then flat-and-planar) were
+    both lifted by Wolf on 2026-09-12: shading and curvature are the artist's call;
   * the object and mesh datablocks carry the revision, so a stale binary announces
     itself. The revision lives in the datablock names INSIDE the .blend, not in any
     filename -- there is exactly one place to bump it.
@@ -32,15 +34,17 @@ one object:
 import os
 import sys
 
+import bmesh
 import bpy
 from mathutils import Vector
 
-REV = "r6"        # each round bumps this, and it is the ONLY line to change here
+REV = "r7"        # each round bumps this, and it is the ONLY line to change here
 ASSET = "SM_VoxelDwarf_Miner01"
 COLLECTION = f"{ASSET}_{REV}"
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "export")
 OUT_PATH = os.path.join(OUT_DIR, f"{ASSET}.glb")
-PLANAR_EPS_M = 1e-5   # a face whose corners stray this far from its own plane is not flat
+TRI_BUDGET = 4000     # LOD0 ceiling, a build gate since round 7
+AREA_EPS_M2 = 1e-10   # a face smaller than this is degenerate, not geometry
 
 
 def parts():
@@ -94,33 +98,67 @@ def seat_on_origin(ob):
     return lo + shift, hi + shift
 
 
-def check_flat_and_planar(ob, originals):
-    """The look's mechanical guarantee, after the rotated-box ruling of 2026-09-11.
+def triangles(ob):
+    """The REAL triangle count, from Blender's own triangulation.
 
-    Rotation is NOT what reads as blocky -- hard edges and flat faces are, and a box
-    tilted 30 degrees has both. So the axis-aligned test this replaces is gone and
-    what stays is the clause that actually guards the style: every face flat-shaded,
-    every face planar, no averaged normals, no modifier that could curve or smooth
-    anything. A box model needs no modifiers at all, so any modifier fails the build.
-
-    check_asset.py's PROJECT_GRID_METRES clause still asserts every position sits on
-    the authored lattice and a box model FAILS it by design -- expected and reported,
-    not worked around.
+    This was `len(polygons) * 2`, which assumes every face is a quad. That was true
+    while the model was boxes and silently under-reports the moment topology is mixed
+    -- which is exactly when a triangle budget starts mattering. Round 7 makes the
+    budget a build gate, so the count has to be the one the GLB will carry.
     """
-    smooth = sum(1 for poly in ob.data.polygons if poly.use_smooth)
+    ob.data.calc_loop_triangles()
+    return len(ob.data.loop_triangles)
 
-    nonplanar = 0
-    for poly in ob.data.polygons:
-        if poly.loop_total < 4:
-            continue                      # a triangle is planar by definition
-        verts = [ob.data.vertices[i].co for i in poly.vertices]
-        origin, normal = verts[0], poly.normal
-        if max(abs((v - origin).dot(normal)) for v in verts[1:]) > PLANAR_EPS_M:
-            nonplanar += 1
 
-    split = 1 if ob.data.has_custom_normals else 0
-    modified = sum(len(o.modifiers) for o in originals)
-    return smooth, nonplanar, split, modified
+def check_topology(ob, originals):
+    """The game-mesh guarantee that replaced the style clauses on 2026-09-12.
+
+    Wolf's ruling lifted flat faces, flat shading, bevels, subdivision and smooth
+    normals -- none of them is tested any more, and rotation never was the thing that
+    guarded the look. What stays is what a mesh needs in order to be rigged, skinned
+    and shipped, plus the triangle budget.
+
+    Deliberately NOT tested, because no cheap test is honest: interior geometry, and
+    UV island overlap. Both are review items, judged by eye. A gate that cannot
+    actually detect its subject is worse than no gate -- it certifies.
+    """
+    me = ob.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+
+    ngons = sum(1 for f in bm.faces if len(f.verts) > 4)
+    loose_verts = sum(1 for v in bm.verts if not v.link_edges)
+    loose_edges = sum(1 for e in bm.edges if not e.link_faces)
+    nonmanifold = sum(1 for e in bm.edges if len(e.link_faces) > 2)
+    degenerate = sum(1 for f in bm.faces if f.calc_area() < AREA_EPS_M2)
+
+    # Two faces sharing an edge must traverse it in OPPOSITE directions. If they
+    # traverse it the same way, one of them is wound backwards.
+    flipped = 0
+    for e in bm.edges:
+        if len(e.link_faces) != 2:
+            continue
+        walked = []
+        for f in e.link_faces:
+            for lp in f.loops:
+                if lp.edge is e:
+                    walked.append((lp.vert.index, lp.link_loop_next.vert.index))
+                    break
+        if len(walked) == 2 and walked[0] == walked[1]:
+            flipped += 1
+
+    bm.free()
+
+    return {
+        "n-gons": ngons,
+        "non-manifold edges": nonmanifold,
+        "loose verts": loose_verts,
+        "loose edges": loose_edges,
+        "degenerate faces": degenerate,
+        "flipped winding": flipped,
+        "missing UV layer": 0 if me.uv_layers else 1,
+        "unapplied modifiers": sum(len(o.modifiers) for o in originals),
+    }
 
 
 def main():
@@ -141,7 +179,8 @@ def main():
 
     joined = flatten(originals)
     lo, hi = seat_on_origin(joined)
-    smooth, nonplanar, split, modified = check_flat_and_planar(joined, originals)
+    topology = check_topology(joined, originals)
+    tris = triangles(joined)
 
     materials = {slot.material for slot in joined.material_slots if slot.material}
     images = {n.image for m in materials if m.use_nodes
@@ -174,17 +213,22 @@ def main():
     print("  parts joined      %d -> 1 mesh %r" % (len(originals), joined.data.name))
     print("  object / mesh     %s / %s" % (joined.name, joined.data.name))
     print("  materials         %s" % ", ".join(sorted(m.name for m in materials)))
-    print("  palette image     %s" % ", ".join(sorted(i.name for i in images)))
-    print("  triangles         %d" % (len(joined.data.polygons) * 2))
+    print("  texture image     %s" % ", ".join(sorted(i.name for i in images)))
+    print("  triangles         %d  of %d budget" % (tris, TRI_BUDGET))
     print("  size m (X,Y,Z)    %.3f x %.3f x %.3f" % size)
     print("  blender min Z     %.6f   (glTF min Y)" % lo.z)
     print("  blender centre XY %.6f, %.6f   (glTF centre X, Z)"
           % ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0))
-    print("  smooth-shaded     %d   non-planar %d   custom normals %d   modifiers %d"
-          % (smooth, nonplanar, split, modified))
+    print("  topology          %s"
+          % "   ".join("%s %d" % (k, v) for k, v in topology.items()))
     print("  bytes             %d" % os.path.getsize(OUT_PATH))
-    if smooth or nonplanar or split or modified:
-        raise SystemExit("export: flat-and-planar invariant violated")
+
+    broken = {k: v for k, v in topology.items() if v}
+    if broken:
+        raise SystemExit("export: topology gate failed -- %s"
+                         % ", ".join("%s %d" % (k, v) for k, v in broken.items()))
+    if tris > TRI_BUDGET:
+        raise SystemExit("export: %d triangles exceeds the %d budget" % (tris, TRI_BUDGET))
 
 
 if __name__ == "__main__":
