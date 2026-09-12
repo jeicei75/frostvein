@@ -144,6 +144,31 @@ each found real defects this way; three of them are listed above.
   `r7_head`, `r7_brow_L`, `r7_beard_lower`.
 - **Edit the objects in the scene.** A full wipe-and-rebuild is allowed but is the exception:
   announce it in the report, with the reason, each time.
+
+**MODEL FIRST, SCRIPT LATER — and this round there is NO GENERATOR SCRIPT.** Wolf's call,
+2026-09-12. Rounds 4 and 5 both reported the same gravity pulling the session back toward a builder
+script, and round 5 ended up re-running one that wiped and rebuilt the whole figure in forty seconds
+from a spec file. That is fast, unwatchable, and it makes the `.blend` disposable.
+
+- **The `.blend` IS the deliverable.** It accumulates. Do not write a `dwarf_r7.py` that rebuilds the
+  figure, and do not keep the part specs in a file as the real source with the scene as its output.
+- **To be explicit, because the MCP addon runs Python either way:** this is not a ban on the addon,
+  which is the only way you can reach the scene at all. It is a ban on the *artifact* — **each call
+  performs one modelling operation on the live scene**, rather than defining or re-running a builder.
+- **Why:** a generator makes you think in loops and parameters, which produces uniform, symmetric,
+  procedural form — and "flat blocky stick" has been the verdict since round 4. The features this
+  round is judged on are hand-placed and asymmetric. The texture map is hand-painted and could never
+  be generated anyway.
+- **The byte-identical cold-run regeneration rule died at round 4** and does not come back. The
+  finishing condition is that the export is repeatable from the committed `.blend`.
+
+**The one thing you must NOT defer, because it is expensive to retrofit and free to do now: the part
+decomposition.** The project's endpoint is *hand-author the parts, generate the COMBINATIONS* — a
+dwarf stored as a seed, roughly twelve discrete axes plus four continuous dials. That layer scripts
+**parts**, never vertices, so it needs nothing from a generator — but it does need every swappable
+feature to be **its own named object** from the start: beard, hair, hat/hood, pack, belt, boots,
+tunic, tools. Build them separate and named and the combination layer is trivial later. Build them
+welded into one torso and it is a rebuild.
 - **Save the `.blend` after every part**, and write a progress render per part. Four of six delegated
   runs in this project have been killed by the harness; the saves are the crash insurance.
 - **Do not stop and wait for approval.** Work through to a complete figure and deliver. Watchable and
@@ -235,3 +260,8 @@ Lighting for the game is Epic 11's. The rig and the pose are next round. Decimat
 after the look is signed off. **The endpoint this builds toward** is unchanged: hand-author the
 parts, generate the combinations — a dwarf stored as a seed, expressible as a part list plus a
 table of hexes.
+
+**Making that combination layer work in Python is a SEPARATE task, after the look is signed off.**
+It is not deferred by accident and it is not yours to start. All this round owes it is the part
+decomposition in §5 — separate, named objects — which costs nothing to do while modelling and is a
+rebuild to add afterwards. Do not shape the geometry around an imagined variant system beyond that.
