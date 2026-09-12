@@ -333,8 +333,28 @@ props.
 1. **>= 10 silhouette steps per 100 rows** on both the front and the side view.
 2. **Neither edge below 70 % of the other** on the same view.
 
-There is no triangle budget this round, and r5 spent 1,214 against an eventual LOD0 ceiling of
+There is no triangle budget this round, and r5 spent 1,116 against an eventual LOD0 ceiling of
 4,000 — so the headroom for this exists three times over. Spend it on steps, not on smoothness.
+
+## Check 5 — THE NECK IS BARE IN PROFILE
+
+Added 2026-09-12, on Wolf's *"neck is visible on side view of reference images"*, because round 5
+built a neck that no view can see and reported the sheet as having none.
+
+Measured on `dwarf-ortho/side-left.png` and `side-right.png`, which agree to the row: a bare skin
+column from **z/H 0.793 down to 0.679** — **0.121 H of visible neck**, up to **0.064 H wide**,
+landing on the collar just below the shoulder line (0.700). The hair falls **either side of it**
+rather than over it. From the front the beard covers it, which is why four rounds of front-view
+measurement missed it.
+
+**The target:** on our own `dwarf-flat-side-left.png` and `dwarf-flat-side-right.png`, a run of skin
+pixels at least **0.08 H tall** must be visible between the hair and the collar, in **both** side
+views. Measure it the way the reference was measured — classify to nearest palette cell, walk the
+rows, take the longest contiguous run.
+
+**This is a geometry clause, not a beard clause.** The lever is where the HAIR falls, not how wide
+the beard is: the reference keeps a full beard AND a bare neck by parting the hair around the neck.
+Do not narrow the beard to chase this.
 
 ## What round 4 is checked against
 

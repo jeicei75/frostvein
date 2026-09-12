@@ -19,15 +19,24 @@ interpolation, so every original pixel is a clean 5x5 block you can count.
 | `side-left.png` | **every depth (Y) dimension** — head and beard projection, torso depth, the pack, boot length forward. Round 4 estimated all of it |
 | `side-right.png` | cross-check for the left side, and the lantern arm |
 | `back.png` | the back, the pack's straps and flap — **previously invented outright** |
-| `gear.png` | the pickaxe and lantern, with the sheet's own proportions: **pickaxe 0.83x dwarf height, lantern 0.33x** |
+| `gear.png` | the pickaxe and lantern — **measure them AS DRAWN. The breakdown's labels are wrong** and round 5 followed them, which is why its pickaxe is the weakest part of that figure. Measured off the art: pickaxe **~1.04 H** (labelled 0.83), head span **~0.54** of its length (labelled 0.89), lantern **0.26 H** (labelled 0.33) |
 
 ## What the sheet settles that four rounds of video measurement could not
 
 - **The head is not a box.** The crown is **stepped and domed**, visible in both side views — it
-  steps in at the front and the back. Within "no rotated boxes" this is reachable by stepping the
-  crown with two or three smaller boxes.
-- **There is a neck**, and **there are shoulder caps** — the sleeve sits on the shoulder and the
-  torso is wider at the top than at the waist.
+  steps in at the front and the back. Step it with several smaller boxes, and since 2026-09-11
+  those boxes may also be **rotated** (see the ruling in the round brief): the axis-aligned clause
+  is gone, flat shading is what stays.
+- **There is a neck, and IT IS BARE IN BOTH SIDE VIEWS.** Wolf, 2026-09-12: *"neck is visible on
+  side view of reference images"* — measured, and the two side views agree to the row: a skin column
+  running **z/H 0.793 down to 0.679**, so **0.121 H of visible neck** (17 source px), up to **9
+  source px wide (0.064 H)**. The hair does not cover it — **it falls either side of it**, and the
+  column lands on the collar just below the shoulder line (0.700). Round 5's report (§9.2) read the
+  sheet as hiding the neck in all four views and built one that is covered from every angle; that
+  reading is **wrong for the side views** and this line supersedes it. Covered by the beard in
+  front, bare in profile.
+- **There are shoulder caps** — the sleeve sits on the shoulder and the torso is wider at the top
+  than at the waist.
 - **The body has real depth.** The side silhouette is a deep torso with a forward-projecting nose,
   brow and beard, not a flat slab.
 - **The boots are long forward.** In profile the boot projects well past the shin — which is the
