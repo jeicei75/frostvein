@@ -22,6 +22,8 @@ one object:
   * the figure is centred in Blender X and Y and set to min Z = 0, which after the
     Z-up -> Y-up conversion is the contract's "min Y = 0, centred in X and Z";
   * sockets, cameras and lights never reach the GLB;
+  * every face is flat-shaded and planar -- rotated boxes are allowed since
+    2026-09-11, curved or smoothed surfaces are not;
   * the object and mesh datablocks carry the revision, so a stale binary announces
     itself. The revision lives in the datablock names INSIDE the .blend, not in any
     filename -- there is exactly one place to bump it.
@@ -33,11 +35,12 @@ import sys
 import bpy
 from mathutils import Vector
 
-REV = "r5"        # round 5: the ONLY line this round changed in this file
+REV = "r6"        # each round bumps this, and it is the ONLY line to change here
 ASSET = "SM_VoxelDwarf_Miner01"
 COLLECTION = f"{ASSET}_{REV}"
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "export")
 OUT_PATH = os.path.join(OUT_DIR, f"{ASSET}.glb")
+PLANAR_EPS_M = 1e-5   # a face whose corners stray this far from its own plane is not flat
 
 
 def parts():
@@ -91,22 +94,33 @@ def seat_on_origin(ob):
     return lo + shift, hi + shift
 
 
-def check_axis_aligned(ob):
-    """The look's mechanical guarantee: every face normal is exactly +/-X, +/-Y or +/-Z.
+def check_flat_and_planar(ob, originals):
+    """The look's mechanical guarantee, after the rotated-box ruling of 2026-09-11.
 
-    This is what replaces the grid clause for a box model. check_asset.py's
-    PROJECT_GRID_METRES clause asserts every position sits on the authored lattice and
-    a box model FAILS it by design -- that is expected and reported, not worked around.
+    Rotation is NOT what reads as blocky -- hard edges and flat faces are, and a box
+    tilted 30 degrees has both. So the axis-aligned test this replaces is gone and
+    what stays is the clause that actually guards the style: every face flat-shaded,
+    every face planar, no averaged normals, no modifier that could curve or smooth
+    anything. A box model needs no modifiers at all, so any modifier fails the build.
+
+    check_asset.py's PROJECT_GRID_METRES clause still asserts every position sits on
+    the authored lattice and a box model FAILS it by design -- expected and reported,
+    not worked around.
     """
-    bad = 0
-    smooth = 0
+    smooth = sum(1 for poly in ob.data.polygons if poly.use_smooth)
+
+    nonplanar = 0
     for poly in ob.data.polygons:
-        axes = sorted(abs(c) for c in poly.normal)
-        if not (axes[2] > 0.999_999 and axes[1] < 1e-6):
-            bad += 1
-        if poly.use_smooth:
-            smooth += 1
-    return bad, smooth
+        if poly.loop_total < 4:
+            continue                      # a triangle is planar by definition
+        verts = [ob.data.vertices[i].co for i in poly.vertices]
+        origin, normal = verts[0], poly.normal
+        if max(abs((v - origin).dot(normal)) for v in verts[1:]) > PLANAR_EPS_M:
+            nonplanar += 1
+
+    split = 1 if ob.data.has_custom_normals else 0
+    modified = sum(len(o.modifiers) for o in originals)
+    return smooth, nonplanar, split, modified
 
 
 def main():
@@ -127,7 +141,7 @@ def main():
 
     joined = flatten(originals)
     lo, hi = seat_on_origin(joined)
-    bad, smooth = check_axis_aligned(joined)
+    smooth, nonplanar, split, modified = check_flat_and_planar(joined, originals)
 
     materials = {slot.material for slot in joined.material_slots if slot.material}
     images = {n.image for m in materials if m.use_nodes
@@ -166,10 +180,11 @@ def main():
     print("  blender min Z     %.6f   (glTF min Y)" % lo.z)
     print("  blender centre XY %.6f, %.6f   (glTF centre X, Z)"
           % ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0))
-    print("  non-axis-aligned  %d   smooth-shaded %d" % (bad, smooth))
+    print("  smooth-shaded     %d   non-planar %d   custom normals %d   modifiers %d"
+          % (smooth, nonplanar, split, modified))
     print("  bytes             %d" % os.path.getsize(OUT_PATH))
-    if bad or smooth:
-        raise SystemExit("export: axis-aligned/flat-shading invariant violated")
+    if smooth or nonplanar or split or modified:
+        raise SystemExit("export: flat-and-planar invariant violated")
 
 
 if __name__ == "__main__":
