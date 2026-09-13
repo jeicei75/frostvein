@@ -49,7 +49,7 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
-REV = "r8"        # each round bumps this, and it is the ONLY line to change here
+REV = "r9"        # each round bumps this, and it is the ONLY line to change here
 ASSET = "SM_VoxelDwarf_Miner01"
 COLLECTION = f"{ASSET}_{REV}"
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "export")
