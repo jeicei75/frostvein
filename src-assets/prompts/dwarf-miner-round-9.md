@@ -50,9 +50,43 @@ previous one reads right.**
   neck and head, out into shoulders and arms, down into hips and legs. **Use a Mirror modifier and
   model one half** — see §4, mirrors may now stay live.
 - **No features at all.** No brow, no nose, no hem, no buckle. Masses only.
+- **BUILD IT IN THE BIND POSE — arms out at roughly 40 degrees from the body, not hanging at the
+  sides.** See §2.0 below; this is the one place where the figure must NOT match the sheet.
 - **Target 200–500 triangles for the whole block-out**, then stop and render it from front, side,
-  three-quarter and back against the planes. **The silhouette is the deliverable of this stage.**
-  If it is wrong here, nothing added later fixes it.
+  three-quarter and back against the planes. **The silhouette is the deliverable of this stage**,
+  arms excepted. If it is wrong here, nothing added later fixes it.
+
+### Stage 2.0 — the bind pose, and why the reference must be disobeyed here
+
+**The figure is modelled in an A-pose: arms held out at roughly 40 degrees from the body, with a
+real gap at the armpit.** Wolf's call, 2026-09-13, and it is the standard bind pose for a character
+that will be rigged. **The orthographic sheet draws a POSE** — arms down, the pick carried across
+the body — and this brief has otherwise told you to follow the sheet, so this exception is stated
+explicitly: **do not close the arms to match `front.png`.**
+
+Measured on r8, which is what happens if you do: its arm's inboard face sits at **|x| = 0.192**,
+which is *exactly* the torso's half-width — **zero armpit clearance**, coplanar with the torso
+surface, and already intersecting the overtunic and the belt by 6–7 mm. The consequences are all
+real:
+
+- **coincident coplanar faces between two objects shimmer** in the game (z-fighting), and they are
+  a seam that no topology gate catches, because the two surfaces belong to different objects;
+- **the arm cannot rotate** without sweeping through the tunic and the belt;
+- it is the hardest possible case for the buried-face cull, which round 8 already had to re-scope by
+  joint after it ate a hand.
+
+So: **≥ 20 mm of clear air at the armpit** in the bind pose, and the shoulder mass shaped so the arm
+leaves it cleanly. Hands hang relaxed, palms roughly facing the thighs.
+
+**The consequences for the rest of the round, so they are not surprises:**
+
+- **Stage 1–3 silhouette comparisons will not match the sheet at the arms.** That is expected. Judge
+  the torso, head, skirt and boots against the sheet; judge the arms on clearance and form.
+- **The props follow the bind pose.** The pickaxe and lantern sit where a neutral hand holds them,
+  not across the chest. **The two-handed carry is a POSE**, delivered as a render after the rig
+  exists (stage 6), and that is where the figure is finally compared to the reference arm position.
+- A T-pose (arms horizontal) is not wanted: it distorts the shoulder mass and makes the sheet
+  comparison useless for the upper body. 40 degrees is the compromise.
 
 ### Stage 2 — the form pass: loops, taper, round
 
@@ -254,6 +288,8 @@ By Wolf's eye against `f088` — **does it read as a model rather than as layers
 - **the horizontal banding is gone**: no stacked-plate crown, no chest band, no skirt bands
 - **under 70 % horizontal edge length overall, no mass above 80 %**
 - **the side profile matches `side-left.png`**; no mass is a constant-depth extrusion
+- **the figure is in the bind pose with ≥ 20 mm of armpit clearance**, and the reference arm
+  position is shown by a posed render rather than by the mesh
 - the export passes every gate, `check_asset.py` exits 0, the rig gate reads 19 / 0 / 0 / 0
 - the posed renders show no tearing at any joint, and every feature still reads at 60 px
 - nothing written outside `src-assets/`, and no git command run
