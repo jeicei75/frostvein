@@ -230,15 +230,19 @@ One command, from the repo root:
 carries `r10`: object, mesh, material, image, armature. **Until that collection exists the export
 exits with `collection ... not found`, which is expected — do not edit `REV`.**
 
-**THE FILE YOU OPEN IS EMPTY, AND THAT IS DELIBERATE.** `SM_VoxelDwarf_Miner01.blend` has been saved
-over with an empty scene for this round. Rounds 5 to 9 accumulated inside it, and round 9's own brief
-told the seat to *copy the previous collection and rework the copy* — which is the opposite of what
-this round is for. **There is nothing to copy, and you must not go looking: do not import, append or
+**THE FILE YOU OPEN IS EMPTY, AND THAT IS DELIBERATE.** `SM_VoxelDwarf_Miner01.blend` is saved over
+with an empty scene before this round is handed to you. Rounds 5 to 9 accumulated inside it, and
+round 9's own brief told the seat to *copy the previous collection and rework the copy* — which is
+the opposite of what this round is for. **There is nothing to copy, and you must not go looking: do not import, append or
 link geometry from any other file, and do not recover an earlier revision from git.** The earlier
 revisions are in the repository's history if a human ever needs them; they are not an input to you.
 
-If you find yourself with a previous figure in the scene, stop and say so in the report — it means
-the wrong file was opened, and building on it would invalidate the whole point of this round.
+If you find yourself with a previous figure in the scene, **stop and say so** — either the wrong
+file was opened or the empty save was missed, and building on it would invalidate the whole point of
+this round. Report the live scene's contents first (§8) and that check costs you nothing.
+
+**You will also be rebuilding the scaffolding, and that is expected**: the reference image planes,
+your render cameras, and any socket empties. Round 9's file had them; the empty one does not.
 
 **Live modifiers are allowed.** Mirror, Subdivision and Bevel may stay live and are applied on the
 way out; the exporter measures the **evaluated** mesh, so the triangle count and the topology gates
