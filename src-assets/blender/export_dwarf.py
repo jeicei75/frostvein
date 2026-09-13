@@ -50,7 +50,7 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
-REV = "r11"        # each round bumps this, and it is the ONLY line to change here
+REV = "r12"        # each round bumps this, and it is the ONLY line to change here
 ASSET = "SM_VoxelDwarf_Miner01"
 COLLECTION = f"{ASSET}_{REV}"
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "export")
@@ -460,6 +460,47 @@ def inside_out(originals):
     return wrong, open_shells
 
 
+def form_planes(originals, joined):
+    """Planes of FORM, which is what a subdivision cannot add.
+
+    Round 11 met the spec's resolution floor -- every mass at 16-23 mm median face edge -- by
+    putting a SIMPLE subdivision on a 269-face cage. SIMPLE subdivision splits each face into four
+    WITHOUT MOVING ANY VERTEX, so it is shape-preserving: measured on all ten of its masses, the
+    evaluated volume equals the cage volume to 0.00 %. The figure was 269 faces of form wearing
+    25,248 triangles, and its face region had SEVEN cage faces. That is my metric's fault, not the
+    seat's: median face edge is satisfiable by dividing a featureless cage, and the seat hit the
+    number honestly and said so in its report.
+
+    Distinct face normals cannot be faked that way. A subdivided flat face contributes ONE normal
+    however many pieces it is cut into, so this counts changes of direction in the surface -- which
+    is what a viewer reads as detail. Measured across three revisions:
+
+        r9   5,530 faces, 2,251 planes   -- coarse but the form Wolf liked
+        r10 13,592 faces, 3,374 planes   -- the most detailed figure so far
+        r11 12,624 faces,   374 planes   -- "solid" and nearly featureless
+
+    The gate is set at 1,200, well below r9's 2,251, because its job is to catch a figure with no
+    form in it rather than to become a target to tune against. Normals are bucketed at ~1 degree,
+    so vertex noise would have to be visible before it could inflate this.
+    """
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    cage = 0
+    for ob in originals:
+        mirrored = 2 if any(m.type == 'MIRROR' for m in ob.modifiers) else 1
+        cage += len(ob.data.polygons) * mirrored
+    me = joined.evaluated_get(depsgraph).to_mesh()
+    planes = set()
+    for face in me.polygons:
+        normal = (joined.matrix_world.to_3x3() @ face.normal).normalized()
+        planes.add((round(normal.x, 2), round(normal.y, 2), round(normal.z, 2)))
+    faces = len(me.polygons)
+    joined.to_mesh_clear()
+    return cage, faces, len(planes)
+
+
+FORM_PLANE_FLOOR = 1200
+
+
 def glb_facts(path):
     """What the written GLB actually carries: its image names, and its skin's joint names.
 
@@ -516,6 +557,7 @@ def main():
     modifiers = modifier_summary(originals)
     tris = triangles(joined)
     boundary, exposed = exposed_holes(joined)
+    cage_faces, eval_faces, planes = form_planes(originals, joined)
 
     # Re-bind the skin the join threw away, and move the skeleton by the SAME shift the vertices
     # took. `seat_on_origin` edits vertex coordinates; bones live in the armature, so without
@@ -587,6 +629,9 @@ def main():
           % ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0))
     print("  topology          %s"
           % "   ".join("%s %d" % (k, v) for k, v in topology.items()))
+    print("  form              %d planes of form, from %d cage faces -> %d faces (x%.1f)"
+          % (planes, cage_faces, eval_faces,
+             eval_faces / cage_faces if cage_faces else 0.0))
     print("  holes             %d boundary edges, %d EXPOSED to the outside"
           % (boundary, exposed))
     print("  inside-out masses %s   (%d open shell%s not judged: %s)"
@@ -646,6 +691,13 @@ def main():
             "not resolve on this machine; pack it into the .blend (File > External Data > Pack "
             "Resources) so the source reproduces the export anywhere." % len(images))
 
+    if planes < FORM_PLANE_FLOOR:
+        raise SystemExit(
+            "export: only %d distinct planes of form (floor %d). The figure has %d faces, so the "
+            "geometry is there -- what is missing is CHANGES OF DIRECTION in the surface. A SIMPLE "
+            "subdivision cannot add one: it splits faces without moving them. Put the detail in "
+            "the cage. For scale: r9 had 2,251 planes from 5,530 faces, r11 had 374 from 12,624."
+            % (planes, FORM_PLANE_FLOOR, eval_faces))
     if inverted:
         raise SystemExit(
             "export: inside-out mass -- %s. The shell faces inward, so with backface culling it "
