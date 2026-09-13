@@ -40,13 +40,13 @@ view layer excluded collections: ['..._r5', '..._r6', '..._r7']
 file; r8 was excluded from the view layer at the start of this round and r9 added beside it.
 
 **The session ran in the GUI throughout.** The only headless runs were `export_dwarf.py` and
-`render_r9.py`, which §8 allows. **No git command was run. Nothing was written outside
+`render_r9.py`, which the brief's §8 allows. **No git command was run. Nothing was written outside
 `src-assets/`.**
 
 **Blender crashed once**, on an `inset_region` applied to the crown's 8-gon cap (progress 67). The
 per-call saves meant the loss was one operation; Wolf restarted the application, I re-installed the
 instrument module and carried on from the saved `.blend`, which I first verified headlessly
-(196 verts, 190 faces, mirror live, bounds intact). That is exactly the insurance §8 asks for, and
+(196 verts, 190 faces, mirror live, bounds intact). That is exactly the insurance the brief's §8 asks for, and
 it is the first time in this project it has been collected.
 
 ---
@@ -61,7 +61,7 @@ it is the first time in this project it has been collected.
 | triangles | 3,955 | **4,328** | ≤ 30,000 |
 
 **The number moved because the construction changed, not because anything was chopped into rings.**
-§7 warns the check can be gamed by chopping a shaft into rings — the opposite happened here. r9 has
+The brief's §7 warns the check can be gamed by chopping a shaft into rings — the opposite happened here. r9 has
 *fewer* horizontal divisions than r8 on every mass that had them: no stacked crown, no chest band,
 no skirt bands. What it has instead is **fourteen columns around every ring of the trunk**, and a
 column is a vertical edge running the full height of its span. The arithmetic follows the form:
@@ -70,7 +70,7 @@ column is a vertical edge running the full height of its span. The arithmetic fo
 > height H. r8's masses were boxes — M = 4 — so every ring added was almost pure horizontal length.
 > At M = 14 the same ring count lands near 60 %, and the mass reads round while it does it.
 
-That is why the profile is the answer and the bevel was not: see §9.1.
+That is why the profile is the answer and the bevel was not: see §7.1.
 
 ---
 
@@ -102,7 +102,7 @@ from inside it.
 
 | z | landmark | w | y | source |
 |---|---|---|---|---|
-| 1.148 | crown dome | 0.074 | −0.076 … +0.094 | §3 dome |
+| 1.148 | crown dome | 0.074 | −0.076 … +0.094 | the dome, below |
 | 1.132 | skull top | 0.112 | −0.116 … +0.140 | front row 15 |
 | 1.100 | upper skull | 0.130 | −0.128 … +0.174 | forehead sloping back |
 | 1.055 | **brow** | 0.137 | −0.131 … **+0.196** | front row 24, side col 89 |
@@ -129,7 +129,7 @@ again as the leg to 0.243 (trouser), 0.197 (boot-cuff line) and 0.145 (inside th
 **The tunic skirt is the trunk's own continuation, not a second shell over it.** There is no
 boundary at the waist to hide and no seam anywhere between the collar and the hem — the flare from
 ±0.190 at the belt to ±0.263 at the hem happens across four rings of one surface. The hem is the
-only ring that crosses the figure below the belt, and §3 keeps it, because the reference draws it.
+only ring that crosses the figure below the belt, and the brief's §3 keeps it, because the reference draws it.
 
 The arm leaves the trunk from the **side flat of the cross-section** (profile points 3–4, which
 span the sleeve's own 0.18 m depth). That is why r9 has no shoulder wedge: the arm's root is
@@ -143,7 +143,7 @@ constant-depth extrusion anywhere: the chest is 0.352 m deep, the waist 0.340, t
 0.302, the brow 0.327 with the nose carrying it to 0.377.
 
 The crown was domed with one more ring at z 1.148. The sleeve's **outer** corners were chamfered
-(0.024 m, two segments) — the silhouette edges §3 asks to bevel. **The inboard pair was left
+(0.024 m, two segments) — the silhouette edges the brief's §3 asks to bevel. **The inboard pair was left
 square**, deliberately: it shares its coordinates with the trunk's own side column to within 3 mm,
 so no predicate can separate them, and it sits in the armpit where it never reads. That is a
 limitation, named.
@@ -236,9 +236,9 @@ r9_straps                      292     488   0.448 x 0.476 x 0.382
 TOTAL                                 4328
 ```
 
-**Ten objects, and the census is the evidence for §10's first clause: `r9_body` is ONE mesh,
+**Ten objects, and the census is the evidence for the brief's §10 first clause: `r9_body` is ONE mesh,
 1,484 triangles, and it carries torso, arms, hands, legs, neck, head, the tunic and skirt and hem,
-and every carved facial feature.** The other nine are exactly §4's list of swappables — hair,
+and every carved facial feature.** The other nine are exactly the brief's §4 list of swappables — hair,
 beard, moustache, belt + buckle, pack + flap + bedroll, straps, lantern, pickaxe, boots — one
 object per unit the combination layer will swap.
 
@@ -261,6 +261,34 @@ the base surface that I would be willing to freeze: the brow band's rim, the nos
 rectangle, the eye inset's outer rim, the ear's loop at the skull's side flat (x = ±0.137), the
 collar's two rings, the cuff's and shoulder piece's arm rings, the overtunic's inset rim, and the
 hem ring at z = 0.248.
+
+**Where each tag actually landed**, read back off the mesh rather than asserted:
+
+| group | verts | x | y | z |
+|---|---|---|---|---|
+| `feature_nose` | 11 | 0.000–0.045 | +0.201–+0.227 | 0.930–1.030 |
+| `feature_brow.R` | 13 | 0.045–0.115 | +0.175–+0.207 | 1.024–1.055 |
+| `feature_eye.R` | 13 | 0.044–0.118 | +0.151–+0.206 | **1.008–1.030** |
+| `feature_cheek.R` | 17 | 0.040–0.120 | +0.149–+0.223 | 0.930–0.985 |
+| `feature_ear.R` | 8 | 0.200–0.205 | −0.012–+0.052 | 0.942–1.016 |
+| `feature_collar` | 46 | 0.000–0.089 | −0.162–+0.141 | 0.845–0.890 |
+| `feature_cuff.R` | 27 | 0.200–0.316 | −0.095–+0.098 | 0.566–0.613 |
+| `feature_shoulder.R` | 18 | 0.279–0.327 | −0.097–+0.097 | 0.788–0.853 |
+| `feature_overtunic` | 21 | 0.000–0.089 | +0.151–+0.176 | 0.505–0.790 |
+| `feature_crown` | 16 | 0.000–0.112 | −0.116–+0.140 | 1.132–1.148 |
+| `feature_hem` | 6 | 0.000–0.118 | −0.180–+0.180 | 0.248 |
+| `helper_arm.R` | 82 | 0.179–0.327 | −0.102–+0.121 | 0.334–0.853 |
+
+**`feature_eye.R` was wrong until this table was built, and §7.7 records why.**
+
+### 4.1 The mesh is mixed quads and triangles
+
+`r9_body`'s cage is **333 quads and 76 triangles**. Every triangle is cleanup: a loop cut that
+enters a sloped band through a horizontal edge and leaves through a slanted one clips a corner and
+leaves a 5-gon on the neighbour, and the gate forbids n-gons but not triangles. They sit on the
+trapezius, the jaw's underside, the bevel ends and the crown. Nothing else in the figure is
+triangulated except the lofted objects' end caps, which are n-gons by construction and triangulated
+on creation.
 
 ---
 
@@ -335,7 +363,7 @@ loops were already in the surface from stage 2 and nothing had to be added for t
 
 **ONE mesh, RIGID weights: `unweighted verts 0, soft-weighted verts 0`**, verified by the exporter
 on the joined mesh. Every vertex carries exactly one bone-named group at 1.0, and vertices that
-also carry a `feature_*` tag are counted correctly — the exporter fix §4 describes is load-bearing
+also carry a `feature_*` tag are counted correctly — the exporter fix the brief's §4 describes is load-bearing
 here, because the nose, brow, eye, ear, collar, cuff, shoulder-piece, overtunic, hem and crown
 vertices all carry both.
 
@@ -376,7 +404,7 @@ threshold large enough to collapse them produced **11 non-manifold edges**.
 
 **Building the chamfer into the cross-section instead makes all of that disappear.** There is no
 bevel to mis-scope, the corner facets are placed by the profile, the topology stays pure quads, and
-the column count — the thing the §7 number actually measures — is a design decision rather than a
+the column count — the thing the brief's §7 number actually measures — is a design decision rather than a
 side effect. **I should have started there.** The two failed attempts cost roughly a third of the
 session, and the lesson generalises: *on a low-poly character, the silhouette resolution belongs in
 the base mesh's section, not in a modifier applied to it afterwards.*
@@ -385,7 +413,7 @@ The operations of attempts one and two are in progress renders 01–51; the loft
 
 ### 7.2 The grain of the session, and where I departed from one operation per call
 
-§8 asks for one operation per tool call, and the body's construction held to it: every ring, every
+The brief's §8 asks for one operation per tool call, and the body's construction held to it: every ring, every
 loop move, every inset, extrude and bevel is its own call, saved and progress-rendered
 (**87 numbered progress renders**). Three departures, all deliberate:
 
@@ -416,7 +444,22 @@ loop move, every inset, extrude and bevel is its own call, saved and progress-re
   reading the weight census — 6 vertices on `knee.R` where 18 were expected — and fixed by deleting
   the group and recreating it.
 
-### 7.4 Departures from r8, each with its reason
+### 7.4 Three process hazards this session hit, worth recording for the next one
+
+- **A tool call that raises may already have changed the scene.** The first trapezius extrude threw
+  on its own *print statement*, after `bmesh.ops.extrude_face_region`, the translate, the fit and
+  `to_mesh` had all already run. I read the exception as "the call did nothing" and re-ran it,
+  which applied the extrude twice and built a double trapezius. **After an error, read the state
+  back before retrying** — the operation is not atomic with its report.
+- **A bisect scoped to a subset of faces leaves n-gons on the neighbours.** Splitting only the hip
+  cap's edges to make the crotch split turned every adjacent face into a 5-gon: two faces cut, six
+  n-gons produced. Scoping it tighter makes it worse, not better, because the damage is on the
+  faces you did *not* select. The fix is a **global** loop cut, which propagates properly — which is
+  why the crotch split is the column loop at x = 0.090 and not a local bisect.
+- **`vertex_group.add(..., 'REPLACE')` does not evict anyone.** Recorded in §7.3, repeated here
+  because it is the same shape as the two above: an operation that reads as idempotent and is not.
+
+### 7.5 Departures from r8, each with its reason
 
 - **The pickaxe leans back 20°** about the X axis, pivoting near the hand. Carried vertically as r8
   had it, its head sat level with the skull and **read as a hat brim in profile** — a real defect in
@@ -431,11 +474,65 @@ loop move, every inset, extrude and bevel is its own call, saved and progress-re
   on the cheek. The sheet puts brow at row 24 and the eye line at rows 30–34 — six rows, 51 mm —
   and the first placement was 50 mm too low. The lower inset stays as the cheek hollow it actually
   reads as, painted `#C9B099`.
-- **The texture is 256 × 256, down from r8's 512.** §5 asks me to keep r8's density decisions where
+- **The texture is 256 × 256, down from r8's 512.** the brief's §5 asks me to keep r8's density decisions where
   the masses did not change — but the face's masses *did* change, from paint into geometry, and
   that is the round. See §5.
 
-### 7.5 Two things I could not do from here
+### 7.6 No buried-face cull was run, and here is what that costs
+
+**r8 culled buried faces and found that the cull must be scoped BY JOINT** — a face buried inside a
+part on a *different* joint is exposed the moment that joint bends. The brief's §6 notes that one continuous
+body mesh leaves far less to cull. **It does, and I still did not run one.**
+
+Measured rather than estimated: for every face of the figure, a ray from its centre 0.2 mm along
+its own normal, out to 3 m, against the whole assembled figure.
+
+```
+r9_body          939 of  1484 tris occluded  (63%)
+r9_belt          394 of   656                (60%)
+r9_straps        300 of   488                (61%)
+r9_lantern       187 of   316                (59%)
+r9_pack          174 of   324                (54%)
+r9_beard         138 of   192                (72%)
+r9_pickaxe       129 of   240                (54%)
+r9_hair           96 of   192                (50%)
+r9_boots          78 of   328                (24%)
+r9_moustache      74 of   108                (69%)
+TOTAL           2509 of  4328                (58.0%)
+```
+
+**Read this as an upper bound, not as a cull list.** "Occluded along its own normal" is not the
+same as "never visible": the arm's inboard faces point at the torso and would be caught here, but
+they are seen from below and from the front, and they are exposed the moment the shoulder bends —
+which is precisely r8's by-joint finding. The genuinely dead geometry is the part that is *inside*
+another closed shell: the skull under the hair, the chest under the beard, the torso under the belt
+and straps, the legs inside the boots, the skirt's inner wall, the leg inside the tunic, the
+lantern's glass inside its frame and its flame inside the glass.
+
+At 4,328 triangles against a 30,000 budget this costs nothing and I chose the budget over the
+optimisation, which is Wolf's standing ruling — *"it's easier to optimize than add more details
+later on."* It is the obvious first move if LOD0 ever needs trimming, and the numbers above are the
+map for it.
+
+### 7.7 One defect found while reviewing this report, and fixed
+
+**`feature_eye.R` was tagging the wrong region.** The eye socket was carved twice: first at
+z 0.965–0.985, then re-cut at z 1.004–1.028 when the sheet's own rows showed the first one sat
+50 mm too low on the cheek (§7.5). The tag was written against the first socket and **never moved**,
+so `feature_eye.R` pointed at what had since become the cheek hollow and **the eye the figure
+actually has was untagged** — the combination layer could not have found it.
+
+Caught by reading every tag's bounding box back off the mesh instead of trusting the rule that
+wrote it, which is the table now in §4. Fixed: `feature_eye.R` re-tagged onto z 1.008–1.030 (13
+verts) and `feature_cheek.R` widened to cover the hollow at z 0.930–0.985 (17 verts). Re-exported;
+§8's output is from after the fix.
+
+**The general lesson, and it is the third instance of it in this file:** a tag, a weight or a paint
+rule written against geometry that later moves is silently wrong. The paint rules survived because
+they are re-run from one function after every geometry change; the tags did not, because they were
+written once. **Tags should be re-run the same way.**
+
+### 7.8 Two things I could not do from here
 
 - **`scripts/gate.sh` cannot run on this machine.** Neither `cargo` nor `mise` is installed on the
   Windows clone — `(Get-Command cargo).Source` is empty and `mise` is not on PATH — so the Rust gate
@@ -476,7 +573,7 @@ FIGURES src-assets\export\SM_VoxelDwarf_Miner01.glb size_m=0.7x1.2x0.7 min_y_m=0
 ```
 exit 0.
 
-**`live modifiers` is four Mirrors, and they are live on purpose** — §4 lifted the ban, the counts
+**`live modifiers` is four Mirrors, and they are live on purpose** — the brief's §4 lifted the ban, the counts
 now read the evaluated mesh, and `flatten` applies each part's stack before the join. The exported
 4,328 triangles are the mirrored figure, not the half-cage.
 
@@ -515,6 +612,7 @@ is what 60 px can hold.
 | `pose-carry-{front,quarter,side}.png` | the carry |
 | `joint-{neck-head,shoulder-elbow,spine-chest,hip-knee-foot,beard,hand}.png` | one per joint group |
 | `progress/01..87-*.png` | one per authoring call |
+| `scratch/` (32 files) | **not deliverables** — working diagnostics, and the intermediates `render_r9.py` composites `vs-*` and `readability.png` from. Left in place because the script recreates them on every run |
 
 **"Flat" is Workbench `light='FLAT'`** — pure atlas albedo, no shading, which is the honest way to
 check paint. **"Key-lit" is Workbench `light='STUDIO'`**, Blender's fixed three-point studio, chosen
@@ -586,3 +684,10 @@ id. The figure above is the transcript's own count for `dev-art`.
 5. **A second texture tier for the tunic.** Every clothing face is one flat cell; the reference has
    value variation across the tunic's panels. One 64 × 64 island for the chest would carry it
    without moving the map off 256.
+6. **Make the feature tags regenerable.** The paint survived every geometry change because it is
+   one function re-run from scratch each time; the tags did not, because they were written once and
+   then the geometry moved under them (§7.7). Putting the tag rules in the same re-runnable shape
+   would have caught `feature_eye.R` the moment the socket moved instead of at report time.
+7. **The buried-face cull, scoped by joint**, when LOD0 ever needs trimming. §7.6 has the
+   measurement and the map; the safe half of it is the geometry sealed inside another closed shell,
+   and the unsafe half is anything that a joint can expose by bending.
