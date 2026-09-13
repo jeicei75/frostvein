@@ -16,10 +16,30 @@ four thin strips with the background showing between them, because their surface
 figure read as *broken* rather than as unfinished. Wolf: *"completely broken .. top of head is a
 hole .. so worse than 9"*.
 
-**Nothing in this document's requirements changed as a result. What changed is that the exporter now
-FAILS on holes a camera can see, and §5 tells you to run it at every stage boundary so it catches
-them in minutes instead of at delivery.** Round 10 had no way to know — every gate it ran passed
-clean, including `check_asset.py`. That was a defect in the tooling, not in the seat.
+**Round 10's report was read closely, and its failure was NOT only quality control.** Its seat built
+a scripted toolkit — a "centre-line setter", a "section setter", per-op audits, `bisect_plane`
+passes — because a floor of 9–20 mm over a whole figure cannot be hand-placed one operation at a
+time, and eleven of its recorded incidents are those tools destroying geometry: op 61/66 collapsed
+the beard and the whole pack in Y, op 118 turned the body inside out, ops 71–80 compounded
+subdivisions into a 0.68 mm sliver mesh and wrecked the face. It culled 973 faces it did not need
+to (the budget had room) and left the hair's rim uncapped, which is the crown void. It weighted the
+skirt to the arm bones through a geometric guess. It cost $131.67 and 585 turns, most of them on
+tooling and repair rather than on the look — which is why the look came back worse than round 9's.
+
+**So this document is repaired in four places, and each repair removes a way round 10 broke:**
+
+1. **Resolution comes from a live SIMPLE subdivision on a coarse cage** (§3), not from hand-cut
+   loops. Uniform density everywhere, in one modifier, with no way to make a hole. Measured on
+   round 9's figure: 38 mm → 19 mm on the body, 19,336 triangles, zero exposed holes, every gate
+   green.
+2. **No culling** (§7). The budget does not need it and it is how the crown opened.
+3. **No bulk-vertex scripts** (§8). Each tool call is one Blender operator on a selection.
+4. **Weights by selection, never by geometry** (§6), with the gates run before AND after rigging.
+
+Plus three tooling changes: the exporter now **fails on holes a camera can see**, **fails on an
+inside-out mass** (round 10's moustache and straps had negative volume and the winding gate cannot
+see a consistently inverted shell), and **quantises the weights a subdivision interpolates** so the
+rigid-weight contract survives the subdivision workflow.
 
 **What round 9 proved, and why you are starting over anyway.** Round 9 changed the construction
 method — base mesh, form pass, carved features — and it worked: the figure's horizontal edge
@@ -110,8 +130,23 @@ reference video figure's own voxel size, and 2.3 source pixels of the sheet.
   real constraint at this resolution — the first time it has been. If you need to choose, spend on
   the body, the head and the hands; the boots do not need 6 mm faces.
 
+**HOW TO REACH IT — this is the change from round 10, and it is not optional.** Build and shape a
+**coarse cage by hand** — round 9's density, roughly 5,000–8,000 triangles for the whole figure, big
+faces, every form decision made on it — and get the uniform density from a **live Subdivision
+modifier, type SIMPLE, level 1** on each mass that needs it. SIMPLE splits every face in four
+without smoothing, so the flat-faceted look survives; the cage stays coarse and editable, and the
+resolution floor is met everywhere by construction. **Do not hand-cut loops to reach the floor.**
+Round 10 tried that, could not do it one operation at a time, built bulk tools instead, and the
+tools destroyed the figure. Masses that are already fine enough (a belt, a buckle) get no
+subdivision — the floor is a floor.
+
+**Carve features on the cage, before the subdivision level is raised, wherever you can.** A brow
+ridge, a nose, a hem lip cut into a coarse cage subdivide cleanly; the same feature cut into an
+already-dense mesh is where round 10's sliver faces came from. The face is the exception: it goes
+to level 2 (~8.6 mm) *after* its features are carved, because its features need the density.
+
 **Report the distribution** (§9): median face edge in mm per mass, and faces per m². That table is
-how this round is judged on resolution.
+how this round is judged on resolution — and it should show one number, not a spread.
 
 ## 4. The bind pose — the one place the reference must be disobeyed
 
@@ -228,15 +263,28 @@ beard
   hard-edged figure from smoothing at the joints.
 - **Put each joint on an edge ring the figure actually has**, from stage 2. Round 9's, for reference:
   elbow 0.612, knee 0.330, hand 0.424, shoulder 0.806, head 0.886, beard 0.875.
+- **Assign weights BY SELECTION, region by region: select the arm island, assign it to `shoulder`;
+  select below the elbow ring, assign to `elbow`; and so on.** Never by a geometric test. Round 10
+  wrote an "is this part of the arm?" heuristic on distance along the arm axis, and it weighted
+  the skirt to the arm bones, shredded the deflection renders, and had to be repaired twice.
+- **Run the export BEFORE you rig and again AFTER**, and compare the `holes` and `inside-out`
+  lines. Rigging must not change the mesh; if the numbers move, the rigging did something to the
+  geometry and that is the defect to find. Wolf's read of round 10: *"model got messed at least
+  when it was playing with the rig"*.
+- **A subdivided mesh arrives with interpolated weights at the joint rings** (0.5 / 0.5 on a new
+  vertex between two joints). The exporter snaps those to the dominant joint and prints how many;
+  that is expected. What still fails is a vertex whose strongest joint is under half its weight —
+  that is a soft paint job, not an interpolation, and it stays your problem.
 - **The props are weighted like anything else** — the pickaxe to the hand that carries it, the
   lantern and pack to what they hang from — so a posed arm takes its prop with it.
 - **The mesh ships in the bind pose with NO animation** in the GLB.
 - **Prove the weights**: bend each joint group and render it. Tearing, a hole, or geometry following
   the wrong bone is a defect to fix, not to report.
-- **If you cull buried faces, scope the cull BY JOINT.** A face buried inside a part on a *different*
-  joint is exposed the moment that joint bends. Round 8 lost nine faces of a hand to a cull that
-  asked the wrong question, and paid a full rebuild. Use a six-direction enclosure test that fails
-  safe, run **once**, over closed parts. An asymmetric face count between `.L` and `.R` is the tell.
+- **DO NOT CULL BURIED FACES. At all.** Round 8's cull cost a hand and a rebuild; round 10's took
+  973 faces the budget never needed and opened the crown, because the mass covering the culled
+  skull had itself been left uncapped. A face sealed inside another mass costs a few triangles and
+  can never be seen; a cull that is wrong once costs the round. The budget has room for every
+  buried face this figure will ever have.
 
 ## 7. The tools, and what they will and will not accept
 
@@ -281,6 +329,10 @@ describe what the file carries. Only Armature is removed rather than applied.
 - **≤ 30,000 triangles**;
 - **the texture must reach the GLB** — an unpacked external path silently produced a GLB with no
   texture at all in round 7, so pack it;
+- **NO INSIDE-OUT MASS**: signed volume of every mass must be positive. Round 10's moustache was
+  −1.34 L and its straps −2.93 L, and the winding gate passed both, because it compares each face
+  with its neighbours and an inverted shell's neighbours all agree. Recalculate normals outward;
+  if a mass still reads negative, its shell is inverted as a whole.
 - **seating**, read from the GLB's own POSITION bounds: min Y = 0, centre X/Z = 0;
 - **the rig**: 19 joints, 0 missing, 0 unexpected, 0 unweighted, 0 soft-weighted.
 
@@ -308,8 +360,14 @@ the game and no gate catches them.
 - **Prove it before your first edit**: query the live scene and report what was already in it. A
   subprocess starts from a default scene. **If you cannot reach the live instance, stop and say so** —
   Blender never reloads a file that changed underneath it, so the work would be invisible.
-- **One OPERATION per tool call** — an extrude, a loop cut, a loop moved, an inset, a bevel. Not one
-  finished part per call: that grain is what built round 8 out of fifty-four separate boxes.
+- **One OPERATION per tool call, and an operation is a Blender operator applied to a selection**
+  — `extrude_region`, `loopcut`, `inset`, `bevel`, `subdivide`, a transform of the selected
+  vertices, a modifier added. Not one finished part per call (round 8's grain, which stacked
+  boxes), and **not a script that moves vertices in bulk by rule** (round 10's grain, which
+  wrecked them). **No "setters", no per-op helper functions that edit geometry, no bisect-by-plane
+  passes, nothing in `driver_namespace` that touches vertex coordinates.** If you find yourself
+  wanting a helper to do something to hundreds of vertices at once, the thing you want is a
+  modifier — and the modifier you want is almost always Subdivision, which §3 already gives you.
 - **Save the `.blend` after every call**, and write a numbered progress render plus the stage's render
   set at every stage boundary. Four of six delegated runs in this project were killed by the harness;
   the saves are the insurance.
@@ -318,6 +376,14 @@ the game and no gate catches them.
   regeneration was retired at round 4 and does not come back: round 3 delivered it and produced the
   worst-looking dwarf of the nine, because a generator makes you think in loops and parameters.
 - **No git commands at all.** The operator commits.
+
+## 8b. Where the round's effort goes
+
+Round 10 spent 585 turns and $131.67, most of it building tools and repairing what the tools broke.
+This round should spend its turns on the **form and the look** — the cage's silhouette against the
+planes, the face against `f104`, the beard's locks, the cloth — because the density is one modifier
+and the gates are mechanical. If a third of your turns have gone by and the cage is not yet reading
+right from four views, stop adding anything else and fix the cage.
 
 ## 9. Deliverables
 
@@ -347,7 +413,9 @@ the game and no gate catches them.
 By Wolf's eye against `f088` and `f104` — **does it read like the reference, at one resolution?**
 Then, mechanically:
 
-- **zero exposed holes** — the export refuses to write the figure otherwise
+- **zero exposed holes and no inside-out mass** — the export refuses to write the figure otherwise
+- **the resolution table shows one number, not a spread** — every subdivided mass at ~20 mm, the
+  face at ~8.6 mm, and the cage itself coarse and editable
 - **no surface coarser than 20 mm; the face at ~8.6 mm; the body is not the coarsest mass**
 - **the UV islands cover ≥ 60 % of the map**, and no surface is a single flat fill where the
   reference has variation
