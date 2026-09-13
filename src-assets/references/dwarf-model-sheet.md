@@ -265,9 +265,18 @@ mush, while a **box model reduces by removing boxes**, which stays exactly in st
 
 | LOD | screen height | triangle ceiling | what it is for |
 |---|---|---|---|
-| LOD0 | > 200 px | **≤ 4,000** | marketing shots, close-ups; a handful visible |
+| LOD0 | > 200 px | **≤ 30,000** | marketing shots, close-ups; a handful visible |
 | LOD1 | 40–200 px | **≤ 800** | inspection range; tens visible |
 | LOD2 | < 40 px | **≤ 150** | normal play; hundreds visible |
+
+**LOD0 moved 4,000 -> 30,000 on 2026-09-13** (Wolf: *"we can also increase the budget ... it's
+easier to optimize than add more details later on"*). The 4,000 in this row was never binding — the
+2026-09-11 ruling said so in as many words — but round 7 made it a build gate, and it became the
+ceiling on the figure's resolution: at 892 triangles the head was one box and the whole face a
+single flat quad. 30,000 is the top of the band `tech-art-guidelines.md` records for this dwarf, and
+r3 shipped at 14,398. **The crowd argument above constrains LOD1 and LOD2, not LOD0**: LOD0 is a
+handful of close-ups, and this sheet's own measurement says a gameplay dwarf is 8.74 px, so the
+crowd never draws LOD0.
 
 Ceilings, never targets. At 200 LOD2 dwarves that is 30,000 triangles, about a quarter of the
 terrain — sane. And note what the current game framing means: **a dwarf is 8.74 px tall at the boot
@@ -333,8 +342,8 @@ props.
 1. **>= 10 silhouette steps per 100 rows** on both the front and the side view.
 2. **Neither edge below 70 % of the other** on the same view.
 
-There is no triangle budget this round, and r5 spent 1,116 against an eventual LOD0 ceiling of
-4,000 — so the headroom for this exists three times over. Spend it on steps, not on smoothness.
+There is no triangle budget this round, and r5 spent 1,116 against the LOD0 ceiling (4,000 then,
+30,000 since 2026-09-13) — so the headroom for this exists three times over. Spend it on steps, not on smoothness.
 
 ## Check 5 — THE NECK IS BARE IN PROFILE
 

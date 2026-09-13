@@ -54,7 +54,16 @@ ASSET = "SM_VoxelDwarf_Miner01"
 COLLECTION = f"{ASSET}_{REV}"
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "export")
 OUT_PATH = os.path.join(OUT_DIR, f"{ASSET}.glb")
-TRI_BUDGET = 4000     # LOD0 ceiling, a build gate since round 7
+# LOD0 ceiling, a build gate since round 7. Moved 4,000 -> 30,000 on 2026-09-13 by Wolf's ruling
+# ("we can also increase the budget ... it's easier to optimize than add more details later on").
+# The 4,000 was a row in the model sheet's DERIVED LOD ladder, which the 2026-09-11 ruling had
+# explicitly made non-binding, and round 7 promoted it to a gate -- where it became the thing
+# capping the figure's resolution. 30,000 is the top of the band tech-art-guidelines.md already
+# records for a 96-voxel-equivalent dwarf, and the r3 dwarf shipped and ran at 14,398. The ladder's
+# crowd argument (20 dwarves ~ 2x the terrain) constrains LOD1 and LOD2, not LOD0: a gameplay dwarf
+# is 8.74 px, so the crowd never draws LOD0. This gate's job is now to catch a MISTAKE -- an
+# unapplied subdivision, a mirrored duplicate, a cull that never ran -- not to shape the art.
+TRI_BUDGET = 30000
 AREA_EPS_M2 = 1e-10   # a face smaller than this is degenerate, not geometry
 WEIGHT_EPS = 1e-4     # a weight below this is nothing; a rigid weight is 1.0
 # The 19 joints, fixed since round 3 and not the exporter's to negotiate. They are a SET here:
