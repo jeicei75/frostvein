@@ -321,7 +321,10 @@ exit 0
   `SM_VoxelDwarf_Miner01.glb` is legal; any other disagreement still fails, and `mesh=` is printed
   so a stale export announces itself.
 - **`REV` is `r8`**, so **your collection must be named `SM_VoxelDwarf_Miner01_r8`**, and every
-  datablock carries `r8`: object, mesh, material, image, armature.
+  datablock carries `r8`: object, mesh, material, image, armature. **Until that collection exists
+  the export exits with `export: collection 'SM_VoxelDwarf_Miner01_r8' not found in this .blend`
+  — that is expected, not a broken tool.** Do not edit `REV`, and do not export r7's collection to
+  see something succeed.
 
 **The exporter now supports and gates the rig** — verified on two synthetic rigged fixtures, one
 complete and one deliberately short of joints:
