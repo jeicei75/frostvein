@@ -141,6 +141,37 @@ def check_rig(ob, arm):
     }
 
 
+def quantise_weights(ob, arm):
+    """Snap each vertex to its dominant joint at 1.0, and refuse the ones with no dominant joint.
+
+    The contract is RIGID weights, and a live Subdivision -- now the sanctioned way to reach the
+    resolution floor -- interpolates them: a new vertex on an edge between a `spine` vertex and a
+    `chest` vertex is born 0.5 / 0.5. Round 9 with a level-1 subdivision had 348 such vertices, all
+    at the joint rings, all mechanical. They are snapped here, deterministically, and the count is
+    printed so it is never silent.
+
+    A vertex whose strongest joint carries less than half its weight is a different thing -- a
+    genuinely soft paint job -- and that still fails the rig gate as soft-weighted, because snapping
+    it would hide a decision the artist made.
+    """
+    bones = {bone.name for bone in arm.data.bones}
+    deform = {g.index for g in ob.vertex_groups if g.name in bones}
+    snapped = 0
+    for vertex in ob.data.vertices:
+        weights = [(g.weight, g.group) for g in vertex.groups
+                   if g.group in deform and g.weight > WEIGHT_EPS]
+        if len(weights) < 2:
+            continue
+        weight, group = max(weights)
+        if weight < 0.5:
+            continue
+        for _w, other in weights:
+            ob.vertex_groups[other].remove([vertex.index])
+        ob.vertex_groups[group].add([vertex.index], 1.0, 'REPLACE')
+        snapped += 1
+    return snapped
+
+
 def feature_tags(ob, arm):
     """The non-bone names by which a feature can be found inside the one mesh.
 
@@ -387,11 +418,46 @@ def exposed_holes(ob):
                 fan.append(
                     (normal * math.cos(tilt) + axis * sign * math.sin(tilt)).normalized()
                 )
-        if all(not ob.ray_cast(middle + d * 1e-4, d)[0] for d in fan):
+        # Both directions: an inside-out shell's normal points INTO the shell, and a ray cast
+        # that way hits the far wall and reports the hole as sealed. Exposed if EITHER fan
+        # escapes whole -- a culled interior face is sealed both ways, a real hole is open one way.
+        if any(all(not ob.ray_cast(middle + d * sign * 1e-4, d * sign)[0] for d in fan)
+               for sign in (1.0, -1.0)):
             exposed += 1
     bm.free()
     ob.to_mesh_clear()
     return boundary, exposed
+
+
+def inside_out(originals):
+    """Masses whose shell faces inward -- negative signed volume on the evaluated mesh.
+
+    The winding gate compares each edge's two faces with each other, so a shell that is inverted
+    CONSISTENTLY passes it: every neighbour agrees, they are all wrong together. Round 10 shipped
+    its moustache at -1.34 L and its straps at -2.93 L; with backface culling on, an inverted mass
+    renders as its own inside. Round 9's ten masses are all positive.
+
+    ONLY CLOSED MASSES ARE JUDGED. Signed volume means nothing on an open shell: round 8's culled
+    parts read hem -11.5 L, fringe -7.6 L, skull -4.5 L, and none of them is inverted -- the faces
+    that would have closed the integral were culled away. So a mass with any boundary edge is
+    reported as open and left to the hole gate; once its holes are closed, this gate applies. The
+    spec bans culling from round 11, so every mass is expected to arrive closed.
+    """
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    wrong, open_shells = [], []
+    for ob in originals:
+        me = ob.evaluated_get(depsgraph).to_mesh()
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        if any(len(e.link_faces) == 1 for e in bm.edges):
+            open_shells.append(ob.name)
+        else:
+            volume = bm.calc_volume(signed=True)
+            if volume < 0:
+                wrong.append((ob.name, volume * 1000.0))
+        bm.free()
+        ob.to_mesh_clear()
+    return wrong, open_shells
 
 
 def glb_facts(path):
@@ -456,10 +522,13 @@ def main():
     # this the joints sit wherever the figure used to be. `flatten` deliberately drops parenting
     # to bake the socket transforms, which is why the binding is remade here rather than kept.
     rig = None
+    snapped = 0
+    inverted, open_shells = inside_out(originals)
     if arm is not None:
         arm.location = arm.location + shift
         joined.modifiers.new("Armature", 'ARMATURE').object = arm
         bpy.context.view_layer.update()
+        snapped = quantise_weights(joined, arm)
         rig = check_rig(joined, arm)
     tag_groups, tag_attributes = feature_tags(joined, arm)
 
@@ -520,6 +589,10 @@ def main():
           % "   ".join("%s %d" % (k, v) for k, v in topology.items()))
     print("  holes             %d boundary edges, %d EXPOSED to the outside"
           % (boundary, exposed))
+    print("  inside-out masses %s   (%d open shell%s not judged: %s)"
+          % (", ".join("%s (%.2f L)" % row for row in inverted) or "none",
+             len(open_shells), "" if len(open_shells) == 1 else "s",
+             ", ".join(open_shells) or "-"))
     print("  feature tags      %d vertex groups, %d face attributes%s"
           % (len(tag_groups), len(tag_attributes),
              ("   " + ", ".join(tag_groups + tag_attributes)) if (tag_groups or tag_attributes) else ""))
@@ -531,6 +604,8 @@ def main():
         print("  rig               %s   joint names in the GLB: %s"
               % ("   ".join("%s %d" % (k, v) for k, v in rig.items()),
                  ", ".join(joints) or "<NONE>"))
+        print("  weights snapped   %d interpolated vertices quantised to their dominant joint"
+              % snapped)
     print("  GLB min/max       %s / %s   (glTF axes: X, Y up, Z)"
           % (bounds[0], bounds[1]))
     print("  bytes             %d" % os.path.getsize(OUT_PATH))
@@ -571,6 +646,12 @@ def main():
             "not resolve on this machine; pack it into the .blend (File > External Data > Pack "
             "Resources) so the source reproduces the export anywhere." % len(images))
 
+    if inverted:
+        raise SystemExit(
+            "export: inside-out mass -- %s. The shell faces inward, so with backface culling it "
+            "renders as its own inside. Recalculate normals outward, and check the signed volume "
+            "rather than trusting the winding gate, which cannot see a consistently inverted shell."
+            % ", ".join("%s (%.2f L)" % row for row in inverted))
     if exposed:
         raise SystemExit(
             "export: %d of %d boundary edges are EXPOSED to the outside -- the figure has holes a "
