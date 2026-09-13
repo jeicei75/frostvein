@@ -28,15 +28,26 @@ one object:
     both lifted by Wolf on 2026-09-12: shading and curvature are the artist's call;
   * the object and mesh datablocks carry the revision, so a stale binary announces
     itself. The revision lives in the datablock names INSIDE the .blend, not in any
-    filename -- there is exactly one place to bump it.
+    filename -- there is exactly one place to bump it;
+  * from round 8 it also carries the RIG: the skin is exported, the 19 joint names
+    are read back out of the written file, and weights must be rigid (one joint per
+    vertex at 1.0). An unrigged figure still exports, and says so.
+
+WHAT IT CHECKS ON THE ARTIFACT RATHER THAN ON THE SCENE, because both of these have
+already shipped a silent failure: the texture must be present in the GLB (round 7's
+was dropped entirely, and the report line printed the datablock name anyway), and the
+figure's seating is asserted from the GLB's own POSITION bounds (the scene-measured
+line read min Z 0.000000 while the file carried geometry 0.75 m off the floor).
 """
 
+import json
 import os
+import struct
 import sys
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 REV = "r7"        # each round bumps this, and it is the ONLY line to change here
 ASSET = "SM_VoxelDwarf_Miner01"
@@ -45,6 +56,15 @@ OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 OUT_PATH = os.path.join(OUT_DIR, f"{ASSET}.glb")
 TRI_BUDGET = 4000     # LOD0 ceiling, a build gate since round 7
 AREA_EPS_M2 = 1e-10   # a face smaller than this is degenerate, not geometry
+WEIGHT_EPS = 1e-4     # a weight below this is nothing; a rigid weight is 1.0
+# The 19 joints, fixed since round 3 and not the exporter's to negotiate. They are a SET here:
+# the hierarchy is the artist's, the names are the contract, because the game binds by name.
+JOINTS = frozenset((
+    "root", "hips", "spine", "chest", "neck", "head",
+    "shoulder.L", "shoulder.R", "elbow.L", "elbow.R", "hand.L", "hand.R",
+    "hip.L", "hip.R", "knee.L", "knee.R", "foot.L", "foot.R",
+    "beard",
+))
 
 
 def parts():
@@ -56,6 +76,49 @@ def parts():
     if not found:
         raise SystemExit(f"export: collection {COLLECTION!r} holds no mesh parts")
     return found
+
+
+def armature():
+    """The one armature in the collection, or None while the figure is still unrigged.
+
+    Optional on purpose: round 8 paints before it rigs, and an exporter that demanded a skeleton
+    would fail every export taken during the modelling half of the session. What is NOT optional
+    is silence -- the report line says `rig` either way, so an unrigged export announces itself.
+    """
+    found = [o for o in bpy.data.collections[COLLECTION].objects if o.type == 'ARMATURE']
+    if len(found) > 1:
+        raise SystemExit("export: %d armatures in %r; the figure takes one skeleton"
+                         % (len(found), COLLECTION))
+    return found[0] if found else None
+
+
+def check_rig(ob, arm):
+    """The two rig properties a machine can honestly check: the names, and rigid weights.
+
+    Wolf's ruling from round 3 stands -- ONE mesh, RIGID weights, no soft skinning -- so every
+    vertex belongs to exactly one joint at weight 1.0. Soft weights would not fail to render;
+    they would quietly smooth the joints of a hard-edged figure, which is the kind of defect that
+    only shows up once something is animated.
+    """
+    names = {bone.name for bone in arm.data.bones}
+    groups = {group.index: group.name for group in ob.vertex_groups}
+    unweighted = soft = misnamed_groups = 0
+    for vertex in ob.data.vertices:
+        weights = [g for g in vertex.groups if g.weight > WEIGHT_EPS]
+        if not weights:
+            unweighted += 1
+        elif len(weights) > 1 or abs(weights[0].weight - 1.0) > WEIGHT_EPS:
+            soft += 1
+        elif groups.get(weights[0].group) not in names:
+            misnamed_groups += 1
+    return {
+        "joints": len(names),
+        "missing joints": len(JOINTS - names),
+        "unexpected joints": len(names - JOINTS),
+        "unweighted verts": unweighted,
+        "soft-weighted verts": soft,
+        "verts weighted to a non-bone": misnamed_groups,
+    }
 
 
 def flatten(originals):
@@ -82,20 +145,35 @@ def flatten(originals):
 
 
 def seat_on_origin(ob):
-    """Centre in X and Y, stand on Z = 0 -- the contract's invariant, in Blender axes."""
+    """Centre in X and Y, stand on Z = 0 -- the contract's invariant, in Blender axes.
+
+    The object's own transform is BAKED INTO the vertices first, which the contract wants anyway
+    (its transform clause requires an applied identity transform on the published node).
+
+    It has to be baked rather than zeroed. This measured the bounds in WORLD space, added the
+    shift to LOCAL vertex coordinates, and then set `ob.location` to zero -- three spaces, and
+    the arithmetic is only right when the object transform is already identity. It was, for the
+    r7 figure. It is not for any part placed with `primitive_cube_add(location=...)`, and the
+    failure is silent both ways: the export line below prints the world bounds measured BEFORE
+    the location was discarded, so it read `min Z 0.000000` while the GLB carried geometry
+    0.75 m off the floor. Found 2026-09-13 on a rigged fixture, before round 8 could hit it.
+    """
     bpy.context.view_layer.update()
+    matrix = ob.matrix_world.copy()
+    for v in ob.data.vertices:
+        v.co = matrix @ v.co
+    ob.matrix_world = Matrix.Identity(4)
+
     lo = Vector((1e9, 1e9, 1e9))
     hi = Vector((-1e9, -1e9, -1e9))
     for v in ob.data.vertices:
-        w = ob.matrix_world @ v.co
-        lo = Vector(min(lo[i], w[i]) for i in range(3))
-        hi = Vector(max(hi[i], w[i]) for i in range(3))
+        lo = Vector(min(lo[i], v.co[i]) for i in range(3))
+        hi = Vector(max(hi[i], v.co[i]) for i in range(3))
     shift = Vector((-(lo.x + hi.x) / 2.0, -(lo.y + hi.y) / 2.0, -lo.z))
     for v in ob.data.vertices:
         v.co = v.co + shift
-    ob.location = (0.0, 0.0, 0.0)
     bpy.context.view_layer.update()
-    return lo + shift, hi + shift
+    return lo + shift, hi + shift, shift
 
 
 def triangles(ob):
@@ -157,8 +235,46 @@ def check_topology(ob, originals):
         "degenerate faces": degenerate,
         "flipped winding": flipped,
         "missing UV layer": 0 if me.uv_layers else 1,
-        "unapplied modifiers": sum(len(o.modifiers) for o in originals),
+        # An Armature modifier is never applied -- applying it would bake the rest pose into the
+        # vertices and throw the skin away. It is the one modifier whose presence is correct, so
+        # it does not count here; `check_rig` is what has an opinion about it.
+        "unapplied modifiers": sum(
+            1 for o in originals for m in o.modifiers if m.type != 'ARMATURE'
+        ),
     }
+
+
+def glb_facts(path):
+    """What the written GLB actually carries: its image names, and its skin's joint names.
+
+    Read back out of the artifact.
+
+    Round 7 shipped with image `r7` pointing at an absolute `D:/...` path and nothing packed, so
+    off the authoring machine it resolved to nothing, the glTF exporter dropped the material's
+    texture entirely -- no images, no textures, no samplers, no baseColorTexture -- and this
+    script still printed `texture image r7` and exited 0, because that line reports the
+    DATABLOCK'S NAME. A name is not data. The only honest subject for the gate is the file.
+    """
+    with open(path, "rb") as handle:
+        data = handle.read()
+    offset, images, joints, bounds = 12, [], [], (None, None)
+    while offset + 8 <= len(data):
+        length, kind = struct.unpack_from("<II", data, offset)
+        if kind == 0x4E4F534A:
+            document = json.loads(data[offset + 8:offset + 8 + length].decode("utf-8"))
+            images = [image.get("name", "<unnamed>") for image in document.get("images", [])]
+            primitive = document["meshes"][0]["primitives"][0]
+            position = document["accessors"][primitive["attributes"]["POSITION"]]
+            bounds = (position.get("min"), position.get("max"))
+            nodes = document.get("nodes", [])
+            joints = sorted(
+                nodes[index].get("name", "<unnamed>")
+                for skin in document.get("skins", [])
+                for index in skin.get("joints", [])
+            )
+            break
+        offset += 8 + length
+    return images, joints, bounds
 
 
 def main():
@@ -171,6 +287,7 @@ def main():
     if bpy.context.object and bpy.context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
 
+    arm = armature()
     originals = parts()
     for ob in originals:
         ob.hide_set(False)
@@ -178,17 +295,41 @@ def main():
         ob.hide_render = False
 
     joined = flatten(originals)
-    lo, hi = seat_on_origin(joined)
+    lo, hi, shift = seat_on_origin(joined)
     topology = check_topology(joined, originals)
     tris = triangles(joined)
+
+    # Re-bind the skin the join threw away, and move the skeleton by the SAME shift the vertices
+    # took. `seat_on_origin` edits vertex coordinates; bones live in the armature, so without
+    # this the joints sit wherever the figure used to be. `flatten` deliberately drops parenting
+    # to bake the socket transforms, which is why the binding is remade here rather than kept.
+    rig = None
+    if arm is not None:
+        arm.location = arm.location + shift
+        joined.modifiers.new("Armature", 'ARMATURE').object = arm
+        bpy.context.view_layer.update()
+        rig = check_rig(joined, arm)
 
     materials = {slot.material for slot in joined.material_slots if slot.material}
     images = {n.image for m in materials if m.use_nodes
               for n in m.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image}
 
-    # only the joined object reaches the exporter
+    # glTF CLAMP_TO_EDGE, which the asset contract's sampler clause asks for and a packed set of
+    # UV islands needs: under Blender's default REPEAT the far edge of the map bleeds into an
+    # island sitting on the border. Forced here rather than in the .blend so no future round can
+    # author it away. Blender's 'EXTEND' is glTF's CLAMP_TO_EDGE.
+    for material in materials:
+        if not material.use_nodes:
+            continue
+        for node in material.node_tree.nodes:
+            if node.type == 'TEX_IMAGE':
+                node.extension = 'EXTEND'
+
+    # only the joined object -- and the skeleton it is bound to -- reaches the exporter
     bpy.ops.object.select_all(action='DESELECT')
     joined.select_set(True)
+    if arm is not None:
+        arm.select_set(True)
     bpy.context.view_layer.objects.active = joined
 
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -203,17 +344,20 @@ def main():
         export_cameras=False,
         export_lights=False,
         export_extras=False,
-        export_skins=False,
+        export_skins=True,
         export_animations=False,
     )
 
+    embedded, joints, bounds = glb_facts(OUT_PATH)
     size = (hi.x - lo.x, hi.y - lo.y, hi.z - lo.z)
     print("")
     print("EXPORT %s" % OUT_PATH)
     print("  parts joined      %d -> 1 mesh %r" % (len(originals), joined.data.name))
     print("  object / mesh     %s / %s" % (joined.name, joined.data.name))
     print("  materials         %s" % ", ".join(sorted(m.name for m in materials)))
-    print("  texture image     %s" % ", ".join(sorted(i.name for i in images)))
+    print("  texture image     %s   in the GLB: %s"
+          % (", ".join(sorted(i.name for i in images)) or "<none>",
+             ", ".join(embedded) or "<NONE>"))
     print("  triangles         %d  of %d budget" % (tris, TRI_BUDGET))
     print("  size m (X,Y,Z)    %.3f x %.3f x %.3f" % size)
     print("  blender min Z     %.6f   (glTF min Y)" % lo.z)
@@ -221,7 +365,51 @@ def main():
           % ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0))
     print("  topology          %s"
           % "   ".join("%s %d" % (k, v) for k, v in topology.items()))
+    if rig is None:
+        print("  rig               <NONE -- unrigged figure>")
+    else:
+        print("  rig               %s   joint names in the GLB: %s"
+              % ("   ".join("%s %d" % (k, v) for k, v in rig.items()),
+                 ", ".join(joints) or "<NONE>"))
+    print("  GLB min/max       %s / %s   (glTF axes: X, Y up, Z)"
+          % (bounds[0], bounds[1]))
     print("  bytes             %d" % os.path.getsize(OUT_PATH))
+
+    # The seating clause, asserted on the ARTIFACT rather than on the intention. Every figure
+    # above was measured in the scene; these are the numbers the exporter itself wrote into the
+    # GLB's POSITION accessor, and they are what `check_asset.py` will read.
+    if bounds[0] is None or bounds[1] is None:
+        raise SystemExit("export: the GLB carries no POSITION bounds to check")
+    low, high = bounds
+    seating = {
+        "min Y": low[1],
+        "centre X": (low[0] + high[0]) / 2.0,
+        "centre Z": (low[2] + high[2]) / 2.0,
+    }
+    off = {k: v for k, v in seating.items() if abs(v) > 1e-6}
+    if off:
+        raise SystemExit(
+            "export: seating gate failed on the GLB's own bounds -- %s. The figure measured "
+            "clean in the scene, so the geometry moved between the measurement and the file."
+            % ", ".join("%s %.6f" % (k, v) for k, v in off.items()))
+
+    if rig is not None:
+        wrong = {k: v for k, v in rig.items() if k != "joints" and v}
+        if wrong:
+            raise SystemExit("export: rig gate failed -- %s"
+                             % ", ".join("%s %d" % (k, v) for k, v in wrong.items()))
+        if sorted(JOINTS) != joints:
+            raise SystemExit(
+                "export: the armature is correct and the GLB's skin is not -- joints in the "
+                "file: %s. The skin is what the game binds to; a rig that stops at the .blend "
+                "is not a rig." % (", ".join(joints) or "<NONE>"))
+
+    if images and not embedded:
+        raise SystemExit(
+            "export: the material carries %d image(s) and the GLB embeds NONE -- the texture "
+            "did not reach the artifact. The usual cause is an unpacked external path that does "
+            "not resolve on this machine; pack it into the .blend (File > External Data > Pack "
+            "Resources) so the source reproduces the export anywhere." % len(images))
 
     broken = {k: v for k, v in topology.items() if v}
     if broken:
