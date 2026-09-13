@@ -20,9 +20,9 @@ PY
 mutation "reported triangle figures lie" py scripts.tests.test_check_asset.CheckAssetTests.test_the_four_published_pines_report_their_literal_figures <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
-old = '        f"tris={tris} verts={verts}"\n'
+old = '        f"tris={tris} verts={verts} mesh={mesh_name} profile={profile}"\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        f"tris=0 verts={verts}"\n'))
+p.write_text(s.replace(old, '        f"tris=0 verts={verts} mesh={mesh_name} profile={profile}"\n'))
 PY
 
 mutation "a failed asset omits its figures" py scripts.tests.test_check_asset.CheckAssetTests.test_off_centre_stale_asset_names_the_origin_clause <<'PY'
@@ -36,12 +36,12 @@ PY
 mutation "off-grid positions are accepted" py scripts.tests.test_check_asset.CheckAssetTests.test_off_grid_positions_and_unapplied_transforms_are_rejected <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
-old = '''        raise AssetError(
-            f"grid clause: POSITION values must use the {PROJECT_GRID_METRES} m project grid"
-        )
+old = '''            raise AssetError(
+                f"grid clause: POSITION values must use the {PROJECT_GRID_METRES} m project grid"
+            )
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        pass\n'))
+p.write_text(s.replace(old, '            pass\n'))
 PY
 
 mutation "unapplied transforms are accepted" py scripts.tests.test_check_asset.CheckAssetTests.test_off_grid_positions_and_unapplied_transforms_are_rejected <<'PY'
@@ -65,7 +65,7 @@ PY
 mutation "a mismatched file basename is accepted" py scripts.tests.test_check_asset.CheckAssetTests.test_a_mismatched_file_basename_is_rejected <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
-old = '    elif path.stem != mesh_name:\n'
+old = '    elif path.stem != REVISION_SUFFIX.sub("", mesh_name):\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    elif False:\n'))
 PY

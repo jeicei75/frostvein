@@ -15,7 +15,7 @@
 mutation "the palette reader is bounded by the pines' seven again" py scripts.tests.test_check_asset.CheckAssetTests.test_the_authored_dwarf_reports_all_ten_cells_not_the_pines_seven <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
-old = '    for index in range(CELLS_PER_ROW * CELLS_PER_ROW):\n'
+old = '    for index in range(cells_per_row * cells_per_row):\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    for index in range(7):\n'))
 PY
