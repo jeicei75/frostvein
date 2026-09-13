@@ -10,9 +10,12 @@
 
 # AC7, and the row the AC names. The bound used to be the PINES' seven-entry list, so a ten-colour
 # dwarf reported seven and his Wood Trunk, Hair and Lantern-flame cells were read by nothing. The
-# FIXTURE IS THE DWARF ON PURPOSE: a seven-colour asset reports the same figure whether the reader
-# asks the constant or the artifact, so only an asset with a different cell count can discriminate.
-mutation "the palette reader is bounded by the pines' seven again" py scripts.tests.test_check_asset.CheckAssetTests.test_the_authored_dwarf_reports_all_ten_cells_not_the_pines_seven <<'PY'
+# FIXTURE HAS A DIFFERENT CELL COUNT ON PURPOSE: a seven-colour asset reports the same figure
+# whether the reader asks the constant or the artifact, so only an asset with a different cell
+# count can discriminate. It was the PROMOTED dwarf until 2026-09-13, when promoting round 8
+# changed that asset's family and broke this row's test -- the fixture is now a synthesised
+# ten-cell atlas on tree02, which no promotion can move.
+mutation "the palette reader is bounded by the pines' seven again" py scripts.tests.test_check_asset.CheckAssetTests.test_an_atlas_reports_its_own_cell_count_not_a_family_constant <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
 old = '    for index in range(cells_per_row * cells_per_row):\n'

@@ -2,6 +2,7 @@
 
 import json
 import pathlib
+import re
 import subprocess
 import struct
 import sys
@@ -128,15 +129,15 @@ def image_parts(png):
     return document, png
 
 
-def repaint_tree02(document, binary):
-    """Swap tree02's 64x64 atlas for a map of the same size that is NOT cell-quantised.
+# The ten cells of the r3 voxel dwarf, kept as a literal because what this fixture exists to do is
+# report a cell count that is NOT the pines' seven. The family it came from no longer ships -- see
+# `test_an_atlas_reports_its_own_cell_count_not_a_family_constant`.
+TEN_CELLS = ["E9D2BB", "5E4632", "FFFFFF", "5F7A6A", "474B41",
+             "A9B2AC", "8B6B50", "6B5B49", "34271C", "F0A63C"]
 
-    The two artifacts then differ in ONE property -- whether the embedded image is an atlas --
-    which is what the profile is derived from, so a clause that changes verdict between them is
-    changing verdict on the profile and nothing else.
-    """
-    png = png_bytes(painted_pixels(check_asset.ATLAS, "0A141E", "28323C", "F0A63C"),
-                    check_asset.ATLAS)
+
+def retexture_tree02(document, binary, png):
+    """Point tree02's sole image at `png`, appended to its binary chunk, in place."""
     binary += b"\0" * (-len(binary) % 4)
     document["bufferViews"].append(
         {"buffer": 0, "byteOffset": len(binary), "byteLength": len(png)}
@@ -145,9 +146,26 @@ def repaint_tree02(document, binary):
     document["images"][0] = {
         "bufferView": len(document["bufferViews"]) - 1,
         "mimeType": "image/png",
-        "name": "T_Painted",
+        "name": "T_Test",
     }
     document["buffers"][0]["byteLength"] = len(binary)
+
+
+def repaint_tree02(document, binary):
+    """Swap tree02's 64x64 atlas for a map of the same size that is NOT cell-quantised.
+
+    The two artifacts then differ in ONE property -- whether the embedded image is an atlas --
+    which is what the profile is derived from, so a clause that changes verdict between them is
+    changing verdict on the profile and nothing else.
+    """
+    retexture_tree02(document, binary, png_bytes(
+        painted_pixels(check_asset.ATLAS, "0A141E", "28323C", "F0A63C"), check_asset.ATLAS))
+
+
+def ten_cell_atlas_tree02(document, binary):
+    """Give tree02 a TEN-cell atlas -- an atlas whose count differs from the pines' seven."""
+    retexture_tree02(document, binary, png_bytes(
+        cell_pixels(TEN_CELLS, check_asset.ATLAS), check_asset.ATLAS))
 
 
 def break_the_voxel_clauses(document, binary, start):
@@ -201,56 +219,78 @@ class CheckAssetTests(unittest.TestCase):
             figures[3],
         )
 
-    def test_the_authored_dwarf_reports_all_ten_cells_not_the_pines_seven(self):
-        """The fixture is deliberately the DWARF, whose cell count DIFFERS from the pines'.
+    def test_an_atlas_reports_its_own_cell_count_not_a_family_constant(self):
+        """One reader, two atlases, two different counts -- and NEITHER fixture is the runtime slot.
 
-        A seven-colour fixture cannot discriminate here: the bound used to be the pines' own
-        seven-entry list, so a pine reports the same figure whether the reader asks the constant
-        or the artifact. Only an asset with a different number of cells can tell those apart.
+        The bound used to be the PINES' seven-entry hex list, so a pine reports the same figure
+        whether the reader asks the constant or the artifact: only an asset with a different cell
+        count can discriminate. Until 2026-09-13 that asset was `assets/gltf/`'s promoted dwarf,
+        which was the r3 voxel figure with a ten-cell atlas.
 
-        The three cells at stake are Wood Trunk, Hair and the Lantern flame. The flame is the one
-        that matters: `dwarf_miner.py` says it "is a COLOUR and never an emitter. A pixel guard
-        asserts that", and until this test the guard's subject was read by nothing on the artifact
-        side. The generator checking its own output is not independent verification of it.
+        **That fixture choice was wrong, and promoting round 8 is what exposed it.** The runtime
+        slot is promoted by the operator whenever a new asset is signed off -- it is a MOVING
+        TARGET by design -- so a test pinned to its literal figures fails on every promotion, and
+        the pressure that creates is to avoid promoting in order to keep the gate green. A test
+        must never make shipping the thing it checks more expensive.
+
+        So the discriminating atlas is synthesised here from a tracked artifact instead: tree02
+        carrying a ten-cell atlas. The count it must report, ten, is a property of the fixture in
+        this file, and nothing anyone promotes can change it.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            ten = pathlib.Path(directory) / "SM_VoxelPine_Tree02.glb"
+            write_tree02_mutant(
+                ten, lambda document, binary, start: ten_cell_atlas_tree02(document, binary)
+            )
+            atlas_ten = check(ten)
+            pine = check(SIGNOFF / "export/SM_VoxelPine_Tree01.glb")
+            self.assertEqual(atlas_ten.returncode, 0, atlas_ten.stderr)
+            self.assertEqual(pine.returncode, 0, pine.stderr)
+
+            def cells(result):
+                figure = next(
+                    line for line in result.stdout.splitlines() if line.startswith("FIGURES ")
+                )
+                self.assertIn("profile=voxel-atlas", figure)
+                return figure.split("palette=")[1].split(" ")[0].split(",")
+
+            self.assertEqual(len(cells(atlas_ten)), 10)
+            self.assertEqual(len(cells(pine)), 7)
+            self.assertNotEqual(
+                len(cells(atlas_ten)),
+                len(cells(pine)),
+                "one reader must report each atlas's OWN cell count; a shared constant cannot",
+            )
+            self.assertEqual(cells(atlas_ten), ["#" + value for value in TEN_CELLS])
+
+    def test_the_promoted_runtime_dwarf_passes_and_its_lantern_flame_is_read_from_the_artifact(
+        self,
+    ):
+        """What is true of ANY promoted dwarf, so promotion never has to edit this test.
+
+        The property worth keeping from the old version: `dwarf_miner.py` says the lantern flame
+        "is a COLOUR and never an emitter. A pixel guard asserts that" -- and until that test
+        existed, the guard's subject was read by nothing on the artifact side. A generator
+        checking its own output is not independent verification of it.
+
+        Deliberately NOT asserted: the triangle count, the size, the colour count, the profile, or
+        the revision in the mesh name. Every one of those is a property of whichever asset is
+        currently promoted, and the r3 -> r8 promotion changed all five (14,398 tris of
+        voxel-atlas became 3,955 of painted-map). The clauses still run on it, so a broken
+        promotion fails here -- it just fails on the contract rather than on a stale literal.
         """
         result = check(ROOT / "assets/gltf/SM_VoxelDwarf_Miner01.glb")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         figures = [line for line in result.stdout.splitlines() if line.startswith("FIGURES ")]
         self.assertEqual(len(figures), 1, result.stdout)
-        self.assertIn(
-            "size_m=1.2x1.2x0.8 min_y_m=0.000000 centre_x_m=0.000000 centre_z_m=0.000000 "
-            "palette=#E9D2BB,#5E4632,#FFFFFF,#5F7A6A,#474B41,#A9B2AC,#8B6B50,"
-            "#6B5B49,#34271C,#F0A63C tris=14398 verts=28796",
-            figures[0],
-        )
-        # Named separately from the literal above, because the literal would still "pass" if the
-        # reader were re-hardcoded to a ten-entry dwarf list -- which is the same defect wearing
-        # the other family's clothes.
         palette = figures[0].split("palette=")[1].split(" ")[0].split(",")
-        self.assertEqual(len(palette), 10, "the dwarf carries ten painted cells")
         self.assertIn("#F0A63C", palette, "the lantern flame must be read from the artifact")
-
-    def test_a_palette_is_bounded_by_its_own_painted_cells_not_a_family_constant(self):
-        """Same reader, two families, two different counts -- from ONE code path.
-
-        This is the assertion that would fail if anyone re-introduced a per-family list.
-        """
-        dwarf = check(ROOT / "assets/gltf/SM_VoxelDwarf_Miner01.glb")
-        pine = check(SIGNOFF / "export/SM_VoxelPine_Tree01.glb")
-        self.assertEqual(dwarf.returncode, 0, dwarf.stderr)
-        self.assertEqual(pine.returncode, 0, pine.stderr)
-
-        def cells(result):
-            figure = next(l for l in result.stdout.splitlines() if l.startswith("FIGURES "))
-            return figure.split("palette=")[1].split(" ")[0].split(",")
-
-        self.assertEqual(len(cells(dwarf)), 10)
-        self.assertEqual(len(cells(pine)), 7)
-        self.assertNotEqual(
-            len(cells(dwarf)),
-            len(cells(pine)),
-            "one reader must report each family's OWN cell count; a shared constant cannot",
+        mesh = figures[0].split("mesh=")[1].split(" ")[0]
+        self.assertEqual(
+            re.sub(r"_r\d+$", "", mesh),
+            "SM_VoxelDwarf_Miner01",
+            "the promoted mesh must be this asset, bar its revision",
         )
 
     def test_off_centre_stale_asset_names_the_origin_clause(self):
