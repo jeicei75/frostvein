@@ -1,8 +1,8 @@
 # Round 10 — build the dwarf from scratch, at one resolution, to the reference
 
 **This document is the complete specification. You are building `SM_VoxelDwarf_Miner01` from
-nothing: an empty collection, a primitive, and the references. You inherit no previous `.blend`, no
-previous texture and no previous rig — everything you need is here or in `src-assets/references/`.**
+nothing: an EMPTY `.blend`, a primitive, and the references. You inherit no geometry, no texture and
+no rig — everything you need is here or in `src-assets/references/`. See §7 on the empty file.**
 
 It exists because the process has to be reproducible. Nine rounds produced a figure and a great deal
 of hard-won knowledge, and most of that knowledge lived in round-to-round briefs that each assumed
@@ -228,8 +228,17 @@ One command, from the repo root:
 
 **`REV` is `r10`**, so your collection must be `SM_VoxelDwarf_Miner01_r10` and every datablock
 carries `r10`: object, mesh, material, image, armature. **Until that collection exists the export
-exits with `collection ... not found`, which is expected — do not edit `REV`.** Earlier revisions
-stay in the file, excluded from the view layer.
+exits with `collection ... not found`, which is expected — do not edit `REV`.**
+
+**THE FILE YOU OPEN IS EMPTY, AND THAT IS DELIBERATE.** `SM_VoxelDwarf_Miner01.blend` has been saved
+over with an empty scene for this round. Rounds 5 to 9 accumulated inside it, and round 9's own brief
+told the seat to *copy the previous collection and rework the copy* — which is the opposite of what
+this round is for. **There is nothing to copy, and you must not go looking: do not import, append or
+link geometry from any other file, and do not recover an earlier revision from git.** The earlier
+revisions are in the repository's history if a human ever needs them; they are not an input to you.
+
+If you find yourself with a previous figure in the scene, stop and say so in the report — it means
+the wrong file was opened, and building on it would invalidate the whole point of this round.
 
 **Live modifiers are allowed.** Mirror, Subdivision and Bevel may stay live and are applied on the
 way out; the exporter measures the **evaluated** mesh, so the triangle count and the topology gates
