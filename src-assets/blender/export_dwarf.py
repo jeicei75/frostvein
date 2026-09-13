@@ -41,6 +41,7 @@ line read min Z 0.000000 while the file carried geometry 0.75 m off the floor).
 """
 
 import json
+import math
 import os
 import struct
 import sys
@@ -334,6 +335,65 @@ def modifier_summary(originals):
     return live
 
 
+def exposed_holes(ob):
+    """Holes a camera can SEE, which is the only kind that is a defect.
+
+    A boundary edge -- one face instead of two -- is a hole in the surface, and the topology gate
+    above never counted them: it defines non-manifold as an edge with MORE than two faces. Round 10
+    shipped a figure with 962 boundary edges, including the top of its head, and passed every gate
+    clean. Round 9 had 18 and round 8 had 425.
+
+    Which is why the count alone cannot be the gate. Round 8's 425 were DELIBERATE: its buried-face
+    cull deletes faces that are sealed inside another mass, and deleting a face opens the shell
+    where nothing can ever see it. Gating the count at zero would forbid that, so the test has to
+    ask the question that actually matters -- can anything look in?
+
+    For each boundary edge, rays leave the hole along its face's normal and along four directions
+    tilted 30 degrees off it. The hole counts as exposed only if EVERY ray escapes without striking
+    the figure again. One ray was not enough: a single normal grazing past a neighbouring surface
+    reported two exposed holes on round 9's figure, which is a good figure, and a gate that fails a
+    good figure becomes noise the moment someone has to ship. Five rays that all escape is a hole
+    you can see into.
+
+    Run against the JOINED mesh, so a hole in the body that the hair covers is correctly forgiven.
+    Measured on three revisions, which is how the threshold was chosen:
+
+        r9   18 boundary edges,  0 exposed   -- the figure Wolf accepted on form
+        r8  425 boundary edges, 23 exposed   -- shipped; its own magenta-world check saw none of
+                                                them, because it looked from three views
+        r10 962 boundary edges, 58 exposed   -- "completely broken .. top of head is a hole"
+
+    Validated against the observation rather than only against itself: r10's highest exposed holes
+    sit in the hair at z = 1.13, the crown, which is exactly where Wolf said the hole was.
+    """
+    me = evaluated_mesh(ob)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    exposed = boundary = 0
+    for edge in bm.edges:
+        if len(edge.link_faces) != 1:
+            continue
+        boundary += 1
+        face = edge.link_faces[0]
+        middle = (edge.verts[0].co + edge.verts[1].co) / 2.0
+        normal = face.normal.normalized()
+        along = (edge.verts[1].co - edge.verts[0].co).normalized()
+        across = normal.cross(along).normalized()
+        tilt = math.radians(30.0)
+        fan = [normal]
+        for axis in (along, across):
+            for sign in (1.0, -1.0):
+                fan.append(
+                    (normal * math.cos(tilt) + axis * sign * math.sin(tilt)).normalized()
+                )
+        if all(not ob.ray_cast(middle + d * 1e-4, d)[0] for d in fan):
+            exposed += 1
+    bm.free()
+    ob.to_mesh_clear()
+    return boundary, exposed
+
+
 def glb_facts(path):
     """What the written GLB actually carries: its image names, and its skin's joint names.
 
@@ -389,6 +449,7 @@ def main():
     topology = check_topology(joined, originals)
     modifiers = modifier_summary(originals)
     tris = triangles(joined)
+    boundary, exposed = exposed_holes(joined)
 
     # Re-bind the skin the join threw away, and move the skeleton by the SAME shift the vertices
     # took. `seat_on_origin` edits vertex coordinates; bones live in the armature, so without
@@ -457,6 +518,8 @@ def main():
           % ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0))
     print("  topology          %s"
           % "   ".join("%s %d" % (k, v) for k, v in topology.items()))
+    print("  holes             %d boundary edges, %d EXPOSED to the outside"
+          % (boundary, exposed))
     print("  feature tags      %d vertex groups, %d face attributes%s"
           % (len(tag_groups), len(tag_attributes),
              ("   " + ", ".join(tag_groups + tag_attributes)) if (tag_groups or tag_attributes) else ""))
@@ -507,6 +570,13 @@ def main():
             "did not reach the artifact. The usual cause is an unpacked external path that does "
             "not resolve on this machine; pack it into the .blend (File > External Data > Pack "
             "Resources) so the source reproduces the export anywhere." % len(images))
+
+    if exposed:
+        raise SystemExit(
+            "export: %d of %d boundary edges are EXPOSED to the outside -- the figure has holes a "
+            "camera can see. A boundary edge is only acceptable where another mass seals it (a "
+            "buried-face cull does that on purpose); these are open. Close them or cover them."
+            % (exposed, boundary))
 
     broken = {k: v for k, v in topology.items() if v}
     if broken:
