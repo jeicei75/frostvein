@@ -88,13 +88,38 @@ features — brow, nose, sockets, cheekbones, ears. Not one object per feature.
 Separate named objects, because the per-person combination layer swaps them: **hair, beard,
 moustache, belt + buckle, pack + flap + bedroll, straps, lantern, pickaxe, boots.**
 
-**This reverses one thing round 8 was told, and the reason is on the record.** Round 8 made the
-brows, eyes and nose their own objects "so they can swap later". Carved into the head they cannot
-swap individually — **per-person face variation becomes a variant head mesh, or paint, rather than a
-swappable brow.** That is the standard answer for a game character, and it is why the seams exist:
-a nose that is a separate box has a boundary, a nose extruded from the face does not. Wolf's call
-was *"create base mesh and start carving details"*, so the carve wins. Say in the report if you hit
-a case where this costs something real.
+**This reverses one thing round 8 was told.** Round 8 made the brows, eyes and nose their own
+objects "so they can swap later", and that is why the seams exist: a nose that is a separate box has
+a boundary, a nose extruded from the face does not.
+
+**But carving them in does NOT cost the combination layer, because a feature can be named inside one
+mesh.** Wolf's point, 2026-09-13, and verified in this Blender rather than assumed:
+
+- **Vertex groups work and survive the exporter's join** with their names and membership intact.
+  This is the mechanism to use: `Select -> Select All by Trait -> Vertex Group` finds the region
+  again, and the group is visible in the UI.
+- **FACE-domain named attributes also work** (`mesh.attributes.new("feature_nose", 'BOOLEAN',
+  'FACE')`) and survive the join — the right choice when the region is better described by faces
+  than by vertices.
+- **Face maps do NOT exist any more** — removed in Blender 4.x, confirmed absent in 5.2. Do not
+  reach for them.
+
+**So tag every carved feature.** Name the groups `feature_*` — `feature_nose`, `feature_brow.L`,
+`feature_hem` — and the exporter reports them on its own line (`feature tags N vertex groups, M face
+attributes`). It is reported, never gated: an untagged figure still exports, it is just a figure the
+combination layer cannot take apart.
+
+**And this is the part that is free now and a rebuild later: give each swappable feature a STABLE
+BOUNDARY LOOP.** Tagging finds a region; swapping it needs its rim to be a fixed ring of vertices at
+known positions, so a variant can be stitched into the same hole. Carve each feature so its
+surrounding loop is a clean ring you would be willing to freeze, and say in the report which loops
+you intend as the swap boundaries.
+
+**One trap was removed from the exporter today so this is safe:** the rig gate judged rigid weights
+over EVERY vertex group, so a vertex carrying `head` at 1.0 plus `feature_nose` at 1.0 read as
+**soft-weighted and failed the build** — which would have pushed you to delete your own tags to get
+an export. Only bone-named groups count as weights now. Verified on a fixture whose vertices carry
+both.
 
 ### Stage 5 — UVs and paint
 

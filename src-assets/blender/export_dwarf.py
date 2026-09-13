@@ -66,6 +66,10 @@ OUT_PATH = os.path.join(OUT_DIR, f"{ASSET}.glb")
 TRI_BUDGET = 30000
 AREA_EPS_M2 = 1e-10   # a face smaller than this is degenerate, not geometry
 WEIGHT_EPS = 1e-4     # a weight below this is nothing; a rigid weight is 1.0
+# Blender's own FACE-domain attributes, which are not feature tags and must not be reported as
+# such. `sharp_face` in particular exists on any mesh with a hard edge, so every figure would
+# otherwise report one tag it never authored.
+BUILTIN_FACE_ATTRS = frozenset(("material_index", "sharp_face", "custom_normal"))
 # The 19 joints, fixed since round 3 and not the exporter's to negotiate. They are a SET here:
 # the hierarchy is the artist's, the names are the contract, because the game binds by name.
 JOINTS = frozenset((
@@ -108,26 +112,48 @@ def check_rig(ob, arm):
     vertex belongs to exactly one joint at weight 1.0. Soft weights would not fail to render;
     they would quietly smooth the joints of a hard-edged figure, which is the kind of defect that
     only shows up once something is animated.
+
+    ONLY BONE-NAMED GROUPS ARE WEIGHTS. A vertex group whose name is not a bone is a TAG, not a
+    weight: from round 9 the features are carved into one continuous mesh and named with vertex
+    groups (or face attributes) so the per-person combination layer can still find them --
+    Wolf's point, 2026-09-13, and both mechanisms survive the exporter's join. Judged over every
+    group, a vertex carrying `head` at 1.0 plus `feature_nose` at 1.0 read as SOFT-WEIGHTED and
+    failed the build, which would have pushed the seat to delete its own feature tags to get an
+    export. `feature_tags` reports them instead, and is deliberately not a gate.
     """
     names = {bone.name for bone in arm.data.bones}
     groups = {group.index: group.name for group in ob.vertex_groups}
-    unweighted = soft = misnamed_groups = 0
+    deform = {index for index, name in groups.items() if name in names}
+    unweighted = soft = 0
     for vertex in ob.data.vertices:
-        weights = [g for g in vertex.groups if g.weight > WEIGHT_EPS]
+        weights = [g for g in vertex.groups if g.weight > WEIGHT_EPS and g.group in deform]
         if not weights:
             unweighted += 1
         elif len(weights) > 1 or abs(weights[0].weight - 1.0) > WEIGHT_EPS:
             soft += 1
-        elif groups.get(weights[0].group) not in names:
-            misnamed_groups += 1
     return {
         "joints": len(names),
         "missing joints": len(JOINTS - names),
         "unexpected joints": len(names - JOINTS),
         "unweighted verts": unweighted,
         "soft-weighted verts": soft,
-        "verts weighted to a non-bone": misnamed_groups,
     }
+
+
+def feature_tags(ob, arm):
+    """The non-bone names by which a feature can be found inside the one mesh.
+
+    Vertex groups and FACE-domain attributes both survive the join; Blender's face maps do not
+    exist any more (removed in 4.x, verified absent in 5.2). Reported, never gated -- an untagged
+    figure is not a broken export, it is a figure the combination layer cannot take apart yet.
+    """
+    bones = {bone.name for bone in arm.data.bones} if arm else set()
+    groups = sorted(g.name for g in ob.vertex_groups if g.name not in bones)
+    attributes = sorted(
+        a.name for a in ob.data.attributes
+        if a.domain == 'FACE' and not a.name.startswith('.') and a.name not in BUILTIN_FACE_ATTRS
+    )
+    return groups, attributes
 
 
 def flatten(originals):
@@ -374,6 +400,7 @@ def main():
         joined.modifiers.new("Armature", 'ARMATURE').object = arm
         bpy.context.view_layer.update()
         rig = check_rig(joined, arm)
+    tag_groups, tag_attributes = feature_tags(joined, arm)
 
     materials = {slot.material for slot in joined.material_slots if slot.material}
     images = {n.image for m in materials if m.use_nodes
@@ -430,6 +457,9 @@ def main():
           % ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0))
     print("  topology          %s"
           % "   ".join("%s %d" % (k, v) for k, v in topology.items()))
+    print("  feature tags      %d vertex groups, %d face attributes%s"
+          % (len(tag_groups), len(tag_attributes),
+             ("   " + ", ".join(tag_groups + tag_attributes)) if (tag_groups or tag_attributes) else ""))
     print("  live modifiers    %s"
           % (", ".join("%s:%s" % row for row in modifiers) or "none"))
     if rig is None:
