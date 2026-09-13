@@ -1,8 +1,8 @@
 # Round 9 report — built as a low-poly character: one base mesh, shaped, then carved
 
 **The figure is one continuous lofted mesh with the features cut into its surface. Horizontal edge
-length is 60.6 % of the whole figure against r8's 79.6 %, and no mass exceeds 77.8 % against the
-80 % ceiling. 4,328 triangles of the 30,000 budget. Every export gate is green and
+length is 62.2 % of the whole figure against r8's 79.6 %, and no mass exceeds 74.8 % against the
+80 % ceiling. 8,268 triangles of the 30,000 budget. Every export gate is green and
 `check_asset.py` exits 0.**
 
 The thing that actually changed is the construction. r8 was fifty-four finished boxes stacked on
@@ -55,10 +55,10 @@ it is the first time in this project it has been collected.
 
 | | r8 | **r9** | target |
 |---|---|---|---|
-| whole figure, horizontal edge length | 79.6 % | **60.6 %** | < 70 % |
-| worst mass | `r8_hair` 93.0 % | `r9_moustache` 77.8 % | < 80 % |
-| the body | 54 separate objects | **one continuous mesh** | one |
-| triangles | 3,955 | **4,328** | ≤ 30,000 |
+| whole figure, horizontal edge length | 79.6 % | **62.2 %** | < 70 % |
+| worst mass | `r8_hair` 93.0 % | `r9_moustache` 74.8 % | < 80 % |
+| the body | 54 separate objects | **one continuous mesh**, 1,644 tris | one |
+| triangles | 3,955 | **8,268** (27.6 % of budget) | ≤ 30,000 |
 
 **The number moved because the construction changed, not because anything was chopped into rings.**
 The brief's §7 warns the check can be gamed by chopping a shaft into rings — the opposite happened here. r9 has
@@ -109,7 +109,8 @@ from inside it.
 | 1.000 | eye line | 0.137 | −0.128 … +0.192 | front rows 30–34 |
 | 0.965 | cheek | 0.132 | −0.122 … +0.186 | |
 | 0.930 | jaw | 0.116 | −0.108 … +0.166 | |
-| 0.905 | chin / jaw underside | 0.090 | −0.075 … +0.090 | |
+| 0.917 | mouth | 0.111 | −0.086 … +0.159 | added in the detail pass |
+| 0.905 | upper lip | 0.106 | −0.082 … +0.152 | corrected — see §7.8 |
 | 0.890 | neck top | 0.075 | −0.060 … +0.058 | the bare neck, 0.064 H deep |
 | 0.862 | neck base | 0.080 | −0.064 … +0.062 | |
 | 0.845 | **shoulder line** | 0.178 | −0.162 … +0.140 | back row 45 |
@@ -173,6 +174,42 @@ The hair and beard are divided by **vertical locks** — alternate columns pushe
 along their radial direction — which is why the beard reads 54.9 % horizontal and 23.7 % diagonal
 where r8's read 83.0 % horizontal.
 
+### Stage 3b — the detail pass (8,268 tris)
+
+**Wolf, on the first delivery: "we could have much more detail still", and the figure was at 4,328
+triangles — 14 % of budget, under the brief's own 8,000–15,000 band. Being thrifty is the failure
+mode this round and I had been thrifty.** There is no resolution limit in force anywhere: not in
+`export_dwarf.py` (`TRI_BUDGET = 30000`), not in `check_asset.py`, not in the contract. The only
+thing holding the figure at 4,328 was me.
+
+| what | before | after |
+|---|---|---|
+| **boots** — the named defect: no foot in them | one 6-ring loft, 328 tris | shin, ankle, instep, vamp, **toe cap**, welt, **tread**, **heel block**, **cuff lip**, chamfered verticals — 2,848 tris |
+| **hair** | a smooth bowl, 192 | the sheet's **four measured crown steps** (0.164 / 0.229 / 0.286 / 0.336 H at rows 7 / 10 / 12 / 15) plus a **fringe** over the brow — 328 |
+| **beard** | 7 rings, 192 | 11 rings, tapering jaw → point, locks at 9 mm — 304 |
+| **pickaxe** | a symmetric diamond head, 240 | **spike back, blunt poll forward**, a steel collar and two bindings — 456 |
+| **lantern** | a plain box, 316 | base plate, top plate, cap, bail, **four corner posts**, glass, flame — 572 |
+| **pack** | a box and a flap, 324 | plus a **flap buckle** and **two side pockets** — 480 |
+| **belt** | 656 | plus the **hanging tail** — 908 |
+| **straps** | plain bands, 488 | plus **two buckles** at chest height — 592 |
+| **hands** | a plain block | a **knuckle loop**, raised **fingers**, and a **thumb** |
+| **moustache** | z 0.836–0.900, 30 mm of bare lip under the nose | z 0.840–0.926, sitting **directly under the nose** — 136 |
+
+**The boot is the one worth explaining.** The first rebuild still read as a bucket, because every
+ring was roughly the same depth — a cylinder with a chamfer. The sheet says the **shin** is 0.197 m
+deep and the **sole** is 0.248, both starting at the same back edge: so the shaft is a column and
+the foot grows *forward* out of its bottom. Re-lofted that way — front at y +0.104 at the shin,
++0.158 at the welt — it reads as a foot. That step, not the extra rings, is what fixed it.
+
+**Two masses went over the 80 % ceiling during this pass, and both for the same reason as the belt
+in §3**: detail on a short object is mostly horizontal bands, and its triangulated end caps are
+entirely horizontal. The boots hit **83.7 %**. Chamfering their vertical corners fixed it, but the
+first attempt (two segments, every vertical edge) cost 3,060 triangles — more than the whole body —
+and one segment left them at 81.4 %. The answer was **fewer rings and the two-segment chamfer**:
+seven shaft rings instead of eight, offset 0.009, which lands at **73.9 %** and 2,848 triangles.
+Ring count spends horizontal length; the chamfer buys vertical length; the boot needed the second
+more than the first.
+
 ### Stage 4 — paint (`stage-4-textured-*.png`)
 
 See §5.
@@ -192,22 +229,22 @@ stage 2 -- form pass, 900 tris
 stage 3 -- features carved, gear on, 3,858 tris
   WHOLE FIGURE                  61.0%    33.7%     5.3%
 
-stage 4 -- FINAL, textured and rigged, 4,328 tris
+stage 3b -- the detail pass, 8,268 tris
   mass                         horiz%    vert%    diag%
-  WHOLE FIGURE                  60.6%    34.6%     4.9%
-  r9_moustache                  77.8%    10.1%    12.2%
-  r9_belt                       75.0%    25.0%     0.0%
-  r9_boots                      72.6%    27.4%     0.0%
-  r9_hair                       69.5%    22.4%     8.1%
-  r9_pack                       66.4%    30.0%     3.6%
-  r9_body                       63.7%    32.1%     4.2%
-  r9_lantern                    61.6%    38.4%     0.0%
-  r9_beard                      54.9%    21.5%    23.7%
-  r9_straps                     44.8%    47.5%     7.6%
-  r9_pickaxe                    27.9%    65.8%     6.3%
+  WHOLE FIGURE                  62.2%    33.4%     4.4%
+  r9_moustache                  74.8%    12.2%    13.0%
+  r9_boots                      73.9%    22.7%     3.4%
+  r9_hair                       69.8%    19.9%    10.3%
+  r9_belt                       68.7%    31.3%     0.0%
+  r9_body                       65.1%    30.9%     3.9%
+  r9_pack                       62.9%    34.3%     2.7%
+  r9_beard                      62.3%    16.5%    21.2%
+  r9_lantern                    51.3%    48.7%     0.0%
+  r9_straps                     46.4%    46.7%     6.8%
+  r9_pickaxe                    34.6%    60.1%     5.3%
 ```
 
-**Whole figure 60.6 % against the 70 % target; worst mass 77.8 % against the 80 % ceiling.** The
+**Whole figure 62.2 % against the 70 % target; worst mass 74.8 % against the 80 % ceiling.** The
 r8 row for comparison: whole figure 79.6 %, hair 93.0 %, overtunic 92.5 %, skirt 90.5 %.
 
 **One correction I had to make to hit the per-mass ceiling, and it is worth naming.** The belt
@@ -223,21 +260,21 @@ faces that chamfer produced were dissolved before the export saw them.
 
 ```
 part                         faces    tris   size m (X,Y,Z)
-r9_beard                       108     192   0.314 x 0.282 x 0.333
-r9_belt                        496     656   0.432 x 0.398 x 0.107
-r9_body                        818    1484   0.654 x 0.407 x 1.003
-r9_boots                       188     328   0.500 x 0.268 x 0.197
-r9_hair                        108     192   0.418 x 0.314 x 0.355
-r9_lantern                     218     316   0.156 x 0.156 x 0.322
-r9_moustache                    66     108   0.224 x 0.086 x 0.064
-r9_pack                        198     324   0.372 x 0.234 x 0.534
-r9_pickaxe                     156     240   0.052 x 0.593 x 1.083
-r9_straps                      292     488   0.448 x 0.476 x 0.382
-TOTAL                                 4328
+r9_beard                       164     304   0.304 x 0.275 x 0.333
+r9_belt                        702     908   0.432 x 0.398 x 0.107
+r9_body                        898    1644   0.654 x 0.407 x 1.003
+r9_boots                      2112    2848   0.519 x 0.280 x 0.197
+r9_hair                        188     328   0.406 x 0.371 x 0.355
+r9_lantern                     418     572   0.174 x 0.172 x 0.324
+r9_moustache                    80     136   0.242 x 0.079 x 0.086
+r9_pack                        312     480   0.396 x 0.244 x 0.534
+r9_pickaxe                     288     456   0.052 x 0.599 x 1.058
+r9_straps                      368     592   0.448 x 0.482 x 0.382
+TOTAL                                 8268
 ```
 
 **Ten objects, and the census is the evidence for the brief's §10 first clause: `r9_body` is ONE mesh,
-1,484 triangles, and it carries torso, arms, hands, legs, neck, head, the tunic and skirt and hem,
+1,644 triangles, and it carries torso, arms, hands, legs, neck, head, the tunic and skirt and hem,
 and every carved facial feature.** The other nine are exactly the brief's §4 list of swappables — hair,
 beard, moustache, belt + buckle, pack + flap + bedroll, straps, lantern, pickaxe, boots — one
 object per unit the combination layer will swap.
@@ -251,7 +288,7 @@ feature tags  12 vertex groups, 0 face attributes
   feature_shoulder.R, helper_arm.R
 ```
 
-Eleven `feature_*` groups plus one `helper_arm.R`, which is named that way on purpose: it is the
+Twelve `feature_*` groups plus one `helper_arm.R`, which is named that way on purpose: it is the
 connectivity tag that separates the arm from the trunk and the skirt for painting and weighting,
 **not** a swappable feature, and it should not be read as one. The Mirror modifier carries the
 `.R` groups to `.L` with the suffix swapped, so the combination layer finds both sides.
@@ -264,26 +301,27 @@ hem ring at z = 0.248.
 
 **Where each tag actually landed**, read back off the mesh rather than asserted:
 
-| group | verts | x | y | z |
-|---|---|---|---|---|
-| `feature_nose` | 11 | 0.000–0.045 | +0.201–+0.227 | 0.930–1.030 |
-| `feature_brow.R` | 13 | 0.045–0.115 | +0.175–+0.207 | 1.024–1.055 |
-| `feature_eye.R` | 13 | 0.044–0.118 | +0.151–+0.206 | **1.008–1.030** |
-| `feature_cheek.R` | 17 | 0.040–0.120 | +0.149–+0.223 | 0.930–0.985 |
-| `feature_ear.R` | 8 | 0.200–0.205 | −0.012–+0.052 | 0.942–1.016 |
-| `feature_collar` | 46 | 0.000–0.089 | −0.162–+0.141 | 0.845–0.890 |
-| `feature_cuff.R` | 27 | 0.200–0.316 | −0.095–+0.098 | 0.566–0.613 |
-| `feature_shoulder.R` | 18 | 0.279–0.327 | −0.097–+0.097 | 0.788–0.853 |
-| `feature_overtunic` | 21 | 0.000–0.089 | +0.151–+0.176 | 0.505–0.790 |
-| `feature_crown` | 16 | 0.000–0.112 | −0.116–+0.140 | 1.132–1.148 |
-| `feature_hem` | 6 | 0.000–0.118 | −0.180–+0.180 | 0.248 |
-| `helper_arm.R` | 82 | 0.179–0.327 | −0.102–+0.121 | 0.334–0.853 |
+| group | verts | z | what it tags |
+|---|---|---|---|
+| `feature_nose` | 11 | 0.930-1.030 | the extruded nose column |
+| `feature_brow.R` | 14 | 1.024-1.055 | the brow ridge band |
+| `feature_eye.R` | 13 | **1.008-1.030** | the socket under the brow |
+| `feature_cheek.R` | 17 | 0.930-0.985 | the cheek hollow (the first, demoted socket) |
+| `feature_ear.R` | 8 | 0.952-1.002 | the ear |
+| `feature_collar` | 46 | 0.845-0.890 | the raised neck opening |
+| `feature_cuff.R` | 27 | 0.566-0.613 | the sleeve cuff |
+| `feature_shoulder.R` | 18 | 0.788-0.853 | the shoulder piece |
+| `feature_overtunic` | 21 | 0.505-0.790 | the recessed centre-front panel |
+| `feature_hem` | 6 | 0.248 | the tunic hem ring |
+| `feature_crown` | 16 | 1.132-1.148 | the crown dome |
+| `feature_hand.R` | 40 | 0.330-0.455 | the fist, fingers and thumb |
+| `helper_arm.R` | 100 | 0.334-0.853 | **not a feature** - the connectivity tag |
 
 **`feature_eye.R` was wrong until this table was built, and §7.7 records why.**
 
 ### 4.1 The mesh is mixed quads and triangles
 
-`r9_body`'s cage is **333 quads and 76 triangles**. Every triangle is cleanup: a loop cut that
+`r9_body`'s cage is **373 quads and 76 triangles**. Every triangle is cleanup: a loop cut that
 enters a sloped band through a horizontal edge and leaves through a slanted one clips a corner and
 leaves a 5-gon on the neighbour, and the gate forbids n-gons but not triangles. They sit on the
 trapezius, the jaw's underside, the bevel ends and the crown. Nothing else in the figure is
@@ -487,6 +525,8 @@ body mesh leaves far less to cull. **It does, and I still did not run one.**
 Measured rather than estimated: for every face of the figure, a ray from its centre 0.2 mm along
 its own normal, out to 3 m, against the whole assembled figure.
 
+Measured on the 4,328-triangle figure, before the detail pass of §2 stage 3b:
+
 ```
 r9_body          939 of  1484 tris occluded  (63%)
 r9_belt          394 of   656                (60%)
@@ -509,7 +549,7 @@ another closed shell: the skull under the hair, the chest under the beard, the t
 and straps, the legs inside the boots, the skirt's inner wall, the leg inside the tunic, the
 lantern's glass inside its frame and its flame inside the glass.
 
-At 4,328 triangles against a 30,000 budget this costs nothing and I chose the budget over the
+At 8,268 triangles against a 30,000 budget this costs nothing and I chose the budget over the
 optimisation, which is Wolf's standing ruling — *"it's easier to optimize than add more details
 later on."* It is the obvious first move if LOD0 ever needs trimming, and the numbers above are the
 map for it.
@@ -530,9 +570,42 @@ verts) and `feature_cheek.R` widened to cover the hollow at z 0.930–0.985 (17 
 **The general lesson, and it is the third instance of it in this file:** a tag, a weight or a paint
 rule written against geometry that later moves is silently wrong. The paint rules survived because
 they are re-run from one function after every geometry change; the tags did not, because they were
-written once. **Tags should be re-run the same way.**
+written once.
 
-### 7.8 Two things I could not do from here
+**This is now fixed rather than noted.** `retag()` and `reweight()` join `paint()` as
+re-runnable instruments, and the detail pass called all three after every geometry change. That
+mattered immediately: the loop cuts added ~180 vertices to the body, and a vertex created by a loop
+cut carries **no** vertex groups — so without `reweight()` the rig gate fails on unweighted
+vertices. It did not fail once during the detail pass.
+
+### 7.8 The wedge under the nose, and the loop cut that made it
+
+**Wolf, on the first delivery: "what is that deep wedge on face between nose and beard?"** There
+was one, and it was geometry, not paint — the flat-lit render of the same face is clean, because a
+flat render carries no shading to go dark.
+
+Two faults compounded:
+
+1. **The lower face was a ceiling.** The ring built as "chin / jaw underside" was doing the work of
+   the whole lower face: it sat at y +0.090 while the jaw above it was at +0.166 and the nose
+   reached +0.227. That is a **137 mm pocket under the nose**, and every face in it pointed more
+   than 45° *downward*, so it could only ever render dark. Brought forward to y +0.152, which is an
+   upper lip rather than a ceiling.
+2. **A loop cut landed off the surface.** Adding a mouth loop at z 0.917 put four vertices at
+   y 0.120–0.124, where both neighbouring rings — 0.930 at y 0.162–0.170, 0.905 at y 0.146–0.148 —
+   wanted ~0.156. A ring 35 mm behind both of its neighbours is a **groove**, and two ceilings
+   meeting in a groove is exactly the wedge. Interpolated back onto the line between them.
+
+**And the nose was 30 mm short.** The sheet puts the nose tip's lowest point at z/H 0.750 = 0.900 m;
+mine stopped at 0.930. The upper-lip correction carries the face forward under it, and the
+moustache — which had sat at z 0.836–0.900, leaving 30 mm of bare lip — now runs 0.840–0.926,
+directly beneath the nose where the reference draws it.
+
+**What I should have done differently:** a face whose normal points more than about 45° downward
+can only render dark, and that is a one-line probe over the whole mesh. I did not run it until Wolf
+asked. It is now the first thing I would check after any carve.
+
+### 7.9 Two things I could not do from here
 
 - **`scripts/gate.sh` cannot run on this machine.** Neither `cargo` nor `mise` is installed on the
   Windows clone — `(Get-Command cargo).Source` is empty and `mise` is not on PATH — so the Rust gate
@@ -555,27 +628,29 @@ EXPORT D:\Workspace\frostvein\src-assets\export\SM_VoxelDwarf_Miner01.glb
   object / mesh     SM_VoxelDwarf_Miner01_r9 / SM_VoxelDwarf_Miner01_r9
   materials         M_VoxelDwarf_r9
   texture image     r9   in the GLB: T_VoxelDwarf_r9
-  triangles         4328  of 30000 budget
-  size m (X,Y,Z)    0.726 x 0.657 x 1.200
+  triangles         8268  of 30000 budget
+  size m (X,Y,Z)    0.735 x 0.669 x 1.200
   blender min Z     0.000000   (glTF min Y)
   blender centre XY 0.000000, 0.000000   (glTF centre X, Z)
   topology          n-gons 0   non-manifold edges 0   loose verts 0   loose edges 0   degenerate faces 0   flipped winding 0   missing UV layer 0
-  feature tags      12 vertex groups, 0 face attributes   feature_brow.R, feature_cheek.R, feature_collar, feature_crown, feature_cuff.R, feature_ear.R, feature_eye.R, feature_hem, feature_nose, feature_overtunic, feature_shoulder.R, helper_arm.R
-  live modifiers    r9_beard:MIRROR, r9_body:MIRROR, r9_hair:MIRROR, r9_moustache:MIRROR
+  feature tags      13 vertex groups, 0 face attributes   feature_brow.R, feature_cheek.R, feature_collar, feature_crown, feature_cuff.R, feature_ear.R, feature_eye.R, feature_hand.R, feature_hem, feature_nose, feature_overtunic, feature_shoulder.R, helper_arm.R
+  live modifiers    r9_body:MIRROR
   rig               joints 19   missing joints 0   unexpected joints 0   unweighted verts 0   soft-weighted verts 0   joint names in the GLB: beard, chest, elbow.L, elbow.R, foot.L, foot.R, hand.L, hand.R, head, hip.L, hip.R, hips, knee.L, knee.R, neck, root, shoulder.L, shoulder.R, spine
-  GLB min/max       [-0.36299997568130493, 0, -0.3283331096172333] / [0.36299997568130493, 1.2000000476837158, 0.3283331096172333]   (glTF axes: X, Y up, Z)
-  bytes             446632
+  GLB min/max       [-0.3675000071525574, 0, -0.3344358503818512] / [0.3675000071525574, 1.2000000476837158, 0.3344358503818512]   (glTF axes: X, Y up, Z)
+  bytes             842756
 ```
 exit 0.
 
 ```
-FIGURES src-assets\export\SM_VoxelDwarf_Miner01.glb size_m=0.7x1.2x0.7 min_y_m=0.000000 centre_x_m=0.000000 centre_z_m=0.000000 palette=#E9D2BB,#B87C2C,#A9B2AC,#F4ECE0,#868F8A,#8A725C,#33281E,#453324,#474B41,#4A3727,#4A3A2C,#4C6355,#534030,#5E4632,#5F7A6A,#6B5B49,#7A5B42,#8B6B50,#94A08F,#C9B099,#EEEEEA,#FFD16A,#6B5744,#2A2018,#BC8234,#C0883C,#C48F44,#C8954C,#CC9B54,#D1A25C,#D5A864,#D9AE6C,#DDB574,#E1BB7C,#E5C184,#EAC88C,#EECE94,#F2D49C,#F6DBA4,#FAE1AC,#FFE8B4 tris=4328 verts=7929 mesh=SM_VoxelDwarf_Miner01_r9 profile=painted-map
+FIGURES src-assets\export\SM_VoxelDwarf_Miner01.glb size_m=0.7x1.2x0.7 min_y_m=0.000000 centre_x_m=0.000000 centre_z_m=0.000000 palette=#E9D2BB,#B87C2C,#A9B2AC,#F4ECE0,#868F8A,#8A725C,#33281E,#453324,#474B41,#4A3727,#4A3A2C,#4C6355,#534030,#5E4632,#5F7A6A,#6B5B49,#7A5B42,#8B6B50,#94A08F,#C9B099,#EEEEEA,#FFD16A,#6B5744,#2A2018,#BC8234,#C0883C,#C48F44,#C8954C,#CC9B54,#D1A25C,#D5A864,#D9AE6C,#DDB574,#E1BB7C,#E5C184,#EAC88C,#EECE94,#F2D49C,#F6DBA4,#FAE1AC,#FFE8B4 tris=8268 verts=15092 mesh=SM_VoxelDwarf_Miner01_r9 profile=painted-map
 ```
 exit 0.
 
-**`live modifiers` is four Mirrors, and they are live on purpose** — the brief's §4 lifted the ban, the counts
-now read the evaluated mesh, and `flatten` applies each part's stack before the join. The exported
-4,328 triangles are the mirrored figure, not the half-cage.
+**`live modifiers` is one Mirror, and it is live on purpose** — the brief's §4 lifted the ban, the
+counts now read the evaluated mesh, and `flatten` applies each part's stack before the join. The
+exported 8,268 triangles are the figure with that Mirror evaluated, not the half-cage. It is one
+rather than four because the hair, beard and moustache were re-lofted as full closed rings during
+the detail pass; only `r9_body` is still modelled as a half.
 
 ---
 
@@ -626,14 +701,15 @@ Epic 11's and is not simulated here.
 `_bmad/scripts/session_tokens.py --transcript <this session> --phase dev-art`:
 
 ```
-Session token cost  (67baaf5d-757b-4728-8481-eead57ab7f31.jsonl, tool=claude)  (470 turns, claude-opus-5)
-  input (fresh)            940
-  cache creation       831,258
-  cache read       114,298,729
-  output               725,760
-  total processed  115,856,687
-  wall-clock            78 min  (elapsed, includes idle gaps)
-  est. cost             $80.49
+Session token cost  (67baaf5d-757b-4728-8481-eead57ab7f31.jsonl, tool=claude)  (658 turns, claude-opus-5)
+  input (fresh)          1,316
+  cache creation     1,119,356
+  cache read       210,960,096
+  output             1,009,650
+  total processed  213,090,418
+  wall-clock           126 min  (elapsed, includes idle gaps)
+  est. cost            $137.72  (benchmark ~ verify rates in PRICES)
+  (pass BOTH --story and --phase to record a ledger row)
 ```
 
 No ledger row was recorded: that needs `--story` as well as `--phase`, and this round has no story
@@ -669,25 +745,22 @@ id. The figure above is the transcript's own count for `dev-art`.
 
 ## 13. What I would change next, in order
 
-1. **The hair.** It is the mass furthest from the reference — a smooth bowl where `f084`/`f088`
-   show a stepped, domed crown that steps in at the front and the back. Its 69.5 % is inside the
-   ceiling but it is the only mass whose *form* I would call unfinished. Three more rings and a
-   front fringe carved as a separate lip would fix it.
-2. **The moustache at 77.8 %** is the worst mass, and for the same reason the belt was: a short
-   four-ring loft whose two triangulated caps are entirely horizontal. Vertical locks like the
-   beard's would take it under 60 % and make it read as hair rather than as a bar.
-3. **The pickaxe head is a symmetric diamond**; the reference has a curved spike one side and a
-   blunt hammer the other. Four rings would carry it.
+1. **The moustache at 74.8 %** is now the worst mass, and for the reason the belt and the boots
+   both hit: a short five-ring loft whose two triangulated end caps are entirely horizontal.
+   Chamfering its verticals, as the belt and boots got, would take it under 60 %.
+2. **The body's cross-section is still fourteen columns** where the gear now carries far more. Going
+   to eighteen or twenty-two would round the torso and head further — but it means re-lofting, and
+   re-lofting means re-carving every feature. Worth doing as the *first* act of a round, never the
+   last.
+3. **The tunic wants a second texture tier.** Every clothing face is one flat palette cell; the
+   reference has value variation across the tunic's panels. One 64 × 64 island for the chest would
+   carry it without moving the map off 256 × 256.
 4. **The arm's inboard corners** are square where the outboard pair is chamfered (§2). With the
-   arm's connectivity group now computed and stored as `helper_arm.R`, the bevel can be scoped to
-   it directly and the asymmetry removed.
-5. **A second texture tier for the tunic.** Every clothing face is one flat cell; the reference has
-   value variation across the tunic's panels. One 64 × 64 island for the chest would carry it
-   without moving the map off 256.
-6. **Make the feature tags regenerable.** The paint survived every geometry change because it is
-   one function re-run from scratch each time; the tags did not, because they were written once and
-   then the geometry moved under them (§7.7). Putting the tag rules in the same re-runnable shape
-   would have caught `feature_eye.R` the moment the socket moved instead of at report time.
-7. **The buried-face cull, scoped by joint**, when LOD0 ever needs trimming. §7.6 has the
-   measurement and the map; the safe half of it is the geometry sealed inside another closed shell,
-   and the unsafe half is anything that a joint can expose by bending.
+   arm's connectivity now rebuilt by `arm_group()` on demand, the bevel can be scoped to that group
+   directly and the asymmetry removed.
+5. **The buried-face cull, scoped by joint**, when LOD0 ever needs trimming. §7.6 has the
+   measurement and the map; the safe half is geometry sealed inside another closed shell, the
+   unsafe half is anything a joint can expose by bending.
+6. **A `ceilings()` probe in the instrument set**, beside `health()`. Any face whose normal points
+   more than 45° downward can only render dark; running that after every carve would have caught
+   §7.8's wedge before Wolf did.

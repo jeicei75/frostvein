@@ -1,0 +1,16 @@
+EXPORT D:\Workspace\frostvein\src-assets\export\SM_VoxelDwarf_Miner01.glb
+  parts joined      10 -> 1 mesh 'SM_VoxelDwarf_Miner01_r9'
+  object / mesh     SM_VoxelDwarf_Miner01_r9 / SM_VoxelDwarf_Miner01_r9
+  materials         M_VoxelDwarf_r9
+  texture image     r9   in the GLB: T_VoxelDwarf_r9
+  triangles         8268  of 30000 budget
+  size m (X,Y,Z)    0.735 x 0.669 x 1.200
+  blender min Z     0.000000   (glTF min Y)
+  blender centre XY 0.000000, 0.000000   (glTF centre X, Z)
+  topology          n-gons 0   non-manifold edges 0   loose verts 0   loose edges 0   degenerate faces 0   flipped winding 0   missing UV layer 0
+  feature tags      13 vertex groups, 0 face attributes   feature_brow.R, feature_cheek.R, feature_collar, feature_crown, feature_cuff.R, feature_ear.R, feature_eye.R, feature_hand.R, feature_hem, feature_nose, feature_overtunic, feature_shoulder.R, helper_arm.R
+  live modifiers    r9_body:MIRROR
+  rig               joints 19   missing joints 0   unexpected joints 0   unweighted verts 0   soft-weighted verts 0   joint names in the GLB: beard, chest, elbow.L, elbow.R, foot.L, foot.R, hand.L, hand.R, head, hip.L, hip.R, hips, knee.L, knee.R, neck, root, shoulder.L, shoulder.R, spine
+  GLB min/max       [-0.3675000071525574, 0, -0.3344358503818512] / [0.3675000071525574, 1.2000000476837158, 0.3344358503818512]   (glTF axes: X, Y up, Z)
+  bytes             842756
+
