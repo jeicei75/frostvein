@@ -23,7 +23,7 @@ one object:
     Z-up -> Y-up conversion is the contract's "min Y = 0, centred in X and Z";
   * sockets, cameras and lights never reach the GLB;
   * the mesh is fit to rig and ship -- no n-gons, manifold, no loose or degenerate
-    geometry, consistent winding, UVs present, no unapplied modifiers, and at most
+    geometry, consistent winding, UVs present, and at most
     TRI_BUDGET triangles. The style clauses (axis-aligned, then flat-and-planar) were
     both lifted by Wolf on 2026-09-12: shading and curvature are the artist's call;
   * the object and mesh datablocks carry the revision, so a stale binary announces
@@ -131,7 +131,17 @@ def check_rig(ob, arm):
 
 
 def flatten(originals):
-    """Copy every part, drop its socket parenting, and join the copies into one mesh."""
+    """Copy every part, apply its modifiers, drop its socket parenting, and join the copies.
+
+    THE MODIFIERS MUST BE APPLIED PER COPY, BEFORE THE JOIN. `object.join()` keeps only the active
+    object's modifier stack, so a Subdivision on any part but the first was silently discarded --
+    the export reported `live modifiers r8_torso:SUBSURF` and wrote a GLB with no subdivision in
+    it. Found 2026-09-13 on a fixture built for exactly this workflow, and it is the third defect
+    of this shape in this file: a line that describes the scene while the file says otherwise.
+
+    An Armature modifier is removed rather than applied -- applying it bakes the rest pose into the
+    vertices and throws the skin away. `main` re-binds the skin after the join.
+    """
     bpy.ops.object.select_all(action='DESELECT')
     copies = []
     for ob in originals:
@@ -140,7 +150,15 @@ def flatten(originals):
         dup.matrix_world = ob.matrix_world.copy()   # bake the socket transform in
         dup.parent = None
         bpy.context.scene.collection.objects.link(dup)
+        for modifier in [m for m in dup.modifiers if m.type == 'ARMATURE']:
+            dup.modifiers.remove(modifier)
+        if dup.modifiers:
+            bpy.context.view_layer.objects.active = dup
+            bpy.ops.object.select_all(action='DESELECT')
+            dup.select_set(True)
+            bpy.ops.object.convert(target='MESH')
         copies.append(dup)
+    bpy.ops.object.select_all(action='DESELECT')
 
     for dup in copies:
         dup.select_set(True)
@@ -172,17 +190,42 @@ def seat_on_origin(ob):
     for v in ob.data.vertices:
         v.co = matrix @ v.co
     ob.matrix_world = Matrix.Identity(4)
+    bpy.context.view_layer.update()
 
+    # The bounds come from the EVALUATED mesh and the shift is applied to the CAGE. Catmull-Clark
+    # pulls the surface inside its cage, so a figure seated on cage bounds would export floating
+    # above the floor -- and the GLB-bounds gate in main() would (correctly) fail the build.
+    evaluated = evaluated_mesh(ob)
     lo = Vector((1e9, 1e9, 1e9))
     hi = Vector((-1e9, -1e9, -1e9))
-    for v in ob.data.vertices:
+    for v in evaluated.vertices:
         lo = Vector(min(lo[i], v.co[i]) for i in range(3))
         hi = Vector(max(hi[i], v.co[i]) for i in range(3))
+    ob.to_mesh_clear()
     shift = Vector((-(lo.x + hi.x) / 2.0, -(lo.y + hi.y) / 2.0, -lo.z))
     for v in ob.data.vertices:
         v.co = v.co + shift
     bpy.context.view_layer.update()
     return lo + shift, hi + shift, shift
+
+
+def evaluated_mesh(ob):
+    """The mesh the GLB will actually CARRY -- modifiers evaluated, as `export_apply=True` does.
+
+    Added 2026-09-13 because the old measurements read the cage. With a live Subdivision or Bevel
+    modifier the printed triangle count was the un-subdivided figure while the file carried the
+    subdivided one, the topology gates inspected geometry that was never exported, and the
+    "unapplied modifiers" gate then failed the build rather than let any of that ship. The three
+    together made an iterative block-out-then-refine workflow impossible: every modifier had to be
+    applied before the figure could be exported at all, so a subdivision cage could never be kept
+    live and adjusted.
+
+    Measure the evaluated mesh and all three problems go away at once -- the count is honest, the
+    gates inspect the artifact, and modifiers become a reported fact instead of a failure. The
+    caller must `to_mesh_clear()` the object it passed.
+    """
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    return ob.evaluated_get(depsgraph).to_mesh()
 
 
 def triangles(ob):
@@ -193,8 +236,11 @@ def triangles(ob):
     -- which is exactly when a triangle budget starts mattering. Round 7 makes the
     budget a build gate, so the count has to be the one the GLB will carry.
     """
-    ob.data.calc_loop_triangles()
-    return len(ob.data.loop_triangles)
+    me = evaluated_mesh(ob)
+    me.calc_loop_triangles()
+    count = len(me.loop_triangles)
+    ob.to_mesh_clear()
+    return count
 
 
 def check_topology(ob, originals):
@@ -209,7 +255,7 @@ def check_topology(ob, originals):
     UV island overlap. Both are review items, judged by eye. A gate that cannot
     actually detect its subject is worse than no gate -- it certifies.
     """
-    me = ob.data
+    me = evaluated_mesh(ob)
     bm = bmesh.new()
     bm.from_mesh(me)
 
@@ -235,6 +281,8 @@ def check_topology(ob, originals):
             flipped += 1
 
     bm.free()
+    uv_layers = len(me.uv_layers)
+    ob.to_mesh_clear()
 
     return {
         "n-gons": ngons,
@@ -243,14 +291,21 @@ def check_topology(ob, originals):
         "loose edges": loose_edges,
         "degenerate faces": degenerate,
         "flipped winding": flipped,
-        "missing UV layer": 0 if me.uv_layers else 1,
-        # An Armature modifier is never applied -- applying it would bake the rest pose into the
-        # vertices and throw the skin away. It is the one modifier whose presence is correct, so
-        # it does not count here; `check_rig` is what has an opinion about it.
-        "unapplied modifiers": sum(
-            1 for o in originals for m in o.modifiers if m.type != 'ARMATURE'
-        ),
+        "missing UV layer": 0 if uv_layers else 1,
     }
+
+
+def modifier_summary(originals):
+    """Which modifiers are live, as a fact to report rather than a build failure.
+
+    This was a GATE, and it had to be while the counts above read the cage: an unapplied
+    Subdivision made the triangle figure a lie. The counts read the evaluated mesh now, so a live
+    modifier is honest -- and forbidding them forbade the block-out-then-refine workflow. An
+    Armature modifier was always correct to have; applying it would bake the rest pose into the
+    vertices and throw the skin away.
+    """
+    live = [(o.name, m.type) for o in originals for m in o.modifiers if m.type != 'ARMATURE']
+    return live
 
 
 def glb_facts(path):
@@ -306,6 +361,7 @@ def main():
     joined = flatten(originals)
     lo, hi, shift = seat_on_origin(joined)
     topology = check_topology(joined, originals)
+    modifiers = modifier_summary(originals)
     tris = triangles(joined)
 
     # Re-bind the skin the join threw away, and move the skeleton by the SAME shift the vertices
@@ -374,6 +430,8 @@ def main():
           % ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0))
     print("  topology          %s"
           % "   ".join("%s %d" % (k, v) for k, v in topology.items()))
+    print("  live modifiers    %s"
+          % (", ".join("%s:%s" % row for row in modifiers) or "none"))
     if rig is None:
         print("  rig               <NONE -- unrigged figure>")
     else:
