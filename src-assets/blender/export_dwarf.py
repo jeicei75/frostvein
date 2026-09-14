@@ -50,7 +50,7 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
-REV = "r12"        # each round bumps this, and it is the ONLY line to change here
+REV = "r13"        # each round bumps this, and it is the ONLY line to change here
 ASSET = "SM_VoxelDwarf_Miner01"
 COLLECTION = f"{ASSET}_{REV}"
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "export")
@@ -64,7 +64,14 @@ OUT_PATH = os.path.join(OUT_DIR, f"{ASSET}.glb")
 # crowd argument (20 dwarves ~ 2x the terrain) constrains LOD1 and LOD2, not LOD0: a gameplay dwarf
 # is 8.74 px, so the crowd never draws LOD0. This gate's job is now to catch a MISTAKE -- an
 # unapplied subdivision, a mirrored duplicate, a cull that never ran -- not to shape the art.
-TRI_BUDGET = 30000
+#
+# 2026-09-14, Wolf: "I want actually remove all limitations .. let's push and then optimize".
+# 100,000 because round 12 proved a ceiling is not what shapes this figure: it used 19,064 of
+# 30,000 and left the headroom unused, then inflated with 16,106 chamfer slivers of median width
+# 1.32 mm to reach the *expected* count its brief printed. A gate the art cannot reach cannot
+# cap the art. LOD and decimation come after the look is signed off; the runtime slot still
+# carries r8 at 3,955 tris, so nothing in the game pays for a heavy source asset.
+TRI_BUDGET = 100000
 AREA_EPS_M2 = 1e-10   # a face smaller than this is degenerate, not geometry
 WEIGHT_EPS = 1e-4     # a weight below this is nothing; a rigid weight is 1.0
 # Blender's own FACE-domain attributes, which are not feature tags and must not be reported as
@@ -479,9 +486,32 @@ def form_planes(originals, joined):
         r10 13,592 faces, 3,374 planes   -- the most detailed figure so far
         r11 12,624 faces,   374 planes   -- "solid" and nearly featureless
 
-    The gate is set at 1,200, well below r9's 2,251, because its job is to catch a figure with no
-    form in it rather than to become a target to tune against. Normals are bucketed at ~1 degree,
-    so vertex noise would have to be visible before it could inflate this.
+    2026-09-14: AND A BEVEL CAN FAKE IT, WHICH A SUBDIVISION COULD NOT. Round 12 met a 2,500 target
+    with 3,288 planes, and its own report says how: the cage at 1,418 faces carried 111 planes, and
+    a three-segment Bevel took it to 3,273. A chamfer genuinely faces a new direction, so this is
+    not even cheating -- which is what made it a better trap than subdivision. Measured on the
+    delivered GLB: 84.5 % of its triangles were chamfer strips carrying 9.6 % of the surface, at a
+    MEDIAN WIDTH OF 1.32 mm, where the same spec had asked for chamfers of 8-26 mm.
+
+    So the count is now taken ONLY on faces whose shortest edge is at least one source pixel of the
+    reference. A face narrower than one reference pixel cannot be a feature of the reference, and a
+    threshold in the reference's own units cannot drift with the art. This is immune to both cheap
+    operations: subdivision splits a flat face and adds no normal, and a bevel sliver falls under
+    the threshold. Re-measured across every round still recoverable from git:
+
+        round   faces    PLANES   raw    slivers   the verdict it got
+        r7         446      24      24      3 %     head one box, whole face one quad
+        r8       2,120     441     445      7 %     "finally starts to look what it should"
+        r9       5,530   1,436   2,156     49 %     the form Wolf liked
+        r10     13,592   1,408   3,257     58 %     wrecked by its tooling, not its form
+        r11     12,624     267     319     38 %     "not quite close to what I want"
+        r12      9,752     143   3,292     85 %     "lacking detail .. boxy .. missing feet"
+
+    The PLANES column tracks Wolf's eye in every round; the raw column INVERTS it -- r12 raw 3,292
+    against r9's 2,156, for the figure he called the less detailed of the two. The gate is 1,200,
+    below r9's 1,436 and far below the 3,000 round 13 targets, because its job is to catch a figure
+    that LOST form rather than to become a target to tune against. The sliver fraction is printed
+    beside it so inflation stays visible without being gated -- chamfers are wanted, at 8-26 mm.
     """
     depsgraph = bpy.context.evaluated_depsgraph_get()
     cage = 0
@@ -489,14 +519,28 @@ def form_planes(originals, joined):
         mirrored = 2 if any(m.type == 'MIRROR' for m in ob.modifiers) else 1
         cage += len(ob.data.polygons) * mirrored
     me = joined.evaluated_get(depsgraph).to_mesh()
+    basis = joined.matrix_world.to_3x3()
     planes = set()
+    raw = set()
+    slivers = 0
     for face in me.polygons:
-        normal = (joined.matrix_world.to_3x3() @ face.normal).normalized()
-        planes.add((round(normal.x, 2), round(normal.y, 2), round(normal.z, 2)))
+        normal = (basis @ face.normal).normalized()
+        key = (round(normal.x, 2), round(normal.y, 2), round(normal.z, 2))
+        raw.add(key)
+        loop = [joined.matrix_world @ me.vertices[i].co for i in face.vertices]
+        shortest = min((loop[i] - loop[i - 1]).length for i in range(len(loop)))
+        if shortest >= SOURCE_PIXEL_M:
+            planes.add(key)
+        else:
+            slivers += 1
     faces = len(me.polygons)
     joined.to_mesh_clear()
-    return cage, faces, len(planes)
+    return cage, faces, len(planes), len(raw), slivers
 
+
+# One source pixel of the reference sheet: the figure spans 140 px for 1.200 m. A face narrower
+# than this cannot be a feature of the reference, so it does not get to be a plane of form.
+SOURCE_PIXEL_M = 1.200 / 140.0
 
 FORM_PLANE_FLOOR = 1200
 
@@ -557,7 +601,7 @@ def main():
     modifiers = modifier_summary(originals)
     tris = triangles(joined)
     boundary, exposed = exposed_holes(joined)
-    cage_faces, eval_faces, planes = form_planes(originals, joined)
+    cage_faces, eval_faces, planes, raw_planes, slivers = form_planes(originals, joined)
 
     # Re-bind the skin the join threw away, and move the skeleton by the SAME shift the vertices
     # took. `seat_on_origin` edits vertex coordinates; bones live in the armature, so without
@@ -629,9 +673,14 @@ def main():
           % ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0))
     print("  topology          %s"
           % "   ".join("%s %d" % (k, v) for k, v in topology.items()))
-    print("  form              %d planes of form, from %d cage faces -> %d faces (x%.1f)"
-          % (planes, cage_faces, eval_faces,
-             eval_faces / cage_faces if cage_faces else 0.0))
+    print("  form              %d planes of form on faces >= %.1f mm, from %d cage faces -> "
+          "%d faces (x%.1f)"
+          % (planes, SOURCE_PIXEL_M * 1000.0, cage_faces, eval_faces,
+             (float(eval_faces) / cage_faces) if cage_faces else 0.0))
+    print("  slivers           %d of %d faces are narrower than one source pixel (%.1f%%); "
+          "raw plane count %d"
+          % (slivers, eval_faces, (100.0 * slivers / eval_faces) if eval_faces else 0.0,
+             raw_planes))
     print("  holes             %d boundary edges, %d EXPOSED to the outside"
           % (boundary, exposed))
     print("  inside-out masses %s   (%d open shell%s not judged: %s)"
@@ -693,11 +742,15 @@ def main():
 
     if planes < FORM_PLANE_FLOOR:
         raise SystemExit(
-            "export: only %d distinct planes of form (floor %d). The figure has %d faces, so the "
-            "geometry is there -- what is missing is CHANGES OF DIRECTION in the surface. A SIMPLE "
-            "subdivision cannot add one: it splits faces without moving them. Put the detail in "
-            "the cage. For scale: r9 had 2,251 planes from 5,530 faces, r11 had 374 from 12,624."
-            % (planes, FORM_PLANE_FLOOR, eval_faces))
+            "export: only %d planes of form (floor %d), counted on the %d faces at least one "
+            "source pixel (%.1f mm) wide; %d of %d faces are narrower than that and do not count. "
+            "The geometry is there -- what is missing is CHANGES OF DIRECTION a viewer can "
+            "resolve. Neither a SIMPLE subdivision nor a 1 mm bevel can add one: the first splits "
+            "faces without moving them, the second was measured at a 1.32 mm median on r12 and "
+            "carried 9.6 %% of its surface. Put the detail in the cage. For scale: r9 has 1,436 "
+            "planes and r12 had 143."
+            % (planes, FORM_PLANE_FLOOR, eval_faces - slivers, SOURCE_PIXEL_M * 1000.0,
+               slivers, eval_faces))
     if inverted:
         raise SystemExit(
             "export: inside-out mass -- %s. The shell faces inward, so with backface culling it "

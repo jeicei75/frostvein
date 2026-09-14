@@ -265,7 +265,7 @@ mush, while a **box model reduces by removing boxes**, which stays exactly in st
 
 | LOD | screen height | triangle ceiling | what it is for |
 |---|---|---|---|
-| LOD0 | > 200 px | **≤ 30,000** | marketing shots, close-ups; a handful visible |
+| LOD0 | > 200 px | **≤ 100,000** | marketing shots, close-ups; a handful visible |
 | LOD1 | 40–200 px | **≤ 800** | inspection range; tens visible |
 | LOD2 | < 40 px | **≤ 150** | normal play; hundreds visible |
 
@@ -277,6 +277,16 @@ single flat quad. 30,000 is the top of the band `tech-art-guidelines.md` records
 r3 shipped at 14,398. **The crowd argument above constrains LOD1 and LOD2, not LOD0**: LOD0 is a
 handful of close-ups, and this sheet's own measurement says a gameplay dwarf is 8.74 px, so the
 crowd never draws LOD0.
+
+**LOD0 moved 30,000 -> 100,000 on 2026-09-14** (Wolf: *"I want actually remove all limitations ..
+let's push and then optimize"*). Round 12 is the evidence that no ceiling in this row shapes the
+figure: it used **19,064 of 30,000** and left the headroom unused, then reached the *expected* count
+its brief printed by bevelling — 16,106 chamfer slivers of median width **1.32 mm**, against the
+8–26 mm its own spec asked for. A ceiling the art never reaches cannot cap the art. And the deeper
+reason the number was never the lever: **subdivision cannot add a direction.** r11 measured a
+level-3 SIMPLE subdivision at 32,128 triangles on the body and a silhouette change of **0.00 %** —
+there is no level that is "enough", because the operation never moves a vertex. r9 read as the form
+Wolf liked with **7,446 triangles and 2,776 planes of form**; r11 had 25,248 triangles and 374.
 
 Ceilings, never targets. At 200 LOD2 dwarves that is 30,000 triangles, about a quarter of the
 terrain — sane. And note what the current game framing means: **a dwarf is 8.74 px tall at the boot
