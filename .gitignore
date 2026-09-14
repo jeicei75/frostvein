@@ -60,3 +60,6 @@ src-assets/export/
 # every build in that checkout stamp `-dirty`, and the launcher refuses a dirty stamp -- so the
 # drop directory would break the very check it exists to feed.
 .bin/
+
+# Round 13 per-operation viewport screenshots: the timelapse is the deliverable, not the frames.
+src-assets/renders/*/live/
