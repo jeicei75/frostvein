@@ -334,6 +334,81 @@ def vs_frames(stage="A"):
     return written
 
 
+def envelope():
+    """Our outline against the sheet's outline, ROW BY ROW. This is sec.2's actual gate.
+
+    The landmark checks in measure() are a proxy for it: they prove named features are the
+    right size, but a box added between two landmarks can push the outline past the sheet
+    without moving any of them. That is not hypothetical -- a first pass at a detail round
+    added a skirt hem lip at 0.454 H against the sheet's 0.439, a beard lock at 0.370 H
+    against 0.357 and a boot welt past the stance, and every landmark check still read
+    +0.00 px.
+
+    Both views here are the PINNED ones, so our render and the sheet are already aligned
+    pixel for pixel and the comparison needs no fitting. Reported in source pixels, split at
+    the arm band because sec.4 exempts the arms.
+    """
+    scratch = os.path.join(OUT, "scratch")
+    os.makedirs(scratch, exist_ok=True)
+    # sec.8 gates head, hair, beard, torso, skirt, boots and pack -- the props are neither
+    # listed nor posed like the sheet's (ours hangs vertical in a neutral hand where the sheet
+    # carries it across the body), so they come out of OUR silhouette for this measurement.
+    coll = bpy.data.collections[COLL]
+    props = [coll.objects[n] for n in ("r14_pickaxe", "r14_lantern") if n in coll.objects]
+    for ob in props:
+        ob.hide_render = True
+    out = {}
+    for view in ("front", "side-left"):
+        cfg = VIEWS[view]
+        ortho, cam_h, cam_z, size, ppm, _ = frame(view)
+        cam = camera(view, ortho, cam_h, cam_z)
+        bpy.context.scene.camera = cam
+        raw = os.path.join(scratch, "env-%s.png" % view)
+        render(view, raw, size, transparent=True, flat=True)
+        ours, w, h = load(raw)
+        sheet, _, _ = load(os.path.join(REF, cfg["png"]))
+        s = scan(sheet, w, h)
+
+        worst = {"body": 0.0, "arms": 0.0}
+        where = {"body": None, "arms": None}
+        for iy in range(s["y0"], s["y1"] + 1):
+            y = h - 1 - iy
+            mine = [x for x in range(w) if ours[(y * w + x) * 4 + 3] > 0.35]
+            ink = [x for x in range(w)
+                   if is_ink(sheet[(y * w + x) * 4], sheet[(y * w + x) * 4 + 1],
+                             sheet[(y * w + x) * 4 + 2])]
+            # front.png carries a dimension arrow down its left margin, and a plain min/max
+            # over ink columns reads that arrow as the figure's left edge. Drop runs thinner
+            # than 8 px -- an arrow is a 2-3 px line -- and keep every remaining run. Taking
+            # only the LONGEST run is wrong: the sheet's figure legitimately splits into two
+            # runs at the legs, and that read one leg as the whole outline.
+            runs, run = [], []
+            for x in ink:
+                if run and x - run[-1] > 3:
+                    runs.append(run)
+                    run = []
+                run.append(x)
+            if run:
+                runs.append(run)
+            kept = [r for r in runs if len(r) >= 8]
+            theirs = [kept[0][0], kept[-1][-1]] if kept else []
+            if not mine or not theirs:
+                continue
+            z = (s["y1"] - iy) / ppm
+            band = "arms" if 0.40 <= z <= 0.86 else "body"
+            over = max(theirs[0] - mine[0], mine[-1] - theirs[-1]) / SRC_SCALE
+            if over > worst[band]:
+                worst[band] = over
+                where[band] = round(z / H, 3)
+        out[view] = worst
+        print("  envelope %-10s body %+5.2f px at z/H %s   arms %+5.2f px (exempt)   %s" %
+              (view, worst["body"], where["body"], worst["arms"],
+               "OK" if worst["body"] <= 1.0 else "OFF"))
+    for ob in props:
+        ob.hide_render = False
+    return out
+
+
 def skin_share():
     """Visible skin as a share of figure pixels, classified to the NEAREST palette cell.
 
@@ -530,6 +605,23 @@ def face_shots():
     return written
 
 
+def width_at(coll, zh, names, axis="x"):
+    """Silhouette extent of `names` at height zh (in H), across every box that spans it.
+
+    Restructure-proof, which a box index is not: the crown was rebuilt from four bands to
+    six and every index-based crown check silently started measuring a different band.
+    """
+    a = {"x": 0, "y": 1}[axis]
+    z = zh * H
+    lo, hi = 1e9, -1e9
+    for name in names:
+        for b in boxes_of(coll.objects[name]):
+            if b[2][0] <= z <= b[2][1]:
+                lo = min(lo, b[a][0])
+                hi = max(hi, b[a][1])
+    return (hi - lo) / H if hi > lo else 0.0
+
+
 def measure():
     """Our figure's own landmarks, in sheet units, so they compare with the table directly."""
     coll = bpy.data.collections[COLL]
@@ -552,12 +644,21 @@ def measure():
     # Box order follows the build: head 0 skull 1 jaw 2 brow 3-4 nose 5-6 ears 7 neck;
     # hair 0 cap 1-4 crown steps 5 back 6-7 lobes; torso 0 collar 1 chest 2 waist;
     # skirt 0 top 1 mid 2 hem; sleeve 0 cap 1 upper 2 fore; boot 0 sole 1 body 2 toe 3 cuff.
+    # the crown is measured AT the sheet's own sample rows rather than by box index, because
+    # it is stepped from the sheet's per-row edge and has no one box per quoted width
+    # sampled just INSIDE each band rather than on its boundary: width_at includes every box
+    # spanning z, so a sample sitting exactly on a step reports the wider of the two
+    for label, zh, target in (("head with hair @0.944", 0.9445, 0.336),
+                              ("crown step @0.966", 0.9655, 0.286),
+                              ("crown step @0.981", 0.9805, 0.229),
+                              ("crown top @0.999", 0.9985, 0.164)):
+        got = width_at(coll, zh, ["r14_hair"])
+        d_px = (got - target) * H / PX
+        print("  %-26s %.3f H   sheet %.3f H   %+5.2f px  %s" %
+              (label, got, target, d_px, "OK" if abs(d_px) <= 1.0 else "OFF"))
+
     checks = [
-        ("head with hair, width", [("r14_hair", 0)], "x", 0.336),
         ("ear to ear, width", [("r14_head", 5), ("r14_head", 6)], "x", 0.383),
-        ("crown step 1, width", [("r14_hair", 2)], "x", 0.286),
-        ("crown step 2, width", [("r14_hair", 3)], "x", 0.229),
-        ("crown top, width", [("r14_hair", 4)], "x", 0.164),
         ("beard widest, width", [("r14_beard", 1), ("r14_beard", 2)], "x", 0.343),
         ("chest, tunic only", [("r14_torso", 1)], "x", 0.317),
         ("shoulders over the caps", [("r14_sleeve.R", 0), ("r14_sleeve.L", 0)], "x", 0.528),
@@ -580,9 +681,7 @@ def measure():
         ("pack to nose, depth", None, "y", 0.550),
     ]
     heights = [
-        ("crown", "r14_hair", 4, 1, 1.000),
         ("main skull top", "r14_head", 0, 1, 0.943),
-        ("head + hair mass ends", "r14_hair", 5, 0, 0.707),
         ("shoulder line", "r14_sleeve.R", 0, 1, 0.700),
         ("beard tip", "r14_beard", 4, 0, 0.464),
         ("belt top", "r14_belt", 0, 1, 0.421),
@@ -603,6 +702,14 @@ def measure():
         print("  %-26s %.3f H   sheet %.3f H   %+5.2f px  %s" %
               (label, got, target, d_px, "OK" if abs(d_px) <= 1.0 else "OFF"))
     print("  -- heights, z/H from the sole --")
+    # crown and the hair mass ending are the extremes of the whole hair object, not of any
+    # one box, for the same reason the crown widths are
+    for label, fn, target in (("crown", max, 1.000), ("head + hair mass ends", min, 0.707)):
+        got = fn(v[2][i] for v in boxes_of(coll.objects["r14_hair"]) for i in (0, 1)) / H
+        d_px = (got - target) * H / PX
+        worst = max(worst, abs(d_px))
+        print("  %-26s %.3f H   sheet %.3f H   %+5.2f px  %s" %
+              (label, got, target, d_px, "OK" if abs(d_px) <= 1.0 else "OFF"))
     for label, name, idx, end, target in heights:
         got = boxes_of(coll.objects[name])[idx][2][end] / H
         d_px = (got - target) * H / PX

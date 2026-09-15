@@ -153,11 +153,16 @@ def box(x0, x1, y0, y1, z0, z1):
     return v, f
 
 
-def arm_box(t0, t1, hw, hd, pivot, deg, side=1):
+def arm_box(t0, t1, hw, hd, pivot, deg, side=1, off=(0.0, 0.0)):
     """A box along an arm axis `deg` out from straight down, through `pivot`.
 
     side=+1 is the figure's right (+X). The cross-section is hw across the arm in the
     XZ plane and hd in Y, so the sleeve stays square to the body however far it swings.
+
+    `off` shifts the box within that cross-section: (along e1, along Y). It exists for the
+    thumb. Offsetting the thumb in Y alone puts it on the front of the palm, in the middle
+    of the hand; a thumb sits on the INBOARD edge, which is +e1 (e1 points toward the body
+    on both sides), with only a little forward lead.
     """
     a = math.radians(deg)
     u = (side * math.sin(a), 0.0, -math.cos(a))          # down the arm
@@ -169,9 +174,10 @@ def arm_box(t0, t1, hw, hd, pivot, deg, side=1):
     px, py, pz = pivot[0] * side, pivot[1], pivot[2]
 
     def at(t, s1, s2):
-        return (px + u[0] * t + e1[0] * s1 * hw,
-                py + s2 * hd,
-                pz + u[2] * t + e1[2] * s1 * hw)
+        d1 = s1 * hw + off[0]
+        return (px + u[0] * t + e1[0] * d1,
+                py + s2 * hd + off[1],
+                pz + u[2] * t + e1[2] * d1)
 
     v = [at(t0, -1, -1), at(t0, 1, -1), at(t0, 1, 1), at(t0, -1, 1),
          at(t1, -1, -1), at(t1, 1, -1), at(t1, 1, 1), at(t1, -1, 1)]
@@ -259,7 +265,11 @@ def part_head():
         # hair lobes stop at -0.130 behind it, the jaw starts at -0.050 in front, and the
         # 0.078 m between them is the sheet's column. Everything forward of -0.050 is inside
         # the jaw and the beard, exactly as it should be.
-        box(-0.090, 0.090, -0.128, 0.060, p["neck_bot"], p["neck_top"] + 0.020),
+        # It runs out to 0.130, which is the hair lobes' inner edge. At 0.090 it stopped short
+        # of them and left an open slot at x 0.09..0.20, y -0.13..-0.05, under the back corner
+        # of the jaw -- a notch you could see into from below and behind. It still shows in
+        # profile because the lobes sit BEHIND it (y <= -0.130), not beside it.
+        box(-0.130, 0.130, -0.128, 0.060, p["neck_bot"], p["neck_top"] + 0.020),
     ]
 
 
@@ -272,11 +282,21 @@ def part_hair():
     return [
         # cap over the top and the back; its front edge is the fringe at column 71
         box(-p["hw_head"], p["hw_head"], yb, yf, p["ear_top"], top + o),
-        # four crown steps: 0.336 / 0.286 / 0.229 / 0.164 at 0.943 / 0.964 / 0.979 / 1.000
-        box(-hw[0], hw[0], yb, yf, top - o, cs1),
-        box(-hw[1], hw[1], yb + 0.018, yf - 0.012, cs1 - o, cs2),
-        box(-hw[2], hw[2], yb + 0.034, yf - 0.024, cs2 - o, crown - 0.012),
-        box(-hw[3], hw[3], yb + 0.048, yf - 0.034, crown - 0.012 - o, crown),
+        # THE DOMED CROWN, stepped from the sheet's own edge row by row.
+        #
+        # sec.3 quotes four widths -- 0.336 / 0.286 / 0.229 / 0.164 at rows 15 / 12 / 10 / 7 --
+        # and built as four bands they hold the full width up to z/H 0.967, where the sheet
+        # has already stepped in twice. Those four numbers are SAMPLES of a finer dome, not
+        # the dome: reading front.png's right edge row by row gives 504, 499, 489, 484, 469,
+        # 449 image px, which is six steps between 0.940 and 1.000. The sampled rows still
+        # land on their quoted widths; the steps between them are what was missing, and this
+        # is the "domed, stepped crown" the ortho README calls out.
+        box(-hw[0], hw[0], yb, yf, top - o, 1.1460),
+        box(-0.1866, 0.1866, yb + 0.007, yf - 0.005, 1.1420, 1.1568),
+        box(-hw[1], hw[1], yb + 0.016, yf - 0.011, 1.1528, 1.1664),
+        box(-0.1548, 0.1548, yb + 0.024, yf - 0.017, 1.1624, 1.1748),
+        box(-hw[2], hw[2], yb + 0.034, yf - 0.024, 1.1708, 1.1880),
+        box(-hw[3], hw[3], yb + 0.048, yf - 0.034, 1.1840, crown),
         # Back mass, full width, hanging to 0.707 -- but only BEHIND the neck's back face.
         # Three bands, not one slab: f084 and f088 show the back of the hair stepping in
         # layers. The middle band alone reaches column 36, which is the sheet's hair back,
@@ -328,8 +348,17 @@ def part_beard():
         (0.670, 0.765, hwb - 0.031, 0.020, yf - 0.031),
         (p["beard_tip"], 0.675, hwb - 0.071, 0.020, yf - 0.058),
     ]
-    return [box(-hw, hw, y0, y1, z0 - (o if z0 > p["beard_tip"] else 0.0), z1)
-            for z0, z1, hw, y0, y1 in bands]
+    out = [box(-hw, hw, y0, y1, z0 - (o if z0 > p["beard_tip"] else 0.0), z1)
+           for z0, z1, hw, y0, y1 in bands]
+    # Two locks standing proud of the beard's front. The reference beard is not one smooth
+    # face -- f104 and f088 both read it as hanging strands -- and these are steps on the
+    # front edge of the side silhouette, which is where our density is thinnest. They stay
+    # ABOVE the 0.464 H tip, so the beard's length is unchanged.
+    out += [
+        box(-0.072, -0.012, yf - 0.006, yf + 0.016, 0.600, 0.836),
+        box(0.016, 0.070, yf - 0.020, yf + 0.006, 0.646, 0.848),
+    ]
+    return out
 
 
 def part_moustache():
@@ -349,6 +378,10 @@ def part_torso():
         box(-hw, hw, yb + 0.010, yf - 0.026, 0.740 - o, p["cap_top"]),
         box(-hw, hw, yb, yf, 0.560 - o, 0.745),
         box(-hw + 0.010, hw - 0.010, yb + 0.014, yf - 0.014, p["belt_bot"], 0.565),
+        # collar band at the neckline and a yoke step across the shoulders -- both are plain
+        # in f104 and f140, and both are steps the side silhouette does not currently have
+        box(-0.150, 0.150, yb + 0.022, yf - 0.012, 0.818, 0.848),
+        box(-hw - 0.008, hw + 0.008, yb - 0.008, yf - 0.040, 0.782, 0.812),
     ]
 
 
@@ -362,13 +395,22 @@ def part_skirt():
         box(-0.210, 0.210, yb + 0.016, yf - 0.016, 0.390 - o, 0.460),
         box(-0.238, 0.238, yb + 0.008, yf - 0.008, 0.300 - o, 0.395),
         box(-p["hw_waist"], p["hw_waist"], yb, yf, p["hem"], 0.305),
+        # hem lip, standing proud all round the bottom edge, and the front split f104 shows
+        # down the centre of the skirt
+        box(-p["hw_waist"] - 0.009, p["hw_waist"] + 0.009, yb - 0.009, yf + 0.009,
+            p["hem"], p["hem"] + 0.026),
+        box(-0.036, 0.036, yf - 0.006, yf + 0.014, p["hem"] + 0.020, 0.372),
     ]
 
 
 def part_belt():
     p = P
-    return [box(-0.196, 0.196, p["y_torso_b"] - 0.006, p["y_torso_f"] + 0.008,
-                p["belt_bot"], p["belt_top"])]
+    return [
+        box(-0.196, 0.196, p["y_torso_b"] - 0.006, p["y_torso_f"] + 0.008,
+            p["belt_bot"], p["belt_top"]),
+        # the strap end hanging past the buckle, which f104 and f164 both show
+        box(-0.104, -0.052, p["y_torso_f"] + 0.004, p["y_torso_f"] + 0.018, 0.352, 0.428),
+    ]
 
 
 def part_buckle():
@@ -390,6 +432,9 @@ def part_sleeve(side):
         arm_box(0.055, p["arm_cuff_t"] + o, 0.062, 0.068, pivot, p["arm_deg"], 1),
         arm_box(p["arm_cuff_t"], p["arm_len"] - p["hand_len"] + o, 0.052, 0.058,
                 pivot, p["arm_deg"], 1),
+        # the sleeve's cuff band at 0.566 H, standing proud of the bare forearm below it
+        arm_box(p["arm_cuff_t"] - 0.024, p["arm_cuff_t"] + 0.014, 0.068, 0.074,
+                pivot, p["arm_deg"], 1),
     ]
     return parts if side > 0 else mirror_x(parts)
 
@@ -399,9 +444,13 @@ def part_glove(side):
     pivot = (p["arm_x"], 0.0, p["cap_top"])
     t0 = p["arm_len"] - p["hand_len"] - OVERLAP
     parts = [
-        arm_box(t0, p["arm_len"], 0.060, 0.064, pivot, p["arm_deg"], 1),
-        arm_box(t0 + 0.014, t0 + 0.058, 0.026, 0.028,
-                (p["arm_x"], 0.072, p["cap_top"]), p["arm_deg"], 1),      # thumb
+        # palm, then a knuckle step across its outboard end -- the reference hand is not one
+        # box, and f104's close range lands on the hands
+        arm_box(t0, p["arm_len"] - 0.026, 0.060, 0.064, pivot, p["arm_deg"], 1),
+        arm_box(p["arm_len"] - 0.030, p["arm_len"], 0.052, 0.058, pivot, p["arm_deg"], 1),
+        # thumb: on the INBOARD edge (+e1) with a little forward lead, not on the palm face
+        arm_box(t0 + 0.012, t0 + 0.062, 0.022, 0.026, pivot, p["arm_deg"], 1,
+                off=(0.062, 0.022)),
     ]
     return parts if side > 0 else mirror_x(parts)
 
@@ -440,6 +489,13 @@ def part_boot(side):
         # heel block under the rear of the sole -- f088 shows a distinct heel, and it is
         # appended so the sole/body/cuff checks keep reading boxes 0, 1 and 3
         box(xc - 0.095, xc + 0.095, p["y_shin_b"], -0.030, 0.000, 0.052),            # heel
+        # welt between sole and upper, and a toe cap -- both read clearly in f088, and both
+        # are steps in the SIDE silhouette, which is the view carrying half the reference's
+        # step density
+        box(xc - 0.101, xc + 0.101, p["y_shin_b"] + 0.002, 0.148, 0.030, 0.046),     # welt
+        # the toe cap tops out at 0.080: the sheet's boot steps back above z/H 0.077, and at
+        # 0.096 this box stood 7 source px proud of the sheet's outline in the side view
+        box(xc - 0.086, xc + 0.086, 0.086, p["y_sole_f"] - 0.004, 0.044, 0.080),     # toe cap
     ]
     return parts if side > 0 else mirror_x(parts)
 
@@ -810,8 +866,9 @@ WEIGHTS = {
     "r14_pack": {"*": "chest"},
     "r14_strap.R": {"*": "chest"},
     "r14_strap.L": {"*": "chest"},
-    "r14_sleeve.R": {"*": "shoulder.R", 2: "elbow.R"},
-    "r14_sleeve.L": {"*": "shoulder.L", 2: "elbow.L"},
+    # box 2 is the forearm and box 3 the cuff band that sits over the elbow junction
+    "r14_sleeve.R": {"*": "shoulder.R", 2: "elbow.R", 3: "elbow.R"},
+    "r14_sleeve.L": {"*": "shoulder.L", 2: "elbow.L", 3: "elbow.L"},
     "r14_glove.R": {"*": "hand.R"},
     "r14_glove.L": {"*": "hand.L"},
     "r14_leg.R": {"*": "knee.R", 1: "hip.R"},
