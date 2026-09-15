@@ -50,7 +50,7 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
-REV = "r13"        # each round bumps this, and it is the ONLY line to change here
+REV = "r14"        # each round bumps this, and it is the ONLY line to change here
 ASSET = "SM_VoxelDwarf_Miner01"
 COLLECTION = f"{ASSET}_{REV}"
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "export")
@@ -542,7 +542,12 @@ def form_planes(originals, joined):
 # than this cannot be a feature of the reference, so it does not get to be a plane of form.
 SOURCE_PIXEL_M = 1.200 / 140.0
 
-FORM_PLANE_FLOOR = 1200
+# RETIRED FOR ROUND 14, on that round's sec.2: "The plane metric is retired ... If its form floor
+# (1,200 planes) fails the build, set that one constant to 0 and say so." Round 14 is judged on
+# silhouette against the ortho sheet, not on a plane count, and it builds the figure from ~110
+# boxes rather than by carving -- 888 triangles against a floor that assumed a carved body. The
+# count is still computed and still printed; nothing acts on it.
+FORM_PLANE_FLOOR = 0
 
 
 def glb_facts(path):
