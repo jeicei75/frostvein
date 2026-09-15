@@ -179,6 +179,25 @@ def box(x0, x1, y0, y1, z0, z1):
     return v, f
 
 
+def chamfered(x0, x1, y0, y1, z0, z1, cx=0.018, cy=0.018):
+    """One mass as TWO boxes, with all four vertical corners stepped in.
+
+    This is where the reference's roundness comes from. Its masses are not plain boxes: the
+    pack in f088 and f120, and the tunic's shoulder in f104, all show a narrow third plane
+    between the front and the side. Ours were hard 90-degree corners, so at three-quarters
+    they read as two planes meeting at an edge -- slabs, not volumes -- even with every
+    dimension on the sheet.
+
+    The trick is that it costs nothing against the gate. The full-width box carries the front
+    and back views; the full-depth box carries both side views. Neither orthographic
+    silhouette changes at all, so this only ever shows where the sheet cannot see it.
+    """
+    return [
+        box(x0, x1, y0 + cy, y1 - cy, z0, z1),
+        box(x0 + cx, x1 - cx, y0, y1, z0, z1),
+    ]
+
+
 def arm_box(t0, t1, hw, hd, pivot, deg, side=1, off=(0.0, 0.0)):
     """A box along an arm axis `deg` out from straight down, through `pivot`.
 
@@ -253,7 +272,12 @@ def part_head():
     y_skull_back = p["y_head_back"] + 0.020
     return [
         # deep skull, down to the top of the bare neck run
-        box(-hw, hw, y_skull_back, p["y_face_art"], p["neck_top"] - o, p["skull_top"]),
+        # Skull, recessed 10 mm from the face plane and stopping below the top chamfer. The
+        # face plate and the top band are appended boxes; together they step the head in at
+        # the crown and at its front corners, which is what "rounded" means on a box figure
+        # and what f100 and f092 both read.
+        box(-hw, hw, y_skull_back, p["y_face_art"] - 0.010,
+            p["neck_top"] - o, 1.0800),
         # shallow jaw: front of the head only, so the neck stays the outermost
         # surface behind it in profile (see the module docstring). Its back plane is what
         # sets the FRONT of the visible neck column.
@@ -262,7 +286,11 @@ def part_head():
         # Brow band at 0.879 -- the art's step out to +0.181 H at row 24, spanning rows
         # 24-30. Built as a fixed 15 mm proud of column 83 it reached 0.191 H where the art
         # still has 0.167, the largest single violation left in the side view.
-        box(-hw, hw, p["y_face_art"] - o, p["y_brow_art"], row_bot(30), row_top(24)),
+        # The brow BAND is recessed 10 mm; the two brow blocks appended below stand at the
+        # art's 0.181 H. In f100 the brows are two masses with the nose bridge sunk between
+        # them, not one bar across the face.
+        box(-hw, hw, p["y_face_art"] - o, p["y_brow_art"] - 0.010,
+            row_bot(30), row_top(24)),
         # NOSE, ramped from side-left.png's own rows. The art does not carry a block: its
         # front edge steps 0.189 / 0.196 / 0.210 / 0.217 H across rows 31-38 and is back to
         # 0.196 by row 43. A two-box nose reaching 0.207 H from row 24 upward stood 2.5
@@ -300,6 +328,19 @@ def part_head():
         # of the jaw -- a notch you could see into from below and behind. It still shows in
         # profile because the lobes sit BEHIND it (y <= -0.130), not beside it.
         box(-0.130, 0.130, -0.128, 0.060, p["neck_bot"], p["neck_top"] + 0.020),
+        # ---- appended, so boxes 0-9 keep the indices the checks and weights name ----
+        # 10, 11: the two brow masses, at the art's 0.181 H front
+        box(-0.150, -0.034, p["y_brow_art"] - 0.016, p["y_brow_art"],
+            row_bot(29), row_top(25)),
+        box(0.034, 0.150, p["y_brow_art"] - 0.016, p["y_brow_art"],
+            row_bot(29), row_top(25)),
+        # 12: the face plate, proud of the recessed skull and narrower than it, so the head's
+        # front corners step back instead of meeting at a hard edge
+        box(-hw + 0.014, hw - 0.014, p["y_face_art"] - 0.014, p["y_face_art"],
+            p["neck_top"] - o, 1.0800),
+        # 13: the crown chamfer -- the skull steps in before the hair takes over
+        box(-hw + 0.012, hw - 0.012, y_skull_back + 0.008, p["y_face_art"] - 0.018,
+            1.0760, p["skull_top"]),
     ]
 
 
@@ -392,6 +433,15 @@ def part_hair():
             p["head_ends"], p["neck_top"]),
         box(p["hw_head"] - 0.030, p["hw_head"] - 0.004, yb + 0.020, -0.136,
             p["head_ends"], p["neck_top"]),
+        # FACE-FRAMING LOBES. f100 is unambiguous: the hair comes forward past the ears and
+        # down the cheeks, framing the face, in two depth layers. They sit ABOVE the bare
+        # neck run so they cannot bury it, and at y <= +0.118 they stay well inside the art's
+        # +0.167 H front edge at these rows.
+        box(0.150, p["hw_head"], -0.060, 0.118, p["neck_top"], 1.0400),
+        box(-p["hw_head"], -0.150, -0.060, 0.118, p["neck_top"], 1.0400),
+        # the second, shallower layer behind them
+        box(0.128, 0.166, -0.100, 0.070, p["neck_top"] - 0.030, 1.0200),
+        box(-0.166, -0.128, -0.100, 0.070, p["neck_top"] - 0.030, 1.0200),
     ]
 
 
@@ -423,13 +473,37 @@ def part_beard():
     out += [
         box(-0.072, -0.012, yf - 0.006, yf + 0.016, 0.600, 0.836),
         box(0.016, 0.070, yf - 0.020, yf + 0.006, 0.646, 0.848),
+        # THE CENTRE MASS, proud of the sides. In f100 and f104 the beard is not a slab: its
+        # middle carries forward and the sides fall away, which is what gives it volume at
+        # 60 px. It stays inside column 86, the sheet's beard front.
+        # TWO bands, because the art's front DIPS here: +0.210 H at row 41, back to +0.196
+        # at rows 43-49, out again to +0.210 by row 51. That dip between the moustache and
+        # the beard's main mass is real form, and a single centre mass at one depth stood
+        # 2.8 px proud through it.
+        box(-0.104, 0.104, 0.030, h(0.196), 0.826, 0.902),
+        box(-0.104, 0.104, 0.030, h(0.208), 0.640, 0.830),
+        box(-0.086, 0.086, 0.030, h(0.204), 0.586, 0.660),
+        # and a stepped bottom rather than a flat cut, above the 0.464 H tip
+        box(-0.062, 0.062, 0.030, yf - 0.042, p["beard_tip"], 0.600),
+        # cheek masses, where the beard meets the sideburns
+        box(-p["hw_beard"], -0.120, 0.030, yf - 0.048, 0.856, 0.946),
+        box(0.120, p["hw_beard"], 0.030, yf - 0.048, 0.856, 0.946),
     ]
     return out
 
 
 def part_moustache():
     p = P
-    return [box(-0.130, 0.130, p["y_face"] - 0.006, p["y_beard_f"] + 0.014, 0.880, 0.922)]
+    # A centre block with two wings dropping away either side, which is how f100 and f104
+    # read it -- proud of the beard, wider than the mouth, and stepped rather than one bar.
+    yf = p["y_beard_f"]
+    return [
+        # It sits on rows 39-42, where the art's front is +0.217 to +0.210 H. Dropped to rows
+        # 43-44 at that depth it ran 2.3 px past the sheet, which only allows +0.196 there.
+        box(-0.072, 0.072, p["y_face_art"] - 0.006, h(0.208), 0.894, 0.932),
+        box(-0.126, -0.066, p["y_face_art"] - 0.006, h(0.200), 0.898, 0.928),
+        box(0.066, 0.126, p["y_face_art"] - 0.006, h(0.200), 0.898, 0.928),
+    ]
 
 
 def part_torso():
@@ -440,10 +514,12 @@ def part_torso():
     # below step BACK, so the profile reads as three masses rather than one slab -- the side
     # silhouette scored 3.4 steps/100 rows against the reference's 10.3 when all three sat
     # at the same y.
-    return [
-        box(-hw, hw, yb + 0.010, yf - 0.026, 0.740 - o, p["cap_top"]),
-        box(-hw, hw, yb, yf, 0.560 - o, 0.745),
-        box(-hw + 0.010, hw - 0.010, yb + 0.014, yf - 0.014, p["belt_bot"], 0.565),
+    return (
+        chamfered(-hw, hw, yb + 0.010, yf - 0.026, 0.740 - o, p["cap_top"], 0.020, 0.016)
+        + chamfered(-hw, hw, yb, yf, 0.560 - o, 0.745, 0.022, 0.018)
+        + chamfered(-hw + 0.010, hw - 0.010, yb + 0.014, yf - 0.014,
+                    p["belt_bot"], 0.565, 0.018, 0.014)
+    ) + [
         # collar band at the neckline and a yoke step across the shoulders -- both are plain
         # in f104 and f140, and both are steps the side silhouette does not currently have
         box(-0.150, 0.150, yb + 0.022, yf - 0.012, 0.818, 0.848),
@@ -454,7 +530,7 @@ def part_torso():
         # f104: a collar either side of the neck, and a placket down the chest.
         box(-0.104, -0.030, yf - 0.030, yf + 0.004, 0.806, 0.844),
         box(0.030, 0.104, yf - 0.030, yf + 0.004, 0.806, 0.844),
-        box(-0.026, 0.026, yf - 0.004, yf + 0.010, 0.560, 0.822),
+        box(-0.026, 0.026, yf - 0.004, yf + 0.005, 0.560, 0.822),
         # no side seams: they are not resolvable in any frame either
         # the hem lip of the tunic body, under the belt
         box(-hw - 0.006, hw + 0.006, yb + 0.010, yf - 0.010, 0.412, 0.436),
@@ -471,13 +547,17 @@ def part_skirt():
     # pack ends -- and it runs -0.124 H at row 100 to -0.153 by row 118. A constant back off
     # column 37 sat 2.7 px behind the sheet at rows 99-102. The front stays on the table:
     # the arm and the lantern cover it in every view.
-    return [
-        box(-0.210, 0.210, h(-0.125), yf - 0.016, 0.390 - o, 0.460),
-        box(-0.238, 0.238, h(-0.142), yf - 0.008, 0.300 - o, 0.395),
-        box(-p["hw_waist"], p["hw_waist"], h(-0.153), yf, p["hem"], 0.305),
+    return (
+        chamfered(-0.210, 0.210, h(-0.125), yf - 0.016, 0.390 - o, 0.460, 0.022, 0.016)
+        + chamfered(-0.238, 0.238, h(-0.142), yf - 0.008, 0.300 - o, 0.395, 0.024, 0.018)
+        + chamfered(-p["hw_waist"], p["hw_waist"], h(-0.153), yf, p["hem"], 0.305,
+                    0.026, 0.020)
+    ) + [
         # hem lip, standing proud all round the bottom edge, and the front split f104 shows
         # down the centre of the skirt
-        box(-p["hw_waist"] - 0.009, p["hw_waist"] + 0.009, yb - 0.009, yf + 0.009,
+        # the hem lip is proud in Y only -- flared 9 mm in X too it pushed the widest part
+        # of the skirt to 0.454 H against the sheet's 0.439
+        box(-p["hw_waist"], p["hw_waist"], yb, yf + 0.012,
             p["hem"], p["hem"] + 0.026),
         box(-0.036, 0.036, yf - 0.006, yf + 0.014, p["hem"] + 0.020, 0.372),
     ]
@@ -519,9 +599,9 @@ def part_sleeve(side):
     p = P
     o = OVERLAP
     pivot = (p["arm_x"], 0.0, p["cap_top"])
-    parts = [
-        # the cap: this is what carries the 0.528 shoulder width, not the torso
-        box(p["hw_chest"] - 0.006, p["hw_shoulder"], -0.160, 0.160, 0.730, p["cap_top"]),
+    parts = chamfered(p["hw_chest"] - 0.006, p["hw_shoulder"], -0.160, 0.160,
+                      0.730, p["cap_top"], 0.016, 0.020) + [
+        # (the cap above is what carries the 0.528 shoulder width, not the torso)
         arm_box(0.055, p["arm_cuff_t"] + o, 0.062, 0.068, pivot, p["arm_deg"], 1),
         arm_box(p["arm_cuff_t"], p["arm_len"] - p["hand_len"] + o, 0.052, 0.058,
                 pivot, p["arm_deg"], 1),
@@ -585,8 +665,10 @@ def part_boot(side):
         # The boot's front STEPS: the art reads +0.074 H at rows 133-136 and only reaches
         # +0.131 at row 139, down at the toe. One box front at 0.110 m stood 2.5 px forward
         # of the sheet at z/H 0.099.
-        box(xo - p["w_limb"], xo, p["y_shin_b"] + 0.004, 0.110, 0.028 - o, 0.104),   # body
-        box(xo - p["w_limb"], xo, p["y_shin_b"] + 0.004, 0.088, 0.100, 0.135),       # shaft
+    ] + chamfered(xo - p["w_limb"], xo, p["y_shin_b"] + 0.004, 0.110,
+                  0.028 - o, 0.104, 0.016, 0.014) + chamfered(
+                  xo - p["w_limb"], xo, p["y_shin_b"] + 0.004, 0.088,
+                  0.100, 0.135, 0.016, 0.014) + [
         box(xc - 0.091, xc + 0.091, 0.100, p["y_sole_f"], 0.028 - o, 0.080),         # toe
         box(xc - hwc, xc + hwc, p["y_shin_b"] + 0.009, 0.105,
             p["boot_cuff_b"], p["boot_cuff_t"]),                                     # cuff
@@ -774,6 +856,7 @@ MAT = "M_VoxelDwarf_r14"
 TEX_SIZE = 512
 CELL = 32                        # 16 x 16 cells
 FACE_ISLAND = (8, 8, 176, 128)   # x, y, w, h in pixels, bottom-left origin
+FACE_BOXES = (0, 1, 2, 10, 11, 12)   # r14_head boxes whose +Y face carries the island
 FACE_RECT = (-0.2016, 0.2016, 0.8484, 1.1316)     # world x0,x1,z0,z1 the island covers
 
 STEPS = {"top": 1.18, "front": 1.00, "side": 0.85, "bottom": 0.66}
@@ -787,10 +870,16 @@ PAINT = {
     # not: it runs the full head width, so a value step on it reads as a headband across the
     # face. Its form comes from the painted brows just under it.
     "r14_head": ("skin", {3: "skinhi", 4: "skinhi", 5: "skinhi", 6: "skinhi"}),
-    "r14_hair": ("hair", {}),
-    # bands 0-1 catch the light, 3-4 hang in shadow, 5-6 are the proud locks
-    "r14_beard": ("beard", {0: "beardhi", 3: "beardlo", 4: "beardlo",
-                            5: "beardhi", 6: "beardhi"}),
+    # hairhi is the base, with the approved #34271C doing the shadow work through the
+    # orientation steps rather than being the base and crushing everything to black
+    "r14_hair": ("hairhi", {}),
+    # Same inversion as the hair: #826145 is the base and #5E4632 the shadow, not the other
+    # way round. f104's beard is a warm mid-brown that reads clearly LIGHTER than the hair;
+    # built on #5E4632 it went black in shadow and the two masses merged into one.
+    # The main hanging bands keep #5E4632; beardhi lights the cheeks, the proud centre mass
+    # and the locks. Beardhi on everything read a shade too light and orange against f104,
+    # and it pulled antialiased beard/skin boundary pixels into the brown families.
+    "r14_beard": ("beardhi", {1: "beard", 2: "beard", 3: "beard", 4: "beardlo"}),
     "r14_moustache": ("beardhi", {}),
     "r14_torso": ("tunic", {}),
     "r14_skirt": ("tunic", {}),
@@ -805,8 +894,9 @@ PAINT = {
     # f104's boots are LIGHT tan against dark trousers. Built on the darker leather they sank
     # into the background at 60 px and the whole lower body went illegible, so the boot body
     # is the lighter leather and only the sole and heel take the dirt step.
-    "r14_boot.R": ("wood", {0: "dirt", 5: "dirt"}),
-    "r14_boot.L": ("wood", {0: "dirt", 5: "dirt"}),
+    # box 0 is the sole and 7 the heel; the chamfer split the body and shaft into 1-4
+    "r14_boot.R": ("wood", {0: "dirt", 7: "dirt"}),
+    "r14_boot.L": ("wood", {0: "dirt", 7: "dirt"}),
     "r14_pack": ("wood", {2: "metal", 3: "metal", 4: "metal"}),   # the bedroll
     "r14_strap.R": ("trunk", {}),
     "r14_strap.L": ("trunk", {}),
@@ -827,6 +917,13 @@ EXTRA = {
     # The beard was one cell and read as a black mass; f104's is two or three browns with the
     # lit top clearly lighter than the hanging bottom. Both are r3's recorded value steps.
     "beardhi": "#826145", "beardlo": "#423123",
+    # And so was the hair. #34271C is the approved hair cell, but used as the BASE it ranges
+    # #3D2E21 down to #221A12 through the orientation steps -- black in everything but name,
+    # which is what a warm-key render exposed. Used as the shadow step under #513C2B (also
+    # r3's) it reads as the reference's dark warm brown and still separates from the beard.
+    # The model sheet sanctions exactly this: "build on the 10 approved cells, and propose
+    # which of the 13 value steps earn the spare slots as the parts that need them arrive."
+    "hairhi": "#513C2B",
 }
 
 
@@ -979,10 +1076,11 @@ def assign_uvs(coll):
         for poly in me.polygons:
             bi = poly.index // 6
             mat_key = over.get(bi, key)
-            # Box 2 is the BROW RIDGE and it belongs on the island too. It stands 13 mm proud
-            # of the skull's face plane, so with a flat palette cell it covered the painted
-            # brows behind it and the face rendered with no brows at all.
-            face_island = (ob.name == "r14_head" and bi in (0, 1, 2) and poly.normal.y > 0.7)
+            # Everything that forms the front of the face takes the island: skull, jaw, brow
+            # band, the two brow masses and the face plate. A proud box left on a flat
+            # palette cell covers the paint behind it -- that is how the brows went missing.
+            face_island = (ob.name == "r14_head" and bi in FACE_BOXES
+                           and poly.normal.y > 0.7)
             for li in poly.loop_indices:
                 if face_island:
                     co = ob.matrix_world @ me.vertices[me.loops[li].vertex_index].co

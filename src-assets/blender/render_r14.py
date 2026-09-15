@@ -47,7 +47,8 @@ PALETTE_SRC = {
     "pants": "#474B41", "metal": "#A9B2AC", "wood": "#8B6B50", "trunk": "#6B5B49",
     "hair": "#34271C", "flame": "#F0A63C",
 }
-EXTRA_SRC = {"dirt": "#493E32", "skinhi": "#F2DFCB"}
+EXTRA_SRC = {"dirt": "#493E32", "skinhi": "#F2DFCB", "beardhi": "#826145",
+             "beardlo": "#423123", "hairhi": "#513C2B"}
 STEPS_SRC = {"top": 1.18, "front": 1.00, "side": 0.85, "bottom": 0.66}
 SRC_SCALE = 5                  # the crops are 5x blow-ups
 PPM = SRC_SCALE / PX           # 583.333 image px per metre, for the pinned views
@@ -745,41 +746,63 @@ def measure():
         print("  %-26s %.3f H   sheet %.3f H   %+5.2f px  %s" %
               (label, got, target, d_px, "OK" if abs(d_px) <= 1.0 else "OFF"))
 
+    worst = 0.0
+    # Measured at a HEIGHT over the whole part, not by box index. Chamfering splits a mass
+    # into two boxes and every index after it shifts; three checks have already silently
+    # re-pointed themselves that way this round (the crown bands, the skull top, the boot
+    # cuff). A height is stable under any restructure.
+    for label, names, zh, axis, target in (
+        ("chest, tunic only", ["r14_torso"], 0.600, "x", 0.317),
+        ("torso depth", ["r14_torso"], 0.600, "y", 0.286),
+        # NOT the sleeve here -- see the note below the loop
+        ("skirt at the hem", ["r14_skirt"], 0.215, "x", 0.439),
+        ("skirt depth", ["r14_skirt"], 0.215, "y", 0.300),
+        ("stance, boot to boot", ["r14_boot.R", "r14_boot.L"], 0.060, "x", 0.398),
+        ("one boot, width", ["r14_boot.R"], 0.060, "x", 0.164),
+        ("boot cuff, width", ["r14_boot.R"], 0.130, "x", 0.200),
+        ("pack behind the torso", ["r14_pack"], 0.550, "y", 0.186),
+    ):
+        got = width_at(coll, zh, names, axis)
+        d_px = (got - target) * H / PX
+        worst = max(worst, abs(d_px))
+        print("  %-26s %.3f H   sheet %.3f H   %+5.2f px  %s" %
+              (label, got, target, d_px, "OK" if abs(d_px) <= 1.0 else "OFF"))
+
     checks = [
+        # The shoulder cap is named by BOX, not by height, because width_at works on each
+        # box's axis-aligned bounds and the arm boxes are rotated 40 degrees: the upper arm's
+        # AABB reaches x 0.404 and spans z 0.674..0.838, so a height sample anywhere in the
+        # cap swept it in and reported the shoulders at 0.674 H. Boxes 0 and 1 are the cap's
+        # own two chamfer halves.
+        ("shoulders over the caps", [("r14_sleeve.R", 0), ("r14_sleeve.R", 1),
+                                     ("r14_sleeve.L", 0), ("r14_sleeve.L", 1)], "x", 0.528),
         ("ear to ear, width", [("r14_head", 7), ("r14_head", 8)], "x", 0.383),
         ("beard widest, width", [("r14_beard", 1), ("r14_beard", 2)], "x", 0.343),
-        ("chest, tunic only", [("r14_torso", 1)], "x", 0.317),
-        ("shoulders over the caps", [("r14_sleeve.R", 0), ("r14_sleeve.L", 0)], "x", 0.528),
-        ("skirt at the hem", [("r14_skirt", 2)], "x", 0.439),
-        ("stance, boot to boot", [("r14_boot.R", 1), ("r14_boot.L", 1)], "x", 0.398),
-        ("one boot, width", [("r14_boot.R", 1)], "x", 0.164),
-        ("boot cuff, width", [("r14_boot.R", 4)], "x", 0.200),
         # The sheet's 0.064 H neck is NOT checked here. It is the depth of the exposed skin
         # column, which is a property of what the jaw and hair leave uncovered, not of the
         # neck box -- measuring the box against it made a correct full-depth throat report
         # +12.97 px. neck_bare() measures the exposed column itself and reports it.
         # 0.336 runs from the back of the HAIR to the front of the face, so it spans both
         # objects; the skull's own back plane sits 8 mm forward of it to avoid z-fighting
-        ("head depth, back to face", [("r14_hair", 0), ("r14_head", 0)], "y", 0.336),
-        ("torso depth", [("r14_torso", 1)], "y", 0.286),
-        ("skirt depth", [("r14_skirt", 2)], "y", 0.300),
-        ("pack behind the torso", [("r14_pack", 0), ("r14_pack", 1)], "y", 0.186),
+        # box 12 is the FACE PLATE and carries the head's front; box 0 is the skull behind it
+        ("head depth, back to face", [("r14_hair", 0), ("r14_head", 12)], "y", 0.336),
         ("shin depth", [("r14_leg.R", 0)], "y", 0.164),
         ("boot sole length", [("r14_boot.R", 0)], "y", 0.214),
         ("pack to nose, depth", None, "y", 0.550),
     ]
     heights = [
-        ("main skull top", "r14_head", 0, 1, 0.943),
+        # box 13 is the crown chamfer and is now the head's top; box 0 stops below it
+        ("main skull top", "r14_head", 13, 1, 0.943),
         ("shoulder line", "r14_sleeve.R", 0, 1, 0.700),
         ("beard tip", "r14_beard", 4, 0, 0.464),
         ("belt top", "r14_belt", 0, 1, 0.421),
         ("belt bottom", "r14_belt", 0, 0, 0.343),
-        ("tunic hem", "r14_skirt", 2, 0, 0.207),
-        ("boot cuff top", "r14_boot.R", 4, 1, 0.164),
-        ("boot cuff bottom", "r14_boot.R", 4, 0, 0.107),
+        
+        ("boot cuff top", "r14_boot.R", 6, 1, 0.164),
+        ("boot cuff bottom", "r14_boot.R", 6, 0, 0.107),
         ("sole", "r14_boot.R", 0, 0, 0.000),
     ]
-    worst = 0.0
+    # (worst already initialised above, before the height-based checks)
     for label, picks, axis, target in checks:
         if picks is None:
             picks = [(o.name, list(range(len(boxes_of(o))))) for o in coll.objects
@@ -792,8 +815,11 @@ def measure():
     print("  -- heights, z/H from the sole --")
     # crown and the hair mass ending are the extremes of the whole hair object, not of any
     # one box, for the same reason the crown widths are
-    for label, fn, target in (("crown", max, 1.000), ("head + hair mass ends", min, 0.707)):
-        got = fn(v[2][i] for v in boxes_of(coll.objects["r14_hair"]) for i in (0, 1)) / H
+    # object extents, not box indices -- these survive any restructure
+    for label, part, fn, target in (("crown", "r14_hair", max, 1.000),
+                                    ("head + hair mass ends", "r14_hair", min, 0.707),
+                                    ("tunic hem", "r14_skirt", min, 0.207)):
+        got = fn(v[2][i] for v in boxes_of(coll.objects[part]) for i in (0, 1)) / H
         d_px = (got - target) * H / PX
         worst = max(worst, abs(d_px))
         print("  %-26s %.3f H   sheet %.3f H   %+5.2f px  %s" %
