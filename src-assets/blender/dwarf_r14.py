@@ -39,6 +39,7 @@ REV = "r14"
 COLL = "SM_VoxelDwarf_Miner01_" + REV
 H = 1.200                 # figure height, metres
 PX = H / 140.0            # one source pixel, 8.571 mm
+SRC = 5                   # the ortho crops are 5x nearest-neighbour blow-ups
 UNIT = H / 64.0           # the sheet's feature unit, ~18.75 mm
 OVERLAP = 0.004           # parts within one object overlap, never meet exactly (brief sec.4)
 
@@ -59,6 +60,21 @@ def h(frac):
     return frac * H                    # a z/H or width/H fraction -> metres
 
 
+def row_top(r):
+    # z of the TOP edge of source row r, pulled down by half a RENDER pixel.
+    #
+    # A band whose top sits exactly on the boundary still covers the pixel row above it --
+    # rasterisation lights a pixel that geometry merely touches -- so every crown step
+    # rendered one image row early and the overlay read 3.8 source px of overshoot on that
+    # single row, while every settled row around it was 0.0. This is a rasterisation offset,
+    # not a width error, and half a render pixel is the whole of it.
+    return (147.5 - r) * PX - (PX / SRC / 2.0)
+
+
+def row_bot(r):
+    return (146.5 - r) * PX            # z of the BOTTOM edge of source row r
+
+
 def derive():
     """Every dimension round 14 uses, named, in metres, straight off the sheet."""
     p = {}
@@ -69,7 +85,9 @@ def derive():
     p["crown_s1"] = h(0.964)
     p["skull_top"] = h(0.943)
     p["brow"] = h(0.879)
-    p["ear_top"] = h(0.850)
+    # 0.850 is the table's ear top; front.png's own left edge only steps out to the ear at
+    # row 29, which is 0.843. One row, but it put the ears 3.4 px outside the sheet at 0.850.
+    p["ear_top"] = h(0.843)
     p["eye_line"] = h(0.807)
     p["neck_top"] = h(0.793)
     p["nose_low"] = h(0.750)
@@ -84,7 +102,8 @@ def derive():
     p["pack_bot"] = h(0.350)
     p["hand_bot"] = h(0.330)
     p["hem"] = h(0.207)
-    p["boot_cuff_t"] = h(0.164)
+    # likewise 0.164 is the table's cuff top; the art steps out to the cuff at row 125, 0.157
+    p["boot_cuff_t"] = h(0.157)
     p["boot_cuff_b"] = h(0.107)
     p["sole"] = 0.0
 
@@ -236,11 +255,14 @@ def part_head():
         # brow band, ~15 mm proud, full width, at 0.879
         box(-hw, hw, p["y_face"] - o, p["y_face"] + 0.015,
             p["brow"] - 0.013, p["brow"] + 0.013),
-        # nose: a base block and a narrower tip, lowest point at 0.750
-        box(-0.034, 0.034, p["y_face"] - o, p["y_face"] + 0.034,
-            p["nose_low"], p["brow"] - 0.013 + o),
-        box(-0.024, 0.024, p["y_face"] + 0.026, p["y_nose"],
-            p["nose_low"], p["nose_low"] + 0.100),
+        # NOSE, ramped from side-left.png's own rows. The art does not carry a block: its
+        # front edge steps 0.189 / 0.196 / 0.210 / 0.217 H across rows 31-38 and is back to
+        # 0.196 by row 43. A two-box nose reaching 0.207 H from row 24 upward stood 2.5
+        # source px proud of the sheet at z/H 0.833, where the art still has only brow.
+        box(-0.034, 0.034, p["y_face"] - o, h(0.196), row_bot(32), row_top(31)),
+        box(-0.032, 0.032, p["y_face"] - o, h(0.210), row_bot(34), row_top(33) + o),
+        box(-0.028, 0.028, p["y_face"] - o, h(0.217), row_bot(38), row_top(35) + o),
+        box(-0.024, 0.024, p["y_face"] - o, h(0.210), row_bot(42), row_top(39) + o),
         # ears, tabs out to the sheet's 0.383 ear-to-ear, kept FORWARD of the neck
         # EARS. Two things were wrong. They sat at y 0.030..0.150 -- forward of the skull's
         # own centre (0.017) and so reading as too far front -- and at 120 mm deep they were
@@ -280,23 +302,44 @@ def part_hair():
     cs2, cs1, top, crown = p["crown_s2"], p["crown_s1"], p["skull_top"], p["crown"]
     yb, yf = p["y_head_back"], p["y_hair_front"]
     return [
-        # cap over the top and the back; its front edge is the fringe at column 71
-        box(-p["hw_head"], p["hw_head"], yb, yf, p["ear_top"], top + o),
-        # THE DOMED CROWN, stepped from the sheet's own edge row by row.
+        # THE CAP, over the top and the back; its front edge is the fringe at column 71.
         #
-        # sec.3 quotes four widths -- 0.336 / 0.286 / 0.229 / 0.164 at rows 15 / 12 / 10 / 7 --
-        # and built as four bands they hold the full width up to z/H 0.967, where the sheet
-        # has already stepped in twice. Those four numbers are SAMPLES of a finer dome, not
-        # the dome: reading front.png's right edge row by row gives 504, 499, 489, 484, 469,
-        # 449 image px, which is six steps between 0.940 and 1.000. The sampled rows still
-        # land on their quoted widths; the steps between them are what was missing, and this
-        # is the "domed, stepped crown" the ortho README calls out.
-        box(-hw[0], hw[0], yb, yf, top - o, 1.1460),
-        box(-0.1866, 0.1866, yb + 0.007, yf - 0.005, 1.1420, 1.1568),
-        box(-hw[1], hw[1], yb + 0.016, yf - 0.011, 1.1528, 1.1664),
-        box(-0.1548, 0.1548, yb + 0.024, yf - 0.017, 1.1624, 1.1748),
-        box(-hw[2], hw[2], yb + 0.034, yf - 0.024, 1.1708, 1.1880),
-        box(-hw[3], hw[3], yb + 0.048, yf - 0.034, 1.1840, crown),
+        # It stops at the BOTTOM of row 15, where the crown's first step begins. Run up to
+        # skull_top it covered row 15 at the full 0.336 width where the art is 0.320, and the
+        # box that was meant to bridge the gap had its z running BACKWARDS -- 1.1276 down to
+        # 1.1271, a box of negative height. normals() cannot see that one: a degenerate box
+        # has no outward direction to test against.
+        box(-p["hw_head"], p["hw_head"], yb, yf, p["ear_top"], row_bot(15) + o),
+    ] + [
+        # Half-widths read off front.png's own RIGHT edge, row by row -- the left edge is
+        # under the pickaxe from row 8 down, and the art is asymmetric by 1-2 px anyway, so
+        # one clean edge is the honest source. The table's "0.336 at row 15" is the art's row
+        # SIXTEEN value; built on the table this crown stood 4.4 source px outside the sheet.
+        #
+        # Each band spans its rows' own EDGES, not their centres. Boundaries computed by hand
+        # grazed the sheet's pixel rows: a band top landing 0.03 mm inside the row above put
+        # the wider step into that row and read as 3.8 px of overshoot.
+        # DEPTH comes from side-left.png's own rows too, not from an inset off the fringe.
+        # The art's crown is deep -- its front edge runs +0.131 H at row 7 out to +0.167 by
+        # row 10 -- and an inset off y_hair_front left the top of the head up to 13 source px
+        # shallower than the sheet, which is a good part of why the profile read as a slab.
+        box(-half * H, half * H, back * H, front * H,
+            row_bot(r_lo) - OVERLAP, min(row_top(r_hi), crown))
+        # MEAN of the art's two edges where both are clean, not the right edge alone. The art
+        # is hand-drawn and asymmetric -- row 12 is -0.124 left against +0.139 right -- so a
+        # symmetric model built to one edge is 2.1 px outside the other. The mean splits that
+        # in half, which is the best a symmetric figure can do. Rows 8-11 keep the right edge
+        # because the pickaxe covers their left.
+        # rows, half-width, then the side view's back and front edges -- all in H
+        for r_hi, r_lo, half, back, front in (
+            (15, 15, 0.1600, -0.160, 0.174),
+            (13, 14, 0.1425, -0.139, 0.167),
+            (12, 12, 0.1315, -0.139, 0.167),
+            (10, 11, 0.1170, -0.121, 0.167),
+            (8, 9, 0.0890, -0.103, 0.135),
+            (7, 7, 0.0775, -0.096, 0.131),
+        )
+    ] + [
         # Back mass, full width, hanging to 0.707 -- but only BEHIND the neck's back face.
         # Three bands, not one slab: f084 and f088 show the back of the hair stepping in
         # layers. The middle band alone reaches column 36, which is the sheet's hair back,
@@ -507,16 +550,33 @@ def part_pack():
     # Boxes 0 and 1 carry the sheet's 0.186 depth; the bedroll and pocket are added after
     # them so the measured checks keep pointing at the right masses.
     yb = p["y_pack_b"]
+    yf_pack = p["y_pack_f"]
+    # THE PACK TAPERS. side-left.png's back edge runs -0.285 H at row 45 down to -0.331 at
+    # rows 68-75 and back to -0.275 by row 94: deepest in the middle, shallower top and
+    # bottom. Built as one constant-depth slab at the table's column 12 it stood 5.5 source
+    # px behind the sheet at z/H 0.726 -- the single largest envelope violation in the side
+    # view -- while still being correct at its deepest row, which is the row the table quotes.
+    # Boxes 0 and 1 stay the ones the 0.186 H depth check reads.
+    bands = [
+        (0.700, 0.752, -0.285), (0.650, 0.702, -0.295), (0.590, 0.652, -0.305),
+        (0.510, 0.592, -0.331), (0.430, 0.512, -0.324), (0.400, 0.432, -0.300),
+        (0.372, 0.402, -0.275),
+    ]
     return [
-        box(-0.185, 0.185, yb + 0.016, p["y_pack_f"], p["pack_bot"], 0.800),
-        box(-0.155, 0.155, yb, yb + 0.020, 0.580, 0.790),
-        # bedroll strapped across the top of the pack -- f088 shows it as a separate mass
-        # standing above and behind the pack, with its rolled end proud at the sides
-        box(-0.170, 0.170, yb + 0.009, yb + 0.139, 0.796, 0.872),
-        box(0.170, 0.192, yb + 0.019, yb + 0.129, 0.804, 0.864),
-        box(-0.192, -0.170, yb + 0.019, yb + 0.129, 0.804, 0.864),
-        # lower pocket, proud of the body but behind the flap's rear plane (side-left.png)
-        box(-0.115, 0.115, yb + 0.004, yb + 0.024, 0.450, 0.560),
+        box(-0.185, 0.185, h(-0.331), yf_pack, h(0.510), h(0.592)),
+        box(-0.155, 0.155, h(-0.331), h(-0.311), h(0.520), h(0.582)),
+    ] + [
+        box(-0.185, 0.185, h(back), yf_pack, h(lo), h(hi)) for lo, hi, back in bands
+    ] + [
+        # Bedroll across the TOP of the pack -- f088 shows it standing above and behind,
+        # with its rolled end proud at the sides. It sits at rows 36-38's own back edge
+        # (-0.289 H); left at the old flat -0.394 it became the deepest thing at that height
+        # and simply inherited the violation the tapering was meant to remove.
+        box(-0.170, 0.170, h(-0.289), h(-0.230), h(0.752), h(0.800)),
+        box(0.170, 0.192, h(-0.283), h(-0.236), h(0.757), h(0.795)),
+        box(-0.192, -0.170, h(-0.283), h(-0.236), h(0.757), h(0.795)),
+        # lower pocket, a touch proud of the band it sits on (side-left.png)
+        box(-0.115, 0.115, h(-0.328), h(-0.300), h(0.435), h(0.500)),
     ]
 
 
@@ -616,7 +676,9 @@ PAINT = {
     # the brow ridge and the nose stand 15-50 mm proud, so they take a brighter skin step --
     # without it a dead-on front view paints them the same value as the face plane and the
     # nose disappears entirely
-    "r14_head": ("skin", {2: "skinhi", 3: "skinhi", 4: "skinhi"}),
+    # box 2 is the brow ridge and 3-6 the four nose steps; all stand proud, so all take the
+    # brighter skin step
+    "r14_head": ("skin", {2: "skinhi", 3: "skinhi", 4: "skinhi", 5: "skinhi", 6: "skinhi"}),
     "r14_hair": ("hair", {}),
     "r14_beard": ("beard", {}),
     "r14_moustache": ("beard", {}),
@@ -855,7 +917,7 @@ RIG = [
 
 WEIGHTS = {
     # object: {box index: joint}, with "*" as the object's default
-    "r14_head": {"*": "head", 7: "neck"},
+    "r14_head": {"*": "head", 9: "neck"},      # box 9 is the neck column
     "r14_hair": {"*": "head"},
     "r14_moustache": {"*": "head"},
     "r14_beard": {"*": "beard"},

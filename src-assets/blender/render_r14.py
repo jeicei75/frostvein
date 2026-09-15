@@ -367,10 +367,16 @@ def envelope():
         render(view, raw, size, transparent=True, flat=True)
         ours, w, h = load(raw)
         sheet, _, _ = load(os.path.join(REF, cfg["png"]))
-        s = scan(sheet, w, h)
+        # For a PINNED view the row mapping is known and must not be scanned: the sheet spans
+        # source rows 7 (crown) to 147 (sole), so at 5x the figure runs image rows 37 to 737.
+        # Deriving it from scan() instead put every z a few rows out, which shifted the whole
+        # comparison and invented violations at heights where the model is exact.
+        s = {"y0": 7 * SRC_SCALE + 2, "y1": 147 * SRC_SCALE + 2}
+        ppm = (s["y1"] - s["y0"]) / H
 
         worst = {"body": 0.0, "arms": 0.0}
         where = {"body": None, "arms": None}
+        band = {}          # z-decile -> (worst overshoot, left/right, z/H)
         for iy in range(s["y0"], s["y1"] + 1):
             y = h - 1 - iy
             mine = [x for x in range(w) if ours[(y * w + x) * 4 + 3] > 0.35]
@@ -395,18 +401,81 @@ def envelope():
             if not mine or not theirs:
                 continue
             z = (s["y1"] - iy) / ppm
-            band = "arms" if 0.40 <= z <= 0.86 else "body"
-            over = max(theirs[0] - mine[0], mine[-1] - theirs[-1]) / SRC_SCALE
-            if over > worst[band]:
-                worst[band] = over
-                where[band] = round(z / H, 3)
+            grp = "arms" if 0.40 <= z <= 0.86 else "body"
+            dl = (theirs[0] - mine[0]) / SRC_SCALE
+            dr = (mine[-1] - theirs[-1]) / SRC_SCALE
+            over = max(dl, dr)
+            if over > worst[grp]:
+                worst[grp] = over
+                where[grp] = round(z / H, 3)
+            if grp == "body":
+                key = int(z / H * 10)
+                if over > band.get(key, (0.0,))[0]:
+                    band[key] = (over, "L" if dl >= dr else "R", round(z / H, 3))
         out[view] = worst
+        for key in sorted(band):
+            over, edge, zh = band[key]
+            if over > 1.0:
+                print("      z/H %.1f-%.1f   %+5.2f px on %s at %.3f" %
+                      (key / 10.0, key / 10.0 + 0.1, over, edge, zh))
         print("  envelope %-10s body %+5.2f px at z/H %s   arms %+5.2f px (exempt)   %s" %
               (view, worst["body"], where["body"], worst["arms"],
                "OK" if worst["body"] <= 1.0 else "OFF"))
     for ob in props:
         ob.hide_render = False
     return out
+
+
+def sheet_profile(view="front", collapse=True):
+    """The sheet's OWN silhouette, source row by source row, as a step list.
+
+    sec.3's table is 20 sampled landmarks. The art it was read from has far more steps than
+    that, and where the two disagree -- and they do, by 1 to 5 source pixels at the crown,
+    the ears and the boot cuff -- sec.2's gate is the OUTLINE, so the art is the authority.
+    This prints the art as numbers so a profile can be built from it rather than from the
+    samples.
+
+    Half-widths are in H, signed from the sheet's own centre column, so they drop straight
+    into PARAMS. Rows are the sheet's, 7 (crown) to 147 (sole).
+    """
+    cfg = VIEWS[view]
+    px, w, h = load(os.path.join(REF, cfg["png"]))
+    centre = (cfg["centre_col"] if cfg["pinned"] else 0) * SRC_SCALE + SRC_SCALE // 2
+    rows = []
+    for r in range(7, 148):
+        iy = r * SRC_SCALE + SRC_SCALE // 2
+        y = h - 1 - iy
+        ink = [x for x in range(w)
+               if is_ink(px[(y * w + x) * 4], px[(y * w + x) * 4 + 1], px[(y * w + x) * 4 + 2])]
+        runs, run = [], []
+        for x in ink:
+            if run and x - run[-1] > 3:
+                runs.append(run)
+                run = []
+            run.append(x)
+        if run:
+            runs.append(run)
+        kept = [q for q in runs if len(q) >= 8]
+        if not kept:
+            rows.append((r, None, None))
+            continue
+        lo = (kept[0][0] - centre) / SRC_SCALE / 140.0
+        hi = (kept[-1][-1] - centre) / SRC_SCALE / 140.0
+        rows.append((r, lo, hi))
+
+    print("SHEET PROFILE %s -- half-extents in H from column %s, rows 7..147" %
+          (view, cfg["centre_col"]))
+    prev = None
+    for r, lo, hi in rows:
+        if lo is None:
+            continue
+        key = (round(lo, 3), round(hi, 3))
+        if collapse and key == prev:
+            continue
+        prev = key
+        print("  row %3d  z/H %.3f   %+.3f .. %+.3f   width %.3f H" %
+              (r, (147 - r) / 140.0, lo, hi, hi - lo))
+    return rows
 
 
 def skin_share():
@@ -648,7 +717,7 @@ def measure():
     # it is stepped from the sheet's per-row edge and has no one box per quoted width
     # sampled just INSIDE each band rather than on its boundary: width_at includes every box
     # spanning z, so a sample sitting exactly on a step reports the wider of the two
-    for label, zh, target in (("head with hair @0.944", 0.9445, 0.336),
+    for label, zh, target in (("head with hair @0.930", 0.9300, 0.336),
                               ("crown step @0.966", 0.9655, 0.286),
                               ("crown step @0.981", 0.9805, 0.229),
                               ("crown top @0.999", 0.9985, 0.164)):
@@ -658,7 +727,7 @@ def measure():
               (label, got, target, d_px, "OK" if abs(d_px) <= 1.0 else "OFF"))
 
     checks = [
-        ("ear to ear, width", [("r14_head", 5), ("r14_head", 6)], "x", 0.383),
+        ("ear to ear, width", [("r14_head", 7), ("r14_head", 8)], "x", 0.383),
         ("beard widest, width", [("r14_beard", 1), ("r14_beard", 2)], "x", 0.343),
         ("chest, tunic only", [("r14_torso", 1)], "x", 0.317),
         ("shoulders over the caps", [("r14_sleeve.R", 0), ("r14_sleeve.L", 0)], "x", 0.528),
@@ -743,6 +812,20 @@ def normals():
                 bad.append("%s box %d face %d" % (ob.name, bi, poly.index % 6))
     print("  inside-out faces: %s" % (("%d -- %s" % (len(bad), ", ".join(bad[:8])))
                                       if bad else "none"))
+
+    # A box whose z (or x, or y) runs backwards has negative extent and no outward direction
+    # at all, so the test above passes it silently. One slipped into the hair and held the
+    # crown a step too wide. Extents are checked directly.
+    thin = []
+    for ob in coll.objects:
+        if ob.type != 'MESH':
+            continue
+        for i, b in enumerate(boxes_of(ob)):
+            for a, axis in enumerate("xyz"):
+                if b[a][1] - b[a][0] < 0.0005:
+                    thin.append("%s box %d %s=%.4f" % (ob.name, i, axis, b[a][1] - b[a][0]))
+    print("  degenerate boxes: %s" % (("%d -- %s" % (len(thin), ", ".join(thin[:8])))
+                                      if thin else "none"))
     back_skin()
     return bad
 
@@ -803,7 +886,7 @@ def neck_bare(step=0.0015):
             continue
         for i, b in enumerate(boxes_of(ob)):
             allb.append((ob.name, i, b))
-    neck = [b for n, i, b in allb if n == "r14_head" and i == 7][0]
+    neck = [b for n, i, b in allb if n == "r14_head" and i == 9][0]
 
     out = {}
     for label, sign in (("side-left (+X)", 1), ("side-right (-X)", -1)):
@@ -819,7 +902,7 @@ def neck_bare(step=0.0015):
                         v = sign * b[0][1] if sign > 0 else -b[0][0]
                         if v > best:
                             best, who = v, (n, i)
-                if who == ("r14_head", 7):
+                if who == ("r14_head", 9):
                     bare = True
                     break
                 y += step * 4
@@ -849,7 +932,7 @@ def neck_bare(step=0.0015):
                         v = sign * b[0][1] if sign > 0 else -b[0][0]
                         if v > bestx:
                             bestx, who = v, (n, i)
-                if who == ("r14_head", 7):
+                if who == ("r14_head", 9):
                     depth += step
                 y += step
         print("  neck bare, %-16s %.4f m = %.3f H tall   column %.3f H deep "
