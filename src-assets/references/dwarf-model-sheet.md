@@ -62,7 +62,14 @@ approved ten palette cells were read from, and it stays the authority for WHAT g
 > next section replaces this one. The old numbers are kept because the *reasoning* about the beard
 > (a width check, not a length check) still holds and because two of them turned out close.
 
-### Measured off the orthographic views — round 5, and this is the authority
+### Measured off the orthographic views — round 5
+
+> **CORRECTED 2026-09-15 by round 14. THESE TABLES ARE TWENTY SAMPLES, NOT THE DRAWING.**
+> The art they were read from carries far more steps, and the two disagree by **1 to 5 source
+> pixels** at the crown, the ear top, the boot cuff, the pack, the head's front plane and the nose.
+> Where they differ **the art wins**, because the round gate is the outline. Build from a row-by-row
+> extraction of `front.png` and `side-left.png`; use the numbers below as a cross-check.
+> **See "Round 14's corrections" at the end of this file** before trusting any row here.
 
 The figure spans **rows 7 (crown) to 147 (sole)** in both `front.png` and `side-left.png`, so
 **140 source pixels = 1.00 H** and one source pixel is 8.571 mm on a 1.20 m dwarf. `back.png` is
@@ -402,3 +409,108 @@ success followed by a decimation task, not a failure.
 Items 1–3 are the likeness half made checkable. They are not the whole of "looks like the
 reference", and they are not meant to be — they are the three biggest measured deltas between r3 and
 the thing Wolf keeps pointing at.
+
+---
+
+# Round 14's corrections — 2026-09-15
+
+Round 14 built the figure from a row-by-row extraction of the orthographic crops rather than from the
+sampled tables above, and measured it with a per-row outline comparison rather than with landmark
+checks. Both changes exposed errors in this sheet. Everything below is measured, not inferred.
+
+## 1. The tables are samples; the art has more steps
+
+| feature | this sheet says | the art reads | note |
+|---|---|---|---|
+| crown, row 15 | 0.336 H | **0.320 H** | 0.336 is the art's row **sixteen**. The table is one row high here |
+| crown, rows 8–14 | (not sampled) | 0.089 / 0.117 / 0.139 / 0.146 H | the crown is a **six-step dome**, not four bands |
+| ear top | 0.850 H | **0.843 H** | the front edge only steps out to the ear at row 29 |
+| boot cuff top | 0.164 H | **0.157 H** | steps out at row 125 |
+| boot sole length | 0.214 H | **0.207 H** | its own columns 47–76 give 0.207; the fraction is a rounding |
+| pack, behind the torso | flat, columns 12–38 | **tapered**: −0.285 H at row 45, −0.331 at rows 68–75, −0.275 by row 94 | column 12 is only its deepest row |
+| head, front | column 83 | **+0.170 H** rows 15–23, **+0.181 H** at the brow, row 24 | column 83 is 0.6–1.6 px proud of the art everywhere |
+| head, crown depth | (not recorded) | front edge **+0.131 H at row 7 out to +0.167 by row 10** | the crown is DEEP; built shallow the profile reads as a slab |
+| nose | (not recorded) | **a ramp**: 0.189 / 0.196 / 0.210 / 0.217 H across rows 31–38, back to 0.196 by row 43 | not a block |
+| beard front | 0.357 H | **dips** to +0.196 H at rows 43–49 between moustache and main mass | the dip is real form |
+
+**The art is also asymmetric** — row 12 is −0.124 H left against +0.139 H right. The figure is
+symmetric by design (Wolf, 2026-09-15), so build to the **mean** of the two edges, and **symmetrise
+the sheet about column 77 before comparing**. Comparing a symmetric figure to asymmetric art charges
+it a full source pixel of error that is the drawing's, not the model's.
+
+**What the art does NOT show:** the torso and the skirt. The posed arms cover them in front, side and
+back — back.png at row 49 reads ±0.262 H, which is the sleeve caps, not the chest. Those two
+dimensions can only come from the table.
+
+## 2. Check 5 restated — the neck
+
+The clause said "a bare skin column … up to **0.064 H wide**". Measured on `side-left.png`, that is
+the **DEPTH of the visible column, not the neck's thickness.** Two rounds built it as a thickness
+and produced a 77 mm neck under a 403 mm head, which reads as a hole.
+
+**The column is not the neck.** It is what the jaw and the hair leave uncovered. Build the throat
+anatomically (~0.150 H across, full depth) and set the OCCLUDERS: hair lobes behind at y ≤ −0.130,
+jaw in front from −0.050. Anything shoulder-borne riding above 0.700 H eats into the run.
+
+## 3. Check 4 restated — step density is not resolution independent
+
+A diagonal edge steps once per row at any scale, so a 5× render of the same shape reports a **fifth**
+the density. The published **10.3** (side) and **11.2** (front) were counted on this sheet's own
+~335-row render and cannot be compared with a count at any other resolution.
+
+**Counted at the 140-row source, this sheet's own raw counts — side L33/R36, front L37/R38 — are
+24.6 and 26.8 steps per 100 rows.** Those are the comparable targets. Round 14's first build read
+3.4 against a target of 10.3; neither number meant anything.
+
+## 4. Check 3 restated — visible skin moves when the palette moves
+
+It classifies each figure pixel to the nearest palette cell, so **adding cells changes the result
+with no change to the model.** Round 14 reassigned the beard and hair value bases — no geometry
+touched — and the front share went 14.7 % → 10.1 %, because two new mid-browns pulled antialiased
+beard/skin boundary pixels out of the skin family.
+
+This sheet already records the metric failing in the other direction (round 4's 7.4 % on a figure
+that was really 13.9 %). **Always quote the cell list alongside the share**, and treat a change in
+the share as meaningless unless the geometry changed.
+
+## 5. The palette question is CLOSED, and not the way it was left
+
+This sheet records the open question as "the video reads warmer and more saturated than the approved
+cells … the true albedo is not recoverable from it", deferred to Epic 11.
+
+**Measured 2026-09-15: the approved cells are correct.** Rendered under a warm key with a filmic
+transform — approximating the video's torch-lit mine — the same packed texture reads as the
+reference's olive tunic, tan boots and warm skin. The desaturation four rounds complained about was
+**the comparison, not the albedo**: every judgement had been made under Blender Workbench's neutral
+studio lighting.
+
+Two consequences:
+
+- **Workbench flat stays correct for the gates** — silhouette, albedo classification, readability —
+  and is **actively misleading for "does it look like the reference".** A round judged by eye must
+  deliver a lit render, posed to the frame, or it is judging its own lighting.
+- **The value BASE must be the light cell**, with the approved cell as the shadow step. Built on
+  `#34271C` and `#5E4632` as bases, hair and beard range down to `#221A12` through the orientation
+  multipliers — black in everything but name, and the two masses merge. `#513C2B` and `#826145`
+  (both from r3's recorded 23) as bases read correctly.
+
+## 6. Roundness is chamfered corners, and it is free
+
+The reference's masses are not plain boxes: they **step their corners**, so a three-quarter view
+shows a narrow third plane between the front and the side. A figure with every dimension correct and
+hard 90° corners still reads as slabs.
+
+Build each large mass as **two boxes** — one full-width and recessed in depth, one full-depth and
+narrower in width. The union chamfers all four vertical corners and **neither orthographic silhouette
+changes**, because one box carries front and back while the other carries both sides. Round 14
+applied this to torso, skirt, sleeve caps, boots, pack and head at a cost of ~200 triangles and zero
+movement in the envelope.
+
+## 7. Landmarks are not a gate
+
+Thirty landmark checks read **+0.00 px** on a figure whose outline was 4–5 source pixels off the
+sheet. A box added between two landmarks moves the silhouette without moving any of them.
+
+**The gate is a per-row outline comparison** — render at the pinned scale, walk every row, report the
+worst overshoot per z-decile in source pixels. Exclude the props from our silhouette (they are neither
+gated nor posed like the sheet's) and report the arms separately, since the pose exempts them.
