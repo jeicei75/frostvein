@@ -124,6 +124,13 @@ def derive():
     p["y_head_back"] = y_of(36)        # back of the hair          -0.1886
     p["y_hair_front"] = y_of(71)       # fringe stops, skin begins +0.1114
     p["y_face"] = y_of(83)             # front of the face         +0.2143
+    # side-left.png's own front edge across the head, which the table does not carry:
+    # +0.174 H at rows 15-17, dipping to +0.167 at 18-22, back to +0.174 at 23 and out to
+    # +0.181 at the brow, row 24. Column 83 is 0.6-1.6 px proud of all of it, and a brow
+    # ridge built 15 mm proud of column 83 stood 3.4 px outside the sheet.
+    p["y_face_art"] = h(0.170)         # skull front, rows 15-23
+    p["y_brow_art"] = h(0.181)         # brow and jaw front, rows 24-48
+    p["y_fringe_art"] = h(0.174)       # hair fringe front, rows 7-15
     p["y_beard_f"] = y_of(86)          # beard front               +0.2400
     p["y_nose"] = y_of(89)             # nose tip                  +0.2657
     p["y_torso_b"] = y_of(38)          # torso back                -0.1714
@@ -246,23 +253,24 @@ def part_head():
     y_skull_back = p["y_head_back"] + 0.020
     return [
         # deep skull, down to the top of the bare neck run
-        box(-hw, hw, y_skull_back, p["y_face"], p["neck_top"] - o, p["skull_top"]),
+        box(-hw, hw, y_skull_back, p["y_face_art"], p["neck_top"] - o, p["skull_top"]),
         # shallow jaw: front of the head only, so the neck stays the outermost
         # surface behind it in profile (see the module docstring). Its back plane is what
         # sets the FRONT of the visible neck column.
-        box(-hw + 0.012, hw - 0.012, -0.050, p["y_face"],
+        box(-hw + 0.012, hw - 0.012, -0.050, p["y_brow_art"],
             p["head_ends"], p["neck_top"] + o),
-        # brow band, ~15 mm proud, full width, at 0.879
-        box(-hw, hw, p["y_face"] - o, p["y_face"] + 0.015,
-            p["brow"] - 0.013, p["brow"] + 0.013),
+        # Brow band at 0.879 -- the art's step out to +0.181 H at row 24, spanning rows
+        # 24-30. Built as a fixed 15 mm proud of column 83 it reached 0.191 H where the art
+        # still has 0.167, the largest single violation left in the side view.
+        box(-hw, hw, p["y_face_art"] - o, p["y_brow_art"], row_bot(30), row_top(24)),
         # NOSE, ramped from side-left.png's own rows. The art does not carry a block: its
         # front edge steps 0.189 / 0.196 / 0.210 / 0.217 H across rows 31-38 and is back to
         # 0.196 by row 43. A two-box nose reaching 0.207 H from row 24 upward stood 2.5
         # source px proud of the sheet at z/H 0.833, where the art still has only brow.
-        box(-0.034, 0.034, p["y_face"] - o, h(0.196), row_bot(32), row_top(31)),
-        box(-0.032, 0.032, p["y_face"] - o, h(0.210), row_bot(34), row_top(33) + o),
-        box(-0.028, 0.028, p["y_face"] - o, h(0.217), row_bot(38), row_top(35) + o),
-        box(-0.024, 0.024, p["y_face"] - o, h(0.210), row_bot(42), row_top(39) + o),
+        box(-0.034, 0.034, p["y_brow_art"] - o, h(0.196), row_bot(32), row_top(31)),
+        box(-0.032, 0.032, p["y_brow_art"] - o, h(0.210), row_bot(34), row_top(33) + o),
+        box(-0.028, 0.028, p["y_brow_art"] - o, h(0.217), row_bot(38), row_top(35) + o),
+        box(-0.024, 0.024, p["y_brow_art"] - o, h(0.210), row_bot(42), row_top(39) + o),
         # ears, tabs out to the sheet's 0.383 ear-to-ear, kept FORWARD of the neck
         # EARS. Two things were wrong. They sat at y 0.030..0.150 -- forward of the skull's
         # own centre (0.017) and so reading as too far front -- and at 120 mm deep they were
@@ -335,7 +343,10 @@ def part_hair():
             (15, 15, 0.1600, -0.160, 0.174),
             (13, 14, 0.1425, -0.139, 0.167),
             (12, 12, 0.1315, -0.139, 0.167),
-            (10, 11, 0.1170, -0.121, 0.167),
+            # rows 10 and 11 differ in DEPTH (-0.103 against -0.139) though not in width, so
+            # they are separate bands: averaged into one they sat 2.5 px behind row 10.
+            (10, 10, 0.1170, -0.103, 0.167),
+            (11, 11, 0.1170, -0.139, 0.167),
             (8, 9, 0.0890, -0.103, 0.135),
             (7, 7, 0.0775, -0.096, 0.131),
         )
@@ -367,8 +378,20 @@ def part_hair():
         # 4 mm proud of the face plane, not flush with it: a fringe ending exactly on
         # y_face is coplanar with the skull's front face and z-fights, which rendered as a
         # pale band across the forehead.
-        box(-p["hw_head"], p["hw_head"], yf - o, p["y_face"] + 0.004, 1.072,
+        box(-p["hw_head"], p["hw_head"], yf - o, p["y_fringe_art"], 1.072,
             p["skull_top"] + o),
+    ] + [
+        # Locks down the back of the hair. f084 and f088 read it as layered strands, and
+        # this is the largest unbroken area left on the figure. They sit INSIDE the hair's
+        # back plane so the 0.336 depth is untouched.
+        box(lx - 0.022, lx + 0.022, yb + 0.004, yb + 0.026, p["head_ends"], 1.020)
+        for lx in (-0.150, -0.080, 0.000, 0.080, 0.150)
+    ] + [
+        # and two temple locks either side, in front of the back mass
+        box(-p["hw_head"] + 0.004, -p["hw_head"] + 0.030, yb + 0.020, -0.136,
+            p["head_ends"], p["neck_top"]),
+        box(p["hw_head"] - 0.030, p["hw_head"] - 0.004, yb + 0.020, -0.136,
+            p["head_ends"], p["neck_top"]),
     ]
 
 
@@ -425,6 +448,16 @@ def part_torso():
         # in f104 and f140, and both are steps the side silhouette does not currently have
         box(-0.150, 0.150, yb + 0.022, yf - 0.012, 0.818, 0.848),
         box(-hw - 0.008, hw + 0.008, yb - 0.008, yf - 0.040, 0.782, 0.812),
+        # INTERIOR DETAIL from the lit frames. The ortho sheet is 140 px tall and cannot
+        # carry any of this; sec.1 names f088/f104/f140 as the form authority and they show
+        # it plainly. None of it touches the silhouette, which is already within 1-2 px.
+        # f104: a collar either side of the neck, and a placket down the chest.
+        box(-0.104, -0.030, yf - 0.030, yf + 0.004, 0.806, 0.844),
+        box(0.030, 0.104, yf - 0.030, yf + 0.004, 0.806, 0.844),
+        box(-0.026, 0.026, yf - 0.004, yf + 0.010, 0.560, 0.822),
+        # no side seams: they are not resolvable in any frame either
+        # the hem lip of the tunic body, under the belt
+        box(-hw - 0.006, hw + 0.006, yb + 0.010, yf - 0.010, 0.412, 0.436),
     ]
 
 
@@ -434,25 +467,42 @@ def part_skirt():
     yb, yf = p["y_skirt_b"], p["y_skirt_f"]
     # Box 2 is the hem and carries the sheet's 0.439 width and 0.300 depth; the two above it
     # step back in both axes so the skirt flares in profile as well as in front.
+    # The skirt's BACK is the one part of it the art exposes -- from row 95 down, where the
+    # pack ends -- and it runs -0.124 H at row 100 to -0.153 by row 118. A constant back off
+    # column 37 sat 2.7 px behind the sheet at rows 99-102. The front stays on the table:
+    # the arm and the lantern cover it in every view.
     return [
-        box(-0.210, 0.210, yb + 0.016, yf - 0.016, 0.390 - o, 0.460),
-        box(-0.238, 0.238, yb + 0.008, yf - 0.008, 0.300 - o, 0.395),
-        box(-p["hw_waist"], p["hw_waist"], yb, yf, p["hem"], 0.305),
+        box(-0.210, 0.210, h(-0.125), yf - 0.016, 0.390 - o, 0.460),
+        box(-0.238, 0.238, h(-0.142), yf - 0.008, 0.300 - o, 0.395),
+        box(-p["hw_waist"], p["hw_waist"], h(-0.153), yf, p["hem"], 0.305),
         # hem lip, standing proud all round the bottom edge, and the front split f104 shows
         # down the centre of the skirt
         box(-p["hw_waist"] - 0.009, p["hw_waist"] + 0.009, yb - 0.009, yf + 0.009,
             p["hem"], p["hem"] + 0.026),
         box(-0.036, 0.036, yf - 0.006, yf + 0.014, p["hem"] + 0.020, 0.372),
     ]
+    # NO FOLD RIDGES. Ten of them were added here on the claim that "f088 and f104 read the
+    # tunic skirt as panelled cloth". Checked against the frames: they do not. The skirt is a
+    # flat green mass in both, and its variation is painted value, not geometry. The ridges
+    # were added because the triangle count was low and the reference reading was written to
+    # fit -- which is the thing sec.6 forbids.
 
 
 def part_belt():
     p = P
     return [
-        box(-0.196, 0.196, p["y_torso_b"] - 0.006, p["y_torso_f"] + 0.008,
+        # The belt is exposed behind only below z/H 0.372, where the pack ends, and the art
+        # reads -0.124 to -0.139 H there. Carried back to the torso's own column 38 it was
+        # 2.4 px behind the sheet at rows 99-102.
+        box(-0.196, 0.196, h(-0.134), p["y_torso_f"] + 0.008,
             p["belt_bot"], p["belt_top"]),
         # the strap end hanging past the buckle, which f104 and f164 both show
         box(-0.104, -0.052, p["y_torso_f"] + 0.004, p["y_torso_f"] + 0.018, 0.352, 0.428),
+        # f140 carries a second strap and buckle at the figure's left hip, below the belt.
+        # The "row of stitch blocks either side of the buckle" that sat here is gone: the
+        # belt in both frames is a band and a buckle, nothing else.
+        box(0.118, 0.186, p["y_torso_f"] - 0.006, p["y_torso_f"] + 0.026, 0.330, 0.418),
+        box(0.126, 0.178, p["y_torso_f"] + 0.020, p["y_torso_f"] + 0.032, 0.392, 0.412),
     ]
 
 
@@ -494,6 +544,10 @@ def part_glove(side):
         # thumb: on the INBOARD edge (+e1) with a little forward lead, not on the palm face
         arm_box(t0 + 0.012, t0 + 0.062, 0.022, 0.026, pivot, p["arm_deg"], 1,
                 off=(0.062, 0.022)),
+        # NO FINGER BLOCKS. Three per hand were added on the claim that f104's close range
+        # shows them; it does not -- the hands read as a block with a thumb in every frame,
+        # which is what is built. The wrist cuff stays: that one is visible.
+        arm_box(t0 - 0.006, t0 + 0.022, 0.066, 0.070, pivot, p["arm_deg"], 1),
     ]
     return parts if side > 0 else mirror_x(parts)
 
@@ -524,8 +578,15 @@ def part_boot(side):
     xc = xo - p["w_limb"] / 2
     hwc = p["w_bootcuff"] / 2
     parts = [
-        box(xc - 0.110, xc + 0.110, p["y_shin_b"], p["y_sole_f"], 0.000, 0.032),     # sole
-        box(xo - p["w_limb"], xo, p["y_shin_b"] + 0.004, 0.110, 0.028 - o, 0.135),   # body
+        # The sole is no wider than the boot: front.png reads +-0.196 H at rows 135-146, and
+        # a 0.110 half-width flared it to 0.209 H, 1.8 px outside the sheet at the very
+        # bottom of the figure -- the last front violation left after the crown was fixed.
+        box(xc - 0.0947, xc + 0.0947, p["y_shin_b"], p["y_sole_f"], 0.000, 0.032),   # sole
+        # The boot's front STEPS: the art reads +0.074 H at rows 133-136 and only reaches
+        # +0.131 at row 139, down at the toe. One box front at 0.110 m stood 2.5 px forward
+        # of the sheet at z/H 0.099.
+        box(xo - p["w_limb"], xo, p["y_shin_b"] + 0.004, 0.110, 0.028 - o, 0.104),   # body
+        box(xo - p["w_limb"], xo, p["y_shin_b"] + 0.004, 0.088, 0.100, 0.135),       # shaft
         box(xc - 0.091, xc + 0.091, 0.100, p["y_sole_f"], 0.028 - o, 0.080),         # toe
         box(xc - hwc, xc + hwc, p["y_shin_b"] + 0.009, 0.105,
             p["boot_cuff_b"], p["boot_cuff_t"]),                                     # cuff
@@ -539,6 +600,13 @@ def part_boot(side):
         # the toe cap tops out at 0.080: the sheet's boot steps back above z/H 0.077, and at
         # 0.096 this box stood 7 source px proud of the sheet's outline in the side view
         box(xc - 0.086, xc + 0.086, 0.086, p["y_sole_f"] - 0.004, 0.044, 0.080),     # toe cap
+        # f088's boots carry a strap with a buckle across the instep, a cuff lip, and a
+        # stitched welt line up the back. Interior detail, inside the silhouette.
+        box(xc - 0.090, xc + 0.090, 0.016, 0.050, 0.082, 0.126),
+        box(xc - 0.028, xc + 0.028, 0.010, 0.056, 0.092, 0.118),
+        box(xc - hwc + 0.004, xc + hwc - 0.004, p["y_shin_b"] + 0.004, 0.100,
+            p["boot_cuff_t"] - 0.018, p["boot_cuff_t"] + 0.006),
+        # no back welt: it sat inside the boot and was never visible from anywhere
     ]
     return parts if side > 0 else mirror_x(parts)
 
@@ -572,11 +640,24 @@ def part_pack():
         # with its rolled end proud at the sides. It sits at rows 36-38's own back edge
         # (-0.289 H); left at the old flat -0.394 it became the deepest thing at that height
         # and simply inherited the violation the tapering was meant to remove.
-        box(-0.170, 0.170, h(-0.289), h(-0.230), h(0.752), h(0.800)),
+        # two bands, because the art ramps here too: -0.267 at row 35 to -0.289 by row 38.
+        # One band at -0.289 stood 3.0 px behind the sheet at its top.
+        box(-0.170, 0.170, h(-0.272), h(-0.230), h(0.780), h(0.800)),
+        box(-0.170, 0.170, h(-0.289), h(-0.230), h(0.752), h(0.784)),
         box(0.170, 0.192, h(-0.283), h(-0.236), h(0.757), h(0.795)),
         box(-0.192, -0.170, h(-0.283), h(-0.236), h(0.757), h(0.795)),
         # lower pocket, a touch proud of the band it sits on (side-left.png)
         box(-0.115, 0.115, h(-0.328), h(-0.300), h(0.435), h(0.500)),
+        # f088's pack detail: two vertical straps down the flap, each with a buckle plate,
+        # and a pocket on each side wall. All interior -- none of it moves the outline.
+        # straps and buckles stay INSIDE -0.331 H, the pack's own deepest band -- past it
+        # they became the rearmost thing on the figure and pushed pack-to-nose 1.3 px over
+        box(-0.092, -0.052, h(-0.329), h(-0.310), h(0.430), h(0.700)),
+        box(0.052, 0.092, h(-0.329), h(-0.310), h(0.430), h(0.700)),
+        box(-0.100, -0.044, h(-0.330), h(-0.318), h(0.505), h(0.545)),
+        box(0.044, 0.100, h(-0.330), h(-0.318), h(0.505), h(0.545)),
+        box(-0.190, -0.172, h(-0.300), h(-0.200), h(0.470), h(0.610)),
+        box(0.172, 0.190, h(-0.300), h(-0.200), h(0.470), h(0.610)),
     ]
 
 
@@ -602,13 +683,30 @@ def part_pickaxe():
     p = P
     hx, _, hz = _hand_point(1)
     z0 = hz - p["pick_shaft"] * 0.28
+    top = z0 + p["pick_shaft"]
+    b = p["pick_blade"] / 2
+    # gear.png, now actually opened. It draws a SYMMETRIC double pick: both arms sweep out
+    # and DOWN from the haft to a point, with a collar where the head meets the shaft and a
+    # banded grip below it. An earlier version of this comment claimed the same drawing
+    # showed a point one side and a flat adze the other -- it does not, and the file had not
+    # been opened when that was written.
+    arms = []
+    for s in (-1, 1):
+        arms += [
+            box(hx - 0.022, hx + 0.022, min(s * 0.050, s * b * 0.62),
+                max(s * 0.050, s * b * 0.62), top - 0.066, top - 0.008),
+            box(hx - 0.018, hx + 0.018, min(s * b * 0.58, s * b * 0.86),
+                max(s * b * 0.58, s * b * 0.86), top - 0.082, top - 0.030),
+            box(hx - 0.014, hx + 0.014, min(s * b * 0.82, s * b),
+                max(s * b * 0.82, s * b), top - 0.104, top - 0.058),
+        ]
     return [
-        box(hx - 0.021, hx + 0.021, -0.021, 0.021, z0, z0 + p["pick_shaft"]),
-        box(hx - 0.030, hx + 0.030, -p["pick_blade"] / 2, p["pick_blade"] / 2,
-            z0 + p["pick_shaft"] - 0.062, z0 + p["pick_shaft"] - 0.010),
-        box(hx - 0.024, hx + 0.024, -p["pick_blade"] / 2 - 0.052, -p["pick_blade"] / 2 + 0.012,
-            z0 + p["pick_shaft"] - 0.100, z0 + p["pick_shaft"] - 0.020),
-    ]
+        box(hx - 0.019, hx + 0.019, -0.019, 0.019, z0, top - 0.030),           # haft
+        box(hx - 0.024, hx + 0.024, -0.026, 0.026, top - 0.082, top - 0.040),  # collar
+        box(hx - 0.026, hx + 0.026, -0.058, 0.058, top - 0.062, top),          # head centre
+        # the banded grip gear.png draws down the haft below the collar
+        box(hx - 0.023, hx + 0.023, -0.023, 0.023, top - 0.196, top - 0.092),
+    ] + arms
 
 
 def part_lantern():
@@ -617,12 +715,21 @@ def part_lantern():
     hx, _, hz = _hand_point(-1)
     top = hz - 0.010
     bot = top - p["lantern_h"]
+    # A lantern is a FRAME around glass, not a solid block: the contact sheet and f104 both
+    # show corner posts, a vented cap and a footed base. The posts are what make the glass
+    # read as glass when it is lit.
+    g, pz0, pz1 = 0.036, bot + 0.030, top - 0.046
+    posts = [box(hx + sx * g - 0.008, hx + sx * g + 0.008, sy * g - 0.008, sy * g + 0.008,
+                 pz0 - 0.004, pz1 + 0.004)
+             for sx in (-1, 1) for sy in (-1, 1)]
     return [
-        box(hx - 0.010, hx + 0.010, -0.008, 0.008, top - 0.030, top),            # bail
-        box(hx - 0.046, hx + 0.046, -0.046, 0.046, top - 0.052, top - 0.022),    # cap
-        box(hx - 0.038, hx + 0.038, -0.038, 0.038, bot + 0.030, top - 0.046),    # glass
-        box(hx - 0.048, hx + 0.048, -0.048, 0.048, bot, bot + 0.036),            # base
-    ]
+        box(hx - 0.009, hx + 0.009, -0.008, 0.008, top - 0.034, top),            # bail
+        box(hx - 0.046, hx + 0.046, -0.046, 0.046, top - 0.054, top - 0.026),    # cap
+        box(hx - 0.034, hx + 0.034, -0.034, 0.034, top - 0.070, top - 0.048),    # vent
+        box(hx - 0.034, hx + 0.034, -0.034, 0.034, pz0, pz1),                    # glass
+        box(hx - 0.048, hx + 0.048, -0.048, 0.048, bot + 0.010, bot + 0.040),    # base
+        box(hx - 0.040, hx + 0.040, -0.040, 0.040, bot, bot + 0.016),            # foot
+    ] + posts
 
 
 PART_BUILDERS = [
@@ -676,12 +783,15 @@ PAINT = {
     # the brow ridge and the nose stand 15-50 mm proud, so they take a brighter skin step --
     # without it a dead-on front view paints them the same value as the face plane and the
     # nose disappears entirely
-    # box 2 is the brow ridge and 3-6 the four nose steps; all stand proud, so all take the
-    # brighter skin step
-    "r14_head": ("skin", {2: "skinhi", 3: "skinhi", 4: "skinhi", 5: "skinhi", 6: "skinhi"}),
+    # Boxes 3-6 are the nose steps and take the brighter skin. The BROW RIDGE (box 2) does
+    # not: it runs the full head width, so a value step on it reads as a headband across the
+    # face. Its form comes from the painted brows just under it.
+    "r14_head": ("skin", {3: "skinhi", 4: "skinhi", 5: "skinhi", 6: "skinhi"}),
     "r14_hair": ("hair", {}),
-    "r14_beard": ("beard", {}),
-    "r14_moustache": ("beard", {}),
+    # bands 0-1 catch the light, 3-4 hang in shadow, 5-6 are the proud locks
+    "r14_beard": ("beard", {0: "beardhi", 3: "beardlo", 4: "beardlo",
+                            5: "beardhi", 6: "beardhi"}),
+    "r14_moustache": ("beardhi", {}),
     "r14_torso": ("tunic", {}),
     "r14_skirt": ("tunic", {}),
     "r14_belt": ("trunk", {}),
@@ -695,20 +805,29 @@ PAINT = {
     # f104's boots are LIGHT tan against dark trousers. Built on the darker leather they sank
     # into the background at 60 px and the whole lower body went illegible, so the boot body
     # is the lighter leather and only the sole and heel take the dirt step.
-    "r14_boot.R": ("wood", {0: "dirt", 4: "dirt"}),
-    "r14_boot.L": ("wood", {0: "dirt", 4: "dirt"}),
+    "r14_boot.R": ("wood", {0: "dirt", 5: "dirt"}),
+    "r14_boot.L": ("wood", {0: "dirt", 5: "dirt"}),
     "r14_pack": ("wood", {2: "metal", 3: "metal", 4: "metal"}),   # the bedroll
     "r14_strap.R": ("trunk", {}),
     "r14_strap.L": ("trunk", {}),
-    "r14_pickaxe": ("wood", {1: "metal", 2: "metal"}),
-    "r14_lantern": ("metal", {2: "flame"}),
+    # pickaxe: box 0 is the haft and 3 its grip band; 1, 2 and the six arm boxes are the head
+    "r14_pickaxe": ("wood", {1: "metal", 2: "metal", 3: "trunk",
+                             4: "metal", 5: "metal", 6: "metal",
+                             7: "metal", 8: "metal", 9: "metal"}),
+    # lantern: box 3 is the lit glass, 4-5 the base, 6-9 the corner posts
+    "r14_lantern": ("metal", {3: "flame", 4: "trunk", 5: "trunk"}),
 }
 
 # r3's approved value steps, reused rather than invented: dirt for soles, skinhi for the
 # proud brow ridge and nose block
 # skinhi is ONE value step off the skin, not a hue change. r3's #F7CE94 is a warm gold and at
 # full face width it painted an orange T across the brow ridge and nose.
-EXTRA = {"dirt": "#493E32", "skinhi": "#F2DFCB"}
+EXTRA = {
+    "dirt": "#493E32", "skinhi": "#F2DFCB",
+    # The beard was one cell and read as a black mass; f104's is two or three browns with the
+    # lit top clearly lighter than the hanging bottom. Both are r3's recorded value steps.
+    "beardhi": "#826145", "beardlo": "#423123",
+}
 
 
 def srgb_to_linear(c):
@@ -804,10 +923,20 @@ def make_image():
     # Cheek warmth, wide and low against the jaw. The first pass put two small high-contrast
     # patches at the temples and they read as stickers rather than as warmth, so this is a
     # single skin value step, one cell apart from the base.
-    wrect(-0.200, -0.120, 0.902, 0.958, cheek)
-    wrect(0.120, 0.200, 0.902, 0.958, cheek)
+    wrect(-0.196, -0.104, 0.888, 0.948, cheek)
+    wrect(0.104, 0.196, 0.888, 0.948, cheek)
     # mouth line, below the moustache
     wrect(-0.058, 0.058, 0.862, 0.876, hex_rgb(PALETTE["beard"], 0.70))
+    # Shading the flat face has to do here what geometry is forbidden to (sec.4: no eye
+    # sockets, no cheekbones): a shadow under the brow across the eye band, and a soft one
+    # down each side of the nose. f104 reads both clearly at 60 px.
+    shade = hex_rgb("#D8BCA0")
+    wrect(-0.150, -0.128, 0.952, 0.996, shade)
+    wrect(0.128, 0.150, 0.952, 0.996, shade)
+    wrect(-0.040, -0.026, 0.900, 0.996, shade)
+    wrect(0.026, 0.040, 0.900, 0.996, shade)
+    # and the jaw's own shadow where the beard mass begins
+    wrect(-0.170, 0.170, 0.848, 0.862, hex_rgb("#C9AA8D"))
 
     img.pixels = px
     img.pack()
@@ -850,7 +979,10 @@ def assign_uvs(coll):
         for poly in me.polygons:
             bi = poly.index // 6
             mat_key = over.get(bi, key)
-            face_island = (ob.name == "r14_head" and bi in (0, 1) and poly.normal.y > 0.7)
+            # Box 2 is the BROW RIDGE and it belongs on the island too. It stands 13 mm proud
+            # of the skull's face plane, so with a flat palette cell it covered the painted
+            # brows behind it and the face rendered with no brows at all.
+            face_island = (ob.name == "r14_head" and bi in (0, 1, 2) and poly.normal.y > 0.7)
             for li in poly.loop_indices:
                 if face_island:
                     co = ob.matrix_world @ me.vertices[me.loops[li].vertex_index].co

@@ -400,6 +400,16 @@ def envelope():
             theirs = [kept[0][0], kept[-1][-1]] if kept else []
             if not mine or not theirs:
                 continue
+            if view == "front":
+                # The FIGURE IS SYMMETRIC BY DESIGN and the sheet's art is not -- row 12 is
+                # -0.124 H left against +0.139 right. Judging a symmetric outline against an
+                # asymmetric one charges us for the sheet's own hand-drawn wobble on whichever
+                # edge happens to be narrower. Symmetrise the sheet about its own centre
+                # column and compare like with like. The side view has no such symmetry, so
+                # it is compared raw.
+                c = cfg["centre_col"] * SRC_SCALE + SRC_SCALE // 2
+                half = ((c - theirs[0]) + (theirs[1] - c)) / 2.0
+                theirs = [c - half, c + half]
             z = (s["y1"] - iy) / ppm
             grp = "arms" if 0.40 <= z <= 0.86 else "body"
             dl = (theirs[0] - mine[0]) / SRC_SCALE
@@ -440,10 +450,19 @@ def sheet_profile(view="front", collapse=True):
     """
     cfg = VIEWS[view]
     px, w, h = load(os.path.join(REF, cfg["png"]))
-    centre = (cfg["centre_col"] if cfg["pinned"] else 0) * SRC_SCALE + SRC_SCALE // 2
+    if cfg["pinned"]:
+        centre = cfg["centre_col"] * SRC_SCALE + SRC_SCALE // 2
+        scale, top = SRC_SCALE, 7 * SRC_SCALE + SRC_SCALE // 2
+    else:
+        # back.png is drawn smaller -- its figure is ~123 source px, not 140 -- so its rows
+        # and its centre are derived, and every extent is rescaled into the 140-row frame
+        # before being quoted. Otherwise its numbers cannot be compared with the other views'.
+        s = scan(px, w, h)
+        centre = s["head_cx"]
+        scale, top = (s["y1"] - s["y0"]) / 140.0, s["y0"]
     rows = []
     for r in range(7, 148):
-        iy = r * SRC_SCALE + SRC_SCALE // 2
+        iy = int(round(top + (r - 7) * scale))
         y = h - 1 - iy
         ink = [x for x in range(w)
                if is_ink(px[(y * w + x) * 4], px[(y * w + x) * 4 + 1], px[(y * w + x) * 4 + 2])]
@@ -459,8 +478,8 @@ def sheet_profile(view="front", collapse=True):
         if not kept:
             rows.append((r, None, None))
             continue
-        lo = (kept[0][0] - centre) / SRC_SCALE / 140.0
-        hi = (kept[-1][-1] - centre) / SRC_SCALE / 140.0
+        lo = (kept[0][0] - centre) / scale / 140.0
+        hi = (kept[-1][-1] - centre) / scale / 140.0
         rows.append((r, lo, hi))
 
     print("SHEET PROFILE %s -- half-extents in H from column %s, rows 7..147" %
@@ -734,7 +753,7 @@ def measure():
         ("skirt at the hem", [("r14_skirt", 2)], "x", 0.439),
         ("stance, boot to boot", [("r14_boot.R", 1), ("r14_boot.L", 1)], "x", 0.398),
         ("one boot, width", [("r14_boot.R", 1)], "x", 0.164),
-        ("boot cuff, width", [("r14_boot.R", 3)], "x", 0.200),
+        ("boot cuff, width", [("r14_boot.R", 4)], "x", 0.200),
         # The sheet's 0.064 H neck is NOT checked here. It is the depth of the exposed skin
         # column, which is a property of what the jaw and hair leave uncovered, not of the
         # neck box -- measuring the box against it made a correct full-depth throat report
@@ -756,8 +775,8 @@ def measure():
         ("belt top", "r14_belt", 0, 1, 0.421),
         ("belt bottom", "r14_belt", 0, 0, 0.343),
         ("tunic hem", "r14_skirt", 2, 0, 0.207),
-        ("boot cuff top", "r14_boot.R", 3, 1, 0.164),
-        ("boot cuff bottom", "r14_boot.R", 3, 0, 0.107),
+        ("boot cuff top", "r14_boot.R", 4, 1, 0.164),
+        ("boot cuff bottom", "r14_boot.R", 4, 0, 0.107),
         ("sole", "r14_boot.R", 0, 0, 0.000),
     ]
     worst = 0.0
