@@ -89,7 +89,7 @@ ROW
 mutation "the walk phase never advances" gui the_walk_phase_tracks_the_ground_the_dwarf_covers <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                    if travelled < 0.5 {\n'
+old = '                    if travelled <= DWARF_WALK_SNAP_CELLS {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    if false {\n'))
 PY
@@ -97,7 +97,7 @@ PY
 mutation "the phase measures from a stale position" gui walk_phase_advances_only_by_the_ground_covered <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                walk.last = Some(transform.translation);\n'
+old = '                    walk.last = Some(drawn);\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '\n'))
 PY

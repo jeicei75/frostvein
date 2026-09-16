@@ -1077,17 +1077,37 @@ fn the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend() {
         "at spawn the dwarf's origin must sit on the cell floor, not its centre"
     );
 
-    // Move him one cell and let the blend run to completion. This is the arm that was wrong.
+    // Move him and let the blend arm rewrite his translation. This is the arm that was wrong.
+    //
+    // The ARRIVAL is deliberately not asserted here any more. A dwarf is now WALKED to his
+    // delivered cell at `DWARF_WALK_CELLS_PER_SECOND` rather than lerped into it across one tick,
+    // and this harness advances real time by microseconds per update, so no reachable number of
+    // updates gets him there. The floor offset is what this test is about, and it is asserted on
+    // both arms below: while he is walking, and after a move far enough to snap.
     apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
     app.world_mut()
         .resource_mut::<gui::blend::TickClock>()
         .advance(10.0);
     app.update();
+    let walking = projected_translation(&mut app, id);
+    assert_eq!(
+        walking.y, -0.5,
+        "while walking to the delivered cell the dwarf must STILL be on the floor. A bare \
+         world_to_render here lifts him half a cell on the frame after he appears."
+    );
+    assert!(
+        (0.0..=2.0).contains(&walking.x),
+        "he must be between the cell he left and the one delivered, not beyond either: {walking:?}"
+    );
+
+    // Beyond the snap distance he is not walking, he has been moved -- and the offset has to
+    // survive that arm too, which is the one a teleport takes.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [9, 0, 0])]));
+    app.update();
     assert_eq!(
         projected_translation(&mut app, id),
-        bevy::prelude::Vec3::new(2.0, -0.5, 0.0),
-        "after the blend rewrites it, the dwarf must STILL be on the floor. A bare \
-         world_to_render here lifts him half a cell on the frame after he appears."
+        bevy::prelude::Vec3::new(9.0, -0.5, 0.0),
+        "a snapped dwarf must land on the floor of the cell he was moved to"
     );
 }
 

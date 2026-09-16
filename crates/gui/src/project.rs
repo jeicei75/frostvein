@@ -329,6 +329,22 @@ pub fn dwarf_walk_cycles_per_tick() -> f32 {
     (1.0 / METRES_TO_CELLS) / DWARF_WALK_STRIDE_METRES
 }
 
+/// How fast a dwarf is DRAWN crossing the ground, in cells per second.
+///
+/// The wire says which cell he is in and nothing about how he gets there, and the blend used to
+/// spread each change across one tick -- 1.6 m in 100 ms, 16 m/s for a 1.2 m figure. That made
+/// the walk cycle 32.5 gait cycles a second, under two frames each, which aliased into a blur.
+///
+/// `sim-core` now rests `STEP_REST_TICKS` between steps, so a step is delivered about every 1.1 s.
+/// Drawing him at 0.9 cells per second covers the 1.6 m in roughly that time, which is 1.45 m/s
+/// and a readable cadence. He is never drawn anywhere he has not been delivered: this only
+/// governs how long he takes to cross between two delivered cells.
+pub const DWARF_WALK_CELLS_PER_SECOND: f32 = 0.9;
+
+/// Beyond this the dwarf is not walking, he has been moved -- a respawn, a slice change, a
+/// teleport in a test. Walking him there would crawl him across the map; snap instead.
+pub const DWARF_WALK_SNAP_CELLS: f32 = 2.5;
+
 pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree01.glb",
     "trees/SM_VoxelPine_Tree02.glb",
@@ -2098,27 +2114,38 @@ pub fn blend_entities(
             let previous = mirror
                 .previous_entity(marker.0)
                 .map(|previous| previous.pos);
-            transform.translation = blended_translation(previous, entity.pos, clock.factor())
+            let delivered = blended_translation(previous, entity.pos, clock.factor())
                 + entity_draw_offset(entity.kind);
             // Written HERE for the same reason translation and rotation are: this is the sole
-            // writer of the dwarf's drawn position, so it is the only place that can measure the
-            // ground he actually covered. Measuring the DRAWN movement rather than the wire
-            // positions means the legs cannot disagree with where the body went, whatever the
-            // blend does between ticks.
-            if let Some(mut walk) = walk_phase {
-                if let Some(last) = walk.last {
-                    let travelled = (transform.translation - last).length();
-                    // A respawn or a slice change can teleport a dwarf; half a cell of movement
-                    // in one frame is not walking, and winding the phase on by it would make the
-                    // legs jump. Hold the phase instead.
-                    if travelled < 0.5 {
+            // writer of the dwarf's drawn position, so it is the only place that can pace him
+            // across the ground and measure what he covered.
+            //
+            // A dwarf WALKS to his delivered cell instead of being lerped into it across one
+            // tick. The wire only says which cell he is in; spreading that change over a single
+            // 100 ms tick drew a 1.6 m stride in a tenth of a second, and no gait cycle survives
+            // being played 32 times a second. Everything else still takes the delivered blend.
+            match walk_phase {
+                Some(mut walk) => {
+                    let from = walk.last.unwrap_or(delivered);
+                    let remaining = delivered - from;
+                    let gap = remaining.length();
+                    let drawn = if gap > DWARF_WALK_SNAP_CELLS || gap <= f32::EPSILON {
+                        delivered
+                    } else {
+                        let step = (DWARF_WALK_CELLS_PER_SECOND * elapsed_seconds).min(gap);
+                        from + remaining / gap * step
+                    };
+                    let travelled = (drawn - from).length();
+                    if travelled <= DWARF_WALK_SNAP_CELLS {
                         // Render units are CELLS and a cell is 1.6 m, so divide by the
                         // metres-to-cells factor to get the metres the stride is measured in.
                         walk.distance = (walk.distance + travelled / METRES_TO_CELLS)
                             .rem_euclid(DWARF_WALK_STRIDE_METRES);
                     }
+                    walk.last = Some(drawn);
+                    transform.translation = drawn;
                 }
-                walk.last = Some(transform.translation);
+                None => transform.translation = delivered,
             }
             // Rotation is written HERE as well as at the spawn, for the same reason the offset is:
             // this is the sole writer after the spawn frame, so a facing set only at the spawn

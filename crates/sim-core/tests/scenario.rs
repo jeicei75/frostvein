@@ -1036,7 +1036,10 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
     world.apply_command(SimCommand::RemoveStockpile {
         rect: rect(pile, pile),
     });
-    for _ in 0..40 {
+    // 40 ticks covered the carrier's remaining walk while a dwarf stepped once per tick. He now
+    // rests STEP_REST_TICKS between steps, so the same walk takes eleven times as long; this is
+    // the old budget scaled by that pacing, not a number raised until the test passed.
+    for _ in 0..440 {
         step_without_teleporting_a_stone(&mut world);
     }
     // NOTE: `execute_jobs` only recomputes a path when the cached one runs out, so a carrier
