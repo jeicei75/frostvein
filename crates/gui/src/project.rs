@@ -1975,6 +1975,7 @@ pub fn start_dwarf_walk(
     mut commands: Commands,
     assets: Option<Res<ProjectionAssets>>,
     mut players: Query<(BevyEntity, &mut AnimationPlayer), Added<AnimationPlayer>>,
+    mut armed: bevy::prelude::Local<usize>,
 ) {
     let Some(walk) = assets.as_ref().and_then(|assets| assets.dwarf_walk.clone()) else {
         return;
@@ -1984,6 +1985,14 @@ pub fn start_dwarf_walk(
         commands
             .entity(entity)
             .insert(AnimationGraphHandle(walk.graph.clone()));
+        // Said ONCE, and said at all because this is the step with no gate on it: the headless
+        // tests have no animation plugin, so nothing below the asset can prove a player was ever
+        // created. A dwarf that draws but never animates should leave a line saying which half
+        // failed, instead of looking identical to a dwarf with no clip.
+        *armed += 1;
+        if *armed == 1 {
+            eprintln!("gui dwarf walk: armed an animation player");
+        }
     }
 }
 
@@ -2006,17 +2015,30 @@ pub fn drive_dwarf_walk(
     phases: Query<&WalkPhase>,
     assets: Option<Res<ProjectionAssets>>,
     clips: Option<Res<Assets<AnimationClip>>>,
+    mut announced: bevy::prelude::Local<bool>,
+    mut frames: bevy::prelude::Local<u32>,
 ) {
+    *frames += 1;
+    let stalled = *frames == 180;
     let (Some(assets), Some(clips)) = (assets, clips) else {
+        if stalled {
+            eprintln!("gui dwarf walk: STALLED -- no ProjectionAssets or AnimationClip assets");
+        }
         return;
     };
     let Some(walk) = assets.dwarf_walk.as_ref() else {
+        if stalled {
+            eprintln!("gui dwarf walk: STALLED -- the walk graph was never built");
+        }
         return;
     };
     // Read the duration off the clip rather than restating 1.0 s here: a re-authored cycle of a
     // different length must keep working, and a constant beside the asset is how the reported
     // triangle figures came to lie about the artifact they described.
     let Some(duration) = clips.get(&walk.clip).map(AnimationClip::duration) else {
+        if stalled {
+            eprintln!("gui dwarf walk: STALLED -- the Walk clip never loaded");
+        }
         return;
     };
     for (entity, mut player) in players.iter_mut() {
@@ -2032,9 +2054,22 @@ pub fn drive_dwarf_walk(
                 Err(_) => break,
             }
         }
-        let Some(phase) = phase else { continue };
+        let Some(phase) = phase else {
+            if stalled {
+                eprintln!("gui dwarf walk: STALLED -- no WalkPhase above an animation player");
+            }
+            continue;
+        };
         for (_, active) in player.playing_animations_mut() {
             active.seek_to(phase * duration);
+        }
+        // Said once, and said at all because this is the step the gate cannot reach: the headless
+        // tests have no animation plugin, so nothing below `WalkPhase` can prove a clip was ever
+        // driven. A dwarf that draws but never animates should name the link that failed rather
+        // than look identical to one with no clip at all.
+        if !*announced {
+            *announced = true;
+            eprintln!("gui dwarf walk: driving a {duration:.3}s cycle from distance travelled");
         }
     }
 }
