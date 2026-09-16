@@ -5,9 +5,10 @@ use std::{
 };
 
 use bevy::prelude::{
-    AssetServer, Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, Or, Plane3d, PointLight, Query, Res, ResMut, Resource, StandardMaterial,
-    Transform, Vec2, Vec3, With, Without,
+    Added, AnimationClip, AnimationGraph, AnimationGraphHandle, AnimationNodeIndex,
+    AnimationPlayer, AssetServer, Assets, ChildOf, Commands, Component, Cuboid,
+    Entity as BevyEntity, Handle, Mesh, Mesh3d, MeshMaterial3d, Or, Plane3d, PointLight, Query,
+    Res, ResMut, Resource, StandardMaterial, Transform, Vec2, Vec3, With, Without,
 };
 use bevy::{
     asset::RenderAssetUsages,
@@ -23,7 +24,7 @@ use crate::{
         entity_appearance, flicker_scale, foliage_snow_color, hover_highlight_color,
         light_properties, material_color, rim_dissolved_color, snow_cap_color, zone_color,
     },
-    blend::{TickClock, blended_translation},
+    blend::{MIN_TICK_INTERVAL, TickClock, blended_translation},
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
     pick::{PickedCell, PickedTile},
     slice::SliceLevel,
@@ -255,7 +256,24 @@ pub struct ProjectionAssets {
     hover_highlight: Handle<StandardMaterial>,
     trees: [Handle<WorldAsset>; 4],
     dwarf_scene: Handle<WorldAsset>,
+    /// `None` wherever the animation plugin is absent -- every `MinimalPlugins` test.
+    dwarf_walk: Option<DwarfWalk>,
 }
+
+/// The `Walk` clip, wrapped in the one-node graph Bevy needs to play anything.
+#[derive(Clone)]
+struct DwarfWalk {
+    graph: Handle<AnimationGraph>,
+    node: AnimationNodeIndex,
+}
+
+/// Cycles per second this dwarf should be playing, written by the sole translation writer.
+///
+/// It lives on the DWARF entity, not on the player: the player is a descendant spawned by
+/// `WorldAssetRoot` some frames later, and the movement system is the only place that knows
+/// whether this dwarf moved between ticks.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct WalkRate(pub f32);
 
 /// Scene paths in `TreeVariant` order, served from the `embedded://` source.
 ///
@@ -269,6 +287,29 @@ pub const DWARF_SCENE_PATH: &str = "gltf/SM_VoxelDwarf_Miner01.glb";
 /// The pines carried this as a bare 0.625 at their one call site; the dwarf is the second, so it
 /// gets a name. A 1.20 m dwarf therefore draws 0.75 cells tall without any per-kind scale.
 pub const METRES_TO_CELLS: f32 = 0.625;
+
+/// Metres of ground the authored `Walk` clip covers in one cycle.
+///
+/// MEASURED off the exported clip, not chosen. Through stance the planted sole is momentarily
+/// stationary in the world, so in an in-place clip it travels backward through body space at
+/// exactly the ground speed; the stride is that travel over the thirteen stance frames.
+///
+/// Round 18's report rounds it to 0.493. The extra decimals are kept because this is a DIVISOR:
+/// tracking the pinned sole with 0.493 leaves +0.018 mm of drift per frame, which is 0.43 mm a
+/// cycle and accumulates into visible skate over a long walk. 0.4926 tracks it to zero.
+pub const DWARF_WALK_STRIDE_METRES: f32 = 0.4926;
+
+/// How many `Walk` cycles a dwarf plays per simulation tick.
+///
+/// He crosses one CELL per tick and a cell is 1.6 m (`METRES_TO_CELLS` is 0.625), so this is
+/// 1.6 / 0.4926 = 3.25 cycles -- and that is the honest figure, not a tuned one. It is also the
+/// finding: at the sim's current speed the clip has to run over three times a second at a
+/// half-second tick, which reads as a sprint rather than the heavy walk it was authored as.
+/// Playing it slower would skate, so the knob that fixes the LOOK is the sim's dwarf speed or
+/// the stride, not the playback rate. See the round-18 report.
+pub fn dwarf_walk_cycles_per_tick() -> f32 {
+    (1.0 / METRES_TO_CELLS) / DWARF_WALK_STRIDE_METRES
+}
 
 pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree01.glb",
@@ -324,6 +365,9 @@ pub fn setup_projection_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    // Same `Option<Res<..>>` shape as the AssetServer: `Assets<AnimationGraph>` only exists
+    // once Bevy's animation plugin is in the app, and the headless tests build without it.
+    animation_graphs: Option<ResMut<Assets<AnimationGraph>>>,
     asset_server: Option<Res<AssetServer>>,
     // Same `Option<Res<..>>` shape as the AssetServer above, and for the same reason: every
     // MinimalPlugins test builds an app without it and must still run.
@@ -372,6 +416,21 @@ pub fn setup_projection_assets(
             .map_or_else(Handle::default, |asset_server| {
                 asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Scene0"))
             }),
+        // `#Animation0` is the `Walk` clip. The GLB carries exactly one, and
+        // `check_asset.py`'s animation clauses reject a clip that is inert or that does not
+        // close its loop, so a silently empty animation cannot reach here.
+        dwarf_walk: match (asset_server.as_ref(), animation_graphs) {
+            (Some(asset_server), Some(mut graphs)) => {
+                let clip: Handle<AnimationClip> =
+                    asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Animation0"));
+                let (graph, node) = AnimationGraph::from_clip(clip);
+                Some(DwarfWalk {
+                    graph: graphs.add(graph),
+                    node,
+                })
+            }
+            _ => None,
+        },
     });
 }
 
@@ -1651,6 +1710,8 @@ pub fn reconcile(
                         // only looked right because a unit cube's centre is its middle.
                         entity.insert((
                             WorldAssetRoot(assets.dwarf_scene.clone()),
+                            // Starts at rest. `blend_entities` is the only writer after this.
+                            WalkRate(0.0),
                             Transform::from_translation(
                                 world_to_render(position) + entity_draw_offset(mirror_entity.kind),
                             )
@@ -1885,12 +1946,76 @@ pub fn flicker_lights(
     }
 }
 
+/// Attach the walk graph to each `AnimationPlayer` the dwarf's scene brings with it.
+///
+/// The player is created by the glTF loader somewhere under the spawned scene, some frames
+/// after the dwarf entity itself, so this cannot be done at the spawn site. It starts PAUSED:
+/// `drive_dwarf_walk` resumes it the moment the dwarf actually moves, and a dwarf that spawns
+/// standing should be standing.
+pub fn start_dwarf_walk(
+    mut commands: Commands,
+    assets: Option<Res<ProjectionAssets>>,
+    mut players: Query<(BevyEntity, &mut AnimationPlayer), Added<AnimationPlayer>>,
+) {
+    let Some(walk) = assets.as_ref().and_then(|assets| assets.dwarf_walk.clone()) else {
+        return;
+    };
+    for (entity, mut player) in players.iter_mut() {
+        player.play(walk.node).repeat().pause();
+        commands
+            .entity(entity)
+            .insert(AnimationGraphHandle(walk.graph.clone()));
+    }
+}
+
+/// Drive each player from the `WalkRate` its dwarf is carrying.
+///
+/// The rate is on an ANCESTOR -- the dwarf entity -- because that is where the movement system
+/// can see it, so walk up `ChildOf` to find it. The depth is small and fixed (scene root,
+/// armature, player), and the loop is bounded so a malformed hierarchy cannot hang the frame.
+pub fn drive_dwarf_walk(
+    mut players: Query<(BevyEntity, &mut AnimationPlayer)>,
+    parents: Query<&ChildOf>,
+    rates: Query<&WalkRate>,
+) {
+    for (entity, mut player) in players.iter_mut() {
+        let mut current = entity;
+        let mut rate = None;
+        for _ in 0..8 {
+            if let Ok(found) = rates.get(current) {
+                rate = Some(found.0);
+                break;
+            }
+            match parents.get(current) {
+                Ok(parent) => current = parent.0,
+                Err(_) => break,
+            }
+        }
+        let Some(rate) = rate else { continue };
+        for (_, active) in player.playing_animations_mut() {
+            if rate > 0.0 {
+                active.set_speed(rate);
+            }
+        }
+        // Pausing rather than playing at speed 0 leaves the pose where it stopped instead of
+        // holding a mid-stride frame forever, and resuming costs nothing.
+        if rate > 0.0 {
+            player.resume_all();
+        } else {
+            player.pause_all();
+        }
+    }
+}
+
 /// Applies presentation interpolation to dynamic wire projections only.
 pub fn blend_entities(
     mirror: &Mirror,
     clock: &mut TickClock,
     elapsed_seconds: f32,
-    projected: &mut Query<(&WorldProjected, &mut Transform), Without<TerrainTile>>,
+    projected: &mut Query<
+        (&WorldProjected, &mut Transform, Option<&mut WalkRate>),
+        Without<TerrainTile>,
+    >,
 ) {
     clock.advance(elapsed_seconds);
     let entities = mirror
@@ -1901,13 +2026,28 @@ pub fn blend_entities(
         .items()
         .map(|item| (item.id, item.pos))
         .collect::<std::collections::BTreeMap<_, _>>();
-    for (marker, mut transform) in projected.iter_mut() {
+    for (marker, mut transform, walk_rate) in projected.iter_mut() {
         if let Some(entity) = entities.get(&marker.0) {
             let previous = mirror
                 .previous_entity(marker.0)
                 .map(|previous| previous.pos);
             transform.translation = blended_translation(previous, entity.pos, clock.factor())
                 + entity_draw_offset(entity.kind);
+            // Written HERE for the same reason translation and rotation are: this is the sole
+            // writer that knows whether the dwarf moved between ticks. A standing dwarf gets
+            // 0.0 and is paused rather than played slowly, because a walk cycle crawling on the
+            // spot reads worse than a figure holding still.
+            if let Some(mut rate) = walk_rate {
+                let moved = previous.is_some_and(|previous| previous != entity.pos);
+                let next = if moved {
+                    dwarf_walk_cycles_per_tick() / clock.interval().max(MIN_TICK_INTERVAL)
+                } else {
+                    0.0
+                };
+                if rate.0 != next {
+                    rate.0 = next;
+                }
+            }
             // Rotation is written HERE as well as at the spawn, for the same reason the offset is:
             // this is the sole writer after the spawn frame, so a facing set only at the spawn
             // would be correct for exactly one frame. `None` means hold what is already there.

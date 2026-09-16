@@ -3796,3 +3796,55 @@ fn the_perf_row_reports_the_tiles_the_reconcile_actually_drained() {
         "the steady frame after an edit must report zero, not inherit the edit's count: {dirty:?}"
     );
 }
+
+/// The walk cycle must be driven by whether the dwarf ACTUALLY MOVED, through the real wiring.
+///
+/// `WalkRate` is written by `blend_entities` -- the sole writer of a dwarf's translation after
+/// spawn -- for the same reason the draw offset and the facing are: anything written only at the
+/// spawn is correct for exactly one frame. A dwarf standing still must read 0.0 and be paused,
+/// because a walk cycle crawling on the spot reads worse than a figure holding still.
+///
+/// This drives the production systems rather than calling the helper, so deleting the `WalkRate`
+/// write, or unregistering the systems that consume it, fails here.
+#[test]
+fn a_dwarf_walks_only_while_it_is_moving() {
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    app.update();
+    app.update();
+
+    let standing = walk_rate(&mut app, 7);
+    assert_eq!(
+        standing, 0.0,
+        "a dwarf that has not moved must be at rest, not playing a walk in place"
+    );
+
+    apply_delta(&mut app, delta(Vec::new(), vec![dwarf(7, [1, 0, 0])]));
+    app.update();
+
+    let walking = walk_rate(&mut app, 7);
+    assert!(
+        walking > 0.0,
+        "a dwarf that crossed a cell must be walking; rate was {walking}"
+    );
+    // The rate is cycles per SECOND, so it must scale with the clock: a dwarf crossing a cell
+    // covers 1.6 m whatever the tick interval, and the clip covers 0.4926 m per cycle. Pinning
+    // the product rather than the literal keeps this honest if either constant moves.
+    let interval = app.world().resource::<gui::blend::TickClock>().interval();
+    let expected = gui::project::dwarf_walk_cycles_per_tick() / interval;
+    assert!(
+        (walking - expected).abs() < 1e-3,
+        "walk rate {walking} must be the measured stride over the tick interval {expected}"
+    );
+}
+
+fn walk_rate(app: &mut App, id: u32) -> f32 {
+    app.world_mut()
+        .query::<(&gui::project::WorldProjected, &gui::project::WalkRate)>()
+        .iter(app.world())
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, rate)| rate.0)
+        .expect("the dwarf must carry a WalkRate")
+}

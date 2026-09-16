@@ -550,6 +550,11 @@ pub fn projection_systems(app: &mut App) {
                 reconcile_projection,
                 blend_projection,
                 flicker_projection,
+                // Chained after `blend_projection` deliberately: that is the sole writer of
+                // `WalkRate`, so reading it earlier in the same frame would drive every dwarf
+                // from the previous tick's movement.
+                crate::project::start_dwarf_walk,
+                crate::project::drive_dwarf_walk,
             )
                 .chain()
                 .in_set(ProjectionSet),
@@ -1552,7 +1557,14 @@ fn blend_projection(
     mirror: Res<MirrorResource>,
     mut clock: ResMut<TickClock>,
     time: Res<Time>,
-    mut projected: Query<(&WorldProjected, &mut Transform), Without<TerrainTile>>,
+    mut projected: Query<
+        (
+            &WorldProjected,
+            &mut Transform,
+            Option<&mut crate::project::WalkRate>,
+        ),
+        Without<TerrainTile>,
+    >,
 ) {
     blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);
 }
