@@ -3797,17 +3797,18 @@ fn the_perf_row_reports_the_tiles_the_reconcile_actually_drained() {
     );
 }
 
-/// The walk cycle must be driven by whether the dwarf ACTUALLY MOVED, through the real wiring.
+/// The walk cycle is phase-locked to ground covered, through the real wiring.
 ///
-/// `WalkRate` is written by `blend_entities` -- the sole writer of a dwarf's translation after
-/// spawn -- for the same reason the draw offset and the facing are: anything written only at the
-/// spawn is correct for exactly one frame. A dwarf standing still must read 0.0 and be paused,
-/// because a walk cycle crawling on the spot reads worse than a figure holding still.
+/// A speed-driven clip only moves the legs at roughly the right cadence; it says nothing about
+/// WHERE in the cycle the dwarf is, so each tick starts at whatever phase the last one ended on
+/// and the feet plant in unrelated places. That is what "not synced with movement" looked like
+/// from the seat. Locking the phase to distance means a foot plants at the same point of every
+/// stride however the tick interval jitters.
 ///
-/// This drives the production systems rather than calling the helper, so deleting the `WalkRate`
-/// write, or unregistering the systems that consume it, fails here.
+/// The expectation is derived from the DRAWN translation rather than from a literal, so this
+/// cannot pass by agreeing with whatever cadence the code happens to pick.
 #[test]
-fn a_dwarf_walks_only_while_it_is_moving() {
+fn the_walk_phase_tracks_the_ground_the_dwarf_covers() {
     let mut app = headless_app(snapshot(
         vec![Tile::Empty, Tile::Empty],
         vec![dwarf(7, [0, 0, 0])],
@@ -3815,36 +3816,99 @@ fn a_dwarf_walks_only_while_it_is_moving() {
     app.update();
     app.update();
 
-    let standing = walk_rate(&mut app, 7);
+    let before = walk_phase(&mut app, 7);
+    let from = projected_translation(&mut app, 7);
     assert_eq!(
-        standing, 0.0,
-        "a dwarf that has not moved must be at rest, not playing a walk in place"
+        before, 0.0,
+        "a dwarf that has not moved must not have advanced its walk phase"
     );
 
     apply_delta(&mut app, delta(Vec::new(), vec![dwarf(7, [1, 0, 0])]));
     app.update();
+    app.update();
 
-    let walking = walk_rate(&mut app, 7);
+    let after = walk_phase(&mut app, 7);
+    let to = projected_translation(&mut app, 7);
+    let travelled_cells = (to - from).length();
     assert!(
-        walking > 0.0,
-        "a dwarf that crossed a cell must be walking; rate was {walking}"
+        travelled_cells > 0.0,
+        "the delta must actually have moved the dwarf, or this proves nothing"
     );
-    // The rate is cycles per SECOND, so it must scale with the clock: a dwarf crossing a cell
-    // covers 1.6 m whatever the tick interval, and the clip covers 0.4926 m per cycle. Pinning
-    // the product rather than the literal keeps this honest if either constant moves.
-    let interval = app.world().resource::<gui::blend::TickClock>().interval();
-    let expected = gui::project::dwarf_walk_cycles_per_tick() / interval;
+
+    // Render units are cells; the stride is in metres, and a cell is 1.6 m.
+    let strides =
+        (travelled_cells / gui::project::METRES_TO_CELLS) / gui::project::DWARF_WALK_STRIDE_METRES;
+    let expected = (before + strides).fract();
     assert!(
-        (walking - expected).abs() < 1e-3,
-        "walk rate {walking} must be the measured stride over the tick interval {expected}"
+        (after - expected).abs() < 1e-3,
+        "walk phase {after} must be the ground covered ({travelled_cells} cells) over one \
+         stride, which is {expected}"
     );
 }
 
-fn walk_rate(app: &mut App, id: u32) -> f32 {
+/// The lock must hold FRAME BY FRAME, and a dwarf with no delivered movement must not animate.
+///
+/// The first version of this waited for the blend to settle and asserted the phase stopped. It
+/// failed and the CODE was right: under the headless clock the blend creeps for many frames, so
+/// "settled" never arrives. The invariant worth pinning is not that he stops -- it is that phase
+/// advance is always the ground covered, which covers the standing dwarf too.
+#[test]
+fn walk_phase_advances_only_by_the_ground_covered() {
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    app.update();
+
+    // Standing: nothing delivered, so nothing moves and nothing may animate.
+    let resting = (projected_translation(&mut app, 7), walk_phase(&mut app, 7));
+    for frame in 0..5 {
+        app.update();
+        assert_eq!(
+            projected_translation(&mut app, 7),
+            resting.0,
+            "frame {frame}: an undelivered dwarf must not move"
+        );
+        assert_eq!(
+            walk_phase(&mut app, 7),
+            resting.1,
+            "frame {frame}: a dwarf standing still must not walk on the spot"
+        );
+    }
+
+    // Moving: every frame's phase advance must be that frame's ground covered.
+    apply_delta(&mut app, delta(Vec::new(), vec![dwarf(7, [1, 0, 0])]));
+    let mut moved_frames = 0;
+    let mut previous = (projected_translation(&mut app, 7), walk_phase(&mut app, 7));
+    for frame in 0..10 {
+        app.update();
+        let now = (projected_translation(&mut app, 7), walk_phase(&mut app, 7));
+        let cells = (now.0 - previous.0).length();
+        let strides =
+            (cells / gui::project::METRES_TO_CELLS) / gui::project::DWARF_WALK_STRIDE_METRES;
+        let advanced = (now.1 - previous.1).rem_euclid(1.0);
+        assert!(
+            (advanced - strides.rem_euclid(1.0)).abs() < 1e-3,
+            "frame {frame}: phase advanced {advanced} but the dwarf covered {cells} cells, \
+             which is {strides} strides"
+        );
+        if cells > 0.0 {
+            moved_frames += 1;
+        }
+        previous = now;
+    }
+    // Guard the guard: a run where he never moved would satisfy every assertion above vacuously.
+    assert!(
+        moved_frames > 0,
+        "the dwarf never moved, so the locking half of this test proved nothing"
+    );
+}
+
+fn walk_phase(app: &mut App, id: u32) -> f32 {
     app.world_mut()
-        .query::<(&gui::project::WorldProjected, &gui::project::WalkRate)>()
+        .query::<(&gui::project::WorldProjected, &gui::project::WalkPhase)>()
         .iter(app.world())
         .find(|(marker, _)| marker.0 == id)
-        .map(|(_, rate)| rate.0)
-        .expect("the dwarf must carry a WalkRate")
+        .map(|(_, phase)| phase.phase())
+        .expect("the dwarf must carry a WalkPhase")
 }

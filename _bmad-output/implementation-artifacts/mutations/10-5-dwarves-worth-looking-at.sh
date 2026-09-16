@@ -83,21 +83,21 @@ p.write_text(s.replace(old, ''))
 ROW
 
 # --- Round 18's walk cycle. Same lesson as the floor offset above, on a third property: the
-# --- thing that knows whether a dwarf moved is the blend arm, so that is where it has to be
-# --- written, and a row each way proves the test is not passing on one arm alone.
+# --- thing that knows how far a dwarf actually travelled is the blend arm, because it is the
+# --- arm that draws him, so that is where the phase has to be wound on.
 
-mutation "a moving dwarf never starts walking" gui a_dwarf_walks_only_while_it_is_moving <<'PY'
+mutation "the walk phase never advances" gui the_walk_phase_tracks_the_ground_the_dwarf_covers <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                let next = if moved {\n'
+old = '                    if travelled < 0.5 {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                let next = if false {\n'))
+p.write_text(s.replace(old, '                    if false {\n'))
 PY
 
-mutation "a standing dwarf walks on the spot" gui a_dwarf_walks_only_while_it_is_moving <<'PY'
+mutation "the phase measures from a stale position" gui walk_phase_advances_only_by_the_ground_covered <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                let next = if moved {\n'
+old = '                walk.last = Some(transform.translation);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                let next = if true {\n'))
+p.write_text(s.replace(old, '\n'))
 PY

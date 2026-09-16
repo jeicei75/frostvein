@@ -24,7 +24,7 @@ use crate::{
         entity_appearance, flicker_scale, foliage_snow_color, hover_highlight_color,
         light_properties, material_color, rim_dissolved_color, snow_cap_color, zone_color,
     },
-    blend::{MIN_TICK_INTERVAL, TickClock, blended_translation},
+    blend::{TickClock, blended_translation},
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
     pick::{PickedCell, PickedTile},
     slice::SliceLevel,
@@ -265,15 +265,33 @@ pub struct ProjectionAssets {
 struct DwarfWalk {
     graph: Handle<AnimationGraph>,
     node: AnimationNodeIndex,
+    /// Kept so the cycle's DURATION can be read off the clip instead of restated as a constant.
+    clip: Handle<AnimationClip>,
 }
 
-/// Cycles per second this dwarf should be playing, written by the sole translation writer.
+/// How far this dwarf has walked, and where he was last drawn.
 ///
-/// It lives on the DWARF entity, not on the player: the player is a descendant spawned by
-/// `WorldAssetRoot` some frames later, and the movement system is the only place that knows
-/// whether this dwarf moved between ticks.
-#[derive(Component, Debug, Clone, Copy, PartialEq)]
-pub struct WalkRate(pub f32);
+/// The clip is PHASE-LOCKED to distance rather than played at a speed. A speed only makes the
+/// legs move at roughly the right cadence; it says nothing about WHERE in the cycle he is, so
+/// each tick starts at whatever phase the last one happened to end on and the feet plant in
+/// unrelated places. Driving the phase from ground covered means a foot plants at the same point
+/// of every stride no matter how the tick interval jitters, which is the same reason the clip was
+/// authored in place: `blended_translation` owns the travel, the clip owns only the pose.
+///
+/// `distance` is kept modulo one stride so it cannot lose precision over a long session, and
+/// `last` is in RENDER units (cells), because that is what the transform is measured in.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
+pub struct WalkPhase {
+    distance: f32,
+    last: Option<Vec3>,
+}
+
+impl WalkPhase {
+    /// Where in the cycle this dwarf is, as a fraction of one stride.
+    pub fn phase(&self) -> f32 {
+        self.distance / DWARF_WALK_STRIDE_METRES
+    }
+}
 
 /// Scene paths in `TreeVariant` order, served from the `embedded://` source.
 ///
@@ -423,10 +441,11 @@ pub fn setup_projection_assets(
             (Some(asset_server), Some(mut graphs)) => {
                 let clip: Handle<AnimationClip> =
                     asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Animation0"));
-                let (graph, node) = AnimationGraph::from_clip(clip);
+                let (graph, node) = AnimationGraph::from_clip(clip.clone());
                 Some(DwarfWalk {
                     graph: graphs.add(graph),
                     node,
+                    clip,
                 })
             }
             _ => None,
@@ -1711,7 +1730,7 @@ pub fn reconcile(
                         entity.insert((
                             WorldAssetRoot(assets.dwarf_scene.clone()),
                             // Starts at rest. `blend_entities` is the only writer after this.
-                            WalkRate(0.0),
+                            WalkPhase::default(),
                             Transform::from_translation(
                                 world_to_render(position) + entity_draw_offset(mirror_entity.kind),
                             )
@@ -1968,22 +1987,44 @@ pub fn start_dwarf_walk(
     }
 }
 
-/// Drive each player from the `WalkRate` its dwarf is carrying.
+/// Seek each player to the phase its dwarf's travel puts it at.
 ///
-/// The rate is on an ANCESTOR -- the dwarf entity -- because that is where the movement system
+/// The player stays PAUSED for its whole life. In Bevy `paused` only stops the clock advancing
+/// -- the pose is still applied from `seek_time` every frame -- so seeking a paused animation is
+/// how you drive a cycle from something other than wall time. Here that something is ground
+/// covered, which is what makes the feet land with the movement instead of near it.
+///
+/// A dwarf that stops moving stops advancing its phase and simply holds the pose it was in, so
+/// no pause/resume logic is needed: standing still falls out of the same rule.
+///
+/// The phase is on an ANCESTOR -- the dwarf entity -- because that is where the movement system
 /// can see it, so walk up `ChildOf` to find it. The depth is small and fixed (scene root,
 /// armature, player), and the loop is bounded so a malformed hierarchy cannot hang the frame.
 pub fn drive_dwarf_walk(
     mut players: Query<(BevyEntity, &mut AnimationPlayer)>,
     parents: Query<&ChildOf>,
-    rates: Query<&WalkRate>,
+    phases: Query<&WalkPhase>,
+    assets: Option<Res<ProjectionAssets>>,
+    clips: Option<Res<Assets<AnimationClip>>>,
 ) {
+    let (Some(assets), Some(clips)) = (assets, clips) else {
+        return;
+    };
+    let Some(walk) = assets.dwarf_walk.as_ref() else {
+        return;
+    };
+    // Read the duration off the clip rather than restating 1.0 s here: a re-authored cycle of a
+    // different length must keep working, and a constant beside the asset is how the reported
+    // triangle figures came to lie about the artifact they described.
+    let Some(duration) = clips.get(&walk.clip).map(AnimationClip::duration) else {
+        return;
+    };
     for (entity, mut player) in players.iter_mut() {
         let mut current = entity;
-        let mut rate = None;
+        let mut phase = None;
         for _ in 0..8 {
-            if let Ok(found) = rates.get(current) {
-                rate = Some(found.0);
+            if let Ok(found) = phases.get(current) {
+                phase = Some(found.phase());
                 break;
             }
             match parents.get(current) {
@@ -1991,18 +2032,9 @@ pub fn drive_dwarf_walk(
                 Err(_) => break,
             }
         }
-        let Some(rate) = rate else { continue };
+        let Some(phase) = phase else { continue };
         for (_, active) in player.playing_animations_mut() {
-            if rate > 0.0 {
-                active.set_speed(rate);
-            }
-        }
-        // Pausing rather than playing at speed 0 leaves the pose where it stopped instead of
-        // holding a mid-stride frame forever, and resuming costs nothing.
-        if rate > 0.0 {
-            player.resume_all();
-        } else {
-            player.pause_all();
+            active.seek_to(phase * duration);
         }
     }
 }
@@ -2013,7 +2045,7 @@ pub fn blend_entities(
     clock: &mut TickClock,
     elapsed_seconds: f32,
     projected: &mut Query<
-        (&WorldProjected, &mut Transform, Option<&mut WalkRate>),
+        (&WorldProjected, &mut Transform, Option<&mut WalkPhase>),
         Without<TerrainTile>,
     >,
 ) {
@@ -2026,7 +2058,7 @@ pub fn blend_entities(
         .items()
         .map(|item| (item.id, item.pos))
         .collect::<std::collections::BTreeMap<_, _>>();
-    for (marker, mut transform, walk_rate) in projected.iter_mut() {
+    for (marker, mut transform, walk_phase) in projected.iter_mut() {
         if let Some(entity) = entities.get(&marker.0) {
             let previous = mirror
                 .previous_entity(marker.0)
@@ -2034,19 +2066,24 @@ pub fn blend_entities(
             transform.translation = blended_translation(previous, entity.pos, clock.factor())
                 + entity_draw_offset(entity.kind);
             // Written HERE for the same reason translation and rotation are: this is the sole
-            // writer that knows whether the dwarf moved between ticks. A standing dwarf gets
-            // 0.0 and is paused rather than played slowly, because a walk cycle crawling on the
-            // spot reads worse than a figure holding still.
-            if let Some(mut rate) = walk_rate {
-                let moved = previous.is_some_and(|previous| previous != entity.pos);
-                let next = if moved {
-                    dwarf_walk_cycles_per_tick() / clock.interval().max(MIN_TICK_INTERVAL)
-                } else {
-                    0.0
-                };
-                if rate.0 != next {
-                    rate.0 = next;
+            // writer of the dwarf's drawn position, so it is the only place that can measure the
+            // ground he actually covered. Measuring the DRAWN movement rather than the wire
+            // positions means the legs cannot disagree with where the body went, whatever the
+            // blend does between ticks.
+            if let Some(mut walk) = walk_phase {
+                if let Some(last) = walk.last {
+                    let travelled = (transform.translation - last).length();
+                    // A respawn or a slice change can teleport a dwarf; half a cell of movement
+                    // in one frame is not walking, and winding the phase on by it would make the
+                    // legs jump. Hold the phase instead.
+                    if travelled < 0.5 {
+                        // Render units are CELLS and a cell is 1.6 m, so divide by the
+                        // metres-to-cells factor to get the metres the stride is measured in.
+                        walk.distance = (walk.distance + travelled / METRES_TO_CELLS)
+                            .rem_euclid(DWARF_WALK_STRIDE_METRES);
+                    }
                 }
+                walk.last = Some(transform.translation);
             }
             // Rotation is written HERE as well as at the spawn, for the same reason the offset is:
             // this is the sole writer after the spawn frame, so a facing set only at the spawn

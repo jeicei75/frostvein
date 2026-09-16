@@ -580,7 +580,7 @@ pub fn projection_systems(app: &mut App) {
                 blend_projection,
                 flicker_projection,
                 // Chained after `blend_projection` deliberately: that is the sole writer of
-                // `WalkRate`, so reading it earlier in the same frame would drive every dwarf
+                // `WalkPhase`, so reading it earlier in the same frame would drive every dwarf
                 // from the previous tick's movement.
                 crate::project::start_dwarf_walk,
                 crate::project::drive_dwarf_walk,
@@ -1590,7 +1590,7 @@ fn blend_projection(
         (
             &WorldProjected,
             &mut Transform,
-            Option<&mut crate::project::WalkRate>,
+            Option<&mut crate::project::WalkPhase>,
         ),
         Without<TerrainTile>,
     >,
