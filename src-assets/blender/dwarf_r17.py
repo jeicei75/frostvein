@@ -509,6 +509,54 @@ def part_hair():
         # the second, shallower layer behind them
         wedge(0.128, 0.166, -0.100, 0.070, p["neck_top"] - 0.030, 1.0200),
         wedge(-0.166, -0.128, -0.100, 0.070, p["neck_top"] - 0.030, 1.0200),
+        # THE NAPE TONGUE, appended last. The hair mass stops dead at head_ends (0.848) and
+        # the torso starts at 0.848, so the two only touch -- 0.4 mm at bind -- and a 20 deg
+        # nod measures 34.1 mm between them.
+        #
+        # What that distance is actually reporting took a rear render with the pack hidden
+        # to pin down, and it is NOT a hole through the figure. Nothing opens to daylight:
+        # the head, the neck column and the hair are one rigid assembly (WEIGHTS gives head
+        # box 9 to "neck" and everything above it to "head", and head is neck's child), so
+        # a nod cannot move any of them relative to each other. What moves is the SIGHTLINE.
+        # The hair's back band hangs at y -0.176..-0.130 and the neck column's back face is
+        # at -0.128, just 2 mm in front of it, so the band covers the nape only for rays
+        # arriving near horizontal. Tilt the assembly 20 deg and a horizontal ray passes
+        # under the band's bottom edge and lands on the neck column instead -- which paints
+        # skin, so what Wolf sees is a pale strip appearing across the nape, bright against
+        # the hair. Ray-cast from the rear camera at neck -20, z 0.852 through 0.876 all
+        # return r17_head; at bind every one of them returns r17_hair. That strip, not a
+        # slit, is the defect.
+        #
+        # So this box is not a spacer, it is an OCCLUDER: a tongue of hair hanging down the
+        # nape at y -0.148..-0.130, immediately behind the neck column, low enough that the
+        # tilted sightline still meets hair. It is what "extend the lobes' lower edge down"
+        # means once the mechanism is known.
+        #
+        # Extents come from ray-cast FACES, not bounding boxes, and that distinction cost a
+        # build: the torso's bounds say its back is -0.1794 while its back face above z 0.78
+        # is -0.1614, and the pack's front face is -0.1714, so a 10 mm channel runs open
+        # between them. A first attempt sat in it and read as 244 changed pixels in the SIDE
+        # silhouette. Measured, the cover is:
+        #
+        #     z 0.770..0.844   torso   x +-0.190..0.198   back face -0.1614
+        #     z 0.844..0.848   torso   x +-0.150          back face -0.1494
+        #     y < -0.1714      pack    x +-0.1776         (its own shadow, all these z)
+        #
+        # so y stops at -0.148 (1.4 mm inside the tightest torso face) and x at +-0.145
+        # (5 mm inside the collar step).
+        #
+        # The TOP stops at 0.847, below the torso's own top at 0.8480, and that 1 mm is
+        # deliberate. The committed figure has a real 0.4 mm see-through crack at bind
+        # between the torso's top (0.8480) and the hair's bottom (0.8484): at the nape the
+        # pack's front face is -0.1714 and the head's back is -0.1280, so nothing stands
+        # behind y -0.148..-0.130 and the slit reads as 19 partial-alpha pixels in the SIDE
+        # outline. Running this box up to head_ends filled them -- an improvement, but a
+        # silhouette change, and closing a crack that has been in the outline since r14 is
+        # not this round's call to make. Stopping at 0.847 leaves those 19 pixels exactly as
+        # they were. The occlusion this box exists for happens between 0.770 and 0.848 and
+        # does not need the last millimetre. Checked by rendering the outlines rather than
+        # reasoning about them: 0 px changed, front and side.
+        box(-0.145, 0.145, -0.148, -0.130, 0.770, 0.847),
     ]
 
 
@@ -714,6 +762,25 @@ def part_leg(side):
         box(xo - p["w_limb"], xo, p["y_shin_b"], p["y_shin_f"], 0.190, 0.262),
         box(xo - p["w_limb"] + 0.004, xo - 0.004, p["y_shin_b"] + 0.004, p["y_shin_f"] - 0.004,
             0.262 - o, 0.330),
+        # THE ANKLE PLUG, appended. The shin's bottom sits at 0.190 and the cuff's top at
+        # 0.1884, so leg and boot barely meet -- 1.6 mm apart at bind, and the only thing
+        # bridging them is the cuff lip, which reaches 0.1944 and overlaps the shin by 4.4 mm.
+        # That is not enough: at foot -15 deg the pair opens 17.6 mm, and it is already
+        # 12.5 mm at -10 deg. A walk cycle rotates the ankle every step, so the slit would
+        # shimmer along the boot top through the whole animation. This buries 38 mm of leg
+        # column inside the cuff, so the rotation runs out of angle before it runs out of
+        # overlap.
+        #
+        # A SEPARATE box, appended, rather than box 0's bottom dropped to 0.150 -- which is
+        # the obvious edit and is wrong. The shin's back face is y_shin_b (-0.094) and the
+        # cuff's is y_shin_b + 0.009, so a lowered shin would stand 9 mm proud of the cuff's
+        # back between z 0.150 and 0.1884. That stretch is a notch in the SIDE silhouette,
+        # and filling it with bare shin would move the outline. Inset in y and x the plug is
+        # inside the cuff from every direction, and appending keeps box 0 the shin for the
+        # 0.164 depth check and box 1 the thigh for the hip weight.
+        box(xo - p["w_limb"] + 0.004, xo - 0.004,
+            p["y_shin_b"] + 0.013, 0.096,
+            0.150, 0.190 + o),
     ]
     return parts if side > 0 else mirror_x(parts)
 
