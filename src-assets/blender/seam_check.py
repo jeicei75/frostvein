@@ -35,10 +35,24 @@ PASS_MM = 10.0
 
 # Joint ranges, degrees. Axis is X unless named -- the head swivels about Z and the wrist
 # about Y, which is how they are actually animated.
+#
+# r18 widened the leg entries to the angles the `Walk` action actually reaches (walk_r18.py,
+# joint_range()), because a generic ROM is not evidence about the poses the cycle uses. Two
+# of the three were on the wrong side of zero to begin with:
+#
+#   knee  the old (0, 70) was HYPERextension. hip/knee point down at bind with local X =
+#         world X, so a POSITIVE turn swings the shin forward. The walk runs -82 .. -40 and
+#         never once enters the old window.
+#   foot  the walk needs +45 of local dorsiflexion, not because the ankle bends that far in
+#         the world -- absolute foot pitch only runs -18 .. +12 -- but because the foot has
+#         to cancel a knee that is flexed 40-82 to keep the sole flat on the ground.
+#
+# The old bounds are kept where they are the wider of the two, so this is a union and not a
+# replacement.
 RANGES = {
-    "hip":      ("X", (-45.0, 35.0)),
-    "knee":     ("X", (0.0, 70.0)),
-    "foot":     ("X", (-25.0, 25.0)),
+    "hip":      ("X", (-45.0, 62.0)),
+    "knee":     ("X", (-83.0, 70.0)),
+    "foot":     ("X", (-25.0, 45.0)),
     "shoulder": ("X", (-55.0, 40.0)),
     "elbow":    ("X", (-70.0, 0.0)),
     "hand":     ("Y", (-35.0, 35.0)),
@@ -47,7 +61,7 @@ RANGES = {
     "neck":     ("X", (-20.0, 20.0)),
     "head":     ("Z", (-35.0, 35.0)),
     "hips":     ("X", (-12.0, 12.0)),
-    "beard":    ("X", (0.0, 25.0)),
+    "beard":    ("X", (-4.0, 25.0)),
 }
 STEPS = 6                       # samples across each range, endpoints included
 
