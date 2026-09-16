@@ -291,6 +291,30 @@ pub fn dwarf_asset_summary() -> (bool, usize) {
     (DWARF_ASSET.1.starts_with(b"glTF"), DWARF_ASSET.1.len())
 }
 
+/// Does the embedded dwarf actually carry an animation clip?
+///
+/// Read out of the BYTES this binary ships, not off a handle, because the failure it exists to
+/// catch is a stale runtime slot: round 18's walk cycle went into the .blend and the GLB in
+/// `assets/gltf/` was not re-promoted, so the figure loaded, skinned, posed at bind, and simply
+/// never walked. The only complaint anywhere was an asset-server line about a missing
+/// `Animation0` label, buried in a frame log. A dwarf that cannot walk should say so at startup,
+/// for the same reason the byte count says WHICH dwarf this is.
+///
+/// Scans the JSON chunk for the `animations` array rather than parsing glTF: this is a
+/// present/absent signal to a human reading the startup lines, and `check_asset.py`'s animation
+/// clauses are what actually judge a clip.
+pub fn dwarf_clip_summary() -> bool {
+    let data = DWARF_ASSET.1;
+    if data.len() < 20 || !data.starts_with(b"glTF") {
+        return false;
+    }
+    let length = u32::from_le_bytes([data[12], data[13], data[14], data[15]]) as usize;
+    let Some(json) = data.get(20..20 + length) else {
+        return false;
+    };
+    json.windows(13).any(|window| window == br#""animations":"#)
+}
+
 /// Publish the embedded pines into the `embedded://` source before anything loads them.
 ///
 /// `AssetPlugin::build` creates the registry and registers the source, so this must run AFTER
@@ -324,11 +348,16 @@ pub fn run() -> anyhow::Result<()> {
     );
     let (dwarf_present, dwarf_bytes) = dwarf_asset_summary();
     eprintln!(
-        "gui dwarf asset: {} in this binary, {dwarf_bytes} bytes",
+        "gui dwarf asset: {} in this binary, {dwarf_bytes} bytes, walk clip {}",
         if dwarf_present {
             "embedded"
         } else {
             "MISSING OR TRUNCATED"
+        },
+        if dwarf_clip_summary() {
+            "present"
+        } else {
+            "ABSENT -- this dwarf cannot walk; the runtime GLB is behind the .blend"
         }
     );
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
@@ -2371,6 +2400,23 @@ mod tests {
     /// was testable — and the review then deleted the *call to it* from `run()` and watched the
     /// whole suite stay green. Same for `client_systems` and `projection_systems`, which the
     /// headless harness invoked itself. Every expectation below is hand-written here.
+    /// The stale-runtime-slot guard, and the one that would have saved a session.
+    ///
+    /// Round 18 authored the walk cycle into the .blend and `assets/gltf/` was not re-promoted,
+    /// so the embedded GLB had a skin and no clip. Everything loaded, the dwarf posed at bind,
+    /// and the only symptom was an asset-server line about a missing `Animation0` label. The
+    /// wiring was correct the whole time; the artifact was behind it.
+    ///
+    /// `include_bytes!` means the promoted file IS this test's subject, so promoting a dwarf
+    /// exported before its clip turns this red instead of shipping a figure that cannot walk.
+    #[test]
+    fn the_embedded_dwarf_carries_its_walk_clip() {
+        assert!(
+            super::dwarf_clip_summary(),
+            "the promoted dwarf must carry an animation clip; re-export the blend and promote it"
+        );
+    }
+
     #[test]
     fn the_startup_line_says_which_dwarf_this_binary_carries() {
         let (present, bytes) = super::dwarf_asset_summary();
