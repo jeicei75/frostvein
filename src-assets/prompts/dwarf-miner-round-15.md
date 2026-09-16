@@ -75,7 +75,30 @@ overshoot per z-decile in source pixels. Rules it must follow:
    body; left in, it reads as +51 px of overshoot that is not geometry.
 3. **Report the arms separately.** They are exempt (§6, pose).
 
-**Target: ≤ 1.0 source px on the body in both pinned views.** Round 14 finished at 1.2 / 2.4.
+### The tolerance, and what a source pixel is actually worth
+
+**≤ 3 source px on the body passes. Anything beyond that flags and is explained.**
+
+One source pixel is 8.571 mm, 1/140 of figure height. Against the distances the figure is actually
+seen at:
+
+| context | figure height | 1 source px on screen |
+|---|---|---|
+| gameplay — this sheet's own boot-camera measure | **8.74 px** | **0.06 px** |
+| readability strip / LOD2 | 60 px | 0.43 px |
+| LOD1 inspection | 200 px | 1.4 px |
+| LOD0 hero render | 500 px | 3.6 px |
+
+Round 14 finished at 1.2 px front and 2.4 px side. At the distance dwarves are actually seen that
+worst case is **0.15 of a screen pixel** — invisible, and the builds it spent closing the gap from
+5 px were largely wasted. Do not chase this number below 3.
+
+**The envelope's real job is catching drift, not proving fidelity.** It caught four separate
+additions wandering off the sheet inside a single build, each of which every landmark check passed.
+That is what it is for.
+
+**And list the parts the art never exposes.** The torso and the skirt sit behind the posed arms in
+all four views, so their envelope figure is *unmeasurable*, not passing. One number hides that.
 
 ## 4. Method
 
