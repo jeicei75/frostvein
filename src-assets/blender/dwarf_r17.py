@@ -918,8 +918,8 @@ PART_BUILDERS = [
 # Value steps come from face ORIENTATION, read off the polygon normal rather than the face
 # index, so the rotated arm boxes step the same way the axis-aligned ones do.
 
-TEX = "T_VoxelDwarf_r14"
-MAT = "M_VoxelDwarf_r14"
+TEX = "T_VoxelDwarf_r17"
+MAT = "M_VoxelDwarf_r17"
 TEX_SIZE = 512
 CELL = 32                        # 16 x 16 cells
 FACE_ISLAND = (8, 8, 176, 128)   # x, y, w, h in pixels, bottom-left origin
@@ -1000,16 +1000,21 @@ EXTRA = {
 }
 
 
-def srgb_to_linear(c):
-    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-
-
 def hex_rgb(h, mul=1.0):
+    """Hex -> the 0..1 floats that write these exact BYTES into the 8-bit atlas.
+
+    There is deliberately no sRGB->linear transform here. `make_image` creates the image
+    WITHOUT `float_buffer=True`, so its `pixels` are already display-encoded and `pack()`
+    writes those bytes straight into the PNG; glTF then reads baseColorTexture as sRGB.
+    Putting the approved hexes through `srgb_to_linear` first double-encodes them and the
+    game draws the whole figure dark and oversaturated -- issue #94. Round 16 fixed that in
+    `paint_r16.py`; this script was forked from r14 and had inherited the defect.
+    """
     h = h.lstrip("#")
     out = []
     for i in (0, 2, 4):
         v = int(h[i:i + 2], 16) / 255.0 * mul
-        out.append(srgb_to_linear(min(1.0, v)))
+        out.append(min(1.0, v))
     return out
 
 

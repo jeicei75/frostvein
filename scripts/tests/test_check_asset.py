@@ -289,15 +289,15 @@ class CheckAssetTests(unittest.TestCase):
         figures = [line for line in result.stdout.splitlines() if line.startswith("FIGURES ")]
         self.assertEqual(len(figures), 1, result.stdout)
         palette = figures[0].split("palette=")[1].split(" ")[0].split(",")
-        # The flame cell, in EITHER encoding. `#DE610C` is `#F0A63C` put through
-        # `srgb_to_linear`, and r14's `hex_rgb` applies that transform before writing into an
-        # 8-bit image, whose `pixels` are already display-encoded -- so the packed PNG carries
-        # the linear bytes and the game, which reads baseColorTexture as sRGB per the glTF spec,
-        # draws the whole figure too dark. Widened deliberately on promotion so the gate stays
-        # binding on the flame cell being READ while the defect is open; drop the second value
-        # when it closes. Both entries are the same colour, not two approved flames. See #94.
-        self.assertTrue(
-            {"#F0A63C", "#DE610C"} & set(palette),
+        # The approved flame cell, narrowed back from the pair this carried while #94 was open.
+        # `#DE610C` was `#F0A63C` put through `srgb_to_linear` by r14's `hex_rgb`, which wrote it
+        # into an 8-bit image whose `pixels` are already display-encoded -- so the packed PNG
+        # shipped linear bytes and the game, reading baseColorTexture as sRGB per the glTF spec,
+        # drew the whole figure too dark. r17 dropped the transform and the promoted artifact now
+        # reads `#F0A63C` directly, so the widening is gone rather than left in place. See #94.
+        self.assertIn(
+            "#F0A63C",
+            palette,
             "the lantern flame must be read from the artifact; palette was %r" % (palette,),
         )
         mesh = figures[0].split("mesh=")[1].split(" ")[0]
