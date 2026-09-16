@@ -20,9 +20,9 @@ PY
 mutation "reported triangle figures lie" py scripts.tests.test_check_asset.CheckAssetTests.test_the_four_published_pines_report_their_literal_figures <<'PY'
 import pathlib
 p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
-old = '        f"tris={tris} verts={verts} mesh={mesh_name} profile={profile}"\n'
+old = '        f"tris={tris} verts={verts} mesh={mesh_name} profile={profile} "\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        f"tris=0 verts={verts} mesh={mesh_name} profile={profile}"\n'))
+p.write_text(s.replace(old, '        f"tris=0 verts={verts} mesh={mesh_name} profile={profile} "\n'))
 PY
 
 mutation "a failed asset omits its figures" py scripts.tests.test_check_asset.CheckAssetTests.test_off_centre_stale_asset_names_the_origin_clause <<'PY'
@@ -84,4 +84,32 @@ p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
 old = "        f\"palette={','.join(palette)} \"\n"
 assert s.count(old) == 1
 p.write_text(s.replace(old, "        f\"palette={','.join(PALETTE_HEX)} \"\n"))
+PY
+
+# --- Added for round 18's walk cycle: the animation clauses. Until these existed the
+# --- checker had NO animation clause at all, so a clip that was inert or that drifted
+# --- passed every gate in the repo.
+
+mutation "a clip that does not close its loop is accepted" py scripts.tests.test_check_asset.AnimationClauseTests.test_a_vertical_bob_closes_but_a_drift_does_not <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
+old = '            closed = all(abs(a - b) <= 1e-5 for a, b in zip(first, last))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            closed = True\n'))
+PY
+
+mutation "a single-keyframe channel is accepted as animation" py scripts.tests.test_check_asset.AnimationClauseTests.test_a_single_keyframe_channel_cannot_animate_and_is_rejected <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
+old = '            if len(times) < 2:\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if False:\n'))
+PY
+
+mutation "a clip with no channels is accepted as inert" py scripts.tests.test_check_asset.AnimationClauseTests.test_a_clip_with_no_channels_is_rejected_as_inert <<'PY'
+import pathlib
+p = pathlib.Path('scripts/bench/check_asset.py'); s = p.read_text()
+old = '        if not channels:\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if False:\n'))
 PY

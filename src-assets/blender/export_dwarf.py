@@ -563,7 +563,7 @@ def glb_facts(path):
     """
     with open(path, "rb") as handle:
         data = handle.read()
-    offset, images, joints, bounds = 12, [], [], (None, None)
+    offset, images, joints, bounds, clips = 12, [], [], (None, None), []
     while offset + 8 <= len(data):
         length, kind = struct.unpack_from("<II", data, offset)
         if kind == 0x4E4F534A:
@@ -578,9 +578,13 @@ def glb_facts(path):
                 for skin in document.get("skins", [])
                 for index in skin.get("joints", [])
             )
+            clips = [
+                (animation.get("name", "<unnamed>"), len(animation.get("channels", [])))
+                for animation in document.get("animations", [])
+            ]
             break
         offset += 8 + length
-    return images, joints, bounds
+    return images, joints, bounds, clips
 
 
 def main():
@@ -658,10 +662,14 @@ def main():
         export_lights=False,
         export_extras=False,
         export_skins=True,
-        export_animations=False,
+        # Round 18 turns this on for the walk cycle. It exports EVERY action in the file, so
+        # a stray test action ships as a clip nobody asked for -- `clips` below reports what
+        # the written GLB actually carries, and `check_asset.py`'s animation clauses reject a
+        # clip that is inert or does not close its loop.
+        export_animations=True,
     )
 
-    embedded, joints, bounds = glb_facts(OUT_PATH)
+    embedded, joints, bounds, clips = glb_facts(OUT_PATH)
     size = (hi.x - lo.x, hi.y - lo.y, hi.z - lo.z)
     print("")
     print("EXPORT %s" % OUT_PATH)
@@ -705,6 +713,9 @@ def main():
                  ", ".join(joints) or "<NONE>"))
         print("  weights snapped   %d interpolated vertices quantised to their dominant joint"
               % snapped)
+    # Read back out of the file, not off the datablocks -- same rule as `texture image` above.
+    print("  clips             %s"
+          % (", ".join("%s (%d channels)" % (name, count) for name, count in clips) or "<none>"))
     print("  GLB min/max       %s / %s   (glTF axes: X, Y up, Z)"
           % (bounds[0], bounds[1]))
     print("  bytes             %d" % os.path.getsize(OUT_PATH))

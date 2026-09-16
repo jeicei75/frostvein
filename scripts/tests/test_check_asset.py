@@ -549,5 +549,105 @@ class PaletteReadTests(unittest.TestCase):
         self.assertEqual(read_palette(document, binary), ["#0A141E", "#28323C", "#F0A63C"])
 
 
+
+def animation_glb(values_by_channel, times=(0.0, 0.5, 1.0), name="Walk"):
+    """A minimal document+binary carrying one clip, for exercising the animation clauses.
+
+    Built by hand rather than exported, so each test can put exactly one thing wrong. The
+    accessors are laid out back to back with no stride games -- what is under test is the
+    clause, not the reader, which `geometry clause` cases already cover.
+    """
+    binary = b""
+    accessors, views = [], []
+
+    def add(rows, components):
+        nonlocal binary
+        offset = len(binary)
+        for row in rows:
+            binary += struct.pack("<" + "f" * components, *row)
+        views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(binary) - offset})
+        accessors.append({
+            "bufferView": len(views) - 1, "componentType": 5126, "count": len(rows),
+            "type": {1: "SCALAR", 3: "VEC3", 4: "VEC4"}[components],
+        })
+        return len(accessors) - 1
+
+    channels, samplers = [], []
+    for node_index, path, rows in values_by_channel:
+        components = len(rows[0])
+        sampler = {"input": add([(value,) for value in times[:len(rows)]], 1),
+                   "output": add(rows, components), "interpolation": "LINEAR"}
+        samplers.append(sampler)
+        channels.append({"sampler": len(samplers) - 1,
+                         "target": {"node": node_index, "path": path}})
+    document = {
+        "nodes": [{"name": "root"}, {"name": "hip.L"}],
+        "bufferViews": views,
+        "accessors": accessors,
+        "animations": [{"name": name, "channels": channels, "samplers": samplers}],
+    }
+    return document, binary
+
+
+class AnimationClauseTests(unittest.TestCase):
+    """The clauses that did not exist until a walk cycle was on the way.
+
+    Before these, `check_asset.py` had no animation clause of any kind: a clip that was
+    missing, empty, single-keyframed or drifting passed every gate in the repo. That is the
+    same silent-acceptance shape the sim's own filter trap had -- the artifact is accepted
+    and does nothing, and every test stays green.
+    """
+
+    def test_an_asset_with_no_clips_reports_so_rather_than_failing(self):
+        self.assertEqual(check_asset.animation_facts({"nodes": []}, b""), "anims=-")
+
+    def test_a_closed_loop_passes_and_is_reported(self):
+        document, binary = animation_glb([
+            (0, "translation", [(0.0, 0.0, 0.0), (0.0, 0.02, 0.0), (0.0, 0.0, 0.0)]),
+            (1, "rotation", [(0.0, 0.0, 0.0, 1.0), (0.1, 0.0, 0.0, 0.995), (0.0, 0.0, 0.0, 1.0)]),
+        ])
+        self.assertEqual(check_asset.animation_facts(document, binary), "anims=Walk:2ch@1.00s")
+
+    def test_a_vertical_bob_closes_but_a_drift_does_not(self):
+        """The in-place rule, which is the whole reason this clause exists.
+
+        The client owns the dwarf's world position -- `blended_translation` lerps him between
+        cells every tick -- so a clip that displaces him too makes him skate. Both cases below
+        move the SAME channel by the same amount; only one returns to where it started.
+        """
+        bob = animation_glb([(0, "translation", [(0.0, 0.0, 0.0), (0.0, 0.9, 0.0), (0.0, 0.0, 0.0)])])
+        self.assertEqual(check_asset.animation_facts(*bob), "anims=Walk:1ch@1.00s")
+
+        drift = animation_glb([(0, "translation", [(0.0, 0.0, 0.0), (0.0, 0.45, 0.0), (0.0, 0.9, 0.0)])])
+        with self.assertRaises(check_asset.AssetError) as raised:
+            check_asset.animation_facts(*drift)
+        self.assertIn("does not close its loop", str(raised.exception))
+        self.assertIn("root", str(raised.exception))
+
+    def test_a_quaternion_that_loops_with_a_flipped_sign_is_closed(self):
+        """q and -q are the same rotation, so a baked loop may end on either."""
+        document, binary = animation_glb([
+            (1, "rotation", [(0.0, 0.1, 0.0, 0.995), (0.0, 0.5, 0.0, 0.866), (0.0, -0.1, 0.0, -0.995)]),
+        ])
+        self.assertEqual(check_asset.animation_facts(document, binary), "anims=Walk:1ch@1.00s")
+
+    def test_a_single_keyframe_channel_cannot_animate_and_is_rejected(self):
+        document, binary = animation_glb([(1, "rotation", [(0.0, 0.0, 0.0, 1.0)])])
+        with self.assertRaises(check_asset.AssetError) as raised:
+            check_asset.animation_facts(document, binary)
+        self.assertIn("cannot animate anything", str(raised.exception))
+
+    def test_a_clip_with_no_channels_is_rejected_as_inert(self):
+        document, binary = animation_glb([])
+        with self.assertRaises(check_asset.AssetError) as raised:
+            check_asset.animation_facts(document, binary)
+        self.assertIn("animates nothing", str(raised.exception))
+
+    def test_a_channel_targeting_a_missing_node_is_rejected(self):
+        document, binary = animation_glb([(9, "rotation", [(0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0)])])
+        with self.assertRaises(check_asset.AssetError) as raised:
+            check_asset.animation_facts(document, binary)
+        self.assertIn("node that does not exist", str(raised.exception))
+
 if __name__ == "__main__":
     unittest.main()

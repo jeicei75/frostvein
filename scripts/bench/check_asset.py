@@ -432,9 +432,88 @@ def contract_data(document, binary):
     return minimum, maximum, tris, verts, palette, mesh_name, profile
 
 
+def sampler_values(document, binary, index):
+    """Decode a float accessor into a list of tuples, for animation sampler output."""
+    item, start, stride, component_size, components = accessor(document, binary, index)
+    if item["componentType"] != 5126:
+        raise AssetError("animation clause: sampler data must be float")
+    fmt = "<" + "f" * components
+    return [struct.unpack_from(fmt, binary, start + row * stride) for row in range(item["count"])]
+
+
+def animation_facts(document, binary):
+    """Validate the clips and return a one-field summary for the FIGURES line.
+
+    Three things can be wrong with a clip in ways nothing else here would notice, because
+    until this existed `check_asset.py` had no animation clause at all and a missing, empty
+    or drifting clip passed every gate we have.
+
+    INERT: a clip with no channels, or a sampler with one keyframe, animates nothing. It
+    loads, it plays, and the figure stands still -- the same silent-acceptance shape as a
+    client that renders no dwarves while every client-side test is green.
+
+    DRIFT: the dwarf's world position is owned by the CLIENT -- `blended_translation` lerps
+    him between cell positions every tick. A clip that also displaces him fights that writer
+    and he skates. The honest check is LOOP CLOSURE, not an axis test: bone translations are
+    exported in parent-bone space, not world space, so "no horizontal motion" cannot be read
+    off a glTF channel without composing the whole node chain. A channel that ends where it
+    began cannot accumulate displacement however its axes are oriented, and a vertical bob --
+    which is wanted -- closes just as cleanly as a rotation does.
+
+    NOTE: loop closure assumes every clip loops, which is true of `Walk` and of everything
+    planned. A deliberate one-shot clip would need this relaxed, and that should be a
+    decision taken in the open rather than a tolerance quietly widened.
+    """
+    animations = document.get("animations", [])
+    nodes = document.get("nodes", [])
+    if not animations:
+        return "anims=-"
+    summary = []
+    for position, animation in enumerate(animations):
+        name = animation.get("name") or f"<unnamed {position}>"
+        channels = animation.get("channels", [])
+        samplers = animation.get("samplers", [])
+        if not channels:
+            raise AssetError(f"animation clause: clip {name!r} has no channels and animates nothing")
+        longest = 0
+        for channel in channels:
+            target = channel.get("target", {})
+            node = target.get("node")
+            if not isinstance(node, int) or not 0 <= node < len(nodes):
+                raise AssetError(f"animation clause: clip {name!r} targets a node that does not exist")
+            try:
+                sampler = samplers[channel["sampler"]]
+            except (IndexError, KeyError, TypeError) as error:
+                raise AssetError(f"animation clause: clip {name!r} has a malformed sampler") from error
+            times = sampler_values(document, binary, sampler["input"])
+            values = sampler_values(document, binary, sampler["output"])
+            if len(times) < 2:
+                raise AssetError(
+                    f"animation clause: clip {name!r} has a {len(times)}-keyframe channel on "
+                    f"{nodes[node].get('name', node)!r}, which cannot animate anything"
+                )
+            longest = max(longest, times[-1][0])
+            first, last = values[0], values[-1]
+            closed = all(abs(a - b) <= 1e-5 for a, b in zip(first, last))
+            if not closed and target.get("path") == "rotation":
+                # q and -q are the same rotation, so a baked loop may flip sign
+                closed = all(abs(a + b) <= 1e-5 for a, b in zip(first, last))
+            if not closed:
+                raise AssetError(
+                    f"animation clause: clip {name!r} does not close its loop -- "
+                    f"{target.get('path')} on {nodes[node].get('name', node)!r} starts at "
+                    f"{tuple(round(v, 4) for v in first)} and ends at "
+                    f"{tuple(round(v, 4) for v in last)}, so every repeat displaces the figure"
+                )
+        summary.append(f"{name}:{len(channels)}ch@{longest:.2f}s")
+    return "anims=" + ",".join(summary)
+
+
 def figures(path):
     document, binary = load_glb(path)
     minimum, maximum, tris, verts, palette, mesh_name, profile = contract_data(document, binary)
+    anims = animation_facts(document, binary)
+    joints = sum(len(skin.get("joints", [])) for skin in document.get("skins", []))
     size = tuple(maximum[axis] - minimum[axis] for axis in range(3))
     centre_x = (minimum[0] + maximum[0]) / 2
     centre_z = (minimum[2] + maximum[2]) / 2
@@ -442,7 +521,8 @@ def figures(path):
         f"FIGURES {path} size_m={size[0]:.1f}x{size[1]:.1f}x{size[2]:.1f} "
         f"min_y_m={minimum[1]:.6f} centre_x_m={centre_x:.6f} centre_z_m={centre_z:.6f} "
         f"palette={','.join(palette)} "
-        f"tris={tris} verts={verts} mesh={mesh_name} profile={profile}"
+        f"tris={tris} verts={verts} mesh={mesh_name} profile={profile} "
+        f"joints={joints} {anims}"
     )
     if abs(minimum[1]) > 0.000_001:
         failure = f"origin-centring clause: min Y is {minimum[1]:.6f}, expected 0.000000"
