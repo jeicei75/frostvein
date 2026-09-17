@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-10
+last_updated: 2026-09-17
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2048,6 +2048,7 @@ development_status:
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
   10-9-the-land-reads-natural: done
+  10-10-take-the-camera-where-you-want-it: backlog
                           # DONE 2026-09-11 at the closing sitting: Wolf signed off the `df0f722`
                           # frame ("cool ... I think we are done with the story"), which met AC12 --
                           # the last AC outstanding. MERGED 2026-09-11 06:09Z as PR #91, merge
