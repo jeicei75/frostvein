@@ -14,7 +14,7 @@ so that comparing a look change costs one command instead of a hand-flown approx
 
 ## Acceptance Criteria
 
-1. With no camera input and no `--camera`, the boot rig's yaw, pitch, distance and focus and the `Transform` it produces equal hand-written literals in the test — NOT values read back from the `BOOT_*` constants, so the test fails when a constant moves (the deliberate pattern at `ingest.rs:3313`). The boot capture's mean luminance stays within 10x the 0.0048 control swing in `10-10-signoff/task-0-control.md`.
+1. With no camera input and no `--camera`, the boot rig's yaw, pitch, distance and focus and the `Transform` it produces equal hand-written literals in the test — NOT values read back from the `BOOT_*` constants, so the test fails when a constant moves (the deliberate pattern at `ingest.rs:3313`). **The luminance clause is STRUCK (Wolf's ruling, 2026-09-17, issue #98): the hand-written-literal rig guard is the whole of AC1, and there is no capture-based guard on the boot frame.**
 2. `CameraRig.focus` is a world-space `Vec3` that pan moves, clamped so the focus cannot leave the world bounds; orbit and zoom clamps are unchanged.
 3. MMB-drag orbits, shift+MMB-drag pans, the mouse wheel zooms, and holding shift multiplies the rate. RMB and LMB behaviour is unchanged.
 4. Orbit, pan and zoom rates are per-second: stepping the systems at two different frame deltas that total the same elapsed time leaves yaw and pitch within 1e-4 rad and distance within 1e-3 of each other.
@@ -29,9 +29,9 @@ so that comparing a look change costs one command instead of a hand-flown approx
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — re-take the control.** (AC: 1)
+- [x] **Task 0 — re-take the control.** (AC: 1) — **done; its outcome was a finding, and the ruling that struck AC1's luminance clause. See issue #98.**
   - [x] Confirm `./target/debug/gui --version` prints the CURRENT clean HEAD before capturing anything. If it does not, `touch crates/gui/build.rs` and rebuild — see the stamp trap in Dev Notes.
-  - [ ] Re-run the control pair from `10-10-signoff/task-0-control.md` on the story branch and confirm mean luminance still lands near 76.12 and the pair swing near 0.0048. A moved baseline is a finding, not a nuisance.
+  - [x] Re-run the control pair. **The baseline did NOT move.** The documented 76.12 is a plain RGB channel average mislabelled "mean luminance" — it reproduces to 4 d.p. as the RGB mean of the committed creation frame, whose Rec.601 luminance (`10-7-signoff/lumstats.py`, the statistic `pixel_guard.rs` uses) is 71.19. The reported "5 points lower" was that statistic gap, not a look change; creation→now is 0.0670 (Rec.601) / 0.0589 (RGB), i.e. noise-sized. **What did NOT hold is the noise floor: this build's same-build pair swing is 0.0724 against the documented 0.0048 — 20x, and larger than AC1's own 0.048 tolerance, so the clause was unsatisfiable by noise alone.** Settled off the four committed control PNGs; no recapture needed.
 - [x] **Task 1 — make the focus movable.** (AC: 2)
   - [x] Change `CameraRig.focus` from `[i32; 3]` to `Vec3` (world space). Add `world_to_render_f32(Vec3) -> Vec3` in `crates/gui/src/transform.rs` and make the existing `world_to_render([i32; 3])` delegate to it, so exactly one transform pair survives.
   - [x] Add `CameraRig::pan(&mut self, right: f32, forward: f32)`, moving the focus in the camera's own ground plane and clamping each axis to the world bounds.
@@ -76,7 +76,7 @@ so that comparing a look change costs one command instead of a hand-flown approx
 - **The boot composition rides a moved focus.** `composition_target()` (`camera.rs:66`) adds `boot_composition_offset() * (distance/90).min(1.0)` to the focus. Framing a dwarf by pointing the focus at him leaves him off-centre; solve for the offset.
 - **`--cursor` is dead headless** — no `PrimaryWindow`, so the live pick is always `None`. AC8/AC9 must be pinned by `live_app` + `install_pick_camera`, never by a headless capture.
 - **`--frames 2` never captures** — the frame is still black and the run dies on `capture is black` (`capture.rs:1419`). Captures need `--frames 160`.
-- **The changed-pixel count cannot guard this framing.** Same-build noise is 55,284 px (6.0 %). Mean luminance swings 0.0048 and moved 766x that under the RED. Use mean luminance; see `10-10-signoff/task-0-control.md`.
+- **No capture statistic guards this framing.** Changed pixels have a 6.0 % same-build floor (55,284 px), and the mean-luminance floor documented as 0.0048 measured **0.0724** on this build — see issue #98. Both are struck as gates. Note also that `task-0-control.md`'s "mean luminance" is a plain RGB average, NOT the project's Rec.601 (`10-7-signoff/lumstats.py`); its 766x RED headroom is inflated for the same reason. Captures are observations here, not assertions.
 - **The build stamp can go stale.** On a clean tree at `5452c4d`, after a rebuild that recompiled `gui`, `--version` still said `bd5a9df-dirty`; `touch crates/gui/build.rs` fixed it. Check the stamp before trusting any frame.
 - **`camera_controls` and `update_fog_from_camera` are unordered** (`ingest.rs:1487`), so a test on the pair needs two `app.update()`s.
 - **`press_once` releases AND clears** (`tests/headless.rs:78`) — `MinimalPlugins` has no `InputPlugin`, so a pressed key otherwise stays just-pressed forever.
@@ -119,16 +119,19 @@ The `--camera` half cannot run until the flag exists. The required non-zero obse
 ```bash
 ./target/debug/gui 7451 --headless --static-world --subdiv 4 --frames 160 \
   --camera 0.7,0.45,90,64,64,9 --capture 10-10-signoff/camera-boot-<sha>.png
-# REQUIRED: mean luminance within 10x of 0.0048 of the boot control — the flag at boot
-#           values must reproduce the boot frame, not merely be accepted.
+# SUPERSEDED (Wolf, 2026-09-17, issue #98): the luminance tolerance is struck — this build's
+#   same-build swing (0.0724) exceeds it. Record the capture's range-check line as an
+#   observation; the reaches-the-rig TEST carries the proof that the flag reaches the rig.
+#   Do not assert a luminance threshold.
 ```
 
 **The deliberate RED, with its restore step.** Whatever the readout prints, break it before trusting it:
 
 ```bash
 # RED: in setup_camera, discard the parsed value -- `let _ = camera;`
-# EXPECTED: `--camera 0.7,0.45,20,64,64,9` produces a frame whose mean luminance matches the
-#           BOOT control instead of the near-framing, and the reaches-the-rig test goes red.
+# EXPECTED: the reaches-the-rig test goes RED. (The luminance half is struck with AC1's clause —
+#           issue #98. The test going red IS the proof, and is exactly what `--distance` lacked
+#           when `let _ = distance;` left all 106 tests green.)
 # RESTORE: revert the line, rebuild, and confirm --version shows no -dirty before re-capturing.
 ```
 Precedent for why this RED is mandatory: `--distance`'s own docstring (`ingest.rs:3309`) records that replacing its assignment with `let _ = distance;` left all 106 tests green.
@@ -181,5 +184,6 @@ GPT-5.6-Codex
 
 | Date | Change |
 | --- | --- |
+| 2026-09-17 | **AC1's luminance clause STRUCK on Wolf's ruling (issue #98).** Task 0's control re-take found the documented control statistic was a plain RGB channel average mislabelled "mean luminance" (76.1236 reproduces exactly as the RGB mean of the committed creation frame; its Rec.601 luminance is 71.19), so the reported "baseline moved 5 points" was a statistic mismatch — the look never moved. The real defect: the documented 0.0048 same-build swing is a lucky-tight two-sample pair, and this build's swing is 0.0724, larger than AC1's own 0.048 tolerance, making the clause unsatisfiable by noise. Ruling: drop the pixel clause, keep the hand-written-literal rig guard as the whole of AC1. Task 3's required luminance observation and the RED's luminance half are superseded with it; the reaches-the-rig test carries that proof. **This edit changes an Acceptance Criterion, outside the dev workflow's normally permitted sections — made on an explicit ruling and logged here for that reason.** |
 | 2026-09-17 | Created. Control pair, same-build noise floor and the `--distance 80` RED measured at creation on `5452c4d`; AC1 rewritten against mean luminance after the changed-pixel statistic was shown to have a 6 % floor. |
 | 2026-09-17 | Task 1: made camera focus movable in world space with a literal boot-rig guard; re-took Task 0 control and filed #98 for the moved baseline. |
