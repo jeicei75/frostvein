@@ -2048,7 +2048,7 @@ development_status:
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
   10-9-the-land-reads-natural: done
-  10-10-take-the-camera-where-you-want-it: in-progress
+  10-10-take-the-camera-where-you-want-it: review
                           # DONE 2026-09-11 at the closing sitting: Wolf signed off the `df0f722`
                           # frame ("cool ... I think we are done with the story"), which met AC12 --
                           # the last AC outstanding. MERGED 2026-09-11 06:09Z as PR #91, merge
