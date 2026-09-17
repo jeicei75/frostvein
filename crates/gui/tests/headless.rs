@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// Independent of `appearance.rs` on purpose: a lantern dimmer than this cannot read as a warm
 /// pool, whatever the table says. Deliberately far below the shipped 5,000,000 so it constrains
@@ -10,13 +11,17 @@ const LANTERN_VISIBLE_INTENSITY_FLOOR: f32 = 1_000_000.0;
 
 use bevy::color::ColorToPacked;
 use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::time::TimeUpdateStrategy;
 use bevy::{
     MinimalPlugins,
     app::App,
     camera::{CameraProjection, RenderTargetInfo},
     dev_tools::fps_overlay::FpsOverlayConfig,
     ecs::system::RunSystemOnce,
-    input::{ButtonInput, mouse::MouseButton},
+    input::{
+        ButtonInput,
+        mouse::{MouseButton, MouseMotion},
+    },
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         Assets, Camera, DirectionalLight, Entity as BevyEntity, GlobalTransform, KeyCode, Mesh,
@@ -2976,6 +2981,9 @@ fn the_classification_pass_leaves_no_entity_outside_the_partition() {
 #[test]
 fn camera_controls_drive_the_rig() {
     let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+        1.0 / 60.0,
+    )));
     app.update();
     let before = *app
         .world_mut()
@@ -2997,6 +3005,82 @@ fn camera_controls_drive_the_rig() {
         "E did not zoom: camera_controls is not driving the rig ({} unchanged)",
         before.distance
     );
+}
+
+#[test]
+fn camera_controls_are_scaled_by_elapsed_time() {
+    fn stepped(frame_count: u32, delta: Duration) -> CameraRig {
+        let (mut app, _sender) = live_app(one_tile_snapshot());
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(delta));
+        app.update();
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyD);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyW);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyE);
+        for _ in 0..frame_count {
+            app.update();
+        }
+        *app.world_mut()
+            .query::<&CameraRig>()
+            .iter(app.world())
+            .next()
+            .unwrap()
+    }
+
+    let sixty = stepped(60, Duration::from_secs_f32(1.0 / 240.0));
+    let thirty = stepped(30, Duration::from_secs_f32(1.0 / 120.0));
+    assert!(
+        (sixty.yaw - thirty.yaw).abs() < 1e-4,
+        "{:?} {:?}",
+        sixty,
+        thirty
+    );
+    assert!((sixty.pitch - thirty.pitch).abs() < 1e-4);
+    assert!((sixty.distance - thirty.distance).abs() < 1e-3);
+    assert!((sixty.yaw - 1.0).abs() < 1e-4, "{sixty:?}");
+    assert!((sixty.pitch - 0.75).abs() < 1e-4, "{sixty:?}");
+    assert!((sixty.distance - 105.0).abs() < 1e-3, "{sixty:?}");
+}
+
+#[test]
+fn mouse_drag_maps_the_same_motion_at_every_frame_rate() {
+    fn dragged(frame_count: u32, delta: Duration) -> CameraRig {
+        let (mut app, _sender) = live_app(one_tile_snapshot());
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(delta));
+        app.update();
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Middle);
+        for _ in 0..frame_count {
+            app.world_mut().write_message(MouseMotion {
+                delta: Vec2::new(12.0 / frame_count as f32, -8.0 / frame_count as f32),
+            });
+            app.update();
+        }
+        *app.world_mut()
+            .query::<&CameraRig>()
+            .iter(app.world())
+            .next()
+            .unwrap()
+    }
+
+    let sixty = dragged(60, Duration::from_secs_f32(1.0 / 240.0));
+    let thirty = dragged(30, Duration::from_secs_f32(1.0 / 120.0));
+    assert!(
+        (sixty.yaw - thirty.yaw).abs() < 1e-4,
+        "{sixty:?} {thirty:?}"
+    );
+    assert!(
+        (sixty.pitch - thirty.pitch).abs() < 1e-4,
+        "{sixty:?} {thirty:?}"
+    );
+    assert!((sixty.yaw - 0.58).abs() < 1e-4, "{sixty:?}");
+    assert!((sixty.pitch - 0.53).abs() < 1e-4, "{sixty:?}");
 }
 
 /// The fog register has to follow the zoom continuum or the vista is a flat sky-coloured

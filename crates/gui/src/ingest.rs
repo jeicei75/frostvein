@@ -28,9 +28,12 @@ use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::change_detection::DetectChanges,
-    ecs::message::MessageWriter,
+    ecs::message::{MessageReader, MessageWriter},
     ecs::schedule::IntoScheduleConfigs,
-    input::{ButtonInput, mouse::MouseButton},
+    input::{
+        ButtonInput,
+        mouse::{MouseButton, MouseMotion, MouseWheel},
+    },
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
@@ -630,7 +633,9 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
         .init_resource::<DragAnchor>()
-        .init_resource::<LightingToggles>();
+        .init_resource::<LightingToggles>()
+        .add_message::<MouseMotion>()
+        .add_message::<MouseWheel>();
     app.add_systems(
         Startup,
         (
@@ -1431,21 +1436,57 @@ fn log_adapter(adapter: Option<Res<RenderAdapterInfo>>) {
 
 fn camera_controls(
     keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut motions: MessageReader<MouseMotion>,
+    mut wheels: MessageReader<MouseWheel>,
+    time: Res<Time>,
     mut cameras: Query<(&mut CameraRig, &mut Transform)>,
 ) {
-    let yaw = (keys.pressed(KeyCode::KeyD) as i8 - keys.pressed(KeyCode::KeyA) as i8) as f32 * 0.02;
-    let pitch =
-        (keys.pressed(KeyCode::KeyW) as i8 - keys.pressed(KeyCode::KeyS) as i8) as f32 * 0.02;
-    let zoom = (keys.pressed(KeyCode::KeyE) as i8 - keys.pressed(KeyCode::KeyQ) as i8) as f32 * 1.0;
+    const ORBIT_RATE: f32 = 1.2;
+    const ZOOM_RATE: f32 = 60.0;
+    const MOUSE_ORBIT_RATE: f32 = 0.01;
+    const MOUSE_PAN_RATE: f32 = 0.12;
+    const WHEEL_ZOOM_STEP: f32 = 1.0;
+    const SHIFT_MULTIPLIER: f32 = 4.0;
+    let multiplier = if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
+        SHIFT_MULTIPLIER
+    } else {
+        1.0
+    };
+    let key_scale = time.delta_secs() * multiplier;
+    let yaw = (keys.pressed(KeyCode::KeyD) as i8 - keys.pressed(KeyCode::KeyA) as i8) as f32
+        * ORBIT_RATE
+        * key_scale;
+    let pitch = (keys.pressed(KeyCode::KeyW) as i8 - keys.pressed(KeyCode::KeyS) as i8) as f32
+        * ORBIT_RATE
+        * key_scale;
+    let zoom = (keys.pressed(KeyCode::KeyE) as i8 - keys.pressed(KeyCode::KeyQ) as i8) as f32
+        * ZOOM_RATE
+        * key_scale;
+    let motion = motions.read().map(|motion| motion.delta).sum::<Vec2>();
+    let wheel = wheels.read().map(|wheel| wheel.y).sum::<f32>();
     for (mut rig, mut transform) in &mut cameras {
-        rig.orbit(yaw, pitch);
-        rig.zoom(zoom);
+        if mouse.pressed(MouseButton::Middle) {
+            if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
+                rig.pan(
+                    -motion.x * MOUSE_PAN_RATE * multiplier,
+                    motion.y * MOUSE_PAN_RATE * multiplier,
+                );
+            } else {
+                rig.orbit(
+                    yaw - motion.x * MOUSE_ORBIT_RATE * multiplier,
+                    pitch - motion.y * MOUSE_ORBIT_RATE * multiplier,
+                );
+            }
+        } else {
+            rig.orbit(yaw, pitch);
+        }
+        rig.zoom(zoom + wheel * WHEEL_ZOOM_STEP * multiplier);
         *transform = rig.transform();
     }
 }
 
-/// `<` / `>` use the comma and period keys today. The planned wheel zoom remains unclaimed until
-/// UX-DR2 lands, so this client-local binding does not create a future migration.
+/// `<` / `>` use the comma and period keys today; the wheel belongs to the camera.
 fn slice_controls(
     keys: Res<ButtonInput<KeyCode>>,
     mirror: Res<MirrorResource>,
@@ -1858,6 +1899,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(bevy::MinimalPlugins)
             .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
+            .init_resource::<bevy::input::ButtonInput<bevy::input::mouse::MouseButton>>()
             .init_resource::<bevy::asset::Assets<bevy::prelude::Mesh>>()
             .init_resource::<bevy::asset::Assets<bevy::prelude::StandardMaterial>>()
             .init_resource::<bevy::asset::Assets<bevy::image::Image>>()
