@@ -33,6 +33,26 @@
     "schema": 2,
     "turns": 268
   },
+  "0d4f20bb-e63f-4cc8-8573-ddff19cb85b7.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 931861,
+        "cache_read": 115229859,
+        "input": 916,
+        "output": 506410
+      }
+    },
+    "cache_creation": 931861,
+    "cache_read": 115229859,
+    "input": 916,
+    "last_ts": "2026-09-17T11:12:47.971Z",
+    "marked_at": null,
+    "output": 506410,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 458
+  },
   "12c1b954-2845-4dec-8077-3baa388d9a00.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -2398,5 +2418,45 @@
     "quota_last": 56.0,
     "schema": 2,
     "turns": 278
+  },
+  "rollout-2026-09-17T09-00-56-01a0ae98-fb8e-70c0-a907-8efad1d2c434.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 7476736,
+        "input": 170988,
+        "output": 22979
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 7476736,
+    "input": 170988,
+    "last_ts": "2026-09-17T09:22:24.419Z",
+    "marked_at": null,
+    "output": 22979,
+    "primary_only": false,
+    "quota_last": 11.0,
+    "schema": 2,
+    "turns": 82
+  },
+  "rollout-2026-09-17T09-54-52-01a0aeca-5cd3-7431-8873-e51cd858a960.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 786176,
+        "input": 83129,
+        "output": 7079
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 786176,
+    "input": 83129,
+    "last_ts": "2026-09-17T09:58:27.781Z",
+    "marked_at": null,
+    "output": 7079,
+    "primary_only": false,
+    "quota_last": 19.0,
+    "schema": 2,
+    "turns": 14
   }
 }
