@@ -41,11 +41,12 @@ PY
 mutation "camera controls drop out of the update tuple" gui camera_controls_drive_the_rig <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-# RE-ANCHORED 2026-09-03 (story 10.7): light_controls now sits between these two. The row still
+# RE-ANCHORED 2026-09-03 (story 10.7): light_controls now sits between these two. RE-ANCHORED
+# AGAIN 2026-09-17 (story 10.10): camera_readout now follows camera_controls. The row still
 # drops camera_controls out of the update tuple and nothing else.
-old = '            camera_controls,\n            light_controls,'
+old = '            camera_controls,\n            camera_readout,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            light_controls,'))
+p.write_text(s.replace(old, '            camera_readout,'))
 PY
 
 mutation "fog stops following the camera" gui fog_follows_the_camera_rig_every_frame <<'PY'

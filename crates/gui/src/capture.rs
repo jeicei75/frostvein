@@ -18,7 +18,7 @@ use client_core::Mirror;
 use protocol::{EntityKind, JobState, LightKind, Tile};
 
 use crate::{
-    camera::{BOOT_VERTICAL_FOV, CameraRig},
+    camera::{BOOT_VERTICAL_FOV, CameraRig, camera_readout_line},
     designate::DesignateMode,
     ingest::MirrorResource,
     ingest::{ScriptedCursor, ScriptedDrag},
@@ -1103,7 +1103,14 @@ pub fn capture_after_frames(
         };
         commands
             .spawn(shot)
-            .observe(save_then_validate(capture.path.clone(), *slice))
+            .observe(save_then_validate(
+                capture.path.clone(),
+                *slice,
+                cameras
+                    .iter()
+                    .next()
+                    .map_or_else(|| "camera: unavailable".to_string(), camera_readout_line),
+            ))
             .observe(exit_after_capture);
     }
 }
@@ -1266,7 +1273,11 @@ fn exit_after_capture(_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit
 /// The range check deliberately panics on a bad frame, which may end the process before an
 /// independent observer gets a chance to finish its work. Encode and write here so returning from
 /// the save closure means the PNG is already on disk before validation is allowed to panic.
-fn save_then_validate(path: PathBuf, slice: SliceLevel) -> impl FnMut(On<ScreenshotCaptured>) {
+fn save_then_validate(
+    path: PathBuf,
+    slice: SliceLevel,
+    framing: String,
+) -> impl FnMut(On<ScreenshotCaptured>) {
     move |event: On<ScreenshotCaptured>| {
         let bytes = event
             .image
@@ -1287,6 +1298,7 @@ fn save_then_validate(path: PathBuf, slice: SliceLevel) -> impl FnMut(On<Screens
                 size.height,
                 range_band_applies(slice),
                 slice.level(),
+                &framing,
             )
         });
     }
@@ -1381,6 +1393,7 @@ pub fn validate_capture_ranges(
     height: u32,
     band_applies: bool,
     level: i32,
+    framing: &str,
 ) {
     validate_capture_ranges_with_report(
         bytes,
@@ -1389,10 +1402,12 @@ pub fn validate_capture_ranges(
         height,
         band_applies,
         level,
+        framing,
         |line| println!("{line}"),
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn validate_capture_ranges_with_report(
     bytes: &[u8],
     format: TextureFormat,
@@ -1400,6 +1415,7 @@ fn validate_capture_ranges_with_report(
     height: u32,
     band_applies: bool,
     level: i32,
+    framing: &str,
     mut report: impl FnMut(&str),
 ) {
     let pixels = decode_rgba8(bytes, format);
@@ -1451,17 +1467,27 @@ fn validate_capture_ranges_with_report(
     // AREA IS THE ASSERTION, not the pool. The pool's connectivity has a threshold cliff that the
     // vehicle's frames sit clear of but software-rendered ones do not; see NEAR_WHITE_AREA_CEILING.
     // The pool is still printed above, so a vehicle run loses no diagnostic.
+    // The framing is named because the ceiling is calibrated for the BOOT framing ONLY. Once
+    // `--camera` exists, a capture from some other framing is routine, and a bare "above the
+    // ceiling" told the operator nothing about WHICH view produced it. The ceiling is not raised
+    // for those views (10.8's standing rule: measure, do not raise) -- it reports what it was
+    // pointed at, so a trip can be read as "this framing is brighter" rather than a regression.
     assert!(
         near_white <= NEAR_WHITE_AREA_CEILING,
-        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
+        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png, at {}",
         near_white * 100.0,
-        NEAR_WHITE_AREA_CEILING * 100.0
+        NEAR_WHITE_AREA_CEILING * 100.0,
+        framing
     );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Framing text for range-check tests that are not about the framing. Deliberately not a real
+    /// readout line, so a test asserting on the framing cannot pass by accident here.
+    const TEST_FRAMING: &str = "camera: test framing";
 
     /// The band must still bite at full depth, and must NOT bite at a cut. A dark frame is the
     /// discriminator: identical pixels, opposite verdicts, decided only by where the cut sits.
@@ -1487,10 +1513,26 @@ mod tests {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let at_top = std::panic::catch_unwind(|| {
-            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 8, 8, true, top.level());
+            validate_capture_ranges(
+                &bytes,
+                TextureFormat::Rgba8Unorm,
+                8,
+                8,
+                true,
+                top.level(),
+                TEST_FRAMING,
+            );
         });
         let at_cut = std::panic::catch_unwind(|| {
-            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 8, 8, false, cut.level());
+            validate_capture_ranges(
+                &bytes,
+                TextureFormat::Rgba8Unorm,
+                8,
+                8,
+                false,
+                cut.level(),
+                TEST_FRAMING,
+            );
         });
         std::panic::set_hook(previous);
 
@@ -1658,10 +1700,26 @@ mod tests {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let at_top = std::panic::catch_unwind(|| {
-            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, true, 9);
+            validate_capture_ranges(
+                &bytes,
+                TextureFormat::Rgba8Unorm,
+                64,
+                64,
+                true,
+                9,
+                TEST_FRAMING,
+            );
         });
         let at_cut = std::panic::catch_unwind(|| {
-            validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, false, 8);
+            validate_capture_ranges(
+                &bytes,
+                TextureFormat::Rgba8Unorm,
+                64,
+                64,
+                false,
+                8,
+                TEST_FRAMING,
+            );
         });
         std::panic::set_hook(previous);
 
@@ -1699,6 +1757,7 @@ mod tests {
                 64,
                 true,
                 9,
+                TEST_FRAMING,
                 |line| {
                     // Latch, never assign: a second report line must not be able to clear this.
                     if line.contains("blown-pool=") && line.contains("p99-luminance=") {
@@ -1768,6 +1827,7 @@ mod tests {
             64,
             false,
             9,
+            TEST_FRAMING,
             |line| lines.push(line.to_string()),
         );
         assert!(

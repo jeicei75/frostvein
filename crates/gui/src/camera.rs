@@ -4,6 +4,12 @@ use crate::transform::{world_to_render, world_to_render_f32};
 
 const MIN_PITCH: f32 = 0.15;
 const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.15;
+const MIN_DISTANCE: f32 = 4.0;
+const MAX_DISTANCE: f32 = 500.0;
+// NOTE: the focus ceiling is the shipped 128x128x32 world, hardcoded rather than read from the
+// snapshot's `Dims`. A smaller world simply never reaches it, so the clamp is a bound and not a
+// lie; a LARGER world would need this to follow `Dims`.
+const FOCUS_MAX: Vec3 = Vec3::new(127.0, 127.0, 31.0);
 const BOOT_YAW: f32 = 0.7;
 const BOOT_PITCH: f32 = 0.45;
 const BOOT_DISTANCE: f32 = 90.0;
@@ -53,7 +59,17 @@ impl CameraRig {
     }
 
     pub fn zoom(&mut self, delta: f32) {
-        self.distance = (self.distance + delta).clamp(4.0, 500.0);
+        self.distance = (self.distance + delta).clamp(MIN_DISTANCE, MAX_DISTANCE);
+    }
+
+    /// Places the rig at an operator-chosen framing, through the SAME clamps the live controls
+    /// use — so `--camera` cannot reach an angle, zoom or focus that orbiting, zooming and
+    /// panning could not reach by hand (UX-DR1: no angle you get stuck in).
+    pub fn place(&mut self, yaw: f32, pitch: f32, distance: f32, focus: Vec3) {
+        self.yaw = yaw;
+        self.pitch = pitch.clamp(MIN_PITCH, MAX_PITCH);
+        self.distance = distance.clamp(MIN_DISTANCE, MAX_DISTANCE);
+        self.focus = focus.clamp(Vec3::ZERO, FOCUS_MAX);
     }
 
     /// Moves the focus along the camera's horizontal right/forward axes.
@@ -63,7 +79,7 @@ impl CameraRig {
             right * self.yaw.cos() + forward * self.yaw.sin(),
             0.0,
         );
-        self.focus = (self.focus + movement).clamp(Vec3::ZERO, Vec3::new(127.0, 127.0, 31.0));
+        self.focus = (self.focus + movement).clamp(Vec3::ZERO, FOCUS_MAX);
     }
 
     pub fn transform(&self) -> Transform {
@@ -120,6 +136,25 @@ impl CameraRig {
     pub fn project_world_point_with_depth(&self, point: [i32; 3]) -> Option<(Vec2, f32)> {
         self.project_render_point_with_depth(world_to_render(point))
     }
+}
+
+/// One line naming this rig's whole framing, ending in the `--camera` argument that reproduces
+/// it. The line IS the save format: there is no viewpoint registry and no camera-path recorder,
+/// so paste the token back on the command line and the rig returns.
+///
+/// Every field is printed with Rust's shortest round-tripping float form, which is what makes
+/// the paste exact rather than approximate. It is also why this is the ONLY formatter: the
+/// capture's near-white failure names its framing with this same function, so a readout that
+/// disagreed with what a failing capture reported could not happen.
+pub fn camera_readout_line(rig: &CameraRig) -> String {
+    let argument = format!(
+        "{},{},{},{},{},{}",
+        rig.yaw, rig.pitch, rig.distance, rig.focus.x, rig.focus.y, rig.focus.z
+    );
+    format!(
+        "camera: yaw={} pitch={} distance={} focus={},{},{} --camera {argument}",
+        rig.yaw, rig.pitch, rig.distance, rig.focus.x, rig.focus.y, rig.focus.z
+    )
 }
 
 /// Where world NORTH points on this camera's screen, as one of eight ASCII labels.
