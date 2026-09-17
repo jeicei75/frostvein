@@ -1,6 +1,10 @@
+---
+baseline_commit: c5f96caa470e457c874001d9df2ccc58355efe94
+---
+
 # Story 10.10: Take the Camera Where You Want It
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
