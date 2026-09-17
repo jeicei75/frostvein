@@ -317,18 +317,6 @@ pub const METRES_TO_CELLS: f32 = 0.625;
 /// cycle and accumulates into visible skate over a long walk. 0.4926 tracks it to zero.
 pub const DWARF_WALK_STRIDE_METRES: f32 = 0.4926;
 
-/// How many `Walk` cycles a dwarf plays per simulation tick.
-///
-/// He crosses one CELL per tick and a cell is 1.6 m (`METRES_TO_CELLS` is 0.625), so this is
-/// 1.6 / 0.4926 = 3.25 cycles -- and that is the honest figure, not a tuned one. It is also the
-/// finding: at the sim's current speed the clip has to run over three times a second at a
-/// half-second tick, which reads as a sprint rather than the heavy walk it was authored as.
-/// Playing it slower would skate, so the knob that fixes the LOOK is the sim's dwarf speed or
-/// the stride, not the playback rate. See the round-18 report.
-pub fn dwarf_walk_cycles_per_tick() -> f32 {
-    (1.0 / METRES_TO_CELLS) / DWARF_WALK_STRIDE_METRES
-}
-
 /// How fast a dwarf is DRAWN crossing the ground, in cells per second.
 ///
 /// The wire says which cell he is in and nothing about how he gets there, and the blend used to
@@ -339,6 +327,12 @@ pub fn dwarf_walk_cycles_per_tick() -> f32 {
 /// Drawing him at 0.9 cells per second covers the 1.6 m in roughly that time, which is 1.45 m/s
 /// and a readable cadence. He is never drawn anywhere he has not been delivered: this only
 /// governs how long he takes to cross between two delivered cells.
+///
+/// It is also the cadence knob. 0.9 cells per second is 1.44 m/s over a 0.4926 m stride, so the
+/// clip runs at 2.92 cycles a second against the 1.000 s cycle it was authored as. Playing it
+/// slower instead would skate: the phase is locked to ground covered, so the only honest ways to
+/// slow the legs are this speed (with `sim-core`'s `STEP_REST_TICKS` moved to match) or a longer
+/// authored stride -- never the playback rate.
 pub const DWARF_WALK_CELLS_PER_SECOND: f32 = 0.9;
 
 /// Beyond this the dwarf is not walking, he has been moved -- a respawn, a slice change, a
