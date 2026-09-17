@@ -142,3 +142,39 @@ assert s.count(old) == 1
 new = "    if !selected.is_changed() {\n        return;\n    }\n    let Some(id) = selected.0 else {\n        return;\n    };\n"
 p.write_text(s.replace(old, new))
 PY
+
+# --- Added 2026-09-17 after Wolf's verdict from the seat -------------------------------------
+
+# AC3's wheel half was pinned by NOTHING until the step was raised: the wheel term could have been
+# deleted and all 88 tests stayed green. This row is the guard that gap needed.
+mutation "the wheel contributes nothing to the zoom" gui the_wheel_zooms_the_rig_and_shift_multiplies_the_step <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        rig.zoom(zoom + wheel * WHEEL_ZOOM_STEP * multiplier);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        rig.zoom(zoom);\n        let _ = wheel;\n'))
+PY
+
+# The magnitude, not just the mechanism. The test's expected distances are hand-written from the
+# boot 90.0 rather than computed from this constant, which is what lets this row kill.
+# NOTE: this row names a TUNED constant, so a future retune will APPLY-FAIL it rather than kill it.
+# That is the audit's job to surface (`scripts/audit-mutations.py` fails the gate on a dead row) --
+# re-point it to the new value, do not delete it.
+mutation "the wheel step falls back to its pre-seat value" gui the_wheel_zooms_the_rig_and_shift_multiplies_the_step <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    const WHEEL_ZOOM_STEP: f32 = 6.0;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    const WHEEL_ZOOM_STEP: f32 = 1.0;\n'))
+PY
+
+# Wolf tried a reversed MMB drag from the seat on 2026-09-17 and rejected it, so the shipped
+# direction is a DECISION and not an accident. This row is what stops it flipping silently.
+mutation "the mouse orbit drag reverses both axes" gui mouse_drag_maps_the_same_motion_at_every_frame_rate <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = "                    yaw - motion.x * MOUSE_ORBIT_RATE * multiplier,\n                    pitch - motion.y * MOUSE_ORBIT_RATE * multiplier,\n"
+assert s.count(old) == 1
+new = "                    yaw + motion.x * MOUSE_ORBIT_RATE * multiplier,\n                    pitch + motion.y * MOUSE_ORBIT_RATE * multiplier,\n"
+p.write_text(s.replace(old, new))
+PY

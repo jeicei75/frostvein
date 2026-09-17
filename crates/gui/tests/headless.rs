@@ -20,7 +20,7 @@ use bevy::{
     ecs::system::RunSystemOnce,
     input::{
         ButtonInput,
-        mouse::{MouseButton, MouseMotion},
+        mouse::{MouseButton, MouseMotion, MouseWheel},
     },
     pbr::{DistanceFog, FogFalloff},
     prelude::{
@@ -3079,8 +3079,57 @@ fn mouse_drag_maps_the_same_motion_at_every_frame_rate() {
         (sixty.pitch - thirty.pitch).abs() < 1e-4,
         "{sixty:?} {thirty:?}"
     );
+    // Hand-written, and they PIN THE DIRECTION as well as the magnitude: from the boot 0.7/0.45,
+    // dragging right (+x) LOWERS yaw and dragging up (-y here) RAISES pitch. Kept as shipped on
+    // Wolf's verdict from the seat (2026-09-17) after a reversal was tried and rejected; flipping
+    // either sign reddens this test rather than passing silently.
     assert!((sixty.yaw - 0.58).abs() < 1e-4, "{sixty:?}");
     assert!((sixty.pitch - 0.53).abs() < 1e-4, "{sixty:?}");
+}
+
+/// AC3's wheel half, which NOTHING pinned until now — the wheel line could have been deleted and
+/// all 88 tests would have stayed green. Found while raising the step on Wolf's verdict from the
+/// seat, which is a reminder that the gap was in my own work and no gate could see it.
+///
+/// Every expected distance is hand-written from the boot 90.0, never read back from
+/// `WHEEL_ZOOM_STEP` or `BOOT_DISTANCE` — so a moved step reddens this rather than sliding under it.
+#[test]
+fn the_wheel_zooms_the_rig_and_shift_multiplies_the_step() {
+    fn wheeled(notches: f32, shift: bool) -> CameraRig {
+        let (mut app, _sender) = live_app(one_tile_snapshot());
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+            1.0 / 60.0,
+        )));
+        app.update();
+        if shift {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::ShiftLeft);
+        }
+        app.world_mut().write_message(MouseWheel {
+            unit: bevy::input::mouse::MouseScrollUnit::Line,
+            x: 0.0,
+            y: notches,
+            window: BevyEntity::PLACEHOLDER,
+            phase: bevy::input::touch::TouchPhase::Moved,
+        });
+        app.update();
+        *app.world_mut()
+            .query::<&CameraRig>()
+            .iter(app.world())
+            .next()
+            .expect("the live startup must spawn a rig")
+    }
+
+    // Three notches out: 90 + 3 * 6.
+    assert!((wheeled(3.0, false).distance - 108.0).abs() < 1e-3);
+    // And back the other way, which a magnitude-only assertion would miss: 90 - 2 * 6.
+    assert!((wheeled(-2.0, false).distance - 78.0).abs() < 1e-3);
+    // Shift multiplies the step by 4: 90 + 1 * 6 * 4.
+    assert!((wheeled(1.0, true).distance - 114.0).abs() < 1e-3);
+    // A frame with no wheel input leaves the zoom exactly at boot, so the rows above are
+    // measuring the wheel and not some other per-frame drift.
+    assert!((wheeled(0.0, false).distance - 90.0).abs() < 1e-3);
 }
 
 /// AC8. Pinned with `live_app` + `install_pick_camera` and NOT with a headless capture: there is

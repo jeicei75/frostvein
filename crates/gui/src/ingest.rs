@@ -1542,7 +1542,10 @@ fn camera_controls(
     const ZOOM_RATE: f32 = 60.0;
     const MOUSE_ORBIT_RATE: f32 = 0.01;
     const MOUSE_PAN_RATE: f32 = 0.12;
-    const WHEEL_ZOOM_STEP: f32 = 1.0;
+    // One notch was 1.0, which needed ~86 of them to cross the boot-to-closest range. Raised
+    // to 6.0 on Wolf's verdict from the seat (2026-09-17): 14 notches boot-to-closest, and 4
+    // with shift held.
+    const WHEEL_ZOOM_STEP: f32 = 6.0;
     const SHIFT_MULTIPLIER: f32 = 4.0;
     let multiplier = if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
         SHIFT_MULTIPLIER
