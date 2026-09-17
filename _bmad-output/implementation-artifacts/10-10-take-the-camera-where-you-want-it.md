@@ -30,12 +30,12 @@ so that comparing a look change costs one command instead of a hand-flown approx
 ## Tasks / Subtasks
 
 - [ ] **Task 0 — re-take the control.** (AC: 1)
-  - [ ] Confirm `./target/debug/gui --version` prints the CURRENT clean HEAD before capturing anything. If it does not, `touch crates/gui/build.rs` and rebuild — see the stamp trap in Dev Notes.
+  - [x] Confirm `./target/debug/gui --version` prints the CURRENT clean HEAD before capturing anything. If it does not, `touch crates/gui/build.rs` and rebuild — see the stamp trap in Dev Notes.
   - [ ] Re-run the control pair from `10-10-signoff/task-0-control.md` on the story branch and confirm mean luminance still lands near 76.12 and the pair swing near 0.0048. A moved baseline is a finding, not a nuisance.
-- [ ] **Task 1 — make the focus movable.** (AC: 2)
-  - [ ] Change `CameraRig.focus` from `[i32; 3]` to `Vec3` (world space). Add `world_to_render_f32(Vec3) -> Vec3` in `crates/gui/src/transform.rs` and make the existing `world_to_render([i32; 3])` delegate to it, so exactly one transform pair survives.
-  - [ ] Add `CameraRig::pan(&mut self, right: f32, forward: f32)`, moving the focus in the camera's own ground plane and clamping each axis to the world bounds.
-  - [ ] Update `north_on_screen` (`camera.rs:123`) and `CameraRig::new` for the new focus type.
+- [x] **Task 1 — make the focus movable.** (AC: 2)
+  - [x] Change `CameraRig.focus` from `[i32; 3]` to `Vec3` (world space). Add `world_to_render_f32(Vec3) -> Vec3` in `crates/gui/src/transform.rs` and make the existing `world_to_render([i32; 3])` delegate to it, so exactly one transform pair survives.
+  - [x] Add `CameraRig::pan(&mut self, right: f32, forward: f32)`, moving the focus in the camera's own ground plane and clamping each axis to the world bounds.
+  - [x] Update `north_on_screen` (`camera.rs:123`) and `CameraRig::new` for the new focus type.
 - [ ] **Task 2 — seat controls.** (AC: 3, 4)
   - [ ] Extend `camera_controls` (`ingest.rs:1432`) to read `ButtonInput<MouseButton>`, `MouseMotion` and `MouseWheel`; multiply every rate by `Res<Time>::delta_secs()` and by the shift multiplier.
   - [ ] Strike the "remains unclaimed until UX-DR2 lands" comment at `ingest.rs:1446`; the wheel is claimed here.
@@ -153,14 +153,33 @@ Precedent for why this RED is mandatory: `--distance`'s own docstring (`ingest.r
 
 ### Agent Model Used
 
+GPT-5.6-Codex
+
 ### Debug Log References
+
+- Task 0 build stamp: `cargo build --offline -p gui -p simd -j 8`; `./target/debug/gui --version` printed `gui build 8eb1d1d`, matching clean `HEAD 8eb1d1d`.
+- Task 0 control re-take: `control-boot-8eb1d1d-a.png` mean luminance 71.1261; `...-b.png` 71.1985; swing 0.0724. This does not meet the 76.12 / 0.0048 control. Filed live bug #98 with the commands and range measurements.
+- RED — `pan_moves_focus_on_the_camera_ground_plane_and_stays_inside_the_world`: before the implementation, `cargo test --offline -p gui pan_moves_focus_on_the_camera_ground_plane_and_stays_inside_the_world -j 8` failed with `no method named pan` and `[i32; 3] == Vec3` type errors.
+- RED — `boot_rig_and_transform_are_pinned_by_literals`: initial literal-pin test failed and printed `Transform { translation: Vec3(100.74321, 47.646896, -33.05163), rotation: Quat(-0.202291, 0.41114035, 0.094099894, 0.8838479), scale: Vec3(1.0, 1.0, 1.0) }`; the final test compares those hand-written literals and passed.
 
 ### Completion Notes List
 
+- Task 1: `CameraRig.focus` is now a world-space `Vec3`; panning follows camera right/forward on the ground plane and clamps to the fixed 128×128×32 world bounds. Integer and fractional world-to-render conversion now share `world_to_render_f32`.
+- Task 0: stamp was verified, but the manual control pair moved. The task remains open pending a ruling/fix for #98; the baseline was not changed.
+
 ### File List
+
+- `crates/gui/src/camera.rs` — world-space focus, pan, boot literal guard.
+- `crates/gui/src/transform.rs` — fractional world-to-render conversion.
+- `crates/gui/src/pick.rs` — test rig updated for `Vec3` focus.
+- `crates/gui/tests/headless.rs` — test rig literals updated for `Vec3` focus.
+- `_bmad-output/implementation-artifacts/10-10-signoff/control-boot-8eb1d1d-a.png` — Task 0 control evidence.
+- `_bmad-output/implementation-artifacts/10-10-signoff/control-boot-8eb1d1d-b.png` — Task 0 control evidence.
+- `_bmad-output/implementation-artifacts/10-10-take-the-camera-where-you-want-it.md` — Task 0/1 evidence and status.
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-09-17 | Created. Control pair, same-build noise floor and the `--distance 80` RED measured at creation on `5452c4d`; AC1 rewritten against mean luminance after the changed-pixel statistic was shown to have a 6 % floor. |
+| 2026-09-17 | Task 1: made camera focus movable in world space with a literal boot-rig guard; re-took Task 0 control and filed #98 for the moved baseline. |

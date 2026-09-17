@@ -21,7 +21,7 @@ use bevy::{
     prelude::{
         Assets, Camera, DirectionalLight, Entity as BevyEntity, GlobalTransform, KeyCode, Mesh,
         Mesh3d, MeshMaterial3d, Or, PointLight, Resource, StandardMaterial, Text, Transform, UVec2,
-        Vec2, Window, With, Without,
+        Vec2, Vec3, Window, With, Without,
     },
     window::{PrimaryWindow, WindowResolution},
 };
@@ -2566,7 +2566,7 @@ fn camera_picking_covers_orbits_zoom_limits_and_sliced_levels() {
                 for level in levels {
                     let target = [4, 4, level];
                     let rig = CameraRig {
-                        focus: target,
+                        focus: Vec3::new(target[0] as f32, target[1] as f32, target[2] as f32),
                         yaw,
                         pitch,
                         distance,
@@ -2609,7 +2609,7 @@ fn the_nearer_of_two_tiles_on_one_ray_is_the_one_picked() {
 
     // Near-vertical, so one ray passes through both tiles' cells.
     let rig = CameraRig {
-        focus: [4, 4, 3],
+        focus: Vec3::new(4.0, 4.0, 3.0),
         yaw: 0.7,
         pitch: std::f32::consts::FRAC_PI_2 - 0.15,
         distance: 30.0,

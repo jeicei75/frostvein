@@ -508,7 +508,7 @@ mod tests {
     /// A ray from a real camera pose through a chosen cell's centre.
     fn ray_at(target: [i32; 3], yaw: f32, pitch: f32, distance: f32) -> (Vec3, Vec3) {
         let rig = CameraRig {
-            focus: target,
+            focus: Vec3::new(target[0] as f32, target[1] as f32, target[2] as f32),
             yaw,
             pitch,
             distance,

@@ -1,6 +1,6 @@
 use bevy::prelude::{Component, Transform, Vec2, Vec3};
 
-use crate::transform::world_to_render;
+use crate::transform::{world_to_render, world_to_render_f32};
 
 const MIN_PITCH: f32 = 0.15;
 const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.15;
@@ -31,16 +31,16 @@ pub const BOOT_ASPECT_RATIO: f32 = 16.0 / 9.0;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct CameraRig {
-    pub focus: [i32; 3],
+    pub focus: Vec3,
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,
 }
 
 impl CameraRig {
-    pub fn new(focus: [i32; 3]) -> Self {
+    pub fn new([x, y, z]: [i32; 3]) -> Self {
         Self {
-            focus,
+            focus: Vec3::new(x as f32, y as f32, z as f32),
             yaw: BOOT_YAW,
             pitch: BOOT_PITCH,
             distance: BOOT_DISTANCE,
@@ -56,6 +56,16 @@ impl CameraRig {
         self.distance = (self.distance + delta).clamp(4.0, 500.0);
     }
 
+    /// Moves the focus along the camera's horizontal right/forward axes.
+    pub fn pan(&mut self, right: f32, forward: f32) {
+        let movement = Vec3::new(
+            right * self.yaw.sin() - forward * self.yaw.cos(),
+            right * self.yaw.cos() + forward * self.yaw.sin(),
+            0.0,
+        );
+        self.focus = (self.focus + movement).clamp(Vec3::ZERO, Vec3::new(127.0, 127.0, 31.0));
+    }
+
     pub fn transform(&self) -> Transform {
         let focus = self.composition_target();
         let horizontal = self.distance * self.pitch.cos();
@@ -69,7 +79,7 @@ impl CameraRig {
         // Keep the camp in front of the camera at close zoom while retaining the approved
         // composition at the boot distance and beyond.
         let composition_scale = (self.distance / BOOT_DISTANCE).min(1.0);
-        world_to_render(self.focus) + boot_composition_offset() * composition_scale
+        world_to_render_f32(self.focus) + boot_composition_offset() * composition_scale
     }
 
     /// Projects a render-space point to normalized screen coordinates at this rig's camera.
@@ -127,8 +137,10 @@ pub fn north_on_screen(rig: &CameraRig) -> &'static str {
     // Two projected points rather than an analytic derivation: this reuses the SAME projection
     // the picking ray and every capture assertion go through, so a compass that disagrees with
     // what is drawn is not possible.
-    let here = rig.project_world_point(focus);
-    let north = rig.project_world_point([focus[0], focus[1] - NORTH_PROBE_TILES, focus[2]]);
+    let here = rig.project_render_point(world_to_render_f32(focus));
+    let north = rig.project_render_point(world_to_render_f32(
+        focus - Vec3::Y * NORTH_PROBE_TILES as f32,
+    ));
     let (Some(here), Some(north)) = (here, north) else {
         // Never guess a bearing. An unprojectable probe means the compass does not know, and a
         // compass that invents a direction is worse than one that admits it cannot say.
@@ -274,6 +286,40 @@ mod tests {
         assert!(
             rig.project_world_point([64, 64, 9]).is_some(),
             "the vista zoom limit must keep the camp in front of the camera"
+        );
+    }
+
+    #[test]
+    fn pan_moves_focus_on_the_camera_ground_plane_and_stays_inside_the_world() {
+        let mut rig = CameraRig::new([64, 64, 9]);
+        rig.pan(3.0, 4.0);
+        assert_eq!(rig.focus, Vec3::new(62.873_283, 68.871_4, 9.0));
+
+        rig.pan(-10_000.0, 0.0);
+        assert_eq!(rig.focus, Vec3::new(0.0, 0.0, 9.0));
+        rig.pan(10_000.0, 0.0);
+        assert_eq!(rig.focus, Vec3::new(127.0, 127.0, 9.0));
+    }
+
+    #[test]
+    fn boot_rig_and_transform_are_pinned_by_literals() {
+        let rig = CameraRig::new([64, 64, 9]);
+        assert_eq!(rig.yaw, 0.7);
+        assert_eq!(rig.pitch, 0.45);
+        assert_eq!(rig.distance, 90.0);
+        assert_eq!(rig.focus, Vec3::new(64.0, 64.0, 9.0));
+        assert_eq!(
+            rig.transform(),
+            Transform {
+                translation: Vec3::new(100.743_21, 47.646_896, -33.051_63),
+                rotation: bevy::prelude::Quat::from_xyzw(
+                    -0.202_291,
+                    0.411_140_35,
+                    0.094_099_894,
+                    0.883_847_9,
+                ),
+                scale: Vec3::ONE,
+            }
         );
     }
 }

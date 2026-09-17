@@ -2,7 +2,12 @@ use bevy::prelude::Vec3;
 
 /// Converts the simulation's right-handed Z-up coordinates to Bevy's Y-up space.
 pub fn world_to_render([x, y, z]: [i32; 3]) -> Vec3 {
-    Vec3::new(x as f32, z as f32, -y as f32)
+    world_to_render_f32(Vec3::new(x as f32, y as f32, z as f32))
+}
+
+/// Converts a fractional simulation-world point to Bevy's Y-up space.
+pub fn world_to_render_f32(point: Vec3) -> Vec3 {
+    Vec3::new(point.x, point.z, -point.y)
 }
 
 /// Converts a point in simulation space to Bevy space.
