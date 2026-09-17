@@ -1970,6 +1970,121 @@ sharp"*, still deferred — this story's ridges address the same defect with a d
 **each must be judged with the other held fixed**); cover depth, carve masks and any `Tile` or
 `protocol` change (AD-19's terrain-state epic); removing `--subdiv 1`, which Wolf has ruled **stays**.
 
+### Story 10.10: Take the Camera Where You Want It
+
+As the boss,
+I want to fly the camera where I like, return to a view I have already judged, and frame a single dwarf,
+So that comparing a look change costs one command instead of a hand-flown approximation, and I can
+see the thing I am judging.
+
+**Added 2026-09-17 (Wolf), out of the sprint-status sitting.** Wolf's words: *"before we proceed
+anything else I think we need to fix controlling view .. now it's a bit tedious to test visual
+changes"*, and *"selecting a dwarf and quick zoom frame around it would be nice feature"*.
+**RUNS AFTER 10.9 AND BEFORE 11.1.** Every Epic 11 story's ACs are a capture-with-and-without pair
+judged against a noise floor, so the instrument that makes a framing repeatable is worth having
+before the epic that runs that loop nine times. It is Epic 10 and not Epic 11 by 10.9's own rule:
+Epic 11 is mechanisms, and this adds none.
+
+**Verified in the tree at creation, 2026-09-17, on `main` `bd5a9df`:**
+
+- **There is no pan.** `CameraRig` (`crates/gui/src/camera.rs:32-37`) carries `focus`, `yaw`,
+  `pitch`, `distance`. `focus` is written once, at `CameraRig::new([64, 64, 9])`
+  (`crates/gui/src/ingest.rs:1179`), and no code path writes it again. The camera orbits one
+  hardcoded point, so no view exists that is not a view of the camp.
+- **Keyboard only, and frame-rate dependent.** `camera_controls` (`ingest.rs:1432-1444`) reads
+  WASD/QE and applies `0.02` rad and `1.0` distance **per frame**, with no delta-time term. The
+  same key-press therefore travels several times further at the devpod's framerate than at the
+  vehicle's 60, which is on its own enough to make a framing unrepeatable by hand.
+- **The wheel is UX-DR2's, and unclaimed.** 7.1's AC (`epics.md:989`) already resolved the
+  collision — the slice took `<`/`>`, and the mousewheel is *"the conventional orbit-camera zoom
+  that UX-DR2's continuum already claims"*. `slice_controls`' comment (`ingest.rs:1446`) records it
+  as unclaimed pending that ruling. This story claims it, and the comment is struck with it.
+- **RMB is taken, by a safety action.** `designation_input` (`crates/gui/src/designate.rs:120`)
+  aborts an in-progress designation drag on RMB. LMB is taken only while a designate mode is
+  active (`designate.rs:131`), so LMB is free whenever it is not.
+- **Picking is tiles-only.** `pick.rs` produces `PickedTile`/`PickedCell` from a terrain raycast;
+  no entity picking exists anywhere in the client. `CameraRig::project_render_point_with_depth`
+  (`camera.rs:74`) already projects a point to screen space and is the instrument `capture.rs:1121`
+  trusts, so dwarf selection needs no new mechanism.
+- **Headless can only shoot the boot framing.** The only camera flag is `--distance`
+  (`ingest.rs:935`), and it writes `rig.distance` alone (`ingest.rs:1181`). There is no `--yaw`,
+  `--pitch` or `--focus`, so a look change anywhere but the camp cannot be captured at all.
+- **The approved composition is coupled to distance.** `composition_target()` (`camera.rs:66-72`)
+  scales the boot push by `(distance / 90).min(1.0)`, so the frame re-composes as it zooms. That is
+  the composition 5.4 and 10.7 signed off, and it is exactly what a movable focus can move without
+  anyone noticing.
+- **The capture's near-white ceiling is calibrated for the boot framing alone.** Measured at
+  creation: `--distance 80` exits **101** on `near-white-area=1.1134%` while the boot framing exits
+  0 at 0.6597%. `--camera` makes non-boot framings routine, so ceiling trips become routine with
+  them. Per 10.8's standing rule the ceiling is **measured, not raised** (see issue #90); this
+  story must rule what a non-boot capture does about it rather than meeting it at gate time.
+
+**In scope:**
+
+1. **`focus` becomes movable**, clamped to the world bounds. This is the one change both halves of
+   the story rest on.
+2. **Seat controls:** MMB-drag orbits, shift+MMB-drag pans, the wheel zooms, shift moves fast. RMB
+   is left alone. Every rate is **scaled by delta-time**. *(NOTE: MMB is awkward on a trackpad. The
+   limitation is named, not solved — no rebinding system before a third concrete need.)*
+3. **A framing can be written down and restored.** A key prints the rig as `yaw pitch distance
+   focus`; `--camera <those values>` sets it at startup. The printed line IS the save format.
+4. **Select a dwarf and frame him.** LMB with no designate mode active selects the nearest dwarf
+   whose projected screen position falls within a pixel radius of the cursor; the focus moves to
+   him, the distance drops to a readable one, and **the focus tracks him while he stays selected**.
+   Escape releases him. A dwarf is ~10.8 px tall at the boot framing, which is the scale every
+   walk-cycle judgement has been made at so far.
+
+**NOT in scope:** rebindable keys; a camera-path or flythrough recorder; named saved viewpoints
+(the printed line is the save format); entity picking for anything but dwarves; and any change to
+the look, the light, or the boot composition.
+
+**Acceptance Criteria:**
+
+**Given** no camera input and no `--camera`,
+**When** the client boots,
+**Then** the boot rig and the `Transform` it produces are unchanged **by exact float comparison** —
+a deterministic oracle, not a pixel test
+**And** the boot capture's **mean luminance** is within 10x the same-build swing of the control
+pair filed under `10-10-signoff/`.
+
+**Measured at creation, 2026-09-17, on `5452c4d` (clean stamp), which corrected this AC:** two runs
+of the SAME binary differ in **55,284 pixels — 6.0 % of the frame** (animated snow and stars), so a
+changed-pixel count cannot guard this framing; it would tolerate a regression moving 55,284 pixels.
+The same pair's **mean luminance** swings **0.0048**. The deliberate RED — `--distance 80` against
+the boot's 90 — moves mean luminance to 79.8025 from 76.1236, a swing of 3.6789, or **766x** that
+noise. Mean luminance is the discriminating field here and the changed-pixel count is the
+nearly-inert one; the AC above keys off the first two and not the third. Full record and commands:
+`_bmad-output/implementation-artifacts/10-10-signoff/task-0-control.md`.
+
+**Given** the seat,
+**When** I orbit with MMB, pan with shift+MMB and zoom with the wheel,
+**Then** the camera goes where I point it, the pan is clamped so the focus cannot leave the world,
+and UX-DR1 holds — the camera is always usable and there is no angle I get stuck in.
+
+**Given** two runs at different frame rates,
+**When** the same input is held for the same wall-clock duration,
+**Then** the camera arrives at the same place within a stated tolerance, because the rates are
+per-second — pinned by a test that steps the system at two different frame deltas, not by argument.
+
+**Given** a framing I have flown to,
+**When** I press the readout key and pass the printed values straight back as `--camera`,
+**Then** the rig is restored exactly, pinned by a **round-trip test** — print, parse, compare —
+rather than by reading the format and trusting it.
+
+**Given** `--camera` and a designation drag in the same session,
+**Then** RMB still aborts the drag and LMB still designates while a mode is active: the new
+bindings take nothing the old ones had, pinned by a test that exercises both in one app.
+
+**Given** a dwarf on screen,
+**When** I click him with no designate mode active,
+**Then** he is selected and framed, the focus follows him as he walks, Escape releases him, and a
+click on empty ground selects nothing rather than leaving the last dwarf framed.
+
+**Given** the sabotage rows,
+**Then** the delta-time scaling, the pan clamp and the boot-rig guard each carry a mutation row
+that is **shown to kill** — the boot-rig guard above all, since a guard that cannot fail is how an
+approved composition moves without anyone seeing it.
+
 ---
 
 ## Epic 11: The Art-Shot Look
