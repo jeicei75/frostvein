@@ -45,7 +45,7 @@ use gui::{
         ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
         reconcile_projection,
     },
-    pick::{Face, PickedCell, PickedTile},
+    pick::{Face, PickedCell, PickedTile, SelectedDwarf},
     project::{
         ClientLocal, DragPreview, HoverHighlight, ProjectedDesignation, ProjectedItem,
         ProjectedZone, SnowCap, TerrainTile, WorldProjected, setup_projection_assets,
@@ -3081,6 +3081,267 @@ fn mouse_drag_maps_the_same_motion_at_every_frame_rate() {
     );
     assert!((sixty.yaw - 0.58).abs() < 1e-4, "{sixty:?}");
     assert!((sixty.pitch - 0.53).abs() < 1e-4, "{sixty:?}");
+}
+
+/// AC8. Pinned with `live_app` + `install_pick_camera` and NOT with a headless capture: there is
+/// no `PrimaryWindow` in a headless run, so the live pick is always `None` there and a capture
+/// could only ever show the boot framing however broken the selection was.
+///
+/// Two dwarves, so "nearest" has something to discriminate.
+#[test]
+fn a_left_click_selects_the_nearest_dwarf_and_frames_him_at_screen_centre() {
+    let near = [2, 2, 1];
+    let far = [6, 6, 1];
+    let rig = CameraRig::new([4, 4, 1]);
+    let cursor = rig
+        .project_world_point(near)
+        .expect("the near dwarf must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 8, y: 8, z: 2 };
+    let tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let mut app = live_app(snapshot_with_dims(
+        dims,
+        tiles,
+        vec![dwarf(1, near), dwarf(7, far)],
+    ))
+    .0;
+    install_pick_camera(&mut app, rig, cursor);
+    app.update();
+
+    // DesignateMode::None is the default, which is the mode this selection belongs to.
+    assert_eq!(
+        *app.world().resource::<DesignateMode>(),
+        DesignateMode::None
+    );
+    click_once(&mut app, MouseButton::Left);
+
+    assert_eq!(
+        *app.world().resource::<SelectedDwarf>(),
+        SelectedDwarf(Some(1)),
+        "the dwarf under the cursor is selected, not the far one"
+    );
+
+    // The observable the criterion names: HE lands at screen centre. Measured against the rig as
+    // it now stands, through the same projection every capture assertion uses.
+    let framed = *app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("the camera rig must survive the click");
+    let drawn = drawn_translation(&mut app, 1);
+    let screen = framed
+        .project_render_point(drawn)
+        .expect("the framed dwarf must project");
+    assert!(
+        (screen - bevy::prelude::Vec2::splat(0.5)).length() < 0.05,
+        "the selected dwarf must land within 0.05 of screen centre; projected at {screen:?}"
+    );
+
+    // And the focus was SOLVED for the composition push rather than pointed at him. Hand-written
+    // literals: aiming the focus straight at the dwarf would leave it at his own position and
+    // him 33 cells off-centre, which is the trap this AC exists for.
+    let focus = framed.focus;
+    assert!(
+        (focus - bevy::prelude::Vec3::new(27.2398, -19.2592, 1.0)).length() < 0.01,
+        "the focus must be offset from the dwarf by the composition push; got {focus:?}"
+    );
+}
+
+/// AC8's second half: the focus TRACKS him. A framing that were solved once at the click would
+/// pass the test above and still leave a walking dwarf drifting out of frame.
+#[test]
+fn the_focus_tracks_the_selected_dwarf_as_he_walks() {
+    let start = [2, 2, 1];
+    let rig = CameraRig::new([4, 4, 1]);
+    let cursor = rig
+        .project_world_point(start)
+        .expect("the dwarf must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 8, y: 8, z: 2 };
+    let tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![dwarf(1, start)]));
+    // Real elapsed time, or nothing moves: the blend factor AND the walk pace are both driven by
+    // `delta_secs()`, which under MinimalPlugins is the test's own microsecond frame time. Without
+    // this the dwarf travels ~0.06 cells across 40 frames and a broken follow looks identical to a
+    // working one.
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+        1.0 / 60.0,
+    )));
+    install_pick_camera(&mut app, rig, cursor);
+    app.update();
+    click_once(&mut app, MouseButton::Left);
+    assert_eq!(
+        *app.world().resource::<SelectedDwarf>(),
+        SelectedDwarf(Some(1))
+    );
+    let before = app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("a rig")
+        .focus;
+
+    // Move him on the wire and let the blend carry him. Several frames, because the walk paces
+    // him across the ground rather than teleporting him into the delivered cell.
+    // Two cells, deliberately INSIDE `DWARF_WALK_SNAP_CELLS` (2.5), so he is paced across the
+    // ground by the walk rather than snapped into the delivered cell. A snap would move the focus
+    // too, and would prove far less: the paced case is the one where a follow can lag.
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(delta(
+            Vec::new(),
+            vec![dwarf(1, [4, 2, 1])],
+        )))))
+        .unwrap();
+    // 0.9 cells/second over two cells needs ~2.2s of simulated time.
+    for _ in 0..200 {
+        app.update();
+    }
+
+    let after = app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("a rig")
+        .focus;
+    assert!(
+        (after - before).length() > 1.0,
+        "the focus must follow the dwarf as he walks; it moved from {before:?} to {after:?}"
+    );
+    // POSITIVE: he is still centred at the end, which is the point of tracking.
+    let framed = *app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("a rig");
+    let screen = framed
+        .project_render_point(drawn_translation(&mut app, 1))
+        .expect("the tracked dwarf must project");
+    assert!(
+        (screen - bevy::prelude::Vec2::splat(0.5)).length() < 0.05,
+        "the tracked dwarf must stay within 0.05 of screen centre; projected at {screen:?}"
+    );
+}
+
+/// AC9, both halves.
+#[test]
+fn escape_releases_the_selection_and_an_empty_click_leaves_the_rig_untouched() {
+    let dwarf_at = [2, 2, 1];
+    let rig = CameraRig::new([4, 4, 1]);
+    let on_dwarf = rig
+        .project_world_point(dwarf_at)
+        .expect("the dwarf must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 8, y: 8, z: 2 };
+    let tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let mut app = live_app(snapshot_with_dims(dims, tiles, vec![dwarf(1, dwarf_at)])).0;
+
+    // A cursor far from the dwarf's projected position: the corner of the viewport.
+    install_pick_camera(&mut app, rig, bevy::prelude::Vec2::new(4.0, 4.0));
+    app.update();
+    let untouched = *app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("a rig");
+    click_once(&mut app, MouseButton::Left);
+    assert_eq!(
+        *app.world().resource::<SelectedDwarf>(),
+        SelectedDwarf(None),
+        "a click with no dwarf inside the pick radius selects nothing"
+    );
+    let after_empty = *app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("a rig");
+    assert_eq!(after_empty.focus, untouched.focus, "the rig is untouched");
+    assert_eq!(after_empty.yaw, untouched.yaw);
+    assert_eq!(after_empty.pitch, untouched.pitch);
+    assert_eq!(after_empty.distance, untouched.distance);
+
+    // Now select him for real, then release with Escape.
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .unwrap()
+        .set_cursor_position(Some(on_dwarf));
+    click_once(&mut app, MouseButton::Left);
+    assert_eq!(
+        *app.world().resource::<SelectedDwarf>(),
+        SelectedDwarf(Some(1)),
+        "the dwarf under the cursor is selected"
+    );
+
+    press_once(&mut app, KeyCode::Escape);
+    assert_eq!(
+        *app.world().resource::<SelectedDwarf>(),
+        SelectedDwarf(None),
+        "Escape releases the selection"
+    );
+}
+
+/// AC10. Selection and camera state are client-local, so nothing may be queued for the daemon.
+/// `PendingCommands` is the only route to the socket, so an empty queue after a select, a track
+/// and a release is the whole claim.
+#[test]
+fn selecting_and_framing_a_dwarf_queues_nothing_for_the_daemon() {
+    let dwarf_at = [2, 2, 1];
+    let rig = CameraRig::new([4, 4, 1]);
+    let cursor = rig
+        .project_world_point(dwarf_at)
+        .expect("the dwarf must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 8, y: 8, z: 2 };
+    let tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let mut app = live_app(snapshot_with_dims(dims, tiles, vec![dwarf(1, dwarf_at)])).0;
+    install_pick_camera(&mut app, rig, cursor);
+    app.update();
+    click_once(&mut app, MouseButton::Left);
+    app.update();
+    assert_eq!(
+        *app.world().resource::<SelectedDwarf>(),
+        SelectedDwarf(Some(1)),
+        "the selection must have happened, or this test proves nothing"
+    );
+    press_once(&mut app, KeyCode::Escape);
+    assert!(
+        app.world().resource::<PendingCommands>().is_empty(),
+        "a selection is client-local and sends nothing: {:?}",
+        app.world().resource::<PendingCommands>().commands()
+    );
+}
+
+/// One left click, then the frame that reads it.
+///
+/// The release-and-clear is not tidiness. `MinimalPlugins` has no `InputPlugin`, so nothing
+/// clears the transition state between frames, and `ButtonInput::press` on a button that is
+/// ALREADY pressed records no `just_pressed` — so a second click in the same test silently does
+/// nothing. `clear()` alone is not enough, because it leaves the button held.
+fn click_once(app: &mut App, button: MouseButton) {
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(button);
+    app.update();
+    let mut mouse = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+    mouse.release(button);
+    mouse.clear();
+}
+
+/// The drawn translation `blend_entities` wrote for one entity — what the operator actually sees,
+/// and what the framing solves against.
+fn drawn_translation(app: &mut App, id: u32) -> bevy::prelude::Vec3 {
+    app.world_mut()
+        .query::<(&WorldProjected, &Transform)>()
+        .iter(app.world())
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, transform)| transform.translation)
+        .expect("the dwarf must be projected")
 }
 
 /// The fog register has to follow the zoom continuum or the vista is a flat sky-coloured

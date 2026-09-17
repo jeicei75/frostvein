@@ -1,12 +1,19 @@
 use bevy::{
     camera::Camera,
-    prelude::{Camera3d, GlobalTransform, Query, Res, ResMut, Resource, Vec3, Window, With},
+    input::{ButtonInput, mouse::MouseButton},
+    prelude::{
+        Camera3d, GlobalTransform, KeyCode, Query, Res, ResMut, Resource, Transform, Vec2, Vec3,
+        Window, With, Without,
+    },
     window::PrimaryWindow,
 };
+use protocol::EntityKind;
 
 use crate::{
+    camera::CameraRig,
+    designate::DesignateMode,
     ingest::MirrorResource,
-    project::{is_tree_foliage, is_visible_at_slice},
+    project::{TerrainTile, WorldProjected, is_tree_foliage, is_visible_at_slice},
     slice::SliceLevel,
     transform::{render_to_world, world_to_render},
 };
@@ -48,6 +55,132 @@ pub struct PickedTile(pub Option<PickedCell>);
 impl PickedTile {
     pub fn tile(&self) -> Option<[i32; 3]> {
         self.0.map(|cell| cell.tile)
+    }
+}
+
+/// The dwarf the operator has selected, by his wire id.
+///
+/// CLIENT-LOCAL, and that is an acceptance criterion rather than an implementation detail: a
+/// selection sends NOTHING (AD-16 closed the M2 wire diff), and `protocol` and `client-core` know
+/// nothing about it. The id is the wire id only because that is what the mirror keys entities by.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelectedDwarf(pub Option<u32>);
+
+/// How close the cursor must come to a dwarf's projected position to select him, as a fraction of
+/// the viewport HEIGHT. A fraction rather than pixels so it means the same thing at every
+/// resolution; hardcoded because nothing else reads it and no story has asked to tune it.
+const DWARF_PICK_RADIUS: f32 = 0.06;
+
+/// Selects the dwarf nearest the cursor, and releases the selection on Escape.
+///
+/// Only acts when `DesignateMode::None`: with a mode armed, the left button belongs to
+/// `designation_input` and this must not steal it. RMB is untouched — it aborts a designation.
+///
+/// A click that finds no dwarf within the radius leaves the selection exactly as it was. Escape
+/// is the documented release, so an empty click is not a second, silent one.
+pub fn select_dwarf(
+    mouse: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mode: Res<DesignateMode>,
+    mirror: Res<MirrorResource>,
+    mut selected: ResMut<SelectedDwarf>,
+    cameras: Query<&CameraRig>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+) {
+    if keys.just_pressed(KeyCode::Escape) {
+        selected.0 = None;
+        return;
+    }
+    if !mouse.just_pressed(MouseButton::Left) || *mode != DesignateMode::None {
+        return;
+    }
+    let (Ok(rig), Ok(window)) = (cameras.single(), windows.single()) else {
+        return;
+    };
+    let Some(cursor) = window.cursor_position() else {
+        return;
+    };
+    let size = Vec2::new(window.width(), window.height());
+    if size.x <= 0.0 || size.y <= 0.0 {
+        return;
+    }
+    if let Some(id) = nearest_dwarf_to(&mirror.0, rig, cursor / size, size.x / size.y) {
+        selected.0 = Some(id);
+    }
+}
+
+/// The dwarf whose projected position is nearest `cursor` in screen space, within the radius.
+///
+/// Extracted from the system so the pick geometry is testable without a window, and because the
+/// system above cannot be reached headlessly at all: there is no `PrimaryWindow`, so a live pick
+/// is always `None` there.
+///
+/// Ranked on screen distance because that is what the criterion says — "nearest the cursor" — with
+/// view DEPTH breaking a tie, so clicking into a cluster takes the dwarf in front rather than an
+/// arbitrary one. Iteration order is the mirror's id order, so a tie in both is still
+/// deterministic.
+fn nearest_dwarf_to(
+    mirror: &client_core::Mirror,
+    rig: &CameraRig,
+    cursor: Vec2,
+    aspect: f32,
+) -> Option<u32> {
+    mirror
+        .entities()
+        .filter(|entity| entity.kind == EntityKind::Dwarf)
+        .filter_map(|entity| {
+            // `_with_depth` rather than the plain projection: it returns None for anything behind
+            // the camera, and the depth is the tie-break below.
+            let (screen, depth) = rig.project_world_point_with_depth(entity.pos)?;
+            let delta = screen - cursor;
+            // x is scaled by the aspect so the radius is a CIRCLE on screen. Normalized x is
+            // compressed by the aspect ratio, so comparing raw normalized distance would make the
+            // pick region a wide ellipse and a dwarf directly above the cursor harder to hit.
+            let distance = Vec2::new(delta.x * aspect, delta.y).length();
+            (distance <= DWARF_PICK_RADIUS).then_some((distance, depth, entity.id))
+        })
+        .min_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        })
+        .map(|(_, _, id)| id)
+}
+
+/// The drawn entities a follow may read: everything projected that is neither terrain nor the
+/// camera. The `Without<Camera3d>` is load-bearing rather than tidy — it is what makes this
+/// query provably disjoint from the `&mut CameraRig, &mut Transform` one beside it, which both
+/// touch `Transform`.
+type DrawnEntities<'w, 's> = Query<
+    'w,
+    's,
+    (&'static WorldProjected, &'static Transform),
+    (Without<TerrainTile>, Without<Camera3d>),
+>;
+
+/// Keeps the selected dwarf centred while he is selected.
+///
+/// Reads the dwarf's DRAWN translation — the one `blend_entities` wrote this frame — so this
+/// inherits AD-15 exactly: the blend never extrapolates and snaps across a snapshot, and a
+/// follower that read the mirror's integer cell instead would lag the figure it is framing.
+///
+/// While a dwarf is selected the focus is his, so panning cannot fight the follow. Escape
+/// releases him and hands the focus back.
+pub fn frame_selected_dwarf(
+    selected: Res<SelectedDwarf>,
+    drawn: DrawnEntities,
+    mut cameras: Query<(&mut CameraRig, &mut Transform), With<Camera3d>>,
+) {
+    let Some(id) = selected.0 else {
+        return;
+    };
+    let Some((_, dwarf)) = drawn.iter().find(|(marker, _)| marker.0 == id) else {
+        return;
+    };
+    let target = dwarf.translation;
+    for (mut rig, mut transform) in &mut cameras {
+        rig.frame_render_point(target);
+        *transform = rig.transform();
     }
 }
 

@@ -1,6 +1,6 @@
 use bevy::prelude::{Component, Transform, Vec2, Vec3};
 
-use crate::transform::{world_to_render, world_to_render_f32};
+use crate::transform::{render_to_world_f32, world_to_render, world_to_render_f32};
 
 const MIN_PITCH: f32 = 0.15;
 const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.15;
@@ -92,10 +92,33 @@ impl CameraRig {
     }
 
     fn composition_target(&self) -> Vec3 {
-        // Keep the camp in front of the camera at close zoom while retaining the approved
-        // composition at the boot distance and beyond.
-        let composition_scale = (self.distance / BOOT_DISTANCE).min(1.0);
-        world_to_render_f32(self.focus) + boot_composition_offset() * composition_scale
+        world_to_render_f32(self.focus) + self.composition_push()
+    }
+
+    /// The boot composition push at this rig's zoom. Keeps the camp in front of the camera at
+    /// close zoom while retaining the approved composition at the boot distance and beyond.
+    ///
+    /// Factored out so [`Self::frame_render_point`] can solve it away rather than restate it:
+    /// two copies of this scaling is how a framing solve drifts from the framing it inverts.
+    fn composition_push(&self) -> Vec3 {
+        boot_composition_offset() * (self.distance / BOOT_DISTANCE).min(1.0)
+    }
+
+    /// Aims the rig so a render-space point lands exactly at screen centre.
+    ///
+    /// `transform()` looks at [`Self::composition_target`], which is the focus PLUS the
+    /// composition push — so pointing the focus straight AT a dwarf leaves him off-centre by
+    /// that push (33 cells of it at the boot zoom). This solves the push out instead of
+    /// approximating it: make the composition target the dwarf and the look-at point IS the
+    /// dwarf, so he projects at exactly (0.5, 0.5) for any yaw, pitch or distance.
+    ///
+    /// NOTE: this writes the focus WITHOUT the world-bounds clamp that `pan` applies. Centring a
+    /// dwarf generally requires a focus offset from him by the push, which for a dwarf near one
+    /// corner lands outside the world; clamping it would silently decentre exactly the dwarves
+    /// hardest to see. The focus is only an aim point, and a tracked dwarf is on screen by
+    /// construction, so nothing can be lost off-world this way.
+    pub fn frame_render_point(&mut self, target: Vec3) {
+        self.focus = render_to_world_f32(target - self.composition_push());
     }
 
     /// Projects a render-space point to normalized screen coordinates at this rig's camera.

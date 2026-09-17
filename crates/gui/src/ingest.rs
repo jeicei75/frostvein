@@ -635,6 +635,7 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<DragAnchor>()
         .init_resource::<LightingToggles>()
         .init_resource::<LastCameraReadout>()
+        .init_resource::<crate::pick::SelectedDwarf>()
         .add_message::<MouseMotion>()
         .add_message::<MouseWheel>();
     app.add_systems(
@@ -662,6 +663,20 @@ pub fn client_systems(app: &mut App) {
             crate::perf::mark_perf_frame_on_key,
             fall_snow,
         ),
+    )
+    // Ordered, not merely registered. `select_dwarf` must read the rig AFTER `camera_controls`
+    // has moved it, or a click is judged against last frame's framing; `frame_selected_dwarf`
+    // must run after `ProjectionSet`, because `blend_entities` inside it is the sole writer of
+    // the dwarf's drawn position and that position is what gets centred. Both stay in `Update`
+    // so the camera Transform they write is propagated this frame rather than trailing by one —
+    // moving them beside `designation_input` in `PostUpdate` would put them after
+    // `TransformSystems::Propagate` and the followed dwarf would lag the camera.
+    .add_systems(
+        Update,
+        (crate::pick::select_dwarf, crate::pick::frame_selected_dwarf)
+            .chain()
+            .after(camera_controls)
+            .after(ProjectionSet),
     )
     .add_systems(
         PostUpdate,
