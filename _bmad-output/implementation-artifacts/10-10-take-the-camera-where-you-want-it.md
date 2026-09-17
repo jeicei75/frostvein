@@ -262,6 +262,26 @@ follow was indistinguishable from a working one.
 | the pick radius is removed | `escape_releases_the_selection_and_an_empty_click_leaves_the_rig_untouched` | KILLED |
 | escape stops releasing the selection | `escape_releases_the_selection_and_an_empty_click_leaves_the_rig_untouched` | KILLED |
 | the follow solves the framing once instead of tracking | `the_focus_tracks_the_selected_dwarf_as_he_walks` | KILLED |
+| the wheel contributes nothing to the zoom | `the_wheel_zooms_the_rig_and_shift_multiplies_the_step` | KILLED |
+| the wheel step falls back to its pre-seat value | `the_wheel_zooms_the_rig_and_shift_multiplies_the_step` | KILLED |
+| the mouse orbit drag reverses both axes | `mouse_drag_maps_the_same_motion_at_every_frame_rate` | KILLED |
+
+**Seat round, 2026-09-17, after the story first read done.** Wolf ran the client and gave two
+verdicts: the wheel zoom was too slow, and the MMB drag axis might want reversing. `WHEEL_ZOOM_STEP`
+went 1.0 -> 6.0 (one notch needed ~86 of its fellows to cross the boot-to-closest range; now 14, or
+4 with shift). The reversal was implemented, looked at, and **REJECTED** — so the shipped drag
+direction is a decision, recorded as such in the test comment and pinned by a new row that flips
+both signs.
+
+**That round exposed a real hole in my own work: AC3's wheel half was pinned by NOTHING.** No test
+in the suite so much as mentioned `MouseWheel`, so the wheel term could have been deleted and all 88
+tests would have stayed green — the untested-drive-line class this project keeps meeting, invisible
+to the full gate and to the mutation table as it then stood.
+`the_wheel_zooms_the_rig_and_shift_multiplies_the_step` closes it: distances hand-written from the
+boot 90.0 rather than computed from the step, both scroll directions, with shift, plus a no-input
+frame so the rows measure the wheel and not per-frame drift. Whole table re-run after the change —
+**16/16 KILLED**, not just the three new rows, because the code had moved and "the anchors did not
+change" is not evidence.
 
 Re-pointed by this story's edits and **re-run to prove they still kill** (applying is not killing):
 `9-1` "near-white area ceiling assertion is deleted" KILLED, `9-1` "capture reports after the
@@ -356,6 +376,7 @@ exercised headlessly — there is no window to press a key into — which is pre
 
 | Date | Change |
 | --- | --- |
+| 2026-09-17 | **Seat round.** `WHEEL_ZOOM_STEP` 1.0 -> 6.0 on Wolf's verdict; a reversed MMB drag was tried and REJECTED, so the shipped direction is now a recorded decision with a sabotage row guarding it. Closed a hole this exposed in my own work: AC3's wheel half was pinned by no test at all — nothing in the suite mentioned `MouseWheel`, so the wheel term was deletable with all 88 tests green. Table re-run whole: **16/16 KILLED**. |
 | 2026-09-17 | **Tasks 2-5 implemented directly by Claude** after Codex exhausted its 5-hour usage window mid-Task-2 — Wolf's ruling, taking the loss of the dev/review model split. Mouse orbit/pan, wheel zoom and a shift multiplier, with per-second scaling on HELD KEYS ONLY (an event delta is already this frame's movement). `--camera` and the readout key, sharing one formatter with the capture's ceiling message. Dwarf selection and framing that SOLVES the composition push, following the AD-15 blended position. 13-row sabotage table, 13/13 KILLED, plus 4 re-pointed older rows re-run and killed. Full gate GREEN 511s including the pixel-guard tier. Filed #99: the near-white ceiling is unreachable via zoom because the ground-median ceiling fires first, and the control record's `--distance 80` trigger no longer trips. |
 | 2026-09-17 | **AC1's luminance clause STRUCK on Wolf's ruling (issue #98).** Task 0's control re-take found the documented control statistic was a plain RGB channel average mislabelled "mean luminance" (76.1236 reproduces exactly as the RGB mean of the committed creation frame; its Rec.601 luminance is 71.19), so the reported "baseline moved 5 points" was a statistic mismatch — the look never moved. The real defect: the documented 0.0048 same-build swing is a lucky-tight two-sample pair, and this build's swing is 0.0724, larger than AC1's own 0.048 tolerance, making the clause unsatisfiable by noise. Ruling: drop the pixel clause, keep the hand-written-literal rig guard as the whole of AC1. Task 3's required luminance observation and the RED's luminance half are superseded with it; the reaches-the-rig test carries that proof. **This edit changes an Acceptance Criterion, outside the dev workflow's normally permitted sections — made on an explicit ruling and logged here for that reason.** |
 | 2026-09-17 | Created. Control pair, same-build noise floor and the `--distance 80` RED measured at creation on `5452c4d`; AC1 rewritten against mean luminance after the changed-pixel statistic was shown to have a 6 % floor. |
