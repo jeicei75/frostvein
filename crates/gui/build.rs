@@ -12,10 +12,23 @@
 use std::process::Command;
 
 fn main() {
-    // Rerun when HEAD moves. Without these the stamp is frozen at whatever the first build saw,
-    // which would make this worse than nothing — a stamp that lies is trusted, a missing one is not.
-    println!("cargo:rerun-if-changed=../../.git/HEAD");
-    println!("cargo:rerun-if-changed=../../.git/index");
+    // Re-run on EVERY build. Cargo does that for a `rerun-if-changed` path that does not exist,
+    // and the cost is two `git` calls per build against a stamp whose whole value is that it
+    // never lies.
+    //
+    // It used to watch `../../.git/HEAD` and `../../.git/index`, and both are blind to a commit.
+    // Measured 2026-09-17: the pre-commit hook's own gate build runs this script while the tree is
+    // mid-commit — files staged, HEAD still at the PARENT — so it bakes `<parent>-dirty`. The
+    // commit then moves `.git/refs/heads/<branch>` (08:14:12) while `.git/index` only matches the
+    // script's own run (08:13:16) and `.git/HEAD` never moves at all on a same-branch commit. So
+    // neither watched path is newer afterwards, the cached output is reused, and every binary
+    // built through the normal commit flow carries the WRONG commit and a FALSE `-dirty`.
+    // Reproduced twice; `touch crates/gui/build.rs` was the only cure.
+    //
+    // Watching the resolved ref as well would fix the commit case and leave the worse one open:
+    // working-tree dirtiness flips without any ref moving, which is the half this module's doc
+    // calls the more dangerous one.
+    println!("cargo:rerun-if-changed=.git-stamp-recomputed-every-build");
 
     println!("cargo:rustc-env=GUI_BUILD_SHA={}", sha());
     // NOTE: `GUI_WORKSPACE_ROOT` used to be stamped here too. Its only consumer was
