@@ -2013,6 +2013,11 @@ Epic 11 is mechanisms, and this adds none.
   scales the boot push by `(distance / 90).min(1.0)`, so the frame re-composes as it zooms. That is
   the composition 5.4 and 10.7 signed off, and it is exactly what a movable focus can move without
   anyone noticing.
+- **The capture's near-white ceiling is calibrated for the boot framing alone.** Measured at
+  creation: `--distance 80` exits **101** on `near-white-area=1.1134%` while the boot framing exits
+  0 at 0.6597%. `--camera` makes non-boot framings routine, so ceiling trips become routine with
+  them. Per 10.8's standing rule the ceiling is **measured, not raised** (see issue #90); this
+  story must rule what a non-boot capture does about it rather than meeting it at gate time.
 
 **In scope:**
 
@@ -2038,10 +2043,18 @@ the look, the light, or the boot composition.
 **Given** no camera input and no `--camera`,
 **When** the client boots,
 **Then** the boot rig and the `Transform` it produces are unchanged **by exact float comparison** —
-not by a pixel test, because the boot frame's animated snow has no pixel-level noise floor to
-compare against (10.4's AC5 measured same-build noise at 38,087 changed pixels)
-**And** the boot capture's changed-pixel count against a control frame taken at this story's start
-is at or below the same-build noise floor **re-measured on this story's own build**.
+a deterministic oracle, not a pixel test
+**And** the boot capture's **mean luminance** is within 10x the same-build swing of the control
+pair filed under `10-10-signoff/`.
+
+**Measured at creation, 2026-09-17, on `5452c4d` (clean stamp), which corrected this AC:** two runs
+of the SAME binary differ in **55,284 pixels — 6.0 % of the frame** (animated snow and stars), so a
+changed-pixel count cannot guard this framing; it would tolerate a regression moving 55,284 pixels.
+The same pair's **mean luminance** swings **0.0048**. The deliberate RED — `--distance 80` against
+the boot's 90 — moves mean luminance to 79.8025 from 76.1236, a swing of 3.6789, or **766x** that
+noise. Mean luminance is the discriminating field here and the changed-pixel count is the
+nearly-inert one; the AC above keys off the first two and not the third. Full record and commands:
+`_bmad-output/implementation-artifacts/10-10-signoff/task-0-control.md`.
 
 **Given** the seat,
 **When** I orbit with MMB, pan with shift+MMB and zoom with the wheel,
