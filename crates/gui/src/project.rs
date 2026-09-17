@@ -2088,6 +2088,14 @@ pub fn drive_dwarf_walk(
             eprintln!("gui dwarf walk: driving a {duration:.3}s cycle from distance travelled");
         }
     }
+    // The last link, and the only one that can fail with every piece of wiring above it present:
+    // the clip is locked to ground covered, so a world where no dwarf has covered any ground
+    // draws a figure standing at bind and looks exactly like a client with no clip at all.
+    if stalled && !phases.is_empty() && phases.iter().all(|phase| phase.distance == 0.0) {
+        eprintln!(
+            "gui dwarf walk: STALLED -- no dwarf has covered any ground, so every phase is still at bind"
+        );
+    }
 }
 
 /// Applies presentation interpolation to dynamic wire projections only.
