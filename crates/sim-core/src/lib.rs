@@ -30,6 +30,14 @@ const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const STREAM_TREES: u64 = 0x5452_4545_535f_5f5f;
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
+/// Ticks a dwarf rests between steps while WORKING, so a job-walk is paced like a wander.
+///
+/// Without it a pathing dwarf took one cell per tick. A cell is 1.6 m and a tick is 100 ms, so
+/// he crossed the valley at 16 m/s -- for a 1.2 m figure, about 23 m/s at human scale. Nothing
+/// downstream could survive that: the walk cycle it drives is 0.4926 m per stride, which is 32.5
+/// gait cycles a second, under two frames per cycle at 60 fps. The legs aliased into a blur and
+/// the figure read as sliding.
+const STEP_REST_TICKS: u32 = WANDER_REST_TICKS;
 pub const MAX_DESIGNATIONS: usize = 4096;
 const MAX_ASTAR_NODES: usize = 50_000;
 pub const WORK_TICKS: u32 = 5;
@@ -847,9 +855,28 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 };
                 path = computed;
             }
+            // Pace the step. `wander` skips any dwarf holding a job before it touches this
+            // cooldown, so the two never decrement it in the same tick and one field can pace
+            // both kinds of walking.
+            let resting = ecs
+                .get::<Wander>(entity)
+                .map(|wander| wander.cooldown)
+                .unwrap_or(0);
+            if resting > 0 {
+                if let Some(mut wander) = ecs.get_mut::<Wander>(entity) {
+                    wander.cooldown -= 1;
+                }
+                *ecs.get_mut::<JobState>(entity)
+                    .expect("every dwarf has a job state") = JobState::Walk;
+                ecs.entity_mut(entity).insert(Path(path));
+                continue;
+            }
             let next = path.remove(0);
             *ecs.get_mut::<Pos>(entity)
                 .expect("every dwarf has a position") = next;
+            if let Some(mut wander) = ecs.get_mut::<Wander>(entity) {
+                wander.cooldown = STEP_REST_TICKS;
+            }
             *ecs.get_mut::<JobState>(entity)
                 .expect("every dwarf has a job state") = JobState::Walk;
             ecs.entity_mut(entity).insert(Path(path));
@@ -2053,7 +2080,7 @@ mod tests {
         world.drain_dirty();
 
         let mut states = Vec::new();
-        for _ in 0..24 {
+        for _ in 0..80 {
             super::execute_jobs(&mut world.ecs);
             states.push(world.dwarves()[0].2);
             if world.jobs().is_empty() {
@@ -2062,13 +2089,31 @@ mod tests {
         }
 
         use JobState::{Idle, Walk, Work};
+        // Run-length encoded, because the literal sequence this used to assert was really two
+        // numbers -- the length of each walk -- buried in a list that had to be rewritten by hand
+        // whenever the pacing moved. Stating them as `walk_ticks(steps)` keeps the cadence pinned
+        // to `STEP_REST_TICKS` instead of to a magic list, so a pacing regression still fails here
+        // while a deliberate pacing CHANGE does not need the expectation rewritten.
+        fn walk_ticks(steps: usize) -> usize {
+            1 + (steps - 1) * (1 + super::STEP_REST_TICKS as usize)
+        }
+        let mut runs: Vec<(JobState, usize)> = Vec::new();
+        for state in &states {
+            match runs.last_mut() {
+                Some((last, count)) if last == state => *count += 1,
+                _ => runs.push((*state, 1)),
+            }
+        }
         assert_eq!(
-            states,
+            runs,
             vec![
-                Walk, Walk, Work, Work, Work, Work, Work, Walk, Walk, Walk, Work, Work, Work, Work,
-                Work, Idle,
+                (Walk, walk_ticks(2)),
+                (Work, super::WORK_TICKS as usize),
+                (Walk, walk_ticks(3)),
+                (Work, super::WORK_TICKS as usize),
+                (Idle, 1),
             ],
-            "two walks and exactly WORK_TICKS of work in each of the two legs"
+            "two walks, paced by STEP_REST_TICKS, and exactly WORK_TICKS of work in each leg"
         );
         assert_eq!(world.items(), vec![(super::Id(12), pile)]);
         assert_eq!(world.carrying()[0], (super::Id(0), None));
@@ -2509,9 +2554,14 @@ mod tests {
             world.step();
             assert!(world.claims().iter().all(|(_, job)| job.is_none()));
         }
+        // Read his cell on the tick BEFORE the claim rather than reusing the one captured at
+        // spawn: he is jobless until here, so he has been wandering, and how far a wander has
+        // carried him is a function of the movement pacing rather than of anything this test is
+        // about. What it is about is that the claim tick claims and does NOT also step.
+        let before_claim = world.dwarves()[2].1;
         world.step();
         assert_eq!(world.claims()[2], (super::Id(2), Some(JobId(0))));
-        assert_eq!(world.dwarves()[2].1, worker);
+        assert_eq!(world.dwarves()[2].1, before_claim);
         assert_eq!(world.dwarves()[2].2, JobState::Walk);
         let worker = world
             .ecs

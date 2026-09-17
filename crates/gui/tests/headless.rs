@@ -1077,17 +1077,37 @@ fn the_dwarf_stands_on_the_cell_floor_and_stays_there_after_a_blend() {
         "at spawn the dwarf's origin must sit on the cell floor, not its centre"
     );
 
-    // Move him one cell and let the blend run to completion. This is the arm that was wrong.
+    // Move him and let the blend arm rewrite his translation. This is the arm that was wrong.
+    //
+    // The ARRIVAL is deliberately not asserted here any more. A dwarf is now WALKED to his
+    // delivered cell at `DWARF_WALK_CELLS_PER_SECOND` rather than lerped into it across one tick,
+    // and this harness advances real time by microseconds per update, so no reachable number of
+    // updates gets him there. The floor offset is what this test is about, and it is asserted on
+    // both arms below: while he is walking, and after a move far enough to snap.
     apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 0, 0])]));
     app.world_mut()
         .resource_mut::<gui::blend::TickClock>()
         .advance(10.0);
     app.update();
+    let walking = projected_translation(&mut app, id);
+    assert_eq!(
+        walking.y, -0.5,
+        "while walking to the delivered cell the dwarf must STILL be on the floor. A bare \
+         world_to_render here lifts him half a cell on the frame after he appears."
+    );
+    assert!(
+        (0.0..=2.0).contains(&walking.x),
+        "he must be between the cell he left and the one delivered, not beyond either: {walking:?}"
+    );
+
+    // Beyond the snap distance he is not walking, he has been moved -- and the offset has to
+    // survive that arm too, which is the one a teleport takes.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [9, 0, 0])]));
+    app.update();
     assert_eq!(
         projected_translation(&mut app, id),
-        bevy::prelude::Vec3::new(2.0, -0.5, 0.0),
-        "after the blend rewrites it, the dwarf must STILL be on the floor. A bare \
-         world_to_render here lifts him half a cell on the frame after he appears."
+        bevy::prelude::Vec3::new(9.0, -0.5, 0.0),
+        "a snapped dwarf must land on the floor of the cell he was moved to"
     );
 }
 
@@ -3795,4 +3815,120 @@ fn the_perf_row_reports_the_tiles_the_reconcile_actually_drained() {
         Some("0"),
         "the steady frame after an edit must report zero, not inherit the edit's count: {dirty:?}"
     );
+}
+
+/// The walk cycle is phase-locked to ground covered, through the real wiring.
+///
+/// A speed-driven clip only moves the legs at roughly the right cadence; it says nothing about
+/// WHERE in the cycle the dwarf is, so each tick starts at whatever phase the last one ended on
+/// and the feet plant in unrelated places. That is what "not synced with movement" looked like
+/// from the seat. Locking the phase to distance means a foot plants at the same point of every
+/// stride however the tick interval jitters.
+///
+/// The expectation is derived from the DRAWN translation rather than from a literal, so this
+/// cannot pass by agreeing with whatever cadence the code happens to pick.
+#[test]
+fn the_walk_phase_tracks_the_ground_the_dwarf_covers() {
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    app.update();
+    app.update();
+
+    let before = walk_phase(&mut app, 7);
+    let from = projected_translation(&mut app, 7);
+    assert_eq!(
+        before, 0.0,
+        "a dwarf that has not moved must not have advanced its walk phase"
+    );
+
+    apply_delta(&mut app, delta(Vec::new(), vec![dwarf(7, [1, 0, 0])]));
+    app.update();
+    app.update();
+
+    let after = walk_phase(&mut app, 7);
+    let to = projected_translation(&mut app, 7);
+    let travelled_cells = (to - from).length();
+    assert!(
+        travelled_cells > 0.0,
+        "the delta must actually have moved the dwarf, or this proves nothing"
+    );
+
+    // Render units are cells; the stride is in metres, and a cell is 1.6 m.
+    let strides =
+        (travelled_cells / gui::project::METRES_TO_CELLS) / gui::project::DWARF_WALK_STRIDE_METRES;
+    let expected = (before + strides).fract();
+    assert!(
+        (after - expected).abs() < 1e-3,
+        "walk phase {after} must be the ground covered ({travelled_cells} cells) over one \
+         stride, which is {expected}"
+    );
+}
+
+/// The lock must hold FRAME BY FRAME, and a dwarf with no delivered movement must not animate.
+///
+/// The first version of this waited for the blend to settle and asserted the phase stopped. It
+/// failed and the CODE was right: under the headless clock the blend creeps for many frames, so
+/// "settled" never arrives. The invariant worth pinning is not that he stops -- it is that phase
+/// advance is always the ground covered, which covers the standing dwarf too.
+#[test]
+fn walk_phase_advances_only_by_the_ground_covered() {
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    app.update();
+
+    // Standing: nothing delivered, so nothing moves and nothing may animate.
+    let resting = (projected_translation(&mut app, 7), walk_phase(&mut app, 7));
+    for frame in 0..5 {
+        app.update();
+        assert_eq!(
+            projected_translation(&mut app, 7),
+            resting.0,
+            "frame {frame}: an undelivered dwarf must not move"
+        );
+        assert_eq!(
+            walk_phase(&mut app, 7),
+            resting.1,
+            "frame {frame}: a dwarf standing still must not walk on the spot"
+        );
+    }
+
+    // Moving: every frame's phase advance must be that frame's ground covered.
+    apply_delta(&mut app, delta(Vec::new(), vec![dwarf(7, [1, 0, 0])]));
+    let mut moved_frames = 0;
+    let mut previous = (projected_translation(&mut app, 7), walk_phase(&mut app, 7));
+    for frame in 0..10 {
+        app.update();
+        let now = (projected_translation(&mut app, 7), walk_phase(&mut app, 7));
+        let cells = (now.0 - previous.0).length();
+        let strides =
+            (cells / gui::project::METRES_TO_CELLS) / gui::project::DWARF_WALK_STRIDE_METRES;
+        let advanced = (now.1 - previous.1).rem_euclid(1.0);
+        assert!(
+            (advanced - strides.rem_euclid(1.0)).abs() < 1e-3,
+            "frame {frame}: phase advanced {advanced} but the dwarf covered {cells} cells, \
+             which is {strides} strides"
+        );
+        if cells > 0.0 {
+            moved_frames += 1;
+        }
+        previous = now;
+    }
+    // Guard the guard: a run where he never moved would satisfy every assertion above vacuously.
+    assert!(
+        moved_frames > 0,
+        "the dwarf never moved, so the locking half of this test proved nothing"
+    );
+}
+
+fn walk_phase(app: &mut App, id: u32) -> f32 {
+    app.world_mut()
+        .query::<(&gui::project::WorldProjected, &gui::project::WalkPhase)>()
+        .iter(app.world())
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, phase)| phase.phase())
+        .expect("the dwarf must carry a WalkPhase")
 }

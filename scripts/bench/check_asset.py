@@ -7,6 +7,7 @@
 import json
 import math
 import pathlib
+import re
 import struct
 import sys
 import zlib
@@ -44,6 +45,13 @@ CELL = 16
 # run of black is what says where a family's palette ends.
 CELLS_PER_ROW = ATLAS // CELL
 UNUSED_CELL = "#000000"
+# From round 4 the asset's revision lives in the datablock names INSIDE the .blend and in no
+# filename, so a published mesh is `SM_VoxelDwarf_Miner01_r7` inside `SM_VoxelDwarf_Miner01.glb`
+# and the naming clause has to allow that much drift -- while still refusing any OTHER
+# disagreement, which is what catches a stale binary wearing the right filename. The revision is
+# printed as `mesh=` on the FIGURES line for the same reason: a suffix nobody reports cannot
+# announce a stale export.
+REVISION_SUFFIX = re.compile(r"_r\d+$")
 
 
 class AssetError(ValueError):
@@ -151,7 +159,76 @@ def decode_png_rgb(png):
     return width, height, channels, bytes(output)
 
 
-def palette_from_glb(document, binary):
+def embedded_image(document, binary):
+    """Decode the single image the GLB embeds, whatever kind of map it turns out to be."""
+    try:
+        view = document["bufferViews"][document["images"][0]["bufferView"]]
+        start = view.get("byteOffset", 0)
+        png = binary[start:start + view["byteLength"]]
+    except (IndexError, KeyError, TypeError) as error:
+        raise AssetError("palette/material clause: embedded image is malformed") from error
+    return decode_png_rgb(png)
+
+
+def is_palette_atlas(width, height, channels, pixels):
+    """Is this image a cell atlas? MEASURED, not assumed from its side length.
+
+    Two families ship through this checker: the generated voxel assets, whose every face samples
+    one cell of a flat palette atlas, and the hand-modelled painted ones, whose map is a packed
+    set of UV islands. Three clauses below -- the cell read, the voxel grid and the quad soup --
+    are properties of the first pipeline only, so something has to say which family an artifact
+    belongs to.
+
+    It is NOT the atlas's side length. `width == 64` was the test until 2026-09-13, and 64 is
+    the pines' cell count showing through: a voxel family needing more than 16 colours would ship
+    a 128x128 atlas of the same 16 px cells and be misread as painted, silently losing the grid
+    and quad-soup clauses. What actually makes the cell read valid is that the image IS
+    CELL-quantised -- square, a whole number of cells across, and every cell one flat colour --
+    and that is what this tests.
+
+    The misclassification that remains fails LOUDLY, which is why it is the right way round: a
+    painted map that happened to be cell-uniform would be read as an atlas and then rejected by
+    the grid clause, whereas the size test's failure mode was to certify a real voxel asset
+    without ever checking its lattice.
+    """
+    if width != height or width < CELL or width % CELL:
+        return False
+    for row in range(height // CELL):
+        for column in range(width // CELL):
+            first = None
+            for y in range(row * CELL, (row + 1) * CELL):
+                start = (y * width + column * CELL) * channels
+                for x in range(CELL):
+                    offset = start + x * channels
+                    pixel = bytes(pixels[offset:offset + 3])
+                    if first is None:
+                        first = pixel
+                    elif pixel != first:
+                        return False
+    return True
+
+
+def palette_from_painted_map(width, height, channels, pixels):
+    """Every colour a painted map carries, most-painted first -- the whole census, not a sample.
+
+    The `palette=` figure is a by-eye signoff comparison against the approved sheet, so the same
+    rule as the atlas read applies: it has to be able to say "and nothing else is here". A
+    painted map has no cells to walk, so the census is the equivalent statement.
+
+    NOTE: this asserts no particular colour. The round-7 map carries 28 colours -- the approved
+    ten plus eighteen value steps the reference paints and a flat palette could not hold -- so a
+    literal ten-colour assertion would fail the first asset that shades anything, and a hardcoded
+    family list is the exact defect the atlas reader's own docstring exists to record. Which ten
+    are approved is a judgement on a reference sheet; what the artifact carries is this line.
+    """
+    counts = {}
+    for offset in range(0, width * height * channels, channels):
+        key = "#%02X%02X%02X" % tuple(pixels[offset:offset + 3])
+        counts[key] = counts.get(key, 0) + 1
+    return [colour for colour, _count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def palette_from_atlas(width, height, channels, pixels):
     """Read the atlas cells THIS asset actually carries, from the artifact, not the generator.
 
     The bound used to be the PINES' seven-entry hex list, so a ten-colour dwarf reported seven and
@@ -167,18 +244,10 @@ def palette_from_glb(document, binary):
     the dwarf's hair #34271C and the pines' needle #2A3E34), and the alternative -- a per-family
     cell count -- is the second hardcoded list this change exists to remove.
     """
-    try:
-        view = document["bufferViews"][document["images"][0]["bufferView"]]
-        start = view.get("byteOffset", 0)
-        png = binary[start:start + view["byteLength"]]
-    except (IndexError, KeyError, TypeError) as error:
-        raise AssetError("palette/material clause: embedded image is malformed") from error
-    width, height, channels, pixels = decode_png_rgb(png)
-    if width != ATLAS or height != ATLAS:
-        raise AssetError(f"palette/material clause: expected a {ATLAS}x{ATLAS} V1 atlas")
+    cells_per_row = width // CELL
     values = []
-    for index in range(CELLS_PER_ROW * CELLS_PER_ROW):
-        column, row = index % CELLS_PER_ROW, index // CELLS_PER_ROW
+    for index in range(cells_per_row * cells_per_row):
+        column, row = index % cells_per_row, index // cells_per_row
         x, y = column * CELL + CELL // 2, height - 1 - (row * CELL + CELL // 2)
         offset = (y * width + x) * channels
         values.append("#%02X%02X%02X" % tuple(pixels[offset:offset + 3]))
@@ -305,7 +374,12 @@ def contract_data(document, binary):
         # The standing contract verifies the atlas exists and is nearest-filtered. Its declared
         # colour-to-role map remains a signoff comparison, so a different valid asset family is
         # not rejected by the pine palette literals above.
-        palette = palette_from_glb(document, binary)
+        width, height, channels, pixels = embedded_image(document, binary)
+        atlas = is_palette_atlas(width, height, channels, pixels)
+        profile = "voxel-atlas" if atlas else "painted-map"
+        palette = (palette_from_atlas if atlas else palette_from_painted_map)(
+            width, height, channels, pixels
+        )
         check_uv_and_wrap(document, binary, primitive, sampler)
         mesh_name = meshes[0]["name"]
         node_index = next(i for i, item in enumerate(document["nodes"]) if item.get("mesh") == 0)
@@ -335,26 +409,111 @@ def contract_data(document, binary):
         raise AssetError("geometry clause: requires non-empty triangle indices")
     if any(not math.isfinite(value) for point in point_data for value in point):
         raise AssetError("geometry clause: POSITION values must be finite")
-    if any(
-        abs(value - round(value / PROJECT_GRID_METRES) * PROJECT_GRID_METRES)
-        > GRID_TOLERANCE_METRES
-        for point in point_data for value in point
-    ):
-        raise AssetError(
-            f"grid clause: POSITION values must use the {PROJECT_GRID_METRES} m project grid"
-        )
+    # The grid and quad-soup clauses are the generated-voxel pipeline's signature, not the
+    # contract's: one says every vertex lands on the authored lattice, the other that every face
+    # is an independent quad sampling one atlas cell. A hand-modelled figure has no lattice and
+    # shares vertices, so for it both are inapplicable rather than failed -- and `profile=` on
+    # the FIGURES line says which contract was applied, so neither skip is silent.
+    if atlas:
+        if any(
+            abs(value - round(value / PROJECT_GRID_METRES) * PROJECT_GRID_METRES)
+            > GRID_TOLERANCE_METRES
+            for point in point_data for value in point
+        ):
+            raise AssetError(
+                f"grid clause: POSITION values must use the {PROJECT_GRID_METRES} m project grid"
+            )
     minimum = tuple(min(point[axis] for point in point_data) for axis in range(3))
     maximum = tuple(max(point[axis] for point in point_data) for axis in range(3))
     tris = index_data["count"] // 3
     verts = len(point_data)
-    if verts != tris * 2:
+    if atlas and verts != tris * 2:
         raise AssetError("quad-soup clause: verts must equal tris/2 × 4")
-    return minimum, maximum, tris, verts, palette, mesh_name
+    return minimum, maximum, tris, verts, palette, mesh_name, profile
+
+
+def sampler_values(document, binary, index):
+    """Decode a float accessor into a list of tuples, for animation sampler output."""
+    item, start, stride, component_size, components = accessor(document, binary, index)
+    if item["componentType"] != 5126:
+        raise AssetError("animation clause: sampler data must be float")
+    fmt = "<" + "f" * components
+    return [struct.unpack_from(fmt, binary, start + row * stride) for row in range(item["count"])]
+
+
+def animation_facts(document, binary):
+    """Validate the clips and return a one-field summary for the FIGURES line.
+
+    Three things can be wrong with a clip in ways nothing else here would notice, because
+    until this existed `check_asset.py` had no animation clause at all and a missing, empty
+    or drifting clip passed every gate we have.
+
+    INERT: a clip with no channels, or a sampler with one keyframe, animates nothing. It
+    loads, it plays, and the figure stands still -- the same silent-acceptance shape as a
+    client that renders no dwarves while every client-side test is green.
+
+    DRIFT: the dwarf's world position is owned by the CLIENT -- `blended_translation` lerps
+    him between cell positions every tick. A clip that also displaces him fights that writer
+    and he skates. The honest check is LOOP CLOSURE, not an axis test: bone translations are
+    exported in parent-bone space, not world space, so "no horizontal motion" cannot be read
+    off a glTF channel without composing the whole node chain. A channel that ends where it
+    began cannot accumulate displacement however its axes are oriented, and a vertical bob --
+    which is wanted -- closes just as cleanly as a rotation does.
+
+    NOTE: loop closure assumes every clip loops, which is true of `Walk` and of everything
+    planned. A deliberate one-shot clip would need this relaxed, and that should be a
+    decision taken in the open rather than a tolerance quietly widened.
+    """
+    animations = document.get("animations", [])
+    nodes = document.get("nodes", [])
+    if not animations:
+        return "anims=-"
+    summary = []
+    for position, animation in enumerate(animations):
+        name = animation.get("name") or f"<unnamed {position}>"
+        channels = animation.get("channels", [])
+        samplers = animation.get("samplers", [])
+        if not channels:
+            raise AssetError(f"animation clause: clip {name!r} has no channels and animates nothing")
+        longest = 0
+        for channel in channels:
+            target = channel.get("target", {})
+            node = target.get("node")
+            if not isinstance(node, int) or not 0 <= node < len(nodes):
+                raise AssetError(f"animation clause: clip {name!r} targets a node that does not exist")
+            try:
+                sampler = samplers[channel["sampler"]]
+            except (IndexError, KeyError, TypeError) as error:
+                raise AssetError(f"animation clause: clip {name!r} has a malformed sampler") from error
+            times = sampler_values(document, binary, sampler["input"])
+            values = sampler_values(document, binary, sampler["output"])
+            if len(times) < 2:
+                raise AssetError(
+                    f"animation clause: clip {name!r} has a {len(times)}-keyframe channel on "
+                    f"{nodes[node].get('name', node)!r}, which cannot animate anything"
+                )
+            longest = max(longest, times[-1][0])
+            first, last = values[0], values[-1]
+            closed = all(abs(a - b) <= 1e-5 for a, b in zip(first, last))
+            if not closed and target.get("path") == "rotation":
+                # q and -q are the same rotation, so a baked loop may flip sign
+                closed = all(abs(a + b) <= 1e-5 for a, b in zip(first, last))
+            if not closed:
+                raise AssetError(
+                    f"animation clause: clip {name!r} does not close its loop -- "
+                    f"{target.get('path')} on {nodes[node].get('name', node)!r} starts at "
+                    f"{tuple(round(v, 4) for v in first)} and ends at "
+                    f"{tuple(round(v, 4) for v in last)}, so every repeat displaces the figure"
+                )
+        summary.append(f"{name}:{len(channels)}ch@{longest:.2f}s")
+    return "anims=" + ",".join(summary)
 
 
 def figures(path):
     document, binary = load_glb(path)
-    minimum, maximum, tris, verts, palette, mesh_name = contract_data(document, binary)
+    minimum, maximum, tris, verts, palette, mesh_name, profile = contract_data(document, binary)
+    anims = animation_facts(document, binary)
+    joints = sum(len(skin.get("joints", [])) for skin in document.get("skins", []))
     size = tuple(maximum[axis] - minimum[axis] for axis in range(3))
     centre_x = (minimum[0] + maximum[0]) / 2
     centre_z = (minimum[2] + maximum[2]) / 2
@@ -362,7 +521,8 @@ def figures(path):
         f"FIGURES {path} size_m={size[0]:.1f}x{size[1]:.1f}x{size[2]:.1f} "
         f"min_y_m={minimum[1]:.6f} centre_x_m={centre_x:.6f} centre_z_m={centre_z:.6f} "
         f"palette={','.join(palette)} "
-        f"tris={tris} verts={verts}"
+        f"tris={tris} verts={verts} mesh={mesh_name} profile={profile} "
+        f"joints={joints} {anims}"
     )
     if abs(minimum[1]) > 0.000_001:
         failure = f"origin-centring clause: min Y is {minimum[1]:.6f}, expected 0.000000"
@@ -371,10 +531,10 @@ def figures(path):
             "origin-centring clause: centre X/Z are "
             f"{centre_x:.6f}/{centre_z:.6f}, expected 0.000000/0.000000"
         )
-    elif path.stem != mesh_name:
+    elif path.stem != REVISION_SUFFIX.sub("", mesh_name):
         failure = (
             f"naming clause: file basename {path.stem!r} and published mesh/node name "
-            f"{mesh_name!r} must match"
+            f"{mesh_name!r} must match, bar an optional _r<N> revision"
         )
     else:
         failure = None

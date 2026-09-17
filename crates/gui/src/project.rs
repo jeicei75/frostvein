@@ -5,9 +5,10 @@ use std::{
 };
 
 use bevy::prelude::{
-    AssetServer, Assets, Commands, Component, Cuboid, Entity as BevyEntity, Handle, Mesh, Mesh3d,
-    MeshMaterial3d, Or, Plane3d, PointLight, Query, Res, ResMut, Resource, StandardMaterial,
-    Transform, Vec2, Vec3, With, Without,
+    Added, AnimationClip, AnimationGraph, AnimationGraphHandle, AnimationNodeIndex,
+    AnimationPlayer, AssetServer, Assets, ChildOf, Commands, Component, Cuboid,
+    Entity as BevyEntity, Handle, Mesh, Mesh3d, MeshMaterial3d, Or, Plane3d, PointLight, Query,
+    Res, ResMut, Resource, StandardMaterial, Transform, Vec2, Vec3, With, Without,
 };
 use bevy::{
     asset::RenderAssetUsages,
@@ -255,6 +256,41 @@ pub struct ProjectionAssets {
     hover_highlight: Handle<StandardMaterial>,
     trees: [Handle<WorldAsset>; 4],
     dwarf_scene: Handle<WorldAsset>,
+    /// `None` wherever the animation plugin is absent -- every `MinimalPlugins` test.
+    dwarf_walk: Option<DwarfWalk>,
+}
+
+/// The `Walk` clip, wrapped in the one-node graph Bevy needs to play anything.
+#[derive(Clone)]
+struct DwarfWalk {
+    graph: Handle<AnimationGraph>,
+    node: AnimationNodeIndex,
+    /// Kept so the cycle's DURATION can be read off the clip instead of restated as a constant.
+    clip: Handle<AnimationClip>,
+}
+
+/// How far this dwarf has walked, and where he was last drawn.
+///
+/// The clip is PHASE-LOCKED to distance rather than played at a speed. A speed only makes the
+/// legs move at roughly the right cadence; it says nothing about WHERE in the cycle he is, so
+/// each tick starts at whatever phase the last one happened to end on and the feet plant in
+/// unrelated places. Driving the phase from ground covered means a foot plants at the same point
+/// of every stride no matter how the tick interval jitters, which is the same reason the clip was
+/// authored in place: `blended_translation` owns the travel, the clip owns only the pose.
+///
+/// `distance` is kept modulo one stride so it cannot lose precision over a long session, and
+/// `last` is in RENDER units (cells), because that is what the transform is measured in.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
+pub struct WalkPhase {
+    distance: f32,
+    last: Option<Vec3>,
+}
+
+impl WalkPhase {
+    /// Where in the cycle this dwarf is, as a fraction of one stride.
+    pub fn phase(&self) -> f32 {
+        self.distance / DWARF_WALK_STRIDE_METRES
+    }
 }
 
 /// Scene paths in `TreeVariant` order, served from the `embedded://` source.
@@ -269,6 +305,39 @@ pub const DWARF_SCENE_PATH: &str = "gltf/SM_VoxelDwarf_Miner01.glb";
 /// The pines carried this as a bare 0.625 at their one call site; the dwarf is the second, so it
 /// gets a name. A 1.20 m dwarf therefore draws 0.75 cells tall without any per-kind scale.
 pub const METRES_TO_CELLS: f32 = 0.625;
+
+/// Metres of ground the authored `Walk` clip covers in one cycle.
+///
+/// MEASURED off the exported clip, not chosen. Through stance the planted sole is momentarily
+/// stationary in the world, so in an in-place clip it travels backward through body space at
+/// exactly the ground speed; the stride is that travel over the thirteen stance frames.
+///
+/// Round 18's report rounds it to 0.493. The extra decimals are kept because this is a DIVISOR:
+/// tracking the pinned sole with 0.493 leaves +0.018 mm of drift per frame, which is 0.43 mm a
+/// cycle and accumulates into visible skate over a long walk. 0.4926 tracks it to zero.
+pub const DWARF_WALK_STRIDE_METRES: f32 = 0.4926;
+
+/// How fast a dwarf is DRAWN crossing the ground, in cells per second.
+///
+/// The wire says which cell he is in and nothing about how he gets there, and the blend used to
+/// spread each change across one tick -- 1.6 m in 100 ms, 16 m/s for a 1.2 m figure. That made
+/// the walk cycle 32.5 gait cycles a second, under two frames each, which aliased into a blur.
+///
+/// `sim-core` now rests `STEP_REST_TICKS` between steps, so a step is delivered about every 1.1 s.
+/// Drawing him at 0.9 cells per second covers the 1.6 m in roughly that time, which is 1.45 m/s
+/// and a readable cadence. He is never drawn anywhere he has not been delivered: this only
+/// governs how long he takes to cross between two delivered cells.
+///
+/// It is also the cadence knob. 0.9 cells per second is 1.44 m/s over a 0.4926 m stride, so the
+/// clip runs at 2.92 cycles a second against the 1.000 s cycle it was authored as. Playing it
+/// slower instead would skate: the phase is locked to ground covered, so the only honest ways to
+/// slow the legs are this speed (with `sim-core`'s `STEP_REST_TICKS` moved to match) or a longer
+/// authored stride -- never the playback rate.
+pub const DWARF_WALK_CELLS_PER_SECOND: f32 = 0.9;
+
+/// Beyond this the dwarf is not walking, he has been moved -- a respawn, a slice change, a
+/// teleport in a test. Walking him there would crawl him across the map; snap instead.
+pub const DWARF_WALK_SNAP_CELLS: f32 = 2.5;
 
 pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree01.glb",
@@ -324,6 +393,9 @@ pub fn setup_projection_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    // Same `Option<Res<..>>` shape as the AssetServer: `Assets<AnimationGraph>` only exists
+    // once Bevy's animation plugin is in the app, and the headless tests build without it.
+    animation_graphs: Option<ResMut<Assets<AnimationGraph>>>,
     asset_server: Option<Res<AssetServer>>,
     // Same `Option<Res<..>>` shape as the AssetServer above, and for the same reason: every
     // MinimalPlugins test builds an app without it and must still run.
@@ -372,6 +444,22 @@ pub fn setup_projection_assets(
             .map_or_else(Handle::default, |asset_server| {
                 asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Scene0"))
             }),
+        // `#Animation0` is the `Walk` clip. The GLB carries exactly one, and
+        // `check_asset.py`'s animation clauses reject a clip that is inert or that does not
+        // close its loop, so a silently empty animation cannot reach here.
+        dwarf_walk: match (asset_server.as_ref(), animation_graphs) {
+            (Some(asset_server), Some(mut graphs)) => {
+                let clip: Handle<AnimationClip> =
+                    asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Animation0"));
+                let (graph, node) = AnimationGraph::from_clip(clip.clone());
+                Some(DwarfWalk {
+                    graph: graphs.add(graph),
+                    node,
+                    clip,
+                })
+            }
+            _ => None,
+        },
     });
 }
 
@@ -1651,6 +1739,8 @@ pub fn reconcile(
                         // only looked right because a unit cube's centre is its middle.
                         entity.insert((
                             WorldAssetRoot(assets.dwarf_scene.clone()),
+                            // Starts at rest. `blend_entities` is the only writer after this.
+                            WalkPhase::default(),
                             Transform::from_translation(
                                 world_to_render(position) + entity_draw_offset(mirror_entity.kind),
                             )
@@ -1885,12 +1975,132 @@ pub fn flicker_lights(
     }
 }
 
+/// Attach the walk graph to each `AnimationPlayer` the dwarf's scene brings with it.
+///
+/// The player is created by the glTF loader somewhere under the spawned scene, some frames
+/// after the dwarf entity itself, so this cannot be done at the spawn site. It starts PAUSED:
+/// `drive_dwarf_walk` resumes it the moment the dwarf actually moves, and a dwarf that spawns
+/// standing should be standing.
+pub fn start_dwarf_walk(
+    mut commands: Commands,
+    assets: Option<Res<ProjectionAssets>>,
+    mut players: Query<(BevyEntity, &mut AnimationPlayer), Added<AnimationPlayer>>,
+    mut armed: bevy::prelude::Local<usize>,
+) {
+    let Some(walk) = assets.as_ref().and_then(|assets| assets.dwarf_walk.clone()) else {
+        return;
+    };
+    for (entity, mut player) in players.iter_mut() {
+        player.play(walk.node).repeat().pause();
+        commands
+            .entity(entity)
+            .insert(AnimationGraphHandle(walk.graph.clone()));
+        // Said ONCE, and said at all because this is the step with no gate on it: the headless
+        // tests have no animation plugin, so nothing below the asset can prove a player was ever
+        // created. A dwarf that draws but never animates should leave a line saying which half
+        // failed, instead of looking identical to a dwarf with no clip.
+        *armed += 1;
+        if *armed == 1 {
+            eprintln!("gui dwarf walk: armed an animation player");
+        }
+    }
+}
+
+/// Seek each player to the phase its dwarf's travel puts it at.
+///
+/// The player stays PAUSED for its whole life. In Bevy `paused` only stops the clock advancing
+/// -- the pose is still applied from `seek_time` every frame -- so seeking a paused animation is
+/// how you drive a cycle from something other than wall time. Here that something is ground
+/// covered, which is what makes the feet land with the movement instead of near it.
+///
+/// A dwarf that stops moving stops advancing its phase and simply holds the pose it was in, so
+/// no pause/resume logic is needed: standing still falls out of the same rule.
+///
+/// The phase is on an ANCESTOR -- the dwarf entity -- because that is where the movement system
+/// can see it, so walk up `ChildOf` to find it. The depth is small and fixed (scene root,
+/// armature, player), and the loop is bounded so a malformed hierarchy cannot hang the frame.
+pub fn drive_dwarf_walk(
+    mut players: Query<(BevyEntity, &mut AnimationPlayer)>,
+    parents: Query<&ChildOf>,
+    phases: Query<&WalkPhase>,
+    assets: Option<Res<ProjectionAssets>>,
+    clips: Option<Res<Assets<AnimationClip>>>,
+    mut announced: bevy::prelude::Local<bool>,
+    mut frames: bevy::prelude::Local<u32>,
+) {
+    *frames += 1;
+    let stalled = *frames == 180;
+    let (Some(assets), Some(clips)) = (assets, clips) else {
+        if stalled {
+            eprintln!("gui dwarf walk: STALLED -- no ProjectionAssets or AnimationClip assets");
+        }
+        return;
+    };
+    let Some(walk) = assets.dwarf_walk.as_ref() else {
+        if stalled {
+            eprintln!("gui dwarf walk: STALLED -- the walk graph was never built");
+        }
+        return;
+    };
+    // Read the duration off the clip rather than restating 1.0 s here: a re-authored cycle of a
+    // different length must keep working, and a constant beside the asset is how the reported
+    // triangle figures came to lie about the artifact they described.
+    let Some(duration) = clips.get(&walk.clip).map(AnimationClip::duration) else {
+        if stalled {
+            eprintln!("gui dwarf walk: STALLED -- the Walk clip never loaded");
+        }
+        return;
+    };
+    for (entity, mut player) in players.iter_mut() {
+        let mut current = entity;
+        let mut phase = None;
+        for _ in 0..8 {
+            if let Ok(found) = phases.get(current) {
+                phase = Some(found.phase());
+                break;
+            }
+            match parents.get(current) {
+                Ok(parent) => current = parent.0,
+                Err(_) => break,
+            }
+        }
+        let Some(phase) = phase else {
+            if stalled {
+                eprintln!("gui dwarf walk: STALLED -- no WalkPhase above an animation player");
+            }
+            continue;
+        };
+        for (_, active) in player.playing_animations_mut() {
+            active.seek_to(phase * duration);
+        }
+        // Said once, and said at all because this is the step the gate cannot reach: the headless
+        // tests have no animation plugin, so nothing below `WalkPhase` can prove a clip was ever
+        // driven. A dwarf that draws but never animates should name the link that failed rather
+        // than look identical to one with no clip at all.
+        if !*announced {
+            *announced = true;
+            eprintln!("gui dwarf walk: driving a {duration:.3}s cycle from distance travelled");
+        }
+    }
+    // The last link, and the only one that can fail with every piece of wiring above it present:
+    // the clip is locked to ground covered, so a world where no dwarf has covered any ground
+    // draws a figure standing at bind and looks exactly like a client with no clip at all.
+    if stalled && !phases.is_empty() && phases.iter().all(|phase| phase.distance == 0.0) {
+        eprintln!(
+            "gui dwarf walk: STALLED -- no dwarf has covered any ground, so every phase is still at bind"
+        );
+    }
+}
+
 /// Applies presentation interpolation to dynamic wire projections only.
 pub fn blend_entities(
     mirror: &Mirror,
     clock: &mut TickClock,
     elapsed_seconds: f32,
-    projected: &mut Query<(&WorldProjected, &mut Transform), Without<TerrainTile>>,
+    projected: &mut Query<
+        (&WorldProjected, &mut Transform, Option<&mut WalkPhase>),
+        Without<TerrainTile>,
+    >,
 ) {
     clock.advance(elapsed_seconds);
     let entities = mirror
@@ -1901,13 +2111,44 @@ pub fn blend_entities(
         .items()
         .map(|item| (item.id, item.pos))
         .collect::<std::collections::BTreeMap<_, _>>();
-    for (marker, mut transform) in projected.iter_mut() {
+    for (marker, mut transform, walk_phase) in projected.iter_mut() {
         if let Some(entity) = entities.get(&marker.0) {
             let previous = mirror
                 .previous_entity(marker.0)
                 .map(|previous| previous.pos);
-            transform.translation = blended_translation(previous, entity.pos, clock.factor())
+            let delivered = blended_translation(previous, entity.pos, clock.factor())
                 + entity_draw_offset(entity.kind);
+            // Written HERE for the same reason translation and rotation are: this is the sole
+            // writer of the dwarf's drawn position, so it is the only place that can pace him
+            // across the ground and measure what he covered.
+            //
+            // A dwarf WALKS to his delivered cell instead of being lerped into it across one
+            // tick. The wire only says which cell he is in; spreading that change over a single
+            // 100 ms tick drew a 1.6 m stride in a tenth of a second, and no gait cycle survives
+            // being played 32 times a second. Everything else still takes the delivered blend.
+            match walk_phase {
+                Some(mut walk) => {
+                    let from = walk.last.unwrap_or(delivered);
+                    let remaining = delivered - from;
+                    let gap = remaining.length();
+                    let drawn = if gap > DWARF_WALK_SNAP_CELLS || gap <= f32::EPSILON {
+                        delivered
+                    } else {
+                        let step = (DWARF_WALK_CELLS_PER_SECOND * elapsed_seconds).min(gap);
+                        from + remaining / gap * step
+                    };
+                    let travelled = (drawn - from).length();
+                    if travelled <= DWARF_WALK_SNAP_CELLS {
+                        // Render units are CELLS and a cell is 1.6 m, so divide by the
+                        // metres-to-cells factor to get the metres the stride is measured in.
+                        walk.distance = (walk.distance + travelled / METRES_TO_CELLS)
+                            .rem_euclid(DWARF_WALK_STRIDE_METRES);
+                    }
+                    walk.last = Some(drawn);
+                    transform.translation = drawn;
+                }
+                None => transform.translation = delivered,
+            }
             // Rotation is written HERE as well as at the spawn, for the same reason the offset is:
             // this is the sole writer after the spawn frame, so a facing set only at the spawn
             // would be correct for exactly one frame. `None` means hold what is already there.

@@ -81,3 +81,23 @@ old = "    if heading.length_squared() <= f32::EPSILON {\n        return None;\n
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 ROW
+
+# --- Round 18's walk cycle. Same lesson as the floor offset above, on a third property: the
+# --- thing that knows how far a dwarf actually travelled is the blend arm, because it is the
+# --- arm that draws him, so that is where the phase has to be wound on.
+
+mutation "the walk phase never advances" gui the_walk_phase_tracks_the_ground_the_dwarf_covers <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                    if travelled <= DWARF_WALK_SNAP_CELLS {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    if false {\n'))
+PY
+
+mutation "the phase measures from a stale position" gui walk_phase_advances_only_by_the_ground_covered <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                    walk.last = Some(drawn);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '\n'))
+PY

@@ -1,0 +1,9 @@
+Session token cost  (67baaf5d-757b-4728-8481-eead57ab7f31.jsonl, tool=claude)  (658 turns, claude-opus-5)
+  input (fresh)          1,316
+  cache creation     1,119,356
+  cache read       210,960,096
+  output             1,009,650
+  total processed  213,090,418
+  wall-clock           126 min  (elapsed, includes idle gaps)
+  est. cost            $137.72  (benchmark — verify rates in PRICES)
+  (pass BOTH --story and --phase to record a ledger row)

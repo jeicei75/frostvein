@@ -1656,7 +1656,10 @@ fn completed_dig_streams_dirty_tile_and_item_in_the_same_delta() {
     send_literal(&mut writer, designate.as_bytes());
 
     let mut completed = None;
-    for _ in 0..400 {
+    // Scaled by the movement pacing, not raised until it passed: `sim-core` rests
+    // STEP_REST_TICKS between steps, so every walk in this scenario costs eleven times the ticks
+    // it used to, and the old 400 ran out before the dwarf reached the face.
+    for _ in 0..4400 {
         let update = read_delta(&mut reader);
         if !update.tiles.is_empty() && !update.items.is_empty() {
             completed = Some(update);
@@ -1751,7 +1754,9 @@ fn a_designated_dig_and_a_stockpile_stream_a_stone_onto_a_zone_tile() {
     send_literal(&mut writer, designate.as_bytes());
 
     let mut stored = None;
-    for _ in 0..900 {
+    // Same pacing scale as the dig scenario above: a haul is two walks, and both got eleven
+    // times longer when dwarves stopped crossing a cell every tick.
+    for _ in 0..9900 {
         let update = read_delta(&mut reader);
         if let Some(item) = update
             .items
