@@ -2048,7 +2048,57 @@ development_status:
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
   10-9-the-land-reads-natural: done
-  10-10-take-the-camera-where-you-want-it: review
+  10-10-take-the-camera-where-you-want-it: in-progress
+                          # 10.10 CODE-REVIEWED 2026-09-17 -> in-progress. FOUR LAYERS, ALL LIVE.
+                          # 12 patch items + 3 deferred + 3 dismissed; patches LEFT AS ACTION ITEMS
+                          # for a separate review-patch session (Wolf's choice). Wolf ruled three
+                          # decisions on the spot: clamp what the READOUT PRINTS (not the aim
+                          # point); 10.10 OWES THE SELECT-ZOOM that AC8 dropped at creation and
+                          # `epics.md` still specifies; patch only the two OBJECTIVE seat items
+                          # (dead shift conditional in the pan branch, distance-scaled pan) and
+                          # HOLD wheel direction / notch count / discoverability for a seat round.
+                          # VERIFICATION ACTUALLY RUN BY THE REVIEW: `gate.sh --fast` GREEN 58s at
+                          # 339a07f -- a COVERAGE HOLE, not a full gate: it skips serve.rs (61
+                          # daemon tests) and pixel_guard.rs (2 frame guards), and NOTHING has run
+                          # the full gate at 339a07f (the record's GATE GREEN 511s is 4b3f75b, two
+                          # commits back). Sabotage table re-run independently: 16/16 KILLED, so
+                          # AC12 no longer rests on the dev's word. Repo binaries rebuilt after the
+                          # mutation run -- `gui build 339a07f`, no -dirty.
+                          # THE TWO FINDINGS THAT MATTER MOST: (1) the dwarf pick's oracle disagrees
+                          # with what is DRAWN, two ways at one site -- it projects the raw wire cell
+                          # (not the blended, -0.5Y-offset figure) through a projection hardcoded to
+                          # BOOT_ASPECT_RATIO (while the render camera's aspect follows the live,
+                          # never-locked resizable window). Both hide inside the 0.06 radius at boot
+                          # and exceed it at distance <=40 -- i.e. clicking a walking dwarf fails at
+                          # exactly the close zoom this feature exists for. Every picking test uses
+                          # 1920x1080 AND derives its cursor from the same projection the pick uses,
+                          # so oracle and subject share the error term. (2) TWO EVIDENCE CHANNELS ARE
+                          # UNOBSERVABLE: `LastCameraReadout` was built as "the seam so a test can
+                          # assert what the operator saw" and NOTHING reads it; the capture's live
+                          # rig->framing seam is the same shape. Same class the story's own Change
+                          # Log records closing for the wheel three commits earlier.
+                          # ALSO: shift+MMB pan is pinned by no test and no row across all 551;
+                          # `epics.md:2043` still publishes AC1's STRUCK luminance clause and its
+                          # falsified figures (0.0048, 76.1236, "766x"), so the phantom regression is
+                          # still re-derivable from the epic; and ISSUE #99 IS WRONG -- near-white IS
+                          # reachable via zoom at d=45 (ground median 89, near-white 2.6951%, ceiling
+                          # trips and names the framing), so AC11 is live-demonstrable in one command.
+                          # CONVERGENCE, measured not inferred: 5 in 15 findings (4-way on the
+                          # unclamped focus, 3-way on --distance overriding --camera, 2-way on the
+                          # pan hole / readout key / capture framing) against Epic 3's 1-in-8.
+                          # REVIEW INCIDENT, and it changes a standing instruction: the acceptance
+                          # layer sabotaged the SHARED WORKING TREE mid-review. It tried to check
+                          # whether the mutation anchors were stale by `exec`-ing each payload with
+                          # `pathlib.Path` monkeypatched to swallow writes -- but every payload opens
+                          # with `import pathlib`, and `import X` inside `exec` REBINDS the name to
+                          # the real module, so all 16 payloads wrote to five tracked source files at
+                          # 17:07:32 in one 5ms burst, no restore, while three siblings compiled
+                          # against that tree. Restored on Wolf's authorisation; diff archived; the
+                          # blind layer was re-run from a rebuilt cache and CHANGED its headline
+                          # finding on clean source (its "boots at 800x600" premise was false --
+                          # Bevy 0.19 defaults to 1280x720). A mutation payload reports whether it
+                          # applies BY APPLYING IT: every future layer prompt must ban executing the
+                          # payloads, not merely `scripts/mutate.sh`.
                           # DONE 2026-09-11 at the closing sitting: Wolf signed off the `df0f722`
                           # frame ("cool ... I think we are done with the story"), which met AC12 --
                           # the last AC outstanding. MERGED 2026-09-11 06:09Z as PR #91, merge

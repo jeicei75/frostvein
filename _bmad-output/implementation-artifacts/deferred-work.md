@@ -2170,3 +2170,10 @@ decision-needed items live in the story file's Review Findings section, not here
   `gradient` is always 0 and the scour branch never fires there at all. Patch-index arithmetic was
   checked by hand for `x,y` in `0..128` and no boundary defect was found — this is a coverage gap,
   not a confirmed defect.
+
+
+## Deferred from: code review of 10-10-take-the-camera-where-you-want-it (2026-09-17)
+
+- **`MouseScrollUnit` is ignored in the wheel zoom** (`crates/gui/src/ingest.rs:1566`). `wheels.read().map(|w| w.y).sum()` never consults `w.unit`. On a Windows precision touchpad or Wayland, winit reports `MouseScrollUnit::Pixel` with `y` in the tens or hundreds per gesture rather than +/-1 per notch, so `wheel * WHEEL_ZOOM_STEP` (6.0) slams the rig to a clamp on the first flick. The only wheel test writes `unit: MouseScrollUnit::Line` (`tests/headless.rs:3121`). Not reproducible in this devpod — no window, no pointing device. Raised by the feature layer.
+- **Escape does double duty** (`crates/gui/src/pick.rs:90`). `select_dwarf` clears the selection on Escape BEFORE its `DesignateMode::None` guard, so the release is unconditional while the selection itself is mode-gated. With a dwarf followed, arming dig and then pressing Escape to leave dig also silently drops the dwarf. No test covers the combination. Raised by the feature layer.
+- **A selection is never released when the dwarf leaves the mirror** (`crates/gui/src/pick.rs:176`). If the followed entity drops out of `DrawnEntities`, `frame_selected_dwarf` returns early and the camera freezes at his last framing with `SelectedDwarf` still `Some(id)`; nothing but Escape or a fresh selection clears it, and no UI reads `SelectedDwarf`, so there is no indicator. Probably unreachable in M2 (dwarves do not die), which is why it is deferred rather than patched. Raised by the blind and feature layers.
