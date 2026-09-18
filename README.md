@@ -212,20 +212,27 @@ binary that predates your change says so.
 scripts/gate.sh
 ```
 
-`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, a probe that
-`tui` has not grown a `sim-core` dependency, and the metrics ledger tests. It exits non-zero,
-and `.githooks/pre-commit`
-runs it on every commit — enable that once per clone with:
+`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, three probes
+that `tui`, `client-core` and `gui` have not grown a `sim-core` dependency, the metrics ledger
+tests, the bench contract tests, and an audit that every mutation-table row still applies to the
+source it names. It exits non-zero, and `.githooks/pre-commit` runs it on every commit — enable
+that once per clone with:
 
 ```bash
 git config core.hooksPath .githooks
 git config core.sshCommand 'ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=60'
 ```
 
-The second line is not optional decoration. `.githooks/pre-push` runs the **full** gate, 350-450s,
-and git opens the connection to the remote *before* running the hook — so the socket sits idle for
-the whole gate and GitHub closes it. The keepalives stop that. This cannot be committed into the
-repo: git deliberately refuses to let a fetched repository dictate the client's ssh options.
+The second line is not optional decoration. Git opens the connection to the remote *before*
+running the `pre-push` hook, so the socket sits idle for as long as the hook takes and GitHub
+closes it. The keepalives stop that. This cannot be committed into the repo: git deliberately
+refuses to let a fetched repository dictate the client's ssh options.
+
+**`pre-push` runs the FAST tier, not the full gate** (changed 2026-09-08, because a multi-minute
+hook is not a stricter gate but a flakier one). It skips `simd/tests/serve.rs` and the pixel
+guards, and it scopes itself to the range being pushed. **So a green push is NOT full-gate
+evidence** — the heavy tier is `scripts/gate.sh` with no arguments, run explicitly, and every
+story needs it green before it can be called done.
 
 **Push with the wrapper rather than `git push` directly:**
 
