@@ -136,10 +136,10 @@ PY
 # drift out of frame, which is why tracking has its own row.
 mutation "the follow solves the framing once instead of tracking him" gui the_focus_tracks_the_selected_dwarf_as_he_walks <<'PY'
 import pathlib
+# RE-ANCHORED 2026-09-18 (10.10 review patch): `DetectChanges` is imported by the module now --
+# the zoom drop reads `selected.is_changed()` -- so this row no longer injects the import, which
+# made it a NO-COMPILE (a duplicate `use`). A row that cannot compile pins nothing.
 p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
-imports = 'use protocol::EntityKind;'
-assert s.count(imports) == 1
-s = s.replace(imports, 'use bevy::ecs::change_detection::DetectChanges;\nuse protocol::EntityKind;')
 old = "    let Some(id) = selected.0 else {\n        return;\n    };\n"
 assert s.count(old) == 1
 new = "    if !selected.is_changed() {\n        return;\n    }\n    let Some(id) = selected.0 else {\n        return;\n    };\n"

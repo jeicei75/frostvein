@@ -2048,7 +2048,51 @@ development_status:
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
   10-9-the-land-reads-natural: done
-  10-10-take-the-camera-where-you-want-it: in-progress
+  10-10-take-the-camera-where-you-want-it: review
+                          # 10.10 REVIEW-PATCHED 2026-09-18 -> review. ALL TWELVE patch items
+                          # closed; the 3 deferred stay deferred and the 3 seat items Wolf HELD
+                          # stay held, so what the story still owes is a SEAT ROUND and sign-off,
+                          # not code. Two decisions went to Wolf first, neither having a ruled
+                          # value: pan's fast modifier (CTRL, over alt, which Linux window managers
+                          # claim before the client ever sees the drag) and the selection distance
+                          # (20 -- a dwarf reads ~49 px against 10.8 at the boot 90).
+                          # FULL GATE GREEN 557s at 2078e5a (RUST_TEST_THREADS=6, foreground),
+                          # INCLUDING the pixel-guard tier at 380s -- the tier the review's own
+                          # --fast run skipped and called a coverage hole. That hole is closed.
+                          # BOTH ORACLE DEFECTS FIXED AT SOURCE, not corrected for: the pick ranks
+                          # the DRAWN translation (blend lag and draw offset included) through the
+                          # LIVE camera's world_to_viewport, the same seam update_pick already used,
+                          # with the radius in pixels off logical_viewport_size. The two new tests
+                          # STATE THEIR OWN DISCRIMINATION rather than leaving it to a mutation: the
+                          # wire cell sits 105 px from the cursor against a 64.8 px radius at
+                          # distance 20, and at 900x1200 the 16:9 projection puts the dwarf 227 px
+                          # from where he is drawn. install_pick_camera takes a viewport now --
+                          # every picking test had used 1920x1080, the one aspect where the
+                          # hardcoded constant is right.
+                          # THE THREE UNTESTED SEAMS ARE PINNED: shift+MMB pan (nothing across all
+                          # 551 rows), the readout key with its LastCameraReadout, and the live
+                          # rig->framing string the capture reports -- the last through the REAL
+                          # BINARY in pixel_guard.rs, because that is the only place the live query
+                          # exists. Sabotage table re-run WHOLE (the code moved; "the anchors did
+                          # not change" is not evidence): 31 rows, 31 KILLED, and one OLD row came
+                          # back NO-COMPILE -- it injected a `DetectChanges` import the module now
+                          # has of its own, so it read as a row in the file while pinning nothing.
+                          # Three rows re-pointed in all; the pre-commit hook's mutation audit
+                          # caught two of them before the commit landed, which is what that probe
+                          # is for.
+                          # ISSUE #99 IS OVERTURNED ON ITS HEADLINE, re-verified here rather than
+                          # relayed: --camera 0.7,0.45,45,64,64,9 exits 101 on the NEAR-WHITE
+                          # assertion with the ground median at 91, comfortably inside [70,180].
+                          # The ground median does not climb smoothly with the zoom -- 81 at d=90,
+                          # 83 at d=80, 91 at d=45, 202 at d=20 -- which is what a two-sample
+                          # generalisation missed. #99 stays OPEN for its second finding (the
+                          # recorded --distance 80 trigger is not repeatable).
+                          # FOR THE SEAT ROUND: the pan feel Wolf judged on 2026-09-17 was the
+                          # always-on 4x at the boot zoom, which is now CTRL+shift+MMB. Plain
+                          # shift+MMB runs at the documented 0.12 rate, which nobody has felt yet,
+                          # and every pan is distance-scaled now.
+                          # ACs 2, 3 and 8 AMENDED on Wolf's rulings -- outside the dev workflow's
+                          # normally permitted sections, logged in the story's Change Log.
                           # 10.10 CODE-REVIEWED 2026-09-17 -> in-progress. FOUR LAYERS, ALL LIVE.
                           # 12 patch items + 3 deferred + 3 dismissed; patches LEFT AS ACTION ITEMS
                           # for a separate review-patch session (Wolf's choice). Wolf ruled three
