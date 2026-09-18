@@ -88,9 +88,13 @@ PY
 mutation "the flicker is never advanced by elapsed time" gui production_drives_the_flicker_from_elapsed_time <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = 'flicker_lights(time.elapsed_secs(), &mut lights);'
+old = '''    let seconds = if steady.0 {
+        STEADY_FLICKER_SECONDS
+    } else {
+        time.elapsed_secs()
+    };'''
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'flicker_lights(0.0, &mut lights);'))
+p.write_text(s.replace(old, '    let seconds = STEADY_FLICKER_SECONDS;'))
 PY
 
 mutation "a same-frame tick burst collapses the measured cadence" gui blend::tests::a_burst_of_ticks_in_one_frame_keeps_the_measured_cadence <<'PY'

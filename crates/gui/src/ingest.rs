@@ -151,6 +151,10 @@ pub struct LightingToggles {
 #[derive(Default, Resource)]
 struct FxaaOff(bool);
 
+/// Pins emitter flicker to a reproducible phase for a captured frame.
+#[derive(Default, Resource)]
+struct LightsSteady(bool);
+
 impl Default for LightingToggles {
     fn default() -> Self {
         Self {
@@ -533,6 +537,7 @@ fn configure_client_app(
     // flag and the present one take the SAME path and neither can rot while the other is tested.
     app.insert_resource(LightingToggles::with_off(&args.lights_off));
     app.insert_resource(FxaaOff(args.fx_off));
+    app.insert_resource(LightsSteady(args.lights_steady));
     insert_capture_resources(app, &args);
     // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
     // without this resource the actual side never gains them and a WINDOWED capture asserts
@@ -612,6 +617,7 @@ pub fn projection_systems(app: &mut App) {
     // `init_resource` is idempotent, so `client_systems` keeping its own call is not a conflict —
     // each builder now stands up what it registers.
     app.init_resource::<LightingToggles>();
+    app.init_resource::<LightsSteady>();
     app.init_resource::<FxaaOff>();
     app.add_systems(
         Update,
@@ -774,6 +780,7 @@ struct Args {
     subdiv: Option<u32>,
     lights_off: Vec<LightSource>,
     fx_off: bool,
+    lights_steady: bool,
     /// `--assets <dir>`: read glTF scenes from this directory instead of the embedded blobs.
     /// Dev-only, absolute, and never a default.
     assets: Option<PathBuf>,
@@ -902,6 +909,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut subdiv = None;
     let mut lights_off = Vec::new();
     let mut fx_off = false;
+    let mut lights_steady = false;
     let mut assets = None;
     let mut perf_log = None;
     let mut args = args.into_iter();
@@ -1024,6 +1032,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                     unknown => bail!("unknown effect {unknown:?}; expected fxaa"),
                 }
             }
+        } else if arg == "--lights-steady" {
+            lights_steady = true;
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -1089,6 +1099,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         subdiv,
         lights_off,
         fx_off,
+        lights_steady,
         assets,
         perf_log,
     })
@@ -1881,13 +1892,20 @@ pub fn reconcile_projection(
 
 fn flicker_projection(
     time: Res<Time>,
+    steady: Res<LightsSteady>,
     mut lights: Query<(
         &WorldProjected,
         &crate::project::ProjectedLight,
         &mut bevy::prelude::PointLight,
     )>,
 ) {
-    flicker_lights(time.elapsed_secs(), &mut lights);
+    const STEADY_FLICKER_SECONDS: f32 = 0.0;
+    let seconds = if steady.0 {
+        STEADY_FLICKER_SECONDS
+    } else {
+        time.elapsed_secs()
+    };
+    flicker_lights(seconds, &mut lights);
 }
 
 fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
@@ -2195,6 +2213,17 @@ mod tests {
                 Err(error) => error,
             };
         assert_eq!(error.to_string(), "unknown effect \"taa\"; expected fxaa");
+    }
+
+    #[test]
+    fn lights_steady_reaches_the_live_flicker_system() {
+        let (mut default, _sender, _server) = configured_app(&[]);
+        default.update();
+        assert!(!default.world().resource::<super::LightsSteady>().0);
+
+        let (mut steady, _sender, _server) = configured_app(&["--lights-steady"]);
+        steady.update();
+        assert!(steady.world().resource::<super::LightsSteady>().0);
     }
 
     #[test]
