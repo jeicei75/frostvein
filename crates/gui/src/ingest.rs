@@ -25,7 +25,7 @@ use bevy::{
         ButtonInput,
         mouse::{MouseButton, MouseMotion, MouseWheel},
     },
-    pbr::{DistanceFog, FogFalloff},
+    pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
         DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
@@ -1322,6 +1322,7 @@ fn setup_camera(
             Msaa::Off,
             Exposure { ev100: 10.5 },
             Fxaa::default(),
+            ScreenSpaceAmbientOcclusion::default(),
             Projection::Perspective(PerspectiveProjection {
                 fov: BOOT_VERTICAL_FOV,
                 ..Default::default()
@@ -1977,7 +1978,9 @@ mod tests {
         camera::{CameraProjection, RenderTargetInfo},
         dev_tools::fps_overlay::FpsOverlayConfig,
         input::{ButtonInput, mouse::MouseButton},
-        prelude::{Camera, Camera3d, GlobalTransform, KeyCode, Text, UVec2, Vec3, Window, With},
+        prelude::{
+            Camera, Camera3d, GlobalTransform, KeyCode, Text, Time, UVec2, Vec3, Window, With,
+        },
         window::{PrimaryWindow, WindowResolution},
     };
     use client_core::Mirror;
@@ -2217,13 +2220,59 @@ mod tests {
 
     #[test]
     fn lights_steady_reaches_the_live_flicker_system() {
-        let (mut default, _sender, _server) = configured_app(&[]);
-        default.update();
-        assert!(!default.world().resource::<super::LightsSteady>().0);
+        let snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![protocol::Entity {
+                id: 1,
+                kind: protocol::EntityKind::Campfire,
+                pos: [0, 0, 0],
+                state: protocol::JobState::Idle,
+                light: Some(protocol::LightKind::Campfire),
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let intensity = |app: &mut App| {
+            app.world_mut()
+                .query::<(&crate::project::ProjectedLight, &bevy::prelude::PointLight)>()
+                .iter(app.world())
+                .find_map(|(kind, light)| {
+                    (kind.0 == protocol::LightKind::Campfire).then_some(light.intensity)
+                })
+                .expect("the fixture must spawn the campfire point light")
+        };
+        let step = |app: &mut App| {
+            app.world_mut()
+                .resource_mut::<Time>()
+                .advance_by(Duration::from_secs(1));
+            app.update();
+        };
 
-        let (mut steady, _sender, _server) = configured_app(&["--lights-steady"]);
+        let (mut default, _sender, _server) = configured_app_with_snapshot(&[], snapshot.clone());
+        default.update();
+        let flickering_before = intensity(&mut default);
+        step(&mut default);
+        let flickering_after = intensity(&mut default);
+        assert_ne!(
+            flickering_before, flickering_after,
+            "without --lights-steady the live flicker system must vary a PointLight across stepped frames"
+        );
+
+        let (mut steady, _sender, _server) =
+            configured_app_with_snapshot(&["--lights-steady"], snapshot);
         steady.update();
-        assert!(steady.world().resource::<super::LightsSteady>().0);
+        let steady_before = intensity(&mut steady);
+        step(&mut steady);
+        let steady_after = intensity(&mut steady);
+        assert_eq!(
+            steady_before, steady_after,
+            "--lights-steady must pin the PointLight intensity the live flicker system writes"
+        );
     }
 
     #[test]

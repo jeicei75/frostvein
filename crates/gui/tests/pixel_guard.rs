@@ -40,6 +40,36 @@ fn mean_luminance(pixels: &[[u8; 4]]) -> f32 {
     total as f32 / pixels.len() as f32
 }
 
+/// Integer Rec.601 p10 for a fixed screen rectangle, matching `11-1-signoff/creases.py`.
+/// The literal windows and expected values are the hand-measured instrument contract, rather than
+/// values derived from the camera's components: this test has to notice when Bevy silently skips
+/// SSAO because MSAA was re-enabled.
+fn rec601_p10(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> u8 {
+    let (x0, y0, x1, y1) = rect;
+    let mut values = Vec::with_capacity((x1 - x0) * (y1 - y0));
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let [r, g, b, _] = pixels[y * width + x];
+            values.push(((r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000) as u8);
+        }
+    }
+    values.sort_unstable();
+    values[values.len() / 10]
+}
+
+fn rec601_median(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> u8 {
+    let (x0, y0, x1, y1) = rect;
+    let mut values = Vec::with_capacity((x1 - x0) * (y1 - y0));
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let [r, g, b, _] = pixels[y * width + x];
+            values.push(((r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000) as u8);
+        }
+    }
+    values.sort_unstable();
+    values[values.len() / 2]
+}
+
 /// Sky pixels that no path from the frame border can reach through sky -- a port of
 /// `10-7-signoff/enclosed.py`, and the replacement for the silhouette count this file shipped with.
 ///
@@ -203,6 +233,46 @@ impl Daemon {
         let _ = std::fs::remove_file(&out);
         (pixels, width, height)
     }
+}
+
+/// AC2 and AC3, on the rendered frame rather than on the camera components.
+///
+/// On Task 0's four no-AO controls, terrace p10 was 31 and both snow medians were 117. With AO
+/// consuming its depth/normal prepasses, the crease must darken while open snow stays exactly at
+/// those controls. Re-enabling MSAA makes Bevy's SSAO extractor return before every camera, which
+/// restores p10 to 31 even though the frame renders and exits normally; this oracle catches that
+/// silent failure.
+#[test]
+#[ignore = "renders a real frame; scripts/gate.sh runs it in the full tier"]
+fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it() {
+    const TERRACE: (usize, usize, usize, usize) = (860, 190, 1060, 290);
+    const OPEN_SNOW_LL: (usize, usize, usize, usize) = (180, 620, 380, 700);
+    const OPEN_SNOW_LR: (usize, usize, usize, usize) = (950, 590, 1150, 670);
+    const NO_AO_TERRACE_P10: u8 = 31;
+    const CONTROL_OPEN_SNOW_MEDIAN: u8 = 117;
+
+    let daemon = Daemon::spawn();
+    let (pixels, width, _height) =
+        daemon.capture("ambient-occlusion", &["--static-world", "--subdiv", "4"]);
+    let terrace_p10 = rec601_p10(&pixels, width, TERRACE);
+    let open_snow_ll_median = rec601_median(&pixels, width, OPEN_SNOW_LL);
+    let open_snow_lr_median = rec601_median(&pixels, width, OPEN_SNOW_LR);
+    println!(
+        "AC2/AC3 pixel guard (Rec.601): terrace p10={terrace_p10}; open-snow LL/LR median={open_snow_ll_median}/{open_snow_lr_median}"
+    );
+
+    assert!(
+        terrace_p10 < NO_AO_TERRACE_P10,
+        "SSAO must visibly darken terrace creases: Rec.601 p10={terrace_p10}, but the no-AO control is {NO_AO_TERRACE_P10}. This also detects MSAA silently disabling the SSAO extractor."
+    );
+    assert_eq!(
+        open_snow_ll_median, CONTROL_OPEN_SNOW_MEDIAN,
+        "AO must not move the Rec.601 open-snow-LL median from its Task 0 control"
+    );
+    assert_eq!(
+        open_snow_lr_median, CONTROL_OPEN_SNOW_MEDIAN,
+        "AO must not move the Rec.601 open-snow-LR median from its Task 0 control"
+    );
 }
 
 impl Daemon {
