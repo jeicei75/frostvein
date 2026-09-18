@@ -1,0 +1,307 @@
+---
+baseline_commit: d3ecdff2df8ae1d1284de21c4223ec3e7f0d8587
+---
+
+# Story 11.1b: The Air Has Depth
+
+Status: ready-for-dev
+
+## Story
+
+As the boss,
+I want creases and contacts to darken and emitters to glow,
+so that the diorama reads as lit objects in a space, not as coloured cubes on a plane.
+
+## Stacking — read this first
+
+**This story is STACKED on `story-11-1a-exposure-and-clean-edge`, which is PUSHED at `d3ecdff` but
+NOT MERGED and NOT REVIEWED.** Branch off that branch, not `main`.
+
+Consequence, and it is a standing defect class here: **any AC of the form "X did not change" must be
+proved with THIS story's own commit range, never `git diff main...HEAD`** — a range against `main`
+silently attributes all of 11.1a's changes to this story. Use `git diff d3ecdff..HEAD`.
+
+If 11.1a is merged or amended while this story is in flight, re-check the branch point before every
+commit and push, and retarget the PR. That has caught this project out seven times.
+
+## What 11.1a already built for you
+
+11.1a exists because **SSAO is a silent no-op while MSAA is on** — `extract_ssao_settings`
+(`bevy_pbr-0.19.0/src/ssao/mod.rs:479-494`) logs an `error!` and then **`return`s out of the whole
+loop**, skipping every camera, while the frame still renders and the process exits 0. So:
+
+- `Msaa::Off`, `Exposure { ev100: 9.7 }` and `Fxaa::default()` are on the camera tuple
+  (`crates/gui/src/ingest.rs:1308-1335`). **The prerequisite is already satisfied — do not re-add it.**
+- `--fx-off <list>` + `F10` + a readout line exist, with the toggle implemented as component
+  **insert/remove** (`fxaa_controls`, `ingest.rs:1440`), not an `enabled` flag. Follow that pattern.
+- **`creases.py`** (`11-1-signoff/creases.py`) measures Rec.601 `p10`/`median`/`p90`/`mean` over
+  pinned windows and is **proved both ways** — see `creases-proof.md`.
+
+## The instrument you inherit, and the one place it does not reach
+
+`creases.py`'s three pinned windows have a **same-build noise floor of ZERO on `p10` and `median`**
+(measured across two builds now):
+
+| window | rect | p10 | median |
+| --- | --- | --- | --- |
+| `terrace-creases` | 860,190 → 1060,290 | 31 | 65 |
+| `open-snow-LL` | 180,620 → 380,700 | 68 | 117 |
+| `open-snow-LR` | 950,590 → 1150,670 | 69 | 117 |
+
+**That is an excellent instrument for AO and a useless one for bloom**, because it deliberately
+excludes the camp — and the camp is where every emitter is.
+
+**Measured at creation, four same-build controls, camp window `(500,400)..(760,620)`:**
+
+| statistic | across ctl-a..d | spread |
+| --- | --- | ---: |
+| median | 82, 82, 83, 84 | **2** |
+| p90 | 194, 203, 204, 212 | **18** |
+| p99 | 248, 250, 250, 251 | **3** |
+| mean | 110.421 … 114.959 | **4.538** |
+| near-white (≥230) area | 4.2308 … 5.6731 % | **1.4423 pp** |
+
+**Bloom acts on exactly the bright tail that moves.** The cause is not the sim: `flicker_lights`
+is driven by `time.elapsed_secs()` (`ingest.rs:1890`), Bevy's wall clock, so `--static-world`
+pauses the world and **not** the flicker. A bloom figure taken at the camp without fixing this has
+a 1.4423 pp floor — for scale, the whole-frame near-white ceiling's entire headroom is 0.13 pp.
+Task 1 fixes the instrument before Task 3 leans on it.
+
+## Acceptance Criteria
+
+1. `--lights-steady` pins the flicker term to a fixed, deterministic phase, and the camp window's
+   same-build spread collapses: across at least four captures with the flag, `median`, `p90` and
+   `near-white area` each move by less than a tenth of the un-pinned spreads recorded above. The
+   before/after floors are both recorded.
+2. Ambient occlusion is on the camera, and **its output is consumed, not merely produced**: with AO
+   on, `terrace-creases` `p10` drops by more than the window's same-build floor, while
+   `open-snow-LL` and `open-snow-LR` `median` stay at their control values exactly. Figures and
+   floor recorded.
+3. **A guard fails if MSAA is ever re-enabled while AO is on.** It must assert the rendered
+   consequence, not the component: a test that only checks `Msaa::Off` is present does not satisfy
+   this, because the defect it guards is silent at every level above the pixels.
+4. Bloom is on the camera, and only emitters and their immediate halo brighten: with
+   `--lights-steady`, the camp window's bright tail rises by more than its pinned floor while
+   `open-snow-LL` and `open-snow-LR` `median` do not move. Figures and floor recorded.
+5. **Headless area figures are compared only headless-to-headless.** `NEAR_WHITE_AREA_CEILING` and
+   `BLOWN_POOL_FRACTION_CEILING` are **not** raised and **not** asserted against a headless bloom
+   frame; the ceiling clause is judged on the vehicle at the sitting (Wolf's ruling, 2026-09-18).
+6. `--fx-off` accepts `ao` and `bloom` beside `fxaa` as a **set**, each reaching the spawned camera
+   rather than only `Args`: naming an effect removes its component, omitting it leaves it present.
+   An unknown name errors naming all accepted names.
+7. Each new effect has a seat toggle beside `F10`, and the readout names each one's state. A test
+   presses the real keys and asserts the recorded readout changes.
+8. On the vehicle, `--perf-log` at boot framing is read with all effects on and with each off, and
+   the p50 frame times recorded. NFR6's 60 fps bar is re-read; if an effect costs it, the figures
+   are recorded and Wolf rules rather than the story tuning anything.
+9. Wolf signs off both halves at the sitting against the reference art, with the frame pair filed.
+10. `crates/gui/tests/capture.rs` stays unchanged and green, and `git diff d3ecdff..HEAD --stat` on
+    `crates/protocol`, `crates/sim-core` and `crates/client-core` is empty.
+11. Every mutation row in `mutations/11-1b-the-air-has-depth.sh` is shown to KILL, and the table's
+    output is pasted into the Dev Agent Record.
+
+## Tasks / Subtasks
+
+- [ ] **Task 0 — control, on a clean tree.** (AC: 1, 2, 4)
+  - [ ] `./target/debug/gui --version` must name the current HEAD's tree before any capture.
+  - [ ] Take at least four same-build captures and recompute BOTH floors on this build — the crease
+        windows and the camp window. **Floors are build-specific**; they moved 3.3x across one story
+        and 20x across another. The creation figures above are a control to compare against, never a
+        threshold to reuse.
+- [ ] **Task 1 — make the emitter window measurable.** (AC: 1)
+  - [ ] Add `--lights-steady`, pinning the `seconds` passed to `flicker_lights` (`ingest.rs:1890`)
+        to a constant so every capture sees the same flicker phase. One branch; do not rewrite
+        `flicker_scale`, whose determinism is already pinned by
+        `flicker_is_bounded_distinct_and_deterministic` (`appearance.rs:175`).
+  - [ ] **Instrument test:** the flag must reach the live system, not merely parse — copy
+        `fx_off_reaches_the_live_camera_and_rejects_unknown_effects` (`ingest.rs:2171`).
+  - [ ] Re-measure the camp window with the flag and show the spread collapses. **If it does not,
+        stop and say so** — every bloom figure in this story depends on it.
+- [ ] **Task 2 — ambient occlusion.** (AC: 2, 3)
+  - [ ] Add `ScreenSpaceAmbientOcclusion` to the camera tuple. `DepthPrepass` and `NormalPrepass`
+        arrive automatically via `#[require(...)]` (`ssao/mod.rs:113`) and `PbrPlugin` already
+        registers the plugin (`bevy_pbr-0.19.0/src/lib.rs:227`, in `DefaultPlugins` at
+        `bevy_internal-0.19.0/src/default_plugins.rs:79`). **No `add_plugins`, no feature change.**
+  - [ ] Measure with `creases.py` against Task 0's floor. Record the figures.
+  - [ ] **The MSAA guard (AC3).** Assert the rendered consequence. The deliberate RED is in
+        Verification below and is the whole reason this story was split out — run it.
+- [ ] **Task 3 — bloom.** (AC: 4, 5)
+  - [ ] Add `Bloom` to the camera tuple. `Hdr` arrives via `#[require(Hdr)]`
+        (`bloom/settings.rs:32`) and `PostProcessPlugin` is in `DefaultPlugins`
+        (`default_plugins.rs:61`). `Bloom::default()` is `NATURAL` — `intensity: 0.15`,
+        `low_frequency_boost: 0.7`, `composite_mode: EnergyConserving` (`settings.rs:132-141`);
+        `OLD_SCHOOL` (0.05, Additive) and `SCREEN_BLUR` (1.0) are the other presets. Record which
+        you chose and why in one line.
+  - [ ] **`Hdr` changes the whole frame's pipeline, not just the emitters.** Expect every figure to
+        move, including the open-snow windows. If they move, AC4's "does not move" clause is about
+        bloom's *marginal* contribution — measure bloom on/off with `Hdr` present in both, not
+        against a pre-`Hdr` control, or you will attribute the pipeline change to bloom.
+  - [ ] Record the headless area figures as a DELTA only (AC5). Do not assert a ceiling on them.
+- [ ] **Task 4 — the switches.** (AC: 6, 7)
+  - [ ] Generalise `FxaaOff(bool)` (`ingest.rs:152`) into a set, mirroring `LightSource`/
+        `LightingToggles` (`ingest.rs:91-196`) — this is the third concrete effect, so a small enum
+        earns its place now and not before. Keep insert/remove, not an `enabled` field.
+  - [ ] Pick the two keys and extend the readout (`lighting_readout`, `ingest.rs:1371`). `F5`–`F10`
+        are taken; note the existing order is not alphabetical (F7 lanterns, F8 ambient, F9 torches).
+  - [ ] Update the three tests pinning the full readout string (`ingest.rs:2489`, `:2508`, `:2594`).
+        **Do not weaken them to substring checks** — they pin the whole line on purpose.
+- [ ] **Task 5 — the vehicle read.** (AC: 8, 9) — **cannot be done on a devpod.** No devpod can open
+      a window. Write `11-1-signoff/task-5b-vehicle-card.md` naming the exact `--perf-log` runs and
+      the frame pair Wolf judges, leave this task UNCHECKED, and hand it to the gingerspice sitting.
+      **Invent no fps figure.**
+- [ ] **Task 6 — sabotage.** (AC: 11)
+  - [ ] Rows for: AO omitted; AO present but MSAA re-enabled (AC3's guard — this row must KILL, and
+        it is the most important row in the table); bloom omitted; each `--fx-off` name discarded;
+        each new key moved; `--lights-steady` value discarded; the readout not recording.
+  - [ ] `rg` all of `mutations/` for rows quoting `ingest.rs` camera-tuple or readout literals and
+        re-point any this story breaks. **11.1a broke a 10.7 row exactly this way and it failed the
+        gate** — budget for it. APPLY-FAILED is not noise.
+  - [ ] **Never `exec` a mutation payload.** And per **issue #104**, `mutate.sh` does NOT restore
+        tracked non-Rust targets: after any run touching `creases.py` or a doc, check
+        `git status --porcelain` and restore. It reports KILLED while leaving the file sabotaged.
+
+## Dev Notes
+
+### Scope guardrails — do NOT
+
+- Do NOT re-add `Msaa::Off`, `Exposure` or `Fxaa` — 11.1a owns them. Do NOT change the EV100.
+- Do NOT add depth of field, volumetric fog, a day/night cycle, a moon or a clock. Those are 11.2
+  and 11.3.
+- Do NOT add a dependency or change a `bevy` feature. `3d_bevy_render` already carries
+  `bevy_pbr`, `bevy_post_process` and `bevy_anti_alias`.
+- Do NOT touch `protocol`, `sim-core`, `client-core` or `simd` (AC10).
+- Do NOT change a light constant, a colour, or a `BOOT_*` constant. This story adds MECHANISMS; the
+  look re-judgement under them is Wolf's at the sitting. `bench_contract.rs:128-162` greps
+  `camera.rs` for those literals.
+- Do NOT raise `NEAR_WHITE_AREA_CEILING` or `BLOWN_POOL_FRACTION_CEILING` (AC5).
+- Do NOT build a general post-effect registry. A set of three named effects, mirroring the existing
+  light toggles, is the whole of it.
+
+### Key decisions & traps
+
+- **The lavapipe question is ANSWERED for both mechanisms, and it stays answered.** Probed through
+  wgpu 29.0.4 on this devpod (`llvmpipe (LLVM 19.1.7, 256 bits)`, Vulkan, Mesa 25.0.7):
+  `max_storage_textures_per_shader_stage = 48`, so SSAO's only GPU gate (`>= 5`,
+  `ssao/mod.rs:61-70`) passes; and `Rgba16Float` reports `RENDER_ATTACHMENT`, `STORAGE_BINDING`,
+  `TEXTURE_BINDING` and `FILTERABLE`, so `Hdr` has its format. **This proves the plugins load and
+  the formats exist — not that either effect looks right.**
+- **AO's failure mode is silence, and it is the reason this story exists.** If AO appears to do
+  nothing, check `Msaa` before blaming lavapipe. The `error!` goes to the log, the capture is clean,
+  the exit code is 0.
+- **Exit 0 is not a result.** Range-check what the instrument printed.
+- **`--frames 160`** — `--frames 2` never captures (dies on `capture is black`, `capture.rs:1419`).
+  `--cursor` is dead headless.
+- **The PNG is written before the range check asserts** (`save_then_validate`, `capture.rs:1276`),
+  so a capture that exits 101 still leaves a measurable frame. Both creation controls used this.
+- **Rec.601 vs Rec.709.** `creases.py` and `pixel_guard.rs:35-41` are Rec.601 integer;
+  `capture.rs:604` is Rec.709. Say which any new figure is in.
+- **A mutant binary outlives a source restore.** Rebuild and re-check `--version` after any
+  mutation run before taking a capture.
+- **Two samples are not a floor.** Four minimum. Issue #98 retracted a floor that was one
+  lucky-tight pair.
+
+### Open question inherited from 11.1a, and it may land on this story
+
+**The `enclosed_sky` guard has gone vacuous and Wolf has not yet ruled.** 11.1a moved its residual
+from 2,042 px to **11** px against an unchanged `ENCLOSED_SKY_CEILING` of 2,300
+(`pixel_guard.rs:478`), because FXAA blends the edge pixels that used to match the sky colour
+exactly. It passes, and it now tolerates 209x its own value — it has stopped discriminating.
+**Do not move it in this story without Wolf's explicit ruling**; if he rules while this story is in
+flight, the change belongs wherever he says. Re-measure it either way and record the figure, because
+`Hdr` will move it again.
+
+### Project Structure
+
+| File | Change |
+| --- | --- |
+| `crates/gui/src/ingest.rs` | UPDATE — SSAO + Bloom on the camera tuple; `FxaaOff` → an effect set; `--lights-steady`; two keys; readout |
+| `crates/gui/tests/headless.rs` | UPDATE — live-entity and key-path tests |
+| `crates/gui/tests/pixel_guard.rs` | UPDATE — AC2's crease pair, AC3's MSAA guard, AC4's bloom pair |
+| `crates/gui/tests/capture.rs` | UNCHANGED — AC10 asserts this |
+| `docs/tech-art-guidelines.md` | UPDATE — the AO and bloom rows beside 11.1a's exposure row |
+| `_bmad-output/implementation-artifacts/11-1-signoff/task-5b-vehicle-card.md` | NEW |
+| `_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh` | NEW |
+
+### Verification
+
+From the repo root. **`scripts/gate.sh` has no thread knob and its Bevy test apps exhaust 23 GB —
+export `RUST_TEST_THREADS=6` and run it in the FOREGROUND.** The full gate is ~420s; the pre-commit
+hook is the FAST tier at ~50-66s. **Never `git commit --no-verify`** — 11.1a did it once and put a
+red commit on the branch. If the gate is red, fix the cause or say it is red.
+
+```bash
+RUST_TEST_THREADS=6 scripts/gate.sh
+scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh
+git status --porcelain     # issue #104: mutate.sh leaves tracked non-Rust targets sabotaged
+```
+
+**The control, which RAN at creation** (figures in the table above):
+
+```bash
+./target/debug/simd 7466 &
+./target/debug/gui 7466 --headless --static-world --subdiv 4 --frames 160 \
+  --capture 11-1-signoff/control-<sha>-a.png
+# creation observation on 41b3f02, exit 0:
+#   capture range check: warm-lit pixels=28772 ground-median-luminance=81
+#     near-white-area=0.8584% blown-pool=0.5872% p99-luminance=192.5 resolution=1280x720
+```
+
+**THE DELIBERATE RED — this is the one that matters, and it is AC3's whole purpose.** With AO on,
+put MSAA back:
+
+```bash
+# RED: change `Msaa::Off` to `Msaa::Sample4` in the camera tuple (ingest.rs:1308-1335).
+# EXPECTED: AC3's guard goes RED, and `terrace-creases` p10 returns to its no-AO value —
+#           because extract_ssao_settings returns out of the loop and skips EVERY camera.
+#           The capture still succeeds and still exits 0. THAT is the point: nothing else
+#           in the system notices.
+# RESTORE: revert to `Msaa::Off`, rebuild, confirm `gui --version` shows no -dirty, re-capture.
+```
+
+**If that RED does not redden the guard, the guard is worthless and AC3 is unmet** — no matter how
+green the suite is. A guard that only checks the `Msaa::Off` component would pass this RED trivially
+while AO silently does nothing, which is the exact defect.
+
+### References
+
+- `_bmad-output/planning-artifacts/epics.md` § Epic 11 / Story 11.1 — source; carries the split, the
+  FXAA ruling, the struck bloom clause and the lavapipe note
+- `11-1a-a-chosen-exposure-and-a-clean-edge.md` — the render path this story stands on
+- `11-1-signoff/creases-proof.md` (instrument GREEN/RED), `fxaa-silhouette.md` (the exact-sky
+  method), `task-0-control.md` (both builds' control figures and the ceiling-headroom finding)
+- Pinned Bevy 0.19.0: `bevy_pbr/src/ssao/mod.rs:61-70, 113, 479-494` ·
+  `bevy_post_process/src/bloom/settings.rs:32, 132-175` · `bevy_internal/src/default_plugins.rs:61, 79`
+- `deferred-work.md:1237-1246` — llvmpipe under-reads near-white by ~16 %; headless area figures are
+  deltas only
+- NFR6 — 60 fps at working zoom, ≥30 at full vista, read on the vehicle with `--perf-log`
+- Open issues: **#104** (`mutate.sh` leaves tracked targets sabotaged — hit this story's `creases.py`
+  directly), **#90** (near-white swing), **#75** (lighting re-judgement), **#72** (pixel-guard race)
+
+### Previous-story intelligence
+
+- 11.1a's `--fx-off` is **insert/remove**, not an `enabled` flag, and its reaches-the-camera test
+  (`ingest.rs:2171`) is the shape to copy. `let _ = value;` left all 106 tests green once here.
+- 11.1a broke a **10.7** mutation row by inserting one line into `projection_systems`, and the gate
+  caught it. Expect the same and budget for the re-point.
+- 11.1a's dev was delegated across three Codex runs; the ones that handed back honestly at their
+  context limit were resumable **because each task was committed green**. Commit per task.
+- Branch off `story-11-1a-exposure-and-clean-edge` at `d3ecdff`, slug
+  `story-11-1b-the-air-has-depth`. Commit as `Völundr <jeicei75@gmail.com>` on the **first** commit —
+  this clone's git config defaults to `jeicei75`. No `Co-Authored-By: Claude` trailer and no
+  "Generated with Claude" footer (CLAUDE.md §8).
+
+## Dev Agent Record
+
+### Agent Model Used
+
+### Debug Log References
+
+### Completion Notes List
+
+### File List
+
+## Change Log
+
+| Date | Change |
+| --- | --- |
+| 2026-09-18 | Created, stacked on 11.1a. Lavapipe answered for both mechanisms (48 storage textures; `Rgba16Float` is a filterable render attachment). Creation measured the camp window's flicker floor at 1.4423 pp near-white / 18 levels p90 and found `flicker_lights` runs off the wall clock, so `--static-world` does not stop it — Task 1 fixes the instrument before bloom leans on it. |
