@@ -315,6 +315,8 @@ GPT-5 Codex
 - Task 4 (2026-09-18): replaced `FxaaOff(bool)` with the fixed three-member `CameraEffect` / `EffectsOff` set. `--fx-off` accepts `fxaa`, `ao`, and `bloom`; F10/F11/F12 toggle them with live component insertion/removal and the full readout. Focused tests for the live `--fx-off` and real-key paths passed. Legacy 10.7 and 11.1a mutation anchors were re-pointed; the pre-commit mutation audit then passed. The story's new Task 6 rows were not added or run because AC4 invoked its explicit stop rule.
 - Task 2 guard repair (2026-09-18): `Hdr` erased the former p10 signal: fresh Rec.601 terrace p10 was 38 with AO on (four samples) and 38 with AO off, matching the all-effects-on and bloom-off checks. Four clean `gui build 5a1ed7b` AO-on captures measured terrace means 69.515/69.505/69.489/69.466 (floor 0.049); a fresh AO-off capture measured 70.016. The rendered guard now uses the terrace mean with a 69.75 ceiling (0.234 below the ceiling at the highest AO-on sample; 0.266 above it when AO is off). Hdr also moved both stable open-snow medians to 116, which is their new exact Hdr control.
 - Task 2 guard repair RED (2026-09-18): after changing only the camera tuple from `Msaa::Off` to `Msaa::Sample4`, the mean-based rendered guard failed in 78.51 s: `AC2/AC3 pixel guard (Rec.601): terrace mean=70.756; open-snow LL/LR median=117/117`; `SSAO must visibly darken terrace creases ... mean=70.756, but AO-on must stay below 69.75` at `pixel_guard.rs:264`. The source was restored to `Msaa::Off` before the clean rebuild.
+- Task 2 guard repair restore (2026-09-18): after committing and rebuilding, `gui build a5ee674` named a clean tree before the required post-RED capture. `creases.py` measured terrace p10/median/p90/mean 38/65/114/69.441 Rec.601; open-snow LL/LR medians were 116/116. The focused enclosed-sky guard re-measured 0 pixels in 0 blobs; its 2,300-pixel ceiling was not changed.
+- Task 5 card (2026-09-18): wrote the gingerspice sitting recipe for all-effects-on plus each individual `--fx-off` perf-log run, and named `effects-on.png` / `bloom-off.png` as Wolf's frame pair. No vehicle window was opened and no frame-time figure was observed.
 
 ### Completion Notes List
 
@@ -351,6 +353,7 @@ GPT-5 Codex
 - `_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md` (updated)
 - `_bmad-output/implementation-artifacts/11-1-signoff/task-2b-5a1ed7b-ao-a.png` through `-d.png` (new; fresh mean-floor captures)
 - `_bmad-output/implementation-artifacts/11-1-signoff/task-2b-5a1ed7b-ao-off.png` (new; fresh no-AO threshold control)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-2b-a5ee674-restored.png` (new; clean post-RED restored capture)
 
 ## Change Log
 
@@ -364,3 +367,4 @@ GPT-5 Codex
 | 2026-09-18 | Full foreground gate GREEN (461 s). Three self-gate attempts were blocked before diff inspection by the known read-only `/tmp` mount-registry lock; no review finding was produced and the hard cap precluded a fourth. |
 | 2026-09-18 | Task 3: added default Natural Bloom and measured Hdr-on bloom-off controls before judging bloom. Camp p90 floor was 5 Rec.601 levels (203–208); the bloom sample was 207, so it did not clear the floor and AC4 remains unmet. Task 4's three-effect switches were implemented and focused-test green; further sabotage and gate work stopped at AC4's explicit stop condition. |
 | 2026-09-18 | Repaired the AC3 rendered guard after Hdr made terrace p10 non-discriminating (38 both with and without AO). Fresh Rec.601 terrace-mean samples set a 69.75 ceiling from a 0.049 AO-on floor and 70.016 AO-off control. The focused guard passed; the required MSAA-on RED failed at mean 70.756, then source was restored. |
+| 2026-09-18 | Rebuilt the restored source as clean `a5ee674`, captured terrace mean 69.441 Rec.601, and re-measured enclosed sky at 0 px / 0 blobs without moving its ceiling. Added the Task 5 vehicle card; vehicle-only Task 5 remains unchecked and no FPS figure was claimed. |
