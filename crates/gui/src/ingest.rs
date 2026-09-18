@@ -17,9 +17,12 @@ use bevy::{
     app::PluginGroup,
     app::ScheduleRunnerPlugin,
     asset::{AssetPlugin, Assets, Handle},
-    camera::RenderTarget,
+    camera::{Exposure, RenderTarget},
     image::Image,
-    render::render_resource::{TextureFormat, TextureUsages},
+    render::{
+        render_resource::{TextureFormat, TextureUsages},
+        view::Msaa,
+    },
     window::{ExitCondition, WindowPlugin},
     winit::WinitPlugin,
 };
@@ -1284,6 +1287,8 @@ fn setup_camera(
     let camera = commands
         .spawn((
             Camera3d::default(),
+            Msaa::Off,
+            Exposure { ev100: 9.7 },
             Projection::Perspective(PerspectiveProjection {
                 fov: BOOT_VERTICAL_FOV,
                 ..Default::default()
@@ -2064,6 +2069,34 @@ mod tests {
                 "a capture must carry its tree accounting (headless={headless})"
             );
         }
+    }
+
+    #[test]
+    fn configured_camera_disables_msaa_on_the_live_rig() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+
+        let msaa = app
+            .world_mut()
+            .query_filtered::<&bevy::render::view::Msaa, With<CameraRig>>()
+            .single(app.world())
+            .expect("startup must spawn the one live camera rig");
+
+        assert_eq!(*msaa, bevy::render::view::Msaa::Off);
+    }
+
+    #[test]
+    fn configured_camera_carries_the_chosen_ev100_on_the_live_rig() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+
+        let exposure = app
+            .world_mut()
+            .query_filtered::<&bevy::camera::Exposure, With<CameraRig>>()
+            .single(app.world())
+            .expect("startup must spawn the one live camera rig");
+
+        assert_eq!(exposure.ev100, 9.7);
     }
 
     /// `--assets` is a RESOLVER: it decides which of two asset trees the client reads. The

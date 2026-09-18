@@ -64,6 +64,7 @@ Ruled in [Sky and lights](#sky-and-lights), except the last row. Pinned by
 | `LightKind::Lantern` | — | — | 3M lm | 10 m | bounded, deterministic |
 | ↳ before 10.8 | — | — | 5M lm **(superseded)** | 14 m | — |
 | ↳ rejected | — | — | 72M lm **(rejected)** | blew a ~9-tile pool white | — |
+| `Exposure` | — | — | 9.7 EV100 | camera | explicit Blender-calibrated exposure |
 | moving light | table-driven by `LightKind` | — | table-driven | table-driven | eye-only |
 
 The sections state no colour, range or amplitude for torch and campfire; those cells stay `—`
@@ -220,6 +221,8 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
   at least twice the ambient's.
 - The ladder is dark sky and flanks, midtone snow and ice, then warm pools and near-white emitter
   faces.
+- The camera exposure is explicitly 9.7 EV100, Bevy's Blender-calibrated value. It preserves the
+  approved frame while making the exposure a client-owned art decision for subsequent effects.
 
 Check: `appearance_tables_pin_the_cold_boot_palette` and `flicker_is_bounded_distinct_and_deterministic`
 (`crates/gui/src/appearance.rs`) pin the light table, the warm-emitter ordering and the flicker

@@ -97,15 +97,15 @@ consumed rather than silently skipped.
   - [x] Re-take at least four same-build captures and recompute the floors below on THIS build. The
         floor is build-specific — it moved 3.3x across one story before, and 20x across another. Do not
         inherit the creation figures; they are a control to compare against, not a floor to reuse.
-- [ ] **Task 1 — the render path.** (AC: 1, 2)
-  - [ ] Add `Msaa::Off` and one `Exposure` to the camera tuple at `ingest.rs:1284-1308`. Both are plain
+- [x] **Task 1 — the render path.** (AC: 1, 2)
+  - [x] Add `Msaa::Off` and one `Exposure` to the camera tuple at `ingest.rs:1284-1308`. Both are plain
         components beside the existing `AmbientLight` / `DistanceFog`; nothing else in the tuple moves.
-  - [ ] Pick the EV100 and say why in one line. `Exposure::default()` is `BLENDER` = **9.7**
+  - [x] Pick the EV100 and say why in one line. `Exposure::default()` is `BLENDER` = **9.7**
         (`bevy_camera-0.19.0/src/camera.rs:263`, `impl Default` at `:279-283`); the other named
         constants are `EV100_SUNLIGHT` 15.0, `EV100_OVERCAST` 12.0, `EV100_INDOOR` 7.0 (`:255-257`).
         Setting the component explicitly at 9.7 changes no pixel and is a legitimate choice — it makes
         the value ours rather than Bevy's. Any other value must be justified by a frame.
-  - [ ] Add the row to `docs/tech-art-guidelines.md` § Lights (table rows `:56-67`). Read `:19-22`
+  - [x] Add the row to `docs/tech-art-guidelines.md` § Lights (table rows `:56-67`). Read `:19-22`
         first: the tables are a view of the sections below, so rule the value into the section, then
         the table — do not fill the table in from the code.
 - [ ] **Task 2 — FXAA, switchable.** (AC: 3, 4, 5)
@@ -355,6 +355,7 @@ gpt-5.6-terra, reasoning effort high
 ### Completion Notes List
 
 - Task 0 complete: rebuilt after checking the merge-tree stamp, then re-took four same-build controls. The control spreads are recorded; no prior-build floor was reused.
+- Task 1 complete: the live camera explicitly uses `Msaa::Off` and 9.7 EV100. 9.7 is Bevy's Blender-calibrated default, selected to preserve the approved frame while making the art decision explicit.
 
 ### File List
 
@@ -364,6 +365,9 @@ gpt-5.6-terra, reasoning effort high
 - `_bmad-output/implementation-artifacts/11-1-signoff/control-41b3f02-b.png` — Task 0 control capture.
 - `_bmad-output/implementation-artifacts/11-1-signoff/control-41b3f02-c.png` — Task 0 control capture.
 - `_bmad-output/implementation-artifacts/11-1-signoff/control-41b3f02-d.png` — Task 0 control capture.
+- `_bmad-output/implementation-artifacts/mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh` — Task 1 mutation rows.
+- `crates/gui/src/ingest.rs` — explicit camera MSAA/exposure and live-rig tests.
+- `docs/tech-art-guidelines.md` — exposure ruling and Lights table row.
 
 ## Change Log
 
@@ -371,3 +375,4 @@ gpt-5.6-terra, reasoning effort high
 | --- | --- |
 | 2026-09-18 | Created. Epic 11's 11.1 split into 11.1a (render path + instrument) and 11.1b (SSAO + Bloom) on Wolf's ruling, after creation-time verification found the SSAO/MSAA silent skip, answered the lavapipe question (48 storage textures, ≥ 5), and measured the area ceilings' headroom to be smaller than their own noise. FXAA ruled over TAA and SMAA. |
 | 2026-09-18 | Re-took Task 0's four same-build controls and recorded the build-specific floors. |
+| 2026-09-18 | Made the camera's MSAA and exposure explicit, with live-entity tests and the tech-art ruling. |
