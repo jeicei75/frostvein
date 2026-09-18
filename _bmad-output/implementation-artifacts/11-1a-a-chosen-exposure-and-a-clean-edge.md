@@ -79,6 +79,9 @@ of it and judges them with the instrument this story builds and proves.
     and Wolf rules rather than the story tuning anything.
 11. Wolf signs off the frame at the sitting: the edges read cleaner than the MSAA-4x control at the same
     framing, and the exposure is the one he wants to judge 11.1b's effects under. The pair is filed.
+    **FIRST CLAUSE CLOSED (Wolf, 2026-09-18, gingerspice, build `d3ecdff` confirmed): "edges are
+    fine".** The FXAA-may-read-blurrier caveat is withdrawn. The exposure clause and AC10 are still
+    owed — see `11-1-signoff/wolf-seat-check-d3ecdff.md`.
 12. Every mutation row in `mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh` is shown to KILL, and
     the table's output is pasted into the Dev Agent Record.
 
