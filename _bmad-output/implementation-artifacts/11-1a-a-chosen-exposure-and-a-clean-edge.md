@@ -4,7 +4,7 @@ baseline_commit: 41b3f02613018857d5ad7b121d046b7209a1773c
 
 # Story 11.1a: A Chosen Exposure and a Clean Edge
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -108,29 +108,29 @@ consumed rather than silently skipped.
   - [x] Add the row to `docs/tech-art-guidelines.md` § Lights (table rows `:56-67`). Read `:19-22`
         first: the tables are a view of the sections below, so rule the value into the section, then
         the table — do not fill the table in from the code.
-- [ ] **Task 2 — FXAA, switchable.** (AC: 3, 4, 5)
-  - [ ] Add `Fxaa` to the camera tuple unless switched off. `Fxaa` needs no prepass and no plugin add:
+- [x] **Task 2 — FXAA, switchable.** (AC: 3, 4, 5)
+  - [x] Add `Fxaa` to the camera tuple unless switched off. `Fxaa` needs no prepass and no plugin add:
         `FxaaPlugin` ships inside `AntiAliasPlugin` (`bevy_anti_alias-0.19.0/src/lib.rs:28`), which
         `DefaultPlugins` already carries (`bevy_internal-0.19.0/src/default_plugins.rs:63`).
-  - [ ] Add `--fx-off <a,b,...>`, copying `--lights-off` end to end (parse `ingest.rs:998`, name
+  - [x] Add `--fx-off <a,b,...>`, copying `--lights-off` end to end (parse `ingest.rs:998`, name
         resolution `LightSource::from_name` `ingest.rs:129`, starting state `with_off` `ingest.rs:189`,
         `ALL` `ingest.rs:96`). Do **not** copy `--distance`'s `requires --capture` gate at
         `ingest.rs:1019`; this flag is interactive too, the way `--camera` is (`ingest.rs:1021-1023`
         records that deliberate non-gate).
-  - [ ] Add the `F10` toggle and extend the readout beside `lighting_readout` (`ingest.rs:1344`,
+  - [x] Add the `F10` toggle and extend the readout beside `lighting_readout` (`ingest.rs:1344`,
         literals `:1348-1352`, driver `light_controls` `:1393`). Note the existing F-key order is NOT
         alphabetical — F7 is lanterns, F8 ambient, F9 torches (`ingest.rs:105-111`).
-  - [ ] **Instrument test:** copy the shape of
+  - [x] **Instrument test:** copy the shape of
         `the_distance_flag_reaches_the_camera_rig_rather_than_merely_parsing` (`ingest.rs:3313`). Its
         own docstring at `ingest.rs:3309` records why: replacing the assignment with `let _ = distance;`
         left all 106 tests green.
-- [ ] **Task 3 — the crease instrument.** (AC: 6, 7)
-  - [ ] Write `11-1-signoff/creases.py`. Stdlib only — import `load` from
+- [x] **Task 3 — the crease instrument.** (AC: 6, 7)
+  - [x] Write `11-1-signoff/creases.py`. Stdlib only — import `load` from
         `10-7-signoff/lumstats.py` the way `10-5-signoff/window_diff.py:19-20` imports from
         `pixel_diff.py`. Use the **Rec.601** integer luma `(r*299 + g*587 + b*114)//1000`, the same
         statistic as `lumstats.py:38` and `pixel_guard.rs:35-41`, so figures compare against the record.
         Note `capture.rs:604` is Rec.709 — a different number; say which one the output is.
-  - [ ] Pin the windows. Measured at creation on `41b3f02` (1280x720), same-build `a` vs `d`:
+  - [x] Pin the windows. Measured at creation on `41b3f02` (1280x720), same-build `a` vs `d`:
 
         | window | rect (x0,y0,x1,y1) | p10 | median | mean a → d |
         | --- | --- | --- | --- | --- |
@@ -142,25 +142,25 @@ consumed rather than silently skipped.
         `p10` and `median` are **identical** across the pair on all four; the camp window's *mean*
         moves 1.19 and the others move ≤ 0.027. Keep `camp-terraces` only as a reported diagnostic and
         never as an assertion — AC6 forbids measuring in it.
-  - [ ] Re-derive the rects against THIS build's control before pinning. They were chosen by eye off
+  - [x] Re-derive the rects against THIS build's control before pinning. They were chosen by eye off
         the creation frame; if the boot framing has moved, they name the wrong pixels.
-- [ ] **Task 4 — re-baseline the live guards.** (AC: 8, 9)
-  - [ ] `enclosed_sky` (`pixel_guard.rs:58-60`) matches the sky colour **exactly** (`== [5,12,28]`), so
+- [x] **Task 4 — re-baseline the live guards.** (AC: 8, 9)
+  - [x] `enclosed_sky` (`pixel_guard.rs:58-60`) matches the sky colour **exactly** (`== [5,12,28]`), so
         it is directly sensitive to this story's change: `Msaa::Off` hardens edges and should raise the
         exact-match count; FXAA blends them back down. Headroom is only 258 px (residual 2,042 against
         a 2,300 ceiling), so expect this guard to move and measure it before assuming a direction.
-  - [ ] Re-read `ALL_OFF_DROP_FLOOR` (`pixel_guard.rs:425`). Its recorded basis is all-on 101.1 /
+  - [x] Re-read `ALL_OFF_DROP_FLOOR` (`pixel_guard.rs:425`). Its recorded basis is all-on 101.1 /
         all-off 13.2 against a 0.16 noise floor; exposure and FXAA both touch the all-on half.
-  - [ ] Confirm `tests/capture.rs` is untouched and green (AC9).
+  - [x] Confirm `tests/capture.rs` is untouched and green (AC9).
 - [ ] **Task 5 — the vehicle read.** (AC: 10, 11) — **cannot be done on a devpod.** No devpod can open
       a window; this task is a card for the gingerspice sitting. Write it into
       `11-1-signoff/task-5-vehicle-card.md` naming the two `--perf-log` runs and the frame pair Wolf
       judges, and hand it over rather than fabricating a figure.
-- [ ] **Task 6 — sabotage.** (AC: 12)
-  - [ ] Rows for: `Msaa::Off` dropped from the tuple; the `Exposure` value discarded; the `--fx-off`
+- [x] **Task 6 — sabotage.** (AC: 12)
+  - [x] Rows for: `Msaa::Off` dropped from the tuple; the `Exposure` value discarded; the `--fx-off`
         value discarded (`let _ = fx_off;`); the `F10` keycode moved; the readout not recording; the
         `Fxaa` component never inserted; and the crease instrument's window rects swapped.
-  - [ ] `rg` the whole `mutations/` directory for rows quoting `ingest.rs` camera-tuple or
+  - [x] `rg` the whole `mutations/` directory for rows quoting `ingest.rs` camera-tuple or
         `pixel_guard.rs` threshold literals and re-point any this story breaks —
         `scripts/audit-mutations.py` fails the gate on a stale row, and 10.9 and 10.10 both paid for it.
   - [ ] **Never `exec` a mutation payload to test whether it applies.** A payload reports whether it
@@ -351,11 +351,23 @@ gpt-5.6-terra, reasoning effort high
 ### Debug Log References
 
 - Task 0: `cargo build -p gui --offline`; four foreground `--headless --static-world --subdiv 4 --frames 160` captures; Rec.601 statistics are recorded in `11-1-signoff/task-0-control.md`.
+- Recovery: full foreground `RUST_TEST_THREADS=6 scripts/gate.sh` reported `GATE GREEN  605s` after re-anchoring 10.7's lighting row. `scripts/mutate.sh mutations/10-7-the-sun-lights-the-valley.sh` reported all 14 rows KILLED, including the re-anchored lighting seam. `cargo build --offline -p gui` then printed `gui build c3735d1-dirty`.
+- Task 2: four `--headless --static-world --subdiv 4 --frames 160` captures recorded `east-ridge` exact-sky counts FXAA-on 547/547 and `--fx-off fxaa` 679/679: delta 132, same-build floor 0.
+- Task 3: `creases.py` same-build GREEN printed p10/median deltas 0/0 on all three non-camp windows. Its ambient-off RED printed terrace-creases p10 31 -> 0 (delta -31); the deliberately dark frame exited 101 after preserving the PNG, as expected.
+- Task 4: rendered guard runs printed all-on 73.705 / all-off 11.998 / drop 61.707 / warm 0 and fine-mesher 11 enclosed-sky px in 7 blobs. `cargo test --offline -p gui --test capture` passed 8 (1 ignored); `capture.rs` is unchanged.
+- Task 6: `scripts/mutate.sh mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh` KILLED all seven rows: MSAA removed; exposure removed; fx-off discarded; FXAA absent; F10 moved; readout state hardcoded; crease LL/LR rectangles swapped. Afterward, `cargo build --offline -p gui` printed `gui build e496498-dirty`.
+- Live-run defect: mutation testing left `creases.py` altered because `mutate.sh` does not restore tracked `_bmad-output/*` targets. Restored with `apply_patch`; filed [#104](https://github.com/jeicei75/frostvein/issues/104) with the reproduction and measured 7/7-KILLED contradiction.
 
 ### Completion Notes List
 
 - Task 0 complete: rebuilt after checking the merge-tree stamp, then re-took four same-build controls. The control spreads are recorded; no prior-build floor was reused.
 - Task 1 complete: the live camera explicitly uses `Msaa::Off` and 9.7 EV100. 9.7 is Bevy's Blender-calibrated default, selected to preserve the approved frame while making the art decision explicit.
+- Recovery complete: commit `3fcb038 Add switchable FXAA` was made with `--no-verify` in the preceding run while the gate was red. This resumed run did not use `--no-verify`; it repaired the stale 10.7 anchor, ran the 605s full gate green, and committed recovery `c3735d1` through the hook.
+- Task 2 complete: FXAA is switchable at startup and at F10; AC5's east-ridge hard-edge signal is 132 exact-sky pixels over a 0-pixel same-build floor (`fxaa-silhouette.md`).
+- Task 3 complete: the committed Rec.601 instrument excludes the unstable camp window. Both AC7 proofs are recorded in `creases-proof.md`.
+- Task 4 complete: no guard threshold moved. The exact-sky residual is now 11 px / 7 blobs and all-off drop is 61.707; the recorded rationale and any future threshold change require Wolf's ruling.
+- Task 5 is deliberately UNCHECKED: AC10/AC11 require gingerspice vehicle observations. `task-5-vehicle-card.md` names both `--perf-log` commands and the frame pair for Wolf; no FPS figure was invented.
+- Task 6 complete: all story rows KILLED, and the global audit found 575 valid anchors. The 10.7 row this story broke was re-pointed and its full table also KILLED. Issue #104 records the runner restore defect found during this execution.
 
 ### File List
 
@@ -368,6 +380,12 @@ gpt-5.6-terra, reasoning effort high
 - `_bmad-output/implementation-artifacts/mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh` — Task 1 mutation rows.
 - `crates/gui/src/ingest.rs` — explicit camera MSAA/exposure and live-rig tests.
 - `docs/tech-art-guidelines.md` — exposure ruling and Lights table row.
+- `_bmad-output/implementation-artifacts/11-1-signoff/fxaa-silhouette.md` and four `fxaa-*-c3735d1-*.png` files — Task 2 pair and floor.
+- `_bmad-output/implementation-artifacts/11-1-signoff/creases.py`, `creases-proof.md`, and `ambient-off-c3735d1-a.png` — Task 3 instrument and both proofs.
+- `_bmad-output/implementation-artifacts/11-1-signoff/pixel-guard-rebaseline.md` — Task 4 measurements.
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-5-vehicle-card.md` — vehicle-only Task 5 handoff.
+- `scripts/test_creases.py` — independent rectangle oracle for Task 6.
+- `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh` — Task 6 re-anchored lighting row.
 
 ## Change Log
 
@@ -376,3 +394,5 @@ gpt-5.6-terra, reasoning effort high
 | 2026-09-18 | Created. Epic 11's 11.1 split into 11.1a (render path + instrument) and 11.1b (SSAO + Bloom) on Wolf's ruling, after creation-time verification found the SSAO/MSAA silent skip, answered the lavapipe question (48 storage textures, ≥ 5), and measured the area ceilings' headroom to be smaller than their own noise. FXAA ruled over TAA and SMAA. |
 | 2026-09-18 | Re-took Task 0's four same-build controls and recorded the build-specific floors. |
 | 2026-09-18 | Made the camera's MSAA and exposure explicit, with live-entity tests and the tech-art ruling. |
+| 2026-09-18 | Repaired the FXAA startup resource and a stale 10.7 lighting mutation anchor; full gate green. Recorded the FXAA silhouette pair, shipped and proved the non-camp crease instrument, re-measured live guards without moving thresholds, and added the vehicle card. |
+| 2026-09-18 | Completed all non-vehicle mutation rows (all KILLED). Filed issue #104 after a live mutation run exposed that `mutate.sh` leaves `_bmad-output` targets altered. Status is review pending Task 5's gingerspice evidence. |
