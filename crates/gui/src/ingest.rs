@@ -26,6 +26,7 @@ use bevy::{
         mouse::{MouseButton, MouseMotion, MouseWheel},
     },
     pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
+    post_process::bloom::Bloom,
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
         DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
@@ -1323,6 +1324,7 @@ fn setup_camera(
             Exposure { ev100: 10.5 },
             Fxaa::default(),
             ScreenSpaceAmbientOcclusion::default(),
+            Bloom::default(),
             Projection::Perspective(PerspectiveProjection {
                 fov: BOOT_VERTICAL_FOV,
                 ..Default::default()
