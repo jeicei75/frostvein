@@ -68,6 +68,7 @@ instead — it is a camera property, not a light, and those two tests do not rea
 | ↳ rejected | — | — | 72M lm **(rejected)** | blew a ~9-tile pool white | — |
 | `Exposure` (camera) | — | — | 10.5 EV100 | n/a | n/a |
 | `ScreenSpaceAmbientOcclusion` | — | — | default | camera | requires `Msaa::Off`; darkens terrace creases while leaving open-snow medians unchanged |
+| `Bloom` | — | — | default `NATURAL` | camera | energy-conserving emitter halo; headless AC4 measurement remains blocked by its camp-tail floor |
 | moving light | table-driven by `LightKind` | — | table-driven | table-driven | eye-only |
 
 The sections state no colour, range or amplitude for torch and campfire; those cells stay `—`

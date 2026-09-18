@@ -126,24 +126,24 @@ Task 1 fixes the instrument before Task 3 leans on it.
   - [x] **The MSAA guard (AC3).** Assert the rendered consequence. The deliberate RED is in
         Verification below and is the whole reason this story was split out — run it.
 - [ ] **Task 3 — bloom.** (AC: 4, 5)
-  - [ ] Add `Bloom` to the camera tuple. `Hdr` arrives via `#[require(Hdr)]`
+  - [x] Add `Bloom` to the camera tuple. `Hdr` arrives via `#[require(Hdr)]`
         (`bloom/settings.rs:32`) and `PostProcessPlugin` is in `DefaultPlugins`
         (`default_plugins.rs:61`). `Bloom::default()` is `NATURAL` — `intensity: 0.15`,
         `low_frequency_boost: 0.7`, `composite_mode: EnergyConserving` (`settings.rs:132-141`);
         `OLD_SCHOOL` (0.05, Additive) and `SCREEN_BLUR` (1.0) are the other presets. Record which
         you chose and why in one line.
-  - [ ] **`Hdr` changes the whole frame's pipeline, not just the emitters.** Expect every figure to
+  - [x] **`Hdr` changes the whole frame's pipeline, not just the emitters.** Expect every figure to
         move, including the open-snow windows. If they move, AC4's "does not move" clause is about
         bloom's *marginal* contribution — measure bloom on/off with `Hdr` present in both, not
         against a pre-`Hdr` control, or you will attribute the pipeline change to bloom.
-  - [ ] Record the headless area figures as a DELTA only (AC5). Do not assert a ceiling on them.
-- [ ] **Task 4 — the switches.** (AC: 6, 7)
-  - [ ] Generalise `FxaaOff(bool)` (`ingest.rs:152`) into a set, mirroring `LightSource`/
+  - [x] Record the headless area figures as a DELTA only (AC5). Do not assert a ceiling on them.
+- [x] **Task 4 — the switches.** (AC: 6, 7)
+  - [x] Generalise `FxaaOff(bool)` (`ingest.rs:152`) into a set, mirroring `LightSource`/
         `LightingToggles` (`ingest.rs:91-196`) — this is the third concrete effect, so a small enum
         earns its place now and not before. Keep insert/remove, not an `enabled` field.
-  - [ ] Pick the two keys and extend the readout (`lighting_readout`, `ingest.rs:1371`). `F5`–`F10`
+  - [x] Pick the two keys and extend the readout (`lighting_readout`, `ingest.rs:1371`). `F5`–`F10`
         are taken; note the existing order is not alphabetical (F7 lanterns, F8 ambient, F9 torches).
-  - [ ] Update the three tests pinning the full readout string (`ingest.rs:2489`, `:2508`, `:2594`).
+  - [x] Update the three tests pinning the full readout string (`ingest.rs:2489`, `:2508`, `:2594`).
         **Do not weaken them to substring checks** — they pin the whole line on purpose.
 - [ ] **Task 5 — the vehicle read.** (AC: 8, 9) — **cannot be done on a devpod.** No devpod can open
       a window. Write `11-1-signoff/task-5b-vehicle-card.md` naming the exact `--perf-log` runs and
@@ -311,11 +311,15 @@ GPT-5 Codex
 - Task 6 scope rows (2026-09-18): first mutation-table run correctly reported both ignored AO rows NOT-RUN because their targets omitted the runner's required `ignored` tier; no result was claimed. After adding that tier, rerun output was all KILLED: strengthened steady consequence (`assertion left == right failed: --lights-steady must pin the PointLight intensity the live flicker system writes`, `ingest.rs:2273`); AO omitted and MSAA re-enabled (both rendered guard failures at `pixel_guard.rs:264`, 64.19 s and 78.24 s respectively). `scripts/mutate.sh` restored Rust source; only this table and newly recorded PNGs remained changed afterward.
 - Final verification for this handoff: `RUST_TEST_THREADS=6 scripts/gate.sh` was GREEN in 461 s, including rendered pixel guards and mutation-table audit. Three `codex review --base 77d5056` passes were attempted after the gate (the latter two after record-only commits); none could inspect any diff because every shell invocation hit the known read-only `/tmp` mount-registry lock before execution. None produced a finding. The three-pass cap is now exhausted; no fourth review was run.
 - Self-gate: one `codex review --base 77d5056` pass was attempted. It did not start review work because its sandbox reported every command (including `git diff`) blocked by a read-only mount-registry lock under `/tmp`. No second pass was run; this is environmental, not a review result.
+- Task 3/4 (2026-09-18): `gui build 67ba364` (clean, no `-dirty`) before five headless captures. `Bloom::default()` / Natural was selected because it is the requested default energy-conserving mechanism, not a look-tuned preset. Hdr/no-bloom four-capture Rec.601 camp floor: median 82/82/81/81 (spread 1), p90 208/208/203/204 (spread 5), near-white >=230 4.9231/5.3409/4.8864/5.1364% (spread 0.4545 pp). The Hdr+bloom sample was median 95, p90 207, near-white 5.2255%: p90 fell one level rather than rising beyond the measured floor, so AC4 is unmet and work stopped as directed. Bloom's headless whole-frame near-white delta was -0.0236 pp (0.7879% no-bloom a to 0.7643% bloom); no ceiling was asserted or changed. Rec.601 `creases.py` snow medians moved from 117/117 (Hdr/no-bloom) to 116/116 (bloom), so the marginal contribution was -1/-1. The requested enclosed-sky re-measurement was not completed before the AC4 stop condition.
+- Task 4 (2026-09-18): replaced `FxaaOff(bool)` with the fixed three-member `CameraEffect` / `EffectsOff` set. `--fx-off` accepts `fxaa`, `ao`, and `bloom`; F10/F11/F12 toggle them with live component insertion/removal and the full readout. Focused tests for the live `--fx-off` and real-key paths passed. Legacy 10.7 and 11.1a mutation anchors were re-pointed; the pre-commit mutation audit then passed. The story's new Task 6 rows were not added or run because AC4 invoked its explicit stop rule.
 
 ### Completion Notes List
 
 - Task 0: captured the build-specific no-AO/no-bloom controls. The camp flicker floor confirms Task 1 must pin the live flicker clock before bloom is measured.
 - Task 1: implemented and mutation-proved the live `--lights-steady` path, but AC1 is blocked by residual camp-window variance after the clock is pinned. Tasks 2–6 were intentionally not started; Task 5 remains vehicle-only.
+- Task 3: Bloom is installed but AC4 is blocked: its bright-tail p90 did not rise over the new build-specific Hdr/no-bloom floor. No headless ceiling was changed.
+- Task 4: the three-effect command and seat controls are implemented and focused-test green; its story mutations remain deferred by the AC4 stop rule.
 
 ### File List
 
@@ -340,6 +344,8 @@ GPT-5 Codex
 - `crates/gui/src/ingest.rs` (updated)
 - `crates/gui/tests/pixel_guard.rs` (updated)
 - `docs/tech-art-guidelines.md` (updated)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-3-hdr-no-bloom-67ba364-a.png` through `-d.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-3-bloom-67ba364-a.png` (new)
 - `_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md` (updated)
 
 ## Change Log
@@ -352,3 +358,4 @@ GPT-5 Codex
 | 2026-09-18 | Task 2: added default SSAO and a rendered Rec.601 guard. Four 8edc62a captures put terrace p10 at 30 against the Task 0 control 31 (floor 0), with both open-snow medians unchanged at 117. The deliberate MSAA-on RED failed the guard and returned terrace p10 to 32; bloom remains blocked by #105. |
 | 2026-09-18 | Task 2 restored capture again read terrace p10 30 and both open-snow medians 117 on clean 621ef4f; enclosed sky was 11 px / 7 blobs and its ceiling stayed untouched. Task 6's three in-scope rows were KILLED after correcting the initial ignored-test target omission. |
 | 2026-09-18 | Full foreground gate GREEN (461 s). Three self-gate attempts were blocked before diff inspection by the known read-only `/tmp` mount-registry lock; no review finding was produced and the hard cap precluded a fourth. |
+| 2026-09-18 | Task 3: added default Natural Bloom and measured Hdr-on bloom-off controls before judging bloom. Camp p90 floor was 5 Rec.601 levels (203–208); the bloom sample was 207, so it did not clear the floor and AC4 remains unmet. Task 4's three-effect switches were implemented and focused-test green; further sabotage and gate work stopped at AC4's explicit stop condition. |
