@@ -19,9 +19,9 @@ PY
 mutation "the --fx-off value is parsed but discarded before camera setup" gui fx_off_reaches_the_live_camera_and_rejects_unknown_effects <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '    app.insert_resource(FxaaOff(args.fx_off));\n'
+old = '    app.insert_resource(EffectsOff::with_off(&args.fx_off));\n'
 assert s.count(old) == 1
-new = '    let _ = args.fx_off;\n    app.insert_resource(FxaaOff(false));\n'
+new = '    let _ = args.fx_off;\n    app.insert_resource(EffectsOff::default());\n'
 p.write_text(s.replace(old, new))
 PY
 
@@ -33,20 +33,20 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "F10 is no longer the FXAA key" gui f10_toggles_fxaa_and_the_live_readout <<'PY'
+mutation "F10 is no longer the FXAA key" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '    if !keys.just_pressed(KeyCode::F10) {\n'
+old = '            Self::Fxaa => KeyCode::F10,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    if !keys.just_pressed(KeyCode::F11) {\n'))
+p.write_text(s.replace(old, '            Self::Fxaa => KeyCode::F13,\n'))
 PY
 
-mutation "the FXAA readout no longer records its state" gui f10_toggles_fxaa_and_the_live_readout <<'PY'
+mutation "the FXAA readout no longer records its state" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        if fxaa_enabled { "on" } else { "off" }\n'
+old = '            Self::Fxaa => "fxaa",\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        "on"\n'))
+p.write_text(s.replace(old, '            Self::Fxaa => "post",\n'))
 PY
 
 # The rect MOVES ONTO THE CAMP, it does not trade places with its sibling.  The first version of
