@@ -2298,7 +2298,7 @@ development_status:
   11-1a-a-chosen-exposure-and-a-clean-edge: in-progress
   # 11.1b inherits the render path and the instrument 11.1a builds, and owes the AC that proves AO's
   # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.
-  11-1b-the-air-has-depth: ready-for-dev
+  11-1b-the-air-has-depth: in-progress
   11-2-the-miniature: backlog
   11-3-night-falls-day-breaks: backlog
   epic-11-retrospective: optional
