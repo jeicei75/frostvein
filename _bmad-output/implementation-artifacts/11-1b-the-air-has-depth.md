@@ -109,13 +109,13 @@ Task 1 fixes the instrument before Task 3 leans on it.
         and 20x across another. The creation figures above are a control to compare against, never a
         threshold to reuse.
 - [ ] **Task 1 — make the emitter window measurable.** (AC: 1)
-  - [ ] Add `--lights-steady`, pinning the `seconds` passed to `flicker_lights` (`ingest.rs:1890`)
+  - [x] Add `--lights-steady`, pinning the `seconds` passed to `flicker_lights` (`ingest.rs:1890`)
         to a constant so every capture sees the same flicker phase. One branch; do not rewrite
         `flicker_scale`, whose determinism is already pinned by
         `flicker_is_bounded_distinct_and_deterministic` (`appearance.rs:175`).
-  - [ ] **Instrument test:** the flag must reach the live system, not merely parse — copy
+  - [x] **Instrument test:** the flag reaches the live system, not merely parse — copied
         `fx_off_reaches_the_live_camera_and_rejects_unknown_effects` (`ingest.rs:2171`).
-  - [ ] Re-measure the camp window with the flag and show the spread collapses. **If it does not,
+  - [ ] Re-measured the camp window with the flag; its spread did not collapse. **Stopped as required:
         stop and say so** — every bloom figure in this story depends on it.
 - [ ] **Task 2 — ambient occlusion.** (AC: 2, 3)
   - [ ] Add `ScreenSpaceAmbientOcclusion` to the camera tuple. `DepthPrepass` and `NormalPrepass`
@@ -299,10 +299,14 @@ GPT-5 Codex
 ### Debug Log References
 
 - Task 0 (2026-09-18): `gui build f604b40` before capture. Four `--headless --static-world --subdiv 4 --frames 160` controls: crease windows were Rec.601 p10/median-stable (terrace 31/65; LL 68/117; LR 69/117). Camp `(500,400)..(760,620)` was Rec.601: median 82/81/85/84 (floor 4), p90 200/195/212/199 (floor 17), near-white >=230 4.7552/4.2587/6.0245/4.4563% (floor 1.7658 pp).
+- Task 1 RED: `cargo test --offline -p gui lights_steady_reaches_the_live_flicker_system` failed before implementation with `error[E0425]: cannot find type LightsSteady in this scope` at `ingest.rs:2204` and `:2208`. GREEN: the focused test passed after the resource, parser branch, app wiring, and fixed 0.0-second branch were added. The first hook run also exposed standalone `projection_systems` test apps lacking the resource; `projection_systems` now initializes it alongside its other resources.
+- Task 1 mutation (2026-09-18), `the --lights-steady value is discarded before the live flicker system`: KILLED. Output: `thread 'ingest::tests::lights_steady_reaches_the_live_flicker_system' ... panicked at crates/gui/src/ingest.rs:2227:9: assertion failed: steady.world().resource::<super::LightsSteady>().0`; `test result: FAILED. 0 passed; 1 failed`.
+- Task 1 measure (2026-09-18): `gui build 7d13828` before capture. Four `--headless --static-world --lights-steady --subdiv 4 --frames 160` samples, all successful headless captures. Camp `(500,400)..(760,620)`, Rec.601: median 82/83/83/82 (spread 1), p90 209/209/209/209 (spread 0), near-white >=230 5.4441/5.5227/5.5839/5.8566% (spread 0.4125 pp). AC1 requires each spread below one tenth of Task 0's 4/17/1.7658 floors: <0.4 median, <1.7 p90, <0.17658 pp near-white. Median and near-white fail; #90 already tracks this same-build near-white instability. Stopped before Task 2 as the story directs.
 
 ### Completion Notes List
 
 - Task 0: captured the build-specific no-AO/no-bloom controls. The camp flicker floor confirms Task 1 must pin the live flicker clock before bloom is measured.
+- Task 1: implemented and mutation-proved the live `--lights-steady` path, but AC1 is blocked by residual camp-window variance after the clock is pinned. Tasks 2–6 were intentionally not started; Task 5 remains vehicle-only.
 
 ### File List
 
@@ -310,6 +314,14 @@ GPT-5 Codex
 - `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-b.png` (new)
 - `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-c.png` (new)
 - `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-d.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-a.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-b.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-c.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-d.png` (new)
+- `_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh` (new)
+- `_bmad-output/implementation-artifacts/mutations/6-1-the-world-moves.sh` (updated; re-pointed after the flicker seam changed)
+- `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh` (updated; re-pointed after the projection resource initialization changed)
+- `crates/gui/src/ingest.rs` (updated)
 - `_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md` (updated)
 
 ## Change Log
@@ -318,3 +330,4 @@ GPT-5 Codex
 | --- | --- |
 | 2026-09-18 | Created, stacked on 11.1a. Lavapipe answered for both mechanisms (48 storage textures; `Rgba16Float` is a filterable render attachment). Creation measured the camp window's flicker floor at 1.4423 pp near-white / 18 levels p90 and found `flicker_lights` runs off the wall clock, so `--static-world` does not stop it — Task 1 fixes the instrument before bloom leans on it. |
 | 2026-09-18 | Task 0: captured the f604b40 build controls. Crease p10/median floor was 0; the camp's unpinned Rec.601 floor was 4 median levels, 17 p90 levels, and 1.7658 pp near-white. |
+| 2026-09-18 | Task 1: added and mutation-proved `--lights-steady`, but the pinned camp capture still spread by 1 Rec.601 median level and 0.4125 pp near-white (AC1 requires <0.4 and <0.17658 pp). Stopped before AO/bloom; #90 already records the matching near-white instability. |
