@@ -122,6 +122,90 @@ bash -c 'head -c 300 < /dev/tcp/127.0.0.1/7451'
 
 (`/dev/tcp` is a bash builtin, hence the `bash -c` — it does not work from zsh.)
 
+## Behold it in 3D
+
+`gui` is the Bevy client, and the real viewer — the terminal client above is a 2D instrument
+beside it. It depends on `protocol` and `client-core` and holds no game rule: the camera,
+the selection and the slice are all client-local, and none of them go on the wire.
+
+```bash
+cargo run -p gui           # connects to 127.0.0.1:7451
+cargo run -p gui -- 7999   # optional arg: the port simd is listening on
+```
+
+**A devpod cannot open a window** — there is no graphics userspace — so a bare `cargo run -p gui`
+fails there. Everything below under *Looking without a window* still works: lavapipe gives Bevy a
+software Vulkan device, so the client renders and captures headlessly. A real window needs the
+Windows vehicle, and there `scripts/launch-gui.ps1` is the way in: it refuses to run a `gui.exe`
+whose compiled-in `gui build <sha>` stamp is not the checkout's HEAD, which is the only thing that
+has ever reliably caught a stale binary.
+
+### Controls
+
+| Keys | What it does |
+| --- | --- |
+| `W` `A` `S` `D` | orbit the camera |
+| `Q` / `E` | zoom out / in |
+| MMB drag | orbit |
+| shift + MMB drag | pan — hold `ctrl` as well for 4x |
+| wheel | zoom — hold `shift` for 4x |
+| `,` / `.` | slice down / up one z-level |
+| `C` | print the framing as a pasteable `--camera` line |
+| LMB | select the dwarf under the cursor and follow him (with no designate mode armed) |
+| `Esc` | release the selection, or abort a designation |
+| `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
+| `space` | pause / resume the sim |
+| `F3` / `F4` | fps overlay / mark a frame in the perf log |
+| `F5` `F6` `F7` `F8` `F9` | toggle sun / campfire / lanterns / ambient / torches |
+
+The slice keys are the **unshifted comma and period**. The on-screen hint calls them `<` / `>`,
+which reads as "shift these", and that has already cost one session — see #102, where naming the
+controls in the client itself is tracked.
+
+Selecting a dwarf drops the zoom to a readable distance and keeps him centred as he walks; `Esc`
+hands the camera back. Nothing above is rebindable, deliberately — there is no rebinding system
+until a third concrete need asks for one.
+
+### Writing a framing down, and flying back to it
+
+`C` prints one line naming the whole framing, ending in the `--camera` argument that reproduces it:
+
+```
+camera: yaw=0.7 pitch=0.45 distance=45 focus=64,64,9 --camera 0.7,0.45,45,64,64,9
+```
+
+**That line IS the save format.** There is no viewpoint registry and no camera-path recorder: paste
+the tail of it onto a command line and the rig returns, by exact float comparison. It is what makes
+comparing a look change cost one command instead of a hand-flown approximation.
+
+### Looking without a window
+
+```bash
+cargo run -p gui -- <port> --headless --static-world --subdiv 4 --frames 160 --capture out.png
+```
+
+**Take ~160 frames, not two.** The capture waits for 100 delivered ticks before it fires, so a
+short run dies on `capture is black` having written nothing. Every capture also validates what it
+drew — warm-lit pixels, the valley floor's median value, near-white area — and a band that trips
+panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
+
+| Flag | What it does |
+| --- | --- |
+| `--headless` | render to an offscreen texture instead of a window |
+| `--capture <path>` | save a PNG, validate its ranges, then exit |
+| `--frames N` / `--at-tick N` | when to capture |
+| `--camera <yaw,pitch,distance,fx,fy,fz>` | open at a framing; works interactively too |
+| `--distance <d>` | zoom only, capture only — mutually exclusive with `--camera`, which carries its own |
+| `--z <level>` | pin the slice level |
+| `--subdiv <n>` | terrain subdivision; defaults to the shipped 4, and the recipes pass it anyway so the frame says what it was |
+| `--static-world` | freeze the sim so two captures differ only by what you changed |
+| `--lights-off <a,b>` | switch named light sources off for a measurement |
+| `--perf-log <path>` | write a per-frame CSV |
+| `--version` | print `gui build <sha>` and exit |
+
+`--version` is worth using before trusting any frame. The stamp is recomputed on every build, so a
+binary that predates your change says so.
+
 ## Test
 
 ```bash
@@ -160,6 +244,8 @@ screen and no branch on the remote, which is a failure that reads as a success. 
 | `sim-core` | the world, as a pure library — no I/O |
 | `protocol` | wire types only; the single home of message shapes |
 | `simd` | the daemon: owns the sim, serves it over TCP |
+| `client-core` | the shared client-side world mirror: applies snapshots and deltas, holds no I/O |
 | `tui` | terminal client; talks `protocol` only. Renders what the wire says, holds no game rule |
+| `gui` | Bevy client, the real viewer; `protocol` and `client-core` only, and equally ruleless |
 
 See `docs/project-brief.md` for what this is, `docs/technical-preferences.md` for how it's built.
