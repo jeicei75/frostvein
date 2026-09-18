@@ -102,9 +102,9 @@ Task 1 fixes the instrument before Task 3 leans on it.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — control, on a clean tree.** (AC: 1, 2, 4)
-  - [ ] `./target/debug/gui --version` must name the current HEAD's tree before any capture.
-  - [ ] Take at least four same-build captures and recompute BOTH floors on this build — the crease
+- [x] **Task 0 — control, on a clean tree.** (AC: 1, 2, 4)
+  - [x] `./target/debug/gui --version` named the current HEAD's tree before capture.
+  - [x] Took four same-build captures and recomputed BOTH floors on this build — the crease
         windows and the camp window. **Floors are build-specific**; they moved 3.3x across one story
         and 20x across another. The creation figures above are a control to compare against, never a
         threshold to reuse.
@@ -294,14 +294,27 @@ while AO silently does nothing, which is the exact defect.
 
 ### Agent Model Used
 
+GPT-5 Codex
+
 ### Debug Log References
+
+- Task 0 (2026-09-18): `gui build f604b40` before capture. Four `--headless --static-world --subdiv 4 --frames 160` controls: crease windows were Rec.601 p10/median-stable (terrace 31/65; LL 68/117; LR 69/117). Camp `(500,400)..(760,620)` was Rec.601: median 82/81/85/84 (floor 4), p90 200/195/212/199 (floor 17), near-white >=230 4.7552/4.2587/6.0245/4.4563% (floor 1.7658 pp).
 
 ### Completion Notes List
 
+- Task 0: captured the build-specific no-AO/no-bloom controls. The camp flicker floor confirms Task 1 must pin the live flicker clock before bloom is measured.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-a.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-b.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-c.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-d.png` (new)
+- `_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md` (updated)
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-09-18 | Created, stacked on 11.1a. Lavapipe answered for both mechanisms (48 storage textures; `Rgba16Float` is a filterable render attachment). Creation measured the camp window's flicker floor at 1.4423 pp near-white / 18 levels p90 and found `flicker_lights` runs off the wall clock, so `--static-world` does not stop it — Task 1 fixes the instrument before bloom leans on it. |
+| 2026-09-18 | Task 0: captured the f604b40 build controls. Crease p10/median floor was 0; the camp's unpinned Rec.601 floor was 4 median levels, 17 p90 levels, and 1.7658 pp near-white. |
