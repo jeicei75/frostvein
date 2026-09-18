@@ -477,9 +477,9 @@ PY
 mutation "the compass stops turning with the camera" gui the_compass_reports_where_north_actually_is_and_turns_with_the_camera <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
-old = '    let north = rig.project_world_point([focus[0], focus[1] - NORTH_PROBE_TILES, focus[2]]);\n'
+old = '        focus - Vec3::Y * NORTH_PROBE_TILES as f32,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    let north = rig.project_world_point([focus[0] - NORTH_PROBE_TILES, focus[1], focus[2]]);\n'))
+p.write_text(s.replace(old, '        focus - Vec3::X * NORTH_PROBE_TILES as f32,\n'))
 PY
 
 mutation "the compass reads the screen y axis upside down" gui the_compass_reports_where_north_actually_is_and_turns_with_the_camera <<'PY'

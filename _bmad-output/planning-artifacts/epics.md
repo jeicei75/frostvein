@@ -2044,16 +2044,38 @@ the look, the light, or the boot composition.
 **When** the client boots,
 **Then** the boot rig and the `Transform` it produces are unchanged **by exact float comparison** —
 a deterministic oracle, not a pixel test
-**And** the boot capture's **mean luminance** is within 10x the same-build swing of the control
-pair filed under `10-10-signoff/`.
+**And** ~~the boot capture's **mean luminance** is within 10x the same-build swing of the control
+pair filed under `10-10-signoff/`~~ — **STRUCK (Wolf's ruling, 2026-09-17, issue #98). The
+hand-written-literal rig guard is the whole of AC1, and there is no capture-based guard on the boot
+frame.**
 
-**Measured at creation, 2026-09-17, on `5452c4d` (clean stamp), which corrected this AC:** two runs
-of the SAME binary differ in **55,284 pixels — 6.0 % of the frame** (animated snow and stars), so a
-changed-pixel count cannot guard this framing; it would tolerate a regression moving 55,284 pixels.
-The same pair's **mean luminance** swings **0.0048**. The deliberate RED — `--distance 80` against
-the boot's 90 — moves mean luminance to 79.8025 from 76.1236, a swing of 3.6789, or **766x** that
-noise. Mean luminance is the discriminating field here and the changed-pixel count is the
-nearly-inert one; the AC above keys off the first two and not the third. Full record and commands:
+**Measured at creation, 2026-09-17, on `5452c4d` (clean stamp), which corrected this AC — and
+CORRECTED AGAIN at Task 0, 2026-09-17 (issue #98). Do not re-derive the figures below without the
+correction that follows them.** Two runs of the SAME binary differ in **55,284 pixels — 6.0 % of
+the frame** (animated snow and stars), so a changed-pixel count cannot guard this framing; it would
+tolerate a regression moving 55,284 pixels. The same pair's **mean luminance** swings 0.0048. The
+deliberate RED — `--distance 80` against the boot's 90 — moves mean luminance to 79.8025 from
+76.1236, a swing of 3.6789, or 766x that noise. Mean luminance is the discriminating field here and
+the changed-pixel count is the nearly-inert one.
+
+> **CORRECTION (issue #98), carried here from `10-10-signoff/task-0-control.md` because this epic is
+> what everything is re-derived from:**
+> 1. **The "mean luminance" figures above are a plain unweighted RGB channel average, not
+>    luminance.** `76.1236` reproduces to four decimal places as the RGB mean of
+>    `control-boot-5452c4d-a.png`; that frame's Rec.601 luminance — the statistic
+>    `10-7-signoff/lumstats.py` computes and `pixel_guard.rs` asserts on — is **71.1931**. The ~5.0
+>    gap was read once as a 5-point look regression that had not happened.
+> 2. **`0.0048` is not a noise floor.** It is one two-sample pair that landed tight. Re-measured on
+>    `8eb1d1d`, with no production change between the two, the same-build swing is **0.0724** —
+>    14–20x — so the "within 10x" clause above gated at 0.048, NARROWER than the build's own noise,
+>    and was unsatisfiable. That is why it is struck.
+> 3. **The 766x RED headroom is inflated for the same reason.** The RED's ranking conclusion
+>    survives (mean luminance discriminates, the changed-pixel count does not); its multiplier does
+>    not.
+>
+> The level itself never moved: creation → `8eb1d1d` is 0.0670 (Rec.601) / 0.0589 (RGB average).
+
+Full record and commands:
 `_bmad-output/implementation-artifacts/10-10-signoff/task-0-control.md`.
 
 **Given** the seat,

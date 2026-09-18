@@ -2170,3 +2170,22 @@ decision-needed items live in the story file's Review Findings section, not here
   `gradient` is always 0 and the scour branch never fires there at all. Patch-index arithmetic was
   checked by hand for `x,y` in `0..128` and no boundary defect was found — this is a coverage gap,
   not a confirmed defect.
+
+
+## Deferred from: code review of 10-10-take-the-camera-where-you-want-it (2026-09-17)
+
+- **`MouseScrollUnit` is ignored in the wheel zoom** (`crates/gui/src/ingest.rs:1566`). `wheels.read().map(|w| w.y).sum()` never consults `w.unit`. On a Windows precision touchpad or Wayland, winit reports `MouseScrollUnit::Pixel` with `y` in the tens or hundreds per gesture rather than +/-1 per notch, so `wheel * WHEEL_ZOOM_STEP` (6.0) slams the rig to a clamp on the first flick. The only wheel test writes `unit: MouseScrollUnit::Line` (`tests/headless.rs:3121`). Not reproducible in this devpod — no window, no pointing device. Raised by the feature layer.
+- **Escape does double duty** (`crates/gui/src/pick.rs:90`). `select_dwarf` clears the selection on Escape BEFORE its `DesignateMode::None` guard, so the release is unconditional while the selection itself is mode-gated. With a dwarf followed, arming dig and then pressing Escape to leave dig also silently drops the dwarf. No test covers the combination. Raised by the feature layer.
+- **A selection is never released when the dwarf leaves the mirror** (`crates/gui/src/pick.rs:176`). If the followed entity drops out of `DrawnEntities`, `frame_selected_dwarf` returns early and the camera freezes at his last framing with `SelectedDwarf` still `Some(id)`; nothing but Escape or a fresh selection clears it, and no UI reads `SelectedDwarf`, so there is no indicator. Probably unreachable in M2 (dwarves do not die), which is why it is deferred rather than patched. Raised by the blind and feature layers.
+
+
+## Deferred from: the seat round closing 10-10-take-the-camera-where-you-want-it (2026-09-18)
+
+- **The camera controls tell a human nothing about themselves.** There is no `--help`, and the hint
+  bar still reads only `1 dig  2 channel  3 stockpile  4 clear` (`designate.rs:51`) -- so MMB orbit,
+  shift+MMB pan, ctrl for fast pan, the wheel, the `C` readout and left-click-to-follow are
+  discoverable only by reading the source or being told. Raised by the review's feature layer; Wolf
+  HELD it for a seat round, and the seat round did not answer it: he signed the feel off from a seat
+  where he already knew every binding, which is exactly the operator this gap is invisible to.
+  Deferred rather than ticked. NOTE the two shapes are not equal in cost -- a `--help` block is a
+  print statement, while a hint bar that names six mouse gestures has a layout question behind it.

@@ -135,9 +135,12 @@ PY
 mutation "close zoom loses the camp" gui zoom_limits_keep_the_camp_in_front_of_the_camera <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
-old = '        let composition_scale = (self.distance / BOOT_DISTANCE).min(1.0);\n'
+# RE-ANCHORED 2026-09-17 (story 10.10): the scale moved out of a local binding in
+# `composition_target` and into `composition_push`, which the dwarf-framing solve also reads. The
+# SABOTAGE is unchanged -- pin the scale at 1.0 so close zoom stops keeping the camp in front.
+old = '        boot_composition_offset() * (self.distance / BOOT_DISTANCE).min(1.0)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        let composition_scale = 1.0;\n'))
+p.write_text(s.replace(old, '        boot_composition_offset()\n'))
 PY
 
 mutation "snowfall collapses into one row" gui snowfall_scatters_through_the_camp_read_without_marching_in_rows <<'PY'

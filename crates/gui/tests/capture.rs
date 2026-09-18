@@ -292,16 +292,46 @@ fn blown_pool_range_failure_is_a_real_panic_not_a_successful_capture() {
         }
     }
 
+    // A framing a --camera run could really produce, written as a literal rather than built from
+    // a rig, so this test states independently what the failure must carry.
+    const NEAR_FRAMING: &str = "camera: yaw=0.7 pitch=0.45 distance=20 focus=64,64,9 \
+                                --camera 0.7,0.45,20,64,64,9";
+
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        validate_capture_ranges(&bytes, TextureFormat::Rgba8Unorm, 64, 64, true, 9);
+        validate_capture_ranges(
+            &bytes,
+            TextureFormat::Rgba8Unorm,
+            64,
+            64,
+            true,
+            9,
+            NEAR_FRAMING,
+        );
     }));
     std::panic::set_hook(previous);
 
     assert!(
         outcome.is_err(),
         "a range assertion panics out of the observer and therefore exits the app with 101"
+    );
+    // AC11: the ceiling is calibrated for the BOOT framing only, so once --camera makes other
+    // framings routine the failure has to say which one it was pointed at -- otherwise a
+    // legitimately brighter view is indistinguishable from a regression. The ceiling itself is
+    // NOT raised for those views.
+    let message = outcome
+        .expect_err("the ceiling must trip on this frame")
+        .downcast::<String>()
+        .expect("a range assertion panics with a formatted String message");
+    assert!(
+        message.contains("near-white area is"),
+        "the near-white ceiling must be the assertion that tripped; got {message:?}"
+    );
+    assert!(
+        message.contains("--camera 0.7,0.45,20,64,64,9"),
+        "the ceiling failure must name the framing it was taken at, pasteable as --camera; \
+         got {message:?}"
     );
 }
 

@@ -2048,7 +2048,112 @@ development_status:
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
   10-9-the-land-reads-natural: done
-  10-10-take-the-camera-where-you-want-it: ready-for-dev
+  10-10-take-the-camera-where-you-want-it: done
+                          # DONE 2026-09-18: WOLF SIGNED OFF FROM THE SEAT after the review patch
+                          # -- "perfect .. I am happy. Works like it should. So PR." That closes
+                          # the seat round the patch was waiting on, and the two feel items he had
+                          # HELD stand AS SHIPPED (wheel notch count, wheel direction), judged
+                          # rather than argued. It also closes the gap no devpod could: MMB orbit,
+                          # shift+MMB pan, a real wheel notch, C printing a line, clicking a dwarf
+                          # and Escape have now been exercised by a person with a window.
+                          # The THIRD held item is NOT closed and is not claimed as closed --
+                          # discoverability (no --help, the hint bar still reads only
+                          # "1 dig 2 channel 3 stockpile 4 clear") is invisible to an operator who
+                          # already knows the controls, which Wolf does. Deferred, not ticked.
+                          # 10.10 REVIEW-PATCHED 2026-09-18. ALL TWELVE patch items
+                          # closed; the 3 deferred stay deferred and the 3 seat items Wolf HELD
+                          # stay held, so what the story still owes is a SEAT ROUND and sign-off,
+                          # not code. Two decisions went to Wolf first, neither having a ruled
+                          # value: pan's fast modifier (CTRL, over alt, which Linux window managers
+                          # claim before the client ever sees the drag) and the selection distance
+                          # (20 -- a dwarf reads ~49 px against 10.8 at the boot 90).
+                          # FULL GATE GREEN 557s at 2078e5a (RUST_TEST_THREADS=6, foreground),
+                          # INCLUDING the pixel-guard tier at 380s -- the tier the review's own
+                          # --fast run skipped and called a coverage hole. That hole is closed.
+                          # BOTH ORACLE DEFECTS FIXED AT SOURCE, not corrected for: the pick ranks
+                          # the DRAWN translation (blend lag and draw offset included) through the
+                          # LIVE camera's world_to_viewport, the same seam update_pick already used,
+                          # with the radius in pixels off logical_viewport_size. The two new tests
+                          # STATE THEIR OWN DISCRIMINATION rather than leaving it to a mutation: the
+                          # wire cell sits 105 px from the cursor against a 64.8 px radius at
+                          # distance 20, and at 900x1200 the 16:9 projection puts the dwarf 227 px
+                          # from where he is drawn. install_pick_camera takes a viewport now --
+                          # every picking test had used 1920x1080, the one aspect where the
+                          # hardcoded constant is right.
+                          # THE THREE UNTESTED SEAMS ARE PINNED: shift+MMB pan (nothing across all
+                          # 551 rows), the readout key with its LastCameraReadout, and the live
+                          # rig->framing string the capture reports -- the last through the REAL
+                          # BINARY in pixel_guard.rs, because that is the only place the live query
+                          # exists. Sabotage table re-run WHOLE (the code moved; "the anchors did
+                          # not change" is not evidence): 31 rows, 31 KILLED, and one OLD row came
+                          # back NO-COMPILE -- it injected a `DetectChanges` import the module now
+                          # has of its own, so it read as a row in the file while pinning nothing.
+                          # Three rows re-pointed in all; the pre-commit hook's mutation audit
+                          # caught two of them before the commit landed, which is what that probe
+                          # is for.
+                          # ISSUE #99 IS OVERTURNED ON ITS HEADLINE, re-verified here rather than
+                          # relayed: --camera 0.7,0.45,45,64,64,9 exits 101 on the NEAR-WHITE
+                          # assertion with the ground median at 91, comfortably inside [70,180].
+                          # The ground median does not climb smoothly with the zoom -- 81 at d=90,
+                          # 83 at d=80, 91 at d=45, 202 at d=20 -- which is what a two-sample
+                          # generalisation missed. #99 stays OPEN for its second finding (the
+                          # recorded --distance 80 trigger is not repeatable).
+                          # FOR THE SEAT ROUND: the pan feel Wolf judged on 2026-09-17 was the
+                          # always-on 4x at the boot zoom, which is now CTRL+shift+MMB. Plain
+                          # shift+MMB runs at the documented 0.12 rate, which nobody has felt yet,
+                          # and every pan is distance-scaled now.
+                          # ACs 2, 3 and 8 AMENDED on Wolf's rulings -- outside the dev workflow's
+                          # normally permitted sections, logged in the story's Change Log.
+                          # 10.10 CODE-REVIEWED 2026-09-17 -> in-progress. FOUR LAYERS, ALL LIVE.
+                          # 12 patch items + 3 deferred + 3 dismissed; patches LEFT AS ACTION ITEMS
+                          # for a separate review-patch session (Wolf's choice). Wolf ruled three
+                          # decisions on the spot: clamp what the READOUT PRINTS (not the aim
+                          # point); 10.10 OWES THE SELECT-ZOOM that AC8 dropped at creation and
+                          # `epics.md` still specifies; patch only the two OBJECTIVE seat items
+                          # (dead shift conditional in the pan branch, distance-scaled pan) and
+                          # HOLD wheel direction / notch count / discoverability for a seat round.
+                          # VERIFICATION ACTUALLY RUN BY THE REVIEW: `gate.sh --fast` GREEN 58s at
+                          # 339a07f -- a COVERAGE HOLE, not a full gate: it skips serve.rs (61
+                          # daemon tests) and pixel_guard.rs (2 frame guards), and NOTHING has run
+                          # the full gate at 339a07f (the record's GATE GREEN 511s is 4b3f75b, two
+                          # commits back). Sabotage table re-run independently: 16/16 KILLED, so
+                          # AC12 no longer rests on the dev's word. Repo binaries rebuilt after the
+                          # mutation run -- `gui build 339a07f`, no -dirty.
+                          # THE TWO FINDINGS THAT MATTER MOST: (1) the dwarf pick's oracle disagrees
+                          # with what is DRAWN, two ways at one site -- it projects the raw wire cell
+                          # (not the blended, -0.5Y-offset figure) through a projection hardcoded to
+                          # BOOT_ASPECT_RATIO (while the render camera's aspect follows the live,
+                          # never-locked resizable window). Both hide inside the 0.06 radius at boot
+                          # and exceed it at distance <=40 -- i.e. clicking a walking dwarf fails at
+                          # exactly the close zoom this feature exists for. Every picking test uses
+                          # 1920x1080 AND derives its cursor from the same projection the pick uses,
+                          # so oracle and subject share the error term. (2) TWO EVIDENCE CHANNELS ARE
+                          # UNOBSERVABLE: `LastCameraReadout` was built as "the seam so a test can
+                          # assert what the operator saw" and NOTHING reads it; the capture's live
+                          # rig->framing seam is the same shape. Same class the story's own Change
+                          # Log records closing for the wheel three commits earlier.
+                          # ALSO: shift+MMB pan is pinned by no test and no row across all 551;
+                          # `epics.md:2043` still publishes AC1's STRUCK luminance clause and its
+                          # falsified figures (0.0048, 76.1236, "766x"), so the phantom regression is
+                          # still re-derivable from the epic; and ISSUE #99 IS WRONG -- near-white IS
+                          # reachable via zoom at d=45 (ground median 89, near-white 2.6951%, ceiling
+                          # trips and names the framing), so AC11 is live-demonstrable in one command.
+                          # CONVERGENCE, measured not inferred: 5 in 15 findings (4-way on the
+                          # unclamped focus, 3-way on --distance overriding --camera, 2-way on the
+                          # pan hole / readout key / capture framing) against Epic 3's 1-in-8.
+                          # REVIEW INCIDENT, and it changes a standing instruction: the acceptance
+                          # layer sabotaged the SHARED WORKING TREE mid-review. It tried to check
+                          # whether the mutation anchors were stale by `exec`-ing each payload with
+                          # `pathlib.Path` monkeypatched to swallow writes -- but every payload opens
+                          # with `import pathlib`, and `import X` inside `exec` REBINDS the name to
+                          # the real module, so all 16 payloads wrote to five tracked source files at
+                          # 17:07:32 in one 5ms burst, no restore, while three siblings compiled
+                          # against that tree. Restored on Wolf's authorisation; diff archived; the
+                          # blind layer was re-run from a rebuilt cache and CHANGED its headline
+                          # finding on clean source (its "boots at 800x600" premise was false --
+                          # Bevy 0.19 defaults to 1280x720). A mutation payload reports whether it
+                          # applies BY APPLYING IT: every future layer prompt must ban executing the
+                          # payloads, not merely `scripts/mutate.sh`.
                           # DONE 2026-09-11 at the closing sitting: Wolf signed off the `df0f722`
                           # frame ("cool ... I think we are done with the story"), which met AC12 --
                           # the last AC outstanding. MERGED 2026-09-11 06:09Z as PR #91, merge

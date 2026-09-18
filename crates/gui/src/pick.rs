@@ -1,12 +1,20 @@
 use bevy::{
     camera::Camera,
-    prelude::{Camera3d, GlobalTransform, Query, Res, ResMut, Resource, Vec3, Window, With},
+    ecs::change_detection::DetectChanges,
+    input::{ButtonInput, mouse::MouseButton},
+    prelude::{
+        Camera3d, GlobalTransform, KeyCode, Query, Res, ResMut, Resource, Transform, Vec2, Vec3,
+        Window, With, Without,
+    },
     window::PrimaryWindow,
 };
+use protocol::EntityKind;
 
 use crate::{
+    camera::CameraRig,
+    designate::DesignateMode,
     ingest::MirrorResource,
-    project::{is_tree_foliage, is_visible_at_slice},
+    project::{TerrainTile, WorldProjected, is_tree_foliage, is_visible_at_slice},
     slice::SliceLevel,
     transform::{render_to_world, world_to_render},
 };
@@ -48,6 +56,186 @@ pub struct PickedTile(pub Option<PickedCell>);
 impl PickedTile {
     pub fn tile(&self) -> Option<[i32; 3]> {
         self.0.map(|cell| cell.tile)
+    }
+}
+
+/// The dwarf the operator has selected, by his wire id.
+///
+/// CLIENT-LOCAL, and that is an acceptance criterion rather than an implementation detail: a
+/// selection sends NOTHING (AD-16 closed the M2 wire diff), and `protocol` and `client-core` know
+/// nothing about it. The id is the wire id only because that is what the mirror keys entities by.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelectedDwarf(pub Option<u32>);
+
+/// How close the cursor must come to a dwarf's DRAWN position to select him, as a fraction of the
+/// viewport HEIGHT. A fraction rather than pixels so it means the same thing at every resolution;
+/// hardcoded because nothing else reads it and no story has asked to tune it.
+const DWARF_PICK_RADIUS: f32 = 0.06;
+
+/// The distance a selection drops the rig to, in cells.
+///
+/// `epics.md` § 10.10 specifies that selecting a dwarf drops the distance "to a readable one", and
+/// records why: a dwarf is ~10.8 px tall at the boot distance of 90, which is the scale every
+/// walk-cycle judgement has been made at so far. Apparent height goes as 1/distance, so 20 draws
+/// him ~49 px tall — ~6.8% of a 720p frame. Wolf's value, 2026-09-17. AC8 dropped this clause at
+/// story creation and the review put it back: centring a 10.8 px speck still left the operator
+/// hand-flying the zoom, which is the cost this story exists to remove.
+const SELECT_DISTANCE: f32 = 20.0;
+
+/// Selects the dwarf nearest the cursor, and releases the selection on Escape.
+///
+/// Only acts when `DesignateMode::None`: with a mode armed, the left button belongs to
+/// `designation_input` and this must not steal it. RMB is untouched — it aborts a designation.
+///
+/// A click that finds no dwarf within the radius leaves the selection exactly as it was. Escape
+/// is the documented release, so an empty click is not a second, silent one.
+// Eight parameters, one over the lint's bar: five of them are the resources the criterion names
+// (the button, Escape, the designate mode, the mirror's kinds, the selection it writes) and the
+// last three are the seam the review's oracle finding closed — the LIVE camera, the DRAWN
+// entities, and the window the cursor comes from. Collapsing any of them into a helper struct
+// would hide which of them the system actually reads.
+#[allow(clippy::too_many_arguments)]
+pub fn select_dwarf(
+    mouse: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mode: Res<DesignateMode>,
+    mirror: Res<MirrorResource>,
+    mut selected: ResMut<SelectedDwarf>,
+    cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    drawn: DrawnEntities,
+    windows: Query<&Window, With<PrimaryWindow>>,
+) {
+    if keys.just_pressed(KeyCode::Escape) {
+        selected.0 = None;
+        return;
+    }
+    if !mouse.just_pressed(MouseButton::Left) || *mode != DesignateMode::None {
+        return;
+    }
+    let (Ok((camera, global)), Ok(window)) = (cameras.single(), windows.single()) else {
+        return;
+    };
+    let (Some(cursor), Some(viewport)) = (window.cursor_position(), camera.logical_viewport_size())
+    else {
+        return;
+    };
+    if viewport.y <= 0.0 {
+        return;
+    }
+    if let Some(id) = nearest_dwarf_to(
+        &mirror.0,
+        camera,
+        global,
+        &drawn,
+        cursor,
+        viewport.y * DWARF_PICK_RADIUS,
+    ) {
+        selected.0 = Some(id);
+    }
+}
+
+/// The dwarf whose DRAWN position is nearest `cursor`, in viewport pixels, within `radius`.
+///
+/// Extracted from the system so the pick geometry is testable without a window, and because the
+/// system above cannot be reached headlessly at all: there is no `PrimaryWindow`, so a live pick
+/// is always `None` there.
+///
+/// Two things here are deliberate, and both were defects the 10.10 review found:
+///
+/// - The candidate position is the DRAWN translation `blend_entities` wrote this frame, not
+///   `entity.pos` off the wire. The drawn figure carries `entity_draw_offset` (-0.5 Y) and trails
+///   the delivered cell by up to `DWARF_WALK_SNAP_CELLS` while he walks; against the 0.06 radius
+///   that separation measured 0.0223 at the boot distance but 0.0496 at 40 and 0.0975 at 20, so
+///   clicking exactly on a walking dwarf missed him at precisely the close zoom a selection now
+///   drops to. `frame_selected_dwarf` already followed the drawn position; the pick agrees with it
+///   and with the screen now.
+/// - The projection is the LIVE render camera's, via `world_to_viewport`, the same seam
+///   `update_pick` resolves the terrain cursor through. The rig's own `project_*` is hardcoded to
+///   `BOOT_ASPECT_RATIO` while the window is `resizable: true` and never locked, so Bevy's
+///   `camera_system` drives the drawn aspect away from the constant the moment the operator
+///   resizes — an error of 0.24 at 1024x768 and 1.0 at 900x1200, in a 0.06 radius.
+///
+/// Ranked on screen distance because that is what the criterion says — "nearest the cursor" — with
+/// view DEPTH breaking a tie, so clicking into a cluster takes the dwarf in front rather than an
+/// arbitrary one. Iteration order is the drawn query's, so a tie in both is still deterministic
+/// within a frame.
+fn nearest_dwarf_to(
+    mirror: &client_core::Mirror,
+    camera: &Camera,
+    global: &GlobalTransform,
+    drawn: &DrawnEntities,
+    cursor: Vec2,
+    radius: f32,
+) -> Option<u32> {
+    let dwarves = mirror
+        .entities()
+        .filter(|entity| entity.kind == EntityKind::Dwarf)
+        .map(|entity| entity.id)
+        .collect::<std::collections::BTreeSet<_>>();
+    drawn
+        .iter()
+        .filter(|(marker, _)| dwarves.contains(&marker.0))
+        .filter_map(|(marker, transform)| {
+            // `_with_depth` rather than the plain projection: both return Err for anything outside
+            // the frustum, and the depth — view-space and positive — is the tie-break below.
+            let screen = camera
+                .world_to_viewport_with_depth(global, transform.translation)
+                .ok()?;
+            let distance = screen.truncate().distance(cursor);
+            (distance <= radius).then_some((distance, screen.z, marker.0))
+        })
+        .min_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        })
+        .map(|(_, _, id)| id)
+}
+
+/// The drawn entities a follow may read: everything projected that is neither terrain nor the
+/// camera. The `Without<Camera3d>` is load-bearing rather than tidy — it is what makes this
+/// query provably disjoint from the `&mut CameraRig, &mut Transform` one beside it, which both
+/// touch `Transform`.
+type DrawnEntities<'w, 's> = Query<
+    'w,
+    's,
+    (&'static WorldProjected, &'static Transform),
+    (Without<TerrainTile>, Without<Camera3d>),
+>;
+
+/// Keeps the selected dwarf centred while he is selected.
+///
+/// Reads the dwarf's DRAWN translation — the one `blend_entities` wrote this frame — so this
+/// inherits AD-15 exactly: the blend never extrapolates and snaps across a snapshot, and a
+/// follower that read the mirror's integer cell instead would lag the figure it is framing.
+///
+/// While a dwarf is selected the focus is his, so panning cannot fight the follow. Escape
+/// releases him and hands the focus back.
+///
+/// Selecting him also drops the zoom to [`SELECT_DISTANCE`] — the clause `epics.md` specifies and
+/// AC8 lost at story creation.
+pub fn frame_selected_dwarf(
+    selected: Res<SelectedDwarf>,
+    drawn: DrawnEntities,
+    mut cameras: Query<(&mut CameraRig, &mut Transform), With<Camera3d>>,
+) {
+    let Some(id) = selected.0 else {
+        return;
+    };
+    let Some((_, dwarf)) = drawn.iter().find(|(marker, _)| marker.0 == id) else {
+        return;
+    };
+    let target = dwarf.translation;
+    for (mut rig, mut transform) in &mut cameras {
+        // ONCE per selection, not every frame: the zoom is dropped when he is picked and the wheel
+        // is the operator's again afterwards. Holding it at `SELECT_DISTANCE` every frame would
+        // centre him and then refuse to let anyone pull back for context, which is a worse camera
+        // than the one this story replaced.
+        if selected.is_changed() {
+            rig.distance = SELECT_DISTANCE;
+        }
+        rig.frame_render_point(target);
+        *transform = rig.transform();
     }
 }
 
@@ -508,7 +696,7 @@ mod tests {
     /// A ray from a real camera pose through a chosen cell's centre.
     fn ray_at(target: [i32; 3], yaw: f32, pitch: f32, distance: f32) -> (Vec3, Vec3) {
         let rig = CameraRig {
-            focus: target,
+            focus: Vec3::new(target[0] as f32, target[1] as f32, target[2] as f32),
             yaw,
             pitch,
             distance,

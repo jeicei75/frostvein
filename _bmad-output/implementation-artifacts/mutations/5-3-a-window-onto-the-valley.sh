@@ -35,9 +35,15 @@ PY
 mutation "world transform flips handedness" gui coordinate_transform_preserves_the_pinned_handedness <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/transform.rs'); s = p.read_text()
-old = '    Vec3::new(x as f32, z as f32, -y as f32)\n'
+old = '''pub fn world_to_render_f32(point: Vec3) -> Vec3 {
+    Vec3::new(point.x, point.z, -point.y)
+}
+'''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    Vec3::new(x as f32, z as f32, y as f32)\n'))
+p.write_text(s.replace(old, '''pub fn world_to_render_f32(point: Vec3) -> Vec3 {
+    Vec3::new(point.x, point.z, point.y)
+}
+'''))
 PY
 
 mutation "reconciliation ignores the simulation id" gui terrain_ids_never_satisfy_a_simulation_id_lookup <<'PY'

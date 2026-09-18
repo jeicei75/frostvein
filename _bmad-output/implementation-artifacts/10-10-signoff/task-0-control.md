@@ -1,5 +1,30 @@
 # Task 0 control — the boot framing, and what an instrument can actually see here
 
+> **CORRECTION, 2026-09-17 (issue #98). Two figures below are wrong about what they measure, and
+> one of them is not a noise floor. Do not re-derive from this document without reading this box.**
+>
+> 1. **"mean luminance" here is a plain unweighted RGB channel average, not luminance.** The
+>    `76.1236` below reproduces to four decimal places as the RGB mean of `control-boot-5452c4d-a.png`.
+>    That frame's actual Rec.601 luminance — the statistic `10-7-signoff/lumstats.py` computes and
+>    `crates/gui/tests/pixel_guard.rs` asserts on — is **71.1931**. The two differ by ~5.0 on this
+>    frame, which is enough to look exactly like a look regression to anyone comparing across tools.
+>    It did that once already: the figure was read as a 5-point baseline move on 2026-09-17.
+> 2. **The `0.0048` swing is not the same-build noise floor.** It is one two-sample pair that
+>    happened to land tight. Re-measured on build `8eb1d1d` (no production change between the two —
+>    only the build-stamp fix #96 and a docs commit #97), the same-build pair swing is **0.0724**
+>    on Rec.601 and **0.0684** on the RGB average: **14–20x** this figure. Across five same-build
+>    captures in that run, `near-white-area` spread 0.5655 %–0.7922 % (cf. issue #90).
+>    A two-sample pair cannot establish a floor; it can only produce a lucky-tight one.
+> 3. **Consequence:** story 10.10's AC1 gated on "within 10x the 0.0048 swing" = a 0.048 tolerance,
+>    which is *narrower than the measured same-build noise*. Wolf struck the clause on 2026-09-17;
+>    the hand-written-literal rig guard is the whole of AC1.
+> 4. **The 766x RED headroom below is inflated for the same reason** — it divides an RGB-average
+>    delta by a lucky-tight pair swing. The RED's *ranking* conclusion survives (mean luminance
+>    discriminates, changed-pixel count does not); its multiplier does not.
+>
+> The level itself never moved: creation → `8eb1d1d` is 0.0670 (Rec.601) / 0.0589 (RGB average).
+> All four control PNGs are committed beside this file, so this was settled off the images in hand.
+
 **Build:** `gui build 5452c4d` (HEAD `5452c4d`, clean tree — the stamp was verified, see the trap
 at the bottom). Daemon `./target/debug/simd 7451`.
 

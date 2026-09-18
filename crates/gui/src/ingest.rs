@@ -28,15 +28,18 @@ use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::change_detection::DetectChanges,
-    ecs::message::MessageWriter,
+    ecs::message::{MessageReader, MessageWriter},
     ecs::schedule::IntoScheduleConfigs,
-    input::{ButtonInput, mouse::MouseButton},
+    input::{
+        ButtonInput,
+        mouse::{MouseButton, MouseMotion, MouseWheel},
+    },
     pbr::{DistanceFog, FogFalloff},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
         DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
         Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform,
-        TransformSystems, Vec2, Window, With, Without, px,
+        TransformSystems, Vec2, Vec3, Window, With, Without, px,
     },
     render::renderer::RenderAdapterInfo,
     window::PrimaryWindow,
@@ -48,7 +51,7 @@ use crate::{
     appearance::{light_properties, night_lighting},
     atmosphere::{fall_snow, setup_atmosphere, sun_light_transform},
     blend::TickClock,
-    camera::{BOOT_VERTICAL_FOV, CameraRig},
+    camera::{BOOT_VERTICAL_FOV, CameraRig, camera_readout_line},
     capture::{
         CaptureState, TreeCaptureVerification, accumulate_motion, capture_after_frames,
         update_tree_capture_verification,
@@ -630,7 +633,11 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
         .init_resource::<DragAnchor>()
-        .init_resource::<LightingToggles>();
+        .init_resource::<LightingToggles>()
+        .init_resource::<LastCameraReadout>()
+        .init_resource::<crate::pick::SelectedDwarf>()
+        .add_message::<MouseMotion>()
+        .add_message::<MouseWheel>();
     app.add_systems(
         Startup,
         (
@@ -655,6 +662,31 @@ pub fn client_systems(app: &mut App) {
             crate::perf::mark_perf_frame_on_key,
             fall_snow,
         ),
+    )
+    // Ordered, not merely registered. `select_dwarf` must read the rig AFTER `camera_controls`
+    // has moved it, or a click is judged against last frame's framing; `frame_selected_dwarf`
+    // must run after `ProjectionSet`, because `blend_entities` inside it is the sole writer of
+    // the dwarf's drawn position and that position is what gets centred. Both stay in `Update`
+    // so the camera Transform they write is propagated this frame rather than trailing by one —
+    // moving them beside `designation_input` in `PostUpdate` would put them after
+    // `TransformSystems::Propagate` and the followed dwarf would lag the camera.
+    .add_systems(
+        Update,
+        (crate::pick::select_dwarf, crate::pick::frame_selected_dwarf)
+            .chain()
+            .after(camera_controls)
+            .after(ProjectionSet),
+    )
+    // The readout reads the rig every one of these three write. Bevy does NOT order a conflicting
+    // read/write pair by declaration order, and in an unordered tuple the edge layer reproduced
+    // reader-before-writer EVERY frame in a standalone Bevy 0.19 crate — so `C` printed the
+    // framing of the frame before the one the operator was looking at. An instrument that
+    // misreports by a frame is still an instrument that misreports.
+    .add_systems(
+        Update,
+        camera_readout
+            .after(camera_controls)
+            .after(crate::pick::frame_selected_dwarf),
     )
     .add_systems(
         PostUpdate,
@@ -724,6 +756,7 @@ struct Args {
     static_world: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
+    camera: Option<CameraStart>,
     cursor: Option<Vec2>,
     at_tick: Option<u64>,
     drag: Option<ScriptedDragSpec>,
@@ -850,6 +883,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut static_world = false;
     let mut slice_level = None;
     let mut distance = None;
+    let mut camera = None;
     let mut cursor = None;
     let mut at_tick = None;
     let mut drag = None;
@@ -942,6 +976,11 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                 bail!("--distance must be finite");
             }
             distance = Some(parsed);
+        } else if arg == "--camera" {
+            let value = args
+                .next()
+                .context("--camera requires yaw,pitch,distance,fx,fy,fz")?;
+            camera = Some(parse_camera(value)?);
         } else if arg == "--cursor" {
             let value = args.next().context("--cursor requires x,y")?;
             cursor = Some(parse_cursor(value)?);
@@ -979,6 +1018,21 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if distance.is_some() && capture.is_none() {
         bail!("--distance requires --capture");
     }
+    // NOTE: deliberately NO `--camera requires --capture` gate. `--distance` has one because it
+    // only ever existed to pin a capture; `--camera` is how the operator flies the live seat to a
+    // framing and reads it back, so gating it on --capture would break its primary use.
+    if camera.is_some() && distance.is_some() {
+        // `setup_camera` places the whole framing and THEN overwrites the distance from
+        // `CaptureDistance`, so the pasted line's yaw, pitch and focus survive while its zoom is
+        // silently clobbered — an operator who pastes a readout onto a command line that already
+        // carries `--distance` gets a framing the line does not describe. Verified in review:
+        // `--camera 0.7,0.45,4,64,64,9` panics on the close zoom, and the same command plus
+        // `--distance 90` succeeds. Bail rather than pick a winner, exactly as `--cursor` and
+        // `--drag` do: the readout line carries a distance of its own and is the save format.
+        bail!(
+            "--camera and --distance are mutually exclusive; the --camera line carries its own distance"
+        );
+    }
     if cursor.is_some() && capture.is_none() {
         bail!("--cursor requires --capture");
     }
@@ -1005,6 +1059,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         static_world,
         slice_level,
         distance,
+        camera,
         cursor,
         at_tick,
         drag,
@@ -1013,6 +1068,44 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         lights_off,
         assets,
         perf_log,
+    })
+}
+
+/// An operator-chosen opening framing, from `--camera yaw,pitch,distance,fx,fy,fz`.
+///
+/// One type doing double duty as the parsed argument and the resource `setup_camera` reads, so
+/// there is no second shape to keep in step.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct CameraStart {
+    pub yaw: f32,
+    pub pitch: f32,
+    pub distance: f32,
+    pub focus: Vec3,
+}
+
+fn parse_camera(value: OsString) -> anyhow::Result<CameraStart> {
+    let value = value.to_string_lossy();
+    let parts = value.split(',').collect::<Vec<_>>();
+    let [yaw, pitch, distance, fx, fy, fz] = parts.as_slice() else {
+        bail!("invalid --camera; expected yaw,pitch,distance,fx,fy,fz");
+    };
+    let yaw: f32 = yaw.parse().context("invalid --camera yaw")?;
+    let pitch: f32 = pitch.parse().context("invalid --camera pitch")?;
+    let distance: f32 = distance.parse().context("invalid --camera distance")?;
+    let fx: f32 = fx.parse().context("invalid --camera focus x")?;
+    let fy: f32 = fy.parse().context("invalid --camera focus y")?;
+    let fz: f32 = fz.parse().context("invalid --camera focus z")?;
+    if ![yaw, pitch, distance, fx, fy, fz]
+        .iter()
+        .all(|value| value.is_finite())
+    {
+        bail!("invalid --camera; every value must be finite");
+    }
+    Ok(CameraStart {
+        yaw,
+        pitch,
+        distance,
+        focus: Vec3::new(fx, fy, fz),
     })
 }
 
@@ -1142,6 +1235,9 @@ fn insert_capture_resources(app: &mut App, args: &Args) {
     if let Some(distance) = args.distance {
         app.insert_resource(CaptureDistance(distance));
     }
+    if let Some(camera) = args.camera {
+        app.insert_resource(camera);
+    }
     if let Some(cursor) = args.cursor {
         app.insert_resource(ScriptedCursor(cursor));
     }
@@ -1156,6 +1252,7 @@ fn insert_capture_resources(app: &mut App, args: &Args) {
 fn setup_camera(
     mut commands: Commands,
     distance: Option<Res<CaptureDistance>>,
+    start: Option<Res<CameraStart>>,
     headless: Option<Res<HeadlessRequested>>,
     images: Option<ResMut<Assets<Image>>>,
 ) {
@@ -1177,6 +1274,9 @@ fn setup_camera(
         _ => None,
     };
     let mut rig = CameraRig::new([64, 64, 9]);
+    if let Some(start) = start {
+        rig.place(start.yaw, start.pitch, start.distance, start.focus);
+    }
     if let Some(distance) = distance {
         rig.distance = distance.0.clamp(4.0, 500.0);
     }
@@ -1418,6 +1518,29 @@ fn classify_client_local(
     }
 }
 
+/// The camera's own readout key. Prints the framing AND records it, because a `println!` alone
+/// is not reachable by a test: the instrument rule here is that an evidence channel must itself
+/// be tested, and an untested one manufactures false evidence rather than merely missing true
+/// evidence. `LastCameraReadout` is that seam and nothing else reads it.
+fn camera_readout(
+    keys: Res<ButtonInput<KeyCode>>,
+    cameras: Query<&CameraRig>,
+    mut last: ResMut<LastCameraReadout>,
+) {
+    if !keys.just_pressed(KeyCode::KeyC) {
+        return;
+    }
+    for rig in &cameras {
+        let line = camera_readout_line(rig);
+        println!("{line}");
+        last.0 = Some(line);
+    }
+}
+
+/// The last line [`camera_readout`] printed, so a test can assert what the operator saw.
+#[derive(Resource, Default, Debug)]
+pub struct LastCameraReadout(pub Option<String>);
+
 fn log_adapter(adapter: Option<Res<RenderAdapterInfo>>) {
     if let Some(adapter) = adapter {
         println!(
@@ -1431,21 +1554,69 @@ fn log_adapter(adapter: Option<Res<RenderAdapterInfo>>) {
 
 fn camera_controls(
     keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut motions: MessageReader<MouseMotion>,
+    mut wheels: MessageReader<MouseWheel>,
+    time: Res<Time>,
     mut cameras: Query<(&mut CameraRig, &mut Transform)>,
 ) {
-    let yaw = (keys.pressed(KeyCode::KeyD) as i8 - keys.pressed(KeyCode::KeyA) as i8) as f32 * 0.02;
-    let pitch =
-        (keys.pressed(KeyCode::KeyW) as i8 - keys.pressed(KeyCode::KeyS) as i8) as f32 * 0.02;
-    let zoom = (keys.pressed(KeyCode::KeyE) as i8 - keys.pressed(KeyCode::KeyQ) as i8) as f32 * 1.0;
+    const ORBIT_RATE: f32 = 1.2;
+    const ZOOM_RATE: f32 = 60.0;
+    const MOUSE_ORBIT_RATE: f32 = 0.01;
+    // Cells of ground per pixel of cursor motion AT THE BOOT ZOOM; `pan_scale` carries it to
+    // every other zoom. Reachable at last: this rate was dead until 10.10's review, because
+    // shift is what SELECTS pan and the pan branch then multiplied by the shift multiplier
+    // unconditionally, so 0.48 was the only pan speed the seat ever felt.
+    const MOUSE_PAN_RATE: f32 = 0.12;
+    // One notch was 1.0, which needed ~86 of them to cross the boot-to-closest range. Raised
+    // to 6.0 on Wolf's verdict from the seat (2026-09-17): 14 notches boot-to-closest, and 4
+    // with shift held.
+    const WHEEL_ZOOM_STEP: f32 = 6.0;
+    const SHIFT_MULTIPLIER: f32 = 4.0;
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    let multiplier = if shift { SHIFT_MULTIPLIER } else { 1.0 };
+    // Pan takes its multiplier from CONTROL, not shift. Shift is the modifier that SELECTS pan,
+    // so `multiplier` inside the pan branch was always 4.0 and AC3's "shift multiplies the rate"
+    // was unobservable there. Ctrl is Wolf's ruling (2026-09-17) over Alt, which most Linux
+    // window managers take for themselves before the client ever sees the drag.
+    let pan_multiplier =
+        if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
+            SHIFT_MULTIPLIER
+        } else {
+            1.0
+        };
+    let key_scale = time.delta_secs() * multiplier;
+    let yaw = (keys.pressed(KeyCode::KeyD) as i8 - keys.pressed(KeyCode::KeyA) as i8) as f32
+        * ORBIT_RATE
+        * key_scale;
+    let pitch = (keys.pressed(KeyCode::KeyW) as i8 - keys.pressed(KeyCode::KeyS) as i8) as f32
+        * ORBIT_RATE
+        * key_scale;
+    let zoom = (keys.pressed(KeyCode::KeyE) as i8 - keys.pressed(KeyCode::KeyQ) as i8) as f32
+        * ZOOM_RATE
+        * key_scale;
+    let motion = motions.read().map(|motion| motion.delta).sum::<Vec2>();
+    let wheel = wheels.read().map(|wheel| wheel.y).sum::<f32>();
     for (mut rig, mut transform) in &mut cameras {
-        rig.orbit(yaw, pitch);
-        rig.zoom(zoom);
+        if mouse.pressed(MouseButton::Middle) {
+            if shift {
+                let rate = MOUSE_PAN_RATE * rig.pan_scale() * pan_multiplier;
+                rig.pan(-motion.x * rate, motion.y * rate);
+            } else {
+                rig.orbit(
+                    yaw - motion.x * MOUSE_ORBIT_RATE * multiplier,
+                    pitch - motion.y * MOUSE_ORBIT_RATE * multiplier,
+                );
+            }
+        } else {
+            rig.orbit(yaw, pitch);
+        }
+        rig.zoom(zoom + wheel * WHEEL_ZOOM_STEP * multiplier);
         *transform = rig.transform();
     }
 }
 
-/// `<` / `>` use the comma and period keys today. The planned wheel zoom remains unclaimed until
-/// UX-DR2 lands, so this client-local binding does not create a future migration.
+/// `<` / `>` use the comma and period keys today; the wheel belongs to the camera.
 fn slice_controls(
     keys: Res<ButtonInput<KeyCode>>,
     mirror: Res<MirrorResource>,
@@ -1727,7 +1898,7 @@ mod tests {
         camera::{CameraProjection, RenderTargetInfo},
         dev_tools::fps_overlay::FpsOverlayConfig,
         input::{ButtonInput, mouse::MouseButton},
-        prelude::{Camera, Camera3d, GlobalTransform, KeyCode, UVec2, Window, With},
+        prelude::{Camera, Camera3d, GlobalTransform, KeyCode, UVec2, Vec3, Window, With},
         window::{PrimaryWindow, WindowResolution},
     };
     use client_core::Mirror;
@@ -1858,6 +2029,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(bevy::MinimalPlugins)
             .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
+            .init_resource::<bevy::input::ButtonInput<bevy::input::mouse::MouseButton>>()
             .init_resource::<bevy::asset::Assets<bevy::prelude::Mesh>>()
             .init_resource::<bevy::asset::Assets<bevy::prelude::StandardMaterial>>()
             .init_resource::<bevy::asset::Assets<bevy::image::Image>>()
@@ -3188,6 +3360,55 @@ mod tests {
         );
     }
 
+    /// `setup_camera` places the whole `--camera` framing and THEN overwrites the distance from
+    /// `CaptureDistance`, so a pasted readout line's yaw, pitch and focus survived while its zoom
+    /// was silently clobbered. Verified live in the 10.10 review: `--camera 0.7,0.45,4,64,64,9`
+    /// panics on the close zoom, and the same command plus `--distance 90` succeeds — the
+    /// operator got a framing the line he pasted does not describe, with no warning.
+    ///
+    /// The readout line IS the save format and carries a distance of its own, so there is nothing
+    /// for `--distance` to add and no winner worth picking. Bail, exactly as `--cursor` and
+    /// `--drag` do.
+    #[test]
+    fn a_pasted_camera_line_and_a_capture_distance_are_mutually_exclusive() {
+        let both = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("30"),
+            std::ffi::OsString::from("--camera"),
+            std::ffi::OsString::from("0.7,0.45,20,64,64,9"),
+            std::ffi::OsString::from("--distance"),
+            std::ffi::OsString::from("90"),
+        ]);
+        let Err(error) = both else {
+            panic!("a --camera line carries its own distance; accepting both silently drops one");
+        };
+        assert!(
+            error.to_string().contains("mutually exclusive"),
+            "the rejection must say WHY, not merely fail: {error}"
+        );
+        // Either one alone still parses: the pairing is what is rejected, not the flags.
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--camera"),
+                std::ffi::OsString::from("0.7,0.45,20,64,64,9"),
+            ])
+            .is_ok()
+        );
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--capture"),
+                std::ffi::OsString::from("working.png"),
+                std::ffi::OsString::from("--frames"),
+                std::ffi::OsString::from("30"),
+                std::ffi::OsString::from("--distance"),
+                std::ffi::OsString::from("90"),
+            ])
+            .is_ok()
+        );
+    }
+
     /// AC16 requires a run that never reaches its tick to exit NON-ZERO. `App::run()` RETURNS the
     /// status and `AppExit` is not `#[must_use]`, so `app.run();` compiled clean under
     /// `-D warnings` while throwing every capture failure away.
@@ -3338,6 +3559,233 @@ mod tests {
         // And the pin is clamped by the same rule the flag documents.
         assert_eq!(rig_distance(Some(0.0)), 4.0);
         assert_eq!(rig_distance(Some(9_000.0)), 500.0);
+    }
+
+    /// `--camera`'s half of the same lie, and the reason this test exists at all: `--distance`'s
+    /// own docstring above records that replacing its assignment with `let _ = distance;` left
+    /// all 106 tests green. This runs the REAL `setup_camera` and reads the whole framing back
+    /// off the spawned rig, so a `--camera` that parses and then evaporates cannot pass.
+    #[test]
+    fn the_camera_flag_reaches_the_camera_rig_rather_than_merely_parsing() {
+        fn placed(requested: Option<super::CameraStart>) -> CameraRig {
+            let mut app = App::new();
+            if let Some(start) = requested {
+                app.insert_resource(start);
+            }
+            app.world_mut()
+                .run_system_once(super::setup_camera)
+                .expect("the camera setup must run");
+            *app.world_mut()
+                .query::<&CameraRig>()
+                .iter(app.world())
+                .next()
+                .expect("the camera setup must spawn a rig")
+        }
+
+        // Independent oracle: every expected value is written here by hand, never read back from
+        // `CameraStart`, `BOOT_*` or the rig itself.
+        let rig = placed(Some(super::CameraStart {
+            yaw: 1.25,
+            pitch: 0.6,
+            distance: 42.0,
+            focus: Vec3::new(20.0, 30.0, 4.0),
+        }));
+        assert_eq!(rig.yaw, 1.25);
+        assert_eq!(rig.pitch, 0.6);
+        assert_eq!(rig.distance, 42.0);
+        assert_eq!(rig.focus, Vec3::new(20.0, 30.0, 4.0));
+
+        // A second, different framing: one value reaching the rig proves nothing about the rest,
+        // and a flag that carried only its distance would pass a single-case assertion.
+        let other = placed(Some(super::CameraStart {
+            yaw: -0.5,
+            pitch: 0.3,
+            distance: 120.0,
+            focus: Vec3::new(1.0, 2.0, 3.0),
+        }));
+        assert_eq!(other.yaw, -0.5);
+        assert_eq!(other.pitch, 0.3);
+        assert_eq!(other.distance, 120.0);
+        assert_eq!(other.focus, Vec3::new(1.0, 2.0, 3.0));
+
+        // No flag means the boot framing, written by hand rather than read from the constants,
+        // so the test fails when a BOOT_* constant moves (AC1's rule, same reason).
+        let boot = placed(None);
+        assert_eq!(boot.yaw, 0.7);
+        assert_eq!(boot.pitch, 0.45);
+        assert_eq!(boot.distance, 90.0);
+        assert_eq!(boot.focus, Vec3::new(64.0, 64.0, 9.0));
+
+        // And the flag goes through the SAME clamps the live controls use, so it cannot reach a
+        // framing the operator could not fly to by hand.
+        let clamped = placed(Some(super::CameraStart {
+            yaw: 0.0,
+            pitch: 9.0,
+            distance: 9_000.0,
+            focus: Vec3::new(-50.0, 900.0, 900.0),
+        }));
+        assert_eq!(clamped.pitch, std::f32::consts::FRAC_PI_2 - 0.15);
+        assert_eq!(clamped.distance, 500.0);
+        assert_eq!(clamped.focus, Vec3::new(0.0, 127.0, 31.0));
+    }
+
+    /// `--camera` is an interactive flag as well as a capture one, so it must NOT inherit
+    /// `--distance`'s `requires --capture` gate. That gate is the one line of `--distance`'s
+    /// plumbing this flag deliberately does not copy.
+    #[test]
+    fn the_camera_flag_parses_without_capture_and_rejects_malformed_values() {
+        let args = super::parse_args_from([
+            std::ffi::OsString::from("7451"),
+            "--camera".into(),
+            "0.7,0.45,90,64,64,9".into(),
+        ])
+        .expect("--camera must parse with no --capture anywhere on the command line");
+        assert_eq!(
+            args.camera,
+            Some(super::CameraStart {
+                yaw: 0.7,
+                pitch: 0.45,
+                distance: 90.0,
+                focus: Vec3::new(64.0, 64.0, 9.0),
+            })
+        );
+
+        for bad in [
+            "0.7,0.45,90,64,64",
+            "0.7,0.45,90,64,64,9,1",
+            "0.7,0.45,90,64,64,nan",
+            "",
+        ] {
+            assert!(
+                super::parse_args_from([
+                    std::ffi::OsString::from("7451"),
+                    "--camera".into(),
+                    bad.into(),
+                ])
+                .is_err(),
+                "--camera must reject {bad:?}"
+            );
+        }
+    }
+
+    /// AC6: the printed line IS the save format. Paste its `--camera` token back and the rig
+    /// returns EXACTLY -- float equality, not a tolerance, because a readout that only
+    /// approximately reproduces a framing cannot be used to compare a look change.
+    #[test]
+    fn the_camera_readout_round_trips_through_the_flag_exactly() {
+        for (yaw, pitch, distance, focus) in [
+            (0.7_f32, 0.45_f32, 90.0_f32, Vec3::new(64.0, 64.0, 9.0)),
+            (
+                1.2345678,
+                0.6543211,
+                37.77777,
+                Vec3::new(1.5, 126.25, 30.125),
+            ),
+            (-0.3333333, 0.15, 4.0, Vec3::ZERO),
+        ] {
+            let mut original = CameraRig::new([0, 0, 0]);
+            original.place(yaw, pitch, distance, focus);
+            let line = crate::camera::camera_readout_line(&original);
+
+            // Take the flag argument straight out of the printed line, exactly as an operator
+            // copying the tail of it would.
+            let argument = line
+                .split("--camera ")
+                .nth(1)
+                .expect("the readout line must carry a --camera argument");
+            let parsed = super::parse_camera(std::ffi::OsString::from(argument))
+                .expect("the readout's own argument must parse");
+            let mut reproduced = CameraRig::new([0, 0, 0]);
+            reproduced.place(parsed.yaw, parsed.pitch, parsed.distance, parsed.focus);
+
+            assert_eq!(reproduced.yaw, original.yaw, "{line}");
+            assert_eq!(reproduced.pitch, original.pitch, "{line}");
+            assert_eq!(reproduced.distance, original.distance, "{line}");
+            assert_eq!(reproduced.focus, original.focus, "{line}");
+        }
+    }
+
+    /// AC6 for the case the review found, and Wolf's ruling on it (2026-09-17). Framing a dwarf
+    /// writes an unclamped AIM POINT — `frame_render_point` deliberately skips the world-bounds
+    /// clamp, because clamping it would decentre exactly the dwarves near an edge, which are the
+    /// hardest to see. Printing that raw focus produced a line `place()` clamped on the way back
+    /// in, so the round trip AC6 requires was NOT exact for those dwarves: a probe measured focus
+    /// y -19.2592 printed and 0.0 restored. The ruling: clamp what the readout PRINTS and leave
+    /// the aim point free.
+    ///
+    /// The cost is named rather than hidden, and asserted here: the printed line restores a view
+    /// NEAR his, not the identical one. What it may never do is round-trip inexactly.
+    #[test]
+    fn the_readout_round_trips_even_from_an_aim_point_outside_the_world() {
+        let mut rig = CameraRig::new([4, 4, 1]);
+        rig.distance = 20.0;
+        // The real 10.10 case: the drawn translation of a dwarf at world [2, 2, 1], which is
+        // `world_to_render` plus the -0.5 Y the dwarf is drawn at.
+        rig.frame_render_point(Vec3::new(2.0, 0.5, -2.0));
+        assert!(
+            rig.focus.y < 0.0,
+            "the framing solve must leave the world for this test to mean anything; got {:?}",
+            rig.focus
+        );
+
+        let line = crate::camera::camera_readout_line(&rig);
+        let argument = line
+            .split("--camera ")
+            .nth(1)
+            .expect("the readout line must carry a --camera argument");
+        let parsed = super::parse_camera(std::ffi::OsString::from(argument))
+            .expect("the readout's own argument must parse");
+        let mut reproduced = CameraRig::new([0, 0, 0]);
+        reproduced.place(parsed.yaw, parsed.pitch, parsed.distance, parsed.focus);
+
+        // EXACT, by float equality, against the framing the line describes.
+        let printed = rig.placed();
+        assert_eq!(reproduced.yaw, printed.yaw, "{line}");
+        assert_eq!(reproduced.pitch, printed.pitch, "{line}");
+        assert_eq!(reproduced.distance, printed.distance, "{line}");
+        assert_eq!(reproduced.focus, printed.focus, "{line}");
+        // Hand-written: the out-of-world y is printed AT the bound, not past it and not rounded.
+        assert_eq!(parsed.focus.y, 0.0, "{line}");
+        // And the aim point itself is untouched, so the edge dwarf stays centred.
+        assert!(rig.focus.y < 0.0, "{:?}", rig.focus);
+    }
+
+    /// AC7: two rigs that are not equal never print the same line. A readout that collapsed any
+    /// field -- rounded it, or left it out -- would make two different framings indistinguishable
+    /// in the record, which is the one thing this instrument exists to prevent.
+    #[test]
+    fn the_camera_readout_differs_whenever_the_rig_differs() {
+        let base = (0.7_f32, 0.45_f32, 90.0_f32, Vec3::new(64.0, 64.0, 9.0));
+        let variants = [
+            base,
+            // One field moved at a time, each by a hair, so a rounded or dropped field shows up.
+            (0.700_01, base.1, base.2, base.3),
+            (base.0, 0.450_01, base.2, base.3),
+            (base.0, base.1, 90.000_1, base.3),
+            (base.0, base.1, base.2, Vec3::new(64.000_1, 64.0, 9.0)),
+            (base.0, base.1, base.2, Vec3::new(64.0, 64.000_1, 9.0)),
+            (base.0, base.1, base.2, Vec3::new(64.0, 64.0, 9.000_1)),
+        ];
+        let lines = variants
+            .iter()
+            .map(|&(yaw, pitch, distance, focus)| {
+                let mut rig = CameraRig::new([0, 0, 0]);
+                rig.place(yaw, pitch, distance, focus);
+                crate::camera::camera_readout_line(&rig)
+            })
+            .collect::<Vec<_>>();
+        let unique = lines.iter().collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            unique.len(),
+            lines.len(),
+            "each distinct rig must print a distinct line; got {lines:#?}"
+        );
+        // And a POSITIVE assertion about what the line actually says, so this cannot pass by
+        // printing seven different but meaningless strings.
+        assert_eq!(
+            lines[0],
+            "camera: yaw=0.7 pitch=0.45 distance=90 focus=64,64,9 --camera 0.7,0.45,90,64,64,9"
+        );
     }
 
     #[test]

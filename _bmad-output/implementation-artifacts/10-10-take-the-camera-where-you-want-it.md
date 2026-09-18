@@ -1,6 +1,10 @@
+---
+baseline_commit: c5f96caa470e457c874001d9df2ccc58355efe94
+---
+
 # Story 10.10: Take the Camera Where You Want It
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -10,14 +14,14 @@ so that comparing a look change costs one command instead of a hand-flown approx
 
 ## Acceptance Criteria
 
-1. With no camera input and no `--camera`, the boot rig's yaw, pitch, distance and focus and the `Transform` it produces equal hand-written literals in the test — NOT values read back from the `BOOT_*` constants, so the test fails when a constant moves (the deliberate pattern at `ingest.rs:3313`). The boot capture's mean luminance stays within 10x the 0.0048 control swing in `10-10-signoff/task-0-control.md`.
-2. `CameraRig.focus` is a world-space `Vec3` that pan moves, clamped so the focus cannot leave the world bounds; orbit and zoom clamps are unchanged.
-3. MMB-drag orbits, shift+MMB-drag pans, the mouse wheel zooms, and holding shift multiplies the rate. RMB and LMB behaviour is unchanged.
+1. With no camera input and no `--camera`, the boot rig's yaw, pitch, distance and focus and the `Transform` it produces equal hand-written literals in the test — NOT values read back from the `BOOT_*` constants, so the test fails when a constant moves (the deliberate pattern at `ingest.rs:3313`). **The luminance clause is STRUCK (Wolf's ruling, 2026-09-17, issue #98): the hand-written-literal rig guard is the whole of AC1, and there is no capture-based guard on the boot frame.**
+2. `CameraRig.focus` is a world-space `Vec3` that pan moves, clamped so the focus cannot leave the world bounds; orbit and zoom clamps are unchanged. **AMENDED (Wolf's ruling, 2026-09-17, review finding 1): framing a selected dwarf writes an unclamped AIM POINT — the clamp would decentre exactly the dwarves near an edge, which are the hardest to see — so the focus MAY sit outside the bounds while a dwarf is framed. What the readout PRINTS never does: `camera_readout_line` emits the framing `place()` reproduces, so AC6 still round-trips exactly.**
+3. MMB-drag orbits, shift+MMB-drag pans, the mouse wheel zooms, and holding shift multiplies the rate. RMB and LMB behaviour is unchanged. **AMENDED (Wolf's ruling, 2026-09-17, review finding 3): shift is what SELECTS pan, so it cannot also be pan's rate multiplier — inside the pan branch it was always on, and the stated `MOUSE_PAN_RATE` was unreachable. Pan takes its 4x from CONTROL (ctrl+shift+MMB), and its rate is scaled by the rig's distance so the ground moves with the cursor by the same screen amount at every zoom. Shift still multiplies orbit, zoom and the held keys.**
 4. Orbit, pan and zoom rates are per-second: stepping the systems at two different frame deltas that total the same elapsed time leaves yaw and pitch within 1e-4 rad and distance within 1e-3 of each other.
 5. `--camera <yaw>,<pitch>,<distance>,<fx>,<fy>,<fz>` sets the rig at startup and reaches the spawned `CameraRig`, not merely `Args`. It does not require `--capture`.
 6. The readout key prints one line carrying yaw, pitch, distance and focus; passing that line's values back as `--camera` reproduces the same rig by exact float comparison.
 7. The printed line differs when the rig differs: two rigs that are not equal never print the same line.
-8. LMB with `DesignateMode::None` selects the nearest dwarf whose projected screen position lies within the pick radius of the cursor, and frames him: he projects within 0.05 of screen centre and the focus tracks him while selected.
+8. LMB with `DesignateMode::None` selects the nearest dwarf whose DRAWN screen position — the blended, offset figure, projected through the LIVE camera — lies within the pick radius of the cursor, and frames him: he projects within 0.05 of screen centre, **the distance drops to a readable 20**, and the focus tracks him while selected. **AMENDED (Wolf's ruling, 2026-09-17, review finding 2): the distance clause is `epics.md`'s and was dropped at story creation; a centred ~10.8 px speck still left the operator hand-flying the zoom this story exists to remove. The zoom drops ONCE, at the click, so the wheel is the operator's again while following. The "drawn, live" wording is review finding 4: the oracle projected the raw wire cell through a projection hardcoded to `BOOT_ASPECT_RATIO`, and both errors exceed the radius at distance <= 40.**
 9. Escape releases the selection; LMB on empty ground with no dwarf in radius selects nothing and leaves the rig untouched.
 10. Selection and camera state are client-local: no wire message is sent, and `protocol` and `client-core` are unchanged.
 11. A non-boot `--camera` capture that trips `NEAR_WHITE_AREA_CEILING` reports which framing it was taken at. The ceiling value is not raised.
@@ -25,29 +29,56 @@ so that comparing a look change costs one command instead of a hand-flown approx
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — re-take the control.** (AC: 1)
-  - [ ] Confirm `./target/debug/gui --version` prints the CURRENT clean HEAD before capturing anything. If it does not, `touch crates/gui/build.rs` and rebuild — see the stamp trap in Dev Notes.
-  - [ ] Re-run the control pair from `10-10-signoff/task-0-control.md` on the story branch and confirm mean luminance still lands near 76.12 and the pair swing near 0.0048. A moved baseline is a finding, not a nuisance.
-- [ ] **Task 1 — make the focus movable.** (AC: 2)
-  - [ ] Change `CameraRig.focus` from `[i32; 3]` to `Vec3` (world space). Add `world_to_render_f32(Vec3) -> Vec3` in `crates/gui/src/transform.rs` and make the existing `world_to_render([i32; 3])` delegate to it, so exactly one transform pair survives.
-  - [ ] Add `CameraRig::pan(&mut self, right: f32, forward: f32)`, moving the focus in the camera's own ground plane and clamping each axis to the world bounds.
-  - [ ] Update `north_on_screen` (`camera.rs:123`) and `CameraRig::new` for the new focus type.
-- [ ] **Task 2 — seat controls.** (AC: 3, 4)
-  - [ ] Extend `camera_controls` (`ingest.rs:1432`) to read `ButtonInput<MouseButton>`, `MouseMotion` and `MouseWheel`; multiply every rate by `Res<Time>::delta_secs()` and by the shift multiplier.
-  - [ ] Strike the "remains unclaimed until UX-DR2 lands" comment at `ingest.rs:1446`; the wheel is claimed here.
-  - [ ] `configured_app` does NOT insert `ButtonInput<MouseButton>` (`ingest.rs:1845-1866`). Insert it there, or the new tests panic on a missing resource.
-- [ ] **Task 3 — the instrument: readout and `--camera`.** (AC: 5, 6, 7, 11)
-  - [ ] Parse `--camera` beside `--distance` (`ingest.rs:935`). Do NOT copy `--distance`'s `requires --capture` gate at `ingest.rs:980`; this flag is interactive too.
-  - [ ] Carry it to the rig in `setup_camera` (`ingest.rs:1179`) the way `CaptureDistance` is carried (`ingest.rs:1147`).
-  - [ ] Add the readout key printing one line, and make the capture's ceiling failure name the framing it was taken at.
-  - [ ] **Instrument test:** the printed line must CHANGE when the rig changes (AC7), and `--camera` must reach the rig rather than parse — copy the shape of `the_distance_flag_reaches_the_camera_rig_rather_than_merely_parsing` (`ingest.rs:3313`).
-- [ ] **Task 4 — select and frame a dwarf.** (AC: 8, 9, 10)
-  - [ ] Project each mirrored dwarf with `project_world_point_with_depth` and take the nearest within the pick radius. Read positions from the `client-core` mirror, never from wire messages.
-  - [ ] Solve the framing so the dwarf lands centred: `composition_target()` still adds the boot push scaled by `distance/90`, so aiming the focus AT the dwarf leaves him off-centre.
-  - [ ] Follow the AD-15 blended position; never extrapolate, and snap rather than animate across a `snapshot`.
-- [ ] **Task 5 — sabotage.** (AC: 12)
-  - [ ] Write `mutations/10-10-take-the-camera-where-you-want-it.sh` with rows for: delta-time scaling removed, the pan clamp removed, the `--camera` value discarded (`let _ = camera;`), and the boot-rig guard.
-  - [ ] `rg` the whole `mutations/` directory for rows quoting `camera.rs`/`setup_camera`/`camera_controls` literals and re-point any this story breaks — `scripts/audit-mutations.py` fails the gate on a stale row.
+- [x] **Task 0 — re-take the control.** (AC: 1) — **done; its outcome was a finding, and the ruling that struck AC1's luminance clause. See issue #98.**
+  - [x] Confirm `./target/debug/gui --version` prints the CURRENT clean HEAD before capturing anything. If it does not, `touch crates/gui/build.rs` and rebuild — see the stamp trap in Dev Notes.
+  - [x] Re-run the control pair. **The baseline did NOT move.** The documented 76.12 is a plain RGB channel average mislabelled "mean luminance" — it reproduces to 4 d.p. as the RGB mean of the committed creation frame, whose Rec.601 luminance (`10-7-signoff/lumstats.py`, the statistic `pixel_guard.rs` uses) is 71.19. The reported "5 points lower" was that statistic gap, not a look change; creation→now is 0.0670 (Rec.601) / 0.0589 (RGB), i.e. noise-sized. **What did NOT hold is the noise floor: this build's same-build pair swing is 0.0724 against the documented 0.0048 — 20x, and larger than AC1's own 0.048 tolerance, so the clause was unsatisfiable by noise alone.** Settled off the four committed control PNGs; no recapture needed.
+- [x] **Task 1 — make the focus movable.** (AC: 2)
+  - [x] Change `CameraRig.focus` from `[i32; 3]` to `Vec3` (world space). Add `world_to_render_f32(Vec3) -> Vec3` in `crates/gui/src/transform.rs` and make the existing `world_to_render([i32; 3])` delegate to it, so exactly one transform pair survives.
+  - [x] Add `CameraRig::pan(&mut self, right: f32, forward: f32)`, moving the focus in the camera's own ground plane and clamping each axis to the world bounds.
+  - [x] Update `north_on_screen` (`camera.rs:123`) and `CameraRig::new` for the new focus type.
+- [x] **Task 2 — seat controls.** (AC: 3, 4)
+  - [x] Extend `camera_controls` (`ingest.rs:1432`) to read `ButtonInput<MouseButton>`, `MouseMotion` and `MouseWheel`; multiply every rate by `Res<Time>::delta_secs()` and by the shift multiplier.
+  - [x] Strike the "remains unclaimed until UX-DR2 lands" comment at `ingest.rs:1446`; the wheel is claimed here.
+  - [x] `configured_app` does NOT insert `ButtonInput<MouseButton>` (`ingest.rs:1845-1866`). Insert it there, or the new tests panic on a missing resource.
+- [x] **Task 3 — the instrument: readout and `--camera`.** (AC: 5, 6, 7, 11)
+  - [x] Parse `--camera` beside `--distance` (`ingest.rs:935`). Do NOT copy `--distance`'s `requires --capture` gate at `ingest.rs:980`; this flag is interactive too.
+  - [x] Carry it to the rig in `setup_camera` (`ingest.rs:1179`) the way `CaptureDistance` is carried (`ingest.rs:1147`).
+  - [x] Add the readout key printing one line, and make the capture's ceiling failure name the framing it was taken at.
+  - [x] **Instrument test:** the printed line must CHANGE when the rig changes (AC7), and `--camera` must reach the rig rather than parse — copy the shape of `the_distance_flag_reaches_the_camera_rig_rather_than_merely_parsing` (`ingest.rs:3313`).
+- [x] **Task 4 — select and frame a dwarf.** (AC: 8, 9, 10)
+  - [x] Project each mirrored dwarf with `project_world_point_with_depth` and take the nearest within the pick radius. Read positions from the `client-core` mirror, never from wire messages.
+  - [x] Solve the framing so the dwarf lands centred: `composition_target()` still adds the boot push scaled by `distance/90`, so aiming the focus AT the dwarf leaves him off-centre.
+  - [x] Follow the AD-15 blended position; never extrapolate, and snap rather than animate across a `snapshot`.
+- [x] **Task 5 — sabotage.** (AC: 12)
+  - [x] Write `mutations/10-10-take-the-camera-where-you-want-it.sh` with rows for: delta-time scaling removed, the pan clamp removed, the `--camera` value discarded (`let _ = camera;`), and the boot-rig guard.
+  - [x] `rg` the whole `mutations/` directory for rows quoting `camera.rs`/`setup_camera`/`camera_controls` literals and re-point any this story breaks — `scripts/audit-mutations.py` fails the gate on a stale row.
+
+### Review Findings
+
+Four-layer adversarial review, 2026-09-17. Layer that raised each finding is named; convergence
+between layers is recorded rather than inferred. Full gate NOT run — `scripts/gate.sh --fast` is
+green at `339a07f`, which skips `simd/tests/serve.rs` and `gui/tests/pixel_guard.rs` (a coverage
+hole, not a clean result). Sabotage table re-run independently by the reviewer: **16/16 KILLED**.
+
+- [x] [Review][Patch] **RULED (Wolf, 2026-09-17): option (c) — clamp what the READOUT PRINTS.** The aim point stays free so edge dwarves remain centred; `camera_readout_line` must emit a framing `place()` reproduces exactly, and AC2 gains a note that the aim point may sit outside bounds while the printed framing never does. Original finding: the framing focus is written unclamped, so the readout does not round-trip — `frame_render_point` (`camera.rs:120`) deliberately skips the `[0, FOCUS_MAX]` clamp that `pan` and `place` apply, with documented reasoning (clamping would decentre exactly the dwarves hardest to see). Consequences, all confirmed: a dwarf with world `x >= 102` or `y <= 21` at boot yaw drives the focus out of bounds; `camera_readout_line` prints it; pasting that line back through `place()` clamps it, so AC6's "exact float comparison" round-trip fails (probe: focus y `-19.2592` -> `0.0`); Escape does not restore the focus, so it persists after deselection; and the next `pan()` — even a zero-magnitude one — silently snaps it back. AC2 states the clamp unconditionally. Raised by blind + auditor + feature + orchestrator (4-way convergence). OPTIONS: (a) clamp in `frame_render_point` and accept decentring near edges; (b) keep unclamped and amend AC2/AC6 to say so; (c) clamp only what the readout PRINTS, keeping the aim point free. **PATCHED 2026-09-18:** `CameraRig::placed()` applies `place`'s clamps and `camera_readout_line` formats THAT; the aim point is untouched, so an edge dwarf stays centred. AC2 carries the note. Pinned by `the_readout_round_trips_even_from_an_aim_point_outside_the_world`, which asserts the raw focus is out of world AND the printed one round-trips by float equality.
+- [x] [Review][Patch] **RULED (Wolf, 2026-09-17): 10.10 OWES THE ZOOM.** `frame_selected_dwarf` must also drop `rig.distance` to a readable framing, and AC8 regains the distance clause `epics.md` specifies. Original finding: selecting a dwarf centres him but never zooms — `epics.md:2033` specifies "the focus moves to him, **the distance drops to a readable one**, and the focus tracks him", and AC8 dropped the distance clause at STORY CREATION. Neither `select_dwarf` nor `frame_selected_dwarf` touches `rig.distance` (`pick.rs:164-183`), so the operator gets a centred ~10.8 px speck and still hand-flies a zoom — the cost this story exists to remove. The dev built AC8 faithfully; the narrowing is upstream of the dev. Raised by auditor. DECISION: does 10.10 owe the zoom, or is AC8 as written the agreed scope? **PATCHED 2026-09-18:** `frame_selected_dwarf` drops `rig.distance` to `SELECT_DISTANCE` (20 — Wolf's value; a dwarf reads ~49 px tall against 10.8 at the boot 90) on the frame the selection changes, and only then, so the wheel is the operator's again while following. AC8 regains the clause. Two rows: dropping the zoom, and pinning it every frame.
+- [x] [Review][Patch] **RULED (Wolf, 2026-09-17): patch the two OBJECTIVE items only** — the dead shift conditional in the pan branch (pan must have a real 1x and a real 4x) and distance-scaled pan. Items (3) wheel notch count, (4) wheel direction and (5) discoverability are HELD for a seat round, unchanged. Original finding: seat-judgement bundle. (1) Shift is the modifier that SELECTS pan, so `multiplier` inside the pan branch is always 4.0: the stated `MOUSE_PAN_RATE` of 0.12 is unreachable and AC3's "shift multiplies the rate" is unobservable for pan (`ingest.rs:1550,1569-1573`). (2) Pan is not distance-scaled — the ground moves ~1.7x cursor speed at distance 90 and ~7.8x at distance 20, before the always-on 4x. (3) Wheel zoom is additive, so vista (500) back to boot (90) is 68 notches, 17 with shift. (4) Scrolling away zooms OUT, the opposite of most 3D tools; the seat round ruled on wheel SPEED and drag AXIS, not direction. (5) Nothing tells a human any of this exists — no `--help`, and the hint bar still reads only `1 dig 2 channel 3 stockpile 4 clear`. Raised by feature. **PATCHED 2026-09-18:** pan's 4x moved to CONTROL (Wolf chose ctrl over alt, which Linux window managers take before the client sees the drag), so `MOUSE_PAN_RATE` 0.12 is reachable at last and shift keeps its job of selecting pan; and the rate is multiplied by `CameraRig::pan_scale()` (`distance / BOOT_DISTANCE`), solved against the boot zoom rather than the viewport because `camera_controls` has no window. NOTE FOR THE SEAT ROUND: the feel Wolf judged in the 2026-09-17 round was the always-on 4x at the boot zoom, which is now ctrl+shift+MMB; plain shift+MMB is four times slower than anything yet judged. Items (3) (4) (5) remain HELD, unchanged.
+- [x] [Review][Patch] The dwarf pick's oracle diverges from what is actually drawn, two ways at one site [crates/gui/src/pick.rs:134] — `nearest_dwarf_to` projects `entity.pos`, the raw wire cell, through a projection hardcoded to `BOOT_ASPECT_RATIO`. (a) The DRAWN dwarf is at the blended position plus `entity_draw_offset` (-0.5 Y), and the blend trails the delivered cell up to `DWARF_WALK_SNAP_CELLS`; computed separation against the 0.06 radius is 0.0223 (1-cell lag) at distance 90 but 0.0496 at 40 and 0.0975 at 20 — so at the close zoom this feature exists for, clicking exactly on a walking dwarf misses him. (b) The window is `resizable: true` and never locked; Bevy's `camera_system` updates the RENDER projection's aspect from the live window while the pick keeps the constant, giving errors of 0.24 (1024x768) to 1.0 (900x1200). Note `nearest_dwarf_to` already computes the live `aspect` and applies it only to the radius circle, not to the position. Every picking test uses `PICK_VIEWPORT = 1920x1080`, the one aspect where (b) is invisible, and derives the cursor from the same projection the pick uses, so the oracle shares the error term with the subject. Unified fix available: project through the live camera as `update_pick` already does via `viewport_to_world`. Raised by feature (a) + blind (b). **PATCHED 2026-09-18:** `nearest_dwarf_to` now ranks the DRAWN translation (the one `blend_entities` wrote, offset included) projected through the LIVE camera's `world_to_viewport_with_depth`, the same seam `update_pick` resolves the terrain cursor through, with the radius in pixels off `logical_viewport_size`. Both errors are gone at their source rather than corrected for. Two tests, each stating its own discrimination: the wire cell is 105 px from the cursor against a 64.8 px radius at distance 20, and the 16:9 projection puts the dwarf 227 px from where he is drawn at 900x1200.
+- [x] [Review][Patch] Shift+MMB pan — half of AC3 — is pinned by no test and no mutation row [crates/gui/src/ingest.rs:1569] — `MouseButton::Middle` appears once in the tests, with no shift, so the pan branch never executes; `rig.pan`/`MOUSE_PAN_RATE`/`MouseButton::Middle` return nothing across all 551 mutation rows. Delete or invert the branch and the full suite, the gate and the whole table stay green. This is the IDENTICAL hole this story's own Change Log records closing for the wheel, left open one branch away. Raised by auditor + feature (2-way convergence). **PATCHED 2026-09-18:** `shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate` pins direction, magnitude, both axes, the control multiplier, the distance scaling, and that MMB without shift orbits instead. Three rows: the branch deleted, control ignored, the distance scaling removed.
+- [x] [Review][Patch] The readout key is observable by nothing [crates/gui/src/ingest.rs:1503] — `camera_readout`, `LastCameraReadout` and `KeyCode::KeyC` appear only in `ingest.rs`, in no test. `LastCameraReadout` was built explicitly as the seam that makes the evidence channel testable ("so a test can assert what the operator saw") and nothing was ever hung on it. The two readout mutation rows sabotage the FORMATTER, which is reached independently from `capture.rs`, so they kill without touching the key, the system or the resource. Change the keycode or drop the system from the tuple and everything stays green. Raised by auditor + feature (2-way convergence). **PATCHED 2026-09-18:** `the_readout_key_records_the_framing_as_it_stands_after_this_frames_camera_move` reads `LastCameraReadout` after a real `KeyC` press, so the keycode, the system and the resource are all pinned. Two rows: the keycode moved, and the recording dropped.
+- [x] [Review][Patch] `camera_readout` has no ordering guard against the systems that write the rig [crates/gui/src/ingest.rs:659] — it sits in an unordered tuple with `camera_controls`, and `frame_selected_dwarf` writes `CameraRig` later still. Bevy does not order a conflicting read/write pair by declaration order; the edge layer reproduced reader-before-writer every frame in a standalone Bevy 0.19 crate. So `C` can print a framing one frame stale — an instrument that misreports, which is the class this project patches regardless of severity. Raised by edge. **PATCHED 2026-09-18:** registered on its own with `.after(camera_controls).after(frame_selected_dwarf)`. The test above presses `C` in the SAME frame as a wheel notch and requires the recorded line to name distance=108, not the 90 it was at when the frame began. The row sabotages it as the WRONG order rather than as no order, because an unordered pair is not a deterministic mutant.
+- [x] [Review][Patch] Only the near-white assertion names its framing, and it is the one that rarely fires [crates/gui/src/capture.rs:1452] — the warm-pixel floor and the ground-median floor and ceiling all assert BEFORE it and name nothing. Verified live: `--camera 2.5,1.0,40,20,100,12` panics with "capture contains fewer than 3000 warm-lit pixels", no framing, no hint the camera moved; `--camera 0.7,0.45,4,...` panics on the valley floor, likewise. Per #99 the ground ceiling shadows near-white for most zoom framings, so AC11's benefit is largely unrealised in practice. Raised by edge + feature (2-way convergence). **PATCHED 2026-09-18:** all five band assertions name it — black, uniform, the warm floor, and both ground bands. Verified live: `--camera 2.5,1,40,20,100,12` now dies with `capture contains fewer than 3000 warm-lit pixels, at camera: yaw=2.5 pitch=1 distance=40 focus=20,100,12 --camera 2.5,1,40,20,100,12`.
+- [x] [Review][Patch] The live rig -> framing-string seam has no automated coverage [crates/gui/src/capture.rs:1106] — `cameras.iter().next().map_or_else(|| "camera: unavailable", camera_readout_line)` is exercised by nothing: `tests/capture.rs` hand-writes `NEAR_FRAMING` and the `src/capture.rs` tests hand-write `TEST_FRAMING`. Replace the expression with the literal fallback and every capture reports a framing it was not taken at, with the suite green. A broken observability instrument — patched regardless of LOW severity, per this project's standing exception. Raised by auditor. **PATCHED 2026-09-18:** `a_capture_failure_names_the_framing_the_live_rig_was_actually_at` (`tests/pixel_guard.rs`, full tier, 36s) drives the real binary at a non-boot framing and asserts the failure carries the rig's OWN formatting — `pitch=1`, not the `1` that was typed — and is neither the boot rig nor the `camera: unavailable` fallback. Two rows.
+- [x] [Review][Patch] `--distance` silently overrides a pasted `--camera` [crates/gui/src/ingest.rs:1256] — `setup_camera` calls `rig.place(...)` and then unconditionally overwrites `rig.distance` from `CaptureDistance`. Verified live: `--camera 0.7,0.45,4,64,64,9` panics on the close zoom, and the same command plus `--distance 90` succeeds — the camera's yaw/pitch/focus survive while its distance is clobbered. An operator pasting a readout line onto a command line that already carries `--distance` gets a framing the line does not describe, with no warning. Precedent for the fix exists: `--cursor` + `--drag` `bail!`s on the conflict. Raised by edge + feature + orchestrator (3-way convergence). **PATCHED 2026-09-18:** the parser bails on the pairing, as `--cursor` + `--drag` already does; either flag alone still parses. `a_pasted_camera_line_and_a_capture_distance_are_mutually_exclusive`.
+- [x] [Review][Patch] AC1's strike was not propagated to `epics.md`, which still publishes the falsified control figures [_bmad-output/planning-artifacts/epics.md:2043] — the epic still reads "**And** the boot capture's **mean luminance** is within 10x the same-build swing of the control pair", and still states the 0.0048 swing, 76.1236, and "**766x** that noise". The story file and `task-0-control.md` both carry the correction box; the epic, which is the source everything is re-derived from, does not, and it is not in this story's diff. The next reader re-derives the phantom 5-point regression the correction box exists to stop. Raised by auditor. **PATCHED 2026-09-18:** `epics.md` now strikes the clause in the AC itself and carries the correction box from `task-0-control.md` — both wrong figures named as wrong, with the Rec.601 value beside the RGB average, and the 766x headroom flagged as inflated.
+- [x] [Review][Patch] Issue #99's conclusion is wrong and will mislead whoever picks it up — #99 states the near-white ceiling "is unreachable via zoom" because the ground-median ceiling fires first. Its measurements are sound (boot 81, d=80 83, d=20 202) but it generalises from two samples across an interval nobody sampled. Verified live at **d=45**: ground median **89**, comfortably inside [70,180]; near-white **2.6951%**; the ceiling trips cleanly and names the full framing, pasteable verbatim. AC11 IS live-demonstrable in one command, and the Dev Agent Record's "What I could NOT demonstrate" section is wrong on this point. A true premise at d=20 gave a false general conclusion. Raised by auditor. **PATCHED 2026-09-18:** corrected on the issue, re-verified independently here rather than relayed. `--camera 0.7,0.45,45,64,64,9`: ground median **91** (inside [70,180]), near-white **3.6764%**, exit 101 on the NEAR-WHITE assertion, naming the full framing pasteably. The ground median does not climb smoothly with the zoom — 81 at d=90, 83 at d=80, 91 at d=45, 202 at d=20 — which is what the two-sample generalisation missed. #99's second finding stands and the issue is left open for it.
+- [x] [Review][Defer] `MouseScrollUnit` is ignored, so a precision touchpad zooms ~100x a mouse notch [crates/gui/src/ingest.rs:1566] — deferred, needs hardware this devpod does not have
+- [x] [Review][Defer] Escape does double duty: it releases the dwarf selection AND aborts a designation [crates/gui/src/pick.rs:90] — deferred, pre-existing key sharing
+- [x] [Review][Defer] A selected dwarf that leaves the mirror never releases; the camera silently freezes with `SelectedDwarf` stuck [crates/gui/src/pick.rs:176] — deferred, likely unreachable in M2
+
+**Dismissed as noise (3):** no occlusion check in `nearest_dwarf_to` (AC8 defines selection purely by projected screen position — matches the implementation, and adding occlusion is scope beyond the AC); the blind layer's original "the interactive app boots at 800x600" premise (WITHDRAWN on its own re-verification — Bevy 0.19's default `WindowResolution` is 1280x720, exactly 16:9, so there is no boot-time mismatch); the acceptance layer's "16/16 anchors still apply" (WITHDRAWN as measured-wrong — see the review incident note below, and superseded by a real 16/16 KILLED run).
+
+**Review incident, recorded because it cost a re-run and changes a standing instruction.** Mid-review the shared working tree was sabotaged: the acceptance layer tried to check whether the mutation anchors were stale by `exec`-ing each payload with `pathlib.Path` monkeypatched to swallow writes, but every payload begins with `import pathlib`, and `import X` inside `exec` rebinds the name to the REAL module — so all 16 payloads wrote to five tracked source files at 17:07:32 in one 5-millisecond burst, with no restore, while three sibling layers were compiling against that tree. Restored on Wolf's authorisation with `git restore --source=HEAD --worktree crates/gui/src/`; the sabotage diff is archived. The blind layer was re-run from a discarded-and-rebuilt cache and CHANGED its headline finding on clean source. A mutation payload reports whether it applies BY APPLYING IT; every future layer prompt must ban executing the payloads, not merely `scripts/mutate.sh`.
 
 ## Dev Notes
 
@@ -72,7 +103,7 @@ so that comparing a look change costs one command instead of a hand-flown approx
 - **The boot composition rides a moved focus.** `composition_target()` (`camera.rs:66`) adds `boot_composition_offset() * (distance/90).min(1.0)` to the focus. Framing a dwarf by pointing the focus at him leaves him off-centre; solve for the offset.
 - **`--cursor` is dead headless** — no `PrimaryWindow`, so the live pick is always `None`. AC8/AC9 must be pinned by `live_app` + `install_pick_camera`, never by a headless capture.
 - **`--frames 2` never captures** — the frame is still black and the run dies on `capture is black` (`capture.rs:1419`). Captures need `--frames 160`.
-- **The changed-pixel count cannot guard this framing.** Same-build noise is 55,284 px (6.0 %). Mean luminance swings 0.0048 and moved 766x that under the RED. Use mean luminance; see `10-10-signoff/task-0-control.md`.
+- **No capture statistic guards this framing.** Changed pixels have a 6.0 % same-build floor (55,284 px), and the mean-luminance floor documented as 0.0048 measured **0.0724** on this build — see issue #98. Both are struck as gates. Note also that `task-0-control.md`'s "mean luminance" is a plain RGB average, NOT the project's Rec.601 (`10-7-signoff/lumstats.py`); its 766x RED headroom is inflated for the same reason. Captures are observations here, not assertions.
 - **The build stamp can go stale.** On a clean tree at `5452c4d`, after a rebuild that recompiled `gui`, `--version` still said `bd5a9df-dirty`; `touch crates/gui/build.rs` fixed it. Check the stamp before trusting any frame.
 - **`camera_controls` and `update_fog_from_camera` are unordered** (`ingest.rs:1487`), so a test on the pair needs two `app.update()`s.
 - **`press_once` releases AND clears** (`tests/headless.rs:78`) — `MinimalPlugins` has no `InputPlugin`, so a pressed key otherwise stays just-pressed forever.
@@ -115,16 +146,19 @@ The `--camera` half cannot run until the flag exists. The required non-zero obse
 ```bash
 ./target/debug/gui 7451 --headless --static-world --subdiv 4 --frames 160 \
   --camera 0.7,0.45,90,64,64,9 --capture 10-10-signoff/camera-boot-<sha>.png
-# REQUIRED: mean luminance within 10x of 0.0048 of the boot control — the flag at boot
-#           values must reproduce the boot frame, not merely be accepted.
+# SUPERSEDED (Wolf, 2026-09-17, issue #98): the luminance tolerance is struck — this build's
+#   same-build swing (0.0724) exceeds it. Record the capture's range-check line as an
+#   observation; the reaches-the-rig TEST carries the proof that the flag reaches the rig.
+#   Do not assert a luminance threshold.
 ```
 
 **The deliberate RED, with its restore step.** Whatever the readout prints, break it before trusting it:
 
 ```bash
 # RED: in setup_camera, discard the parsed value -- `let _ = camera;`
-# EXPECTED: `--camera 0.7,0.45,20,64,64,9` produces a frame whose mean luminance matches the
-#           BOOT control instead of the near-framing, and the reaches-the-rig test goes red.
+# EXPECTED: the reaches-the-rig test goes RED. (The luminance half is struck with AC1's clause —
+#           issue #98. The test going red IS the proof, and is exactly what `--distance` lacked
+#           when `let _ = distance;` left all 106 tests green.)
 # RESTORE: revert the line, rebuild, and confirm --version shows no -dirty before re-capturing.
 ```
 Precedent for why this RED is mandatory: `--distance`'s own docstring (`ingest.rs:3309`) records that replacing its assignment with `let _ = distance;` left all 106 tests green.
@@ -149,14 +183,354 @@ Precedent for why this RED is mandatory: `--distance`'s own docstring (`ingest.r
 
 ### Agent Model Used
 
+- **Tasks 0 and 1 — Codex `gpt-5.6-terra`**, reasoning effort high, via `scripts/codex-handoff.sh`.
+  Two runs. The first handed back honestly at 193,967 tokens with Task 1 committed and Task 2
+  part-written; the second died at 90,208 tokens on `You've hit your usage limit ... try again at
+  1:58 PM` — a 5-hour-window exhaustion, confirmed by a probe. No last-message file was written at
+  all, which is how a quota death differs from a harness kill (that leaves an EMPTY one).
+- **Tasks 2 to 5 — Claude `claude-opus-5[1m]`**, as the direct-implementation fallback on Wolf's
+  explicit ruling after being told the cost: the dev/review model split this project relies on is
+  lost for that work, so the review will be the same model that wrote it.
+
+The sections below keep Codex's own record for Tasks 0-1 verbatim; Claude's follows under each
+heading.
+
 ### Debug Log References
+
+- Task 0 build stamp: `cargo build --offline -p gui -p simd -j 8`; `./target/debug/gui --version` printed `gui build 8eb1d1d`, matching clean `HEAD 8eb1d1d`.
+- Task 0 control re-take: `control-boot-8eb1d1d-a.png` mean luminance 71.1261; `...-b.png` 71.1985; swing 0.0724. This does not meet the 76.12 / 0.0048 control. Filed live bug #98 with the commands and range measurements.
+- RED — `pan_moves_focus_on_the_camera_ground_plane_and_stays_inside_the_world`: before the implementation, `cargo test --offline -p gui pan_moves_focus_on_the_camera_ground_plane_and_stays_inside_the_world -j 8` failed with `no method named pan` and `[i32; 3] == Vec3` type errors.
+- RED — `boot_rig_and_transform_are_pinned_by_literals`: initial literal-pin test failed and printed `Transform { translation: Vec3(100.74321, 47.646896, -33.05163), rotation: Quat(-0.202291, 0.41114035, 0.094099894, 0.8838479), scale: Vec3(1.0, 1.0, 1.0) }`; the final test compares those hand-written literals and passed.
+
+**Claude, Tasks 2-5.**
+
+- Full gate at `4b3f75b`: **GATE GREEN 511s** — fmt, clippy `-D warnings`, `cargo test` 126s,
+  **pixel guards 351s**, three dependency-edge probes, metrics, bench, mutation audit.
+  `RUST_TEST_THREADS=6`, foreground.
+- Mutation run: `scripts/mutate.sh .../10-10-take-the-camera-where-you-want-it.sh` — **13/13
+  KILLED**. Four re-pointed older rows re-run separately — **4/4 KILLED**. Audit passes at 551 rows.
+- Build stamp verified `gui build 4b3f75b` on a clean tree before every capture. It earned its keep:
+  straight after the mutation run it read `4b3f75b-dirty`, catching the mutant build that outlives
+  the source restore. Every frame below was taken after the rebuild.
+- Issues filed from running the system: **#98** (control statistic — corrected, retitled),
+  **#99** (the near-white ceiling is unreachable via zoom).
 
 ### Completion Notes List
 
+- Task 1: `CameraRig.focus` is now a world-space `Vec3`; panning follows camera right/forward on the ground plane and clamps to the fixed 128×128×32 world bounds. Integer and fractional world-to-render conversion now share `world_to_render_f32`.
+- Task 0: stamp was verified, but the manual control pair moved. The task remains open pending a ruling/fix for #98; the baseline was not changed.
+  - **RESOLVED (orchestrator, same day).** The pair had not moved; the DOCUMENTED figure was a different statistic. See the Task 0 note below and #98's correction. Task 0 is closed.
+
+**Claude, Tasks 2-5.**
+
+**Task 0's outcome, since it reshaped AC1.** The re-take did not confirm the baseline; it falsified
+the record. `task-0-control.md`'s "mean luminance 76.1236" is a plain unweighted RGB channel
+average, not luminance — it reproduces to four decimal places as the RGB mean of the committed
+creation frame, whose Rec.601 value (`10-7-signoff/lumstats.py`, the statistic `pixel_guard.rs`
+asserts on) is **71.1931**. Codex measured 71.13 with the canonical decoder, compared it against the
+documented 76.12, and read a 5-point regression. There was none: creation to this build is **0.0670**
+(Rec.601) / **0.0589** (RGB). Settled off the four committed control PNGs — no rebuild, no recapture.
+
+The real defect was the floor. The documented **0.0048** swing is one two-sample pair that landed
+tight; this build's pair swings **0.0724**, 20x, and five same-build captures spread
+`near-white-area` over 0.5655-0.7922%. AC1 gated on 10x 0.0048 = a **0.048** tolerance, *narrower
+than the measured noise*, so it would have failed on noise alone. Wolf struck the clause.
+`task-0-control.md` now carries a correction box, because its 766x RED headroom is inflated the same
+way and the next reader would have re-derived the phantom regression from it.
+
+**Task 2 — the seat controls.** Held keys scale by delta time; mouse and wheel deltas do NOT, because
+an event delta is already this frame's movement and scaling it by `dt` makes one physical sweep
+depend on the frame rate — the opposite of what "per-second" is for. Three defects in the
+half-finished work were fixed rather than inherited: the elapsed-time test could never pass
+(`TimePlugin` overwrites a manually advanced `Time` in `First`, so it measured real microsecond frame
+time — the arithmetic gave it away, 1.2 rad/s must move yaw 1.2 rad in a second and the runs moved
+0.088 and 0.049); its pitch assertion was **vacuous**, both rigs reading the boot 0.45 because only
+`KeyD`/`KeyE` were pressed; and the mouse path carried `dt`.
+
+**Task 3 — the instrument.** `--camera` places the rig through the same clamps the live controls use,
+and deliberately does NOT copy `--distance`'s `requires --capture` gate. The readout key (`C`) prints
+one line ending in the `--camera` argument that reproduces the rig, so the line IS the save format.
+`camera_readout_line` is the ONLY formatter, and the capture's near-white failure names its framing
+with the same function, so a readout that disagreed with a failing capture cannot happen.
+`LastCameraReadout` exists because a bare `println!` is unreachable by a test, and an untested
+evidence channel manufactures false evidence rather than merely missing true evidence.
+
+**Task 4 — select and frame.** The framing SOLVES the composition push rather than approximating it:
+`transform()` looks at `composition_target()`, so aiming the focus at a dwarf leaves him 33 cells
+off-centre; setting the composition target TO the dwarf makes the look-at point the dwarf, so he
+projects at exactly (0.5, 0.5) at any yaw, pitch or distance. The follow reads his DRAWN translation
+— the one `blend_entities` wrote this frame — so it inherits AD-15 rather than re-deriving it.
+Ordering is explicit: `select_dwarf` after `camera_controls`, `frame_selected_dwarf` after
+`ProjectionSet`, both in `Update` so the camera Transform is propagated this frame instead of
+trailing by one. NOTE: the follow writes the focus without pan's clamp — centring a dwarf needs a
+focus offset from him by the push, which near a corner lands outside the world, and clamping would
+decentre exactly the dwarves hardest to see.
+
+Two defects in my own first draft of these tests, both found by running them: a second
+`ButtonInput::press` on an already-pressed button records NO `just_pressed` under `MinimalPlugins`,
+so the second click in a test silently did nothing (`click_once` now releases AND clears); and the
+tracking test gave the walk no time, so the dwarf travelled 0.06 cells across 40 frames and a broken
+follow was indistinguishable from a working one.
+
+**Task 5 — sabotage. 13 of 13 KILLED**, plus 4 re-pointed older rows re-run and KILLED.
+
+| mutation | test that died | result |
+| --- | --- | --- |
+| delta-time scaling leaves the key rates per-frame | `camera_controls_are_scaled_by_elapsed_time` | KILLED |
+| mouse deltas are scaled by delta time as well | `mouse_drag_maps_the_same_motion_at_every_frame_rate` | KILLED |
+| the pan clamp lets the focus leave the world | `pan_moves_focus_on_the_camera_ground_plane_and_stays_inside_the_world` | KILLED |
+| the boot yaw moves out from under the pinned framing | `boot_rig_and_transform_are_pinned_by_literals` | KILLED |
+| the fractional inverse transform mirrors an axis | `the_fractional_transform_pair_round_trips_and_pins_its_handedness` | KILLED |
+| the `--camera` value is discarded after parsing | `the_camera_flag_reaches_the_camera_rig_rather_than_merely_parsing` | KILLED |
+| the readout rounds the framing it prints | `the_camera_readout_round_trips_through_the_flag_exactly` | KILLED |
+| the readout prints the same line for every rig | `the_camera_readout_differs_whenever_the_rig_differs` | KILLED |
+| the near-white ceiling stops naming its framing | `blown_pool_range_failure_is_a_real_panic_not_a_successful_capture` | KILLED |
+| the framing skips the composition push | `a_left_click_selects_the_nearest_dwarf_and_frames_him_at_screen_centre` | KILLED |
+| the pick radius is removed | `escape_releases_the_selection_and_an_empty_click_leaves_the_rig_untouched` | KILLED |
+| escape stops releasing the selection | `escape_releases_the_selection_and_an_empty_click_leaves_the_rig_untouched` | KILLED |
+| the follow solves the framing once instead of tracking | `the_focus_tracks_the_selected_dwarf_as_he_walks` | KILLED |
+| the wheel contributes nothing to the zoom | `the_wheel_zooms_the_rig_and_shift_multiplies_the_step` | KILLED |
+| the wheel step falls back to its pre-seat value | `the_wheel_zooms_the_rig_and_shift_multiplies_the_step` | KILLED |
+| the mouse orbit drag reverses both axes | `mouse_drag_maps_the_same_motion_at_every_frame_rate` | KILLED |
+
+**Seat round, 2026-09-17, after the story first read done.** Wolf ran the client and gave two
+verdicts: the wheel zoom was too slow, and the MMB drag axis might want reversing. `WHEEL_ZOOM_STEP`
+went 1.0 -> 6.0 (one notch needed ~86 of its fellows to cross the boot-to-closest range; now 14, or
+4 with shift). The reversal was implemented, looked at, and **REJECTED** — so the shipped drag
+direction is a decision, recorded as such in the test comment and pinned by a new row that flips
+both signs.
+
+**That round exposed a real hole in my own work: AC3's wheel half was pinned by NOTHING.** No test
+in the suite so much as mentioned `MouseWheel`, so the wheel term could have been deleted and all 88
+tests would have stayed green — the untested-drive-line class this project keeps meeting, invisible
+to the full gate and to the mutation table as it then stood.
+`the_wheel_zooms_the_rig_and_shift_multiplies_the_step` closes it: distances hand-written from the
+boot 90.0 rather than computed from the step, both scroll directions, with shift, plus a no-input
+frame so the rows measure the wheel and not per-frame drift. Whole table re-run after the change —
+**16/16 KILLED**, not just the three new rows, because the code had moved and "the anchors did not
+change" is not evidence.
+
+Re-pointed by this story's edits and **re-run to prove they still kill** (applying is not killing):
+`9-1` "near-white area ceiling assertion is deleted" KILLED, `9-1` "capture reports after the
+blown-pool assertion" KILLED, `m2-1` "camera controls drop out of the update tuple" KILLED, `5-4`
+"close zoom loses the camp" KILLED.
+
+**RED output, per test, observed before each green** (restored from file copies, never
+`git checkout --`, because the fix was uncommitted at the time):
+
+- `key_scale = multiplier` -> yaw **72.700005 vs 36.700012** for the same 0.25 s elapsed. Worth
+  recording: under this sabotage pitch and distance BOTH saturate at their clamps in both runs
+  (1.4207964 and 500.0), so the run-to-run equality assertions are blind to it and **only yaw
+  discriminates**.
+- mouse deltas scaled by `dt` -> yaw **0.6994993 vs 0.6990004**, and the sweep barely moves the rig.
+- `setup_camera: let _ = start;` -> yaw left **0.7**, right **1.25**, with **159 other tests still
+  green** — the same shape as `--distance` at 7.2, where the identical sabotage left all 106 green.
+  Run against the whole lib, so this is exclusivity, not a focused invocation.
+- readout formatted `{:.2}` -> killed the round-trip AND the differs test.
+- ceiling drops its framing -> `"near-white area is 9.7656%, above the 0.9461% ceiling calibrated on
+  boot7.png"`, no framing named.
+- `focus = target`, push unsolved -> the dwarf projects at **y 0.7794** instead of 0.5, 28% of screen
+  height out.
+- pick radius removed -> a corner click selected the dwarf across the frame.
+- Escape release removed -> the selection survived Escape.
+- follow gated on `is_changed` -> focus **identical** before and after, `Vec3(27.239794, -19.259184,
+  1.0)`.
+
+**Instrument observations** — observations, not assertions, since AC1's tolerance was struck:
+
+```
+boot, no flag:  warm-lit pixels=28881 ground-median-luminance=81 near-white-area=0.8173%
+                blown-pool=0.5808% p99-luminance=190.8 resolution=1280x720   exit 0
+--camera 0.7,0.45,90,64,64,9:
+                warm-lit pixels=27029 ground-median-luminance=81 near-white-area=0.7019%
+                blown-pool=0.5007% p99-luminance=186.2 resolution=1280x720   exit 0
+```
+
+Rec.601 mean luminance **71.409** (no flag) against **71.238** (flag at boot values) — the flag
+reproduces the boot frame. The 0.171 gap is 2.4x the two-sample swing this story's own control
+published, which is the reason the clause was struck rather than a defect in the flag.
+
+**What I could NOT demonstrate, and why.** AC11's near-white path could not be reached on the LIVE
+instrument. `validate_capture_ranges` asserts the ground-median ceiling (180) BEFORE near-white, and
+zooming raises both, so `--camera 0.7,0.45,20,64,64,9` exits 101 on `the valley floor reads 202`
+without ever reaching near-white. The recorded `--distance 80` trigger no longer trips either:
+**0.7897% this run against 1.1134% in the control record, exit 0**. AC11 is closed by the unit test
+(RED observed, mutation-killed); the live gap is filed as **#99**. The readout KEY likewise cannot be
+exercised headlessly — there is no window to press a key into — which is precisely what
+`LastCameraReadout` and the formatter tests exist for.
+
+**Review patch, 2026-09-18 (Claude `claude-opus-5[1m]`).** All twelve patch items closed; the three
+DEFERRED items stay deferred and the three seat items Wolf HELD stay held. Two decisions were put to
+Wolf before any code was written, because neither had a ruled value: pan's fast modifier (ctrl,
+over alt, which Linux window managers claim before the client sees the drag) and the selection
+distance (20).
+
+The two findings the review ranked highest were both oracle defects, and both are fixed at the
+source rather than corrected for:
+
+- **The pick now ranks what is DRAWN, through the LIVE camera.** `nearest_dwarf_to` took the raw
+  wire cell through a projection hardcoded to `BOOT_ASPECT_RATIO`; it now takes the translation
+  `blend_entities` wrote this frame — offset included, lag included — through
+  `Camera::world_to_viewport_with_depth`, the same seam `update_pick` already resolved the terrain
+  cursor through, with the radius in pixels off `logical_viewport_size`. The two new tests state
+  their own discriminating power rather than relying on a mutation to reveal it: at distance 20 the
+  wire cell sits **105 px** from the cursor against a **64.8 px** radius, and at 900x1200 the 16:9
+  projection puts the dwarf **227 px** from where he is drawn. `install_pick_camera` takes a
+  viewport now, because every picking test used 1920x1080 — the one aspect where the constant is
+  right.
+- **Both unobservable evidence channels are observable.** `LastCameraReadout` was built as the seam
+  that makes the readout testable and nothing read it; the capture's live rig -> framing seam was
+  the same shape. The first is pinned in-process, the second through the real binary, where the
+  live query actually exists.
+
+**Verification.**
+
+- **Full gate GREEN 557s at `2078e5a`**, `RUST_TEST_THREADS=6` — fmt, clippy `-D warnings`,
+  `cargo test` 140s, **pixel guards 380s** (the tier the review's own `--fast` run skipped, and
+  where the new live-framing test runs), three dependency-edge probes, metrics, bench, mutation
+  audit. The review recorded `gate.sh --fast` at `339a07f` and said plainly that it was a coverage
+  hole; this closes it.
+- Sabotage table re-run WHOLE, not just the new rows — the code moved, and "the anchors did not
+  change" is not evidence. See the table below.
+- Two older rows re-pointed and re-run: `10-10` "the pick radius is removed" (the radius is a pixel
+  distance now, and the candidate is the drawn dwarf) and `m2-1` "camera controls drop out of the
+  update tuple" (`camera_readout` left the tuple for its own ordered registration). The gate's
+  mutation audit caught both at the pre-commit hook, which is what that probe is for.
+- Live observations, taken on the patched build with the daemon on an ephemeral port:
+
+```
+--camera 2.5,1,40,20,100,12   exit 101
+  capture range check: warm-lit pixels=0 ground-median-luminance=45 near-white-area=0.0053%
+    blown-pool=0.0002% p99-luminance=169.6 resolution=1280x720
+  capture contains fewer than 3000 warm-lit pixels, at camera: yaw=2.5 pitch=1 distance=40
+    focus=20,100,12 --camera 2.5,1,40,20,100,12
+
+--camera 0.7,0.45,45,64,64,9   exit 101
+  capture range check: warm-lit pixels=126390 ground-median-luminance=91 near-white-area=3.6764%
+    blown-pool=2.5958% p99-luminance=239.4 resolution=1280x720
+  near-white area is 3.6764%, above the 0.9461% ceiling calibrated on boot7.png, at camera:
+    yaw=0.7 pitch=0.45 distance=45 focus=64,64,9 --camera 0.7,0.45,45,64,64,9
+```
+
+  The first is the band-naming patch working on a band that is NOT the near-white ceiling. The
+  second overturns issue #99's headline: the near-white ceiling **is** reachable via zoom, in one
+  command, with the ground median comfortably inside its own band at 91. The generalisation failed
+  because the ground median does not climb smoothly with the zoom — 81 at d=90, 83 at d=80, **91 at
+  d=45**, 202 at d=20.
+
+**Sabotage — the whole table, 31 rows, 31 KILLED.** The 16 rows the story already carried were
+re-run alongside the 15 new ones, because the code under them moved. One OLD row came back
+**NO-COMPILE**, and it is the reason a whole re-run is not ceremony: "the follow solves the framing
+once instead of tracking him" injected a `DetectChanges` import that the module now has of its own,
+so the sabotage no longer compiled and pinned nothing while reading as a row in the file. Re-anchored
+and re-run alone: KILLED.
+
+| mutation | test that died | result |
+| --- | --- | --- |
+| the readout prints the raw aim point again | `the_readout_round_trips_even_from_an_aim_point_outside_the_world` | KILLED |
+| selecting a dwarf no longer drops the zoom | `a_left_click_selects_the_nearest_dwarf_and_frames_him_at_screen_centre` | KILLED |
+| the follow pins the zoom every frame instead of once | `the_focus_tracks_the_selected_dwarf_as_he_walks` | KILLED |
+| the pan branch is deleted and shift+MMB orbits instead | `shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate` | KILLED |
+| control stops multiplying the pan rate | `shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate` | KILLED |
+| the pan rate stops following the zoom | `shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate` | KILLED |
+| the readout key moves and nothing presses it | `the_readout_key_records_the_framing_as_it_stands_after_this_frames_camera_move` | KILLED |
+| the readout prints but records nothing | `the_readout_key_records_the_framing_as_it_stands_after_this_frames_camera_move` | KILLED |
+| the readout runs before the systems that move the rig | `the_readout_key_records_the_framing_as_it_stands_after_this_frames_camera_move` | KILLED |
+| the pick ranks the wire cell instead of the drawn dwarf | `the_pick_ranks_the_drawn_dwarf_not_the_cell_the_wire_delivered` | KILLED |
+| the pick projects at the boot aspect instead of the live one | `the_pick_uses_the_live_windows_aspect_rather_than_the_boot_constant` | KILLED |
+| a pasted `--camera` line is accepted beside `--distance` again | `a_pasted_camera_line_and_a_capture_distance_are_mutually_exclusive` | KILLED |
+| the warm-pixel floor stops naming its framing | `a_capture_failure_names_the_framing_the_live_rig_was_actually_at` | KILLED |
+| the capture reports the fallback framing instead of the live rig's | `a_capture_failure_names_the_framing_the_live_rig_was_actually_at` | KILLED |
+| the follow solves the framing once instead of tracking him (RE-ANCHORED) | `the_focus_tracks_the_selected_dwarf_as_he_walks` | KILLED |
+
+Three rows re-pointed rather than added, all three caught by a probe rather than by reading: the
+gate's mutation audit failed the pre-commit hook on `10-10` "the pick radius is removed" and `m2-1`
+"camera controls drop out of the update tuple", and the run itself caught the NO-COMPILE above.
+
+**SEAT ROUND, 2026-09-18 — Wolf signed off.** He ran the patched client and gave the verdict in
+his own words: *"perfect .. I am happy. Works like it should. So PR."* That closes the seat round
+the patch was waiting on, and with it the two feel items Wolf had HELD: **the wheel's notch count
+and the wheel's direction stand AS SHIPPED**, judged at the seat rather than argued. It also
+closes, by the only means available, the gap this story could never close from a devpod — MMB
+orbit, shift+MMB pan, a real wheel notch, `C` printing a line, left-clicking a dwarf and Escape
+with a mouse in hand have now all been exercised by a person with a window.
+
+**The third held item is NOT closed by that verdict and is not being claimed as closed.**
+Discoverability — no `--help`, and the hint bar still reads only `1 dig  2 channel  3 stockpile
+4 clear` — is invisible to an operator who already knows the controls, which Wolf does. Filed to
+`deferred-work.md` rather than ticked.
+
+**What this patch does NOT close.** The three held seat items (wheel notch count, wheel direction,
+discoverability) need Wolf at the seat. One thing for that round: the pan feel judged on 2026-09-17
+was the always-on 4x at the boot zoom, which is now **ctrl**+shift+MMB. Plain shift+MMB runs at the
+documented 0.12 rate, which no one has yet felt, and every pan is now distance-scaled.
+
 ### File List
+
+- `crates/gui/src/camera.rs` — world-space focus, pan, boot literal guard.
+- `crates/gui/src/transform.rs` — fractional world-to-render conversion.
+- `crates/gui/src/pick.rs` — test rig updated for `Vec3` focus.
+- `crates/gui/tests/headless.rs` — test rig literals updated for `Vec3` focus.
+- `_bmad-output/implementation-artifacts/10-10-signoff/control-boot-8eb1d1d-a.png` — Task 0 control evidence.
+- `_bmad-output/implementation-artifacts/10-10-signoff/control-boot-8eb1d1d-b.png` — Task 0 control evidence.
+- `_bmad-output/implementation-artifacts/10-10-take-the-camera-where-you-want-it.md` — Task 0/1 evidence and status.
+
+**Claude, Tasks 2-5** (production)
+- `crates/gui/src/camera.rs` — `place`, `composition_push`, `frame_render_point`,
+  `camera_readout_line`, clamp constants
+- `crates/gui/src/transform.rs` — `render_to_world_f32`, integer form delegating to it
+- `crates/gui/src/ingest.rs` — `camera_controls` (mouse, wheel, delta time, shift), `--camera`
+  parse / `CameraStart` / rig, `camera_readout` + `LastCameraReadout`, `configured_app` mouse
+  resource, selection-system registration and ordering
+- `crates/gui/src/pick.rs` — `SelectedDwarf`, `select_dwarf`, `nearest_dwarf_to`,
+  `frame_selected_dwarf`, `DrawnEntities`
+- `crates/gui/src/capture.rs` — the near-white failure names its framing
+
+**Tests**
+- `crates/gui/tests/headless.rs` — elapsed-time, mouse-drag, select / frame / track / release /
+  no-wire, plus `click_once` and `drawn_translation`
+- `crates/gui/tests/capture.rs` — the ceiling failure names its framing
+
+**Review patch, 2026-09-18** (production)
+- `crates/gui/src/camera.rs` — `CameraRig::placed`, `pan_scale`, `camera_readout_line` prints the
+  placed framing
+- `crates/gui/src/pick.rs` — `SELECT_DISTANCE`, `select_dwarf` reads the live camera and the drawn
+  entities, `nearest_dwarf_to` re-written around both, the zoom drop in `frame_selected_dwarf`
+- `crates/gui/src/ingest.rs` — pan's control multiplier and distance scaling, `camera_readout`'s own
+  ordered registration, the `--camera`/`--distance` bail
+- `crates/gui/src/capture.rs` — all five band assertions name the framing
+
+**Review patch tests**
+- `crates/gui/tests/headless.rs` — the pan test, the readout-key/ordering test, the two pick-oracle
+  tests, `install_pick_camera_at`, `viewport_position`, `set_cursor`; the selection test regains its
+  distance assertion and its focus literals move with the zoom
+- `crates/gui/tests/pixel_guard.rs` — the live rig -> framing seam, through the real binary
+- `crates/gui/src/ingest.rs` — the out-of-world round trip, and the flag-conflict test
+
+**Artifacts and records**
+- `_bmad-output/implementation-artifacts/mutations/10-10-take-the-camera-where-you-want-it.sh` — NEW;
+  15 rows added by the review patch
+- `_bmad-output/planning-artifacts/epics.md` — AC1's strike and correction box propagated
+- `_bmad-output/implementation-artifacts/mutations/9-1-the-frame-stops-blowing-out.sh` — 2 rows re-pointed
+- `_bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh` — 1 row re-pointed
+- `_bmad-output/implementation-artifacts/mutations/5-4-the-cold-boot.sh` — 1 row re-pointed
+- `_bmad-output/implementation-artifacts/mutations/8-2-designate-with-the-mouse.sh`,
+  `mutations/5-3-a-window-onto-the-valley.sh` — re-pointed during Task 1
+- `_bmad-output/implementation-artifacts/10-10-signoff/task-0-control.md` — correction box
+- `_bmad-output/implementation-artifacts/10-10-signoff/boot-4b3f75b.png`,
+  `camera-boot-4b3f75b.png`, `camera-d80-4b3f75b.png`, `camera-near-4b3f75b.png` — NEW.
+  `camera-near` is the close-zoom frame that trips the GROUND ceiling (#99), NOT a near-white trip;
+  `camera-d80` is the framing the control record says should trip near-white and does not.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-09-18 | **Wolf signed off from the seat — "works like it should" — and the story is DONE.** The held wheel items (notch count, direction) stand as shipped, judged at the seat. Discoverability is deferred, not closed. |
+| 2026-09-18 | **Review patch: all twelve items closed.** The pick's oracle now ranks the DRAWN dwarf through the LIVE camera, closing both halves of the review's top finding at their source; the two new tests state their own discrimination (105 px vs a 64.8 px radius at distance 20; 227 px at 900x1200). Selecting a dwarf drops the zoom to 20, once, at the click — AC8 regains the clause `epics.md` always specified. The readout prints the framing `place()` reproduces while the aim point stays free (Wolf's option (c)), pan takes its 4x from control and scales with the zoom, `camera_readout` is ordered after both writers of the rig, `--camera` + `--distance` bails, and all five capture bands name their framing. Three untested seams pinned: shift+MMB pan, the readout key and its `LastCameraReadout`, and the live rig -> framing string (through the real binary). AC1's strike propagated to `epics.md`; #99 corrected and re-verified independently — the near-white ceiling IS reachable at d=45. **Three ACs amended on Wolf's rulings (2, 3, 8), outside the dev workflow's normally permitted sections and logged here for that reason.** 15 mutation rows added, 2 older rows re-pointed, the whole table re-run. |
+| 2026-09-17 | **Seat round.** `WHEEL_ZOOM_STEP` 1.0 -> 6.0 on Wolf's verdict; a reversed MMB drag was tried and REJECTED, so the shipped direction is now a recorded decision with a sabotage row guarding it. Closed a hole this exposed in my own work: AC3's wheel half was pinned by no test at all — nothing in the suite mentioned `MouseWheel`, so the wheel term was deletable with all 88 tests green. Table re-run whole: **16/16 KILLED**. |
+| 2026-09-17 | **Tasks 2-5 implemented directly by Claude** after Codex exhausted its 5-hour usage window mid-Task-2 — Wolf's ruling, taking the loss of the dev/review model split. Mouse orbit/pan, wheel zoom and a shift multiplier, with per-second scaling on HELD KEYS ONLY (an event delta is already this frame's movement). `--camera` and the readout key, sharing one formatter with the capture's ceiling message. Dwarf selection and framing that SOLVES the composition push, following the AD-15 blended position. 13-row sabotage table, 13/13 KILLED, plus 4 re-pointed older rows re-run and killed. Full gate GREEN 511s including the pixel-guard tier. Filed #99: the near-white ceiling is unreachable via zoom because the ground-median ceiling fires first, and the control record's `--distance 80` trigger no longer trips. |
+| 2026-09-17 | **AC1's luminance clause STRUCK on Wolf's ruling (issue #98).** Task 0's control re-take found the documented control statistic was a plain RGB channel average mislabelled "mean luminance" (76.1236 reproduces exactly as the RGB mean of the committed creation frame; its Rec.601 luminance is 71.19), so the reported "baseline moved 5 points" was a statistic mismatch — the look never moved. The real defect: the documented 0.0048 same-build swing is a lucky-tight two-sample pair, and this build's swing is 0.0724, larger than AC1's own 0.048 tolerance, making the clause unsatisfiable by noise. Ruling: drop the pixel clause, keep the hand-written-literal rig guard as the whole of AC1. Task 3's required luminance observation and the RED's luminance half are superseded with it; the reaches-the-rig test carries that proof. **This edit changes an Acceptance Criterion, outside the dev workflow's normally permitted sections — made on an explicit ruling and logged here for that reason.** |
 | 2026-09-17 | Created. Control pair, same-build noise floor and the `--distance 80` RED measured at creation on `5452c4d`; AC1 rewritten against mean luminance after the changed-pixel statistic was shown to have a 6 % floor. |
+| 2026-09-17 | Task 1: made camera focus movable in world space with a literal boot-rig guard; re-took Task 0 control and filed #98 for the moved baseline. |

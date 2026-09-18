@@ -1,9 +1,15 @@
 use bevy::prelude::{Component, Transform, Vec2, Vec3};
 
-use crate::transform::world_to_render;
+use crate::transform::{render_to_world_f32, world_to_render, world_to_render_f32};
 
 const MIN_PITCH: f32 = 0.15;
 const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.15;
+const MIN_DISTANCE: f32 = 4.0;
+const MAX_DISTANCE: f32 = 500.0;
+// NOTE: the focus ceiling is the shipped 128x128x32 world, hardcoded rather than read from the
+// snapshot's `Dims`. A smaller world simply never reaches it, so the clamp is a bound and not a
+// lie; a LARGER world would need this to follow `Dims`.
+const FOCUS_MAX: Vec3 = Vec3::new(127.0, 127.0, 31.0);
 const BOOT_YAW: f32 = 0.7;
 const BOOT_PITCH: f32 = 0.45;
 const BOOT_DISTANCE: f32 = 90.0;
@@ -31,16 +37,16 @@ pub const BOOT_ASPECT_RATIO: f32 = 16.0 / 9.0;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct CameraRig {
-    pub focus: [i32; 3],
+    pub focus: Vec3,
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,
 }
 
 impl CameraRig {
-    pub fn new(focus: [i32; 3]) -> Self {
+    pub fn new([x, y, z]: [i32; 3]) -> Self {
         Self {
-            focus,
+            focus: Vec3::new(x as f32, y as f32, z as f32),
             yaw: BOOT_YAW,
             pitch: BOOT_PITCH,
             distance: BOOT_DISTANCE,
@@ -53,7 +59,50 @@ impl CameraRig {
     }
 
     pub fn zoom(&mut self, delta: f32) {
-        self.distance = (self.distance + delta).clamp(4.0, 500.0);
+        self.distance = (self.distance + delta).clamp(MIN_DISTANCE, MAX_DISTANCE);
+    }
+
+    /// Places the rig at an operator-chosen framing, through the SAME clamps the live controls
+    /// use — so `--camera` cannot reach an angle, zoom or focus that orbiting, zooming and
+    /// panning could not reach by hand (UX-DR1: no angle you get stuck in).
+    pub fn place(&mut self, yaw: f32, pitch: f32, distance: f32, focus: Vec3) {
+        self.yaw = yaw;
+        self.pitch = pitch.clamp(MIN_PITCH, MAX_PITCH);
+        self.distance = distance.clamp(MIN_DISTANCE, MAX_DISTANCE);
+        self.focus = focus.clamp(Vec3::ZERO, FOCUS_MAX);
+    }
+
+    /// This rig as `place()` would restore it: the same framing with every clamp `place` applies
+    /// already applied. Identical to `self` for any rig that only orbiting, zooming and panning
+    /// produced; it differs only where [`Self::frame_render_point`] has pushed the aim point out
+    /// of the world bounds. The one caller is [`camera_readout_line`], which owes AC6 an exact
+    /// round trip through `place`.
+    pub fn placed(&self) -> Self {
+        let mut placed = *self;
+        placed.place(self.yaw, self.pitch, self.distance, self.focus);
+        placed
+    }
+
+    /// How far the ground must move per pixel of cursor motion, relative to the boot zoom.
+    ///
+    /// The world span one pixel covers is proportional to the rig's distance, so a fixed
+    /// cells-per-pixel pan rate means one thing at one zoom and something else everywhere else:
+    /// measured in review, the ground ran ~1.7x cursor speed at distance 90 and ~7.8x at 20, so a
+    /// drag that nudged at the vista threw the camp off screen up close. Scaled against the BOOT
+    /// distance rather than solved from the viewport because `camera_controls` has no window, and
+    /// because the boot zoom is the one rate the seat has actually judged.
+    pub fn pan_scale(&self) -> f32 {
+        self.distance / BOOT_DISTANCE
+    }
+
+    /// Moves the focus along the camera's horizontal right/forward axes.
+    pub fn pan(&mut self, right: f32, forward: f32) {
+        let movement = Vec3::new(
+            right * self.yaw.sin() - forward * self.yaw.cos(),
+            right * self.yaw.cos() + forward * self.yaw.sin(),
+            0.0,
+        );
+        self.focus = (self.focus + movement).clamp(Vec3::ZERO, FOCUS_MAX);
     }
 
     pub fn transform(&self) -> Transform {
@@ -66,10 +115,33 @@ impl CameraRig {
     }
 
     fn composition_target(&self) -> Vec3 {
-        // Keep the camp in front of the camera at close zoom while retaining the approved
-        // composition at the boot distance and beyond.
-        let composition_scale = (self.distance / BOOT_DISTANCE).min(1.0);
-        world_to_render(self.focus) + boot_composition_offset() * composition_scale
+        world_to_render_f32(self.focus) + self.composition_push()
+    }
+
+    /// The boot composition push at this rig's zoom. Keeps the camp in front of the camera at
+    /// close zoom while retaining the approved composition at the boot distance and beyond.
+    ///
+    /// Factored out so [`Self::frame_render_point`] can solve it away rather than restate it:
+    /// two copies of this scaling is how a framing solve drifts from the framing it inverts.
+    fn composition_push(&self) -> Vec3 {
+        boot_composition_offset() * (self.distance / BOOT_DISTANCE).min(1.0)
+    }
+
+    /// Aims the rig so a render-space point lands exactly at screen centre.
+    ///
+    /// `transform()` looks at [`Self::composition_target`], which is the focus PLUS the
+    /// composition push — so pointing the focus straight AT a dwarf leaves him off-centre by
+    /// that push (33 cells of it at the boot zoom). This solves the push out instead of
+    /// approximating it: make the composition target the dwarf and the look-at point IS the
+    /// dwarf, so he projects at exactly (0.5, 0.5) for any yaw, pitch or distance.
+    ///
+    /// NOTE: this writes the focus WITHOUT the world-bounds clamp that `pan` applies. Centring a
+    /// dwarf generally requires a focus offset from him by the push, which for a dwarf near one
+    /// corner lands outside the world; clamping it would silently decentre exactly the dwarves
+    /// hardest to see. The focus is only an aim point, and a tracked dwarf is on screen by
+    /// construction, so nothing can be lost off-world this way.
+    pub fn frame_render_point(&mut self, target: Vec3) {
+        self.focus = render_to_world_f32(target - self.composition_push());
     }
 
     /// Projects a render-space point to normalized screen coordinates at this rig's camera.
@@ -112,6 +184,35 @@ impl CameraRig {
     }
 }
 
+/// One line naming this rig's whole framing, ending in the `--camera` argument that reproduces
+/// it. The line IS the save format: there is no viewpoint registry and no camera-path recorder,
+/// so paste the token back on the command line and the rig returns.
+///
+/// Every field is printed with Rust's shortest round-tripping float form, which is what makes
+/// the paste exact rather than approximate. It is also why this is the ONLY formatter: the
+/// capture's near-white failure names its framing with this same function, so a readout that
+/// disagreed with what a failing capture reported could not happen.
+///
+/// The line describes [`CameraRig::placed`], not the rig's raw fields. `frame_selected_dwarf`
+/// writes an unclamped AIM POINT (see [`CameraRig::frame_render_point`]), so a dwarf near a world
+/// edge drives the focus out of bounds; printing that raw focus produced a line `place()` clamped
+/// on the way back in, and the round trip AC6 requires was not exact for exactly the dwarves this
+/// feature exists to look at. Wolf's ruling, 2026-09-17: clamp what the readout PRINTS and leave
+/// the aim point free, so an edge dwarf stays centred AND the printed framing is reproducible.
+/// The cost is named rather than hidden: while such a dwarf is framed, the printed line restores a
+/// view near his, not the identical one.
+pub fn camera_readout_line(rig: &CameraRig) -> String {
+    let rig = &rig.placed();
+    let argument = format!(
+        "{},{},{},{},{},{}",
+        rig.yaw, rig.pitch, rig.distance, rig.focus.x, rig.focus.y, rig.focus.z
+    );
+    format!(
+        "camera: yaw={} pitch={} distance={} focus={},{},{} --camera {argument}",
+        rig.yaw, rig.pitch, rig.distance, rig.focus.x, rig.focus.y, rig.focus.z
+    )
+}
+
 /// Where world NORTH points on this camera's screen, as one of eight ASCII labels.
 ///
 /// This client had no orientation cue of any kind, and its screen axes are not the world's: the
@@ -127,8 +228,10 @@ pub fn north_on_screen(rig: &CameraRig) -> &'static str {
     // Two projected points rather than an analytic derivation: this reuses the SAME projection
     // the picking ray and every capture assertion go through, so a compass that disagrees with
     // what is drawn is not possible.
-    let here = rig.project_world_point(focus);
-    let north = rig.project_world_point([focus[0], focus[1] - NORTH_PROBE_TILES, focus[2]]);
+    let here = rig.project_render_point(world_to_render_f32(focus));
+    let north = rig.project_render_point(world_to_render_f32(
+        focus - Vec3::Y * NORTH_PROBE_TILES as f32,
+    ));
     let (Some(here), Some(north)) = (here, north) else {
         // Never guess a bearing. An unprojectable probe means the compass does not know, and a
         // compass that invents a direction is worse than one that admits it cannot say.
@@ -274,6 +377,40 @@ mod tests {
         assert!(
             rig.project_world_point([64, 64, 9]).is_some(),
             "the vista zoom limit must keep the camp in front of the camera"
+        );
+    }
+
+    #[test]
+    fn pan_moves_focus_on_the_camera_ground_plane_and_stays_inside_the_world() {
+        let mut rig = CameraRig::new([64, 64, 9]);
+        rig.pan(3.0, 4.0);
+        assert_eq!(rig.focus, Vec3::new(62.873_283, 68.871_4, 9.0));
+
+        rig.pan(-10_000.0, 0.0);
+        assert_eq!(rig.focus, Vec3::new(0.0, 0.0, 9.0));
+        rig.pan(10_000.0, 0.0);
+        assert_eq!(rig.focus, Vec3::new(127.0, 127.0, 9.0));
+    }
+
+    #[test]
+    fn boot_rig_and_transform_are_pinned_by_literals() {
+        let rig = CameraRig::new([64, 64, 9]);
+        assert_eq!(rig.yaw, 0.7);
+        assert_eq!(rig.pitch, 0.45);
+        assert_eq!(rig.distance, 90.0);
+        assert_eq!(rig.focus, Vec3::new(64.0, 64.0, 9.0));
+        assert_eq!(
+            rig.transform(),
+            Transform {
+                translation: Vec3::new(100.743_21, 47.646_896, -33.051_63),
+                rotation: bevy::prelude::Quat::from_xyzw(
+                    -0.202_291,
+                    0.411_140_35,
+                    0.094_099_894,
+                    0.883_847_9,
+                ),
+                scale: Vec3::ONE,
+            }
         );
     }
 }

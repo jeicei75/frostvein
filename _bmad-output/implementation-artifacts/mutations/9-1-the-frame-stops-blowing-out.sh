@@ -19,13 +19,16 @@ import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 old = '''    assert!(
         near_white <= NEAR_WHITE_AREA_CEILING,
-        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
+        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png, at {}",
         near_white * 100.0,
-        NEAR_WHITE_AREA_CEILING * 100.0
+        NEAR_WHITE_AREA_CEILING * 100.0,
+        framing
     );
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    let _ = near_white;\n'))
+# RE-ANCHORED 2026-09-17 (story 10.10): the ceiling names its framing now, and `framing`
+# would be an unused parameter once the assertion is gone, so the sabotage consumes it too.
+p.write_text(s.replace(old, '    let _ = (near_white, framing);\n'))
 PY
 
 mutation "blown-pool ceiling rises past today's frame" gui committed_bevy_vistas_show_the_blown_pool_that_ground_median_cannot_see <<'PY'
@@ -67,9 +70,10 @@ new = '''    let report_line = format!(
 s = s.replace(old, new)
 old_assert = '''    assert!(
         near_white <= NEAR_WHITE_AREA_CEILING,
-        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png",
+        "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png, at {}",
         near_white * 100.0,
-        NEAR_WHITE_AREA_CEILING * 100.0
+        NEAR_WHITE_AREA_CEILING * 100.0,
+        framing
     );
 '''
 assert s.count(old_assert) == 1
