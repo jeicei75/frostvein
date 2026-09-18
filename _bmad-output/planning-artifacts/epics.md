@@ -2137,7 +2137,9 @@ default EV100 9.7); `DepthOfField` (`bevy_post_process/src/dof/mod.rs:79-115`);
 `VolumetricFog` + `FogVolume` + `VolumetricLight` (`bevy_light/src/volumetric.rs:16-130`, the light
 needs a shadow map, which the sun has). **Whether any of these runs under lavapipe is unknown** —
 each story's first task is that probe, and if a mechanism cannot render headless, its opening
-artifact comes from the vehicle and says so.
+artifact comes from the vehicle and says so. **(SSAO ANSWERED 2026-09-18: its only GPU gate is
+`max_storage_textures_per_shader_stage >= 5` at `bevy_pbr-0.19.0/src/ssao/mod.rs:61-70`, and this
+devpod's llvmpipe reports 48 — the plugin loads. Bloom, DoF and volumetric fog are still unprobed.)**
 
 **Every story: UX-DR22 both halves; the opening artifact is the client's own headless capture;
 every figure carries its same-build noise floor; no capture ceiling is raised to pass; every effect
@@ -2146,6 +2148,41 @@ is never judged without knowing what was on; and NFR6 is re-read on the vehicle 
 after each effect lands.**
 
 ### Story 11.1: The Air Has Depth
+
+**SPLIT INTO 11.1a AND 11.1b (Wolf ruled, 2026-09-18, at 11.1's creation).** Three things found by
+verifying this story's own premises against the pinned source forced it:
+
+1. **SSAO is inert while MSAA is on, and fails silently.** `extract_ssao_settings`
+   (`bevy_pbr-0.19.0/src/ssao/mod.rs:479-494`) logs an `error!` and then **`return`s out of the whole
+   loop** — not `continue` — so *every* camera is skipped. `Msaa`'s default is `Sample4`
+   (`bevy_render-0.19.0/src/view/mod.rs:243-244`) and the client sets `Msaa` nowhere, so AO added as
+   this story described it would render a clean frame and exit 0 with no occlusion in it. The other
+   prerequisites are automatic — `Bloom` carries `#[require(Hdr)]`, `ScreenSpaceAmbientOcclusion`
+   carries `#[require(DepthPrepass, NormalPrepass)]` — so `Msaa::Off` is the only one a human must
+   remember and the only one that fails quietly.
+2. **`Msaa::Off` and `Hdr` each move every pixel before any effect is judged**, so the live-frame
+   guards must be re-baselined against that change alone, not against it plus two effects.
+3. **The bloom criterion below was unsatisfiable headless** — see the strike on it.
+
+- **11.1a — A Chosen Exposure and a Clean Edge**: `Msaa::Off`, the AA replacement, the hardcoded
+  `Exposure`, the crease instrument built and proved both ways, and the live guards re-baselined.
+- **11.1b — The Air Has Depth**: SSAO and Bloom on that render path, judged with that instrument.
+
+**FXAA, not TAA (Wolf ruled).** TAA needs `MotionVectorPrepass` + jitter and accumulates across
+frames; falling snow, flickering light and a 160-frame capture settle make that unproven here. `Fxaa`
+(`bevy_anti_alias-0.19.0/src/fxaa/mod.rs:57`) needs no prepass. SMAA was rejected: it needs the
+`smaa_luts` feature, absent from the root feature list, and crossing a `bevy` feature boundary
+rebuilds ~400 crates and has nearly OOMed the devpod.
+
+**The epic's "no bevy feature change" premise HOLDS** — `3d_bevy_render` expands to include
+`bevy_anti_alias`, `bevy_pbr` and `bevy_post_process` (`bevy-0.19.0/Cargo.toml` `[features]`), and all
+three plugins are in `DefaultPlugins` (`bevy_internal-0.19.0/src/default_plugins.rs:61, 63, 79`), so a
+component alone is enough.
+
+**And the epic's lavapipe unknown is ANSWERED for SSAO.** The plugin's only GPU gate is
+`max_storage_textures_per_shader_stage >= 5` (`bevy_pbr-0.19.0/src/ssao/mod.rs:61-70`). Probed on the
+devpod: llvmpipe / Mesa 25.0.7 reports **48**. The plugin will load. That proves it loads, not that it
+looks right.
 
 As the boss,
 I want creases and contacts to darken and emitters to glow,
@@ -2160,16 +2197,32 @@ floor while the open snow's median does not move — and the AC names the instru
 crease, not the whole frame.
 
 **Given** bloom on an HDR camera,
-**Then** only emitter faces and their immediate halo brighten; `NEAR_WHITE_AREA_CEILING` and the
-blown-pool figure stay inside 10.8's re-calibrated ceilings, because glow is not blow-out.
+**Then** only emitter faces and their immediate halo brighten; ~~`NEAR_WHITE_AREA_CEILING` and the
+blown-pool figure stay inside 10.8's re-calibrated ceilings~~, because glow is not blow-out.
+
+> **THE CEILING CLAUSE IS STRUCK (Wolf ruled, 2026-09-18, at creation). It could not be honoured on a
+> headless frame, for two independent reasons.** (1) `deferred-work.md:1237-1246` already rules that
+> llvmpipe under-reads near-white area by ~16 %, so a headless area figure must **never** be judged
+> against these ceilings, which are calibrated on a GPU frame; read it only as a delta between two
+> headless runs. (2) Measured at creation over **four** same-build boot captures on `41b3f02`
+> (`11-1-signoff/task-0-control.md`), the margin is gone anyway: near-white has **0.1284 pp** of
+> headroom against a **0.2388 pp** same-build spread, and blown-pool has **0.0154 pp** against
+> **0.1568 pp** — a margin one tenth of its own noise, so a capture can trip a ceiling by luck with
+> nothing changed. This is issue #90 confirmed at four samples instead of two, and extended to
+> blown-pool.
+>
+> **REPLACED BY:** headless proves bloom is LOCAL — emitter pixels and their halo brighten while the
+> open-snow window's median does not move, measured on-vs-off headless-to-headless against that
+> window's own floor. The ceiling clause is judged only on the vehicle capture at the sitting.
+> **No ceiling is raised** — 10.8's standing rule holds, and this strike does not move one.
 
 **Given** exposure is now a set constant rather than Bevy's default,
 **Then** it is one hardcoded `Exposure` on the camera, named in the tech-art doc beside the light
 table, and the story records the EV100 chosen and why.
 
 **Given** the anti-aliasing AO takes away,
-**Then** TAA (or Wolf's ruled alternative) is on, and the frame is not visibly more aliased than
-before — judged by eye at the sitting, with the same-framing pair filed.
+**Then** FXAA (ruled 2026-09-18; **lands in 11.1a**) is on, and the frame is not visibly more aliased
+than before — judged by eye at the sitting, with the same-framing pair filed.
 
 **Given** the vehicle,
 **Then** `--perf-log` at working zoom reads at or above 60 fps p50 with every effect on, or the

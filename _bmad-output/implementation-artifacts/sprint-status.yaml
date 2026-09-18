@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-17
+last_updated: 2026-09-18
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2214,7 +2214,7 @@ development_status:
                           # must be judged one at a time).
   epic-10-retrospective: optional
 
-  epic-11: backlog
+  epic-11: in-progress
   # THE ART-SHOT LOOK. Added 2026-09-08 (Wolf) out of 10.8's creation. FEATURES, not re-tuning:
   # ambient occlusion + bloom + exposure (11.1), depth of field + volumetric haze (11.2), a
   # day/night cycle that BOOTS AT NIGHT (11.3). EXECUTION ORDER IS NOT NUMERIC ORDER for the
@@ -2223,7 +2223,42 @@ development_status:
   # Every mechanism is already compiled in via 3d_bevy_render (verified in the pinned 0.19.0
   # source) -- no bevy feature change. Whether any renders under lavapipe is UNKNOWN; each
   # story's first task is that probe. NFR6 re-read with --perf-log after every effect.
-  11-1-the-air-has-depth: backlog
+  # 11.1 SPLIT INTO 11.1a AND 11.1b (Wolf ruled 2026-09-18, at 11.1's creation). Verifying the
+  # epic's own premises against the pinned 0.19.0 source found three things.
+  # (1) SSAO IS INERT WHILE MSAA IS ON, AND FAILS SILENTLY. extract_ssao_settings
+  #     (bevy_pbr-0.19.0/src/ssao/mod.rs:479-494) logs an error! and then RETURNS OUT OF THE LOOP --
+  #     not continue -- so EVERY camera is skipped. Msaa's default is Sample4 and this client sets
+  #     Msaa nowhere, so AO added as 11.1 described it renders a clean frame and exits 0 with no
+  #     occlusion in it. Bloom's Hdr and SSAO's prepasses ARE automatic (#[require(...)]);
+  #     Msaa::Off is the only prerequisite a human must remember and the only one that fails quietly.
+  # (2) Msaa::Off and Hdr each move EVERY PIXEL before any effect is judged, so the live-frame
+  #     guards re-baseline against that change alone, not against it plus two effects.
+  # (3) THE EPIC'S BLOOM AC WAS UNSATISFIABLE HEADLESS and is struck in epics.md. Two independent
+  #     reasons: deferred-work.md:1237-1246 already forbids judging a headless area figure against
+  #     ceilings calibrated on a GPU frame (llvmpipe under-reads ~16%); and measured over FOUR
+  #     same-build boot captures at creation, near-white has 0.1284 pp of headroom against a
+  #     0.2388 pp spread and blown-pool 0.0154 pp against 0.1568 pp -- a margin ONE TENTH of its own
+  #     noise, so a capture can trip a ceiling by luck with nothing changed. That is issue #90 at
+  #     four samples instead of two, extended to blown-pool. REPLACED BY a headless on/off DELTA
+  #     plus a vehicle-judged ceiling. NO CEILING WAS RAISED -- 10.8's rule holds.
+  # FXAA, NOT TAA (Wolf ruled). TAA needs MotionVectorPrepass + jitter and accumulates across frames;
+  # falling snow, flickering light and a 160-frame settle make that unproven here. SMAA rejected: it
+  # needs the smaa_luts feature, absent from the root list, and crossing a bevy feature boundary
+  # rebuilds ~400 crates and has nearly OOMed this devpod.
+  # THE "ALREADY COMPILED IN" PREMISE HOLDS: 3d_bevy_render expands to include bevy_anti_alias,
+  # bevy_pbr and bevy_post_process, and all three plugins are in DefaultPlugins -- a component alone
+  # is enough, no add_plugins owed, no feature change.
+  # AND THE EPIC'S LAVAPIPE UNKNOWN IS ANSWERED FOR SSAO: its only GPU gate is
+  # max_storage_textures_per_shader_stage >= 5 (ssao/mod.rs:61-70); this devpod's llvmpipe reports
+  # 48, so the plugin loads. That proves it LOADS, not that it looks right. Bloom/DoF/fog unprobed.
+  # Creation control (4 same-build captures on 41b3f02) filed at 11-1-signoff/task-0-control.md,
+  # with the crease instrument's own GREEN (p10/median identical across a same-build pair -- a ZERO
+  # noise floor) and RED (--lights-off ambient moves crease p10 30->0 while open snow's median moves
+  # 117->104). The camp window is DIAGNOSTIC ONLY: its mean moves 1.19 between same-build runs.
+  11-1a-a-chosen-exposure-and-a-clean-edge: review
+  # 11.1b inherits the render path and the instrument 11.1a builds, and owes the AC that proves AO's
+  # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.
+  11-1b-the-air-has-depth: backlog
   11-2-the-miniature: backlog
   11-3-night-falls-day-breaks: backlog
   epic-11-retrospective: optional
