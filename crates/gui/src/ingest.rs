@@ -148,7 +148,7 @@ pub struct LightingToggles {
     ambient: bool,
 }
 
-#[derive(Resource)]
+#[derive(Default, Resource)]
 struct FxaaOff(bool);
 
 impl Default for LightingToggles {
@@ -612,6 +612,7 @@ pub fn projection_systems(app: &mut App) {
     // `init_resource` is idempotent, so `client_systems` keeping its own call is not a conflict —
     // each builder now stands up what it registers.
     app.init_resource::<LightingToggles>();
+    app.init_resource::<FxaaOff>();
     app.add_systems(
         Update,
         (apply_lighting_toggles, update_lighting_readout)
@@ -2504,7 +2505,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off"
+            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on"
         );
 
         assert_eq!(
@@ -2590,7 +2591,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on"
         );
         assert_eq!(
             emissive(&mut app, protocol::LightKind::Campfire),
@@ -2830,7 +2831,8 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on".to_string(),
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on"
+                .to_string(),
         ];
         expected.sort();
         assert_eq!(
