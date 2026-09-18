@@ -1434,11 +1434,11 @@ fn validate_capture_ranges_with_report(
     ));
     assert!(
         pixels.iter().any(|pixel| pixel[..3] != [0, 0, 0]),
-        "capture is black"
+        "capture is black, at {framing}"
     );
     assert!(
         pixels.windows(2).any(|pair| pair[0] != pair[1]),
-        "capture is uniform"
+        "capture is uniform, at {framing}"
     );
     // The numbers print either way. Only the calibrated band is conditional, and `capture is
     // black` / `capture is uniform` above are not — a slice capture is never left ungated.
@@ -1452,26 +1452,29 @@ fn validate_capture_ranges_with_report(
     // NOTE: confirm this source-face-derived floor on the native-Windows vehicle run.
     assert!(
         warm >= WARM_PIXEL_FLOOR,
-        "capture contains fewer than {WARM_PIXEL_FLOOR} warm-lit pixels"
+        "capture contains fewer than {WARM_PIXEL_FLOOR} warm-lit pixels, at {framing}"
     );
     assert!(
         ground >= GROUND_LUMINANCE_FLOOR,
         "the valley floor reads {ground}, below the {GROUND_LUMINANCE_FLOOR} value floor — \
-         the frame is a black field, not a lit night"
+         the frame is a black field, not a lit night, at {framing}"
     );
     assert!(
         ground <= GROUND_LUMINANCE_CEILING,
         "the valley floor reads {ground}, above the {GROUND_LUMINANCE_CEILING} value ceiling — \
-         night snow must stay midtone; only emissive approaches white"
+         night snow must stay midtone; only emissive approaches white, at {framing}"
     );
     // AREA IS THE ASSERTION, not the pool. The pool's connectivity has a threshold cliff that the
     // vehicle's frames sit clear of but software-rendered ones do not; see NEAR_WHITE_AREA_CEILING.
     // The pool is still printed above, so a vehicle run loses no diagnostic.
-    // The framing is named because the ceiling is calibrated for the BOOT framing ONLY. Once
-    // `--camera` exists, a capture from some other framing is routine, and a bare "above the
-    // ceiling" told the operator nothing about WHICH view produced it. The ceiling is not raised
-    // for those views (10.8's standing rule: measure, do not raise) -- it reports what it was
-    // pointed at, so a trip can be read as "this framing is brighter" rather than a regression.
+    // The framing is named because every one of these bands is calibrated for the BOOT framing
+    // ONLY. Once `--camera` exists, a capture from some other framing is routine, and a bare
+    // "above the ceiling" told the operator nothing about WHICH view produced it. The ceiling is
+    // not raised for those views (10.8's standing rule: measure, do not raise) -- it reports what
+    // it was pointed at, so a trip can be read as "this framing is brighter" rather than a
+    // regression. AC11 names the near-white ceiling because that was the trip the story expected;
+    // review found the others fire FIRST and far more often (the warm floor and the valley floor
+    // both panic on ordinary `--camera` framings, naming nothing), so all five carry it.
     assert!(
         near_white <= NEAR_WHITE_AREA_CEILING,
         "near-white area is {:.4}%, above the {:.4}% ceiling calibrated on boot7.png, at {}",

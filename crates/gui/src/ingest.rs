@@ -656,7 +656,6 @@ pub fn client_systems(app: &mut App) {
         Update,
         (
             camera_controls,
-            camera_readout,
             light_controls,
             update_fog_from_camera,
             toggle_overlay,
@@ -677,6 +676,17 @@ pub fn client_systems(app: &mut App) {
             .chain()
             .after(camera_controls)
             .after(ProjectionSet),
+    )
+    // The readout reads the rig every one of these three write. Bevy does NOT order a conflicting
+    // read/write pair by declaration order, and in an unordered tuple the edge layer reproduced
+    // reader-before-writer EVERY frame in a standalone Bevy 0.19 crate — so `C` printed the
+    // framing of the frame before the one the operator was looking at. An instrument that
+    // misreports by a frame is still an instrument that misreports.
+    .add_systems(
+        Update,
+        camera_readout
+            .after(camera_controls)
+            .after(crate::pick::frame_selected_dwarf),
     )
     .add_systems(
         PostUpdate,
@@ -1011,6 +1021,18 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     // NOTE: deliberately NO `--camera requires --capture` gate. `--distance` has one because it
     // only ever existed to pin a capture; `--camera` is how the operator flies the live seat to a
     // framing and reads it back, so gating it on --capture would break its primary use.
+    if camera.is_some() && distance.is_some() {
+        // `setup_camera` places the whole framing and THEN overwrites the distance from
+        // `CaptureDistance`, so the pasted line's yaw, pitch and focus survive while its zoom is
+        // silently clobbered — an operator who pastes a readout onto a command line that already
+        // carries `--distance` gets a framing the line does not describe. Verified in review:
+        // `--camera 0.7,0.45,4,64,64,9` panics on the close zoom, and the same command plus
+        // `--distance 90` succeeds. Bail rather than pick a winner, exactly as `--cursor` and
+        // `--drag` do: the readout line carries a distance of its own and is the save format.
+        bail!(
+            "--camera and --distance are mutually exclusive; the --camera line carries its own distance"
+        );
+    }
     if cursor.is_some() && capture.is_none() {
         bail!("--cursor requires --capture");
     }
@@ -1541,17 +1563,28 @@ fn camera_controls(
     const ORBIT_RATE: f32 = 1.2;
     const ZOOM_RATE: f32 = 60.0;
     const MOUSE_ORBIT_RATE: f32 = 0.01;
+    // Cells of ground per pixel of cursor motion AT THE BOOT ZOOM; `pan_scale` carries it to
+    // every other zoom. Reachable at last: this rate was dead until 10.10's review, because
+    // shift is what SELECTS pan and the pan branch then multiplied by the shift multiplier
+    // unconditionally, so 0.48 was the only pan speed the seat ever felt.
     const MOUSE_PAN_RATE: f32 = 0.12;
     // One notch was 1.0, which needed ~86 of them to cross the boot-to-closest range. Raised
     // to 6.0 on Wolf's verdict from the seat (2026-09-17): 14 notches boot-to-closest, and 4
     // with shift held.
     const WHEEL_ZOOM_STEP: f32 = 6.0;
     const SHIFT_MULTIPLIER: f32 = 4.0;
-    let multiplier = if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
-        SHIFT_MULTIPLIER
-    } else {
-        1.0
-    };
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    let multiplier = if shift { SHIFT_MULTIPLIER } else { 1.0 };
+    // Pan takes its multiplier from CONTROL, not shift. Shift is the modifier that SELECTS pan,
+    // so `multiplier` inside the pan branch was always 4.0 and AC3's "shift multiplies the rate"
+    // was unobservable there. Ctrl is Wolf's ruling (2026-09-17) over Alt, which most Linux
+    // window managers take for themselves before the client ever sees the drag.
+    let pan_multiplier =
+        if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
+            SHIFT_MULTIPLIER
+        } else {
+            1.0
+        };
     let key_scale = time.delta_secs() * multiplier;
     let yaw = (keys.pressed(KeyCode::KeyD) as i8 - keys.pressed(KeyCode::KeyA) as i8) as f32
         * ORBIT_RATE
@@ -1566,11 +1599,9 @@ fn camera_controls(
     let wheel = wheels.read().map(|wheel| wheel.y).sum::<f32>();
     for (mut rig, mut transform) in &mut cameras {
         if mouse.pressed(MouseButton::Middle) {
-            if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
-                rig.pan(
-                    -motion.x * MOUSE_PAN_RATE * multiplier,
-                    motion.y * MOUSE_PAN_RATE * multiplier,
-                );
+            if shift {
+                let rate = MOUSE_PAN_RATE * rig.pan_scale() * pan_multiplier;
+                rig.pan(-motion.x * rate, motion.y * rate);
             } else {
                 rig.orbit(
                     yaw - motion.x * MOUSE_ORBIT_RATE * multiplier,
@@ -3329,6 +3360,55 @@ mod tests {
         );
     }
 
+    /// `setup_camera` places the whole `--camera` framing and THEN overwrites the distance from
+    /// `CaptureDistance`, so a pasted readout line's yaw, pitch and focus survived while its zoom
+    /// was silently clobbered. Verified live in the 10.10 review: `--camera 0.7,0.45,4,64,64,9`
+    /// panics on the close zoom, and the same command plus `--distance 90` succeeds — the
+    /// operator got a framing the line he pasted does not describe, with no warning.
+    ///
+    /// The readout line IS the save format and carries a distance of its own, so there is nothing
+    /// for `--distance` to add and no winner worth picking. Bail, exactly as `--cursor` and
+    /// `--drag` do.
+    #[test]
+    fn a_pasted_camera_line_and_a_capture_distance_are_mutually_exclusive() {
+        let both = super::parse_args_from([
+            std::ffi::OsString::from("--capture"),
+            std::ffi::OsString::from("working.png"),
+            std::ffi::OsString::from("--frames"),
+            std::ffi::OsString::from("30"),
+            std::ffi::OsString::from("--camera"),
+            std::ffi::OsString::from("0.7,0.45,20,64,64,9"),
+            std::ffi::OsString::from("--distance"),
+            std::ffi::OsString::from("90"),
+        ]);
+        let Err(error) = both else {
+            panic!("a --camera line carries its own distance; accepting both silently drops one");
+        };
+        assert!(
+            error.to_string().contains("mutually exclusive"),
+            "the rejection must say WHY, not merely fail: {error}"
+        );
+        // Either one alone still parses: the pairing is what is rejected, not the flags.
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--camera"),
+                std::ffi::OsString::from("0.7,0.45,20,64,64,9"),
+            ])
+            .is_ok()
+        );
+        assert!(
+            super::parse_args_from([
+                std::ffi::OsString::from("--capture"),
+                std::ffi::OsString::from("working.png"),
+                std::ffi::OsString::from("--frames"),
+                std::ffi::OsString::from("30"),
+                std::ffi::OsString::from("--distance"),
+                std::ffi::OsString::from("90"),
+            ])
+            .is_ok()
+        );
+    }
+
     /// AC16 requires a run that never reaches its tick to exit NON-ZERO. `App::run()` RETURNS the
     /// status and `AppExit` is not `#[must_use]`, so `app.run();` compiled clean under
     /// `-D warnings` while throwing every capture failure away.
@@ -3623,6 +3703,51 @@ mod tests {
             assert_eq!(reproduced.distance, original.distance, "{line}");
             assert_eq!(reproduced.focus, original.focus, "{line}");
         }
+    }
+
+    /// AC6 for the case the review found, and Wolf's ruling on it (2026-09-17). Framing a dwarf
+    /// writes an unclamped AIM POINT — `frame_render_point` deliberately skips the world-bounds
+    /// clamp, because clamping it would decentre exactly the dwarves near an edge, which are the
+    /// hardest to see. Printing that raw focus produced a line `place()` clamped on the way back
+    /// in, so the round trip AC6 requires was NOT exact for those dwarves: a probe measured focus
+    /// y -19.2592 printed and 0.0 restored. The ruling: clamp what the readout PRINTS and leave
+    /// the aim point free.
+    ///
+    /// The cost is named rather than hidden, and asserted here: the printed line restores a view
+    /// NEAR his, not the identical one. What it may never do is round-trip inexactly.
+    #[test]
+    fn the_readout_round_trips_even_from_an_aim_point_outside_the_world() {
+        let mut rig = CameraRig::new([4, 4, 1]);
+        rig.distance = 20.0;
+        // The real 10.10 case: the drawn translation of a dwarf at world [2, 2, 1], which is
+        // `world_to_render` plus the -0.5 Y the dwarf is drawn at.
+        rig.frame_render_point(Vec3::new(2.0, 0.5, -2.0));
+        assert!(
+            rig.focus.y < 0.0,
+            "the framing solve must leave the world for this test to mean anything; got {:?}",
+            rig.focus
+        );
+
+        let line = crate::camera::camera_readout_line(&rig);
+        let argument = line
+            .split("--camera ")
+            .nth(1)
+            .expect("the readout line must carry a --camera argument");
+        let parsed = super::parse_camera(std::ffi::OsString::from(argument))
+            .expect("the readout's own argument must parse");
+        let mut reproduced = CameraRig::new([0, 0, 0]);
+        reproduced.place(parsed.yaw, parsed.pitch, parsed.distance, parsed.focus);
+
+        // EXACT, by float equality, against the framing the line describes.
+        let printed = rig.placed();
+        assert_eq!(reproduced.yaw, printed.yaw, "{line}");
+        assert_eq!(reproduced.pitch, printed.pitch, "{line}");
+        assert_eq!(reproduced.distance, printed.distance, "{line}");
+        assert_eq!(reproduced.focus, printed.focus, "{line}");
+        // Hand-written: the out-of-world y is printed AT the bound, not past it and not rounded.
+        assert_eq!(parsed.focus.y, 0.0, "{line}");
+        // And the aim point itself is untouched, so the edge dwarf stays centred.
+        assert!(rig.focus.y < 0.0, "{:?}", rig.focus);
     }
 
     /// AC7: two rigs that are not equal never print the same line. A readout that collapsed any

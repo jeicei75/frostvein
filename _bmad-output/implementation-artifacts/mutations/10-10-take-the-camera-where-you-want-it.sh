@@ -115,10 +115,13 @@ PY
 
 mutation "the pick radius is removed so any dwarf answers a click" gui escape_releases_the_selection_and_an_empty_click_leaves_the_rig_untouched <<'PY'
 import pathlib
+# RE-ANCHORED 2026-09-18 (10.10 review patch): the radius is now a pixel distance measured
+# against the LIVE viewport height rather than a normalized constant, and the candidate is the
+# DRAWN dwarf rather than the wire cell. The row still deletes the radius and nothing else.
 p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
-old = '            (distance <= DWARF_PICK_RADIUS).then_some((distance, depth, entity.id))\n'
+old = '            (distance <= radius).then_some((distance, screen.z, marker.0))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Some((distance, depth, entity.id))\n'))
+p.write_text(s.replace(old, '            Some((distance, screen.z, marker.0))\n'))
 PY
 
 mutation "escape stops releasing the selection" gui escape_releases_the_selection_and_an_empty_click_leaves_the_rig_untouched <<'PY'
@@ -177,4 +180,186 @@ old = "                    yaw - motion.x * MOUSE_ORBIT_RATE * multiplier,\n    
 assert s.count(old) == 1
 new = "                    yaw + motion.x * MOUSE_ORBIT_RATE * multiplier,\n                    pitch + motion.y * MOUSE_ORBIT_RATE * multiplier,\n"
 p.write_text(s.replace(old, new))
+PY
+
+# --- Added 2026-09-18 with the review patches ----------------------------------------------
+#
+# One row per patched finding. The two pick rows matter most: the oracle the story shipped
+# disagreed with what is DRAWN in two independent ways, and every picking test used the one
+# viewport and the one projection where both errors are invisible.
+
+# Wolf's ruling on the unclamped framing focus (option c): the aim point stays free so an edge
+# dwarf is still centred, and the READOUT prints what `place()` reproduces.
+mutation "the readout prints the raw aim point again" gui the_readout_round_trips_even_from_an_aim_point_outside_the_world <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
+old = '    let rig = &rig.placed();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+# AC8's distance clause, dropped at story creation and restored by the review.
+mutation "selecting a dwarf no longer drops the zoom" gui a_left_click_selects_the_nearest_dwarf_and_frames_him_at_screen_centre <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
+old = '            rig.distance = SELECT_DISTANCE;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+# The other half of the same decision: the drop happens ONCE, at the click. Pinning it every
+# frame centres him and then refuses to let anyone pull back for context.
+mutation "the follow pins the zoom every frame instead of once" gui the_focus_tracks_the_selected_dwarf_as_he_walks <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
+old = '        if selected.is_changed() {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if true {\n'))
+PY
+
+# THE HOLE THE REVIEW NAMED: shift+MMB pan was pinned by no test and no row across all 551, so
+# deleting the branch left everything green. It does not any more.
+mutation "the pan branch is deleted and shift+MMB orbits instead" gui shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            if shift {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false {\n'))
+PY
+
+# Shift SELECTS pan, so the shift multiplier inside the pan branch was always 4.0 and the stated
+# 0.12 rate was unreachable. Ctrl carries the 4x now; ignoring it restores the dead conditional.
+mutation "control stops multiplying the pan rate" gui shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '                let rate = MOUSE_PAN_RATE * rig.pan_scale() * pan_multiplier;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let rate = MOUSE_PAN_RATE * rig.pan_scale();\n'))
+PY
+
+# A fixed cells-per-pixel rate ran the ground at ~1.7x the cursor at distance 90 and ~7.8x at 20.
+mutation "the pan rate stops following the zoom" gui shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '                let rate = MOUSE_PAN_RATE * rig.pan_scale() * pan_multiplier;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let rate = MOUSE_PAN_RATE * pan_multiplier;\n'))
+PY
+
+# `LastCameraReadout` was built as the seam that makes the readout testable and nothing read it:
+# both readout rows above sabotage the FORMATTER, which `capture.rs` reaches independently, so
+# the key, the system and the resource were all free to break silently.
+mutation "the readout key moves and nothing presses it" gui the_readout_key_records_the_framing_as_it_stands_after_this_frames_camera_move <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    if !keys.just_pressed(KeyCode::KeyC) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if !keys.just_pressed(KeyCode::KeyV) {\n'))
+PY
+
+mutation "the readout prints but records nothing" gui the_readout_key_records_the_framing_as_it_stands_after_this_frames_camera_move <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        last.0 = Some(line);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+# The ordering edge, sabotaged as the WRONG order rather than as no order: Bevy does not order a
+# conflicting read/write pair by declaration, so "unordered" is not a deterministic mutant, but
+# reader-before-writer is exactly what an unordered tuple was observed to do every frame.
+mutation "the readout runs before the systems that move the rig" gui the_readout_key_records_the_framing_as_it_stands_after_this_frames_camera_move <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = """        camera_readout
+            .after(camera_controls)
+            .after(crate::pick::frame_selected_dwarf),
+"""
+assert s.count(old) == 1
+new = """        camera_readout
+            .before(camera_controls)
+            .before(crate::pick::frame_selected_dwarf),
+"""
+p.write_text(s.replace(old, new))
+PY
+
+# ORACLE HALF ONE: rank the cell the wire delivered instead of the figure on screen. The blend
+# trails the delivered cell while he walks, and the drawn dwarf carries `entity_draw_offset`.
+mutation "the pick ranks the wire cell instead of the drawn dwarf" gui the_pick_ranks_the_drawn_dwarf_not_the_cell_the_wire_delivered <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
+old = """    drawn
+        .iter()
+        .filter(|(marker, _)| dwarves.contains(&marker.0))
+        .filter_map(|(marker, transform)| {
+"""
+assert s.count(old) == 1
+new = """    let _ = (&drawn, &dwarves);
+    mirror
+        .entities()
+        .filter(|entity| entity.kind == EntityKind::Dwarf)
+        .filter_map(|entity| {
+"""
+s = s.replace(old, new)
+old = 'camera\n                .world_to_viewport_with_depth(global, transform.translation)\n'
+assert s.count(old) == 1
+s = s.replace(old, 'camera\n                .world_to_viewport_with_depth(global, world_to_render(entity.pos))\n')
+old = '            (distance <= radius).then_some((distance, screen.z, marker.0))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            (distance <= radius).then_some((distance, screen.z, entity.id))\n'))
+PY
+
+# ORACLE HALF TWO: put the BOOT_ASPECT_RATIO error back. The window is resizable and never
+# locked, so the rig's constant aspect and the render camera's live one part company the moment
+# the operator resizes -- 0.24 at 1024x768, 1.0 at 900x1200, inside a 0.06 radius.
+mutation "the pick projects at the boot aspect instead of the live one" gui the_pick_uses_the_live_windows_aspect_rather_than_the_boot_constant <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
+old = '            let distance = screen.truncate().distance(cursor);\n'
+assert s.count(old) == 1
+new = """            let size = camera.logical_viewport_size()?;
+            let screen = Vec3::new(
+                (screen.x - size.x * 0.5) * ((size.x / size.y) / crate::camera::BOOT_ASPECT_RATIO)
+                    + size.x * 0.5,
+                screen.y,
+                screen.z,
+            );
+            let distance = screen.truncate().distance(cursor);
+"""
+p.write_text(s.replace(old, new))
+PY
+
+# `setup_camera` places the whole framing and then overwrites the distance, so a pasted readout
+# line silently lost its zoom to a `--distance` already on the command line.
+mutation "a pasted --camera line is accepted beside --distance again" gui a_pasted_camera_line_and_a_capture_distance_are_mutually_exclusive <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    if camera.is_some() && distance.is_some() {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if false {\n'))
+PY
+
+# The bands that fire FIRST named nothing: a --camera run that trips the warm floor or the valley
+# floor told the operator only that something was dark, not which view produced it.
+mutation "the warm-pixel floor stops naming its framing" gui a_capture_failure_names_the_framing_the_live_rig_was_actually_at ignored <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '        "capture contains fewer than {WARM_PIXEL_FLOOR} warm-lit pixels, at {framing}"\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        "capture contains fewer than {WARM_PIXEL_FLOOR} warm-lit pixels"\n'))
+PY
+
+# The live rig -> framing-string seam itself, which nothing exercised: both test suites hand-write
+# their framing, so replacing the whole expression with its literal fallback left every capture
+# reporting a framing it was not taken at, with the suite green.
+mutation "the capture reports the fallback framing instead of the live rig's" gui a_capture_failure_names_the_framing_the_live_rig_was_actually_at ignored <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = """                cameras
+                    .iter()
+                    .next()
+                    .map_or_else(|| "camera: unavailable".to_string(), camera_readout_line),
+"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                "camera: unavailable".to_string(),\n'))
 PY

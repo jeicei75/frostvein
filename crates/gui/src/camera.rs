@@ -72,6 +72,29 @@ impl CameraRig {
         self.focus = focus.clamp(Vec3::ZERO, FOCUS_MAX);
     }
 
+    /// This rig as `place()` would restore it: the same framing with every clamp `place` applies
+    /// already applied. Identical to `self` for any rig that only orbiting, zooming and panning
+    /// produced; it differs only where [`Self::frame_render_point`] has pushed the aim point out
+    /// of the world bounds. The one caller is [`camera_readout_line`], which owes AC6 an exact
+    /// round trip through `place`.
+    pub fn placed(&self) -> Self {
+        let mut placed = *self;
+        placed.place(self.yaw, self.pitch, self.distance, self.focus);
+        placed
+    }
+
+    /// How far the ground must move per pixel of cursor motion, relative to the boot zoom.
+    ///
+    /// The world span one pixel covers is proportional to the rig's distance, so a fixed
+    /// cells-per-pixel pan rate means one thing at one zoom and something else everywhere else:
+    /// measured in review, the ground ran ~1.7x cursor speed at distance 90 and ~7.8x at 20, so a
+    /// drag that nudged at the vista threw the camp off screen up close. Scaled against the BOOT
+    /// distance rather than solved from the viewport because `camera_controls` has no window, and
+    /// because the boot zoom is the one rate the seat has actually judged.
+    pub fn pan_scale(&self) -> f32 {
+        self.distance / BOOT_DISTANCE
+    }
+
     /// Moves the focus along the camera's horizontal right/forward axes.
     pub fn pan(&mut self, right: f32, forward: f32) {
         let movement = Vec3::new(
@@ -169,7 +192,17 @@ impl CameraRig {
 /// the paste exact rather than approximate. It is also why this is the ONLY formatter: the
 /// capture's near-white failure names its framing with this same function, so a readout that
 /// disagreed with what a failing capture reported could not happen.
+///
+/// The line describes [`CameraRig::placed`], not the rig's raw fields. `frame_selected_dwarf`
+/// writes an unclamped AIM POINT (see [`CameraRig::frame_render_point`]), so a dwarf near a world
+/// edge drives the focus out of bounds; printing that raw focus produced a line `place()` clamped
+/// on the way back in, and the round trip AC6 requires was not exact for exactly the dwarves this
+/// feature exists to look at. Wolf's ruling, 2026-09-17: clamp what the readout PRINTS and leave
+/// the aim point free, so an edge dwarf stays centred AND the printed framing is reproducible.
+/// The cost is named rather than hidden: while such a dwarf is framed, the printed line restores a
+/// view near his, not the identical one.
 pub fn camera_readout_line(rig: &CameraRig) -> String {
+    let rig = &rig.placed();
     let argument = format!(
         "{},{},{},{},{},{}",
         rig.yaw, rig.pitch, rig.distance, rig.focus.x, rig.focus.y, rig.focus.z

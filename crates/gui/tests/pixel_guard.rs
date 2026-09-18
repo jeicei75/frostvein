@@ -574,3 +574,76 @@ fn the_perf_log_names_the_run_that_produced_it() {
         "a {FRAMES}-frame run must leave more than one measured row; got {rows}"
     );
 }
+
+/// AC11's live half, and the seam the review found untested: the framing a capture failure names
+/// must come off the RIG THAT TOOK IT.
+///
+/// `capture_after_frames` resolves it with
+/// `cameras.iter().next().map_or_else(|| "camera: unavailable", camera_readout_line)`, and nothing
+/// exercised that expression: `tests/capture.rs` hand-writes `NEAR_FRAMING` and the `src/capture.rs`
+/// tests hand-write `TEST_FRAMING`, so replacing the whole expression with its literal fallback
+/// left every capture reporting a framing it was not taken at, with the suite green. A broken
+/// observability instrument is patched here regardless of severity — it manufactures false
+/// evidence rather than merely missing true evidence.
+///
+/// Driven through the real binary because that is the only place the live query exists. The
+/// framing is asserted in the rig's OWN formatting (`pitch=1`, not the `1` that was typed), which
+/// is what makes this evidence that the line was built from the camera rather than echoed back
+/// from argv.
+///
+/// The band that trips is the WARM-PIXEL FLOOR, not the near-white ceiling AC11 names: pointed up
+/// and away from the camp, this framing has no warm light in it at all (`warm-lit pixels=0`).
+/// That is the review's other finding in the same place — the ceiling asserts LAST, and for most
+/// `--camera` framings one of the earlier bands fires first, so all five name the framing now.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn a_capture_failure_names_the_framing_the_live_rig_was_actually_at() {
+    const FRAMING: &str = "--camera 2.5,1,40,20,100,12";
+    let daemon = Daemon::spawn();
+    let out = std::env::temp_dir().join(format!("frostvein-framing-{}.png", std::process::id()));
+    let result = Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg(daemon.port.to_string())
+        .args([
+            "--headless",
+            "--static-world",
+            "--subdiv",
+            "4",
+            "--frames",
+            FRAMES,
+            "--camera",
+            "2.5,1,40,20,100,12",
+            "--capture",
+            out.to_str().expect("a utf-8 path"),
+        ])
+        .stdout(Stdio::null())
+        .output()
+        .expect("the client must run");
+    let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
+    assert!(
+        out.exists(),
+        "every capture in this project saves before it validates, so a missing PNG is a real \
+         failure rather than the expected 101\n{stderr}"
+    );
+    let _ = std::fs::remove_file(&out);
+    assert_eq!(
+        result.status.code(),
+        Some(101),
+        "this framing has no warm light in it; the run must die on a band, or there is no failure \
+         message to read\n{stderr}"
+    );
+    assert!(
+        stderr.contains("fewer than"),
+        "the warm-pixel floor must be the band that tripped; got\n{stderr}"
+    );
+    assert!(
+        stderr.contains(FRAMING),
+        "the failure must name the framing it was taken at, pasteable as {FRAMING}; got\n{stderr}"
+    );
+    // NOT the boot rig, and not the fallback: both would still be a string, and both would be a
+    // lie about which view produced the frame.
+    assert!(
+        !stderr.contains("--camera 0.7,0.45,90,64,64,9") && !stderr.contains("camera: unavailable"),
+        "the framing must be the live rig's, not the boot default or the unavailable fallback; \
+         got\n{stderr}"
+    );
+}

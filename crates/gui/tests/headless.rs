@@ -36,14 +36,14 @@ struct TestWireSender(std::sync::mpsc::SyncSender<anyhow::Result<WireMessage>>);
 use client_core::Mirror;
 use gui::{
     atmosphere::{Atmosphere, SNOWFLAKE_COUNT, STAR_COUNT, Snowflake, setup_atmosphere},
-    camera::CameraRig,
+    camera::{CameraRig, camera_readout_line},
     capture::{CaptureState, accumulate_motion},
     command::PendingCommands,
     designate::{DesignateHint, DesignateMode, DragAnchor, DragMode, designation_hint},
     ingest::{
-        CaptureDistance, IngestReceiver, MirrorResource, ProjectionSet, ProjectionWork,
-        ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff, projection_systems,
-        reconcile_projection,
+        CaptureDistance, IngestReceiver, LastCameraReadout, MirrorResource, ProjectionSet,
+        ProjectionWork, ScriptedCursor, SliceReadout, WireMessage, client_systems, fog_falloff,
+        projection_systems, reconcile_projection,
     },
     pick::{Face, PickedCell, PickedTile, SelectedDwarf},
     project::{
@@ -2361,6 +2361,15 @@ fn one_tile_snapshot() -> Snapshot {
 const PICK_VIEWPORT: UVec2 = UVec2::new(1920, 1080);
 
 fn install_pick_camera(app: &mut App, rig: CameraRig, cursor: Vec2) {
+    install_pick_camera_at(app, rig, cursor, PICK_VIEWPORT);
+}
+
+/// The same rig, at a viewport the caller chooses.
+///
+/// Every picking test used `PICK_VIEWPORT` alone — 1920x1080, the ONE aspect at which a pick
+/// hardcoded to `BOOT_ASPECT_RATIO` agrees with the camera that is actually drawing. The window
+/// is `resizable: true` and never locked, so that agreement is an accident of the fixture.
+fn install_pick_camera_at(app: &mut App, rig: CameraRig, cursor: Vec2, viewport: UVec2) {
     // Run Startup first: `live_app` deliberately drives the same registration point as `run()`.
     app.update();
 
@@ -2371,14 +2380,14 @@ fn install_pick_camera(app: &mut App, rig: CameraRig, cursor: Vec2) {
         .expect("live startup must spawn exactly one camera rig");
     let mut camera = Camera::default();
     camera.computed.target_info = Some(RenderTargetInfo {
-        physical_size: PICK_VIEWPORT,
+        physical_size: viewport,
         scale_factor: 1.0,
     });
     let mut projection = bevy::prelude::PerspectiveProjection {
         fov: gui::camera::BOOT_VERTICAL_FOV,
         ..Default::default()
     };
-    projection.update(PICK_VIEWPORT.x as f32, PICK_VIEWPORT.y as f32);
+    projection.update(viewport.x as f32, viewport.y as f32);
     camera.computed.clip_from_view = projection.get_clip_from_view();
     let transform = rig.transform();
     app.world_mut().entity_mut(camera_entity).insert((
@@ -2389,7 +2398,7 @@ fn install_pick_camera(app: &mut App, rig: CameraRig, cursor: Vec2) {
     ));
 
     let mut window = Window {
-        resolution: WindowResolution::new(PICK_VIEWPORT.x, PICK_VIEWPORT.y),
+        resolution: WindowResolution::new(viewport.x, viewport.y),
         ..Default::default()
     };
     window.set_cursor_position(Some(cursor));
@@ -3132,6 +3141,306 @@ fn the_wheel_zooms_the_rig_and_shift_multiplies_the_step() {
     assert!((wheeled(0.0, false).distance - 90.0).abs() < 1e-3);
 }
 
+/// AC3's pan half, which NOTHING pinned across all 551 mutation rows until now: `MouseButton::Middle`
+/// appeared once in the tests, without shift, so the pan branch never executed and deleting or
+/// inverting it left the suite, the gate and the whole table green. The IDENTICAL hole this story's
+/// Change Log records closing for the wheel, left open one branch away.
+///
+/// Also pins the two objective defects the review's seat layer found. Shift is what SELECTS pan,
+/// so the shift multiplier inside the pan branch was always 4.0 and the stated 0.12 rate was
+/// unreachable; pan now takes its multiplier from CONTROL (Wolf, 2026-09-17). And the rate is
+/// scaled by the rig's distance, because a fixed cells-per-pixel pan ran the ground at ~1.7x the
+/// cursor at distance 90 and ~7.8x at 20.
+///
+/// Every expected focus is hand-written from the boot 0.7 yaw and the 0.12 rate, never read back
+/// from `MOUSE_PAN_RATE` or `pan_scale` — a moved rate reddens this rather than sliding under it.
+#[test]
+fn shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate() {
+    fn panned(distance: f32, control: bool, motion: Vec2) -> CameraRig {
+        let (mut app, _sender) = live_app(one_tile_snapshot());
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+            1.0 / 60.0,
+        )));
+        app.update();
+        for mut rig in app
+            .world_mut()
+            .query::<&mut CameraRig>()
+            .iter_mut(app.world_mut())
+        {
+            rig.distance = distance;
+        }
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.press(KeyCode::ShiftLeft);
+            if control {
+                keys.press(KeyCode::ControlLeft);
+            }
+        }
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Middle);
+        app.world_mut().write_message(MouseMotion { delta: motion });
+        app.update();
+        *app.world_mut()
+            .query::<&CameraRig>()
+            .iter(app.world())
+            .next()
+            .expect("the live startup must spawn a rig")
+    }
+
+    // Dragging RIGHT by 10 px at the boot zoom: the focus moves 1.2 cells along the camera's own
+    // -right axis, which at yaw 0.7 is (-sin, -cos) * 1.2 = (-0.7731, -0.9178) off (64, 64, 9).
+    let plain = panned(90.0, false, Vec2::new(10.0, 0.0));
+    assert!(
+        (plain.focus - Vec3::new(63.226_94, 63.082_19, 9.0)).length() < 1e-3,
+        "{plain:?}"
+    );
+    // Control multiplies that by 4 and nothing else: 4 * 1.2 = 4.8 cells of travel.
+    let fast = panned(90.0, true, Vec2::new(10.0, 0.0));
+    assert!(
+        (fast.focus - Vec3::new(60.907_76, 60.328_76, 9.0)).length() < 1e-3,
+        "{fast:?}"
+    );
+    // A REAL 1x and a REAL 4x: the two differ, which is what the dead conditional made impossible.
+    assert!(
+        (fast.focus - plain.focus).length() > 1.0,
+        "control must multiply the pan rate; got {plain:?} and {fast:?}"
+    );
+    // Distance-scaled: the same drag at distance 20 moves the ground 20/90 as far, so the pan
+    // covers the same fraction of the SCREEN at every zoom. 1.2 * 20/90 = 0.26667 cells.
+    let close = panned(20.0, false, Vec2::new(10.0, 0.0));
+    assert!(
+        (close.focus - Vec3::new(63.828_21, 63.796_04, 9.0)).length() < 1e-3,
+        "{close:?}"
+    );
+    // And the other axis, which a magnitude-only assertion would miss: dragging DOWN (+y) moves
+    // the focus along the camera's own forward axis, (-cos, +sin) * 1.2.
+    let vertical = panned(90.0, false, Vec2::new(0.0, 10.0));
+    assert!(
+        (vertical.focus - Vec3::new(63.082_19, 64.773_06, 9.0)).length() < 1e-3,
+        "{vertical:?}"
+    );
+    // MMB WITHOUT shift is the orbit branch, so the focus must not move at all — the pan is
+    // selected by the modifier and not by the button.
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+        1.0 / 60.0,
+    )));
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Middle);
+    app.world_mut().write_message(MouseMotion {
+        delta: Vec2::new(10.0, 0.0),
+    });
+    app.update();
+    let orbited = *app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("a rig");
+    assert_eq!(orbited.focus, Vec3::new(64.0, 64.0, 9.0), "{orbited:?}");
+}
+
+/// AC6's key half. `LastCameraReadout` was built as the seam that makes the readout testable — "so
+/// a test can assert what the operator saw" — and until now NOTHING read it: the two readout
+/// mutation rows sabotage the FORMATTER, which `capture.rs` reaches independently, so they killed
+/// without touching the key, the system or the resource. Change the keycode or drop the system
+/// from the tuple and every test stayed green.
+///
+/// The wheel notch in the SAME frame is the ordering half. `camera_readout` reads the rig that
+/// `camera_controls` and `frame_selected_dwarf` write; Bevy does not order a conflicting
+/// read/write pair by declaration order, and in the unordered tuple it shipped in, the edge review
+/// layer reproduced reader-before-writer every frame. An unordered readout prints distance=90 here
+/// — last frame's framing — rather than the 108 the operator is looking at.
+#[test]
+fn the_readout_key_records_the_framing_as_it_stands_after_this_frames_camera_move() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+        1.0 / 60.0,
+    )));
+    app.update();
+    assert!(
+        app.world().resource::<LastCameraReadout>().0.is_none(),
+        "nothing is recorded until the key is pressed"
+    );
+
+    app.world_mut().write_message(MouseWheel {
+        unit: bevy::input::mouse::MouseScrollUnit::Line,
+        x: 0.0,
+        y: 3.0,
+        window: BevyEntity::PLACEHOLDER,
+        phase: bevy::input::touch::TouchPhase::Moved,
+    });
+    press_once(&mut app, KeyCode::KeyC);
+
+    let recorded = app
+        .world()
+        .resource::<LastCameraReadout>()
+        .0
+        .clone()
+        .expect("the readout key must record the line it printed");
+    // Hand-written: three notches out from the boot 90 at a step of 6.
+    assert!(
+        recorded.contains("distance=108"),
+        "the readout must name the framing AFTER this frame's zoom, not before it; got {recorded:?}"
+    );
+    let rig = *app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("a rig");
+    assert_eq!(
+        recorded,
+        camera_readout_line(&rig),
+        "the recorded line must be the one this rig prints"
+    );
+}
+
+/// Where a point lands on screen, in viewport pixels, written out from first principles here.
+///
+/// Hand-rolled rather than called off the rig, because the two tests below exist to show the pick
+/// disagreeing with the rig's own projection: an oracle that shared `project_render_point`'s
+/// hardcoded aspect would share the very error it is meant to catch. `aspect` is a parameter for
+/// the same reason — it is what the two callers vary.
+fn viewport_position(rig: &CameraRig, viewport: Vec2, aspect: f32, point: Vec3) -> Vec2 {
+    let camera = rig.transform();
+    let offset = point - camera.translation;
+    let depth = offset.dot(camera.forward().as_vec3());
+    let half = (gui::camera::BOOT_VERTICAL_FOV * 0.5).tan();
+    let ndc = Vec2::new(
+        offset.dot(camera.right().as_vec3()) / (depth * half * aspect),
+        offset.dot(*camera.up()) / (depth * half),
+    );
+    Vec2::new(
+        (ndc.x + 1.0) * 0.5 * viewport.x,
+        (1.0 - ndc.y) * 0.5 * viewport.y,
+    )
+}
+
+fn set_cursor(app: &mut App, position: Vec2) {
+    let mut windows = app
+        .world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>();
+    let world = app.world_mut();
+    for mut window in windows.iter_mut(world) {
+        window.set_cursor_position(Some(position));
+    }
+}
+
+/// AC8, half one of the review's oracle finding: the pick must rank the dwarf the operator can
+/// SEE, not the cell the wire last delivered.
+///
+/// `nearest_dwarf_to` projected `entity.pos` — the raw integer cell — while the figure on screen
+/// is at the blended translation plus `entity_draw_offset` (-0.5 Y), and the blend trails the
+/// delivered cell by up to `DWARF_WALK_SNAP_CELLS` while he walks. Against the 0.06 radius that
+/// separation measured 0.0223 at the boot distance, 0.0496 at 40 and 0.0975 at 20 — so clicking
+/// exactly on a walking dwarf missed him at precisely the close zoom a selection now drops to,
+/// which is the zoom this feature exists for.
+///
+/// The last assertion is what gives this test its teeth: it states that the wire cell is further
+/// from the cursor than the whole pick radius, so the oracle that shipped could not have hit.
+#[test]
+fn the_pick_ranks_the_drawn_dwarf_not_the_cell_the_wire_delivered() {
+    let start = [2, 2, 1];
+    let mut rig = CameraRig::new([4, 4, 1]);
+    // The distance a selection now drops to, and the one the separation was measured at.
+    rig.distance = 20.0;
+    let dims = Dims { x: 8, y: 8, z: 2 };
+    let tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![dwarf(1, start)]));
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+        1.0 / 60.0,
+    )));
+    install_pick_camera(&mut app, rig, Vec2::ZERO);
+    app.update();
+
+    // He is mid-walk: two cells delivered, inside `DWARF_WALK_SNAP_CELLS`, so the blend paces him
+    // across the ground rather than snapping him into the delivered cell.
+    sender
+        .send(Ok(WireMessage::Delta(Box::new(delta(
+            Vec::new(),
+            vec![dwarf(1, [4, 2, 1])],
+        )))))
+        .unwrap();
+    for _ in 0..30 {
+        app.update();
+    }
+
+    let drawn = drawn_translation(&mut app, 1);
+    let delivered = world_to_render([4, 2, 1]);
+    assert!(
+        (drawn - delivered).length() > 0.5,
+        "the drawn figure must actually lag the delivered cell, or this test proves nothing: \
+         drawn {drawn:?}, delivered {delivered:?}"
+    );
+
+    let viewport = PICK_VIEWPORT.as_vec2();
+    let aspect = viewport.x / viewport.y;
+    let cursor = viewport_position(&rig, viewport, aspect, drawn);
+    set_cursor(&mut app, cursor);
+    click_once(&mut app, MouseButton::Left);
+    assert_eq!(
+        *app.world().resource::<SelectedDwarf>(),
+        SelectedDwarf(Some(1)),
+        "a click on the figure the operator sees must select him"
+    );
+
+    let wire = viewport_position(&rig, viewport, aspect, delivered);
+    assert!(
+        (wire - cursor).length() > 0.06 * viewport.y,
+        "the wire cell must sit OUTSIDE the pick radius of the drawn figure, or the oracle this \
+         test replaces would have passed it too; {:.1} px apart",
+        (wire - cursor).length()
+    );
+}
+
+/// AC8, half two: the pick must go through the LIVE camera, not a projection hardcoded to
+/// `BOOT_ASPECT_RATIO`.
+///
+/// The window is `resizable: true` and never locked, and Bevy's `camera_system` drives the render
+/// projection's aspect off the live window — so the moment the operator resizes, the rig's own
+/// `project_*` describes a frame nobody is looking at. Every picking test used 1920x1080, the one
+/// aspect where the constant is right, and derived its cursor from the same projection the pick
+/// used, so the oracle shared the subject's error term. This one is 900x1200 and derives the
+/// cursor from the viewport's TRUE aspect.
+#[test]
+fn the_pick_uses_the_live_windows_aspect_rather_than_the_boot_constant() {
+    const TALL_VIEWPORT: UVec2 = UVec2::new(900, 1200);
+    // Off to the side of the frame, where an aspect error is worth pixels rather than rounding —
+    // but inside it, because Bevy's `cursor_position()` reports None for a point outside the
+    // window and the click would then be judged on nothing at all.
+    let dwarf_cell = [0, 2, 1];
+    let mut rig = CameraRig::new([4, 4, 1]);
+    rig.distance = 20.0;
+    let dims = Dims { x: 8, y: 8, z: 2 };
+    let tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let (mut app, _sender) = live_app(snapshot_with_dims(dims, tiles, vec![dwarf(1, dwarf_cell)]));
+    install_pick_camera_at(&mut app, rig, Vec2::ZERO, TALL_VIEWPORT);
+    app.update();
+
+    let drawn = drawn_translation(&mut app, 1);
+    let viewport = TALL_VIEWPORT.as_vec2();
+    let cursor = viewport_position(&rig, viewport, viewport.x / viewport.y, drawn);
+    set_cursor(&mut app, cursor);
+    click_once(&mut app, MouseButton::Left);
+    assert_eq!(
+        *app.world().resource::<SelectedDwarf>(),
+        SelectedDwarf(Some(1)),
+        "a click on the drawn figure must select him at a viewport that is not 16:9"
+    );
+
+    let boot_aspect = viewport_position(&rig, viewport, gui::camera::BOOT_ASPECT_RATIO, drawn);
+    assert!(
+        (boot_aspect - cursor).length() > 0.06 * viewport.y,
+        "the 16:9 projection must put him OUTSIDE the pick radius of where he is drawn, or this \
+         test cannot tell the two apart; {:.1} px apart",
+        (boot_aspect - cursor).length()
+    );
+}
+
 /// AC8. Pinned with `live_app` + `install_pick_camera` and NOT with a headless capture: there is
 /// no `PrimaryWindow` in a headless run, so the live pick is always `None` there and a capture
 /// could only ever show the boot framing however broken the selection was.
@@ -3187,12 +3496,23 @@ fn a_left_click_selects_the_nearest_dwarf_and_frames_him_at_screen_centre() {
         "the selected dwarf must land within 0.05 of screen centre; projected at {screen:?}"
     );
 
+    // AC8's distance clause, which the story dropped at creation and the review put back: the
+    // selection drops the zoom to a READABLE one. A dwarf is ~10.8 px tall at the boot 90, so a
+    // centred speck still left the operator hand-flying the zoom. Hand-written, not read back
+    // from `SELECT_DISTANCE`.
+    assert!(
+        (framed.distance - 20.0).abs() < 1e-3,
+        "selecting a dwarf must drop the zoom to a readable distance; got {}",
+        framed.distance
+    );
+
     // And the focus was SOLVED for the composition push rather than pointed at him. Hand-written
     // literals: aiming the focus straight at the dwarf would leave it at his own position and
-    // him 33 cells off-centre, which is the trap this AC exists for.
+    // him 33 cells off-centre, which is the trap this AC exists for. The push scales with the
+    // zoom, so these are the values at the selection distance of 20, not at the boot 90.
     let focus = framed.focus;
     assert!(
-        (focus - bevy::prelude::Vec3::new(27.2398, -19.2592, 1.0)).length() < 0.01,
+        (focus - bevy::prelude::Vec3::new(7.6088, -2.7243, 0.6111)).length() < 0.01,
         "the focus must be offset from the dwarf by the composition push; got {focus:?}"
     );
 }
@@ -3232,6 +3552,18 @@ fn the_focus_tracks_the_selected_dwarf_as_he_walks() {
         .expect("a rig")
         .focus;
 
+    // The zoom drops ONCE, at the click, and is the operator's again afterwards: three notches
+    // out here must survive every following frame below. Holding him at `SELECT_DISTANCE` every
+    // frame would centre him and then refuse to let anyone pull back for context.
+    app.world_mut().write_message(MouseWheel {
+        unit: bevy::input::mouse::MouseScrollUnit::Line,
+        x: 0.0,
+        y: 3.0,
+        window: BevyEntity::PLACEHOLDER,
+        phase: bevy::input::touch::TouchPhase::Moved,
+    });
+    app.update();
+
     // Move him on the wire and let the blend carry him. Several frames, because the walk paces
     // him across the ground rather than teleporting him into the delivered cell.
     // Two cells, deliberately INSIDE `DWARF_WALK_SNAP_CELLS` (2.5), so he is paced across the
@@ -3258,6 +3590,18 @@ fn the_focus_tracks_the_selected_dwarf_as_he_walks() {
     assert!(
         (after - before).length() > 1.0,
         "the focus must follow the dwarf as he walks; it moved from {before:?} to {after:?}"
+    );
+    // Hand-written: 20 at the click, plus three notches of 6.
+    let held = app
+        .world_mut()
+        .query::<&CameraRig>()
+        .iter(app.world())
+        .next()
+        .expect("a rig")
+        .distance;
+    assert!(
+        (held - 38.0).abs() < 1e-3,
+        "the follow must leave the zoom where the operator put it; got {held}"
     );
     // POSITIVE: he is still centred at the end, which is the point of tracking.
     let framed = *app
