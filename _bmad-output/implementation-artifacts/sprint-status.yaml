@@ -2048,8 +2048,19 @@ development_status:
                           # AMBIENT is the real illuminant: -46.9 frame mean, 404x noise, against
                           # the directional's -6.8 / 59x. See 10-8-signoff/AC3-marginals.md.
   10-9-the-land-reads-natural: done
-  10-10-take-the-camera-where-you-want-it: review
-                          # 10.10 REVIEW-PATCHED 2026-09-18 -> review. ALL TWELVE patch items
+  10-10-take-the-camera-where-you-want-it: done
+                          # DONE 2026-09-18: WOLF SIGNED OFF FROM THE SEAT after the review patch
+                          # -- "perfect .. I am happy. Works like it should. So PR." That closes
+                          # the seat round the patch was waiting on, and the two feel items he had
+                          # HELD stand AS SHIPPED (wheel notch count, wheel direction), judged
+                          # rather than argued. It also closes the gap no devpod could: MMB orbit,
+                          # shift+MMB pan, a real wheel notch, C printing a line, clicking a dwarf
+                          # and Escape have now been exercised by a person with a window.
+                          # The THIRD held item is NOT closed and is not claimed as closed --
+                          # discoverability (no --help, the hint bar still reads only
+                          # "1 dig 2 channel 3 stockpile 4 clear") is invisible to an operator who
+                          # already knows the controls, which Wolf does. Deferred, not ticked.
+                          # 10.10 REVIEW-PATCHED 2026-09-18. ALL TWELVE patch items
                           # closed; the 3 deferred stay deferred and the 3 seat items Wolf HELD
                           # stay held, so what the story still owes is a SEAT ROUND and sign-off,
                           # not code. Two decisions went to Wolf first, neither having a ruled

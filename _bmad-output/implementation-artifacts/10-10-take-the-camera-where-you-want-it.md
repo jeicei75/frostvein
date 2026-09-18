@@ -4,7 +4,7 @@ baseline_commit: c5f96caa470e457c874001d9df2ccc58355efe94
 
 # Story 10.10: Take the Camera Where You Want It
 
-Status: review
+Status: done
 
 ## Story
 
@@ -447,6 +447,19 @@ Three rows re-pointed rather than added, all three caught by a probe rather than
 gate's mutation audit failed the pre-commit hook on `10-10` "the pick radius is removed" and `m2-1`
 "camera controls drop out of the update tuple", and the run itself caught the NO-COMPILE above.
 
+**SEAT ROUND, 2026-09-18 — Wolf signed off.** He ran the patched client and gave the verdict in
+his own words: *"perfect .. I am happy. Works like it should. So PR."* That closes the seat round
+the patch was waiting on, and with it the two feel items Wolf had HELD: **the wheel's notch count
+and the wheel's direction stand AS SHIPPED**, judged at the seat rather than argued. It also
+closes, by the only means available, the gap this story could never close from a devpod — MMB
+orbit, shift+MMB pan, a real wheel notch, `C` printing a line, left-clicking a dwarf and Escape
+with a mouse in hand have now all been exercised by a person with a window.
+
+**The third held item is NOT closed by that verdict and is not being claimed as closed.**
+Discoverability — no `--help`, and the hint bar still reads only `1 dig  2 channel  3 stockpile
+4 clear` — is invisible to an operator who already knows the controls, which Wolf does. Filed to
+`deferred-work.md` rather than ticked.
+
 **What this patch does NOT close.** The three held seat items (wheel notch count, wheel direction,
 discoverability) need Wolf at the seat. One thing for that round: the pan feel judged on 2026-09-17
 was the always-on 4x at the boot zoom, which is now **ctrl**+shift+MMB. Plain shift+MMB runs at the
@@ -514,6 +527,7 @@ documented 0.12 rate, which no one has yet felt, and every pan is now distance-s
 
 | Date | Change |
 | --- | --- |
+| 2026-09-18 | **Wolf signed off from the seat — "works like it should" — and the story is DONE.** The held wheel items (notch count, direction) stand as shipped, judged at the seat. Discoverability is deferred, not closed. |
 | 2026-09-18 | **Review patch: all twelve items closed.** The pick's oracle now ranks the DRAWN dwarf through the LIVE camera, closing both halves of the review's top finding at their source; the two new tests state their own discrimination (105 px vs a 64.8 px radius at distance 20; 227 px at 900x1200). Selecting a dwarf drops the zoom to 20, once, at the click — AC8 regains the clause `epics.md` always specified. The readout prints the framing `place()` reproduces while the aim point stays free (Wolf's option (c)), pan takes its 4x from control and scales with the zoom, `camera_readout` is ordered after both writers of the rig, `--camera` + `--distance` bails, and all five capture bands name their framing. Three untested seams pinned: shift+MMB pan, the readout key and its `LastCameraReadout`, and the live rig -> framing string (through the real binary). AC1's strike propagated to `epics.md`; #99 corrected and re-verified independently — the near-white ceiling IS reachable at d=45. **Three ACs amended on Wolf's rulings (2, 3, 8), outside the dev workflow's normally permitted sections and logged here for that reason.** 15 mutation rows added, 2 older rows re-pointed, the whole table re-run. |
 | 2026-09-17 | **Seat round.** `WHEEL_ZOOM_STEP` 1.0 -> 6.0 on Wolf's verdict; a reversed MMB drag was tried and REJECTED, so the shipped direction is now a recorded decision with a sabotage row guarding it. Closed a hole this exposed in my own work: AC3's wheel half was pinned by no test at all — nothing in the suite mentioned `MouseWheel`, so the wheel term was deletable with all 88 tests green. Table re-run whole: **16/16 KILLED**. |
 | 2026-09-17 | **Tasks 2-5 implemented directly by Claude** after Codex exhausted its 5-hour usage window mid-Task-2 — Wolf's ruling, taking the loss of the dev/review model split. Mouse orbit/pan, wheel zoom and a shift multiplier, with per-second scaling on HELD KEYS ONLY (an event delta is already this frame's movement). `--camera` and the readout key, sharing one formatter with the capture's ceiling message. Dwarf selection and framing that SOLVES the composition push, following the AD-15 blended position. 13-row sabotage table, 13/13 KILLED, plus 4 re-pointed older rows re-run and killed. Full gate GREEN 511s including the pixel-guard tier. Filed #99: the near-white ceiling is unreachable via zoom because the ground-median ceiling fires first, and the control record's `--distance 80` trigger no longer trips. |
