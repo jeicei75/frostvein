@@ -117,13 +117,13 @@ Task 1 fixes the instrument before Task 3 leans on it.
         `fx_off_reaches_the_live_camera_and_rejects_unknown_effects` (`ingest.rs:2171`).
   - [ ] Re-measured the camp window with the flag; its spread did not collapse. **Stopped as required:
         stop and say so** — every bloom figure in this story depends on it.
-- [ ] **Task 2 — ambient occlusion.** (AC: 2, 3)
-  - [ ] Add `ScreenSpaceAmbientOcclusion` to the camera tuple. `DepthPrepass` and `NormalPrepass`
+- [x] **Task 2 — ambient occlusion.** (AC: 2, 3)
+  - [x] Add `ScreenSpaceAmbientOcclusion` to the camera tuple. `DepthPrepass` and `NormalPrepass`
         arrive automatically via `#[require(...)]` (`ssao/mod.rs:113`) and `PbrPlugin` already
         registers the plugin (`bevy_pbr-0.19.0/src/lib.rs:227`, in `DefaultPlugins` at
         `bevy_internal-0.19.0/src/default_plugins.rs:79`). **No `add_plugins`, no feature change.**
-  - [ ] Measure with `creases.py` against Task 0's floor. Record the figures.
-  - [ ] **The MSAA guard (AC3).** Assert the rendered consequence. The deliberate RED is in
+  - [x] Measure with `creases.py` against Task 0's floor. Record the figures.
+  - [x] **The MSAA guard (AC3).** Assert the rendered consequence. The deliberate RED is in
         Verification below and is the whole reason this story was split out — run it.
 - [ ] **Task 3 — bloom.** (AC: 4, 5)
   - [ ] Add `Bloom` to the camera tuple. `Hdr` arrives via `#[require(Hdr)]`
@@ -150,6 +150,9 @@ Task 1 fixes the instrument before Task 3 leans on it.
       the frame pair Wolf judges, leave this task UNCHECKED, and hand it to the gingerspice sitting.
       **Invent no fps figure.**
 - [ ] **Task 6 — sabotage.** (AC: 11)
+  - [x] Scope-only rows: AO omitted; AO present with MSAA re-enabled; strengthened
+        `--lights-steady` consequence. The bloom, effect-switch, key, and readout rows remain
+        deferred with Tasks 3–4.
   - [ ] Rows for: AO omitted; AO present but MSAA re-enabled (AC3's guard — this row must KILL, and
         it is the most important row in the table); bloom omitted; each `--fx-off` name discarded;
         each new key moved; `--lights-steady` value discarded; the readout not recording.
@@ -302,6 +305,8 @@ GPT-5 Codex
 - Task 1 RED: `cargo test --offline -p gui lights_steady_reaches_the_live_flicker_system` failed before implementation with `error[E0425]: cannot find type LightsSteady in this scope` at `ingest.rs:2204` and `:2208`. GREEN: the focused test passed after the resource, parser branch, app wiring, and fixed 0.0-second branch were added. The first hook run also exposed standalone `projection_systems` test apps lacking the resource; `projection_systems` now initializes it alongside its other resources.
 - Task 1 mutation (2026-09-18), `the --lights-steady value is discarded before the live flicker system`: KILLED. Output: `thread 'ingest::tests::lights_steady_reaches_the_live_flicker_system' ... panicked at crates/gui/src/ingest.rs:2227:9: assertion failed: steady.world().resource::<super::LightsSteady>().0`; `test result: FAILED. 0 passed; 1 failed`.
 - Task 1 measure (2026-09-18): `gui build 7d13828` before capture. Four `--headless --static-world --lights-steady --subdiv 4 --frames 160` samples, all successful headless captures. Camp `(500,400)..(760,620)`, Rec.601: median 82/83/83/82 (spread 1), p90 209/209/209/209 (spread 0), near-white >=230 5.4441/5.5227/5.5839/5.8566% (spread 0.4125 pp). AC1 requires each spread below one tenth of Task 0's 4/17/1.7658 floors: <0.4 median, <1.7 p90, <0.17658 pp near-white. Median and near-white fail; #90 already tracks this same-build near-white instability. Stopped before Task 2 as the story directs.
+- Task 2 GREEN (2026-09-18): `gui build 8edc62a` before four `--headless --static-world --subdiv 4 --frames 160` captures. `creases.py` Rec.601 figures were stable: terrace p10/median = 30/64 (Task 0 control 31/65, p10 floor 0); open-snow-LL median = 117 and open-snow-LR median = 117 (both exactly their Task 0 controls). The rendered guard `ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it` passed.
+- Task 2 deliberate RED: changing only `Msaa::Off` to `Msaa::Sample4` made the rendered guard fail (`terrace p10=32`, open-snow medians 117/117) at `pixel_guard.rs:264`, while the process still rendered. A dirty standalone mutant logged Bevy's SSAO/MSAA error and `creases.py` measured terrace p10=32, LL/LR medians 117/117 (Rec.601). Thus MSAA restored the no-AO rendered consequence and the guard reddened as required. Source was restored before the post-RED rebuild.
 - Self-gate: one `codex review --base 77d5056` pass was attempted. It did not start review work because its sandbox reported every command (including `git diff`) blocked by a read-only mount-registry lock under `/tmp`. No second pass was run; this is environmental, not a review result.
 
 ### Completion Notes List
@@ -319,10 +324,17 @@ GPT-5 Codex
 - `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-b.png` (new)
 - `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-c.png` (new)
 - `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-d.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-8edc62a-a.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-8edc62a-b.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-8edc62a-c.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-8edc62a-d.png` (new)
+- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-msaa-red-8edc62a.png` (new; deliberate dirty mutant evidence)
 - `_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh` (new)
 - `_bmad-output/implementation-artifacts/mutations/6-1-the-world-moves.sh` (updated; re-pointed after the flicker seam changed)
 - `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh` (updated; re-pointed after the projection resource initialization changed)
 - `crates/gui/src/ingest.rs` (updated)
+- `crates/gui/tests/pixel_guard.rs` (updated)
+- `docs/tech-art-guidelines.md` (updated)
 - `_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md` (updated)
 
 ## Change Log
@@ -332,3 +344,4 @@ GPT-5 Codex
 | 2026-09-18 | Created, stacked on 11.1a. Lavapipe answered for both mechanisms (48 storage textures; `Rgba16Float` is a filterable render attachment). Creation measured the camp window's flicker floor at 1.4423 pp near-white / 18 levels p90 and found `flicker_lights` runs off the wall clock, so `--static-world` does not stop it — Task 1 fixes the instrument before bloom leans on it. |
 | 2026-09-18 | Task 0: captured the f604b40 build controls. Crease p10/median floor was 0; the camp's unpinned Rec.601 floor was 4 median levels, 17 p90 levels, and 1.7658 pp near-white. |
 | 2026-09-18 | Task 1: added and mutation-proved `--lights-steady`, but the pinned camp capture still spread by 1 Rec.601 median level and 0.4125 pp near-white (AC1 requires <0.4 and <0.17658 pp). Stopped before AO/bloom; #90 already records the matching near-white instability. |
+| 2026-09-18 | Task 2: added default SSAO and a rendered Rec.601 guard. Four 8edc62a captures put terrace p10 at 30 against the Task 0 control 31 (floor 0), with both open-snow medians unchanged at 117. The deliberate MSAA-on RED failed the guard and returned terrace p10 to 32; bloom remains blocked by #105. |

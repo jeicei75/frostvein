@@ -67,6 +67,7 @@ instead — it is a camera property, not a light, and those two tests do not rea
 | ↳ before 10.8 | — | — | 5M lm **(superseded)** | 14 m | — |
 | ↳ rejected | — | — | 72M lm **(rejected)** | blew a ~9-tile pool white | — |
 | `Exposure` (camera) | — | — | 10.5 EV100 | n/a | n/a |
+| `ScreenSpaceAmbientOcclusion` | — | — | default | camera | requires `Msaa::Off`; darkens terrace creases while leaving open-snow medians unchanged |
 | moving light | table-driven by `LightKind` | — | table-driven | table-driven | eye-only |
 
 The sections state no colour, range or amplitude for torch and campfire; those cells stay `—`
