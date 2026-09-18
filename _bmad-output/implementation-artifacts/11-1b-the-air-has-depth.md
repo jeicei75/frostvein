@@ -149,14 +149,14 @@ Task 1 fixes the instrument before Task 3 leans on it.
       a window. Write `11-1-signoff/task-5b-vehicle-card.md` naming the exact `--perf-log` runs and
       the frame pair Wolf judges, leave this task UNCHECKED, and hand it to the gingerspice sitting.
       **Invent no fps figure.**
-- [ ] **Task 6 — sabotage.** (AC: 11)
+- [x] **Task 6 — sabotage.** (AC: 11)
   - [x] Scope-only rows: AO omitted; AO present with MSAA re-enabled; strengthened
         `--lights-steady` consequence. The bloom, effect-switch, key, and readout rows remain
         deferred with Tasks 3–4.
-  - [ ] Rows for: AO omitted; AO present but MSAA re-enabled (AC3's guard — this row must KILL, and
+  - [x] Rows for: AO omitted; AO present but MSAA re-enabled (AC3's guard — this row must KILL, and
         it is the most important row in the table); bloom omitted; each `--fx-off` name discarded;
         each new key moved; `--lights-steady` value discarded; the readout not recording.
-  - [ ] `rg` all of `mutations/` for rows quoting `ingest.rs` camera-tuple or readout literals and
+  - [x] `rg` all of `mutations/` for rows quoting `ingest.rs` camera-tuple or readout literals and
         re-point any this story breaks. **11.1a broke a 10.7 row exactly this way and it failed the
         gate** — budget for it. APPLY-FAILED is not noise.
   - [ ] **Never `exec` a mutation payload.** And per **issue #104**, `mutate.sh` does NOT restore
@@ -317,6 +317,20 @@ GPT-5 Codex
 - Task 2 guard repair RED (2026-09-18): after changing only the camera tuple from `Msaa::Off` to `Msaa::Sample4`, the mean-based rendered guard failed in 78.51 s: `AC2/AC3 pixel guard (Rec.601): terrace mean=70.756; open-snow LL/LR median=117/117`; `SSAO must visibly darken terrace creases ... mean=70.756, but AO-on must stay below 69.75` at `pixel_guard.rs:264`. The source was restored to `Msaa::Off` before the clean rebuild.
 - Task 2 guard repair restore (2026-09-18): after committing and rebuilding, `gui build a5ee674` named a clean tree before the required post-RED capture. `creases.py` measured terrace p10/median/p90/mean 38/65/114/69.441 Rec.601; open-snow LL/LR medians were 116/116. The focused enclosed-sky guard re-measured 0 pixels in 0 blobs; its 2,300-pixel ceiling was not changed.
 - Task 5 card (2026-09-18): wrote the gingerspice sitting recipe for all-effects-on plus each individual `--fx-off` perf-log run, and named `effects-on.png` / `bloom-off.png` as Wolf's frame pair. No vehicle window was opened and no frame-time figure was observed.
+- Task 6 full table (2026-09-18): after committing the table before mutation, `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh` reported all ten rows KILLED. The two ignored rendered guards ran in their required ignored tier; neither had an APPLY-FAILED, NOT-RUN, or NO-COMPILE result. The harness restored its Rust target, and `git status --porcelain` was clean immediately after it. Rebuilt restored source and confirmed `gui build f8271de` before the later full gate. `rg` found the existing 11.1a `Msaa::Off` / `Fxaa::default()` and 10.7 readout anchors as well as this story's new tuple/readout rows; `scripts/audit-mutations.py` confirmed all 585 repository rows still apply, so no additional re-point was needed.
+
+```
+the strengthened --lights-steady consequence is discarded before the live flicker system KILLED
+ambient occlusion is omitted from the live camera            KILLED
+MSAA is re-enabled while ambient occlusion is present        KILLED
+bloom is omitted from the live camera                        KILLED
+--fx-off fxaa discards the named FXAA effect                 KILLED
+--fx-off ao discards the named ambient-occlusion effect      KILLED
+--fx-off bloom discards the named bloom effect               KILLED
+F11 is no longer the ambient-occlusion key                   KILLED
+F12 is no longer the bloom key                               KILLED
+the effect readout stops recording changed state             KILLED
+```
 
 ### Completion Notes List
 
@@ -324,6 +338,7 @@ GPT-5 Codex
 - Task 1: implemented and mutation-proved the live `--lights-steady` path, but AC1 is blocked by residual camp-window variance after the clock is pinned. Tasks 2–6 were intentionally not started; Task 5 remains vehicle-only.
 - Task 3: Bloom is installed but AC4 is blocked: its bright-tail p90 did not rise over the new build-specific Hdr/no-bloom floor. No headless ceiling was changed.
 - Task 4: the three-effect command and seat controls are implemented and focused-test green; its story mutations remain deferred by the AC4 stop rule.
+- Task 6: added and ran the remaining bloom, per-name `--fx-off`, F11/F12, and readout sabotages; all ten table rows KILLED. The full repository anchor audit passed after checking the legacy camera/readout rows.
 
 ### File List
 
@@ -368,3 +383,4 @@ GPT-5 Codex
 | 2026-09-18 | Task 3: added default Natural Bloom and measured Hdr-on bloom-off controls before judging bloom. Camp p90 floor was 5 Rec.601 levels (203–208); the bloom sample was 207, so it did not clear the floor and AC4 remains unmet. Task 4's three-effect switches were implemented and focused-test green; further sabotage and gate work stopped at AC4's explicit stop condition. |
 | 2026-09-18 | Repaired the AC3 rendered guard after Hdr made terrace p10 non-discriminating (38 both with and without AO). Fresh Rec.601 terrace-mean samples set a 69.75 ceiling from a 0.049 AO-on floor and 70.016 AO-off control. The focused guard passed; the required MSAA-on RED failed at mean 70.756, then source was restored. |
 | 2026-09-18 | Rebuilt the restored source as clean `a5ee674`, captured terrace mean 69.441 Rec.601, and re-measured enclosed sky at 0 px / 0 blobs without moving its ceiling. Added the Task 5 vehicle card; vehicle-only Task 5 remains unchecked and no FPS figure was claimed. |
+| 2026-09-18 | Completed Task 6: all ten 11.1b mutations KILLED, including the rendered AO/MSAA rows; the restored-source audit found all 585 repository mutation anchors current. |
