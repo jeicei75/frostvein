@@ -15,3 +15,19 @@ old = '            Exposure { ev100: 9.7 },\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
+
+mutation "the camera never receives FXAA" gui configured_camera_starts_with_fxaa <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            Fxaa::default(),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "F10 is no longer the FXAA key" gui f10_toggles_fxaa_and_the_live_readout <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    if !keys.just_pressed(KeyCode::F10) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if !keys.just_pressed(KeyCode::F11) {\n'))
+PY
