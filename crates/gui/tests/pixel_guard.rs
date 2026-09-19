@@ -69,86 +69,6 @@ fn rec601_median(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, u
     values[values.len() / 2]
 }
 
-/// Sky pixels that no path from the frame border can reach through sky -- a port of
-/// `10-7-signoff/enclosed.py`, and the replacement for the silhouette count this file shipped with.
-///
-/// THE OLD ORACLE MEASURED THE WRONG QUANTITY. It resolved a column's silhouette as that column's
-/// topmost non-sky pixel, and the night sky is a GRADIENT, so no column's top pixel is ever exactly
-/// `SKY` and the silhouette landed at `y <= 19` in all 1,280 columns. What it counted was OPEN SKY:
-/// 11,174 px of a frame holding 18,889 sky pixels, against 1,650 genuinely enclosed. Its delta still
-/// tracked holes, which is why it looked like it worked -- but a delta can say "some closed" and
-/// never "none left", and AC12 asks for gone. Story 10.7 read a delta as a level and shipped 54
-/// holes under a green guard, until Wolf saw them from the seat.
-///
-/// A hole is a TOPOLOGICAL fact -- sky with terrain drawn all the way around it -- so this resolves
-/// it as a flood fill from the border. Everything the fill reaches is open sky however deep in the
-/// frame it looks; everything it cannot reach is a hole. Same-build noise floor: 0 px, twice, at
-/// both subdivisions, against the old oracle's 45 px spread over eight readings.
-fn enclosed_sky(pixels: &[[u8; 4]], width: usize, height: usize) -> (usize, usize) {
-    const SKY: [u8; 3] = [5, 12, 28];
-    let sky: Vec<bool> = pixels.iter().map(|p| [p[0], p[1], p[2]] == SKY).collect();
-    let mut seen = vec![false; width * height];
-    let mut queue = std::collections::VecDeque::new();
-    let push = |i: usize, seen: &mut Vec<bool>, queue: &mut std::collections::VecDeque<usize>| {
-        if sky[i] && !seen[i] {
-            seen[i] = true;
-            queue.push_back(i);
-        }
-    };
-    for x in 0..width {
-        push(x, &mut seen, &mut queue);
-        push((height - 1) * width + x, &mut seen, &mut queue);
-    }
-    for y in 0..height {
-        push(y * width, &mut seen, &mut queue);
-        push(y * width + width - 1, &mut seen, &mut queue);
-    }
-    while let Some(i) = queue.pop_front() {
-        let (x, y) = (i % width, i / width);
-        if x > 0 {
-            push(i - 1, &mut seen, &mut queue);
-        }
-        if x + 1 < width {
-            push(i + 1, &mut seen, &mut queue);
-        }
-        if y > 0 {
-            push(i - width, &mut seen, &mut queue);
-        }
-        if y + 1 < height {
-            push(i + width, &mut seen, &mut queue);
-        }
-    }
-    // Second pass: how many SEPARATE regions, which is where the discrimination is -- 38 trunk
-    // holes came to only 135 pixels between them.
-    let mut total = 0;
-    let mut blobs = 0;
-    for start in 0..width * height {
-        if !sky[start] || seen[start] {
-            continue;
-        }
-        blobs += 1;
-        seen[start] = true;
-        queue.push_back(start);
-        while let Some(i) = queue.pop_front() {
-            total += 1;
-            let (x, y) = (i % width, i / width);
-            if x > 0 {
-                push(i - 1, &mut seen, &mut queue);
-            }
-            if x + 1 < width {
-                push(i + 1, &mut seen, &mut queue);
-            }
-            if y > 0 {
-                push(i - width, &mut seen, &mut queue);
-            }
-            if y + 1 < height {
-                push(i + width, &mut seen, &mut queue);
-            }
-        }
-    }
-    (total, blobs)
-}
-
 struct Daemon {
     child: Child,
     port: u16,
@@ -509,56 +429,27 @@ fn switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing() {
     );
 }
 
-/// AC12, on the pixels rather than on the mesh masks.
-///
-/// The permanent mask tests prove the mesher emits the specific faces a mesh-drawn tree must not
-/// hide, and that the ground under a trunk reaches the mesher at all. They are genuinely
-/// discriminating and they are still geometry: they cannot see a hole opened anywhere they were not
-/// pointed. This one asks the frame.
-#[test]
-#[ignore = "renders real frames; scripts/gate.sh runs it in the full tier"]
-fn the_fine_mesher_leaves_no_sky_showing_through_the_terrain() {
-    let daemon = Daemon::spawn();
-    let (fine, width, height) = daemon.capture("subdiv2", &["--subdiv", "2"]);
-    let (holes, blobs) = enclosed_sky(&fine, width, height);
-    println!("AC12 pixel guard: subdiv 2 enclosed-sky px = {holes} in {blobs} blobs");
-
-    // Hand-written, NOT derived from the mesher. Every state this must separate, measured with
-    // `10-7-signoff/enclosed.py`, same-build noise floor 0 px:
-    //   this build                       2,042 px /  16 blobs   <- must pass
-    //   the draw-set hole (10.7's first  2,177 px /  54 blobs   <- must fail
-    //     fix, which Wolf's eye caught)
-    //   before any 10.7 fix              2,571 px /  82 blobs   <- must fail
-    //   the REJECTED first fix           3,449 px /  67 blobs   <- must fail
-    //
-    // THE BLOB COUNT IS THE PRIMARY BAR, because it is where the separation actually is: the
-    // trunk-base family was 38 separate holes but only 135 pixels, so a pixel ceiling alone
-    // discriminates it by a margin barely above nothing. The pixel ceiling is the second net,
-    // for a regression that grows a hole rather than adding one.
-    //
-    // NEITHER CEILING IS ZERO, AND THAT IS CORRECT -- it is not a debt. The 2,042 px residual is
-    // NOT holes: it is the sky BEYOND THE WORLD'S EDGE, where the terrain stops at its outer
-    // boundary and pines carry on standing past the last terrain cell, so the canopy closes over
-    // pockets of open sky and a border flood fill cannot reach them. The whole-world face oracle
-    // reports zero missing faces after this fix, which is what rules out the alternative. Wolf
-    // ruled at the 2026-09-04 sitting, having looked at `--subdiv` 1, 2 and 4: the holes are gone
-    // and 16 is fine. So these ceilings are a property of this framing, not a bug waiting to be
-    // fixed, and raising them to clear a failing run would still be forbidden.
-    const BLOB_CEILING: usize = 20;
-    const ENCLOSED_SKY_CEILING: usize = 2_300;
-    assert!(
-        blobs <= BLOB_CEILING,
-        "sky is showing through the terrain at --subdiv 2: {blobs} separate enclosed-sky regions, \
-         above the {BLOB_CEILING} ceiling. Every hole beyond the four of issue #65 is a terrain \
-         face that nothing drew -- either a mesh-drawn tree cell suppressing a neighbour's face, \
-         or the ground under a trunk never reaching the mesher at all."
-    );
-    assert!(
-        holes <= ENCLOSED_SKY_CEILING,
-        "sky is showing through the terrain at --subdiv 2: {holes} enclosed-sky pixels, above the \
-         {ENCLOSED_SKY_CEILING} ceiling."
-    );
-}
+// AC12's frame-level guard is RETIRED. Issue #108, Wolf's ruling 2026-09-19.
+//
+// `the_fine_mesher_leaves_no_sky_showing_through_the_terrain` resolved sky with an EXACT RGB match
+// (`const SKY: [u8; 3] = [5, 12, 28]`). `Hdr` moved the rendered sky to `[7, 15, 31]`, so by 11.1b
+// ZERO pixels in a frame classified as sky where 8,434 had pre-`Hdr`. The flood fill then had
+// nothing to fill and the guard returned 0 holes / 0 blobs -- not because the terrain was sound,
+// but because it could no longer SEE sky. It would have passed with the terrain entirely absent.
+// That is worse than the vacuous ceiling it was first filed as: a green line asserting nothing.
+//
+// It is retired rather than repaired because repairing it is a story, not a re-baseline. The old
+// oracle worked only because the night sky was a single exact colour over a large flat region, and
+// the post-stack destroyed that property: dark shadowed terrain and night sky now OVERLAP in
+// colour space. Measured attempts, both rejected -- a self-calibrated exact match fragments the
+// fill's connectivity (the sky is dithered across many near-values), and a tolerant rule
+// calibrated from the frame's own top rows reports ~21,000 false holes in ~790 blobs.
+//
+// WHAT IS STILL COVERED: the permanent mask tests, which prove the mesher emits the faces a
+// mesh-drawn tree must not hide and that the ground under a trunk reaches the mesher at all. They
+// are geometry, they are genuinely discriminating, and the whole-world face oracle still reports
+// zero missing faces. WHAT IS NOT: a hole opened anywhere nothing was pointed at. That is the gap
+// #108 carries, and nothing here should be read as covering it.
 
 /// AC9's header clause, on the real binary.
 ///

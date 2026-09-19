@@ -2322,13 +2322,15 @@ development_status:
   #   Task 6: TWELVE rows, ALL KILLED, incl. both pause-path failure modes (never sent; sent as
   #     Normal). git status clean after the run (#104).
   #   Task 5 stays UNCHECKED: vehicle-bound, card at 11-1-signoff/task-5-vehicle-card.md.
+  #   #108 RULED by Wolf 2026-09-19: RETIRE the enclosed_sky guard, rebuild the oracle as its own
+  #     story. It was INERT, not vacuous -- const SKY = [5,12,28] is an EXACT match and Hdr moved
+  #     the sky to [7,15,31], so ZERO pixels classified as sky (8,434 did pre-Hdr). It returned 0
+  #     holes because it could not SEE sky and would have passed with the terrain absent. Test and
+  #     helper removed; a ledger comment in pixel_guard.rs names what is still covered (the
+  #     geometric mask tests, whole-world face oracle) and what is NOT (a hole opened where nothing
+  #     was pointed). #108 carries the rebuild.
   # OPEN, blocking review:
-  #   1. #108 -- the enclosed_sky guard is INERT, not merely vacuous. const SKY = [5,12,28] is an
-  #      EXACT match and Hdr moved the sky to [7,15,31], so ZERO pixels now classify as sky (8,434
-  #      did pre-Hdr). It reports 0 holes because it cannot SEE sky, and would pass with the
-  #      terrain entirely absent. A fix is a story, not a re-baseline: post-stack, dark shadowed
-  #      terrain and night sky OVERLAP in colour space. Wolf picks retire / red-gate / rebuild.
-  #   2. NO SELF-GATE RAN ON THIS STORY AT ALL: every codex review attempt across four handoffs
+  #   1. NO SELF-GATE RAN ON THIS STORY AT ALL: every codex review attempt across four handoffs
   #      died on a read-only /tmp mount-registry lock and the three-pass cap is spent (see #49).
   #      The code review carries the adversarial load alone.
   11-2-the-miniature: backlog

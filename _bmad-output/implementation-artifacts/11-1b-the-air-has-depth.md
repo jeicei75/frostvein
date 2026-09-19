@@ -232,9 +232,22 @@ Task 1 fixes the instrument before Task 3 leans on it.
 from 2,042 px to **11** px against an unchanged `ENCLOSED_SKY_CEILING` of 2,300
 (`pixel_guard.rs:478`), because FXAA blends the edge pixels that used to match the sky colour
 exactly. It passes, and it now tolerates 209x its own value — it has stopped discriminating.
-**Do not move it in this story without Wolf's explicit ruling**; if he rules while this story is in
+**RULED AND CLOSED 2026-09-19 — see below.** (Original instruction: do not move it without Wolf's explicit ruling; if he rules while this story is in
 flight, the change belongs wherever he says. Re-measure it either way and record the figure, because
-`Hdr` will move it again.
+`Hdr` will move it again.)
+
+**Wolf ruled 2026-09-19: RETIRE it, and rebuild the oracle as its own story (issue #108).** The
+guard was not vacuous, it was **inert**. `const SKY = [5,12,28]` is an EXACT RGB match; `Hdr` moved
+the rendered sky to `[7,15,31]`, so **zero** pixels classified as sky where **8,434** did pre-`Hdr`.
+It returned 0 holes / 0 blobs because it could not SEE sky — it would have passed with the terrain
+entirely absent. Repair is a story, not a re-baseline: post-stack, dark shadowed terrain and night
+sky **overlap in colour space**, which is the discrimination the unique sky colour gave for free.
+Two measured attempts were rejected (a self-calibrated exact match fragments the fill's
+connectivity; a tolerant rule calibrated from the frame's own top rows reports ~21,000 false holes
+in ~790 blobs). The flood-fill port itself is sound — it reproduces the recorded 11 px / 7 blobs
+pre-`Hdr`, and a synthetic 40x40 sky patch painted into the terrain raises the count by exactly
+1,600 px / 1 blob. The test and its `enclosed_sky` helper are removed, with a ledger comment in
+`pixel_guard.rs` naming what is still covered (the geometric mask tests) and what is not.
 
 ### Project Structure
 
