@@ -53,6 +53,43 @@ impl PendingCommands {
 #[derive(Resource, Default)]
 pub struct SimPaused(pub bool);
 
+/// Whether this session was asked to freeze the simulation for its whole run (`--static-world`).
+#[derive(Resource, Default)]
+pub struct StaticWorld(pub bool);
+
+/// Freezes the simulation at startup when `--static-world` was asked for.
+///
+/// `--static-world` is documented as "freeze the sim so two captures differ only by what you
+/// changed" (`README.md`), and until this story it did no such thing. It set a flag that silenced
+/// the capture's motion assertions and NOTHING else: the daemon kept ticking, the dwarves kept
+/// walking, and `capture.rs` printed "the simulation is paused" over a world that was not. Issue
+/// #105 measured what that cost -- the camp window's "flicker" floor was mostly moving,
+/// lantern-carrying dwarves rather than flicker, and three documents were written from it.
+///
+/// The pause is not a new mechanism. It is the same `SetSpeed { Paused }` that `toggle_pause` has
+/// sent since 10.5, queued for exactly the reason that function's own comment already gives.
+///
+/// `Startup`, so the command is drained by `send_commands` in the first frame's `PostUpdate` and
+/// the daemon stops as early as the wire allows. The initial snapshot is read synchronously by
+/// `connect_to_daemon` before the app is built, so the world is already populated here: this
+/// freezes a delivered world rather than racing one into existence.
+pub fn pause_static_world(
+    static_world: Res<StaticWorld>,
+    mut paused: ResMut<SimPaused>,
+    mut pending: ResMut<PendingCommands>,
+) {
+    if !static_world.0 {
+        return;
+    }
+    paused.0 = true;
+    pending.push(Command::SetSpeed {
+        speed: Speed::Paused,
+    });
+    // Say so, for the same reason `toggle_pause` does: a paused world looks exactly like a
+    // stalled one, and this one was paused by a flag rather than by a keypress anybody saw.
+    eprintln!("sim PAUSED (--static-world)");
+}
+
 /// Space toggles the simulation between paused and running.
 ///
 /// Added because judging anything in a moving scene is guesswork: the dwarves wander, so two

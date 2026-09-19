@@ -613,6 +613,7 @@ fn configure_client_app(
     app.insert_resource(LightingToggles::with_off(&args.lights_off));
     app.insert_resource(EffectsOff::with_off(&args.fx_off));
     app.insert_resource(LightsSteady(args.lights_steady));
+    app.insert_resource(crate::command::StaticWorld(args.static_world));
     insert_capture_resources(app, &args);
     // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
     // without this resource the actual side never gains them and a WINDOWED capture asserts
@@ -719,6 +720,7 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<crate::project::DragPreviewCells>()
         .init_resource::<crate::command::PendingCommands>()
         .init_resource::<crate::command::SimPaused>()
+        .init_resource::<crate::command::StaticWorld>()
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
@@ -737,6 +739,7 @@ pub fn client_systems(app: &mut App) {
             setup_atmosphere,
             setup_designate_hint,
             log_adapter,
+            crate::command::pause_static_world,
         ),
     )
     // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
@@ -2290,6 +2293,55 @@ mod tests {
             .single(app.world())
             .expect("the default live camera must carry FXAA");
         assert!(fxaa.enabled);
+    }
+
+    /// `--static-world` must reach the DAEMON, not merely the capture's assertion switch.
+    ///
+    /// Issue #105. The flag is documented as "freeze the sim so two captures differ only by what
+    /// you changed" and for three stories it froze nothing: it silenced the capture's motion
+    /// assertions while the daemon kept ticking and the dwarves kept walking, and `capture.rs`
+    /// announced "the simulation is paused" over a world that was not. The camp window's measured
+    /// "flicker" floor turned out to be mostly those dwarves and their lanterns.
+    ///
+    /// A test asserting the RESOURCE would have passed throughout that entire period, because the
+    /// resource was always set correctly -- it just went nowhere. So this reads the SOCKET: the
+    /// only thing in this system that can stop a dwarf is a command the daemon actually receives.
+    #[test]
+    fn static_world_pauses_the_daemon_over_the_wire() {
+        use std::io::{BufRead, BufReader};
+
+        let (mut app, _sender, server) = configured_app(&["--static-world"]);
+        app.update();
+
+        let mut line = String::new();
+        BufReader::new(server)
+            .read_line(&mut line)
+            .expect("--static-world must write a command to the daemon");
+        assert_eq!(
+            line.trim(),
+            r#"{"type":"set_speed","speed":"paused"}"#,
+            "--static-world must send the daemon the pause its own documentation promises"
+        );
+        assert!(
+            app.world().resource::<crate::command::SimPaused>().0,
+            "the client's pause state must agree with what it asked the daemon for"
+        );
+
+        // The control carries as much weight as the case. This flag defaults OFF, and a pause
+        // leaking into a run that never asked for one would freeze every other capture in the
+        // suite -- silently, and looking exactly like a stall.
+        let (mut running, _sender, server) = configured_app(&[]);
+        running.update();
+        let mut unasked = String::new();
+        let _ = BufReader::new(server).read_line(&mut unasked);
+        assert!(
+            unasked.is_empty(),
+            "without --static-world the daemon must be sent nothing, got {unasked:?}"
+        );
+        assert!(
+            !running.world().resource::<crate::command::SimPaused>().0,
+            "without --static-world the client must not believe the sim is paused"
+        );
     }
 
     #[test]
