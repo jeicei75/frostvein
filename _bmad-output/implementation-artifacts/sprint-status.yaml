@@ -2320,7 +2320,23 @@ development_status:
   #     drop 21.707 -> 8.707; ground floor's binding path 58 vs 55) and the first to go under.
   #     NOT patched: lowering a bar until runs pass is what 10.8's rule forbids, and the floor at
   #     10.5 is unmeasured. #111 carries the measurements and the ratio-vs-absolute option.
-  11-1a-a-chosen-exposure-and-a-clean-edge: in-progress
+  # 2026-09-19 (FINAL): AC4 CLOSED AT THE SEAT -> STORY DONE. All twelve ACs met or closed.
+  #   AC4 needed a WINDOWED run and nothing before it could carry the clause: neither readout renders
+  #   headless (zero pixels of its colour in a real capture), so the string had been proven only as a
+  #   Text component inside a MinimalPlugins app. Wolf observed BOTH halves: F10 visibly re-roughens
+  #   the polygon edges and NOTHING ELSE in the frame moves -- the correct signature of an AA pass --
+  #   and the readout text flips between "F10 fxaa on" and "F10 fxaa off".
+  #   A WRONG DIAGNOSIS was raised and withdrawn en route, recorded because the error is reusable:
+  #   from Wolf's first "cannot see any difference" a source reading concluded all three runtime
+  #   toggles were inert, since they remove the component and `extract_components` queries
+  #   `Query<(RenderEntity, &C)>` so a removed component stops matching its own cleanup branch. True,
+  #   but not the whole plugin -- `ExtractComponentPlugin::build` ALSO installs `SyncComponentPlugin`,
+  #   whose `on_remove` hook does the render-world removal. One system was read in isolation instead
+  #   of the plugin that assembles them. The SEAT observation was right and the source reading wrong;
+  #   no issue was filed. Wolf's "no exposure difference" was also correct and not a fault: both
+  #   captures are 10.5, and against the 09-18 frame Bloom returns ~39% of the darkening while the
+  #   sky never moves at all (#113, the sky is a ClearColor and bypasses Exposure entirely).
+  11-1a-a-chosen-exposure-and-a-clean-edge: done
   # 11.1b inherits the render path and the instrument 11.1a builds, and owes the AC that proves AO's
   # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.
   # 2026-09-19 (LATER): REBASED ONTO 11.1a's REVIEWED TIP (122271c). 38 commits replayed, only two
