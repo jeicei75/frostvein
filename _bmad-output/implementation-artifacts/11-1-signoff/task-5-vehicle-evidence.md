@@ -67,9 +67,36 @@ measured on lavapipe — a venue that is sited and has mispredicted the delivery
 this sitting the value was chosen but unseen. It has now been seen, on the delivery GPU, at the
 shipped build.
 
+## AC4 — CLOSED at the seat, 2026-09-19 (added after the first sitting)
+
+Observed on a **windowed** run, which is the only venue that can show either half: neither readout
+renders headless, and a scan of a real 1280x720 headless capture for the readout's colour
+`(219, 232, 255)` found **zero pixels**.
+
+- **The toggle works.** Pressing `F10` visibly re-roughens the polygon edges — Wolf: *"a bit more
+  jagged edges when off"* — **and nothing else in the frame moves.** That is the correct signature
+  of an anti-aliasing pass, and the fact that nothing else moves is itself evidence the toggle is
+  wired to FXAA alone.
+- **The readout works.** The on-screen text flips between `F10 fxaa on` and `F10 fxaa off` beside
+  the F5-F9 lights.
+
+**A wrong diagnosis was raised and withdrawn on the way here, recorded because the reasoning error
+is reusable.** Wolf first reported seeing no difference, and a source-level reading concluded the
+runtime toggles were inert: all three (`F10`/`F11`/`F12`) turn an effect off with
+`camera.remove::<T>()`, and `extract_components` queries `Query<(RenderEntity, &C)>`, so a removed
+component stops matching and that system's own cleanup branch is unreachable. That much is true —
+but it is not the whole plugin. `ExtractComponentPlugin::build` ALSO installs
+`SyncComponentPlugin`, which registers an `on_remove` component hook that removes the component from
+the render world. The removal path exists; the diagnosis was wrong because one system was read in
+isolation instead of the plugin that assembles them. **The seat observation was the correct
+evidence and the source reading was the wrong one** — no issue was filed.
+
 ## Still open
 
-**AC4's on-screen clause.** It needs a WINDOWED run: neither readout renders headless, and a scan of
+Nothing on 11.1a. All twelve ACs are met or closed; Task 5 is complete.
+Deferred items remain in `deferred-work.md` by design, and issues #111, #113 stay open.
+
+~~**AC4's on-screen clause.**~~ It needs a WINDOWED run: neither readout renders headless, and a scan of
 a real 1280x720 headless capture for the readout's colour `(219, 232, 255)` found zero pixels. The
 string is still proven only as a `Text` component value inside a `MinimalPlugins` test app, and
 nobody has pressed F10 on a machine. F10 is conventionally a menu-activation key on Windows, which

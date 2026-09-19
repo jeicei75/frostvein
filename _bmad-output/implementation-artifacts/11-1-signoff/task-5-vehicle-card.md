@@ -66,6 +66,9 @@ Feature Auditor.
 
 - **§1 AC10 — MET.** p50 3.47 ms (FXAA on) vs 3.55 ms (`--fx-off fxaa`), NFR6 bar 16.67 ms.
 - **§2 AC11 exposure — CLOSED.** 10.5 EV100 confirmed at the seat.
-- **§3 AC4 on-screen — STILL OPEN.** It needs a WINDOWED run and was not covered: the AC10 runs were
+- **§3 AC4 on-screen — CLOSED 2026-09-19 at the seat.** Both halves observed on a windowed run: the
+  edges visibly re-roughen with FXAA off and nothing else in the frame moves, and the readout text
+  flips. Detail in `task-5-vehicle-evidence.md`.
+- ~~**§3 AC4 on-screen — was open.**~~ It needs a WINDOWED run and was not covered: the AC10 runs were
   `--headless` by necessity, and neither readout renders headless. Run `gui.exe <port>` with no
   `--headless`, press F10, confirm the line beside the F5-F9 lights flips.

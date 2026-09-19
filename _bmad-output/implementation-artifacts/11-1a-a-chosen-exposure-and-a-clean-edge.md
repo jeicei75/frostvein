@@ -4,7 +4,7 @@ baseline_commit: 41b3f02613018857d5ad7b121d046b7209a1773c
 
 # Story 11.1a: A Chosen Exposure and a Clean Edge
 
-Status: review
+Status: done
 
 ## Story
 
@@ -55,6 +55,14 @@ of it and judges them with the instrument this story builds and proves.
    The flag does not require `--capture`. An unknown name is an error naming the accepted names.
 4. `F10` toggles FXAA at the seat, and the on-screen readout names its state beside the F5–F9 lights.
    A test presses `F10` through the real key path and asserts the recorded readout string changes.
+   **MET AT THE SEAT (Wolf, 2026-09-19, gingerspice, merged build).** Both halves observed on a
+   WINDOWED run — the only venue that can show either, since neither readout renders headless:
+   pressing `F10` visibly softens and re-roughens the polygon edges ("a bit more jagged edges when
+   off"), **and nothing else in the frame moves**, which is the correct signature of an
+   anti-aliasing pass; and the on-screen readout text flips between `F10 fxaa on` and `F10 fxaa off`
+   beside the F5-F9 lights. This was the last clause on the story that no gate could close: the code
+   review measured **zero pixels** of the readout's colour in a real headless capture, so until this
+   sitting the string was proven only as a `Text` component value inside a `MinimalPlugins` app.
 5. FXAA visibly softens the terrain silhouette: at the boot framing, a headless pair `--fx-off fxaa`
    against the default differs, inside a pinned window straddling the ridge-line silhouette, by more
    than that window's own same-build floor — measured as the count of pixels exactly equal to the sky
