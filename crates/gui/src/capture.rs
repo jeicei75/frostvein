@@ -891,6 +891,18 @@ pub fn accumulate_motion(
     }
 }
 
+/// The scripted-cursor and scripted-drag resources, bundled into one system parameter.
+///
+/// Grouping is MECHANICAL, not conceptual: `capture_after_frames` sits on Bevy's 16-parameter
+/// ceiling and holding the `--static-world` countdown needed one more. Both stay independent
+/// `Option<Res<_>>` and neither changes behaviour; the alternative was dropping a check to make
+/// room, which is how instruments in this repo have gone quiet before.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct ScriptedInput<'w> {
+    cursor: Option<Res<'w, ScriptedCursor>>,
+    drag: Option<Res<'w, ScriptedDrag>>,
+}
+
 /// Captures from the primary window after the real render loop has advanced N frames.
 // The capture instrument is one production system so its frame observations retain a single
 // ordering edge. Grouping unrelated ECS queries merely to satisfy this lint would hide that.
@@ -905,15 +917,24 @@ pub fn capture_after_frames(
     designations: Query<&ProjectedDesignation>,
     zones: Query<&ProjectedZone>,
     picked: Option<Res<PickedTile>>,
-    cursor: Option<Res<ScriptedCursor>>,
-    drag: Option<Res<ScriptedDrag>>,
+    scripted: ScriptedInput,
     cameras: Query<&CameraRig, With<Camera3d>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     headless: Option<Res<crate::ingest::HeadlessTarget>>,
     tree_verification: Option<Res<TreeCaptureVerification>>,
+    static_world_pause: Option<Res<crate::command::StaticWorldPause>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if capture.requested || capture.failed {
+        return;
+    }
+    // HOLD until the DAEMON says it stopped. The settle window exists to let a still world settle;
+    // starting it over a world that is still ticking means the frames that decide the capture are
+    // measuring motion this flag promised to remove. `landed()` reads the daemon's reported speed,
+    // not the client's belief about what it asked for -- the distinction #105 was made of.
+    // `confirm_static_world_pause` fails the run loudly if the pause never arrives, so this cannot
+    // become a silent hang.
+    if static_world_pause.is_some_and(|pause| pause.holds_capture()) {
         return;
     }
     capture.elapsed += 1;
@@ -958,7 +979,7 @@ pub fn capture_after_frames(
                 &drawn_cells(&terrain, &chunk_cells).collect::<BTreeSet<_>>(),
             );
         }
-        if let Some(cursor) = cursor {
+        if let Some(cursor) = &scripted.cursor {
             let expected = cameras.single().ok().and_then(|rig| {
                 windows
                     .single()
@@ -1037,7 +1058,7 @@ pub fn capture_after_frames(
         // thresholds is exactly the run whose numbers are needed to diagnose it, and a panic
         // prints none of them. The draw check was briefly asserted up at its own print, which
         // silenced the lantern, motion and range numbers on precisely those failures.
-        if let Some(drag) = drag.as_deref() {
+        if let Some(drag) = scripted.drag.as_deref() {
             // A drag still mid-stage never released, so nothing it was meant to create exists.
             assert!(
                 drag.completed(),

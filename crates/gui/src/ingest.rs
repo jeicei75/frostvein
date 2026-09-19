@@ -614,6 +614,7 @@ fn configure_client_app(
     app.insert_resource(EffectsOff::with_off(&args.fx_off));
     app.insert_resource(LightsSteady(args.lights_steady));
     app.insert_resource(crate::command::StaticWorld(args.static_world));
+    app.insert_resource(crate::command::StaticWorldPause::new(args.static_world));
     insert_capture_resources(app, &args);
     // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
     // without this resource the actual side never gains them and a WINDOWED capture asserts
@@ -721,6 +722,7 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<crate::command::PendingCommands>()
         .init_resource::<crate::command::SimPaused>()
         .init_resource::<crate::command::StaticWorld>()
+        .init_resource::<crate::command::StaticWorldPause>()
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
@@ -739,7 +741,6 @@ pub fn client_systems(app: &mut App) {
             setup_atmosphere,
             setup_designate_hint,
             log_adapter,
-            crate::command::pause_static_world,
         ),
     )
     // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
@@ -755,6 +756,12 @@ pub fn client_systems(app: &mut App) {
             toggle_overlay,
             crate::perf::mark_perf_frame_on_key,
             fall_snow,
+            // `Update`, not `Startup`: the tick the pause is SENT at is what makes the frozen
+            // world reproducible, and a `Startup` command is sent before the client has heard a
+            // single delta. `confirm_` runs after, reading the DAEMON's reported speed rather
+            // than the client's belief about what it asked for.
+            crate::command::pause_static_world,
+            crate::command::confirm_static_world_pause.after(crate::command::pause_static_world),
         ),
     )
     // Ordered, not merely registered. `select_dwarf` must read the rig AFTER `camera_controls`
@@ -791,8 +798,15 @@ pub fn client_systems(app: &mut App) {
             designation_input.after(update_pick),
             sync_drag_preview.after(designation_input),
             // Before `send_commands`, so a space press reaches the daemon on the same frame it is
-            // read rather than the next one.
-            crate::command::toggle_pause.after(update_pick),
+            // read rather than the next one. The `.before` is EXPLICIT: this comment claimed the
+            // ordering for three stories while the schedule only constrained `toggle_pause`
+            // against `update_pick`, so the press actually reached the socket a frame late.
+            crate::command::toggle_pause
+                .after(update_pick)
+                .before(send_commands),
+            // Before `send_commands`, so the hand-back reaches the socket on the frame the
+            // exit is requested rather than never.
+            crate::command::restore_speed_on_exit.before(send_commands),
             send_commands.after(designation_input),
             update_designate_hint.after(designation_input),
         ),
@@ -1427,9 +1441,20 @@ fn setup_camera(
             camera.remove::<Fxaa>();
         }
         if effects_off.is_off(CameraEffect::AmbientOcclusion) {
-            camera.remove::<ScreenSpaceAmbientOcclusion>();
+            // WITH REQUIRES, unlike the other two. `ScreenSpaceAmbientOcclusion` `#[require]`s
+            // `DepthPrepass` and `NormalPrepass`, and a plain `remove` leaves both running for the
+            // rest of the session: two full-scene GPU passes nothing samples, while the readout
+            // says "ao off". AC8 reads AO's cost on the vehicle as an on/off delta, so leaving them
+            // makes AO look cheaper than it is by exactly the part that is expensive.
+            camera.remove_with_requires::<ScreenSpaceAmbientOcclusion>();
         }
         if effects_off.is_off(CameraEffect::Bloom) {
+            // WITHOUT requires, DELIBERATELY. `Bloom` `#[require]`s `Hdr`, and `Hdr` moves every
+            // pixel in the frame on its own. `--fx-off bloom` is the control AC4's figures are
+            // measured against, and it is only a measure of BLOOM'S MARGINAL contribution while
+            // `Hdr` stays on in both halves. Removing requires here would silently turn that
+            // control into an Hdr+bloom comparison and re-break the attribution the story spent
+            // three documents correcting.
             camera.remove::<Bloom>();
         }
     }
@@ -1563,8 +1588,11 @@ fn effect_controls(
             match effect {
                 CameraEffect::Fxaa if effects_off.is_off(effect) => camera.remove::<Fxaa>(),
                 CameraEffect::Fxaa => camera.insert(Fxaa::default()),
+                // With requires, and bloom below without: see `setup_camera` for why the two
+                // differ. AO's prepasses are dead weight when it is off; bloom's `Hdr` is the
+                // control every AC4 figure is measured against.
                 CameraEffect::AmbientOcclusion if effects_off.is_off(effect) => {
-                    camera.remove::<ScreenSpaceAmbientOcclusion>()
+                    camera.remove_with_requires::<ScreenSpaceAmbientOcclusion>()
                 }
                 CameraEffect::AmbientOcclusion => {
                     camera.insert(ScreenSpaceAmbientOcclusion::default())
@@ -2295,7 +2323,31 @@ mod tests {
         assert!(fxaa.enabled);
     }
 
-    /// `--static-world` must reach the DAEMON, not merely the capture's assertion switch.
+    /// A snapshot identical to `configured_app`'s but stopped at a chosen tick, so a test can put
+    /// the world on either side of `--static-world`'s pause tick.
+    fn snapshot_at_tick(tick: u64, speed: Speed) -> Snapshot {
+        Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed,
+            tick,
+        }
+    }
+
+    fn read_one_command(server: &std::net::TcpStream) -> String {
+        use std::io::{BufRead, BufReader};
+        let mut line = String::new();
+        let _ = BufReader::new(server).read_line(&mut line);
+        line.trim().to_string()
+    }
+
+    /// `--static-world` must reach the DAEMON, not merely the capture's assertion switch -- and it
+    /// must reach it at a CHOSEN tick rather than whichever one the scheduler allowed.
     ///
     /// Issue #105. The flag is documented as "freeze the sim so two captures differ only by what
     /// you changed" and for three stories it froze nothing: it silenced the capture's motion
@@ -2306,19 +2358,37 @@ mod tests {
     /// A test asserting the RESOURCE would have passed throughout that entire period, because the
     /// resource was always set correctly -- it just went nowhere. So this reads the SOCKET: the
     /// only thing in this system that can stop a dwarf is a command the daemon actually receives.
+    ///
+    /// The review that followed found the remaining half: the pause was queued in `Startup`, so it
+    /// landed at whatever tick won the race and two captures of one binary froze different worlds.
+    /// The EARLY case below is that half -- it fails if the pause is sent before its tick.
     #[test]
-    fn static_world_pauses_the_daemon_over_the_wire() {
-        use std::io::{BufRead, BufReader};
+    fn static_world_waits_for_its_tick_then_pauses_the_daemon_over_the_wire() {
+        // BEFORE the pause tick: nothing may be sent. This is the assertion the pre-review
+        // `Startup` implementation could never satisfy, and it is what makes the freeze point a
+        // decision instead of a race outcome.
+        let (mut early, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(0, Speed::Normal));
+        early.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "--static-world must not pause before its chosen tick, or the frozen world is \
+             whatever the scheduler allowed"
+        );
+        assert!(
+            !early
+                .world()
+                .resource::<crate::command::StaticWorldPause>()
+                .landed(),
+            "nothing may be considered landed before the daemon has reported a pause"
+        );
 
-        let (mut app, _sender, server) = configured_app(&["--static-world"]);
+        // AT the pause tick: the command goes out.
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
         app.update();
-
-        let mut line = String::new();
-        BufReader::new(server)
-            .read_line(&mut line)
-            .expect("--static-world must write a command to the daemon");
         assert_eq!(
-            line.trim(),
+            read_one_command(&server),
             r#"{"type":"set_speed","speed":"paused"}"#,
             "--static-world must send the daemon the pause its own documentation promises"
         );
@@ -2330,17 +2400,137 @@ mod tests {
         // The control carries as much weight as the case. This flag defaults OFF, and a pause
         // leaking into a run that never asked for one would freeze every other capture in the
         // suite -- silently, and looking exactly like a stall.
-        let (mut running, _sender, server) = configured_app(&[]);
+        let (mut running, _sender, server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Normal));
         running.update();
-        let mut unasked = String::new();
-        let _ = BufReader::new(server).read_line(&mut unasked);
         assert!(
-            unasked.is_empty(),
-            "without --static-world the daemon must be sent nothing, got {unasked:?}"
+            read_one_command(&server).is_empty(),
+            "without --static-world the daemon must be sent nothing"
         );
         assert!(
             !running.world().resource::<crate::command::SimPaused>().0,
             "without --static-world the client must not believe the sim is paused"
+        );
+    }
+
+    /// The freeze is confirmed from the DAEMON's report, never from the client's own belief.
+    ///
+    /// `SimPaused` records what we ASKED for and was correct throughout the entire period the
+    /// world was not actually pausing, so it cannot be the oracle. `Mirror::speed()` is the
+    /// daemon's own speed off the wire -- which `SimPaused`'s doc comment wrongly claimed did not
+    /// exist, for as long as the defect did.
+    #[test]
+    fn static_world_confirms_the_pause_from_the_daemons_own_report() {
+        let (mut app, sender, _server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert!(
+            !app.world()
+                .resource::<crate::command::StaticWorldPause>()
+                .landed(),
+            "asking is not landing: with the daemon still reporting Normal, the capture must wait"
+        );
+
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(protocol::Delta {
+                msg_type: MessageType::Delta,
+                tick: 9,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Paused,
+            }))))
+            .unwrap();
+        // Two frames: one ingests the delta into the mirror, the next reads the mirror's speed.
+        app.update();
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<crate::command::StaticWorldPause>()
+                .landed_at(),
+            Some(9),
+            "the landing tick must be the one the DAEMON reported it stopped at"
+        );
+    }
+
+    /// Space must not quietly resume a run that asked for a frozen world.
+    ///
+    /// `toggle_pause` took no notice of the flag and queued `SetSpeed { Normal }` on any press, so
+    /// one keystroke at the seat broke the guarantee every figure in the capture is measured
+    /// against, with nothing said.
+    #[test]
+    fn space_cannot_resume_a_static_world_run() {
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#
+        );
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Space);
+        app.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "Space must send the daemon nothing under --static-world"
+        );
+        assert!(
+            app.world().resource::<crate::command::SimPaused>().0,
+            "Space must not clear the client's pause state under --static-world"
+        );
+
+        // Control: without the flag, Space still works. A guard that disabled the key outright
+        // would pass the assertions above and break the seat.
+        let (mut seat, _sender, server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Normal));
+        seat.update();
+        seat.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Space);
+        seat.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#,
+            "without --static-world, Space must still pause the daemon"
+        );
+    }
+
+    /// A `--static-world` run hands the daemon back at Normal when it ends.
+    ///
+    /// The daemon's speed is ONE global shared by every client, so before this a `--static-world`
+    /// run left it frozen for good: the next client to connect without the flag rendered a dead
+    /// world, failed its motion assertions, exited 101 and wrote no PNG -- blaming the dwarves.
+    #[test]
+    fn a_static_world_run_hands_the_daemon_back_at_normal() {
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#
+        );
+
+        app.world_mut().write_message(bevy::app::AppExit::Success);
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"normal"}"#,
+            "a --static-world run must hand the daemon back, or every later client is frozen"
+        );
+
+        // Control: a run that never asked for a pause must not send one on the way out either.
+        let (mut plain, _sender, server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Normal));
+        plain.update();
+        plain.world_mut().write_message(bevy::app::AppExit::Success);
+        plain.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "a run that never paused must send nothing on exit"
         );
     }
 
@@ -2379,6 +2569,47 @@ mod tests {
                 "--fx-off {name:?} must remove only its named live camera components"
             );
         }
+        // The REQUIRED components, which a plain `remove` leaves behind. `--fx-off ao` must take
+        // the prepasses with it, or "ao off" still pays two full-scene GPU passes nothing samples
+        // and AC8's vehicle cost delta under-reports AO by exactly its expensive half. Bloom is
+        // the deliberate opposite: its required `Hdr` must SURVIVE, because `--fx-off bloom` is
+        // the control AC4's marginal figures are measured against.
+        let prepasses = |app: &mut App| {
+            (
+                app.world_mut()
+                    .query_filtered::<&bevy::core_pipeline::prepass::DepthPrepass, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&bevy::core_pipeline::prepass::NormalPrepass, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&bevy::camera::Hdr, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+            )
+        };
+        assert_eq!(
+            prepasses(&mut default),
+            (1, 1, 1),
+            "AO's prepasses and bloom's Hdr must all be present by default"
+        );
+        let (mut no_ao, _sender, _server) = configured_app(&["--fx-off", "ao"]);
+        no_ao.update();
+        assert_eq!(
+            prepasses(&mut no_ao),
+            (0, 0, 1),
+            "--fx-off ao must remove AO's required prepasses and leave bloom's Hdr alone"
+        );
+        let (mut no_bloom, _sender, _server) = configured_app(&["--fx-off", "bloom"]);
+        no_bloom.update();
+        assert_eq!(
+            prepasses(&mut no_bloom),
+            (1, 1, 1),
+            "--fx-off bloom must LEAVE Hdr in place: it is the control AC4 is measured against"
+        );
+
         let error =
             match super::parse_args_from([OsString::from("--fx-off"), OsString::from("taa")]) {
                 Ok(_) => panic!("unknown effects must fail"),

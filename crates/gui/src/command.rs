@@ -47,9 +47,16 @@ impl PendingCommands {
 
 /// Whether the client believes the simulation is paused.
 ///
-/// Client-side because the wire carries no speed in the snapshot; this is presentation state that
-/// mirrors what we last ASKED for, not what the daemon reports. A reconnect would desync it, and
-/// reconnect is outside this story.
+/// This mirrors what we last ASKED for, not what the daemon reports, so it can be wrong and a
+/// reconnect would desync it.
+///
+/// CORRECTED 2026-09-19: this comment previously justified itself with "the wire carries no speed
+/// in the snapshot". That was false and had always been false -- `protocol::Snapshot` and
+/// `protocol::Delta` both carry `speed`, and `client_core::Mirror::speed()` has exposed it all
+/// along. Nothing had ever looked. That false premise is why every instrument downstream trusted a
+/// client-side belief instead of the daemon's own report, which is the mechanism behind #105.
+/// Anything that must know the world is ACTUALLY still reads `Mirror::speed()` -- see
+/// [`confirm_static_world_pause`] -- and not this.
 #[derive(Resource, Default)]
 pub struct SimPaused(pub bool);
 
@@ -57,7 +64,68 @@ pub struct SimPaused(pub bool);
 #[derive(Resource, Default)]
 pub struct StaticWorld(pub bool);
 
-/// Freezes the simulation at startup when `--static-world` was asked for.
+/// The tick `--static-world` aims to freeze the world at.
+///
+/// NOT zero, and not "as early as the wire allows". Before this, the pause was queued in `Startup`
+/// and landed wherever the scheduler let it -- measured at three ticks and eight dwarf position
+/// changes on an idle box, and further under load. Two captures of ONE binary therefore froze two
+/// different worlds, and the camp window's "noise floor" was largely the dwarves standing
+/// somewhere else. A fixed target makes the freeze point a DECISION instead of a race outcome.
+///
+/// NOTE: this makes the freeze point REPRODUCIBLE, not EXACT. The daemon applies queued commands
+/// between steps, so it stops at this tick plus however many it had already processed when it read
+/// the command. That residual is why `landed_at` is printed on every run: a capture pair that
+/// froze at different ticks says so out loud rather than surfacing later as unexplained variance.
+/// Freezing at an exact tick needs either a daemon that boots paused or a `pause at tick N`
+/// command, and both live in `simd`/`protocol`, which this story may not touch (AC10).
+const STATIC_WORLD_PAUSE_TICK: u64 = 8;
+
+/// Where the `--static-world` freeze got to: whether the command has been sent, and the tick the
+/// daemon actually reported itself stopped at.
+#[derive(Resource, Default)]
+pub struct StaticWorldPause {
+    /// Mirrors `StaticWorld` so that one resource answers "must the capture wait?". Carried here
+    /// rather than read as a second system parameter because `capture_after_frames` sits on
+    /// Bevy's 16-parameter ceiling.
+    active: bool,
+    requested: bool,
+    landed_at: Option<u64>,
+    waited_frames: u32,
+}
+
+/// How long the capture will hold for a pause that never arrives before failing LOUDLY.
+///
+/// A capture that silently waits forever is indistinguishable from a hung daemon, and this project
+/// has paid for enough instruments that report nothing and look fine. At 160 frames this is
+/// comfortably longer than any observed landing (single digits) and still ends the run.
+const STATIC_WORLD_PAUSE_TIMEOUT_FRAMES: u32 = 600;
+
+impl StaticWorldPause {
+    pub fn new(active: bool) -> Self {
+        Self {
+            active,
+            ..Default::default()
+        }
+    }
+
+    /// True once the DAEMON has confirmed it is paused -- not once we asked.
+    pub fn landed(&self) -> bool {
+        self.landed_at.is_some()
+    }
+
+    /// The tick the daemon reported it stopped at, once it has.
+    pub fn landed_at(&self) -> Option<u64> {
+        self.landed_at
+    }
+
+    /// True while a `--static-world` run is still waiting for its pause. `capture.rs` holds its
+    /// frame countdown on this so the settle window cannot start over a world still in motion.
+    pub fn holds_capture(&self) -> bool {
+        self.active && self.landed_at.is_none()
+    }
+}
+
+/// Asks the daemon to freeze, once the world has reached [`STATIC_WORLD_PAUSE_TICK`].
 ///
 /// `--static-world` is documented as "freeze the sim so two captures differ only by what you
 /// changed" (`README.md`), and until this story it did no such thing. It set a flag that silenced
@@ -69,25 +137,95 @@ pub struct StaticWorld(pub bool);
 /// The pause is not a new mechanism. It is the same `SetSpeed { Paused }` that `toggle_pause` has
 /// sent since 10.5, queued for exactly the reason that function's own comment already gives.
 ///
-/// `Startup`, so the command is drained by `send_commands` in the first frame's `PostUpdate` and
-/// the daemon stops as early as the wire allows. The initial snapshot is read synchronously by
-/// `connect_to_daemon` before the app is built, so the world is already populated here: this
-/// freezes a delivered world rather than racing one into existence.
+/// `Update` rather than `Startup`, because the tick it fires at is now the point: a `Startup`
+/// command is sent before the client has heard a single delta, so it lands at whatever tick the
+/// scheduler allows and the frozen world differs run to run.
 pub fn pause_static_world(
     static_world: Res<StaticWorld>,
+    mirror: Res<crate::ingest::MirrorResource>,
+    mut state: ResMut<StaticWorldPause>,
     mut paused: ResMut<SimPaused>,
     mut pending: ResMut<PendingCommands>,
 ) {
-    if !static_world.0 {
+    if !static_world.0 || state.requested || mirror.0.tick() < STATIC_WORLD_PAUSE_TICK {
         return;
     }
+    state.requested = true;
     paused.0 = true;
     pending.push(Command::SetSpeed {
         speed: Speed::Paused,
     });
-    // Say so, for the same reason `toggle_pause` does: a paused world looks exactly like a
-    // stalled one, and this one was paused by a flag rather than by a keypress anybody saw.
-    eprintln!("sim PAUSED (--static-world)");
+    eprintln!(
+        "sim PAUSE REQUESTED (--static-world) at tick {}",
+        mirror.0.tick()
+    );
+}
+
+/// Records the tick the daemon actually stopped at, from what the DAEMON reports.
+///
+/// This reads `Mirror::speed()`, which is the daemon's own speed off the wire, NOT the client's
+/// `SimPaused` belief about what it asked for. That distinction is the whole lesson of #105: a
+/// client-side flag reported a pause that had never happened, and every instrument downstream
+/// believed it. `SimPaused`'s own doc comment asserted the wire carried no speed -- it always did
+/// (`protocol::Snapshot::speed`, `protocol::Delta::speed`), and nothing had ever looked.
+pub fn confirm_static_world_pause(
+    static_world: Res<StaticWorld>,
+    mirror: Res<crate::ingest::MirrorResource>,
+    mut state: ResMut<StaticWorldPause>,
+    mut exit: bevy::prelude::MessageWriter<bevy::app::AppExit>,
+) {
+    if !static_world.0 || state.landed_at.is_some() {
+        return;
+    }
+    if mirror.0.speed() != Speed::Paused {
+        state.waited_frames += 1;
+        if state.waited_frames == STATIC_WORLD_PAUSE_TIMEOUT_FRAMES {
+            eprintln!(
+                "--static-world: the daemon never reported itself paused within \
+                 {STATIC_WORLD_PAUSE_TIMEOUT_FRAMES} frames (last reported speed {:?}, tick {}); \
+                 refusing to capture a world that may still be moving",
+                mirror.0.speed(),
+                mirror.0.tick()
+            );
+            exit.write(bevy::app::AppExit::error());
+        }
+        return;
+    }
+    let tick = mirror.0.tick();
+    state.landed_at = Some(tick);
+    // The landing tick, every run, because it is the one number that says whether two captures
+    // froze the same world. Silence here is what made the old floor look like noise.
+    eprintln!("sim PAUSED (--static-world) at tick {tick}");
+}
+
+/// Hands the daemon back at the speed we found it, when a `--static-world` run ends cleanly.
+///
+/// The daemon's speed is ONE global (`simd/src/main.rs`), shared by every client and outliving the
+/// one that set it. Before this, a `--static-world` run left the daemon frozen for good: the next
+/// client to connect without the flag rendered a dead world, failed its motion assertions, exited
+/// 101 and wrote no PNG at all -- blaming the dwarves for standing still.
+///
+/// NOTE: a run that dies by PANIC (the capture range check, `save_then_validate`) does not reach
+/// this system, so the daemon stays paused in exactly that case. Naming the limitation rather than
+/// reaching for a panic hook: the restart is one command, and a hook that runs during unwinding
+/// has no socket guarantees worth the complexity.
+pub fn restore_speed_on_exit(
+    mut exits: bevy::prelude::MessageReader<bevy::app::AppExit>,
+    static_world: Res<StaticWorld>,
+    state: Res<StaticWorldPause>,
+    mut pending: ResMut<PendingCommands>,
+) {
+    if exits.is_empty() {
+        return;
+    }
+    exits.clear();
+    if !static_world.0 || !state.requested {
+        return;
+    }
+    pending.push(Command::SetSpeed {
+        speed: Speed::Normal,
+    });
+    eprintln!("sim RESUMED (--static-world run ending); daemon handed back at Normal");
 }
 
 /// Space toggles the simulation between paused and running.
@@ -96,12 +234,22 @@ pub fn pause_static_world(
 /// captures of one binary differ by dwarf-sized areas with no code change at all, and a person at
 /// the seat cannot hold a frame still to look at it. Story 10.5's AC2 measurement is unreachable
 /// without it -- the same-build noise floor swamps the signal it is meant to separate.
+///
+/// REFUSES the press under `--static-world`. That flag promises the world is frozen for the whole
+/// run, and every figure a capture reports is measured against that promise; a Space press used to
+/// queue `SetSpeed { Normal }` regardless, silently resuming the daemon and breaking the guarantee
+/// with nothing said. It says so now instead of doing it.
 pub fn toggle_pause(
     keys: Res<ButtonInput<KeyCode>>,
+    static_world: Res<StaticWorld>,
     mut paused: ResMut<SimPaused>,
     mut pending: ResMut<PendingCommands>,
 ) {
     if !keys.just_pressed(KeyCode::Space) {
+        return;
+    }
+    if static_world.0 {
+        eprintln!("sim stays PAUSED: --static-world holds the world frozen for the whole run");
         return;
     }
     paused.0 = !paused.0;
@@ -171,7 +319,8 @@ mod tests {
     use protocol::{Command, DesignationKind, Rect, Speed};
 
     use super::{
-        CommandSink, MAX_PENDING_COMMANDS, PendingCommands, SimPaused, send_commands, toggle_pause,
+        CommandSink, MAX_PENDING_COMMANDS, PendingCommands, SimPaused, StaticWorld, send_commands,
+        toggle_pause,
     };
 
     /// Space toggles, and the SECOND press matters as much as the first: a pause that cannot be
@@ -183,6 +332,10 @@ mod tests {
         app.add_plugins(MinimalPlugins)
             .init_resource::<PendingCommands>()
             .init_resource::<SimPaused>()
+            // Default is OFF, which is the seat's case: this test is about Space WORKING. The
+            // refusal under `--static-world` is proved separately, with its own control, by
+            // `space_cannot_resume_a_static_world_run`.
+            .init_resource::<StaticWorld>()
             .init_resource::<ButtonInput<KeyCode>>()
             .add_systems(Update, toggle_pause);
 
