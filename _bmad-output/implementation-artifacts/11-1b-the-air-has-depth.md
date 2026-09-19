@@ -101,8 +101,17 @@ Task 1 fixes the instrument before Task 3 leans on it.
    not possess. The **halo** this AC also names IS that signature, it is large, and it is what the AC
    now measures. The preset is unchanged: the story still tunes no look.
 5. **Headless area figures are compared only headless-to-headless.** `NEAR_WHITE_AREA_CEILING` and
-   `BLOWN_POOL_FRACTION_CEILING` are **not** raised and **not** asserted against a headless bloom
+   `BLOWN_POOL_FRACTION_CEILING` are **not** raised and **not judged against** a headless bloom
    frame; the ceiling clause is judged on the vehicle at the sitting (Wolf's ruling, 2026-09-18).
+
+   **Amended 2026-09-19 (Wolf, at the review).** "not **asserted** against" -> "not **judged**
+   against". The original wording was factually contradicted by shipped code: `capture.rs:1479`
+   asserts `near_white <= NEAR_WHITE_AREA_CEILING` inside `range_check`, which runs on EVERY
+   headless capture, so both ceilings were asserted against every bloom frame this story took.
+   Nothing about the intent changes -- neither ceiling is raised, both constants and their pins are
+   intact, and the VERDICT still belongs to the vehicle. The amendment makes the AC say what the
+   2026-09-18 ruling meant and what the story actually did. Silencing the range check instead would
+   mean editing `capture.rs`'s assertion for the convenience of an AC, which is the wrong direction.
 6. `--fx-off` accepts `ao` and `bloom` beside `fxaa` as a **set**, each reaching the spawned camera
    rather than only `Args`: naming an effect removes its component, omitting it leaves it present.
    An unknown name errors naming all accepted names.
@@ -587,6 +596,73 @@ F12 is no longer the bloom key                               KILLED
 the effect readout stops recording changed state             KILLED
 ```
 
+### Review patch pass (2026-09-19) — measurements, and two corrections to the review itself
+
+All measurements below: build `6140ca3`, clean tree (`gui --version` checked), headless llvmpipe,
+Rec.601 integer luma, `--static-world --lights-steady --subdiv 4 --frames 160`.
+
+**THE RACE IS REAL AND THE FIRST FIX FOR IT DID NOT WORK.** Wolf ruled "fix the race, then
+re-measure". The first attempt targeted a fixed tick client-side. It failed, and the failure is the
+finding: the pause fired at ticks **30, 66, 101, 136, 171** across five runs, never at the target 8,
+because the daemon had been running before each client connected and the world was already past the
+gate at connect. The frozen worlds were ~35 ticks apart -- WORSE than the 3-tick spread it was meant
+to remove. A client-side target tick cannot work when the world is already past it.
+
+**WHAT DOES WORK IS ONE DAEMON PER CAPTURE**, and the difference is not marginal:
+
+| recipe | camp median | p90 | p99 | mean | near-white |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| fresh `simd` per capture (n=4) | 0 | 0 | 1 | 0.020 | **0.0070 pp** |
+| one shared `simd` (n=5) | 1 | 2 | 1 | 0.867 | **0.3619 pp** |
+
+AC1's bar is <0.4 median, <1.7 p90, <0.17658 pp near-white. Fresh daemons clear it by **25x**; a
+shared daemon **fails it by 2.05x**. With fresh daemons the pause landed at **tick 40 in four runs
+out of four**. This exactly reproduces the code review's independent 0.5210 pp figure, which was
+taken across twelve captures against one daemon -- that reading was right, and it was measuring the
+recipe, not the flag. **AC1 stands, with a precondition nobody had written down.** The recipe is now
+in `README.md`, in the vehicle card, and enforced inside both rendered guards.
+
+**AC2/AC3 re-measured after the prepass change**, fresh daemon per capture:
+terrace mean AO-on 69.499 / 69.511 (floor 0.012), AO-off 70.142 / 70.125 (floor 0.017),
+**darkening 0.62-0.64 against a 0.017 floor, about 36x**. Guard bar 0.30.
+
+**AC4 re-measured**, camp window, fresh daemon per capture: bloom-on median 95/95 mean
+120.334/120.288; bloom-off median 82/82 mean 113.427/113.435. **Median +13, mean +6.88**, against
+same-build floors of 0 and 0.046. Independently reproduces the 2026-09-19 figures.
+
+**CORRECTION 1 — the review's AC3 finding was overstated, and this is the review correcting
+itself.** It was reported as "the guard passes with SSAO absent once bloom is off". Measured:
+`--fx-off ao,bloom` gives terrace mean **68.403**, which does clear the old 69.75 ceiling -- but the
+same capture reads open-snow LL/LR median **117** against the guard's `== 116`, so **the guard still
+goes red**. The true finding is narrower and still worth the fix: the guard's STATED mechanism (a
+terrace level) stopped discriminating once bloom was off, and what actually caught AO's absence was
+the open-snow clause the story calls an unrelated control, via a one-level quantisation boundary.
+The guard is a delta now, so the stated mechanism is the one doing the work.
+
+**CORRECTION 2 — the published margins were overstated and are now measured.** "delta -0.601
+against a 0.001 floor -- 600x" divided by a TWO-sample floor, against this story's own Dev Note
+("Two samples are not a floor. Four minimum. Issue #98"). Three independent review layers read the
+same statistic on one build at 69.452 / 69.485 / 69.486 / 69.487 / 69.487 -- a spread of **0.035,
+at least 35x the published floor**, and one of those readings falls BELOW the range the guard's own
+doc comment stated. The real margin is about **36x**, not 600x. Nothing was failing; the number was.
+
+**`remove_with_requires` CRASHES and was reverted to naming the two prepasses explicitly.** Every
+`--fx-off ao` run died in `bevy_render::sync_world` with "Attempting to synchronize an entity that
+has already been synchronized!": it removes the whole transitive require closure, which overlaps
+components the camera needs for its own render-world sync. The unit test passed throughout, because
+`MinimalPlugins` has no render world -- a component assertion cannot see a client that cannot draw.
+
+**Issue #106's ruling, recorded here because it lived only on the issue.** Wolf ruled 2026-09-18,
+re-measured at `164ab55`: **AO is accepted as WIRED AND PROVED, it is NOT visible from the seat, and
+its look judgement moves to 11.3.** SSAO attenuates only the ambient term and this scene tunes
+ambient deliberately small (1,500 against a 7,000 directional and 7,000,000 lm point lights,
+`appearance.rs:37-48`), so AO's strongest effect anywhere in frame is ~2% of base luminance and is
+broadly uniform rather than concentrated at contacts. #106 stays OPEN for its second half: AC2 as
+written cannot distinguish "consumed" from "visible". The review measured that the same defect
+applies to **AC4's** "does not brighten" clause -- open-snow LL's MEAN rises 0.686 under bloom while
+its MEDIAN falls -- and Wolf ruled 2026-09-19 to record that on #106 rather than rewrite either AC
+mid-story. **AC2 and AC3 are a MECHANISM proof and are not a claim that AO reads from the seat.**
+
 ### Completion Notes List
 
 - Task 0: captured the build-specific no-AO/no-bloom controls. The camp flicker floor confirms Task 1 must pin the live flicker clock before bloom is measured.
@@ -597,33 +673,53 @@ the effect readout stops recording changed state             KILLED
 
 ### File List
 
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-a.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-b.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-c.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-0-f604b40-d.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-a.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-b.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-c.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-1-7d13828-d.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-8edc62a-a.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-8edc62a-b.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-8edc62a-c.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-8edc62a-d.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-msaa-red-8edc62a.png` (new; deliberate dirty mutant evidence)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-621ef4f-restored.png` (new; restored clean-build capture)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2-621ef4f-enclosed.png` (new; subdiv-2 enclosed-sky re-measurement)
-- `_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh` (new)
-- `_bmad-output/implementation-artifacts/mutations/6-1-the-world-moves.sh` (updated; re-pointed after the flicker seam changed)
-- `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh` (updated; re-pointed after the projection resource initialization changed)
-- `crates/gui/src/ingest.rs` (updated)
-- `crates/gui/tests/pixel_guard.rs` (updated)
-- `docs/tech-art-guidelines.md` (updated)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-3-hdr-no-bloom-67ba364-a.png` through `-d.png` (new)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-3-bloom-67ba364-a.png` (new)
+REBUILT 2026-09-19 at the code review, which found the previous list omitted about 25 changed
+files -- including `crates/gui/src/command.rs`, which carries this story's headline change -- and
+listed `crates/gui/tests/headless.rs` as UPDATE when it was never touched. Enumerated from
+`git diff --name-only d3ecdff..HEAD`, not from memory. 67 files; the 41 signoff PNGs are named by
+their families rather than one line each.
+
+**Source**
+
+- `crates/gui/src/ingest.rs` (updated) -- SSAO + Bloom on the camera tuple; `FxaaOff` -> the
+  `CameraEffect`/`EffectsOff` set; `--lights-steady`; `--static-world` wiring; F11/F12; readout;
+  the review's pause-handshake systems and the `toggle_pause` -> `send_commands` ordering edge
+- `crates/gui/src/command.rs` (updated) -- `StaticWorld`, `StaticWorldPause`, `pause_static_world`,
+  `confirm_static_world_pause`, `restore_speed_on_exit`, and `toggle_pause`'s `--static-world` guard
+- `crates/gui/src/capture.rs` (updated, at the review) -- the capture countdown holds until the
+  daemon reports itself paused; `ScriptedInput` bundles two params to make room for it
+- `crates/gui/tests/pixel_guard.rs` (updated) -- AC2/AC3's rendered guard (a DELTA since the
+  review), AC4's rendered bloom guard (NEW at the review), and the retired `enclosed_sky` helper
+- `crates/gui/tests/capture.rs` -- UNCHANGED, and AC10 asserts it
+
+**Docs**
+
+- `README.md` (updated, at the review) -- `--static-world` says what it actually freezes;
+  `--lights-steady` and `--fx-off` documented for the first time
+- `docs/tech-art-guidelines.md` (updated) -- the AO and Bloom rows, corrected at the review
+
+**Process and evidence**
+
 - `_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md` (updated)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2b-5a1ed7b-ao-a.png` through `-d.png` (new; fresh mean-floor captures)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2b-5a1ed7b-ao-off.png` (new; fresh no-AO threshold control)
-- `_bmad-output/implementation-artifacts/11-1-signoff/task-2b-a5ee674-restored.png` (new; clean post-RED restored capture)
+- `_bmad-output/implementation-artifacts/11-1a-a-chosen-exposure-and-a-clean-edge.md` (updated)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (updated)
+- `_bmad-output/implementation-artifacts/deferred-work.md` (updated, at the review)
+- `_bmad-output/implementation-artifacts/metrics/11-1b-the-air-has-depth.md`,
+  `metrics/.session-cursors.json` (updated)
+- `mutations/11-1b-the-air-has-depth.sh` (new; 18 rows after the review added six and fixed two
+  weak kills), `mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh` (updated; readout row split
+  and F10 row de-weakened), `mutations/10-7-the-sun-lights-the-valley.sh`,
+  `mutations/6-1-the-world-moves.sh` (updated; re-pointed)
+- `11-1-signoff/task-5-vehicle-card.md` -- RESTORED to 11.1a's card at the review
+- `11-1-signoff/task-5b-vehicle-card.md` (new, at the review) -- 11.1b's card, at the path the
+  Project Structure table always named
+- `11-1-signoff/campstats.py`, `delta.py`, `markdiff.py`, `residual.py` (new instruments)
+- `11-1-signoff/emitter-window-flicker-floor.md`,
+  `11-1-signoff/residual-after-the-flicker-pin.md`, `11-1-signoff/wolf-seat-check-d3ecdff.md` (new)
+- 41 new signoff PNGs under `11-1-signoff/`: `task-0-f604b40-*`, `task-1-7d13828-*`,
+  `task-2-8edc62a-*`, `task-2-621ef4f-*`, `task-2b-5a1ed7b-*`, `task-2b-a5ee674-restored`,
+  `task-3-hdr-no-bloom-67ba364-*`, `task-3-bloom-67ba364-a`, `task-3b-164ab55-nobloom-*`,
+  `task-1b-164ab55-paused-*`, `task-2c-164ab55-noao-*`, `task-2d-*`, `residual-b50235b-*`
 
 ## Change Log
 

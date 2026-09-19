@@ -2300,8 +2300,9 @@ development_status:
   # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.
   11-1b-the-air-has-depth: in-progress
   # 2026-09-19: AC1 and AC4 are now MET and the two blocking rulings are recorded on #105/#107.
-  # Branch story-11-1b-the-air-has-depth, FULL GATE GREEN 482s run in the foreground here.
-  # STILL NOT READY FOR REVIEW -- see the two open items at the bottom of this block.
+  # Branch story-11-1b-the-air-has-depth.
+  # CODE REVIEWED 2026-09-19 -- see the review block at the bottom. Stays in-progress: the
+  # remaining work is vehicle-bound (Task 5, AC8, AC9) and only Wolf's seat can close it.
   #   AC1 MET, as written, no bar lowered (#105). The residual was never flicker: --static-world
   #     is documented as "freeze the sim" (README.md:201) and froze NOTHING -- it set a bool that
   #     silenced the capture's motion assertions while the daemon kept ticking. Wired it to the
@@ -2329,10 +2330,39 @@ development_status:
   #     helper removed; a ledger comment in pixel_guard.rs names what is still covered (the
   #     geometric mask tests, whole-world face oracle) and what is NOT (a hole opened where nothing
   #     was pointed). #108 carries the rebuild.
-  # OPEN, blocking review:
-  #   1. NO SELF-GATE RAN ON THIS STORY AT ALL: every codex review attempt across four handoffs
-  #      died on a read-only /tmp mount-registry lock and the three-pass cap is spent (see #49).
-  #      The code review carries the adversarial load alone.
+  # CODE REVIEW 2026-09-19 (four layers, no coverage holes, no layer timed out; the earlier
+  # "two open items" line promised an item that #108's ruling had already closed):
+  #   NO SELF-GATE EVER RAN ON THIS STORY: every codex attempt across four handoffs died on a
+  #     read-only /tmp mount-registry lock and the three-pass cap is spent (#49). The code review
+  #     carried the adversarial load alone, which is why it was run at four layers.
+  #   19 patch items, 3 deferred, 0 dismissed. Wolf ruled six decision items at the sitting; all
+  #     six became patches and all were applied in-session.
+  #   BOTH 2026-09-19 AC AMENDMENTS HELD under independent reproduction -- terrace p10 reads 38
+  #     with AO on AND off, and Bloom::default() is EnergyConserving, so neither original clause
+  #     was satisfiable. They were corrections, not lowered bars.
+  #   THE BIG ONE: --static-world froze the world at whatever tick it had reached at connect, so
+  #     captures meant to be compared froze worlds up to 35 ticks apart. ONE DAEMON PER CAPTURE is
+  #     the fix and it is measured: fresh daemons land on tick 40 every time and the camp spread is
+  #     0.0070 pp; a shared daemon spreads 0.3619 pp and FAILS AC1's bar by 2.05x. AC1 stands, with
+  #     a precondition nobody had written down. It is now in README, the vehicle card, and both
+  #     rendered guards.
+  #   Also fixed: the pause outlived the client and froze every later one (the daemon's speed is
+  #     one global); Space silently resumed a --static-world run; AC3 asserted a LEVEL that bloom
+  #     was propping up, now a delta; AC4 had NO rendered guard despite the spec promising one;
+  #     two mutation rows were weak kills that died on an unreachable! arm before any key
+  #     assertion ran; a re-pointed 11.1a row had stopped sabotaging the readout's on/off state.
+  #   CORRECTED IN FLIGHT: the review's "the AC3 guard passes with SSAO absent" was OVERSTATED --
+  #     --fx-off ao,bloom clears the old terrace ceiling at 68.403 but reads open-snow 117 against
+  #     an == 116 assertion, so the guard still reddened. The stated mechanism had stopped
+  #     discriminating; the open-snow "control" was silently doing the work.
+  #   AND: "600x margin" divided by a TWO-sample floor. Three layers read that statistic across
+  #     0.035 on one build, so the real margin is ~36x. Nothing was failing; the number was.
+  #   #106's RULING NOW LIVES IN THE STORY, not only on the issue: AO is accepted as WIRED and
+  #     PROVED, is NOT visible from the seat, and its look judgement moves to 11.3. #106 stays open
+  #     for the AC-bar half, which the review showed applies to AC4 as well as AC2.
+  #   Task 5's card had OVERWRITTEN 11.1a's card, whose own Task 5 is still unchecked; 11.1a's is
+  #     restored and 11.1b's now sits at task-5b-vehicle-card.md as the spec always said.
+  # STILL OPEN, and only the vehicle can close it: Task 5, AC8 (perf read), AC9 (Wolf's sign-off).
   11-2-the-miniature: backlog
   11-3-night-falls-day-breaks: backlog
   epic-11-retrospective: optional
