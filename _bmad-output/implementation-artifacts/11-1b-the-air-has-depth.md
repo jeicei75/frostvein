@@ -591,10 +591,38 @@ bloom is omitted from the live camera                        KILLED
 --fx-off fxaa discards the named FXAA effect                 KILLED
 --fx-off ao discards the named ambient-occlusion effect      KILLED
 --fx-off bloom discards the named bloom effect               KILLED
-F11 is no longer the ambient-occlusion key                   KILLED
-F12 is no longer the bloom key                               KILLED
+F11 toggles bloom instead of ambient occlusion               KILLED
+F12 toggles ambient occlusion instead of bloom               KILLED
 the effect readout stops recording changed state             KILLED
+--static-world never reaches the daemon                      KILLED
+--static-world asks the daemon to run instead of pause       KILLED
+the --static-world pause is sent before its chosen tick      KILLED
+the pause is believed from our own request, not the daemon report KILLED
+Space resumes a --static-world run                           KILLED
+a --static-world run never hands the daemon back             KILLED
+--fx-off ao leaves AO required prepasses running             KILLED
+--fx-off bloom takes Hdr with it, destroying AC4 control     KILLED
+bloom is retuned to the OLD_SCHOOL preset                    KILLED
+
+All mutations killed.
 ```
+
+**AC11 (2026-09-19, after the review patches).** NINETEEN rows, all KILLED, `git status --porcelain`
+clean immediately after (issue #104). The pre-review record pasted a TEN-row block while the table
+held twelve and the prose claimed twelve; the block above is this table's real output.
+
+The table is re-run **after** every guard change, not before. Two rows earned their place by
+failing first:
+
+- `bloom is retuned to the OLD_SCHOOL preset` **SURVIVED** the first run of AC4's new guard.
+  `OLD_SCHOOL` leaves the `Bloom` component present and is `Additive`, so it ADDS energy and still
+  cleared the halo-rise floors. The row was right and the guard's own comment had overclaimed. The
+  near-white clause that now separates the composite modes was written because of it, and the kill
+  lands on THAT assertion (`pixel_guard.rs:350`), not on an earlier one absorbing the mutation.
+- The AO and bloom guards both gained `--lights-steady` after the near-white clause failed a live
+  run reading bloom RAISING camp near-white by 1.03 pp. Every row targeting either guard was
+  re-mutated against the changed guards; the 18-row result taken before those edits is evidence for
+  the old guards only and is not the table above.
 
 ### Review patch pass (2026-09-19) — measurements, and two corrections to the review itself
 
