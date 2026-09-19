@@ -2298,6 +2298,29 @@ development_status:
   11-1a-a-chosen-exposure-and-a-clean-edge: in-progress
   # 11.1b inherits the render path and the instrument 11.1a builds, and owes the AC that proves AO's
   # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.
+  # 2026-09-19 (LATER): REBASED ONTO 11.1a's REVIEWED TIP (122271c). 38 commits replayed, only two
+  # conflict resolutions needed (tech-art-guidelines.md's Lights table, deferred-work.md's appended
+  # sections) -- 11.1b touches neither the Exposure line nor GROUND_LUMINANCE_FLOOR, so ingest.rs and
+  # capture.rs auto-merged. FULL GATE GREEN 525s at `b60a6f5`.
+  #   ONE CONTROL RE-BASELINED by the exposure ruling: CONTROL_OPEN_SNOW_MEDIAN 116 -> 93
+  #     (pixel_guard.rs). It is an EXPECTED POST-STACK VALUE, not a bar -- the assertion is equality,
+  #     so 93 is neither weaker nor stronger than 116 -- and it moved because Wolf ruled the exposure
+  #     9.7 -> 10.5, a deliberate change to the frame rather than drift. Measured on the guard's own
+  #     flags, fresh daemon per capture, FOUR same-build captures: open-snow-LL and -LR both
+  #     93/93/93/93, spread 0. AO's terrace darkening is untouched at 0.540 against its 0.30 floor.
+  #   THE VEHICLE CARD's review corrections were reverted by the replay and restored: an earlier
+  #     11.1b commit had written 11.1b's card over 11.1a's `task-5-vehicle-card.md`, and a later one
+  #     correctly restored 11.1a's -- which also restored the pre-review version. The load-bearing
+  #     part is `--headless` on both `--perf-log` runs; without it vsync clamps both p50s to the
+  #     refresh interval and AC10 measures the monitor, not FXAA.
+  #   FLAKE OBSERVED, not a regression: `bloom_lifts_the_camp_halo_without_brightening_open_snow`
+  #     failed once under the full gate and then passed alone (130s) AND passed 8/8 under the gate's
+  #     own `--ignored` settings, before the full gate went green. Same shape as #72 and #88. The
+  #     assertion text was not captured before the run was superseded, so no issue was filed on a
+  #     failure nobody can reproduce from the record -- if it recurs, capture the panic first.
+  #   STILL OWED and unchanged by the rebase: 11.1b's own recorded figures (camp spread, near-white,
+  #     bloom deltas) were measured at 9.7 EV100 and floor 70. The GATE does not pin them, so they
+  #     are stale PROSE rather than a red test, and they describe a build that no longer exists.
   11-1b-the-air-has-depth: in-progress
   # 2026-09-19: AC1 and AC4 are now MET and the two blocking rulings are recorded on #105/#107.
   # Branch story-11-1b-the-air-has-depth.
