@@ -47,9 +47,11 @@ Ruled in [Value and materials](#value-and-materials), except the rim row. Every 
 
 ### Lights
 
-Ruled in [Sky and lights](#sky-and-lights), except the last row. Pinned by
+Ruled in [Sky and lights](#sky-and-lights), except `moving light`. Pinned by
 `appearance_tables_pin_the_cold_boot_palette`; the flicker bands by
-`flicker_is_bounded_distinct_and_deterministic`.
+`flicker_is_bounded_distinct_and_deterministic`. The `Exposure` row is pinned by
+`configured_camera_carries_the_chosen_ev100_on_the_live_rig` (`crates/gui/src/ingest.rs`)
+instead — it is a camera property, not a light, and those two tests do not read it.
 
 | Identifier | Colour | Hex | Intensity | Range / shadow | Flicker |
 | --- | --- | --- | --- | --- | --- |
@@ -64,7 +66,7 @@ Ruled in [Sky and lights](#sky-and-lights), except the last row. Pinned by
 | `LightKind::Lantern` | — | — | 3M lm | 10 m | bounded, deterministic |
 | ↳ before 10.8 | — | — | 5M lm **(superseded)** | 14 m | — |
 | ↳ rejected | — | — | 72M lm **(rejected)** | blew a ~9-tile pool white | — |
-| `Exposure` | — | — | 9.7 EV100 | camera | explicit Blender-calibrated exposure |
+| `Exposure` (camera) | — | — | 10.5 EV100 | n/a | n/a |
 | moving light | table-driven by `LightKind` | — | table-driven | table-driven | eye-only |
 
 The sections state no colour, range or amplitude for torch and campfire; those cells stay `—`
@@ -221,8 +223,23 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
   at least twice the ambient's.
 - The ladder is dark sky and flanks, midtone snow and ice, then warm pools and near-white emitter
   faces.
-- The camera exposure is explicitly 9.7 EV100, Bevy's Blender-calibrated value. It preserves the
-  approved frame while making the exposure a client-owned art decision for subsequent effects.
+- The camera exposure is explicitly **10.5 EV100**, ruled by Wolf at 11.1a's code review,
+  2026-09-19. Higher EV100 renders darker. It is the darkest value the frame survives under the
+  ground-median floor, which was ruled 70 -> 55 in the same sitting (see
+  `GROUND_LUMINANCE_FLOOR` in `crates/gui/src/capture.rs` for that ruling and its measurements).
+  Measured on `77d5056`, boot framing, `--subdiv 4 --frames 160`, ground median, FXAA on / off —
+  the `--fx-off fxaa` path binds, because FXAA is worth ~5 levels:
+
+  | ev100 | 9.7 | 10.0 | 10.25 | **10.5** | 10.75 | 11.0 |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | FXAA on | 80 | 73 | 67 | **62** | 57 | 53 |
+  | FXAA off | 76 | 69 | 64 | **58** | 54 ✗ | 49 ✗ |
+
+  It is also a deliberate non-default: 9.7 is byte-identical to `Exposure::default()`
+  (`EV100_BLENDER`), so at that value deleting the component changed nothing and the sabotage row
+  proving it could only ever kill inside the `MinimalPlugins` harness, never in the shipped client.
+  NOTE the margin over the floor on the binding path is 3 levels; capture flakiness is tracked in
+  #72, and 11.1b's SSAO and Bloom both darken further.
 
 Check: `appearance_tables_pin_the_cold_boot_palette` and `flicker_is_bounded_distinct_and_deterministic`
 (`crates/gui/src/appearance.rs`) pin the light table, the warm-emitter ordering and the flicker

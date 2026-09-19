@@ -557,11 +557,31 @@ const GROUND_WINDOW_X: (f32, f32) = (0.25, 0.75);
 const GROUND_WINDOW_Y: (f32, f32) = (0.50, 0.90);
 
 /// AC9's value discipline made measurable. Sampled in the window above, the APPROVED ARTIFACT
-/// reads a median sRGB luminance of 123; the round-4 capture read 21 — a night scene that is
+/// read a median sRGB luminance of 123; the round-4 capture read 21 — a night scene that is
 /// simply black. No headless test can see this, so the instrument carries it. The floor sits
 /// between the two so the dark-field failure class cannot pass while the light budget is free
 /// to land anywhere near the target.
-pub const GROUND_LUMINANCE_FLOOR: u8 = 70;
+///
+/// LOWERED 70 -> 55 by Wolf's ruling at 11.1a's code review, 2026-09-19. NOT to make a run pass:
+/// nothing was failing. The floor was placed with 53 levels of headroom under a 123-level artifact,
+/// and that artifact no longer exists — 10.7 lifted the sun and 10.8 re-ruled the lighting, so the
+/// shipped frame now reads 80 and the headroom had quietly fallen to 10 without anyone moving the
+/// floor. That made a guard built to catch an UNLIT frame into the binding constraint on the
+/// camera exposure, which is the art decision story 11.1a exists to hand to the seat.
+///
+/// Measured on `77d5056`, boot framing, `--subdiv 4 --frames 160`, to place the new value:
+///
+///   shipped, ev100 9.7, FXAA on     80
+///   shipped, ev100 9.7, FXAA off    76   <- the binding path; FXAA is worth ~5 levels
+///   `--lights-off ambient`          45   <- the worst GENUINE failure still to be caught
+///   all lights off                   0
+///   round-4 capture (historic)      21
+///
+/// 55 clears the ambient-off failure by 10 and the round-4 class by 34, so every failure class the
+/// floor was built for is still caught. It does NOT admit ev100 12.0: that frame reads ~32, darker
+/// than the broken ambient-off frame, so no floor can both admit it and catch an ambient
+/// regression — the two requirements collide, and the exposure gave way, not the guard.
+pub const GROUND_LUMINANCE_FLOOR: u8 = 55;
 
 /// The other end of AC9's discipline, added after the boot3 capture measured 156 against the
 /// artifact's 123: a field pushed toward white passes the floor as easily as a correct one.
@@ -1572,7 +1592,7 @@ mod tests {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             save_before_validate(
                 || saved.set(true),
-                || panic!("the valley floor reads 67, below the 70 value floor"),
+                || panic!("the valley floor reads 52, below the 55 value floor"),
             );
         }));
         std::panic::set_hook(previous);

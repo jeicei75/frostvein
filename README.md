@@ -157,6 +157,7 @@ has ever reliably caught a stale binary.
 | `space` | pause / resume the sim |
 | `F3` / `F4` | fps overlay / mark a frame in the perf log |
 | `F5` `F6` `F7` `F8` `F9` | toggle sun / campfire / lanterns / ambient / torches |
+| `F10` | toggle FXAA |
 
 The slice keys are the **unshifted comma and period**. The on-screen hint calls them `<` / `>`,
 which reads as "shift these", and that has already cost one session — see #102, where naming the

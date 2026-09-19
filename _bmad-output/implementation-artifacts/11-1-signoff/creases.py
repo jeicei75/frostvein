@@ -63,6 +63,22 @@ def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__.strip())
     captures = [parse_capture(argument) for argument in sys.argv[1:]]
+    # Both guards exist because this instrument's failure mode is a CONFIDENT GREEN, not an error.
+    # `results` is keyed by label, so a repeated label overwrites the first capture and the delta
+    # block below then compares one capture with itself and prints +0 everywhere -- which is exactly
+    # what a passing same-build control looks like.
+    labels = [label for _, label in captures]
+    duplicates = sorted({label for label in labels if labels.count(label) > 1})
+    if duplicates:
+        raise SystemExit(f"capture labels must be distinct; repeated: {', '.join(duplicates)}")
+    # The window rects are absolute pixel coordinates, so they name the same PLACE in two captures
+    # only if the captures share a framing.  Without this, a reframed or resized capture reads as a
+    # small honest-looking delta rather than an error.
+    sizes = {(width, height) for path, _ in captures for width, height, _ in [load(path)]}
+    if len(sizes) > 1:
+        raise SystemExit(
+            f"captures must share one resolution; got {', '.join(f'{w}x{h}' for w, h in sorted(sizes))}"
+        )
     results = {}
     for path, label in captures:
         results[label] = {}

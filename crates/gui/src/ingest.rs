@@ -1309,7 +1309,7 @@ fn setup_camera(
         .spawn((
             Camera3d::default(),
             Msaa::Off,
-            Exposure { ev100: 9.7 },
+            Exposure { ev100: 10.5 },
             Fxaa::default(),
             Projection::Perspective(PerspectiveProjection {
                 fov: BOOT_VERTICAL_FOV,
@@ -2152,7 +2152,7 @@ mod tests {
             .single(app.world())
             .expect("startup must spawn the one live camera rig");
 
-        assert_eq!(exposure.ev100, 9.7);
+        assert_eq!(exposure.ev100, 10.5);
     }
 
     #[test]

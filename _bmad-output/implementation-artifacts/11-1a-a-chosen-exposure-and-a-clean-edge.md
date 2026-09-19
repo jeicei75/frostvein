@@ -65,23 +65,55 @@ of it and judges them with the instrument this story builds and proves.
    light flicker; the three non-camp windows move 0).
 7. The crease instrument is proved both ways before any figure taken with it is believed: run on two
    same-build captures it reports **delta 0 on `p10` and `median` for every pinned window**; run on a
-   control against a deliberately darkened capture (`--lights-off ambient`) it reports a crease-window
-   `p10` delta of at least 25 levels. Both runs are pasted into the Dev Agent Record.
+   control against a deliberately darkened capture (`--lights-off ambient`) the crease window's `p10`
+   **falls by at least 75% of its own value**. Both runs are pasted into the Dev Agent Record.
+   **AMENDED (Wolf, 2026-09-19, at the code review).** The threshold was "at least 25 levels", an
+   ABSOLUTE figure, and it became arithmetically unreachable the moment the exposure was ruled to
+   10.5 EV100: the crease window's own `p10` is then 23, so a total collapse to zero is a 23-level
+   drop and can never reach 25. The instrument had not weakened — it still drives `p10` 23 -> 0 and
+   the median 50 -> 2. The UNIT was wrong. A level threshold is exposure-dependent, and exposure is
+   now a ruled art variable that moves again in 11.1b (SSAO and Bloom both darken), so the bar is
+   restated as a proportion of the window's own value. No bar was lowered to fit a run: 100% > 75%,
+   and the same measurement under the old exposure (31 -> 0) also passes the new form.
 8. The live-frame guards are re-baselined against the new render path and **no ceiling is raised merely
-   to make a run pass**: `pixel_guard.rs`'s `ENCLOSED_SKY_CEILING` (2,300, residual 2,042) and
-   `ALL_OFF_DROP_FLOOR` (40.0) are re-measured and their new figures recorded. If either must move, the
-   story states the measured residual and the evidence that the count is not holes — the argument
+   to make a run pass**: `pixel_guard.rs`'s `ENCLOSED_SKY_CEILING` (2,300) and `ALL_OFF_DROP_FLOOR`
+   (40.0) are re-measured and their new figures recorded. If either must move, the story states the
+   measured residual and the evidence that the count is not holes — the argument
    `pixel_guard.rs:466-476` makes — and Wolf rules before it moves.
+   **CORRECTED (code review, 2026-09-19).** This AC originally read "`ENCLOSED_SKY_CEILING` (2,300,
+   residual **2,042**) … Headroom is only 258 px, so expect this guard to move". That residual was
+   quoted from a `pixel_guard.rs` comment dating to 10.7 and was **already false before this story
+   began**: measured on a rebuilt, untouched `41b3f02` baseline, the real figure is **43 px / 12
+   blobs**, so pre-story headroom was 2,257 px, not 258. The AC reasoned about the wrong guard. The
+   stale figure is struck rather than restated, because the pixel ceiling's real problem is not its
+   value — see `11-1-signoff/pixel-guard-rebaseline.md` and issue #108. Neither threshold moved.
+   `GROUND_LUMINANCE_FLOOR` in `capture.rs` DID move, 70 -> 55, by Wolf's separate ruling at the same
+   sitting with its own recorded evidence; nothing was failing when it moved, so it is not a ceiling
+   raised to pass a run.
 9. `crates/gui/tests/capture.rs` is unchanged and still green. It measures **committed PNGs on disk**,
    not live renders, so the render-path change cannot reach it; if it goes red, something else did.
 10. On the vehicle, `--perf-log` at the boot framing is read with FXAA on and off, and the two p50
     frame times are recorded. NFR6's 60 fps bar is re-read; if FXAA costs it, the figures are recorded
     and Wolf rules rather than the story tuning anything.
-11. Wolf signs off the frame at the sitting: the edges read cleaner than the MSAA-4x control at the same
-    framing, and the exposure is the one he wants to judge 11.1b's effects under. The pair is filed.
-    **FIRST CLAUSE CLOSED (Wolf, 2026-09-18, gingerspice, build `d3ecdff` confirmed): "edges are
-    fine".** The FXAA-may-read-blurrier caveat is withdrawn. The exposure clause and AC10 are still
-    owed — see `11-1-signoff/wolf-seat-check-d3ecdff.md`.
+11. Wolf signs off the frame at the sitting: the edges read clean at the boot framing, and the
+    exposure is the one he wants to judge 11.1b's effects under.
+    **FIRST CLAUSE CLOSED (Wolf, 2026-09-18, gingerspice, build `d3ecdff`): "edges are fine".** The
+    FXAA-may-read-blurrier caveat is withdrawn.
+    **AMENDED (Wolf, 2026-09-19, at the code review).** The clause read "cleaner than the MSAA-4x
+    control at the same framing. The pair is filed." Both halves overreached what this branch can
+    produce, and the code review found the AC recorded CLOSED on evidence that did not meet it.
+    `Msaa::Off` is unconditional at `ingest.rs:1311` and no flag restores MSAA 4x, so the named
+    control cannot be built from this binary at all and the comparison was unfalsifiable; no pair was
+    ever filed. What was actually judged was an absolute verdict on the shipped frame, and Wolf ruled
+    at the review that this is the sign-off he meant. The wording now says that. Build identity is
+    sound independently of the record: `git diff --name-only c3735d1..d3ecdff -- crates/` is empty,
+    so `d3ecdff` carries exactly the shipped render path.
+    **EXPOSURE CLAUSE: RULED, SEAT CONFIRMATION STILL OWED.** Wolf ruled 10.5 EV100 at the code
+    review from measured ground-median figures (see `docs/tech-art-guidelines.md` § Lights and the
+    `GROUND_LUMINANCE_FLOOR` ruling in `crates/gui/src/capture.rs`), but ruled it from NUMBERS on a
+    devpod, not from a frame at the seat. Those figures are lavapipe, which is venue-sited. The value
+    is shipped; confirming it looks right is a gingerspice task and rides with AC10 on
+    `11-1-signoff/task-5-vehicle-card.md`.
 12. Every mutation row in `mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh` is shown to KILL, and
     the table's output is pasted into the Dev Agent Record.
 
@@ -399,3 +431,151 @@ gpt-5.6-terra, reasoning effort high
 | 2026-09-18 | Made the camera's MSAA and exposure explicit, with live-entity tests and the tech-art ruling. |
 | 2026-09-18 | Repaired the FXAA startup resource and a stale 10.7 lighting mutation anchor; full gate green. Recorded the FXAA silhouette pair, shipped and proved the non-camp crease instrument, re-measured live guards without moving thresholds, and added the vehicle card. |
 | 2026-09-18 | Completed all non-vehicle mutation rows (all KILLED). Filed issue #104 after a live mutation run exposed that `mutate.sh` leaves `_bmad-output` targets altered. Status is review pending Task 5's gingerspice evidence. |
+
+## Review Findings — code review 2026-09-19
+
+Four layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor, Feature Auditor), **no coverage
+holes**: every layer ran `cargo --version` clean and executed real binaries. Reviewed in an isolated
+worktree at `77d5056`, because the repo tree sits at 11.1b, which is stacked on this story and
+changes the same render path — anything built there would have measured the wrong code.
+
+Territory note: R1 names `sim-core` / `simd` / `tui` / `protocol`, and this story's production code is
+entirely `crates/gui`, a crate the split predates. Applying R1 literally would have left 100% of the
+diff outside both hunters. `crates/gui/src/ingest.rs` went to the Blind Hunter, the Python
+instruments and mutation rows to the Edge Case Hunter; both auditors kept whole-diff scope.
+
+### Decision needed
+
+- [ ] **[Review][Decision] FXAA masks the enclosed-sky guard's primary bar; the pixel ceiling is
+      vacuous** — `crates/gui/tests/pixel_guard.rs:466-478`, caused by `crates/gui/src/ingest.rs:1311`.
+      Converged independently by the Feature Auditor and the Acceptance Auditor from two different
+      directions. FA measured at the guard's own conditions (`--subdiv 2`, rebuilt `41b3f02`
+      baseline): baseline 43 px / **12 blobs**, `--fx-off fxaa` 61 px / **18 blobs**, shipped default
+      11 px / 7 blobs, against `BLOB_CEILING = 20`. So `Msaa::Off` alone eats 6 of 8 blobs of margin
+      on the bar `pixel_guard.rs:464` calls "THE PRIMARY BAR", and the shipped reading is low only
+      because FXAA blends the edges back down. AA ported `enclosed_sky` to Python and ran it on this
+      story's own committed same-build frames: FXAA off 245 px / 46 blobs, FXAA on 110 px / 11 blobs —
+      FXAA erases **76% of blobs and 81% of the ≤4 px blobs**. The guard's own comment records 10.7's
+      trunk-hole family as "38 separate holes but only 135 pixels", ~3.5 px each; re-introduced today
+      it would present ~7 blobs, reading 14 against a ceiling of 20. **The guard would go green on the
+      exact defect it was built for.** No ceiling was raised, so AC8's letter holds — its purpose does
+      not. Options: tighten `BLOB_CEILING` to the new residual (a ruled value — Wolf's call), make the
+      sky predicate tolerant rather than exact-match and re-calibrate, or fold this into issue #108,
+      which already tracks the same guard going fully blind under `Hdr` in 11.1b.
+
+- [ ] **[Review][Decision] AC11's first clause is recorded CLOSED on evidence that does not meet it**
+      — story `:80-84`, `11-1-signoff/wolf-seat-check-d3ecdff.md:18-26`. AC11 asks for edges "cleaner
+      than the MSAA-4x control at the same framing" and "the pair is filed". The record holds the
+      quote *"edges are fine"* — an absolute verdict with no control in it — and no pair is filed;
+      `task-5-vehicle-card.md:20` itself states "No vehicle observation has been made here." Worse,
+      **the control AC11 names cannot be produced from this build**: `Msaa::Off` is unconditional at
+      `ingest.rs:1311` with no flag to restore it, and `--fx-off fxaa` yields `Msaa::Off` + no AA, not
+      MSAA 4x. Build identity does hold (`git diff --name-only c3735d1..d3ecdff -- crates/` is empty),
+      but that was established from the commit graph, not the record — the seat-check doc asserts
+      "Build confirmed: `d3ecdff`" with no `gui --version` output pasted, which is the one artifact
+      this project's own rules say cannot lie. Only Wolf can say whether "edges are fine" is the
+      sign-off he meant, or whether he wants the pair against a reverted-MSAA binary.
+
+- [ ] **[Review][Decision] The `Exposure` mutation row kills only in the test harness** —
+      `crates/gui/src/ingest.rs:1312`, `mutations/11-1a-…sh` row 2. Three layers converged on the
+      underlying fact. `bevy_render-0.19.0/src/camera.rs:68` runs
+      `register_required_components::<Camera3d, Exposure>()`, and `Exposure::default()` is `BLENDER` =
+      **9.7** (`bevy_camera-0.19.0/src/camera.rs:263, 279-283`) — the identical literal. In the
+      shipped client, deleting the line leaves an `Exposure` present at 9.7 and changes nothing. The
+      row reported KILLED only because `configured_app` builds on `MinimalPlugins`, which never
+      registers that requirement, so the component genuinely vanishes *there*. This is the recorded
+      "sabotage blind when fixture matches constant" trap. **That the exposure moves no pixels is NOT
+      a finding** — Task 1 ruled it deliberately and AC2 asks only for an explicit value and a
+      recorded reason. What has no evidence is AC2's stated purpose, "it makes the value ours rather
+      than Bevy's". Options: choose an EV100 that is not 9.7 (needs a frame, so Wolf's look call), or
+      add an assertion that distinguishes an explicit component from the auto-inserted one.
+
+- [ ] **[Review][Decision] AC5's headline outcome has no committed instrument, and the Project
+      Structure table promised one** — story `:262-263`. The table lists `crates/gui/tests/headless.rs`
+      "UPDATE — live-entity assertions for AC1–AC4" and `crates/gui/tests/pixel_guard.rs` "UPDATE —
+      AC5's silhouette pair"; `git diff --name-only 41b3f02..77d5056 -- crates/` returns **only**
+      `crates/gui/src/ingest.rs`. For AC1–AC4 this is benign — the tests landed inline in `ingest.rs`
+      and are live-entity tests as required. For AC5 it is not: the east-ridge window and its 547/679
+      counts exist only in markdown, `rg` finds no committed code containing `east-ridge` or `1120`,
+      and the only automated check for this story's headline visible outcome is a *component-presence*
+      assertion. If FXAA became inert for any reason other than the component vanishing, the whole
+      suite and the whole mutation table stay green. AC5 as written only demands the figure be
+      recorded, so this is a gap in the ACs, not a breach — but `pixel_guard.rs`'s tests are `--ignored`
+      and cost 534s, so taking it now is a real decision rather than a free one.
+
+### Patch
+
+- [ ] **[Review][Patch] `creases.py` reports a false GREEN when two captures share a label**
+      [`_bmad-output/implementation-artifacts/11-1-signoff/creases.py:66-68,77-81`] — `results` is keyed
+      by the capture's *label*, and the deltas block re-derives `left`/`right` from those same labels,
+      so two different files given the same label collapse to one dict and the block diffs an entry
+      against itself. Reproduced live: `creases.py fxaa-on-c3735d1-a.png=x ambient-off-c3735d1-a.png=x`
+      prints per-row means of 68.197 and 26.491 and then `p10=+0 median=+0 mean=+0.000` for every
+      window — a confident clean verdict on a pair whose real gap is ~41 levels. AC7's entire proof is
+      "delta 0 on a same-build pair", which is exactly the output this defect fabricates. **Still live
+      at 11.1b's tip, byte-identical**, so both stories' figures came from this tool.
+- [ ] **[Review][Patch] `creases.py` never checks that two captures share a resolution**
+      [`_bmad-output/implementation-artifacts/11-1-signoff/creases.py:34-38,77-85`] — `statistics()`
+      bounds-checks each rect against *that image's own* dimensions only; nothing compares the two
+      captures to each other. Reproduced: a synthetic 1380×720 frame (the real control shifted 100 px)
+      against the 1280×720 control completes with no warning and prints `terrace-creases p10=+2
+      median=+1 mean=+5.325` — small, clean-looking, and comparing physically different regions. Task 3
+      knew this hazard and delegated it to a human ("re-derive the rects against THIS build's control"),
+      which is the "every guard was a procedure" shape. **Still live at 11.1b's tip.**
+- [ ] **[Review][Patch] `scripts/test_creases.py` is invisible to the gate**
+      [`scripts/test_creases.py`] — `scripts/gate.sh:219` runs `python3 -m unittest discover -s
+      scripts/tests`, and this file sits one level up at `scripts/` while all four sibling oracles live
+      inside `scripts/tests/`. `unittest discover -s scripts/tests` runs 81 tests, none of them
+      `test_windows_remain_pinned_to_non_camp_rectangles`. So the only thing pinning the crease window
+      rects never runs in the gate — the rects can drift and nothing catches it. One-line fix: move the
+      file into `scripts/tests/`.
+- [ ] **[Review][Patch] The crease-rect mutation row cannot discriminate**
+      [`_bmad-output/implementation-artifacts/mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh`,
+      last row] — the sabotage swaps the `open-snow-LL` and `open-snow-LR` rect values *between their
+      labels*. The set of measured rectangles is unchanged, so every statistic `creases.py` computes is
+      identical and no figure in any record would move; it is then "killed" by a test that restates the
+      same four literals — the self-referential shape this project hit in 1.1, 1.2 and 1.3. A
+      discriminating row moves a rect onto the camp (where the mean provably swings 1.19) or off the
+      crease terrace, and is killed by a measurement rather than a literal.
+- [ ] **[Review][Patch] AC8 was answered from a stale premise, and the recorded cause is wrong**
+      [`11-1-signoff/pixel-guard-rebaseline.md`, story AC8 `:71-74`] — AC8 states
+      "`ENCLOSED_SKY_CEILING` (2,300, residual **2,042**) … Headroom is only 258 px, so expect this
+      guard to move". The 2,042 is quoted from a `pixel_guard.rs` comment dating to 10.7 and was
+      already false before this story: the untouched `41b3f02` baseline measures **43 px / 12 blobs**,
+      so real pre-story headroom was 2,257 px, not 258. `pixel-guard-rebaseline.md` then explains the
+      new 11 px reading as "because `Msaa::Off` plus FXAA changes the exact-colour edge measure" —
+      also wrong: `Msaa::Off` *raised* it (43 → 61); only FXAA lowered it. Both the figure and the
+      attributed cause need correcting, or the next story reads them as true.
+- [ ] **[Review][Patch] The exposure doc row is unpinned and in the wrong columns**
+      [`docs/tech-art-guidelines.md:67`] — the table is introduced by "Pinned by
+      `appearance_tables_pin_the_cold_boot_palette`", a test that lives in `crates/gui/src/appearance.rs`
+      and pins the *light* table; the camera exposure is pinned by
+      `configured_camera_carries_the_chosen_ev100_on_the_live_rig`, which the doc does not name. The
+      row is also inserted above `moving light`, so the header's "except the last row" carve-out now
+      silently spans two rows. Columns are misused: header is `Identifier | Colour | Hex | Intensity |
+      Range / shadow | Flicker`, and the row puts `9.7 EV100` under **Intensity**, `camera` under
+      **Range / shadow**, and `explicit Blender-calibrated exposure` under **Flicker**. The section
+      bullet at `:224-225` is correct and does rule the value, which is what makes this the recorded
+      "partial doc update immunises" shape — fresh rationale reads as done.
+- [ ] **[Review][Patch] F10 is in no keys table** [`README.md:159`] — the README keys table lists
+      `F5`–`F9` and stops. The `--fx-off` half of this gap was closed downstream (11.1b added
+      `README.md:203`), but the key row was not, and 11.1b has since added F11/F12 on the same
+      mechanism. There is no `--help` (an unknown arg falls through to `port = arg.parse()`), so the
+      README is the only operator-facing surface.
+- [ ] **[Review][Patch] AC5's floor is two samples, against the story's own rule**
+      [`11-1-signoff/fxaa-silhouette.md:9-16`] — Task 0 says "Re-take **at least four** same-build
+      captures", and the Dev Notes carry "A two-sample pair is not a floor … (issue #98)". Task 0 obeyed
+      that for the whole-frame statistics; Task 2 used **two** captures per condition (547/547,
+      679/679) for the statistic AC5 actually judges — and that statistic is the exact-colour sky
+      count, which the guard finding above shows is the most render-path-sensitive number in the repo.
+      The conclusion survives (delta 132 against 68 px of same-build churn in that window, both
+      re-measured), but the method is the one the story explicitly forbids.
+
+### Deferred
+
+- [x] **[Review][Defer] `lumstats.load()` does not validate PNG bit depth** — deferred, pre-existing.
+      [`_bmad-output/implementation-artifacts/10-7-signoff/lumstats.py:9-15`]
+- [x] **[Review][Defer] AC4's test asserts the post-press state, not a transition** — deferred.
+      [`crates/gui/src/ingest.rs:2200-2224`]
+- [x] **[Review][Defer] Task 6's third sub-item is a prohibition rendered as an unticked checkbox** —
+      deferred, cosmetic. [story `:169-173`]
