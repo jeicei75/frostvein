@@ -2216,3 +2216,30 @@ two that were (both in `creases.py`) are in the patch list, not here.
 - **Task 6's third sub-item is a prohibition rendered as an unticked checkbox.** The story's Task 6
   carries "Never `exec` a mutation payload to test whether it applies" as `- [ ]`, so the task reads
   as incomplete when nothing is owed. Cosmetic. Raised by the Acceptance Auditor.
+## Deferred from: code review of 11-1b-the-air-has-depth (2026-09-19)
+
+Four-layer review, no coverage holes. Three LOW-tail items deferred under the review-cost rule
+(cap the low tail: patch HIGH and MED, record LOW). None is a latent silent-failure trap, which is
+the standing frostvein exception that would have forced a patch regardless of severity.
+
+- **`campstats.py` hardcodes an absolute repo path.** `11-1-signoff/campstats.py:12` does
+  `sys.path.insert(0, "/workspace/projects/frostvein/_bmad-output/implementation-artifacts/10-7-signoff")`
+  where its sibling `creases.py:14-17` derives the same path from `__file__`. This new instrument
+  breaks in any other clone or worktree. Deferred because it fails LOUDLY with an ImportError
+  rather than silently producing a wrong number — the class that would otherwise force a patch
+  here. Raised by the Acceptance Auditor.
+
+- **`lighting_readout` carries a live `unreachable!()` arm.** `crates/gui/src/ingest.rs:1490-1496`
+  maps `KeyCode` to a label with `_ => unreachable!("the fixed effect keys are F10 through F12")`.
+  Safe today because `CameraEffect::ALL` only ever yields F10-F12, and deliberate per the code's own
+  comment. It is a maintenance landmine for whoever next extends `CameraEffect::ALL` without
+  updating this match. NOTE the review's separate PATCH item about the two weak-kill mutation rows
+  is a consequence of this arm — those rows retarget a key to `F13` and kill by panicking HERE
+  rather than by failing a key-binding assertion. If that patch is taken by deriving the label from
+  the `KeyCode` instead of swapping F11<->F12, this item closes with it. Raised by the Blind Hunter.
+
+- **`CameraEffect::from_name`'s error text hardcodes the accepted-name list.**
+  `crates/gui/src/ingest.rs:185` bails with a literal `"expected fxaa, ao, or bloom"` rather than
+  deriving it from `CameraEffect::ALL`. AC6 requires the error to name all accepted names and it
+  does so correctly today; it starts lying the moment a fourth effect is added — which 11.2 (depth
+  of field, volumetric haze) is scheduled to do next. Raised by the Feature Auditor.

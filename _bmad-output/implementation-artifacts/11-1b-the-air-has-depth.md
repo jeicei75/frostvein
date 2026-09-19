@@ -186,6 +186,185 @@ Task 1 fixes the instrument before Task 3 leans on it.
         tracked non-Rust targets: after any run touching `creases.py` or a doc, check
         `git status --porcelain` and restore. It reports KILLED while leaving the file sabotaged.
 
+### Review Findings
+
+Code review 2026-09-19, fresh context, four layers (Blind Hunter + Edge Case Hunter on Sonnet,
+Acceptance Auditor + Feature Auditor on Opus), all four ran the binaries, **no coverage holes and
+no layer timed out**. This review carried the adversarial load alone: no self-gate ran on this
+story (four codex handoffs died on the read-only `/tmp` mount-registry lock, three-pass cap spent,
+issue #49). Severities below are the orchestrator's, re-rated from source; layer severities do not
+carry. Layer attribution is recorded on each item.
+
+**Settled and NOT reopened:** both 2026-09-19 amendments are measurement-forced corrections, not
+lowered bars — the Acceptance Auditor reproduced both independently (terrace `p10` reads 38 with AO
+on and 38 with AO off, so the retired statistic is genuinely dead; `Bloom::default() == NATURAL ==
+EnergyConserving` at `bloom/settings.rs:139,185-189`, so the original bright-tail clause was
+unsatisfiable by construction). Wolf's #106 ruling — AO accepted as wired, its look deferred to
+11.3 — also stands and is not relitigated here. All nine Dev Notes scope guardrails verified CLEAN,
+including commit hygiene: 31/31 commits authored `Völundr`, zero Claude trailers.
+
+#### Wolf's rulings on the decision items (2026-09-19)
+
+All six resolved at the review sitting. Each became a PATCH; none was deferred or dismissed.
+
+1. **Space under `--static-world`: REFUSE IT.** `toggle_pause` consults `StaticWorld` and ignores
+   the press, with a readout line saying why. Same fix shape as the permanent-pause HIGH, so the
+   two close together: `--static-world` becomes a sustained invariant instead of a startup event.
+2. **The pause race: FIX IT, then re-measure.** Wait for the daemon's pause to be acknowledged
+   before the capture countdown starts, so the frozen tick is deterministic. AC1's and AC4's camp
+   figures are then re-measured on the stable world.
+
+   **CORRECTION, made during the patch pass.** This item was first recorded as "the fix lives in
+   `crates/gui`'s startup path — AC10 forbids touching `capture.rs`". That was WRONG and it
+   narrowed the fix for no reason: AC10 pins `crates/gui/**tests**/capture.rs`, the integration
+   test. `crates/gui/**src**/capture.rs` is a different file, is not named by any AC, and is where
+   the frame countdown lives. The fix may live there.
+
+   **AND THE HANDSHAKE IS AVAILABLE, contrary to a comment that says it is not.** `SimPaused`'s doc
+   comment (`command.rs:47-50`) states "the wire carries no speed in the snapshot; this is
+   presentation state that mirrors what we last ASKED for, not what the daemon reports." That is
+   FALSE: `protocol::Snapshot` carries `pub speed: Speed` (`protocol/src/lib.rs:152`) and so does
+   `protocol::Delta` (`:168`). The daemon has been reporting its speed on every message all along.
+   That false comment is the stated justification for the client mirroring its own request instead
+   of observing the daemon — which is exactly the design that produced #105 and then this race. It
+   was found in the patch pass, by no review layer, and it is the same latent-doc-lie class as the
+   `README.md:201` item below.
+3. **AC5: AMEND THE WORDING** from "not asserted against" to "not judged against", which is what the
+   2026-09-18 ruling meant and what the story actually did. No code change; `capture.rs:1479` keeps
+   asserting the ceiling on every headless capture, and AC10 forbids changing that here.
+4. **The open-snow control: ADD TO #106, do not touch the ACs.** #106 is already open for exactly
+   this ("AC2 as written cannot distinguish 'consumed' from 'visible'"). Record that the same defect
+   applies to AC4's "does not brighten" clause. No AC is rewritten mid-story.
+5. **AC4's bloom guard: WRITE IT NOW.** The rendered bloom/halo guard the Project Structure table
+   promised, using `--fx-off bloom` as the control, built against the floor that ruling 2 produces.
+6. **Prepasses: REMOVE WITH REQUIRES.** `--fx-off ao` and F11 use `remove_with_requires` so "ao off"
+   is genuinely off and AC8's vehicle cost read is honest. This CHANGES what `--fx-off ao` renders,
+   so the AO-off control and the delta-based AC3 guard must be re-baselined after it.
+
+**ORDERING IS LOAD-BEARING** and is not the order above: fix the race (2) FIRST, because it
+stabilises the frozen tick every camp figure depends on; then re-measure AC1 and AC4; then write the
+bloom guard (5) against that floor; then land `remove_with_requires` (6) LAST and re-baseline the
+AO-off reading and the AC3 guard once. Taking (6) earlier baselines the guard twice.
+
+- [x] [Review][Decision] **Should Space be allowed to defeat `--static-world`?** — `toggle_pause`
+      (`command.rs:99-117`) runs every frame in `PostUpdate`, never consults `Res<StaticWorld>`, and
+      unconditionally queues `SetSpeed{Normal}` on any Space press. Proved by the Edge Case Hunter
+      with a standalone `MinimalPlugins` app against the crate's public API (startup `paused=true`
+      → after Space `paused=false`). Interactive seat only; `apply_scripted_input` never presses
+      Space, so no headless path is affected. Options: refuse Space under the flag; allow it but
+      print a readout line saying the flag's guarantee just broke; or leave it. MED. [edge]
+- [x] [Review][Decision] **The pause is RACED, so AC1's floor is not reproducible and the frozen
+      world state is non-deterministic.** — `pause_static_world` runs in `Startup` and the command
+      drains in the first frame's `PostUpdate`, so the daemon keeps ticking until the pause lands:
+      every `--static-world` run prints `ticks observed=3 dwarf position changes=8 ... moved=true`.
+      The frozen state is whichever tick won the race, which is scheduling- and load-dependent.
+      Measured camp near-white spread of the SAME statistic, same build `46f47c7`, same flags:
+      record 0.0017 pp (n=4) · Feature Auditor 0.0385 pp (n=3) · Acceptance Auditor **0.5210 pp**
+      (n=5, four tight at 0.028 pp and one outlier departing 0.493 pp and dropping p90 a level).
+      AC1's bar is <0.17658 pp, so the reproduction **fails it by 2.95x** while the recorded run
+      clears it by 100x. On a quiet box the pause lands on 3 ticks every time, which is why four
+      consecutive dev captures looked like a zero floor; the layers were run against a box building
+      four Bevy trees at once, which is when the outlier appeared. This bears on whether AC1 is MET
+      and on every camp figure in the story, AC4's halo included. Wolf's call: re-measure AC1 under
+      load, wait for a daemon pause acknowledgement before the capture countdown, or accept the
+      figures as quiet-box measurements and say so. Note AC10 forbids touching `capture.rs`, so the
+      `SKIPPED` silencer whose false confidence caused #105 necessarily stays. HIGH.
+      [acceptance + feature]
+- [x] [Review][Decision] **AC5's "not asserted against a headless bloom frame" is false against
+      shipped code.** — `capture.rs:1479` asserts `near_white <= NEAR_WHITE_AREA_CEILING` inside
+      `range_check`, which runs on EVERY headless capture including every bloom frame this story
+      took. Verified in source by the orchestrator. AC5's important half is MET — neither ceiling
+      was raised, both constants and their pins are intact. But the "not asserted" half cannot be
+      satisfied without changing `capture.rs`, which AC10 forbids. Compounding it: measured headless
+      headroom is 0.196 pp near-white / 0.033 pp blown-pool, against a recorded delivery-GPU penalty
+      of **0.4-0.6 pp worse near-white** — i.e. larger than the entire headroom, so the ceiling is
+      likely to trip at the sitting. Options: amend AC5's wording to "not judged against", exempt
+      bloom frames in a later story, or carry it to the sitting as a known risk. MED.
+      [acceptance + feature]
+- [x] [Review][Decision] **AC2's and AC4's open-snow "control" is near-inert — a median on an
+      integer plateau.** — Three layers measured the same thing independently. AO darkens open snow
+      by MORE than it darkens the creases the guard treats as signal: terrace -0.599 vs LL -0.687,
+      LR -0.627 (Acceptance Auditor); Feature Auditor read -0.628 vs -0.669/-0.622. Bloom changed
+      **99.66% of open-snow pixels**, mean luma -0.667, 2.92% of them by >9 levels (Blind Hunter,
+      `delta.py`) — and open-snow-LL's MEAN **brightened by 0.686** while its median fell, so AC4's
+      "only emitters and their immediate halo brighten" is unsupported on the sensitive statistic
+      and survives only because the clause names the quantisation-blind one. Both clauses would pass
+      a flat ~0.6-luma global darkening and a flat frame dim. This is exactly the AC-bar half #106
+      was deliberately left open for, now shown to apply to AC4 as well as AC2. Recommend adding it
+      to **#106** rather than opening a new issue. MED. [feature + acceptance + blind]
+- [x] [Review][Decision] **AC4's promised bloom pixel guard was never written.** — Project Structure
+      (`:258`) says `pixel_guard.rs` UPDATE for "AC2's crease pair, AC3's MSAA guard, **AC4's bloom
+      pair**". The diff adds exactly one test; `rg` finds no rendered bloom/halo/camp guard anywhere
+      in `crates/gui/tests/`. Bloom's only regression net is a component-presence assertion, so a
+      preset change or a silent post-process skip would be caught by no pixel. Writing one is real
+      work with a real obstacle — the camp is the flicker-noisy window this story had to build
+      `--lights-steady` to measure at all, and the race above still moves it. Wolf's call: write it
+      now, or file it as its own story beside #108's oracle rebuild. MED. [acceptance + feature]
+- [x] [Review][Decision] **`--fx-off ao` and F11 leave `DepthPrepass` + `NormalPrepass` running.** —
+      Bevy's `remove::<T>()` does not remove `#[require]`d components (hence the separate
+      `remove_with_requires`), so "ao off" still pays two full-scene GPU passes for the rest of the
+      session while the readout says off. There is a genuine tension, which is why this is a
+      decision and not a patch: leaving them makes AC2's -0.628 delta purely SSAO's shading, which
+      is GOOD for the guard; removing them makes AC8's vehicle cost read honest. Today AC8 will
+      under-report AO's true cost and Wolf could rule AO cheap on a delta that excludes its
+      expensive half. Minimum action either way: the vehicle card must say which cost its column
+      measures. MED. [feature + blind]
+
+- [ ] [Review][Patch] `--static-world` leaves the daemon paused permanently and daemon-wide; nothing
+      ever sends `Normal` [crates/gui/src/command.rs:74-92] — HIGH. [feature]
+- [ ] [Review][Patch] AC3's guard passes with SSAO absent once bloom is off; assert the AO-on/AO-off
+      delta, not an absolute level [crates/gui/tests/pixel_guard.rs:165-196] — HIGH. [feature]
+- [ ] [Review][Patch] AC11 is NOT MET: the table holds 12 rows and 10 are pasted; the two
+      `--static-world` pause-path rows are missing, and the Completion Notes still say "ten"
+      [_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md:398-409] — MED.
+      [acceptance + orchestrator]
+- [ ] [Review][Patch] Task 5's card OVERWROTE 11.1a's card, destroying a sibling story's live
+      deliverable [_bmad-output/implementation-artifacts/11-1-signoff/task-5-vehicle-card.md] — MED.
+      [acceptance + orchestrator]
+- [ ] [Review][Patch] Two mutation rows are WEAK KILLS: retargeting the key to `F13` panics
+      `lighting_readout`'s `unreachable!()` arm before any key assertion discriminates; swap
+      F11<->F12 instead [_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh:59-73]
+      — MED. [blind + orchestrator]
+- [ ] [Review][Patch] A re-pointed 11.1a mutation row now sabotages the readout LABEL, not its
+      STATE, so nothing anywhere sabotages the on/off literal and AC7's state clause is unprotected
+      [_bmad-output/implementation-artifacts/mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh]
+      — MED. [acceptance]
+- [ ] [Review][Patch] `README.md:201` still promises `--static-world` makes "two captures differ
+      only by what you changed"; the fix pauses the DAEMON while `fall_snow` and `flicker_projection`
+      run on the wall clock [README.md:201, crates/gui/src/atmosphere.rs:321] — MED, latent
+      silent-failure trap. [orchestrator + feature]
+- [ ] [Review][Patch] Published noise floors are lucky-tight pairs: the "600x" margin divides by a
+      TWO-sample 0.001 floor, and three independent layers read 69.452-69.487 (spread 0.035, >=35x
+      it) — one of them BELOW the guard comment's own stated range
+      [crates/gui/tests/pixel_guard.rs:165-172] — MED. [orchestrator + feature + edge]
+- [ ] [Review][Patch] Wolf's #106 ruling (AO accepted as wired, NOT visible from the seat, look
+      deferred to 11.3) is recorded nowhere but the issue — not in this story, not on the board
+      [_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md] — MED, latent: 11.2/11.3
+      inherit a false premise. [orchestrator]
+- [ ] [Review][Patch] `docs/tech-art-guidelines.md` ships two wrong rows: bloom says "AC4 remains
+      blocked" after AC4 was met, and AO claims a creases-concentrated signature #106 measured as
+      broadly uniform [docs/tech-art-guidelines.md:68-69] — MED. [orchestrator + feature + acceptance]
+- [ ] [Review][Patch] The File List is badly stale — ~25 changed files unlisted, including
+      `command.rs` which carries the headline change, four new instrument scripts and 16 PNGs; and
+      `tests/headless.rs` is listed UPDATE but was never touched
+      [_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md] — MED.
+      [acceptance + orchestrator]
+- [ ] [Review][Patch] `sprint-status.yaml` promises "two open items" and lists one [_bmad-output/implementation-artifacts/sprint-status.yaml]
+      — LOW, folded in with the board update. [acceptance + orchestrator]
+- [ ] [Review][Patch] `--lights-steady` is documented nowhere — absent from README's flag table and
+      all of `docs/` [README.md:190-204] — LOW, folded in with the README patch above.
+      [orchestrator + feature + acceptance]
+
+- [x] [Review][Defer] `11-1-signoff/campstats.py:12` hardcodes an absolute repo path where its
+      sibling `creases.py:14-17` derives it from `__file__` — deferred, LOW tail; fails loudly, not
+      silently. [acceptance]
+- [x] [Review][Defer] `lighting_readout`'s key->string match carries a live `unreachable!()` arm
+      [crates/gui/src/ingest.rs:1490-1496] — deferred, LOW tail; a maintenance landmine for whoever
+      extends `CameraEffect::ALL`, not a live bug. [blind]
+- [x] [Review][Defer] `CameraEffect::from_name`'s error text hardcodes the accepted-name list rather
+      than deriving it from `CameraEffect::ALL` [crates/gui/src/ingest.rs:185] — deferred, LOW tail;
+      correct today, lies on a fourth effect. [feature]
+
 ## Dev Notes
 
 ### Scope guardrails — do NOT
