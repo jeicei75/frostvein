@@ -156,43 +156,149 @@ impl Daemon {
 
 /// AC2 and AC3, on the rendered frame rather than on the camera components.
 ///
-/// `Hdr` made the old terrace p10 margin disappear: with bloom either on or off, AO on and AO off
-/// both measure p10=38. The terrace mean remains a stable discriminator. On this build's four
-/// AO-on captures it ranged from 69.466 to 69.515 Rec.601 (a 0.049 floor), while fresh AO-off
-/// measured 70.016. The 69.75 threshold leaves 0.234 below and 0.266 above it. Re-enabling MSAA
-/// makes Bevy's SSAO extractor return before every camera, restoring the AO-off mean even though
-/// the frame renders and exits normally; this oracle catches that silent failure.
+/// A DELTA between an AO-on and an AO-off capture, not a level against a fixed ceiling. The level
+/// version shipped first and the code review measured what was wrong with it: bloom brightens this
+/// same window by +1.77 Rec.601 while AO darkens it by only -0.62, so the AO-off case cleared the
+/// 69.75 ceiling by 0.38 only because bloom was holding it up. With `--fx-off ao,bloom` the terrace
+/// reads 68.403 -- under the ceiling with SSAO ABSENT. The guard survived that state only through
+/// its open-snow clause, which the story describes as an unrelated control; any later change that
+/// darkens this window by more than 0.38 would have taken the stated mechanism out entirely, and
+/// 11.2 (fog) and 11.3 (day/night) are the next two stories. A delta cannot be propped up by an
+/// effect it does not measure.
+///
+/// Measured on `6140ca3`, fresh daemon per capture, Rec.601 integer luma:
+///   AO on   terrace mean 69.499 / 69.511   (same-build floor 0.012)
+///   AO off  terrace mean 70.142 / 70.125   (same-build floor 0.017)
+///   delta   0.62-0.64 against a floor of 0.017 -- about 36x
+/// The 0.30 floor below sits roughly halfway, ~18x the noise and ~half the signal.
+///
+/// Re-enabling MSAA makes Bevy's SSAO extractor `return` out of its whole loop and skip EVERY
+/// camera while the frame still renders and the process still exits 0. That restores the AO-off
+/// reading on the AO-ON capture, collapsing the delta; this oracle is what notices.
 #[test]
-#[ignore = "renders a real frame; scripts/gate.sh runs it in the full tier"]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
 fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it() {
     const TERRACE: (usize, usize, usize, usize) = (860, 190, 1060, 290);
     const OPEN_SNOW_LL: (usize, usize, usize, usize) = (180, 620, 380, 700);
     const OPEN_SNOW_LR: (usize, usize, usize, usize) = (950, 590, 1150, 670);
-    const SSAO_TERRACE_MEAN_CEILING: f32 = 69.75;
+    /// Minimum Rec.601 darkening SSAO must produce in the terrace window.
+    const SSAO_TERRACE_DARKENING_FLOOR: f32 = 0.30;
     const CONTROL_OPEN_SNOW_MEDIAN: u8 = 116;
 
-    let daemon = Daemon::spawn();
-    let (pixels, width, _height) =
-        daemon.capture("ambient-occlusion", &["--static-world", "--subdiv", "4"]);
-    let terrace_mean = rec601_mean(&pixels, width, TERRACE);
-    let open_snow_ll_median = rec601_median(&pixels, width, OPEN_SNOW_LL);
-    let open_snow_lr_median = rec601_median(&pixels, width, OPEN_SNOW_LR);
+    // ONE DAEMON PER CAPTURE, and this is load-bearing for a delta. `--static-world` freezes the
+    // world at whatever tick it has reached when the client connects, so a second capture against
+    // a daemon that has been running through the first freezes a LATER world -- different dwarf
+    // positions, measured as if they were the effect. A freshly spawned daemon lands on the same
+    // tick every time (measured: tick 40, four runs in a row).
+    let (on, width, _height) =
+        Daemon::spawn().capture("ambient-occlusion-on", &["--static-world", "--subdiv", "4"]);
+    let (off, _width, _height) = Daemon::spawn().capture(
+        "ambient-occlusion-off",
+        &["--static-world", "--subdiv", "4", "--fx-off", "ao"],
+    );
+
+    let on_terrace = rec601_mean(&on, width, TERRACE);
+    let off_terrace = rec601_mean(&off, width, TERRACE);
+    let darkening = off_terrace - on_terrace;
+    let open_snow_ll_median = rec601_median(&on, width, OPEN_SNOW_LL);
+    let open_snow_lr_median = rec601_median(&on, width, OPEN_SNOW_LR);
     println!(
-        "AC2/AC3 pixel guard (Rec.601): terrace mean={terrace_mean:.3}; open-snow LL/LR median={open_snow_ll_median}/{open_snow_lr_median}"
+        "AC2/AC3 pixel guard (Rec.601): terrace mean AO-on={on_terrace:.3} AO-off={off_terrace:.3} \
+         darkening={darkening:.3}; open-snow LL/LR median={open_snow_ll_median}/{open_snow_lr_median}"
     );
 
     assert!(
-        terrace_mean < SSAO_TERRACE_MEAN_CEILING,
-        "SSAO must visibly darken terrace creases: Rec.601 mean={terrace_mean:.3}, but AO-on must stay below {SSAO_TERRACE_MEAN_CEILING:.2}. This also detects MSAA silently disabling the SSAO extractor."
+        darkening >= SSAO_TERRACE_DARKENING_FLOOR,
+        "SSAO must darken the terrace creases: AO-on mean={on_terrace:.3}, AO-off mean={off_terrace:.3}, \
+         darkening={darkening:.3}, below the {SSAO_TERRACE_DARKENING_FLOOR:.2} floor. Either SSAO is \
+         not reaching the camera, or MSAA is silently disabling Bevy's SSAO extractor."
     );
+    // NOT an AO-independent control, and the review measured that: AO moves these medians 117 -> 116
+    // on its own, by the same ~0.6 Rec.601 it moves the terrace. What they pin is the POST-STACK
+    // state of a window with no emitter in it, so a change that brightens flat snow is caught. The
+    // "AO acts on creases, not globally" reading this clause once carried is NOT supported --
+    // issue #106 carries that AC-bar defect.
     assert_eq!(
         open_snow_ll_median, CONTROL_OPEN_SNOW_MEDIAN,
-        "AO must not move the Rec.601 open-snow-LL median from its Hdr control"
+        "the all-effects-on open-snow-LL median must hold at its post-stack control"
     );
     assert_eq!(
         open_snow_lr_median, CONTROL_OPEN_SNOW_MEDIAN,
-        "AO must not move the Rec.601 open-snow-LR median from its Hdr control"
+        "the all-effects-on open-snow-LR median must hold at its post-stack control"
     );
+}
+
+/// AC4, on the rendered frame. The guard the Project Structure table promised and the story never
+/// wrote: before this, bloom's only regression net was a component-presence assertion, so a preset
+/// change or a silent post-process skip was caught by no pixel anywhere.
+///
+/// `--fx-off bloom` is the control, and it is a control for BLOOM'S MARGINAL contribution only:
+/// removing the `Bloom` component does not remove the `Hdr` it `#[require]`s, so `Hdr` is on in
+/// both halves. That is deliberate and is why `--fx-off bloom` uses a plain `remove` while
+/// `--fx-off ao` also drops its prepasses.
+///
+/// Measured on `6140ca3`, fresh daemon per capture, camp window (500,400)-(760,620), Rec.601:
+///   bloom on   median 95 / 95     mean 120.334 / 120.288   (floors 0 and 0.046)
+///   bloom off  median 82 / 82     mean 113.427 / 113.435   (floors 0 and 0.008)
+///   delta      median +13, mean +6.88
+/// The floors below are ~half the signal and orders above the noise.
+///
+/// The HALO, not the bright tail. `Bloom::default()` is `NATURAL`/`EnergyConserving`, which
+/// REDISTRIBUTES energy out of bright cores rather than adding any, so p90 actually FALLS by a
+/// level or two. An AC asking the bright tail to rise was unsatisfiable by construction; this
+/// measures the signature the chosen composite mode actually has.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
+    const CAMP: (usize, usize, usize, usize) = (500, 400, 760, 620);
+    const OPEN_SNOW_LL: (usize, usize, usize, usize) = (180, 620, 380, 700);
+    const OPEN_SNOW_LR: (usize, usize, usize, usize) = (950, 590, 1150, 670);
+    /// Minimum Rec.601 rise bloom must produce in the camp halo.
+    const BLOOM_HALO_MEDIAN_FLOOR: i32 = 6;
+    const BLOOM_HALO_MEAN_FLOOR: f32 = 3.0;
+
+    // One daemon per capture: the camp window is where the lantern-carrying dwarves walk, so a
+    // shared daemon's later freeze tick lands them somewhere else and the delta measures that
+    // instead of bloom. This is issue #105's mechanism, one level down.
+    let (on, width, _height) =
+        Daemon::spawn().capture("bloom-on", &["--static-world", "--subdiv", "4"]);
+    let (off, _width, _height) = Daemon::spawn().capture(
+        "bloom-off",
+        &["--static-world", "--subdiv", "4", "--fx-off", "bloom"],
+    );
+
+    let on_median = i32::from(rec601_median(&on, width, CAMP));
+    let off_median = i32::from(rec601_median(&off, width, CAMP));
+    let on_mean = rec601_mean(&on, width, CAMP);
+    let off_mean = rec601_mean(&off, width, CAMP);
+    let median_rise = on_median - off_median;
+    let mean_rise = on_mean - off_mean;
+    println!(
+        "AC4 pixel guard (Rec.601): camp median bloom-on={on_median} bloom-off={off_median} \
+         rise={median_rise}; camp mean bloom-on={on_mean:.3} bloom-off={off_mean:.3} rise={mean_rise:.3}"
+    );
+
+    assert!(
+        median_rise >= BLOOM_HALO_MEDIAN_FLOOR,
+        "bloom must lift the camp halo: median rose {median_rise} (on={on_median}, off={off_median}), \
+         below the {BLOOM_HALO_MEDIAN_FLOOR} floor. Bloom is not reaching the camera, or the post-process \
+         stack is being skipped."
+    );
+    assert!(
+        mean_rise >= BLOOM_HALO_MEAN_FLOOR,
+        "bloom must lift the camp halo: mean rose {mean_rise:.3} (on={on_mean:.3}, off={off_mean:.3}), \
+         below the {BLOOM_HALO_MEAN_FLOOR:.1} floor."
+    );
+    // Only emitters and their halo may BRIGHTEN. These windows hold no emitter; bloom darkens them
+    // by a level, which is the EnergyConserving signature, and the bar is that they do not rise.
+    for (name, rect) in [("LL", OPEN_SNOW_LL), ("LR", OPEN_SNOW_LR)] {
+        let on_snow = i32::from(rec601_median(&on, width, rect));
+        let off_snow = i32::from(rec601_median(&off, width, rect));
+        assert!(
+            on_snow <= off_snow,
+            "bloom must not brighten emitter-free open snow: {name} median went {off_snow} -> {on_snow}"
+        );
+    }
 }
 
 impl Daemon {

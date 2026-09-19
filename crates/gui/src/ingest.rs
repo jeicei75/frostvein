@@ -16,6 +16,7 @@ use anyhow::{Context, bail};
 use bevy::{
     anti_alias::fxaa::Fxaa,
     app::{App, AppExit, PostUpdate, Startup, Update},
+    core_pipeline::prepass::{DepthPrepass, NormalPrepass},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::change_detection::DetectChanges,
@@ -1441,12 +1442,22 @@ fn setup_camera(
             camera.remove::<Fxaa>();
         }
         if effects_off.is_off(CameraEffect::AmbientOcclusion) {
-            // WITH REQUIRES, unlike the other two. `ScreenSpaceAmbientOcclusion` `#[require]`s
-            // `DepthPrepass` and `NormalPrepass`, and a plain `remove` leaves both running for the
-            // rest of the session: two full-scene GPU passes nothing samples, while the readout
-            // says "ao off". AC8 reads AO's cost on the vehicle as an on/off delta, so leaving them
-            // makes AO look cheaper than it is by exactly the part that is expensive.
-            camera.remove_with_requires::<ScreenSpaceAmbientOcclusion>();
+            // The two prepasses go WITH it, named explicitly. `ScreenSpaceAmbientOcclusion`
+            // `#[require]`s `DepthPrepass` and `NormalPrepass`, and a plain `remove` leaves both
+            // running for the rest of the session: two full-scene GPU passes nothing samples,
+            // while the readout says "ao off". AC8 reads AO's cost on the vehicle as an on/off
+            // delta, so leaving them makes AO look cheaper than it is by exactly its expensive
+            // half.
+            //
+            // NOT `remove_with_requires`, which was tried and CRASHES: it removes the whole
+            // transitive require closure, which overlaps the components the camera needs for its
+            // own render-world sync, and the client dies in `bevy_render::sync_world` with
+            // "Attempting to synchronize an entity that has already been synchronized!" on every
+            // `--fx-off ao` run. No unit test can see that -- `MinimalPlugins` has no render
+            // world, so the component assertions pass on a client that cannot render a frame.
+            camera.remove::<ScreenSpaceAmbientOcclusion>();
+            camera.remove::<DepthPrepass>();
+            camera.remove::<NormalPrepass>();
         }
         if effects_off.is_off(CameraEffect::Bloom) {
             // WITHOUT requires, DELIBERATELY. `Bloom` `#[require]`s `Hdr`, and `Hdr` moves every
@@ -1588,11 +1599,13 @@ fn effect_controls(
             match effect {
                 CameraEffect::Fxaa if effects_off.is_off(effect) => camera.remove::<Fxaa>(),
                 CameraEffect::Fxaa => camera.insert(Fxaa::default()),
-                // With requires, and bloom below without: see `setup_camera` for why the two
-                // differ. AO's prepasses are dead weight when it is off; bloom's `Hdr` is the
-                // control every AC4 figure is measured against.
+                // AO takes its two prepasses with it; bloom below deliberately LEAVES its `Hdr`.
+                // See `setup_camera` for both reasons, including why this is not
+                // `remove_with_requires`.
                 CameraEffect::AmbientOcclusion if effects_off.is_off(effect) => {
-                    camera.remove_with_requires::<ScreenSpaceAmbientOcclusion>()
+                    camera.remove::<ScreenSpaceAmbientOcclusion>();
+                    camera.remove::<DepthPrepass>();
+                    camera.remove::<NormalPrepass>()
                 }
                 CameraEffect::AmbientOcclusion => {
                     camera.insert(ScreenSpaceAmbientOcclusion::default())

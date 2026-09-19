@@ -142,9 +142,9 @@ PY
 mutation "--fx-off ao leaves AO required prepasses running" gui fx_off_reaches_the_live_camera_and_rejects_unknown_effects <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            camera.remove_with_requires::<ScreenSpaceAmbientOcclusion>();\n'
+old = '            camera.remove::<DepthPrepass>();\n            camera.remove::<NormalPrepass>();\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            camera.remove::<ScreenSpaceAmbientOcclusion>();\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 mutation "--fx-off bloom takes Hdr with it, destroying AC4 control" gui fx_off_reaches_the_live_camera_and_rejects_unknown_effects <<'PY'
