@@ -2295,6 +2295,31 @@ development_status:
   #     monitor), AC11's exposure clause (10.5 was ruled from lavapipe numbers; nobody has SEEN it),
   #     and AC4's on-screen clause, which the story did not name as vehicle-bound but is: zero pixels
   #     of the readout's colour appear in a real capture, and no human has pressed F10.
+  # 2026-09-19 (LATEST, after the gingerspice sitting on merged build `20b9005`):
+  #   AC10 MET. p50 3.47 ms FXAA-on vs 3.55 ms with --fx-off fxaa, against NFR6's 16.67 ms bar --
+  #     4.7x headroom, so FXAA does not cost the bar and no ruling is owed. The reading rests on the
+  #     SIGN, not the size: FXAA is faster on EVERY percentile, which a post-process pass cannot be,
+  #     so the delta is run-to-run variance and the cost is below the floor. NO cost figure is
+  #     claimed -- one run per condition is not a floor (#98). `--headless` was load-bearing and the
+  #     preamble confirms `vsync=off`; without it both p50s would have clamped to the refresh rate.
+  #   AC11 CLOSED IN FULL. Edges closed 2026-09-18 (`d3ecdff`); exposure closed 2026-09-19
+  #     (`20b9005`) -- Wolf judged the frame and confirmed 10.5 EV100. Until this sitting the value
+  #     was RULED from lavapipe ground-medians and had never been seen on the delivery GPU.
+  #   ONLY AC4's ON-SCREEN CLAUSE REMAINS, and it needs a WINDOWED run: neither readout renders
+  #     headless (zero pixels of its colour in a real capture), so the AC10 captures could not carry
+  #     it and nobody has yet pressed F10 on a machine.
+  #   NOT established by these runs, recorded so nobody over-reads them: the p99/p99.9 tail is 1-2
+  #     frames of a 0.7 s run and is start-up, not steady state; `edit frames: none recorded`, so
+  #     they say nothing about the re-mesh cost that is the expensive frame in this game.
+  #   NEW RISK FILED, #111: the bloom guard's near-white clause is FLAKY at the ruled exposure --
+  #     2 failures in 4 full-gate runs, passing alone and 8/8 under the gate's own --ignored flags.
+  #     Its bar is a 0.10 pp fall; calibrated at 9.7 EV100 the fall was 0.32 pp over a 0.019 floor,
+  #     but 10.5 halved near-white (5.17 -> 3.53 %) and halved the signal: measured 0.1137 and
+  #     0.1679 pp, so the worse run clears by 0.0137 against a 0.019 noise floor -- THE MARGIN IS
+  #     SMALLER THAN THE NOISE. Third guard the exposure ruling has taken headroom from (all-off
+  #     drop 21.707 -> 8.707; ground floor's binding path 58 vs 55) and the first to go under.
+  #     NOT patched: lowering a bar until runs pass is what 10.8's rule forbids, and the floor at
+  #     10.5 is unmeasured. #111 carries the measurements and the ratio-vs-absolute option.
   11-1a-a-chosen-exposure-and-a-clean-edge: in-progress
   # 11.1b inherits the render path and the instrument 11.1a builds, and owes the AC that proves AO's
   # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.

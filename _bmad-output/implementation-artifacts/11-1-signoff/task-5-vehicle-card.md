@@ -60,4 +60,12 @@ Feature Auditor.
 
 ---
 
-File the frame pair and the two CSVs against this card when the sitting happens.
+## Status after the 2026-09-19 sitting
+
+**The sitting happened. Figures and caveats: `task-5-vehicle-evidence.md`, build `20b9005`.**
+
+- **§1 AC10 — MET.** p50 3.47 ms (FXAA on) vs 3.55 ms (`--fx-off fxaa`), NFR6 bar 16.67 ms.
+- **§2 AC11 exposure — CLOSED.** 10.5 EV100 confirmed at the seat.
+- **§3 AC4 on-screen — STILL OPEN.** It needs a WINDOWED run and was not covered: the AC10 runs were
+  `--headless` by necessity, and neither readout renders headless. Run `gui.exe <port>` with no
+  `--headless`, press F10, confirm the line beside the F5-F9 lights flips.

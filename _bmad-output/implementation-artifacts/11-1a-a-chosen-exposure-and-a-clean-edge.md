@@ -95,6 +95,13 @@ of it and judges them with the instrument this story builds and proves.
 10. On the vehicle, `--perf-log` at the boot framing is read with FXAA on and off, and the two p50
     frame times are recorded. NFR6's 60 fps bar is re-read; if FXAA costs it, the figures are recorded
     and Wolf rules rather than the story tuning anything.
+    **MET (Wolf, 2026-09-19, gingerspice, build `20b9005`).** p50 **3.47 ms** with FXAA on and
+    **3.55 ms** with `--fx-off fxaa`, against NFR6's 16.67 ms bar — **4.7x of headroom**, so FXAA
+    does not cost the bar and nothing is owed to a ruling. FXAA is faster on EVERY percentile, which
+    a post-process pass cannot be, so the difference is run-to-run variance and FXAA's cost is below
+    the measurement floor; no cost figure is claimed, because one run per condition is not a floor.
+    Figures, the recipe, and what these runs do NOT establish are in
+    `11-1-signoff/task-5-vehicle-evidence.md`.
 11. Wolf signs off the frame at the sitting: the edges read clean at the boot framing, and the
     exposure is the one he wants to judge 11.1b's effects under.
     **FIRST CLAUSE CLOSED (Wolf, 2026-09-18, gingerspice, build `d3ecdff`): "edges are fine".** The
@@ -108,12 +115,13 @@ of it and judges them with the instrument this story builds and proves.
     at the review that this is the sign-off he meant. The wording now says that. Build identity is
     sound independently of the record: `git diff --name-only c3735d1..d3ecdff -- crates/` is empty,
     so `d3ecdff` carries exactly the shipped render path.
-    **EXPOSURE CLAUSE: RULED, SEAT CONFIRMATION STILL OWED.** Wolf ruled 10.5 EV100 at the code
-    review from measured ground-median figures (see `docs/tech-art-guidelines.md` § Lights and the
-    `GROUND_LUMINANCE_FLOOR` ruling in `crates/gui/src/capture.rs`), but ruled it from NUMBERS on a
-    devpod, not from a frame at the seat. Those figures are lavapipe, which is venue-sited. The value
-    is shipped; confirming it looks right is a gingerspice task and rides with AC10 on
-    `11-1-signoff/task-5-vehicle-card.md`.
+    **EXPOSURE CLAUSE: CLOSED (Wolf, 2026-09-19, gingerspice, build `20b9005`).** Wolf judged
+    `fxaa-on.png` from the AC10 runs and confirmed **10.5 EV100** is the exposure he wants 11.1b's
+    effects judged under. This closes the clause the code review had to leave open: 10.5 was RULED
+    from ground-median figures measured on lavapipe — venue-sited, and it has mispredicted the
+    delivery GPU twice — so until this sitting the value was chosen but never seen. It has now been
+    seen on the delivery GPU at the shipped build. See `11-1-signoff/task-5-vehicle-evidence.md`.
+    **AC11 IS THEREFORE CLOSED IN FULL**, both clauses.
 12. Every mutation row in `mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh` is shown to KILL, and
     the table's output is pasted into the Dev Agent Record.
 
@@ -187,7 +195,11 @@ consumed rather than silently skipped.
   - [x] Re-read `ALL_OFF_DROP_FLOOR` (`pixel_guard.rs:425`). Its recorded basis is all-on 101.1 /
         all-off 13.2 against a 0.16 noise floor; exposure and FXAA both touch the all-on half.
   - [x] Confirm `tests/capture.rs` is untouched and green (AC9).
-- [ ] **Task 5 — the vehicle read.** (AC: 10, 11) — **cannot be done on a devpod.** No devpod can open
+- [x] **Task 5 — the vehicle read.** (AC: 10, 11) — **done 2026-09-19 on gingerspice, build
+      `20b9005`; evidence in `11-1-signoff/task-5-vehicle-evidence.md`.** AC10 MET (p50 3.47 vs
+      3.55 ms against a 16.67 ms bar) and AC11 CLOSED in full. **AC4's on-screen clause is still
+      open and needs a WINDOWED run** — the readout does not render headless, so these captures
+      could not carry it. — **cannot be done on a devpod.** No devpod can open
       a window; this task is a card for the gingerspice sitting. Write it into
       `11-1-signoff/task-5-vehicle-card.md` naming the two `--perf-log` runs and the frame pair Wolf
       judges, and hand it over rather than fabricating a figure.
