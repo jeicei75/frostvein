@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-18
+last_updated: 2026-09-19
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2255,7 +2255,47 @@ development_status:
   # with the crease instrument's own GREEN (p10/median identical across a same-build pair -- a ZERO
   # noise floor) and RED (--lights-off ambient moves crease p10 30->0 while open snow's median moves
   # 117->104). The camp window is DIAGNOSTIC ONLY: its mean moves 1.19 between same-build runs.
-  11-1a-a-chosen-exposure-and-a-clean-edge: review
+  # 2026-09-19: CODE REVIEWED -> in-progress. FOUR LAYERS, ALL LIVE, NO COVERAGE HOLES (every layer
+  # ran cargo and executed binaries; reviewed in an isolated worktree because the repo tree sits at
+  # 11.1b, which is stacked on this story and changes the same render path). 4 decisions + 8 patches
+  # + 3 deferred, 2 dismissed. Patches on `e89af02`; 7/7 mutation rows KILLED; FULL GATE GREEN 434s.
+  # Status is in-progress, NOT done: three ACs are vehicle-bound and only Wolf's seat can close them.
+  #   TWO RULINGS came out of the review and bind beyond this story.
+  #   (1) GROUND_LUMINANCE_FLOOR 70 -> 55 (crates/gui/src/capture.rs). Nothing was failing when it
+  #       moved. It was placed with 53 levels of headroom under a 123-level approved artifact; 10.7
+  #       lifted the sun and 10.8 re-ruled the lighting, the shipped frame drifted to 80, and the
+  #       headroom fell to 10 without anyone touching the floor -- so a guard built to catch an
+  #       UNLIT frame had quietly become the binding constraint on the camera exposure, which is the
+  #       art decision this story exists to hand to the seat. Every failure class it was built for is
+  #       still caught: --lights-off ambient reads 45, all-off reads 0.
+  #   (2) Exposure ruled to 10.5 EV100. 9.7 was byte-identical to Bevy's Exposure::default(), so
+  #       deleting the component changed nothing and its sabotage row could only kill inside the
+  #       MinimalPlugins harness. EV100_OVERCAST (12.0) is unreachable at ANY floor -- that frame
+  #       reads ~32, darker than a broken --lights-off ambient frame, so no floor both admits it and
+  #       catches an ambient regression. 10.5 is the darkest value that survives; the binding path is
+  #       --fx-off fxaa at 58 against the 55 floor.
+  #   AC7 restated from "25 levels" to "75% of the window's own p10" -- the absolute form is
+  #     arithmetically unreachable at 10.5, where the crease window's own p10 is 23. No bar lowered:
+  #     the instrument drives p10 to 0, a 100% fall, and the old measurement passes the new form too.
+  #   AC8 CORRECTED: its "residual 2,042, headroom only 258 px" premise was already false before the
+  #     story began -- the untouched 41b3f02 baseline measures 43 px / 12 blobs. The recorded cause
+  #     was backwards too: Msaa::Off RAISED the count 43 -> 61, only FXAA lowered it.
+  #   AC11 AMENDED: its first clause was recorded CLOSED on evidence that did not meet it. The
+  #     MSAA-4x control it named cannot be built from this branch at all (Msaa::Off is unconditional,
+  #     no flag restores it), so the comparison was unfalsifiable and no pair was ever filed.
+  #   HIGH finding folded into #108 by Wolf's ruling: Msaa::Off takes the enclosed-sky blob count
+  #     12 -> 18 against a ceiling of 20, and the shipped 7 holds only because FXAA blends those
+  #     edges down -- FXAA erases 76% of blobs and 81% of the <=4 px ones, which is exactly 10.7's
+  #     trunk-hole family, so the guard would go green on the defect it was built for.
+  #   TWO instrument HIGHs were still live at 11.1b's tip and 11.1b measured its own figures with
+  #     them: creases.py reported a confident GREEN (+0 everywhere) when two captures shared a label,
+  #     and never checked that two captures share a resolution. Both patched here.
+  #   STILL OWED, vehicle-bound, on 11-1-signoff/task-5-vehicle-card.md: AC10 (its recipe was also
+  #     corrected -- it omitted --headless, so vsync would have clamped both p50s and measured the
+  #     monitor), AC11's exposure clause (10.5 was ruled from lavapipe numbers; nobody has SEEN it),
+  #     and AC4's on-screen clause, which the story did not name as vehicle-bound but is: zero pixels
+  #     of the readout's colour appear in a real capture, and no human has pressed F10.
+  11-1a-a-chosen-exposure-and-a-clean-edge: in-progress
   # 11.1b inherits the render path and the instrument 11.1a builds, and owes the AC that proves AO's
   # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.
   11-1b-the-air-has-depth: backlog
