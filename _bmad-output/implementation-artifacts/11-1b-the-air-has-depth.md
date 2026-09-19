@@ -691,6 +691,20 @@ applies to **AC4's** "does not brighten" clause -- open-snow LL's MEAN rises 0.6
 its MEDIAN falls -- and Wolf ruled 2026-09-19 to record that on #106 rather than rewrite either AC
 mid-story. **AC2 and AC3 are a MECHANISM proof and are not a claim that AO reads from the seat.**
 
+**FULL GATE GREEN, 524s, run in the foreground of the review session on `9609274`, clean tree.**
+fmt 0s · clippy 2s · workspace tests 134s · rendered pixel guards 357s · crate-edge probes ok ·
+metrics 0s · bench 19s · mutation-anchor audit 4s (595 rows). The rendered tier grew from 328s to
+357s because AC4's guard is new and both guards now take two captures against two daemons.
+
+**Review scaffolding reaped**: `scripts/reap-build-caches.sh --tmp-only --force` removed 8
+directories under /tmp and reclaimed **51.5 GB**. The repository's own `target/` was not touched.
+
+**Review cost**: $100.61 over 800 turns, 148.8M cache-read tokens (98.0% of everything processed),
+four subagent transcripts accounting for 33.6%. That is well above Epic 3's $45.52/story baseline,
+and the reason is visible rather than mysterious: this review had no self-gate to lean on (#49), ran
+four layers that each built and ran the binaries, and then carried a nineteen-item patch pass with
+three rendered-guard rebuilds, two full mutation-table runs and a full gate inside the same session.
+
 ### Completion Notes List
 
 - Task 0: captured the build-specific no-AO/no-bloom controls. The camp flicker floor confirms Task 1 must pin the live flicker clock before bloom is measured.
