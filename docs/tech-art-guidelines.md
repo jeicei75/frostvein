@@ -67,6 +67,10 @@ instead — it is a camera property, not a light, and those two tests do not rea
 | ↳ before 10.8 | — | — | 5M lm **(superseded)** | 14 m | — |
 | ↳ rejected | — | — | 72M lm **(rejected)** | blew a ~9-tile pool white | — |
 | `Exposure` (camera) | — | — | 10.5 EV100 | n/a | n/a |
+| `ScreenSpaceAmbientOcclusion` | — | — | default | camera | requires `Msaa::Off`; darkens terrace creases while leaving open-snow medians unchanged |
+| `Bloom` | — | — | default `NATURAL` | camera | energy-conserving emitter halo; headless AC4 measurement remains blocked by its camp-tail floor |
+| `ScreenSpaceAmbientOcclusion` | — | — | default | camera | requires `Msaa::Off`, which fails SILENTLY; darkens the whole frame ~0.6 Rec.601, **not** concentrated at creases — see #106 |
+| `Bloom` | — | — | default `NATURAL` | camera | energy-conserving emitter halo: camp median +13, mean +6.88 against `--fx-off bloom`. Raises the halo and LOWERS the bright tail |
 | moving light | table-driven by `LightKind` | — | table-driven | table-driven | eye-only |
 
 The sections state no colour, range or amplitude for torch and campfire; those cells stay `—`

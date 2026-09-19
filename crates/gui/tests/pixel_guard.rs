@@ -40,84 +40,55 @@ fn mean_luminance(pixels: &[[u8; 4]]) -> f32 {
     total as f32 / pixels.len() as f32
 }
 
-/// Sky pixels that no path from the frame border can reach through sky -- a port of
-/// `10-7-signoff/enclosed.py`, and the replacement for the silhouette count this file shipped with.
-///
-/// THE OLD ORACLE MEASURED THE WRONG QUANTITY. It resolved a column's silhouette as that column's
-/// topmost non-sky pixel, and the night sky is a GRADIENT, so no column's top pixel is ever exactly
-/// `SKY` and the silhouette landed at `y <= 19` in all 1,280 columns. What it counted was OPEN SKY:
-/// 11,174 px of a frame holding 18,889 sky pixels, against 1,650 genuinely enclosed. Its delta still
-/// tracked holes, which is why it looked like it worked -- but a delta can say "some closed" and
-/// never "none left", and AC12 asks for gone. Story 10.7 read a delta as a level and shipped 54
-/// holes under a green guard, until Wolf saw them from the seat.
-///
-/// A hole is a TOPOLOGICAL fact -- sky with terrain drawn all the way around it -- so this resolves
-/// it as a flood fill from the border. Everything the fill reaches is open sky however deep in the
-/// frame it looks; everything it cannot reach is a hole. Same-build noise floor: 0 px, twice, at
-/// both subdivisions, against the old oracle's 45 px spread over eight readings.
-fn enclosed_sky(pixels: &[[u8; 4]], width: usize, height: usize) -> (usize, usize) {
-    const SKY: [u8; 3] = [5, 12, 28];
-    let sky: Vec<bool> = pixels.iter().map(|p| [p[0], p[1], p[2]] == SKY).collect();
-    let mut seen = vec![false; width * height];
-    let mut queue = std::collections::VecDeque::new();
-    let push = |i: usize, seen: &mut Vec<bool>, queue: &mut std::collections::VecDeque<usize>| {
-        if sky[i] && !seen[i] {
-            seen[i] = true;
-            queue.push_back(i);
-        }
-    };
-    for x in 0..width {
-        push(x, &mut seen, &mut queue);
-        push((height - 1) * width + x, &mut seen, &mut queue);
-    }
-    for y in 0..height {
-        push(y * width, &mut seen, &mut queue);
-        push(y * width + width - 1, &mut seen, &mut queue);
-    }
-    while let Some(i) = queue.pop_front() {
-        let (x, y) = (i % width, i / width);
-        if x > 0 {
-            push(i - 1, &mut seen, &mut queue);
-        }
-        if x + 1 < width {
-            push(i + 1, &mut seen, &mut queue);
-        }
-        if y > 0 {
-            push(i - width, &mut seen, &mut queue);
-        }
-        if y + 1 < height {
-            push(i + width, &mut seen, &mut queue);
+/// Mean Rec.601 luminance for a fixed screen rectangle, matching `11-1-signoff/creases.py`.
+/// The literal windows and expected values are the hand-measured instrument contract, rather than
+/// values derived from the camera's components: this test has to notice when Bevy silently skips
+/// SSAO because MSAA was re-enabled.
+fn rec601_mean(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> f32 {
+    let (x0, y0, x1, y1) = rect;
+    let mut total = 0_u64;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let [r, g, b, _] = pixels[y * width + x];
+            total += (r as u64 * 299 + g as u64 * 587 + b as u64 * 114) / 1000;
         }
     }
-    // Second pass: how many SEPARATE regions, which is where the discrimination is -- 38 trunk
-    // holes came to only 135 pixels between them.
-    let mut total = 0;
-    let mut blobs = 0;
-    for start in 0..width * height {
-        if !sky[start] || seen[start] {
-            continue;
-        }
-        blobs += 1;
-        seen[start] = true;
-        queue.push_back(start);
-        while let Some(i) = queue.pop_front() {
-            total += 1;
-            let (x, y) = (i % width, i / width);
-            if x > 0 {
-                push(i - 1, &mut seen, &mut queue);
-            }
-            if x + 1 < width {
-                push(i + 1, &mut seen, &mut queue);
-            }
-            if y > 0 {
-                push(i - width, &mut seen, &mut queue);
-            }
-            if y + 1 < height {
-                push(i + width, &mut seen, &mut queue);
+    total as f32 / ((x1 - x0) * (y1 - y0)) as f32
+}
+
+/// Fraction of a rectangle at or above near-white, as a percentage. `Bloom`'s composite mode is
+/// what this separates: `EnergyConserving` moves energy OUT of bright cores, so it LOWERS this;
+/// `Additive` adds energy and raises it. Nothing else in the frame distinguishes the two presets.
+fn rec601_near_white_percent(
+    pixels: &[[u8; 4]],
+    width: usize,
+    rect: (usize, usize, usize, usize),
+) -> f32 {
+    const NEAR_WHITE: u32 = 230;
+    let (x0, y0, x1, y1) = rect;
+    let mut hits = 0_u32;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let [r, g, b, _] = pixels[y * width + x];
+            if (r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000 >= NEAR_WHITE {
+                hits += 1;
             }
         }
     }
-    (total, blobs)
+    100.0 * hits as f32 / ((x1 - x0) * (y1 - y0)) as f32
+}
+
+fn rec601_median(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> u8 {
+    let (x0, y0, x1, y1) = rect;
+    let mut values = Vec::with_capacity((x1 - x0) * (y1 - y0));
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let [r, g, b, _] = pixels[y * width + x];
+            values.push(((r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000) as u8);
+        }
+    }
+    values.sort_unstable();
+    values[values.len() / 2]
 }
 
 struct Daemon {
@@ -202,6 +173,204 @@ impl Daemon {
         let pixels = image.pixels().map(|pixel| pixel.0).collect::<Vec<_>>();
         let _ = std::fs::remove_file(&out);
         (pixels, width, height)
+    }
+}
+
+/// AC2 and AC3, on the rendered frame rather than on the camera components.
+///
+/// A DELTA between an AO-on and an AO-off capture, not a level against a fixed ceiling. The level
+/// version shipped first and the code review measured what was wrong with it: bloom brightens this
+/// same window by +1.77 Rec.601 while AO darkens it by only -0.62, so the AO-off case cleared the
+/// 69.75 ceiling by 0.38 only because bloom was holding it up. With `--fx-off ao,bloom` the terrace
+/// reads 68.403 -- under the ceiling with SSAO ABSENT. The guard survived that state only through
+/// its open-snow clause, which the story describes as an unrelated control; any later change that
+/// darkens this window by more than 0.38 would have taken the stated mechanism out entirely, and
+/// 11.2 (fog) and 11.3 (day/night) are the next two stories. A delta cannot be propped up by an
+/// effect it does not measure.
+///
+/// Measured on `6140ca3`, fresh daemon per capture, Rec.601 integer luma:
+///   AO on   terrace mean 69.499 / 69.511   (same-build floor 0.012)
+///   AO off  terrace mean 70.142 / 70.125   (same-build floor 0.017)
+///   delta   0.62-0.64 against a floor of 0.017 -- about 36x
+/// The 0.30 floor below sits roughly halfway, ~18x the noise and ~half the signal.
+///
+/// Re-enabling MSAA makes Bevy's SSAO extractor `return` out of its whole loop and skip EVERY
+/// camera while the frame still renders and the process still exits 0. That restores the AO-off
+/// reading on the AO-ON capture, collapsing the delta; this oracle is what notices.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it() {
+    const TERRACE: (usize, usize, usize, usize) = (860, 190, 1060, 290);
+    const OPEN_SNOW_LL: (usize, usize, usize, usize) = (180, 620, 380, 700);
+    const OPEN_SNOW_LR: (usize, usize, usize, usize) = (950, 590, 1150, 670);
+    /// Minimum Rec.601 darkening SSAO must produce in the terrace window.
+    const SSAO_TERRACE_DARKENING_FLOOR: f32 = 0.30;
+    /// RE-BASELINED 116 -> 93 on 2026-09-19, when 11.1b was rebased onto 11.1a's reviewed tip.
+    /// This is a CONTROL, an expected post-stack value, and it moved because Wolf ruled the camera
+    /// exposure from 9.7 to 10.5 EV100 at 11.1a's code review -- a deliberate change to the frame,
+    /// not drift, so the control must track it. It is NOT a bar loosened to pass a failing run:
+    /// the assertion is equality, so 93 is neither weaker nor stronger than 116.
+    /// Measured on the guard's own flags (`--static-world --lights-steady --subdiv 4`), one fresh
+    /// daemon per capture, FOUR same-build captures: open-snow-LL 93/93/93/93 and open-snow-LR
+    /// 93/93/93/93, spread 0 on both. AO's terrace darkening is unaffected at 0.540 (floor 0.30).
+    const CONTROL_OPEN_SNOW_MEDIAN: u8 = 93;
+
+    // ONE DAEMON PER CAPTURE, and this is load-bearing for a delta. `--static-world` freezes the
+    // world at whatever tick it has reached when the client connects, so a second capture against
+    // a daemon that has been running through the first freezes a LATER world -- different dwarf
+    // positions, measured as if they were the effect. A freshly spawned daemon lands on the same
+    // tick every time (measured: tick 40, four runs in a row).
+    let (on, width, _height) = Daemon::spawn().capture(
+        "ambient-occlusion-on",
+        &["--static-world", "--lights-steady", "--subdiv", "4"],
+    );
+    let (off, _width, _height) = Daemon::spawn().capture(
+        "ambient-occlusion-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "ao",
+        ],
+    );
+
+    let on_terrace = rec601_mean(&on, width, TERRACE);
+    let off_terrace = rec601_mean(&off, width, TERRACE);
+    let darkening = off_terrace - on_terrace;
+    let open_snow_ll_median = rec601_median(&on, width, OPEN_SNOW_LL);
+    let open_snow_lr_median = rec601_median(&on, width, OPEN_SNOW_LR);
+    println!(
+        "AC2/AC3 pixel guard (Rec.601): terrace mean AO-on={on_terrace:.3} AO-off={off_terrace:.3} \
+         darkening={darkening:.3}; open-snow LL/LR median={open_snow_ll_median}/{open_snow_lr_median}"
+    );
+
+    assert!(
+        darkening >= SSAO_TERRACE_DARKENING_FLOOR,
+        "SSAO must darken the terrace creases: AO-on mean={on_terrace:.3}, AO-off mean={off_terrace:.3}, \
+         darkening={darkening:.3}, below the {SSAO_TERRACE_DARKENING_FLOOR:.2} floor. Either SSAO is \
+         not reaching the camera, or MSAA is silently disabling Bevy's SSAO extractor."
+    );
+    // NOT an AO-independent control, and the review measured that: AO moves these medians 117 -> 116
+    // on its own, by the same ~0.6 Rec.601 it moves the terrace. What they pin is the POST-STACK
+    // state of a window with no emitter in it, so a change that brightens flat snow is caught. The
+    // "AO acts on creases, not globally" reading this clause once carried is NOT supported --
+    // issue #106 carries that AC-bar defect.
+    assert_eq!(
+        open_snow_ll_median, CONTROL_OPEN_SNOW_MEDIAN,
+        "the all-effects-on open-snow-LL median must hold at its post-stack control"
+    );
+    assert_eq!(
+        open_snow_lr_median, CONTROL_OPEN_SNOW_MEDIAN,
+        "the all-effects-on open-snow-LR median must hold at its post-stack control"
+    );
+}
+
+/// AC4, on the rendered frame. The guard the Project Structure table promised and the story never
+/// wrote: before this, bloom's only regression net was a component-presence assertion, so a preset
+/// change or a silent post-process skip was caught by no pixel anywhere.
+///
+/// `--fx-off bloom` is the control, and it is a control for BLOOM'S MARGINAL contribution only:
+/// removing the `Bloom` component does not remove the `Hdr` it `#[require]`s, so `Hdr` is on in
+/// both halves. That is deliberate and is why `--fx-off bloom` uses a plain `remove` while
+/// `--fx-off ao` also drops its prepasses.
+///
+/// Measured on `6140ca3`, fresh daemon per capture, camp window (500,400)-(760,620), Rec.601:
+///   bloom on   median 95 / 95     mean 120.334 / 120.288   (floors 0 and 0.046)
+///   bloom off  median 82 / 82     mean 113.427 / 113.435   (floors 0 and 0.008)
+///   delta      median +13, mean +6.88
+/// The floors below are ~half the signal and orders above the noise.
+///
+/// The HALO, not the bright tail. `Bloom::default()` is `NATURAL`/`EnergyConserving`, which
+/// REDISTRIBUTES energy out of bright cores rather than adding any, so p90 actually FALLS by a
+/// level or two. An AC asking the bright tail to rise was unsatisfiable by construction; this
+/// measures the signature the chosen composite mode actually has.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
+    const CAMP: (usize, usize, usize, usize) = (500, 400, 760, 620);
+    const OPEN_SNOW_LL: (usize, usize, usize, usize) = (180, 620, 380, 700);
+    const OPEN_SNOW_LR: (usize, usize, usize, usize) = (950, 590, 1150, 670);
+    /// Minimum Rec.601 rise bloom must produce in the camp halo.
+    const BLOOM_HALO_MEDIAN_FLOOR: i32 = 6;
+    const BLOOM_HALO_MEAN_FLOOR: f32 = 3.0;
+
+    // One daemon per capture: the camp window is where the lantern-carrying dwarves walk, so a
+    // shared daemon's later freeze tick lands them somewhere else and the delta measures that
+    // instead of bloom. This is issue #105's mechanism, one level down.
+    let (on, width, _height) = Daemon::spawn().capture(
+        "bloom-on",
+        &["--static-world", "--lights-steady", "--subdiv", "4"],
+    );
+    let (off, _width, _height) = Daemon::spawn().capture(
+        "bloom-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "bloom",
+        ],
+    );
+
+    let on_median = i32::from(rec601_median(&on, width, CAMP));
+    let off_median = i32::from(rec601_median(&off, width, CAMP));
+    let on_mean = rec601_mean(&on, width, CAMP);
+    let off_mean = rec601_mean(&off, width, CAMP);
+    let median_rise = on_median - off_median;
+    let mean_rise = on_mean - off_mean;
+    println!(
+        "AC4 pixel guard (Rec.601): camp median bloom-on={on_median} bloom-off={off_median} \
+         rise={median_rise}; camp mean bloom-on={on_mean:.3} bloom-off={off_mean:.3} rise={mean_rise:.3}"
+    );
+
+    assert!(
+        median_rise >= BLOOM_HALO_MEDIAN_FLOOR,
+        "bloom must lift the camp halo: median rose {median_rise} (on={on_median}, off={off_median}), \
+         below the {BLOOM_HALO_MEDIAN_FLOOR} floor. Bloom is not reaching the camera, or the post-process \
+         stack is being skipped."
+    );
+    assert!(
+        mean_rise >= BLOOM_HALO_MEAN_FLOOR,
+        "bloom must lift the camp halo: mean rose {mean_rise:.3} (on={on_mean:.3}, off={off_mean:.3}), \
+         below the {BLOOM_HALO_MEAN_FLOOR:.1} floor."
+    );
+    // THE PRESET, not just the presence. A swap to `OLD_SCHOOL` leaves the component in place and
+    // still lifts the halo -- it is `Additive`, so it ADDS energy rather than redistributing it --
+    // and it SURVIVED this guard's first version, which is how this assertion came to exist. The
+    // near-white fraction is what separates the two composite modes: `EnergyConserving` moves
+    // energy out of the bright cores and LOWERS it, `Additive` raises it.
+    // Measured on `6140ca3` WITH `--lights-steady`: bloom-on 5.1573 / 5.1766 %, bloom-off
+    // 5.4930 / 5.4738 % -- a fall of about 0.32 pp against a same-build floor of 0.019.
+    // THE FLAG IS REQUIRED FOR THIS CLAUSE and the guard's first version omitted it. The camp is
+    // the emitter window: its near-white swings about 1.44 pp between same-build captures while
+    // the flicker runs free, which is FOUR TIMES this signal. Run unpinned once, this assertion
+    // read bloom-on 5.5839 % against bloom-off 4.5577 % -- bloom apparently RAISING near-white by
+    // 1.03 pp -- and failed. It was measuring the flicker phase, not the composite mode.
+    let on_near_white = rec601_near_white_percent(&on, width, CAMP);
+    let off_near_white = rec601_near_white_percent(&off, width, CAMP);
+    println!(
+        "AC4 pixel guard (Rec.601): camp near-white bloom-on={on_near_white:.4}% \
+         bloom-off={off_near_white:.4}%"
+    );
+    assert!(
+        off_near_white - on_near_white >= 0.10,
+        "bloom must REDISTRIBUTE energy out of the bright cores, not add it: camp near-white went \
+         {off_near_white:.4}% -> {on_near_white:.4}%. A rise means the composite mode is no longer \
+         EnergyConserving -- check the preset."
+    );
+
+    // Only emitters and their halo may BRIGHTEN. These windows hold no emitter; bloom darkens them
+    // by a level, which is the EnergyConserving signature, and the bar is that they do not rise.
+    for (name, rect) in [("LL", OPEN_SNOW_LL), ("LR", OPEN_SNOW_LR)] {
+        let on_snow = i32::from(rec601_median(&on, width, rect));
+        let off_snow = i32::from(rec601_median(&off, width, rect));
+        assert!(
+            on_snow <= off_snow,
+            "bloom must not brighten emitter-free open snow: {name} median went {off_snow} -> {on_snow}"
+        );
     }
 }
 
@@ -439,56 +608,27 @@ fn switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing() {
     );
 }
 
-/// AC12, on the pixels rather than on the mesh masks.
-///
-/// The permanent mask tests prove the mesher emits the specific faces a mesh-drawn tree must not
-/// hide, and that the ground under a trunk reaches the mesher at all. They are genuinely
-/// discriminating and they are still geometry: they cannot see a hole opened anywhere they were not
-/// pointed. This one asks the frame.
-#[test]
-#[ignore = "renders real frames; scripts/gate.sh runs it in the full tier"]
-fn the_fine_mesher_leaves_no_sky_showing_through_the_terrain() {
-    let daemon = Daemon::spawn();
-    let (fine, width, height) = daemon.capture("subdiv2", &["--subdiv", "2"]);
-    let (holes, blobs) = enclosed_sky(&fine, width, height);
-    println!("AC12 pixel guard: subdiv 2 enclosed-sky px = {holes} in {blobs} blobs");
-
-    // Hand-written, NOT derived from the mesher. Every state this must separate, measured with
-    // `10-7-signoff/enclosed.py`, same-build noise floor 0 px:
-    //   this build                       2,042 px /  16 blobs   <- must pass
-    //   the draw-set hole (10.7's first  2,177 px /  54 blobs   <- must fail
-    //     fix, which Wolf's eye caught)
-    //   before any 10.7 fix              2,571 px /  82 blobs   <- must fail
-    //   the REJECTED first fix           3,449 px /  67 blobs   <- must fail
-    //
-    // THE BLOB COUNT IS THE PRIMARY BAR, because it is where the separation actually is: the
-    // trunk-base family was 38 separate holes but only 135 pixels, so a pixel ceiling alone
-    // discriminates it by a margin barely above nothing. The pixel ceiling is the second net,
-    // for a regression that grows a hole rather than adding one.
-    //
-    // NEITHER CEILING IS ZERO, AND THAT IS CORRECT -- it is not a debt. The 2,042 px residual is
-    // NOT holes: it is the sky BEYOND THE WORLD'S EDGE, where the terrain stops at its outer
-    // boundary and pines carry on standing past the last terrain cell, so the canopy closes over
-    // pockets of open sky and a border flood fill cannot reach them. The whole-world face oracle
-    // reports zero missing faces after this fix, which is what rules out the alternative. Wolf
-    // ruled at the 2026-09-04 sitting, having looked at `--subdiv` 1, 2 and 4: the holes are gone
-    // and 16 is fine. So these ceilings are a property of this framing, not a bug waiting to be
-    // fixed, and raising them to clear a failing run would still be forbidden.
-    const BLOB_CEILING: usize = 20;
-    const ENCLOSED_SKY_CEILING: usize = 2_300;
-    assert!(
-        blobs <= BLOB_CEILING,
-        "sky is showing through the terrain at --subdiv 2: {blobs} separate enclosed-sky regions, \
-         above the {BLOB_CEILING} ceiling. Every hole beyond the four of issue #65 is a terrain \
-         face that nothing drew -- either a mesh-drawn tree cell suppressing a neighbour's face, \
-         or the ground under a trunk never reaching the mesher at all."
-    );
-    assert!(
-        holes <= ENCLOSED_SKY_CEILING,
-        "sky is showing through the terrain at --subdiv 2: {holes} enclosed-sky pixels, above the \
-         {ENCLOSED_SKY_CEILING} ceiling."
-    );
-}
+// AC12's frame-level guard is RETIRED. Issue #108, Wolf's ruling 2026-09-19.
+//
+// `the_fine_mesher_leaves_no_sky_showing_through_the_terrain` resolved sky with an EXACT RGB match
+// (`const SKY: [u8; 3] = [5, 12, 28]`). `Hdr` moved the rendered sky to `[7, 15, 31]`, so by 11.1b
+// ZERO pixels in a frame classified as sky where 8,434 had pre-`Hdr`. The flood fill then had
+// nothing to fill and the guard returned 0 holes / 0 blobs -- not because the terrain was sound,
+// but because it could no longer SEE sky. It would have passed with the terrain entirely absent.
+// That is worse than the vacuous ceiling it was first filed as: a green line asserting nothing.
+//
+// It is retired rather than repaired because repairing it is a story, not a re-baseline. The old
+// oracle worked only because the night sky was a single exact colour over a large flat region, and
+// the post-stack destroyed that property: dark shadowed terrain and night sky now OVERLAP in
+// colour space. Measured attempts, both rejected -- a self-calibrated exact match fragments the
+// fill's connectivity (the sky is dithered across many near-values), and a tolerant rule
+// calibrated from the frame's own top rows reports ~21,000 false holes in ~790 blobs.
+//
+// WHAT IS STILL COVERED: the permanent mask tests, which prove the mesher emits the faces a
+// mesh-drawn tree must not hide and that the ground under a trunk reaches the mesher at all. They
+// are geometry, they are genuinely discriminating, and the whole-world face oracle still reports
+// zero missing faces. WHAT IS NOT: a hole opened anywhere nothing was pointed at. That is the gap
+// #108 carries, and nothing here should be read as covering it.
 
 /// AC9's header clause, on the real binary.
 ///

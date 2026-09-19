@@ -2298,7 +2298,94 @@ development_status:
   11-1a-a-chosen-exposure-and-a-clean-edge: in-progress
   # 11.1b inherits the render path and the instrument 11.1a builds, and owes the AC that proves AO's
   # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.
-  11-1b-the-air-has-depth: backlog
+  # 2026-09-19 (LATER): REBASED ONTO 11.1a's REVIEWED TIP (122271c). 38 commits replayed, only two
+  # conflict resolutions needed (tech-art-guidelines.md's Lights table, deferred-work.md's appended
+  # sections) -- 11.1b touches neither the Exposure line nor GROUND_LUMINANCE_FLOOR, so ingest.rs and
+  # capture.rs auto-merged. FULL GATE GREEN 525s at `b60a6f5`.
+  #   ONE CONTROL RE-BASELINED by the exposure ruling: CONTROL_OPEN_SNOW_MEDIAN 116 -> 93
+  #     (pixel_guard.rs). It is an EXPECTED POST-STACK VALUE, not a bar -- the assertion is equality,
+  #     so 93 is neither weaker nor stronger than 116 -- and it moved because Wolf ruled the exposure
+  #     9.7 -> 10.5, a deliberate change to the frame rather than drift. Measured on the guard's own
+  #     flags, fresh daemon per capture, FOUR same-build captures: open-snow-LL and -LR both
+  #     93/93/93/93, spread 0. AO's terrace darkening is untouched at 0.540 against its 0.30 floor.
+  #   THE VEHICLE CARD's review corrections were reverted by the replay and restored: an earlier
+  #     11.1b commit had written 11.1b's card over 11.1a's `task-5-vehicle-card.md`, and a later one
+  #     correctly restored 11.1a's -- which also restored the pre-review version. The load-bearing
+  #     part is `--headless` on both `--perf-log` runs; without it vsync clamps both p50s to the
+  #     refresh interval and AC10 measures the monitor, not FXAA.
+  #   FLAKE OBSERVED, not a regression: `bloom_lifts_the_camp_halo_without_brightening_open_snow`
+  #     failed once under the full gate and then passed alone (130s) AND passed 8/8 under the gate's
+  #     own `--ignored` settings, before the full gate went green. Same shape as #72 and #88. The
+  #     assertion text was not captured before the run was superseded, so no issue was filed on a
+  #     failure nobody can reproduce from the record -- if it recurs, capture the panic first.
+  #   STILL OWED and unchanged by the rebase: 11.1b's own recorded figures (camp spread, near-white,
+  #     bloom deltas) were measured at 9.7 EV100 and floor 70. The GATE does not pin them, so they
+  #     are stale PROSE rather than a red test, and they describe a build that no longer exists.
+  11-1b-the-air-has-depth: in-progress
+  # 2026-09-19: AC1 and AC4 are now MET and the two blocking rulings are recorded on #105/#107.
+  # Branch story-11-1b-the-air-has-depth.
+  # CODE REVIEWED 2026-09-19 -- see the review block at the bottom. Stays in-progress: the
+  # remaining work is vehicle-bound (Task 5, AC8, AC9) and only Wolf's seat can close it.
+  #   AC1 MET, as written, no bar lowered (#105). The residual was never flicker: --static-world
+  #     is documented as "freeze the sim" (README.md:201) and froze NOTHING -- it set a bool that
+  #     silenced the capture's motion assertions while the daemon kept ticking. Wired it to the
+  #     SetSpeed { Paused } command.rs has sent since 10.5. crates/gui ONLY; no wire, no sim.
+  #     Camp spread collapsed: median 4 -> 0, p90 17 -> 0, near-white 1.7658 -> 0.0017 pp.
+  #   AC4 MET, amended on Wolf's ruling (#107). Bloom::default() is EnergyConserving, which
+  #     redistributes energy OUT of bright cores, so the bright tail the AC asked to RISE cannot.
+  #     AC4 now measures the HALO its own prose already named: median +13, mean +6.98 against
+  #     floors of 0 and 0.035. Preset UNCHANGED -- the story still tunes no look.
+  #   AC2 amended: p10 -> terrace MEAN (Hdr killed p10; it reads 38 both ways), open-snow control
+  #     named as 116. ATTRIBUTION CORRECTED: the 117 -> 116 shift is BLOOM's, not Hdr's. The two
+  #     arrived in one commit (Bloom #[require]s Hdr) and --fx-off bloom is the first control to
+  #     separate them -- it reads 117/117 with Hdr still on. Three documents had it wrong.
+  #   AC2/AC3 re-measured on the paused world: terrace mean AO-on 69.485 vs AO-off 70.087 against
+  #     a 0.001 floor -- a 600x margin, where it used to be a fraction of the floor.
+  #   AC10 VERIFIED against this story's OWN range (d3ecdff..HEAD, never main): protocol,
+  #     sim-core, client-core, simd and tests/capture.rs all empty.
+  #   Task 6: TWELVE rows, ALL KILLED, incl. both pause-path failure modes (never sent; sent as
+  #     Normal). git status clean after the run (#104).
+  #   Task 5 stays UNCHECKED: vehicle-bound, card at 11-1-signoff/task-5-vehicle-card.md.
+  #   #108 RULED by Wolf 2026-09-19: RETIRE the enclosed_sky guard, rebuild the oracle as its own
+  #     story. It was INERT, not vacuous -- const SKY = [5,12,28] is an EXACT match and Hdr moved
+  #     the sky to [7,15,31], so ZERO pixels classified as sky (8,434 did pre-Hdr). It returned 0
+  #     holes because it could not SEE sky and would have passed with the terrain absent. Test and
+  #     helper removed; a ledger comment in pixel_guard.rs names what is still covered (the
+  #     geometric mask tests, whole-world face oracle) and what is NOT (a hole opened where nothing
+  #     was pointed). #108 carries the rebuild.
+  # CODE REVIEW 2026-09-19 (four layers, no coverage holes, no layer timed out; the earlier
+  # "two open items" line promised an item that #108's ruling had already closed):
+  #   NO SELF-GATE EVER RAN ON THIS STORY: every codex attempt across four handoffs died on a
+  #     read-only /tmp mount-registry lock and the three-pass cap is spent (#49). The code review
+  #     carried the adversarial load alone, which is why it was run at four layers.
+  #   19 patch items, 3 deferred, 0 dismissed. Wolf ruled six decision items at the sitting; all
+  #     six became patches and all were applied in-session.
+  #   BOTH 2026-09-19 AC AMENDMENTS HELD under independent reproduction -- terrace p10 reads 38
+  #     with AO on AND off, and Bloom::default() is EnergyConserving, so neither original clause
+  #     was satisfiable. They were corrections, not lowered bars.
+  #   THE BIG ONE: --static-world froze the world at whatever tick it had reached at connect, so
+  #     captures meant to be compared froze worlds up to 35 ticks apart. ONE DAEMON PER CAPTURE is
+  #     the fix and it is measured: fresh daemons land on tick 40 every time and the camp spread is
+  #     0.0070 pp; a shared daemon spreads 0.3619 pp and FAILS AC1's bar by 2.05x. AC1 stands, with
+  #     a precondition nobody had written down. It is now in README, the vehicle card, and both
+  #     rendered guards.
+  #   Also fixed: the pause outlived the client and froze every later one (the daemon's speed is
+  #     one global); Space silently resumed a --static-world run; AC3 asserted a LEVEL that bloom
+  #     was propping up, now a delta; AC4 had NO rendered guard despite the spec promising one;
+  #     two mutation rows were weak kills that died on an unreachable! arm before any key
+  #     assertion ran; a re-pointed 11.1a row had stopped sabotaging the readout's on/off state.
+  #   CORRECTED IN FLIGHT: the review's "the AC3 guard passes with SSAO absent" was OVERSTATED --
+  #     --fx-off ao,bloom clears the old terrace ceiling at 68.403 but reads open-snow 117 against
+  #     an == 116 assertion, so the guard still reddened. The stated mechanism had stopped
+  #     discriminating; the open-snow "control" was silently doing the work.
+  #   AND: "600x margin" divided by a TWO-sample floor. Three layers read that statistic across
+  #     0.035 on one build, so the real margin is ~36x. Nothing was failing; the number was.
+  #   #106's RULING NOW LIVES IN THE STORY, not only on the issue: AO is accepted as WIRED and
+  #     PROVED, is NOT visible from the seat, and its look judgement moves to 11.3. #106 stays open
+  #     for the AC-bar half, which the review showed applies to AC4 as well as AC2.
+  #   Task 5's card had OVERWRITTEN 11.1a's card, whose own Task 5 is still unchecked; 11.1a's is
+  #     restored and 11.1b's now sits at task-5b-vehicle-card.md as the spec always said.
+  # STILL OPEN, and only the vehicle can close it: Task 5, AC8 (perf read), AC9 (Wolf's sign-off).
   11-2-the-miniature: backlog
   11-3-night-falls-day-breaks: backlog
   epic-11-retrospective: optional

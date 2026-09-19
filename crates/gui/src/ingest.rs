@@ -16,6 +16,7 @@ use anyhow::{Context, bail};
 use bevy::{
     anti_alias::fxaa::Fxaa,
     app::{App, AppExit, PostUpdate, Startup, Update},
+    core_pipeline::prepass::{DepthPrepass, NormalPrepass},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::change_detection::DetectChanges,
@@ -25,7 +26,8 @@ use bevy::{
         ButtonInput,
         mouse::{MouseButton, MouseMotion, MouseWheel},
     },
-    pbr::{DistanceFog, FogFalloff},
+    pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
+    post_process::bloom::Bloom,
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
         DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
@@ -148,8 +150,86 @@ pub struct LightingToggles {
     ambient: bool,
 }
 
+/// The three seat-toggleable camera effects. This stays a fixed instrument rather than a
+/// registry: these are the only concrete effects the client currently ships.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CameraEffect {
+    Fxaa,
+    AmbientOcclusion,
+    Bloom,
+}
+
+impl CameraEffect {
+    const ALL: [Self; 3] = [Self::Fxaa, Self::AmbientOcclusion, Self::Bloom];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Fxaa => "fxaa",
+            Self::AmbientOcclusion => "ao",
+            Self::Bloom => "bloom",
+        }
+    }
+
+    fn key(self) -> KeyCode {
+        match self {
+            Self::Fxaa => KeyCode::F10,
+            Self::AmbientOcclusion => KeyCode::F11,
+            Self::Bloom => KeyCode::F12,
+        }
+    }
+
+    fn from_name(name: &str) -> anyhow::Result<Self> {
+        match name {
+            "fxaa" => Ok(Self::Fxaa),
+            "ao" => Ok(Self::AmbientOcclusion),
+            "bloom" => Ok(Self::Bloom),
+            _ => bail!("unknown effect {name:?}; expected fxaa, ao, or bloom"),
+        }
+    }
+}
+
+/// Which fixed camera effects start absent. The camera itself remains the source of truth:
+/// toggling always inserts or removes its component rather than retaining a dormant component.
 #[derive(Default, Resource)]
-struct FxaaOff(bool);
+struct EffectsOff {
+    fxaa: bool,
+    ambient_occlusion: bool,
+    bloom: bool,
+}
+
+impl EffectsOff {
+    fn is_off(&self, effect: CameraEffect) -> bool {
+        match effect {
+            CameraEffect::Fxaa => self.fxaa,
+            CameraEffect::AmbientOcclusion => self.ambient_occlusion,
+            CameraEffect::Bloom => self.bloom,
+        }
+    }
+
+    fn set_off(&mut self, effect: CameraEffect, off: bool) {
+        match effect {
+            CameraEffect::Fxaa => self.fxaa = off,
+            CameraEffect::AmbientOcclusion => self.ambient_occlusion = off,
+            CameraEffect::Bloom => self.bloom = off,
+        }
+    }
+
+    fn toggle(&mut self, effect: CameraEffect) {
+        self.set_off(effect, !self.is_off(effect));
+    }
+
+    fn with_off(off: &[CameraEffect]) -> Self {
+        let mut effects = Self::default();
+        for &effect in off {
+            effects.set_off(effect, true);
+        }
+        effects
+    }
+}
+
+/// Pins emitter flicker to a reproducible phase for a captured frame.
+#[derive(Default, Resource)]
+struct LightsSteady(bool);
 
 impl Default for LightingToggles {
     fn default() -> Self {
@@ -532,7 +612,10 @@ fn configure_client_app(
     // comments catalogue: with no `--lights-off` this inserts exactly `Default`, so the absent
     // flag and the present one take the SAME path and neither can rot while the other is tested.
     app.insert_resource(LightingToggles::with_off(&args.lights_off));
-    app.insert_resource(FxaaOff(args.fx_off));
+    app.insert_resource(EffectsOff::with_off(&args.fx_off));
+    app.insert_resource(LightsSteady(args.lights_steady));
+    app.insert_resource(crate::command::StaticWorld(args.static_world));
+    app.insert_resource(crate::command::StaticWorldPause::new(args.static_world));
     insert_capture_resources(app, &args);
     // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
     // without this resource the actual side never gains them and a WINDOWED capture asserts
@@ -612,7 +695,8 @@ pub fn projection_systems(app: &mut App) {
     // `init_resource` is idempotent, so `client_systems` keeping its own call is not a conflict —
     // each builder now stands up what it registers.
     app.init_resource::<LightingToggles>();
-    app.init_resource::<FxaaOff>();
+    app.init_resource::<LightsSteady>();
+    app.init_resource::<EffectsOff>();
     app.add_systems(
         Update,
         (apply_lighting_toggles, update_lighting_readout)
@@ -638,6 +722,8 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<crate::project::DragPreviewCells>()
         .init_resource::<crate::command::PendingCommands>()
         .init_resource::<crate::command::SimPaused>()
+        .init_resource::<crate::command::StaticWorld>()
+        .init_resource::<crate::command::StaticWorldPause>()
         .init_resource::<ButtonInput<bevy::input::mouse::MouseButton>>()
         .init_resource::<DesignateMode>()
         .init_resource::<DragMode>()
@@ -666,11 +752,17 @@ pub fn client_systems(app: &mut App) {
         (
             camera_controls,
             light_controls,
-            fxaa_controls,
+            effect_controls,
             update_fog_from_camera,
             toggle_overlay,
             crate::perf::mark_perf_frame_on_key,
             fall_snow,
+            // `Update`, not `Startup`: the tick the pause is SENT at is what makes the frozen
+            // world reproducible, and a `Startup` command is sent before the client has heard a
+            // single delta. `confirm_` runs after, reading the DAEMON's reported speed rather
+            // than the client's belief about what it asked for.
+            crate::command::pause_static_world,
+            crate::command::confirm_static_world_pause.after(crate::command::pause_static_world),
         ),
     )
     // Ordered, not merely registered. `select_dwarf` must read the rig AFTER `camera_controls`
@@ -707,8 +799,15 @@ pub fn client_systems(app: &mut App) {
             designation_input.after(update_pick),
             sync_drag_preview.after(designation_input),
             // Before `send_commands`, so a space press reaches the daemon on the same frame it is
-            // read rather than the next one.
-            crate::command::toggle_pause.after(update_pick),
+            // read rather than the next one. The `.before` is EXPLICIT: this comment claimed the
+            // ordering for three stories while the schedule only constrained `toggle_pause`
+            // against `update_pick`, so the press actually reached the socket a frame late.
+            crate::command::toggle_pause
+                .after(update_pick)
+                .before(send_commands),
+            // Before `send_commands`, so the hand-back reaches the socket on the frame the
+            // exit is requested rather than never.
+            crate::command::restore_speed_on_exit.before(send_commands),
             send_commands.after(designation_input),
             update_designate_hint.after(designation_input),
         ),
@@ -773,7 +872,8 @@ struct Args {
     headless: bool,
     subdiv: Option<u32>,
     lights_off: Vec<LightSource>,
-    fx_off: bool,
+    fx_off: Vec<CameraEffect>,
+    lights_steady: bool,
     /// `--assets <dir>`: read glTF scenes from this directory instead of the embedded blobs.
     /// Dev-only, absolute, and never a default.
     assets: Option<PathBuf>,
@@ -901,7 +1001,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut headless = false;
     let mut subdiv = None;
     let mut lights_off = Vec::new();
-    let mut fx_off = false;
+    let mut fx_off = Vec::new();
+    let mut lights_steady = false;
     let mut assets = None;
     let mut perf_log = None;
     let mut args = args.into_iter();
@@ -1019,11 +1120,10 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                 .next()
                 .context("--fx-off requires a comma-separated effect list")?;
             for name in value.to_string_lossy().split(',') {
-                match name.trim() {
-                    "fxaa" => fx_off = true,
-                    unknown => bail!("unknown effect {unknown:?}; expected fxaa"),
-                }
+                fx_off.push(CameraEffect::from_name(name.trim())?);
             }
+        } else if arg == "--lights-steady" {
+            lights_steady = true;
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -1089,6 +1189,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         subdiv,
         lights_off,
         fx_off,
+        lights_steady,
         assets,
         perf_log,
     })
@@ -1277,7 +1378,7 @@ fn setup_camera(
     distance: Option<Res<CaptureDistance>>,
     start: Option<Res<CameraStart>>,
     headless: Option<Res<HeadlessRequested>>,
-    fx_off: Option<Res<FxaaOff>>,
+    effects_off: Option<Res<EffectsOff>>,
     images: Option<ResMut<Assets<Image>>>,
 ) {
     // Built BEFORE the spawn so the camera can be pointed at it in the same system, and so a
@@ -1311,6 +1412,8 @@ fn setup_camera(
             Msaa::Off,
             Exposure { ev100: 10.5 },
             Fxaa::default(),
+            ScreenSpaceAmbientOcclusion::default(),
+            Bloom::default(),
             Projection::Perspective(PerspectiveProjection {
                 fov: BOOT_VERTICAL_FOV,
                 ..Default::default()
@@ -1333,8 +1436,38 @@ fn setup_camera(
             ClientLocal,
         ))
         .id();
-    if fx_off.is_some_and(|off| off.0) {
-        commands.entity(camera).remove::<Fxaa>();
+    if let Some(effects_off) = effects_off {
+        let mut camera = commands.entity(camera);
+        if effects_off.is_off(CameraEffect::Fxaa) {
+            camera.remove::<Fxaa>();
+        }
+        if effects_off.is_off(CameraEffect::AmbientOcclusion) {
+            // The two prepasses go WITH it, named explicitly. `ScreenSpaceAmbientOcclusion`
+            // `#[require]`s `DepthPrepass` and `NormalPrepass`, and a plain `remove` leaves both
+            // running for the rest of the session: two full-scene GPU passes nothing samples,
+            // while the readout says "ao off". AC8 reads AO's cost on the vehicle as an on/off
+            // delta, so leaving them makes AO look cheaper than it is by exactly its expensive
+            // half.
+            //
+            // NOT `remove_with_requires`, which was tried and CRASHES: it removes the whole
+            // transitive require closure, which overlaps the components the camera needs for its
+            // own render-world sync, and the client dies in `bevy_render::sync_world` with
+            // "Attempting to synchronize an entity that has already been synchronized!" on every
+            // `--fx-off ao` run. No unit test can see that -- `MinimalPlugins` has no render
+            // world, so the component assertions pass on a client that cannot render a frame.
+            camera.remove::<ScreenSpaceAmbientOcclusion>();
+            camera.remove::<DepthPrepass>();
+            camera.remove::<NormalPrepass>();
+        }
+        if effects_off.is_off(CameraEffect::Bloom) {
+            // WITHOUT requires, DELIBERATELY. `Bloom` `#[require]`s `Hdr`, and `Hdr` moves every
+            // pixel in the frame on its own. `--fx-off bloom` is the control AC4's figures are
+            // measured against, and it is only a measure of BLOOM'S MARGINAL contribution while
+            // `Hdr` stays on in both halves. Removing requires here would silently turn that
+            // control into an Hdr+bloom comparison and re-break the attribution the story spent
+            // three documents correcting.
+            camera.remove::<Bloom>();
+        }
     }
     if let Some(handle) = headless_target {
         // In Bevy 0.19 the render target is its own COMPONENT, not a field on Camera.
@@ -1368,7 +1501,7 @@ pub struct SliceReadout;
 #[derive(Component)]
 pub struct LightingReadout;
 
-fn lighting_readout(toggles: &LightingToggles, fxaa_enabled: bool) -> String {
+fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> String {
     let mut entries = LightSource::ALL
         .into_iter()
         .map(|source| {
@@ -1387,20 +1520,33 @@ fn lighting_readout(toggles: &LightingToggles, fxaa_enabled: bool) -> String {
             )
         })
         .collect::<Vec<_>>();
-    entries.push(format!(
-        "F10 fxaa {}",
-        if fxaa_enabled { "on" } else { "off" }
-    ));
+    entries.extend(CameraEffect::ALL.into_iter().map(|effect| {
+        format!(
+            "{} {} {}",
+            match effect.key() {
+                KeyCode::F10 => "F10",
+                KeyCode::F11 => "F11",
+                KeyCode::F12 => "F12",
+                _ => unreachable!("the fixed effect keys are F10 through F12"),
+            },
+            effect.name(),
+            if effects_off.is_off(effect) {
+                "off"
+            } else {
+                "on"
+            }
+        )
+    }));
     entries.join("  ")
 }
 
 fn setup_lighting_readout(
     mut commands: Commands,
     toggles: Res<LightingToggles>,
-    fx_off: Res<FxaaOff>,
+    effects_off: Res<EffectsOff>,
 ) {
     commands.spawn((
-        Text::new(lighting_readout(&toggles, !fx_off.0)),
+        Text::new(lighting_readout(&toggles, &effects_off)),
         TextFont::from_font_size(22.0),
         TextColor(Color::srgb(0.86, 0.91, 1.0)),
         Node {
@@ -1417,13 +1563,13 @@ fn setup_lighting_readout(
 
 fn update_lighting_readout(
     toggles: Res<LightingToggles>,
-    fx_off: Res<FxaaOff>,
+    effects_off: Res<EffectsOff>,
     mut readout: Query<&mut Text, With<LightingReadout>>,
 ) {
-    if !toggles.is_changed() && !fx_off.is_changed() {
+    if !toggles.is_changed() && !effects_off.is_changed() {
         return;
     }
-    let text = lighting_readout(&toggles, !fx_off.0);
+    let text = lighting_readout(&toggles, &effects_off);
     for mut readout in &mut readout {
         *readout = Text::new(text.clone());
     }
@@ -1437,22 +1583,36 @@ fn light_controls(keys: Res<ButtonInput<KeyCode>>, mut toggles: ResMut<LightingT
     }
 }
 
-fn fxaa_controls(
+fn effect_controls(
     keys: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    mut fx_off: ResMut<FxaaOff>,
+    mut effects_off: ResMut<EffectsOff>,
     cameras: Query<bevy::prelude::Entity, With<CameraRig>>,
 ) {
-    if !keys.just_pressed(KeyCode::F10) {
-        return;
-    }
-    fx_off.0 = !fx_off.0;
-    for camera in cameras {
-        let mut camera = commands.entity(camera);
-        if fx_off.0 {
-            camera.remove::<Fxaa>();
-        } else {
-            camera.insert(Fxaa::default());
+    for effect in CameraEffect::ALL {
+        if !keys.just_pressed(effect.key()) {
+            continue;
+        }
+        effects_off.toggle(effect);
+        for camera in &cameras {
+            let mut camera = commands.entity(camera);
+            match effect {
+                CameraEffect::Fxaa if effects_off.is_off(effect) => camera.remove::<Fxaa>(),
+                CameraEffect::Fxaa => camera.insert(Fxaa::default()),
+                // AO takes its two prepasses with it; bloom below deliberately LEAVES its `Hdr`.
+                // See `setup_camera` for both reasons, including why this is not
+                // `remove_with_requires`.
+                CameraEffect::AmbientOcclusion if effects_off.is_off(effect) => {
+                    camera.remove::<ScreenSpaceAmbientOcclusion>();
+                    camera.remove::<DepthPrepass>();
+                    camera.remove::<NormalPrepass>()
+                }
+                CameraEffect::AmbientOcclusion => {
+                    camera.insert(ScreenSpaceAmbientOcclusion::default())
+                }
+                CameraEffect::Bloom if effects_off.is_off(effect) => camera.remove::<Bloom>(),
+                CameraEffect::Bloom => camera.insert(Bloom::default()),
+            };
         }
     }
 }
@@ -1881,13 +2041,20 @@ pub fn reconcile_projection(
 
 fn flicker_projection(
     time: Res<Time>,
+    steady: Res<LightsSteady>,
     mut lights: Query<(
         &WorldProjected,
         &crate::project::ProjectedLight,
         &mut bevy::prelude::PointLight,
     )>,
 ) {
-    flicker_lights(time.elapsed_secs(), &mut lights);
+    const STEADY_FLICKER_SECONDS: f32 = 0.0;
+    let seconds = if steady.0 {
+        STEADY_FLICKER_SECONDS
+    } else {
+        time.elapsed_secs()
+    };
+    flicker_lights(seconds, &mut lights);
 }
 
 fn read_snapshot(reader: &mut dyn BufRead) -> anyhow::Result<Snapshot> {
@@ -1959,7 +2126,9 @@ mod tests {
         camera::{CameraProjection, RenderTargetInfo},
         dev_tools::fps_overlay::FpsOverlayConfig,
         input::{ButtonInput, mouse::MouseButton},
-        prelude::{Camera, Camera3d, GlobalTransform, KeyCode, Text, UVec2, Vec3, Window, With},
+        prelude::{
+            Camera, Camera3d, GlobalTransform, KeyCode, Text, Time, UVec2, Vec3, Window, With,
+        },
         window::{PrimaryWindow, WindowResolution},
     };
     use client_core::Mirror;
@@ -2167,59 +2336,419 @@ mod tests {
         assert!(fxaa.enabled);
     }
 
+    /// A snapshot identical to `configured_app`'s but stopped at a chosen tick, so a test can put
+    /// the world on either side of `--static-world`'s pause tick.
+    fn snapshot_at_tick(tick: u64, speed: Speed) -> Snapshot {
+        Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed,
+            tick,
+        }
+    }
+
+    fn read_one_command(server: &std::net::TcpStream) -> String {
+        use std::io::{BufRead, BufReader};
+        let mut line = String::new();
+        let _ = BufReader::new(server).read_line(&mut line);
+        line.trim().to_string()
+    }
+
+    /// `--static-world` must reach the DAEMON, not merely the capture's assertion switch -- and it
+    /// must reach it at a CHOSEN tick rather than whichever one the scheduler allowed.
+    ///
+    /// Issue #105. The flag is documented as "freeze the sim so two captures differ only by what
+    /// you changed" and for three stories it froze nothing: it silenced the capture's motion
+    /// assertions while the daemon kept ticking and the dwarves kept walking, and `capture.rs`
+    /// announced "the simulation is paused" over a world that was not. The camp window's measured
+    /// "flicker" floor turned out to be mostly those dwarves and their lanterns.
+    ///
+    /// A test asserting the RESOURCE would have passed throughout that entire period, because the
+    /// resource was always set correctly -- it just went nowhere. So this reads the SOCKET: the
+    /// only thing in this system that can stop a dwarf is a command the daemon actually receives.
+    ///
+    /// The review that followed found the remaining half: the pause was queued in `Startup`, so it
+    /// landed at whatever tick won the race and two captures of one binary froze different worlds.
+    /// The EARLY case below is that half -- it fails if the pause is sent before its tick.
+    #[test]
+    fn static_world_waits_for_its_tick_then_pauses_the_daemon_over_the_wire() {
+        // BEFORE the pause tick: nothing may be sent. This is the assertion the pre-review
+        // `Startup` implementation could never satisfy, and it is what makes the freeze point a
+        // decision instead of a race outcome.
+        let (mut early, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(0, Speed::Normal));
+        early.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "--static-world must not pause before its chosen tick, or the frozen world is \
+             whatever the scheduler allowed"
+        );
+        assert!(
+            !early
+                .world()
+                .resource::<crate::command::StaticWorldPause>()
+                .landed(),
+            "nothing may be considered landed before the daemon has reported a pause"
+        );
+
+        // AT the pause tick: the command goes out.
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#,
+            "--static-world must send the daemon the pause its own documentation promises"
+        );
+        assert!(
+            app.world().resource::<crate::command::SimPaused>().0,
+            "the client's pause state must agree with what it asked the daemon for"
+        );
+
+        // The control carries as much weight as the case. This flag defaults OFF, and a pause
+        // leaking into a run that never asked for one would freeze every other capture in the
+        // suite -- silently, and looking exactly like a stall.
+        let (mut running, _sender, server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Normal));
+        running.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "without --static-world the daemon must be sent nothing"
+        );
+        assert!(
+            !running.world().resource::<crate::command::SimPaused>().0,
+            "without --static-world the client must not believe the sim is paused"
+        );
+    }
+
+    /// The freeze is confirmed from the DAEMON's report, never from the client's own belief.
+    ///
+    /// `SimPaused` records what we ASKED for and was correct throughout the entire period the
+    /// world was not actually pausing, so it cannot be the oracle. `Mirror::speed()` is the
+    /// daemon's own speed off the wire -- which `SimPaused`'s doc comment wrongly claimed did not
+    /// exist, for as long as the defect did.
+    #[test]
+    fn static_world_confirms_the_pause_from_the_daemons_own_report() {
+        let (mut app, sender, _server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert!(
+            !app.world()
+                .resource::<crate::command::StaticWorldPause>()
+                .landed(),
+            "asking is not landing: with the daemon still reporting Normal, the capture must wait"
+        );
+
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(protocol::Delta {
+                msg_type: MessageType::Delta,
+                tick: 9,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Paused,
+            }))))
+            .unwrap();
+        // Two frames: one ingests the delta into the mirror, the next reads the mirror's speed.
+        app.update();
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<crate::command::StaticWorldPause>()
+                .landed_at(),
+            Some(9),
+            "the landing tick must be the one the DAEMON reported it stopped at"
+        );
+    }
+
+    /// Space must not quietly resume a run that asked for a frozen world.
+    ///
+    /// `toggle_pause` took no notice of the flag and queued `SetSpeed { Normal }` on any press, so
+    /// one keystroke at the seat broke the guarantee every figure in the capture is measured
+    /// against, with nothing said.
+    #[test]
+    fn space_cannot_resume_a_static_world_run() {
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#
+        );
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Space);
+        app.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "Space must send the daemon nothing under --static-world"
+        );
+        assert!(
+            app.world().resource::<crate::command::SimPaused>().0,
+            "Space must not clear the client's pause state under --static-world"
+        );
+
+        // Control: without the flag, Space still works. A guard that disabled the key outright
+        // would pass the assertions above and break the seat.
+        let (mut seat, _sender, server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Normal));
+        seat.update();
+        seat.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Space);
+        seat.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#,
+            "without --static-world, Space must still pause the daemon"
+        );
+    }
+
+    /// A `--static-world` run hands the daemon back at Normal when it ends.
+    ///
+    /// The daemon's speed is ONE global shared by every client, so before this a `--static-world`
+    /// run left it frozen for good: the next client to connect without the flag rendered a dead
+    /// world, failed its motion assertions, exited 101 and wrote no PNG -- blaming the dwarves.
+    #[test]
+    fn a_static_world_run_hands_the_daemon_back_at_normal() {
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#
+        );
+
+        app.world_mut().write_message(bevy::app::AppExit::Success);
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"normal"}"#,
+            "a --static-world run must hand the daemon back, or every later client is frozen"
+        );
+
+        // Control: a run that never asked for a pause must not send one on the way out either.
+        let (mut plain, _sender, server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Normal));
+        plain.update();
+        plain.world_mut().write_message(bevy::app::AppExit::Success);
+        plain.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "a run that never paused must send nothing on exit"
+        );
+    }
+
     #[test]
     fn fx_off_reaches_the_live_camera_and_rejects_unknown_effects() {
+        let camera_effects = |app: &mut App| {
+            (
+                app.world_mut()
+                    .query_filtered::<&Fxaa, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&super::ScreenSpaceAmbientOcclusion, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&super::Bloom, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+            )
+        };
         let (mut default, _sender, _server) = configured_app(&[]);
         default.update();
+        assert_eq!(camera_effects(&mut default), (1, 1, 1));
+        for (name, expected) in [
+            ("fxaa", (0, 1, 1)),
+            ("ao", (1, 0, 1)),
+            ("bloom", (1, 1, 0)),
+            ("fxaa, ao,bloom", (0, 0, 0)),
+        ] {
+            let (mut disabled, _sender, _server) = configured_app(&["--fx-off", name]);
+            disabled.update();
+            assert_eq!(
+                camera_effects(&mut disabled),
+                expected,
+                "--fx-off {name:?} must remove only its named live camera components"
+            );
+        }
+        // The REQUIRED components, which a plain `remove` leaves behind. `--fx-off ao` must take
+        // the prepasses with it, or "ao off" still pays two full-scene GPU passes nothing samples
+        // and AC8's vehicle cost delta under-reports AO by exactly its expensive half. Bloom is
+        // the deliberate opposite: its required `Hdr` must SURVIVE, because `--fx-off bloom` is
+        // the control AC4's marginal figures are measured against.
+        let prepasses = |app: &mut App| {
+            (
+                app.world_mut()
+                    .query_filtered::<&bevy::core_pipeline::prepass::DepthPrepass, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&bevy::core_pipeline::prepass::NormalPrepass, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&bevy::camera::Hdr, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+            )
+        };
         assert_eq!(
-            default
-                .world_mut()
-                .query_filtered::<&Fxaa, With<CameraRig>>()
-                .iter(default.world())
-                .count(),
-            1
+            prepasses(&mut default),
+            (1, 1, 1),
+            "AO's prepasses and bloom's Hdr must all be present by default"
         );
-        let (mut disabled, _sender, _server) = configured_app(&["--fx-off", "fxaa"]);
-        disabled.update();
+        let (mut no_ao, _sender, _server) = configured_app(&["--fx-off", "ao"]);
+        no_ao.update();
         assert_eq!(
-            disabled
-                .world_mut()
-                .query_filtered::<&Fxaa, With<CameraRig>>()
-                .iter(disabled.world())
-                .count(),
-            0
+            prepasses(&mut no_ao),
+            (0, 0, 1),
+            "--fx-off ao must remove AO's required prepasses and leave bloom's Hdr alone"
         );
+        let (mut no_bloom, _sender, _server) = configured_app(&["--fx-off", "bloom"]);
+        no_bloom.update();
+        assert_eq!(
+            prepasses(&mut no_bloom),
+            (1, 1, 1),
+            "--fx-off bloom must LEAVE Hdr in place: it is the control AC4 is measured against"
+        );
+
         let error =
             match super::parse_args_from([OsString::from("--fx-off"), OsString::from("taa")]) {
                 Ok(_) => panic!("unknown effects must fail"),
                 Err(error) => error,
             };
-        assert_eq!(error.to_string(), "unknown effect \"taa\"; expected fxaa");
+        assert_eq!(
+            error.to_string(),
+            "unknown effect \"taa\"; expected fxaa, ao, or bloom"
+        );
     }
 
     #[test]
-    fn f10_toggles_fxaa_and_the_live_readout() {
-        let (mut app, _sender, _server) = configured_app(&[]);
-        app.update();
-        app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::F10);
-        app.update();
-        let readout = app
-            .world_mut()
-            .query_filtered::<&Text, With<super::LightingReadout>>()
-            .single(app.world())
-            .unwrap()
-            .0
-            .clone();
-        assert!(readout.ends_with("F10 fxaa off"));
-        assert_eq!(
+    fn lights_steady_reaches_the_live_flicker_system() {
+        let snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![protocol::Entity {
+                id: 1,
+                kind: protocol::EntityKind::Campfire,
+                pos: [0, 0, 0],
+                state: protocol::JobState::Idle,
+                light: Some(protocol::LightKind::Campfire),
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let intensity = |app: &mut App| {
             app.world_mut()
-                .query_filtered::<&Fxaa, With<CameraRig>>()
+                .query::<(&crate::project::ProjectedLight, &bevy::prelude::PointLight)>()
                 .iter(app.world())
-                .count(),
-            0
+                .find_map(|(kind, light)| {
+                    (kind.0 == protocol::LightKind::Campfire).then_some(light.intensity)
+                })
+                .expect("the fixture must spawn the campfire point light")
+        };
+        let step = |app: &mut App| {
+            app.world_mut()
+                .resource_mut::<Time>()
+                .advance_by(Duration::from_secs(1));
+            app.update();
+        };
+
+        let (mut default, _sender, _server) = configured_app_with_snapshot(&[], snapshot.clone());
+        default.update();
+        let flickering_before = intensity(&mut default);
+        step(&mut default);
+        let flickering_after = intensity(&mut default);
+        assert_ne!(
+            flickering_before, flickering_after,
+            "without --lights-steady the live flicker system must vary a PointLight across stepped frames"
         );
+
+        let (mut steady, _sender, _server) =
+            configured_app_with_snapshot(&["--lights-steady"], snapshot);
+        steady.update();
+        let steady_before = intensity(&mut steady);
+        step(&mut steady);
+        let steady_after = intensity(&mut steady);
+        assert_eq!(
+            steady_before, steady_after,
+            "--lights-steady must pin the PointLight intensity the live flicker system writes"
+        );
+    }
+
+    #[test]
+    fn effect_keys_toggle_the_live_camera_and_readout() {
+        let camera_effects = |app: &mut App| {
+            (
+                app.world_mut()
+                    .query_filtered::<&Fxaa, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&super::ScreenSpaceAmbientOcclusion, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&super::Bloom, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+            )
+        };
+        for (key, expected_effects, expected_readout) in [
+            (
+                KeyCode::F10,
+                (0, 1, 1),
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa off  F11 ao on  F12 bloom on",
+            ),
+            (
+                KeyCode::F11,
+                (1, 0, 1),
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao off  F12 bloom on",
+            ),
+            (
+                KeyCode::F12,
+                (1, 1, 0),
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom off",
+            ),
+        ] {
+            let (mut app, _sender, _server) = configured_app(&[]);
+            app.update();
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let readout = app
+                .world_mut()
+                .query_filtered::<&Text, With<super::LightingReadout>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone();
+            assert_eq!(
+                readout, expected_readout,
+                "{key:?} must update the live readout"
+            );
+            assert_eq!(
+                camera_effects(&mut app),
+                expected_effects,
+                "{key:?} must remove only its named live camera component"
+            );
+        }
     }
 
     /// `--assets` is a RESOLVER: it decides which of two asset trees the client reads. The
@@ -2486,7 +3015,7 @@ mod tests {
 
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
         );
         for (key, source) in [
             (KeyCode::F5, super::LightSource::Sun),
@@ -2505,7 +3034,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on"
+            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on  F11 ao on  F12 bloom on"
         );
 
         assert_eq!(
@@ -2591,7 +3120,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
         );
         assert_eq!(
             emissive(&mut app, protocol::LightKind::Campfire),
@@ -2831,7 +3360,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
                 .to_string(),
         ];
         expected.sort();

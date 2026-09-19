@@ -19,9 +19,9 @@ PY
 mutation "the --fx-off value is parsed but discarded before camera setup" gui fx_off_reaches_the_live_camera_and_rejects_unknown_effects <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '    app.insert_resource(FxaaOff(args.fx_off));\n'
+old = '    app.insert_resource(EffectsOff::with_off(&args.fx_off));\n'
 assert s.count(old) == 1
-new = '    let _ = args.fx_off;\n    app.insert_resource(FxaaOff(false));\n'
+new = '    let _ = args.fx_off;\n    app.insert_resource(EffectsOff::default());\n'
 p.write_text(s.replace(old, new))
 PY
 
@@ -33,20 +33,37 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "F10 is no longer the FXAA key" gui f10_toggles_fxaa_and_the_live_readout <<'PY'
+# SWAP, not F13: same weak-kill correction as 11.1b's F11/F12 rows. Moving a key to F13 kills
+# via `lighting_readout`'s `unreachable!()` arm, which fires before any key-press assertion can
+# discriminate, so the row would report KILLED even with the key handling gone entirely.
+mutation "F10 toggles ambient occlusion instead of FXAA" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '    if !keys.just_pressed(KeyCode::F10) {\n'
+old = '            Self::Fxaa => KeyCode::F10,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    if !keys.just_pressed(KeyCode::F11) {\n'))
+p.write_text(s.replace(old, '            Self::Fxaa => KeyCode::F11,\n'))
 PY
 
-mutation "the FXAA readout no longer records its state" gui f10_toggles_fxaa_and_the_live_readout <<'PY'
+# RESTORED by the 2026-09-19 code review. When 11.1b generalised `FxaaOff` into an effect SET,
+# this row was re-pointed from the on/off literal to the effect's NAME. The title still said
+# "state", but after the re-point NO row anywhere sabotaged the on/off literal, so AC7's
+# "the readout names each one's state" was unprotected: a mutant that always reported `on`
+# survived the whole table. A re-point is allowed to move a row; it is not allowed to change
+# what the row proves. Both halves are now covered, one row each.
+mutation "the effect readout no longer records its on/off state" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        if fxaa_enabled { "on" } else { "off" }\n'
+old = '            if effects_off.is_off(effect) {\n                "off"\n            } else {\n                "on"\n            }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        "on"\n'))
+p.write_text(s.replace(old, '            "on"\n'))
+PY
+
+mutation "the effect readout no longer names the effect" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            Self::Fxaa => "fxaa",\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Self::Fxaa => "post",\n'))
 PY
 
 # The rect MOVES ONTO THE CAMP, it does not trade places with its sibling.  The first version of

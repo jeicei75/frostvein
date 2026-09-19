@@ -199,10 +199,23 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | `--distance <d>` | zoom only, capture only — mutually exclusive with `--camera`, which carries its own |
 | `--z <level>` | pin the slice level |
 | `--subdiv <n>` | terrain subdivision; defaults to the shipped 4, and the recipes pass it anyway so the frame says what it was |
-| `--static-world` | freeze the sim so two captures differ only by what you changed |
+| `--static-world` | pause the DAEMON for the whole run. Two captures differ only by what you changed **only if** you also pin the flicker and give each capture its own freshly started `simd` — see the note below |
+| `--lights-steady` | pin emitter flicker to a fixed phase, so a capture pair is comparable |
+| `--fx-off <a,b>` | remove named camera effects: `fxaa`, `ao`, `bloom` |
 | `--lights-off <a,b>` | switch named light sources off for a measurement |
 | `--perf-log <path>` | write a per-frame CSV |
 | `--version` | print `gui build <sha>` and exit |
+
+**`--static-world` pauses the SIM, and that is not the same as a still frame.** It sends the daemon
+`SetSpeed { Paused }` and holds the capture until the daemon reports itself stopped. Two things it
+does NOT stop, because both run on the client's own wall clock: falling snow (`fall_snow`) and
+emitter flicker (`flicker_projection`) — pass `--lights-steady` for the flicker. And the world
+freezes at whatever tick it had reached when the client connected, so **captures you intend to
+compare must each get a freshly started `simd`**. Measured on `6140ca3`: four captures against
+fresh daemons froze at tick 40 every time and the camp window's near-white spread was 0.0070 pp;
+five captures sharing one daemon froze 35 ticks apart and spread 0.3619 pp — 52x worse, and past
+the bar story 11.1b's AC1 is measured against. This flag was documented as "freeze the sim" while
+freezing nothing at all for three stories (issue #105); the sentence above is what it does now.
 
 `--version` is worth using before trusting any frame. The stamp is recomputed on every build, so a
 binary that predates your change says so.
