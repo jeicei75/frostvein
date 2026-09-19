@@ -154,3 +154,14 @@ old = '            camera.remove::<Bloom>();\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            camera.remove_with_requires::<Bloom>();\n'))
 PY
+
+# The one row only PIXELS can kill. A preset swap leaves the `Bloom` component present, so every
+# component-presence test still passes; only the rendered halo delta notices. This is what the
+# AC4 guard buys that the old component assertion did not.
+mutation "bloom is retuned to the OLD_SCHOOL preset" gui bloom_lifts_the_camp_halo_without_brightening_open_snow ignored <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            Bloom::default(),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Bloom::OLD_SCHOOL,\n'))
+PY
