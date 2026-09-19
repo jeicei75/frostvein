@@ -2189,3 +2189,30 @@ decision-needed items live in the story file's Review Findings section, not here
   where he already knew every binding, which is exactly the operator this gap is invisible to.
   Deferred rather than ticked. NOTE the two shapes are not equal in cost -- a `--help` block is a
   print statement, while a hint bar that names six mouse gestures has a layout question behind it.
+
+## Deferred from: code review of 11-1a-a-chosen-exposure-and-a-clean-edge (2026-09-19)
+
+Four-layer review, no coverage holes. Three LOW-tail items deferred under the review-cost rule.
+None is a latent silent-failure trap of the class that forces a patch regardless of severity — the
+two that were (both in `creases.py`) are in the patch list, not here.
+
+- **`lumstats.load()` does not validate PNG bit depth.** `10-7-signoff/lumstats.py:9-15` unpacks
+  `bd` from IHDR at line 12 and never checks it; only colour type is validated at line 15. The Edge
+  Case Hunter built a 16-bit RGB PNG and called `load()` directly: it returned `len(px)=48` where a
+  correct unpack needs 96 bytes, so every 2-byte channel is read as 1 byte and every subsequent
+  index is misaligned, with no exception raised. Deferred as **pre-existing and not reachable in
+  practice**: this story does not touch the file, and every capture in the repo is 8-bit RGB written
+  by the same Rust path. Worth one `if bd != 8: raise` if anyone edits that file. Raised by the Edge
+  Case Hunter.
+
+- **AC4's test asserts the post-press state, not a transition.** `crates/gui/src/ingest.rs:2200-2224`.
+  AC4 says the test "asserts the recorded readout string **changes**"; `f10_toggles_fxaa_and_the_live_readout`
+  reads the readout only after the press. The "before" state is asserted by three sibling tests
+  (`:2489, :2594, :2834`) now expecting `F10 fxaa on`, so the pair of states is covered across the
+  suite and the mutation row that hardcodes `"on"` still dies. Deferred because nothing is unpinned
+  today; a single test capturing before and after would match the AC exactly and survive a future
+  edit to those sibling literals. Raised by the Acceptance Auditor.
+
+- **Task 6's third sub-item is a prohibition rendered as an unticked checkbox.** The story's Task 6
+  carries "Never `exec` a mutation payload to test whether it applies" as `- [ ]`, so the task reads
+  as incomplete when nothing is owed. Cosmetic. Raised by the Acceptance Auditor.

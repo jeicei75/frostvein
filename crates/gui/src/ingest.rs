@@ -14,16 +14,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use bevy::{
-    app::PluginGroup,
-    app::ScheduleRunnerPlugin,
-    asset::{AssetPlugin, Assets, Handle},
-    camera::RenderTarget,
-    image::Image,
-    render::render_resource::{TextureFormat, TextureUsages},
-    window::{ExitCondition, WindowPlugin},
-    winit::WinitPlugin,
-};
-use bevy::{
+    anti_alias::fxaa::Fxaa,
     app::{App, AppExit, PostUpdate, Startup, Update},
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     diagnostic::FrameTimeDiagnosticsPlugin,
@@ -43,6 +34,19 @@ use bevy::{
     },
     render::renderer::RenderAdapterInfo,
     window::PrimaryWindow,
+};
+use bevy::{
+    app::PluginGroup,
+    app::ScheduleRunnerPlugin,
+    asset::{AssetPlugin, Assets, Handle},
+    camera::{Exposure, RenderTarget},
+    image::Image,
+    render::{
+        render_resource::{TextureFormat, TextureUsages},
+        view::Msaa,
+    },
+    window::{ExitCondition, WindowPlugin},
+    winit::WinitPlugin,
 };
 use client_core::Mirror;
 use protocol::{Delta, Dims, Snapshot};
@@ -143,6 +147,9 @@ pub struct LightingToggles {
     lanterns: bool,
     ambient: bool,
 }
+
+#[derive(Default, Resource)]
+struct FxaaOff(bool);
 
 impl Default for LightingToggles {
     fn default() -> Self {
@@ -525,6 +532,7 @@ fn configure_client_app(
     // comments catalogue: with no `--lights-off` this inserts exactly `Default`, so the absent
     // flag and the present one take the SAME path and neither can rot while the other is tested.
     app.insert_resource(LightingToggles::with_off(&args.lights_off));
+    app.insert_resource(FxaaOff(args.fx_off));
     insert_capture_resources(app, &args);
     // NOT gated on `headless`: `expected_cut_face` adds the tree meshes unconditionally, so
     // without this resource the actual side never gains them and a WINDOWED capture asserts
@@ -604,6 +612,7 @@ pub fn projection_systems(app: &mut App) {
     // `init_resource` is idempotent, so `client_systems` keeping its own call is not a conflict —
     // each builder now stands up what it registers.
     app.init_resource::<LightingToggles>();
+    app.init_resource::<FxaaOff>();
     app.add_systems(
         Update,
         (apply_lighting_toggles, update_lighting_readout)
@@ -657,6 +666,7 @@ pub fn client_systems(app: &mut App) {
         (
             camera_controls,
             light_controls,
+            fxaa_controls,
             update_fog_from_camera,
             toggle_overlay,
             crate::perf::mark_perf_frame_on_key,
@@ -763,6 +773,7 @@ struct Args {
     headless: bool,
     subdiv: Option<u32>,
     lights_off: Vec<LightSource>,
+    fx_off: bool,
     /// `--assets <dir>`: read glTF scenes from this directory instead of the embedded blobs.
     /// Dev-only, absolute, and never a default.
     assets: Option<PathBuf>,
@@ -890,6 +901,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut headless = false;
     let mut subdiv = None;
     let mut lights_off = Vec::new();
+    let mut fx_off = false;
     let mut assets = None;
     let mut perf_log = None;
     let mut args = args.into_iter();
@@ -1002,6 +1014,16 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             for name in value.to_string_lossy().split(',') {
                 lights_off.push(LightSource::from_name(name.trim())?);
             }
+        } else if arg == "--fx-off" {
+            let value = args
+                .next()
+                .context("--fx-off requires a comma-separated effect list")?;
+            for name in value.to_string_lossy().split(',') {
+                match name.trim() {
+                    "fxaa" => fx_off = true,
+                    unknown => bail!("unknown effect {unknown:?}; expected fxaa"),
+                }
+            }
         } else {
             port = arg.to_string_lossy().parse().context("invalid port")?;
         }
@@ -1066,6 +1088,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         headless,
         subdiv,
         lights_off,
+        fx_off,
         assets,
         perf_log,
     })
@@ -1254,6 +1277,7 @@ fn setup_camera(
     distance: Option<Res<CaptureDistance>>,
     start: Option<Res<CameraStart>>,
     headless: Option<Res<HeadlessRequested>>,
+    fx_off: Option<Res<FxaaOff>>,
     images: Option<ResMut<Assets<Image>>>,
 ) {
     // Built BEFORE the spawn so the camera can be pointed at it in the same system, and so a
@@ -1284,6 +1308,9 @@ fn setup_camera(
     let camera = commands
         .spawn((
             Camera3d::default(),
+            Msaa::Off,
+            Exposure { ev100: 10.5 },
+            Fxaa::default(),
             Projection::Perspective(PerspectiveProjection {
                 fov: BOOT_VERTICAL_FOV,
                 ..Default::default()
@@ -1306,6 +1333,9 @@ fn setup_camera(
             ClientLocal,
         ))
         .id();
+    if fx_off.is_some_and(|off| off.0) {
+        commands.entity(camera).remove::<Fxaa>();
+    }
     if let Some(handle) = headless_target {
         // In Bevy 0.19 the render target is its own COMPONENT, not a field on Camera.
         commands
@@ -1338,8 +1368,8 @@ pub struct SliceReadout;
 #[derive(Component)]
 pub struct LightingReadout;
 
-fn lighting_readout(toggles: &LightingToggles) -> String {
-    LightSource::ALL
+fn lighting_readout(toggles: &LightingToggles, fxaa_enabled: bool) -> String {
+    let mut entries = LightSource::ALL
         .into_iter()
         .map(|source| {
             format!(
@@ -1356,13 +1386,21 @@ fn lighting_readout(toggles: &LightingToggles) -> String {
                 if toggles.enabled(source) { "on" } else { "off" }
             )
         })
-        .collect::<Vec<_>>()
-        .join("  ")
+        .collect::<Vec<_>>();
+    entries.push(format!(
+        "F10 fxaa {}",
+        if fxaa_enabled { "on" } else { "off" }
+    ));
+    entries.join("  ")
 }
 
-fn setup_lighting_readout(mut commands: Commands, toggles: Res<LightingToggles>) {
+fn setup_lighting_readout(
+    mut commands: Commands,
+    toggles: Res<LightingToggles>,
+    fx_off: Res<FxaaOff>,
+) {
     commands.spawn((
-        Text::new(lighting_readout(&toggles)),
+        Text::new(lighting_readout(&toggles, !fx_off.0)),
         TextFont::from_font_size(22.0),
         TextColor(Color::srgb(0.86, 0.91, 1.0)),
         Node {
@@ -1379,12 +1417,13 @@ fn setup_lighting_readout(mut commands: Commands, toggles: Res<LightingToggles>)
 
 fn update_lighting_readout(
     toggles: Res<LightingToggles>,
+    fx_off: Res<FxaaOff>,
     mut readout: Query<&mut Text, With<LightingReadout>>,
 ) {
-    if !toggles.is_changed() {
+    if !toggles.is_changed() && !fx_off.is_changed() {
         return;
     }
-    let text = lighting_readout(&toggles);
+    let text = lighting_readout(&toggles, !fx_off.0);
     for mut readout in &mut readout {
         *readout = Text::new(text.clone());
     }
@@ -1394,6 +1433,26 @@ fn light_controls(keys: Res<ButtonInput<KeyCode>>, mut toggles: ResMut<LightingT
     for source in LightSource::ALL {
         if keys.just_pressed(source.key()) {
             toggles.toggle(source);
+        }
+    }
+}
+
+fn fxaa_controls(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    mut fx_off: ResMut<FxaaOff>,
+    cameras: Query<bevy::prelude::Entity, With<CameraRig>>,
+) {
+    if !keys.just_pressed(KeyCode::F10) {
+        return;
+    }
+    fx_off.0 = !fx_off.0;
+    for camera in cameras {
+        let mut camera = commands.entity(camera);
+        if fx_off.0 {
+            camera.remove::<Fxaa>();
+        } else {
+            camera.insert(Fxaa::default());
         }
     }
 }
@@ -1888,17 +1947,19 @@ fn read_messages(
 #[cfg(test)]
 mod tests {
     use std::{
+        ffi::OsString,
         io::{BufRead, BufReader},
         sync::{Mutex, mpsc},
         time::Duration,
     };
 
     use bevy::{
+        anti_alias::fxaa::Fxaa,
         app::{App, Update},
         camera::{CameraProjection, RenderTargetInfo},
         dev_tools::fps_overlay::FpsOverlayConfig,
         input::{ButtonInput, mouse::MouseButton},
-        prelude::{Camera, Camera3d, GlobalTransform, KeyCode, UVec2, Vec3, Window, With},
+        prelude::{Camera, Camera3d, GlobalTransform, KeyCode, Text, UVec2, Vec3, Window, With},
         window::{PrimaryWindow, WindowResolution},
     };
     use client_core::Mirror;
@@ -2064,6 +2125,101 @@ mod tests {
                 "a capture must carry its tree accounting (headless={headless})"
             );
         }
+    }
+
+    #[test]
+    fn configured_camera_disables_msaa_on_the_live_rig() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+
+        let msaa = app
+            .world_mut()
+            .query_filtered::<&bevy::render::view::Msaa, With<CameraRig>>()
+            .single(app.world())
+            .expect("startup must spawn the one live camera rig");
+
+        assert_eq!(*msaa, bevy::render::view::Msaa::Off);
+    }
+
+    #[test]
+    fn configured_camera_carries_the_chosen_ev100_on_the_live_rig() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+
+        let exposure = app
+            .world_mut()
+            .query_filtered::<&bevy::camera::Exposure, With<CameraRig>>()
+            .single(app.world())
+            .expect("startup must spawn the one live camera rig");
+
+        assert_eq!(exposure.ev100, 10.5);
+    }
+
+    #[test]
+    fn configured_camera_starts_with_fxaa() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+        let fxaa = app
+            .world_mut()
+            .query_filtered::<&bevy::anti_alias::fxaa::Fxaa, With<CameraRig>>()
+            .single(app.world())
+            .expect("the default live camera must carry FXAA");
+        assert!(fxaa.enabled);
+    }
+
+    #[test]
+    fn fx_off_reaches_the_live_camera_and_rejects_unknown_effects() {
+        let (mut default, _sender, _server) = configured_app(&[]);
+        default.update();
+        assert_eq!(
+            default
+                .world_mut()
+                .query_filtered::<&Fxaa, With<CameraRig>>()
+                .iter(default.world())
+                .count(),
+            1
+        );
+        let (mut disabled, _sender, _server) = configured_app(&["--fx-off", "fxaa"]);
+        disabled.update();
+        assert_eq!(
+            disabled
+                .world_mut()
+                .query_filtered::<&Fxaa, With<CameraRig>>()
+                .iter(disabled.world())
+                .count(),
+            0
+        );
+        let error =
+            match super::parse_args_from([OsString::from("--fx-off"), OsString::from("taa")]) {
+                Ok(_) => panic!("unknown effects must fail"),
+                Err(error) => error,
+            };
+        assert_eq!(error.to_string(), "unknown effect \"taa\"; expected fxaa");
+    }
+
+    #[test]
+    fn f10_toggles_fxaa_and_the_live_readout() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::F10);
+        app.update();
+        let readout = app
+            .world_mut()
+            .query_filtered::<&Text, With<super::LightingReadout>>()
+            .single(app.world())
+            .unwrap()
+            .0
+            .clone();
+        assert!(readout.ends_with("F10 fxaa off"));
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&Fxaa, With<CameraRig>>()
+                .iter(app.world())
+                .count(),
+            0
+        );
     }
 
     /// `--assets` is a RESOLVER: it decides which of two asset trees the client reads. The
@@ -2330,7 +2486,7 @@ mod tests {
 
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on"
         );
         for (key, source) in [
             (KeyCode::F5, super::LightSource::Sun),
@@ -2349,7 +2505,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off"
+            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on"
         );
 
         assert_eq!(
@@ -2435,7 +2591,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on"
         );
         assert_eq!(
             emissive(&mut app, protocol::LightKind::Campfire),
@@ -2675,7 +2831,8 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on".to_string(),
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on"
+                .to_string(),
         ];
         expected.sort();
         assert_eq!(

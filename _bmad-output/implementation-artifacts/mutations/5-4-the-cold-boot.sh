@@ -1,6 +1,10 @@
 # Story 5.4 sabotage table. Run alone with scripts/mutate.sh.
 # NOTE: re-pointed 2026-09-08 by story 10.8, which moved this literal. The row's SABOTAGE
 # is unchanged; only the value it starts from moved. A row that cannot apply pins nothing.
+# NOTE: re-pointed again 2026-09-19 at 11.1a's code review, which ruled GROUND_LUMINANCE_FLOOR
+# 70 -> 55 (see the constant's own doc in crates/gui/src/capture.rs for that ruling). Again only
+# the starting value moved; the sabotage still drops the floor to 1. The gate caught this row
+# within one commit, which is the whole point of audit-mutations.py running before the tests.
 
 mutation "snow cap leaves bare top" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
@@ -284,7 +288,7 @@ PY
 mutation "ground value floor drops to nothing" gui a_black_field_fails_the_value_floor_that_a_lit_one_passes <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
-old = 'pub const GROUND_LUMINANCE_FLOOR: u8 = 70;'
+old = 'pub const GROUND_LUMINANCE_FLOOR: u8 = 55;'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'pub const GROUND_LUMINANCE_FLOOR: u8 = 1;'))
 PY
