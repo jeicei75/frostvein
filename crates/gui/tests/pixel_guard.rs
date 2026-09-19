@@ -56,6 +56,28 @@ fn rec601_mean(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usi
     total as f32 / ((x1 - x0) * (y1 - y0)) as f32
 }
 
+/// Fraction of a rectangle at or above near-white, as a percentage. `Bloom`'s composite mode is
+/// what this separates: `EnergyConserving` moves energy OUT of bright cores, so it LOWERS this;
+/// `Additive` adds energy and raises it. Nothing else in the frame distinguishes the two presets.
+fn rec601_near_white_percent(
+    pixels: &[[u8; 4]],
+    width: usize,
+    rect: (usize, usize, usize, usize),
+) -> f32 {
+    const NEAR_WHITE: u32 = 230;
+    let (x0, y0, x1, y1) = rect;
+    let mut hits = 0_u32;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let [r, g, b, _] = pixels[y * width + x];
+            if (r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000 >= NEAR_WHITE {
+                hits += 1;
+            }
+        }
+    }
+    100.0 * hits as f32 / ((x1 - x0) * (y1 - y0)) as f32
+}
+
 fn rec601_median(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> u8 {
     let (x0, y0, x1, y1) = rect;
     let mut values = Vec::with_capacity((x1 - x0) * (y1 - y0));
@@ -190,11 +212,20 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     // a daemon that has been running through the first freezes a LATER world -- different dwarf
     // positions, measured as if they were the effect. A freshly spawned daemon lands on the same
     // tick every time (measured: tick 40, four runs in a row).
-    let (on, width, _height) =
-        Daemon::spawn().capture("ambient-occlusion-on", &["--static-world", "--subdiv", "4"]);
+    let (on, width, _height) = Daemon::spawn().capture(
+        "ambient-occlusion-on",
+        &["--static-world", "--lights-steady", "--subdiv", "4"],
+    );
     let (off, _width, _height) = Daemon::spawn().capture(
         "ambient-occlusion-off",
-        &["--static-world", "--subdiv", "4", "--fx-off", "ao"],
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "ao",
+        ],
     );
 
     let on_terrace = rec601_mean(&on, width, TERRACE);
@@ -260,11 +291,20 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
     // One daemon per capture: the camp window is where the lantern-carrying dwarves walk, so a
     // shared daemon's later freeze tick lands them somewhere else and the delta measures that
     // instead of bloom. This is issue #105's mechanism, one level down.
-    let (on, width, _height) =
-        Daemon::spawn().capture("bloom-on", &["--static-world", "--subdiv", "4"]);
+    let (on, width, _height) = Daemon::spawn().capture(
+        "bloom-on",
+        &["--static-world", "--lights-steady", "--subdiv", "4"],
+    );
     let (off, _width, _height) = Daemon::spawn().capture(
         "bloom-off",
-        &["--static-world", "--subdiv", "4", "--fx-off", "bloom"],
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "bloom",
+        ],
     );
 
     let on_median = i32::from(rec601_median(&on, width, CAMP));
@@ -289,6 +329,31 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
         "bloom must lift the camp halo: mean rose {mean_rise:.3} (on={on_mean:.3}, off={off_mean:.3}), \
          below the {BLOOM_HALO_MEAN_FLOOR:.1} floor."
     );
+    // THE PRESET, not just the presence. A swap to `OLD_SCHOOL` leaves the component in place and
+    // still lifts the halo -- it is `Additive`, so it ADDS energy rather than redistributing it --
+    // and it SURVIVED this guard's first version, which is how this assertion came to exist. The
+    // near-white fraction is what separates the two composite modes: `EnergyConserving` moves
+    // energy out of the bright cores and LOWERS it, `Additive` raises it.
+    // Measured on `6140ca3` WITH `--lights-steady`: bloom-on 5.1573 / 5.1766 %, bloom-off
+    // 5.4930 / 5.4738 % -- a fall of about 0.32 pp against a same-build floor of 0.019.
+    // THE FLAG IS REQUIRED FOR THIS CLAUSE and the guard's first version omitted it. The camp is
+    // the emitter window: its near-white swings about 1.44 pp between same-build captures while
+    // the flicker runs free, which is FOUR TIMES this signal. Run unpinned once, this assertion
+    // read bloom-on 5.5839 % against bloom-off 4.5577 % -- bloom apparently RAISING near-white by
+    // 1.03 pp -- and failed. It was measuring the flicker phase, not the composite mode.
+    let on_near_white = rec601_near_white_percent(&on, width, CAMP);
+    let off_near_white = rec601_near_white_percent(&off, width, CAMP);
+    println!(
+        "AC4 pixel guard (Rec.601): camp near-white bloom-on={on_near_white:.4}% \
+         bloom-off={off_near_white:.4}%"
+    );
+    assert!(
+        off_near_white - on_near_white >= 0.10,
+        "bloom must REDISTRIBUTE energy out of the bright cores, not add it: camp near-white went \
+         {off_near_white:.4}% -> {on_near_white:.4}%. A rise means the composite mode is no longer \
+         EnergyConserving -- check the preset."
+    );
+
     // Only emitters and their halo may BRIGHTEN. These windows hold no emitter; bloom darkens them
     // by a level, which is the EnergyConserving signature, and the bar is that they do not rise.
     for (name, rect) in [("LL", OPEN_SNOW_LL), ("LR", OPEN_SNOW_LR)] {
