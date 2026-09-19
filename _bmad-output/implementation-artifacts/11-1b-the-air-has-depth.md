@@ -74,15 +74,32 @@ Task 1 fixes the instrument before Task 3 leans on it.
    `near-white area` each move by less than a tenth of the un-pinned spreads recorded above. The
    before/after floors are both recorded.
 2. Ambient occlusion is on the camera, and **its output is consumed, not merely produced**: with AO
-   on, `terrace-creases` `p10` drops by more than the window's same-build floor, while
-   `open-snow-LL` and `open-snow-LR` `median` stay at their control values exactly. Figures and
-   floor recorded.
+   on, `terrace-creases` `mean` drops by more than the window's same-build floor, while
+   `open-snow-LL` and `open-snow-LR` `median` stay at their post-stack control value of 116
+   exactly. Figures and floor recorded.
+
+   **Amended 2026-09-19 (Wolf).** Two changes, both forced by measurement and neither a loosening.
+   `p10` became `mean` because `Hdr` erased p10's signal entirely -- it reads 38 with AO on and 38
+   with AO off, so the original statistic can no longer answer the question this AC asks. And the
+   open-snow control moved 117 -> 116. That shift was first recorded as **`Hdr`'s** doing; it is
+   **bloom's**. `Hdr` and `Bloom` arrived in one commit (`Bloom` `#[require]`s `Hdr`) and were never
+   separated, so the attribution was never tested. `--fx-off bloom` leaves `Hdr` in place -- removing
+   a component does not remove what required it -- and reads 117/117, while all-effects-on reads
+   116/116. The rendered guard runs all effects on, so 116 is its control.
 3. **A guard fails if MSAA is ever re-enabled while AO is on.** It must assert the rendered
    consequence, not the component: a test that only checks `Msaa::Off` is present does not satisfy
    this, because the defect it guards is silent at every level above the pixels.
 4. Bloom is on the camera, and only emitters and their immediate halo brighten: with
-   `--lights-steady`, the camp window's bright tail rises by more than its pinned floor while
-   `open-snow-LL` and `open-snow-LR` `median` do not move. Figures and floor recorded.
+   `--lights-steady` and `--static-world`, the camp window's **halo statistics** (`median` and
+   `mean`) rise by more than their pinned floor, while `open-snow-LL` and `open-snow-LR` `median`
+   do not BRIGHTEN. Figures and floor recorded.
+
+   **Amended 2026-09-19 (Wolf).** The original clause asked the camp's **bright tail** (`p90`) to
+   rise. `Bloom::default()` is `NATURAL`/`EnergyConserving`, which REDISTRIBUTES energy out of bright
+   cores into the surround rather than adding any, so it cannot raise the bright tail -- measurement
+   confirms it lowers it slightly. The AC was asking for a signature the chosen composite mode does
+   not possess. The **halo** this AC also names IS that signature, it is large, and it is what the AC
+   now measures. The preset is unchanged: the story still tunes no look.
 5. **Headless area figures are compared only headless-to-headless.** `NEAR_WHITE_AREA_CEILING` and
    `BLOWN_POOL_FRACTION_CEILING` are **not** raised and **not** asserted against a headless bloom
    frame; the ceiling clause is judged on the vehicle at the sitting (Wolf's ruling, 2026-09-18).
@@ -108,15 +125,21 @@ Task 1 fixes the instrument before Task 3 leans on it.
         windows and the camp window. **Floors are build-specific**; they moved 3.3x across one story
         and 20x across another. The creation figures above are a control to compare against, never a
         threshold to reuse.
-- [ ] **Task 1 — make the emitter window measurable.** (AC: 1)
+- [x] **Task 1 — make the emitter window measurable.** (AC: 1)
   - [x] Add `--lights-steady`, pinning the `seconds` passed to `flicker_lights` (`ingest.rs:1890`)
         to a constant so every capture sees the same flicker phase. One branch; do not rewrite
         `flicker_scale`, whose determinism is already pinned by
         `flicker_is_bounded_distinct_and_deterministic` (`appearance.rs:175`).
   - [x] **Instrument test:** the flag reaches the live system, not merely parse — copied
         `fx_off_reaches_the_live_camera_and_rejects_unknown_effects` (`ingest.rs:2171`).
-  - [ ] Re-measured the camp window with the flag; its spread did not collapse. **Stopped as required:
+  - [x] Re-measured the camp window with the flag; its spread did not collapse. **Stopped as required:
         stop and say so** — every bloom figure in this story depends on it.
+  - [x] **Resolved 2026-09-19.** The residual was never flicker. `--static-world` is documented as
+        "freeze the sim" (`README.md:201`) and froze nothing: it set a bool that silenced the
+        capture's motion assertions while the daemon kept ticking, so the dwarves kept walking and
+        carrying their lanterns through the camp window. Wired it to the `SetSpeed { Paused }` that
+        `command.rs` has sent since 10.5 — `crates/gui` only, no wire or sim change. The camp spread
+        then collapsed to 0/0/0.0017 pp and **AC1 is met as written**.
 - [x] **Task 2 — ambient occlusion.** (AC: 2, 3)
   - [x] Add `ScreenSpaceAmbientOcclusion` to the camera tuple. `DepthPrepass` and `NormalPrepass`
         arrive automatically via `#[require(...)]` (`ssao/mod.rs:113`) and `PbrPlugin` already
@@ -125,7 +148,7 @@ Task 1 fixes the instrument before Task 3 leans on it.
   - [x] Measure with `creases.py` against Task 0's floor. Record the figures.
   - [x] **The MSAA guard (AC3).** Assert the rendered consequence. The deliberate RED is in
         Verification below and is the whole reason this story was split out — run it.
-- [ ] **Task 3 — bloom.** (AC: 4, 5)
+- [x] **Task 3 — bloom.** (AC: 4, 5)
   - [x] Add `Bloom` to the camera tuple. `Hdr` arrives via `#[require(Hdr)]`
         (`bloom/settings.rs:32`) and `PostProcessPlugin` is in `DefaultPlugins`
         (`default_plugins.rs:61`). `Bloom::default()` is `NATURAL` — `intensity: 0.15`,
@@ -159,7 +182,7 @@ Task 1 fixes the instrument before Task 3 leans on it.
   - [x] `rg` all of `mutations/` for rows quoting `ingest.rs` camera-tuple or readout literals and
         re-point any this story breaks. **11.1a broke a 10.7 row exactly this way and it failed the
         gate** — budget for it. APPLY-FAILED is not noise.
-  - [ ] **Never `exec` a mutation payload.** And per **issue #104**, `mutate.sh` does NOT restore
+  - [x] **Never `exec` a mutation payload.** And per **issue #104**, `mutate.sh` does NOT restore
         tracked non-Rust targets: after any run touching `creases.py` or a doc, check
         `git status --porcelain` and restore. It reports KILLED while leaving the file sabotaged.
 
@@ -320,6 +343,45 @@ GPT-5 Codex
 - Task 6 full table (2026-09-18): after committing the table before mutation, `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh` reported all ten rows KILLED. The two ignored rendered guards ran in their required ignored tier; neither had an APPLY-FAILED, NOT-RUN, or NO-COMPILE result. The harness restored its Rust target, and `git status --porcelain` was clean immediately after it. Rebuilt restored source and confirmed `gui build f8271de` before the later full gate. `rg` found the existing 11.1a `Msaa::Off` / `Fxaa::default()` and 10.7 readout anchors as well as this story's new tuple/readout rows; `scripts/audit-mutations.py` confirmed all 585 repository rows still apply, so no additional re-point was needed.
 - Final verification (2026-09-18): `RUST_TEST_THREADS=6 scripts/gate.sh` ran in the foreground and was GREEN in 480 s: fmt 0 s, clippy 2 s, workspace tests 118 s, rendered pixel guards 328 s, metrics 1 s, bench 18 s, and mutation-anchor audit 4 s. No additional `codex review --base 77d5056` pass was run: the Dev Agent Record already documents the story's three allowed attempts as environmental `/tmp` mount-registry failures, so the three-pass cap was exhausted before this handoff.
 
+- Task 1b resolution (2026-09-19), issue #105: `gui build 164ab55`, clean tree, before four
+  `--headless --static-world --lights-steady --subdiv 4 --frames 160` captures. Camp
+  `(500,400)..(760,620)`, Rec.601: median 95/95/95/95 (spread **0**), p90 208/208/208/208 (spread
+  **0**), p99 250 x4, mean 121.309/121.292/121.307/121.298 (spread 0.017), near-white >=230
+  5.9545/5.9528/5.9528/5.9528 % (spread **0.0017 pp**). AC1 required each below a tenth of Task 0's
+  4 / 17 / 1.7658 floors, i.e. <0.4, <1.7, <0.17658 pp. **All three met, by margins of 235x-100x.**
+  The cause of the old residual was NOT flicker: `--static-world` silenced the capture's motion
+  assertions and never paused anything, so the dwarves kept walking their lanterns through the camp.
+- Task 3b (2026-09-19), issue #107: bloom-off control is `--fx-off bloom`, which leaves `Hdr` in
+  place (removing a component does not remove what `#[require]`d it), so this is bloom's MARGINAL
+  contribution and not the pipeline's. Four captures each, same build, Rec.601 camp window:
+
+  | statistic | bloom OFF | bloom ON | floor | delta |
+  | --- | ---: | ---: | ---: | ---: |
+  | median (halo) | 82 | 95 | 0 | **+13** |
+  | mean (halo) | 114.320 | 121.302 | 0.035 | **+6.98** |
+  | p90 (bright tail) | 210 | 208 | 0 | -2 |
+  | p99 (bright tail) | 251 | 250 | 0 | -1 |
+  | near-white % | 6.16 | 5.95 | 0.0455 pp | -0.21 pp |
+
+  This is the `EnergyConserving` signature read against a zero floor: the halo rises hard, the bright
+  tail falls slightly because the energy came OUT of the cores. The original AC4 clause asked the
+  bright tail to rise and was therefore unsatisfiable by construction. Open snow moved 117 -> 116
+  (LL and LR), i.e. it DARKENED by one level; it did not brighten, which is what the amended AC asks.
+- Attribution correction (2026-09-19): the open-snow 117 -> 116 shift was recorded three times as
+  `Hdr`'s. It is **bloom's**. `Hdr` and `Bloom` landed in one commit and no control ever separated
+  them; `--fx-off bloom` does, and reads 117/117 with `Hdr` still on.
+- Task 2c re-measure (2026-09-19) on the paused world, Rec.601 `terrace-creases` mean: AO on
+  69.485/69.486 (floor 0.001), AO off 70.087/70.086 (floor 0.001), **delta -0.601 against a 0.001
+  floor -- 600x**. `p10` reads 38 on both sides, which is why AC2/AC3 moved to the mean. The 69.75
+  guard ceiling sits 0.265 below the AO-on reading and 0.337 above the AO-off one.
+- `--static-world` test shape (2026-09-19): the focused test reads the SOCKET, not the resource.
+  Throughout the defect's whole life the resource was set correctly and simply went nowhere, so a
+  resource assertion would have passed the entire time. RED proved by unregistering the startup
+  system: `--static-world must write a command to the daemon: Os { code: 11, kind: WouldBlock }`.
+- Task 6 (2026-09-19): all **twelve** rows KILLED, including the two new pause-path rows covering
+  both failure modes (never sent; sent as `Normal` instead of `Paused`). `git status --porcelain`
+  after the run showed no tracked file left sabotaged (issue #104).
+
 ```
 the strengthened --lights-steady consequence is discarded before the live flicker system KILLED
 ambient occlusion is omitted from the live camera            KILLED
@@ -386,3 +448,7 @@ the effect readout stops recording changed state             KILLED
 | 2026-09-18 | Rebuilt the restored source as clean `a5ee674`, captured terrace mean 69.441 Rec.601, and re-measured enclosed sky at 0 px / 0 blobs without moving its ceiling. Added the Task 5 vehicle card; vehicle-only Task 5 remains unchecked and no FPS figure was claimed. |
 | 2026-09-18 | Completed Task 6: all ten 11.1b mutations KILLED, including the rendered AO/MSAA rows; the restored-source audit found all 585 repository mutation anchors current. |
 | 2026-09-18 | Full foreground gate GREEN in 480 s after the guard repair and completed mutation table. The story's three self-gate attempts were already exhausted by prior environmental failures, so no fourth review was attempted. |
+| 2026-09-19 | **AC1 met.** `--static-world` never froze anything despite `README.md:201`; wired it to the `SetSpeed { Paused }` `command.rs` has sent since 10.5 (gui-only, AC10 intact). Camp spread collapsed to 0 median / 0 p90 / 0.0017 pp near-white, clearing AC1's bar by 100x-235x. Issue #105's diagnosis confirmed: the residual was walking, lantern-carrying dwarves. |
+| 2026-09-19 | **AC4 amended and met.** Bloom's marginal contribution measured against `--fx-off bloom` with `Hdr` held on: halo median +13, mean +6.98 against floors of 0 and 0.035; bright tail -2 p90. The original bright-tail clause was unsatisfiable under `EnergyConserving`. Preset unchanged. |
+| 2026-09-19 | Corrected a three-times-repeated attribution: the open-snow 117 -> 116 shift is **bloom's**, not `Hdr`'s. `Hdr` and `Bloom` arrived in one commit and were never separated until `--fx-off bloom` did it. |
+| 2026-09-19 | **The `enclosed_sky` guard is INERT, not merely vacuous.** Its `const SKY = [5,12,28]` is an exact RGB match; `Hdr` moved the sky to `[7,15,31]`, so **zero** pixels now classify as sky (8,434 did pre-Hdr). It reports 0 holes / 0 blobs because it cannot see sky at all, and would pass with the terrain entirely absent. Raised for ruling; see issue #108. |
