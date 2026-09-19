@@ -80,3 +80,20 @@ assert s.count(old) == 1
 new = '    let _ = (toggles, effects_off, readout);\n'
 p.write_text(s.replace(old, new))
 PY
+
+mutation "--static-world never reaches the daemon" gui static_world_pauses_the_daemon_over_the_wire <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            crate::command::pause_static_world,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "--static-world asks the daemon to run instead of pause" gui static_world_pauses_the_daemon_over_the_wire <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '    paused.0 = true;\n    pending.push(Command::SetSpeed {\n        speed: Speed::Paused,\n    });\n'
+assert s.count(old) == 1
+new = '    paused.0 = true;\n    pending.push(Command::SetSpeed {\n        speed: Speed::Normal,\n    });\n'
+p.write_text(s.replace(old, new))
+PY
