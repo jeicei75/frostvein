@@ -2299,32 +2299,38 @@ development_status:
   # 11.1b inherits the render path and the instrument 11.1a builds, and owes the AC that proves AO's
   # output is CONSUMED rather than silently skipped -- the seam 11.1a can only place, not exercise.
   11-1b-the-air-has-depth: in-progress
-  # PAUSED 2026-09-18 EOD at 0624303 (branch story-11-1b-the-air-has-depth, pushed, tree clean,
-  # FULL GATE GREEN 466s on an orchestrator re-run). DO NOT move this to review: two ACs are
-  # UNMET and both need a Wolf ruling, not work.
-  #   DONE: Task 0 (controls), Task 1 (--lights-steady, mutation-proved on its CONSEQUENCE),
-  #     Task 2 (SSAO + the AC3 rendered guard), Task 3 (Bloom::default), Task 4 (--fx-off set
-  #     fxaa/ao/bloom + F11/F12 + readout), Task 6 (10 rows, ALL KILLED).
-  #   Task 5 stays UNCHECKED: vehicle-bound, card filed at 11-1-signoff/task-5-vehicle-card.md.
-  #   AC1 UNMET -> issue #105. --static-world PAUSES NOTHING (it only skips the capture's motion
-  #     assertions). The camp window's residual is MOVING LANTERN-CARRYING DWARVES, not flicker:
-  #     34% of the window changes, a quarter of it by >9 luma levels, + and - near-balanced.
-  #     --lights-steady DOES work (camp p90 spread 17 -> 0). AC1's bar is unreachable regardless.
-  #   AC4 UNMET -> issue #107. Bloom::default() is NATURAL/EnergyConserving, which REDISTRIBUTES
-  #     energy out of bright cores into the dark surround. Measured: terrace dark-end +7 levels,
-  #     whole-frame near-white -0.0236 pp (the bright tail went DOWN). AC4 asks the bright tail to
-  #     RISE, so it asks for a signature this composite mode cannot produce. Bloom is NOT inert.
-  #   #106 RULED by Wolf: AO accepted as wired; its LOOK defers to 11.3. AO's strongest effect is
-  #     -1.97 luma anywhere in frame because SSAO scales only the AMBIENT term and ambient is
-  #     deliberately small (1,500 vs a 7,000 directional). Wolf CAN see it with the point lights
-  #     off, and judged it good -- his eye is the authority, the instruments are regression guards.
-  #   ALSO OPEN, unruled: the AC3 guard moved p10 -> terrace MEAN because Hdr killed p10's signal
-  #     entirely (AO on/off both 38 with bloom, both 31 without); CONTROL_OPEN_SNOW_MEDIAN was
-  #     rebaselined 117 -> 116 post-Hdr, which AC2's "exactly" wording does not cover; and
-  #     enclosed_sky is now 0 px against an unchanged 2,300 ceiling -- fully vacuous.
-  #   NO SELF-GATE RAN ON THIS STORY AT ALL: every codex review attempt across four handoffs died
-  #     on a read-only /tmp mount-registry lock and the three-pass cap is spent (evidence on #49).
-  #     The code review carries the adversarial load alone.
+  # 2026-09-19: AC1 and AC4 are now MET and the two blocking rulings are recorded on #105/#107.
+  # Branch story-11-1b-the-air-has-depth, FULL GATE GREEN 482s run in the foreground here.
+  # STILL NOT READY FOR REVIEW -- see the two open items at the bottom of this block.
+  #   AC1 MET, as written, no bar lowered (#105). The residual was never flicker: --static-world
+  #     is documented as "freeze the sim" (README.md:201) and froze NOTHING -- it set a bool that
+  #     silenced the capture's motion assertions while the daemon kept ticking. Wired it to the
+  #     SetSpeed { Paused } command.rs has sent since 10.5. crates/gui ONLY; no wire, no sim.
+  #     Camp spread collapsed: median 4 -> 0, p90 17 -> 0, near-white 1.7658 -> 0.0017 pp.
+  #   AC4 MET, amended on Wolf's ruling (#107). Bloom::default() is EnergyConserving, which
+  #     redistributes energy OUT of bright cores, so the bright tail the AC asked to RISE cannot.
+  #     AC4 now measures the HALO its own prose already named: median +13, mean +6.98 against
+  #     floors of 0 and 0.035. Preset UNCHANGED -- the story still tunes no look.
+  #   AC2 amended: p10 -> terrace MEAN (Hdr killed p10; it reads 38 both ways), open-snow control
+  #     named as 116. ATTRIBUTION CORRECTED: the 117 -> 116 shift is BLOOM's, not Hdr's. The two
+  #     arrived in one commit (Bloom #[require]s Hdr) and --fx-off bloom is the first control to
+  #     separate them -- it reads 117/117 with Hdr still on. Three documents had it wrong.
+  #   AC2/AC3 re-measured on the paused world: terrace mean AO-on 69.485 vs AO-off 70.087 against
+  #     a 0.001 floor -- a 600x margin, where it used to be a fraction of the floor.
+  #   AC10 VERIFIED against this story's OWN range (d3ecdff..HEAD, never main): protocol,
+  #     sim-core, client-core, simd and tests/capture.rs all empty.
+  #   Task 6: TWELVE rows, ALL KILLED, incl. both pause-path failure modes (never sent; sent as
+  #     Normal). git status clean after the run (#104).
+  #   Task 5 stays UNCHECKED: vehicle-bound, card at 11-1-signoff/task-5-vehicle-card.md.
+  # OPEN, blocking review:
+  #   1. #108 -- the enclosed_sky guard is INERT, not merely vacuous. const SKY = [5,12,28] is an
+  #      EXACT match and Hdr moved the sky to [7,15,31], so ZERO pixels now classify as sky (8,434
+  #      did pre-Hdr). It reports 0 holes because it cannot SEE sky, and would pass with the
+  #      terrain entirely absent. A fix is a story, not a re-baseline: post-stack, dark shadowed
+  #      terrain and night sky OVERLAP in colour space. Wolf picks retire / red-gate / rebuild.
+  #   2. NO SELF-GATE RAN ON THIS STORY AT ALL: every codex review attempt across four handoffs
+  #      died on a read-only /tmp mount-registry lock and the three-pass cap is spent (see #49).
+  #      The code review carries the adversarial load alone.
   11-2-the-miniature: backlog
   11-3-night-falls-day-breaks: backlog
   epic-11-retrospective: optional
