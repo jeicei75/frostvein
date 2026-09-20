@@ -24,18 +24,26 @@ below are a comparison set, so each gets its own daemon, and **every run passes 
 — emitter flicker runs on the client's wall clock and `--static-world` does not touch it, which
 matters most for the one pair Wolf judges, since that pair is a bloom HALO comparison.
 
-```text
+**`--headless` is load-bearing, and the first draft of this card omitted it.** `ingest.rs:605`
+hardcodes `vsync: !args.headless` with no other way to disable vsync, so a windowed run is
+`PresentMode::Fifo` and all four p50s clamp to the refresh interval in 16.67 ms steps — the
+comparison would carry no information about any effect. Headless still writes the PNGs judged for
+AC9. 11.1a's review made this same correction to its own card; this one repeated the mistake.
+
+Run through `scripts/launch-gui.ps1`, which forwards the port and `--assets` itself and refuses a
+binary that does not match the checkout. Pass flags as `-GuiArgs @(...)`: the `--` form in the
+script's own docstring cannot work, because the first positional parameter swallows it (issue #81).
+The launcher defaults to `-Port 7451` and a bare `simd` lands on the same port, so neither needs a
+port argument — do not mix that with the `7466` the first draft of this card used.
+
+```powershell
 # repeat for each of the four runs, restarting simd.exe each time
-simd.exe 7466
-gui.exe 7466 --static-world --lights-steady --frames 160 --perf-log effects-on.csv \
-  --capture effects-on.png
+simd.exe
+.\scripts\launch-gui.ps1 -GuiArgs @('--headless','--static-world','--lights-steady','--frames','160','--perf-log','effects-on.csv','--capture','effects-on.png')
 # then stop simd.exe, start it again, and take the next one:
-gui.exe 7466 --static-world --lights-steady --frames 160 --fx-off fxaa --perf-log fxaa-off.csv \
-  --capture fxaa-off.png
-gui.exe 7466 --static-world --lights-steady --frames 160 --fx-off ao --perf-log ao-off.csv \
-  --capture ao-off.png
-gui.exe 7466 --static-world --lights-steady --frames 160 --fx-off bloom --perf-log bloom-off.csv \
-  --capture bloom-off.png
+.\scripts\launch-gui.ps1 -GuiArgs @('--headless','--static-world','--lights-steady','--frames','160','--fx-off','fxaa','--perf-log','fxaa-off.csv','--capture','fxaa-off.png')
+.\scripts\launch-gui.ps1 -GuiArgs @('--headless','--static-world','--lights-steady','--frames','160','--fx-off','ao','--perf-log','ao-off.csv','--capture','ao-off.png')
+.\scripts\launch-gui.ps1 -GuiArgs @('--headless','--static-world','--lights-steady','--frames','160','--fx-off','bloom','--perf-log','bloom-off.csv','--capture','bloom-off.png')
 ```
 
 Each run prints `sim PAUSED (--static-world) at tick N`. **Check that N is the same for all four.**
@@ -70,4 +78,9 @@ captures and all four CSVs filed beside them.
   larger than the whole headroom. AC5 defers the ceiling judgement to this sitting by Wolf's
   2026-09-18 ruling; a trip here is expected information, not a regression to fix on the spot.
 
-**No vehicle observation or FPS figure has been made here.**
+**RUN 2026-09-20 on build `5cd523c`.** The sitting's figures, and what they do and do not
+establish, are in `task-5b-vehicle-evidence.md`. AC8 met, AC9 signed off, AC5's deferred ceiling
+judgement closed — the ceiling held with +0.4449 pp of headroom, so the trip this card predicted
+did not happen.
+
+**No vehicle observation or FPS figure was made in this card.**

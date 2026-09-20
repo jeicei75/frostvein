@@ -177,10 +177,15 @@ Task 1 fixes the instrument before Task 3 leans on it.
         are taken; note the existing order is not alphabetical (F7 lanterns, F8 ambient, F9 torches).
   - [x] Update the three tests pinning the full readout string (`ingest.rs:2489`, `:2508`, `:2594`).
         **Do not weaken them to substring checks** — they pin the whole line on purpose.
-- [ ] **Task 5 — the vehicle read.** (AC: 8, 9) — **cannot be done on a devpod.** No devpod can open
+- [x] **Task 5 — the vehicle read.** (AC: 8, 9) — **cannot be done on a devpod.** No devpod can open
       a window. Write `11-1-signoff/task-5b-vehicle-card.md` naming the exact `--perf-log` runs and
       the frame pair Wolf judges, leave this task UNCHECKED, and hand it to the gingerspice sitting.
       **Invent no fps figure.**
+  - [x] Sitting held 2026-09-20 on build `5cd523c`. Four runs, fresh daemon each, same pause tick,
+        all exited 0. AC8 MET (worst p50 3.55 ms against NFR6's 16.67 ms bar), AC9 signed off, and
+        AC5's deferred ceiling judgement closed. Figures and their limits:
+        `11-1-signoff/task-5b-vehicle-evidence.md`. The card's recipe omitted `--headless`, which
+        `ingest.rs:605` makes load-bearing for a frame-time comparison; corrected before the run.
 - [x] **Task 6 — sabotage.** (AC: 11)
   - [x] Scope-only rows: AO omitted; AO present with MSAA re-enabled; strengthened
         `--lights-steady` consequence. The bloom, effect-switch, key, and readout rows remain
@@ -705,12 +710,45 @@ and the reason is visible rather than mysterious: this review had no self-gate t
 four layers that each built and ran the binaries, and then carried a nineteen-item patch pass with
 three rendered-guard rebuilds, two full mutation-table runs and a full gate inside the same session.
 
+### Vehicle sitting, 2026-09-20 — AC8, AC9, and AC5's deferred ceiling
+
+Full figures, recipe and limits: `11-1-signoff/task-5b-vehicle-evidence.md`. Build `5cd523c`,
+four runs, one fresh `simd.exe` each, same `--static-world` pause tick on all four, all exited 0.
+
+**AC8 — MET.** Steady-state p50, n=166 per run: effects-on **3.33 ms**, `--fx-off fxaa` 3.55,
+`--fx-off ao` 3.42, `--fx-off bloom` 3.36. NFR6's bar is 16.67 ms and the worst of the four is
+3.55 ms — 4.7x of headroom, so no effect costs the bar and the story tunes nothing.
+
+Every effect-OFF run is SLOWER than effects-on. A post-process pass cannot make rendering quicker,
+so no delta here is a cost: each is run-to-run variance and every effect's true cost is below this
+setup's floor. The SIGN carries that, not the size — **one run per condition is not a noise floor**
+(#98), and **no cost figure is published from these deltas**.
+
+**AC9 — SIGNED OFF by Wolf.** `effects-on.png` against `bloom-off.png` at boot framing. Bloom
+reads: the pit floor and lantern cluster blow to white with it on and resolve into readable
+geometry with it off. AO does not read as crease darkening, per #106's ruling; deferred to 11.3.
+
+**AC5's ceiling judgement — CLOSED, the ceiling holds with room.** Measured off the four delivered
+PNGs (not inferred from exit 0), mirroring `near_white_area_fraction`: 0.4824–0.5012% against the
+0.9461% ceiling, **+0.4449 pp of headroom with every effect on**. The card expected a trip — ~0.18 pp
+headless headroom against a recorded 0.4–0.6 pp delivery-GPU penalty — and it did not happen.
+**This does not settle the venue delta**: no same-build headless capture was taken, and the recorded
+penalty was measured in the bright tail, which a night boot framing is not. Bloom's own near-white
+contribution is 0.0121 pp, consistent with a halo local to the camp.
+
+**A gap this sitting exposed.** The pause tick is printed to the console and is NOT in the
+perf-log preamble, and the preamble's content counters read identically whether the daemon was
+restarted or not (#83) — so the artifacts alone cannot show a comparison set is comparable. Closed
+here by Wolf's word at the sitting, which does not survive into the record. The tick belongs in the
+`# run:` line.
+
 ### Completion Notes List
 
 - Task 0: captured the build-specific no-AO/no-bloom controls. The camp flicker floor confirms Task 1 must pin the live flicker clock before bloom is measured.
 - Task 1: implemented and mutation-proved the live `--lights-steady` path, but AC1 is blocked by residual camp-window variance after the clock is pinned. Tasks 2–6 were intentionally not started; Task 5 remains vehicle-only.
 - Task 3: Bloom is installed but AC4 is blocked: its bright-tail p90 did not rise over the new build-specific Hdr/no-bloom floor. No headless ceiling was changed.
 - Task 4: the three-effect command and seat controls are implemented and focused-test green; its story mutations remain deferred by the AC4 stop rule.
+- Task 5: held at the gingerspice sitting 2026-09-20 on `5cd523c`. AC8 met, AC9 signed off, AC5's deferred ceiling closed. The card's recipe omitted `--headless`, which `ingest.rs:605` makes load-bearing for a frame-time read; corrected before the run.
 - Task 6: added and ran the remaining bloom, per-name `--fx-off`, F11/F12, and readout sabotages; all ten table rows KILLED. The full repository anchor audit passed after checking the legacy camera/readout rows.
 
 ### File List
@@ -755,6 +793,9 @@ their families rather than one line each.
 - `11-1-signoff/task-5-vehicle-card.md` -- RESTORED to 11.1a's card at the review
 - `11-1-signoff/task-5b-vehicle-card.md` (new, at the review) -- 11.1b's card, at the path the
   Project Structure table always named
+- `11-1-signoff/task-5b-vehicle-evidence.md` (new, 2026-09-20) -- the sitting's record
+- `11-1-signoff/effects-on.{csv,png}`, `fxaa-off.{csv,png}`, `ao-off.{csv,png}`,
+  `bloom-off.{csv,png}` (new, 2026-09-20) -- the four vehicle runs, Wolf's delivered artifacts
 - `11-1-signoff/campstats.py`, `delta.py`, `markdiff.py`, `residual.py` (new instruments)
 - `11-1-signoff/emitter-window-flicker-floor.md`,
   `11-1-signoff/residual-after-the-flicker-pin.md`, `11-1-signoff/wolf-seat-check-d3ecdff.md` (new)
