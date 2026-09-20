@@ -72,13 +72,19 @@ pub struct StaticWorld(pub bool);
 /// different worlds, and the camp window's "noise floor" was largely the dwarves standing
 /// somewhere else. A fixed target makes the freeze point a DECISION instead of a race outcome.
 ///
-/// NOTE: this makes the freeze point REPRODUCIBLE, not EXACT. The daemon applies queued commands
-/// between steps, so it stops at this tick plus however many it had already processed when it read
-/// the command. That residual is why `landed_at` is printed on every run: a capture pair that
-/// froze at different ticks says so out loud rather than surfacing later as unexplained variance.
-/// Freezing at an exact tick needs either a daemon that boots paused or a `pause at tick N`
-/// command, and both live in `simd`/`protocol`, which this story may not touch (AC10).
-const STATIC_WORLD_PAUSE_TICK: u64 = 8;
+/// EXACT, not merely reproducible, since the `pause at tick N` command this note used to defer now
+/// exists (`protocol::Command::SetSpeed::at_tick`). The daemon holds the change until the world
+/// stands on this tick and stops it there, so the freeze point no longer depends on when the
+/// command arrived. Measured before the fix, same recipe, one fresh daemon each: idle froze at
+/// 39-40, under CPU load at 80, against a daemon given a 15 s head start at 225 -- and camp
+/// near-white swung 0.3636 pp across those worlds, 2.2x the signal the AC4 guard measures (#111).
+///
+/// 120 rather than 8 because the command must ARRIVE before its tick: the client spends seconds
+/// booting Bevy and connecting, and the worst measured fresh-daemon arrival was tick 80 under 24
+/// CPU burners. 120 leaves 50% headroom over that and costs ~4 s, against a capture that already
+/// waits for 100 delivered ticks. If it is ever too tight the run FAILS rather than drifting --
+/// see [`confirm_static_world_pause`].
+const STATIC_WORLD_PAUSE_TICK: u64 = 120;
 
 /// Where the `--static-world` freeze got to: whether the command has been sent, and the tick the
 /// daemon actually reported itself stopped at.
@@ -147,16 +153,21 @@ pub fn pause_static_world(
     mut paused: ResMut<SimPaused>,
     mut pending: ResMut<PendingCommands>,
 ) {
-    if !static_world.0 || state.requested || mirror.0.tick() < STATIC_WORLD_PAUSE_TICK {
+    if !static_world.0 || state.requested {
         return;
     }
+    // Sent as EARLY as possible now, which is the opposite of what this function used to do. The
+    // old code waited for the world to reach the target tick and then sent a bare pause, so the
+    // freeze point was wherever the round trip landed. Naming the tick inverts that: the command
+    // only has to arrive BEFORE tick 120, and the daemon decides where the world stops.
     state.requested = true;
     paused.0 = true;
     pending.push(Command::SetSpeed {
         speed: Speed::Paused,
+        at_tick: Some(STATIC_WORLD_PAUSE_TICK),
     });
     eprintln!(
-        "sim PAUSE REQUESTED (--static-world) at tick {}",
+        "sim PAUSE REQUESTED (--static-world) for tick {STATIC_WORLD_PAUSE_TICK}, sent at tick {}",
         mirror.0.tick()
     );
 }
@@ -196,6 +207,20 @@ pub fn confirm_static_world_pause(
     // The landing tick, every run, because it is the one number that says whether two captures
     // froze the same world. Silence here is what made the old floor look like noise.
     eprintln!("sim PAUSED (--static-world) at tick {tick}");
+    // A landing anywhere but the requested tick means the daemon was already past it when the
+    // command arrived and could not rewind. The capture would still succeed and still exit 0 --
+    // and would silently be of a DIFFERENT world than its pair, which is the entire defect this
+    // scheduling fixes (#111). Refuse it instead: a target that turns out too tight for a loaded
+    // machine must surface as a red gate, not as a drifting measurement nobody can attribute.
+    if tick != STATIC_WORLD_PAUSE_TICK {
+        eprintln!(
+            "--static-world: asked to freeze at tick {STATIC_WORLD_PAUSE_TICK} but the daemon \
+             stopped at {tick}; it was already past when the command arrived. This capture is \
+             NOT comparable with one that froze at {STATIC_WORLD_PAUSE_TICK}, so it is refused \
+             rather than measured."
+        );
+        exit.write(bevy::app::AppExit::error());
+    }
 }
 
 /// Hands the daemon back at the speed we found it, when a `--static-world` run ends cleanly.
@@ -224,6 +249,7 @@ pub fn restore_speed_on_exit(
     }
     pending.push(Command::SetSpeed {
         speed: Speed::Normal,
+        at_tick: None,
     });
     eprintln!("sim RESUMED (--static-world run ending); daemon handed back at Normal");
 }
@@ -259,6 +285,7 @@ pub fn toggle_pause(
         } else {
             Speed::Normal
         },
+        at_tick: None,
     });
     // Say so on stderr: a paused world looks exactly like a stalled one.
     eprintln!("sim {}", if paused.0 { "PAUSED" } else { "running" });
@@ -362,7 +389,10 @@ mod tests {
             let queued = app.world().resource::<PendingCommands>().commands().clone();
             assert_eq!(
                 queued.back(),
-                Some(&Command::SetSpeed { speed: expected }),
+                Some(&Command::SetSpeed {
+                    speed: expected,
+                    at_tick: None
+                }),
                 "press {press} must queue set_speed {expected:?}"
             );
             assert_eq!(

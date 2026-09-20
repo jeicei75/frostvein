@@ -124,10 +124,41 @@ fn tick(
 ) -> anyhow::Result<()> {
     let mut clients = Vec::new();
     let mut speed = protocol::Speed::Normal;
+    // A `SetSpeed` that named a future tick, held until the world reaches it. See
+    // `protocol::Command::SetSpeed::at_tick`: applying one on arrival makes the freeze point
+    // latency-bound, which is issue #111.
+    let mut scheduled_speed: Option<(u64, protocol::Speed)> = None;
     loop {
         for command in command_rx.try_iter() {
             match command {
-                protocol::Command::SetSpeed { speed: next } => speed = next,
+                protocol::Command::SetSpeed {
+                    speed: next,
+                    at_tick: None,
+                } => {
+                    // An unscheduled command is an explicit "now", so it also cancels anything
+                    // still waiting -- otherwise a stale schedule fires later over the top of it.
+                    scheduled_speed = None;
+                    speed = next;
+                }
+                protocol::Command::SetSpeed {
+                    speed: next,
+                    at_tick: Some(target),
+                } => {
+                    if world.tick() >= target {
+                        // LOUD, because the daemon cannot rewind: the caller asked to freeze a
+                        // world that is already gone. Silence here is what made the freeze point
+                        // read as an instrument noise floor for three stories.
+                        eprintln!(
+                            "SetSpeed at_tick {target} arrived at tick {} -- already past, \
+                             applying {next:?} now; the freeze point is NOT the one requested",
+                            world.tick()
+                        );
+                        scheduled_speed = None;
+                        speed = next;
+                    } else {
+                        scheduled_speed = Some((target, next));
+                    }
+                }
                 // NOTE: encoding ~524k tiles stalls this iteration by roughly the same
                 // amount as a connect snapshot. Save is an explicit operator action, so
                 // no worker thread or async write is warranted yet.
@@ -171,6 +202,19 @@ fn tick(
                 }
             }
         }
+        // Fire a scheduled speed change the moment the world stands on its tick, BEFORE the step
+        // below, so a scheduled `Paused` stops the world ON that tick rather than one past it.
+        if let Some((target, next)) = scheduled_speed
+            && world.tick() >= target
+        {
+            speed = next;
+            scheduled_speed = None;
+            eprintln!(
+                "SetSpeed at_tick {target} applied: speed {next:?} at tick {}",
+                world.tick()
+            );
+        }
+
         let deadline = Instant::now() + period(speed);
 
         // Encode the connect snapshot at most once per iteration and share it — every

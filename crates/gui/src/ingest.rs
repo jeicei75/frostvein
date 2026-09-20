@@ -2374,36 +2374,36 @@ mod tests {
     ///
     /// The review that followed found the remaining half: the pause was queued in `Startup`, so it
     /// landed at whatever tick won the race and two captures of one binary froze different worlds.
-    /// The EARLY case below is that half -- it fails if the pause is sent before its tick.
+    /// That half was first addressed by holding the command back until a chosen tick -- which made
+    /// the freeze point REPRODUCIBLE but not EXACT, because the daemon still applied it on arrival
+    /// and kept ticking in the meantime. Measured afterwards, one fresh daemon per capture: idle
+    /// froze at tick 39-40, under CPU load at 80, and against a daemon given a 15 s head start at
+    /// 225, swinging camp near-white by 0.3636 pp -- 2.2x the signal the AC4 guard measures (#111).
+    ///
+    /// So the contract INVERTED, and this test with it. The command now goes out as EARLY as
+    /// possible and names the tick it wants (`at_tick`); the daemon holds it and stops the world
+    /// on exactly that tick. Sending early is no longer the defect -- **failing to name the tick
+    /// is**, because an unscheduled command is applied wherever the round trip puts it. That is
+    /// what the wire assertion below pins.
     #[test]
-    fn static_world_waits_for_its_tick_then_pauses_the_daemon_over_the_wire() {
-        // BEFORE the pause tick: nothing may be sent. This is the assertion the pre-review
-        // `Startup` implementation could never satisfy, and it is what makes the freeze point a
-        // decision instead of a race outcome.
-        let (mut early, _sender, server) =
-            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(0, Speed::Normal));
-        early.update();
-        assert!(
-            read_one_command(&server).is_empty(),
-            "--static-world must not pause before its chosen tick, or the frozen world is \
-             whatever the scheduler allowed"
-        );
-        assert!(
-            !early
-                .world()
-                .resource::<crate::command::StaticWorldPause>()
-                .landed(),
-            "nothing may be considered landed before the daemon has reported a pause"
-        );
-
-        // AT the pause tick: the command goes out.
+    fn static_world_schedules_its_pause_at_a_chosen_tick_over_the_wire() {
+        // EARLY IS NOW CORRECT: the command only has to ARRIVE before its tick, so it is sent on
+        // the first update rather than held back. What makes the freeze point a decision instead
+        // of a race outcome is `at_tick`, not the moment of sending.
         let (mut app, _sender, server) =
-            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(0, Speed::Normal));
         app.update();
         assert_eq!(
             read_one_command(&server),
-            r#"{"type":"set_speed","speed":"paused"}"#,
-            "--static-world must send the daemon the pause its own documentation promises"
+            r#"{"type":"set_speed","speed":"paused","at_tick":120}"#,
+            "--static-world must SCHEDULE its pause: a command without at_tick is applied on \
+             arrival, which is latency-bound and freezes a different world under load (#111)"
+        );
+        assert!(
+            !app.world()
+                .resource::<crate::command::StaticWorldPause>()
+                .landed(),
+            "nothing may be considered landed before the daemon has reported a pause"
         );
         assert!(
             app.world().resource::<crate::command::SimPaused>().0,
@@ -2480,7 +2480,7 @@ mod tests {
         app.update();
         assert_eq!(
             read_one_command(&server),
-            r#"{"type":"set_speed","speed":"paused"}"#
+            r#"{"type":"set_speed","speed":"paused","at_tick":120}"#
         );
 
         app.world_mut()
@@ -2524,7 +2524,7 @@ mod tests {
         app.update();
         assert_eq!(
             read_one_command(&server),
-            r#"{"type":"set_speed","speed":"paused"}"#
+            r#"{"type":"set_speed","speed":"paused","at_tick":120}"#
         );
 
         app.world_mut().write_message(bevy::app::AppExit::Success);

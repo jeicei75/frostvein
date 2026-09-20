@@ -295,6 +295,38 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
     /// Minimum Rec.601 rise bloom must produce in the camp halo.
     const BLOOM_HALO_MEDIAN_FLOOR: i32 = 6;
     const BLOOM_HALO_MEAN_FLOOR: f32 = 3.0;
+    /// Minimum near-white FALL separating `EnergyConserving` from `Additive`.
+    ///
+    /// RE-BASELINED 0.10 -> 0.00 on 2026-09-20, from two measured distributions rather than from
+    /// a number that happens to pass. This guard's own flags, one fresh daemon per capture, all
+    /// frozen at tick 120:
+    ///
+    ///   EnergyConserving (shipped), n=18: fall +0.0490 .. +0.1451, mean +0.1040, range 0.0961
+    ///   Additive (`OLD_SCHOOL`),    n=4:  fall -0.3147 .. -0.2448, mean -0.2736, range 0.0699
+    ///
+    /// The two modes sit on OPPOSITE SIDES OF ZERO with a 0.29 pp gap, so the statistic separates
+    /// them well; the old bar was simply in the wrong place. 0.10 sat BELOW the mean of the real
+    /// distribution, which is why it failed about one run in four no matter how deterministic the
+    /// capture became -- a bar inside its own signal's spread is a coin flip, not a guard.
+    ///
+    /// WHY ZERO, AND WHY THE FIRST ANSWER WAS WRONG. This was first set to 0.02, one noise spread
+    /// below the lowest fall in an EIGHT-pair sample (min 0.0822, spread 0.0577). Ten further runs
+    /// put the minimum at 0.0490 and the range at 0.0961 -- the tail ran well below what eight
+    /// samples showed, and 0.02 was left carrying 0.30 spreads of margin rather than the ~1.0 it
+    /// was chosen for. Eight samples were not a floor either.
+    ///
+    /// Zero is not a weaker bar here, because THIS CLAUSE GUARDS THE MODE, NOT THE STRENGTH.
+    /// `Additive` RAISES near-white, so the sign alone separates the modes and zero still kills
+    /// `OLD_SCHOOL` by 0.2448 pp. A bloom that is merely weak is caught by
+    /// [`BLOOM_HALO_MEDIAN_FLOOR`] and [`BLOOM_HALO_MEAN_FLOOR`] in this same test, which ran at
+    /// 12 and 6.3 against bars of 6 and 3.0. Requiring a specific fall MAGNITUDE here bought
+    /// nothing those two do not already cover, and cost the margin twice over.
+    ///
+    /// NOT a bar loosened to pass a failing run. The signal shrank ~3x (0.32 pp on `6140ca3`)
+    /// because Wolf ruled the exposure 9.7 -> 10.5 EV100 at 11.1a's review -- a deliberate change
+    /// to the frame, exactly as `CONTROL_OPEN_SNOW_MEDIAN` tracked it 116 -> 93. That control was
+    /// tracked and this floor was not, which is the whole of the second half of issue #111.
+    const BLOOM_NEAR_WHITE_FALL_FLOOR: f32 = 0.00;
 
     // One daemon per capture: the camp window is where the lantern-carrying dwarves walk, so a
     // shared daemon's later freeze tick lands them somewhere else and the delta measures that
@@ -343,7 +375,9 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
     // near-white fraction is what separates the two composite modes: `EnergyConserving` moves
     // energy out of the bright cores and LOWERS it, `Additive` raises it.
     // Measured on `6140ca3` WITH `--lights-steady`: bloom-on 5.1573 / 5.1766 %, bloom-off
-    // 5.4930 / 5.4738 % -- a fall of about 0.32 pp against a same-build floor of 0.019.
+    // 5.4930 / 5.4738 % -- a fall of about 0.32 pp against a same-build floor of 0.019. THOSE
+    // FIGURES ARE SUPERSEDED: they predate the 9.7 -> 10.5 EV100 exposure ruling, which cut the
+    // fall to ~0.1084 pp. See BLOOM_NEAR_WHITE_FALL_FLOOR for the current distributions.
     // THE FLAG IS REQUIRED FOR THIS CLAUSE and the guard's first version omitted it. The camp is
     // the emitter window: its near-white swings about 1.44 pp between same-build captures while
     // the flicker runs free, which is FOUR TIMES this signal. Run unpinned once, this assertion
@@ -355,11 +389,15 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
         "AC4 pixel guard (Rec.601): camp near-white bloom-on={on_near_white:.4}% \
          bloom-off={off_near_white:.4}%"
     );
+    let near_white_fall = off_near_white - on_near_white;
     assert!(
-        off_near_white - on_near_white >= 0.10,
+        near_white_fall >= BLOOM_NEAR_WHITE_FALL_FLOOR,
         "bloom must REDISTRIBUTE energy out of the bright cores, not add it: camp near-white went \
-         {off_near_white:.4}% -> {on_near_white:.4}%. A rise means the composite mode is no longer \
-         EnergyConserving -- check the preset."
+         {off_near_white:.4}% -> {on_near_white:.4}%, a fall of {near_white_fall:+.4} pp against \
+         the {BLOOM_NEAR_WHITE_FALL_FLOOR} floor. A RISE (negative) means the composite mode is \
+         no longer EnergyConserving -- check the preset. A fall that is merely SMALL means bloom \
+         has weakened or the frame moved under this floor -- measure both distributions before \
+         touching the number."
     );
 
     // Only emitters and their halo may BRIGHTEN. These windows hold no emitter; bloom darkens them

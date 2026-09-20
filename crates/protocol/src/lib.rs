@@ -87,14 +87,39 @@ pub struct Rect {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
-    SetSpeed { speed: Speed },
+    SetSpeed {
+        speed: Speed,
+        /// The tick to apply `speed` at, or `None` to apply it as soon as the daemon reads it.
+        ///
+        /// A bare `SetSpeed` lands wherever the round trip puts it, and that is latency-bound:
+        /// measured on an idle devpod a `--static-world` pause landed at tick 39-40, under CPU
+        /// load at tick 80, and against a daemon given a 15 s head start at tick 225. Two captures
+        /// meant to differ only by an effect therefore froze two DIFFERENT worlds -- different
+        /// dwarf positions, different lantern placement -- and the difference was read as an
+        /// instrument noise floor (issue #111). Naming the tick makes the freeze point a decision
+        /// instead of a race outcome.
+        ///
+        /// The daemon cannot rewind, so a tick already past applies immediately and says so on
+        /// stderr rather than freezing somewhere else in silence.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at_tick: Option<u64>,
+    },
     Save,
     Load,
     Quit,
-    Designate { kind: DesignationKind, rect: Rect },
-    CancelDesignation { rect: Rect },
-    PlaceStockpile { rect: Rect },
-    RemoveStockpile { rect: Rect },
+    Designate {
+        kind: DesignationKind,
+        rect: Rect,
+    },
+    CancelDesignation {
+        rect: Rect,
+    },
+    PlaceStockpile {
+        rect: Rect,
+    },
+    RemoveStockpile {
+        rect: Rect,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -310,6 +335,7 @@ mod tests {
                 COMMAND_WIRE,
                 Command::SetSpeed {
                     speed: Speed::Paused,
+                    at_tick: None,
                 },
             ),
             (r#"{"type":"save"}"#, Command::Save),
@@ -444,7 +470,8 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(Command::SetSpeed {
-                speed: Speed::Paused
+                speed: Speed::Paused,
+                at_tick: None
             })
             .unwrap()["type"],
             "set_speed"

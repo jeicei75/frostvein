@@ -87,7 +87,7 @@ new = '    let _ = (toggles, effects_off, readout);\n'
 p.write_text(s.replace(old, new))
 PY
 
-mutation "--static-world never reaches the daemon" gui static_world_waits_for_its_tick_then_pauses_the_daemon_over_the_wire <<'PY'
+mutation "--static-world never reaches the daemon" gui static_world_schedules_its_pause_at_a_chosen_tick_over_the_wire <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '            crate::command::pause_static_world,\n'
@@ -95,23 +95,28 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "--static-world asks the daemon to run instead of pause" gui static_world_waits_for_its_tick_then_pauses_the_daemon_over_the_wire <<'PY'
+mutation "--static-world asks the daemon to run instead of pause" gui static_world_schedules_its_pause_at_a_chosen_tick_over_the_wire <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
-old = '        speed: Speed::Paused,\n    });\n    eprintln!(\n        "sim PAUSE REQUESTED'
+old = '        speed: Speed::Paused,\n        at_tick: Some(STATIC_WORLD_PAUSE_TICK),\n    });'
 assert s.count(old) == 1
-new = '        speed: Speed::Normal,\n    });\n    eprintln!(\n        "sim PAUSE REQUESTED'
+new = '        speed: Speed::Normal,\n        at_tick: Some(STATIC_WORLD_PAUSE_TICK),\n    });'
 p.write_text(s.replace(old, new))
 PY
 
 # --- Rows added by the 2026-09-19 code review, covering what its own patches introduced.
 
-mutation "the --static-world pause is sent before its chosen tick" gui static_world_waits_for_its_tick_then_pauses_the_daemon_over_the_wire <<'PY'
+# RE-POINTED 2026-09-20 (#111 fix). The old row deleted the client-side ` || mirror.0.tick() <
+# STATIC_WORLD_PAUSE_TICK` guard, i.e. it pinned "do not send the pause before its tick". That
+# guard is gone ON PURPOSE: the command now names its tick and sending EARLY is correct, because
+# it only has to arrive first. The defect that replaced it is sending an UNSCHEDULED pause, which
+# the daemon applies on arrival -- latency-bound, and the whole of #111.
+mutation "the --static-world pause does not name its tick" gui static_world_schedules_its_pause_at_a_chosen_tick_over_the_wire <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
-old = ' || mirror.0.tick() < STATIC_WORLD_PAUSE_TICK'
+old = '        at_tick: Some(STATIC_WORLD_PAUSE_TICK),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '        at_tick: None,\n'))
 PY
 
 mutation "the pause is believed from our own request, not the daemon report" gui static_world_confirms_the_pause_from_the_daemons_own_report <<'PY'
@@ -133,7 +138,7 @@ PY
 mutation "a --static-world run never hands the daemon back" gui a_static_world_run_hands_the_daemon_back_at_normal <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
-old = '    pending.push(Command::SetSpeed {\n        speed: Speed::Normal,\n    });\n    eprintln!("sim RESUMED'
+old = '    pending.push(Command::SetSpeed {\n        speed: Speed::Normal,\n        at_tick: None,\n    });\n    eprintln!("sim RESUMED'
 assert s.count(old) == 1
 new = '    eprintln!("sim RESUMED'
 p.write_text(s.replace(old, new))
