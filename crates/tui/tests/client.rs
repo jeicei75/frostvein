@@ -139,7 +139,8 @@ fn capture_speed_frames(key: Option<&str>) -> Vec<String> {
             assert_eq!(
                 serde_json::from_str::<protocol::Command>(&line).expect("decode speed command"),
                 protocol::Command::SetSpeed {
-                    speed: protocol::Speed::Paused
+                    speed: protocol::Speed::Paused,
+                    at_tick: None
                 }
             );
             protocol::Speed::Paused

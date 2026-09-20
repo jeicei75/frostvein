@@ -2061,3 +2061,118 @@ fn client_disconnect_mid_snapshot_does_not_kill_daemon() {
     let snapshot = read_snapshot(&mut next);
     assert_eq!(snapshot.tiles.len(), 524_288);
 }
+
+/// Reads deltas until the daemon reports itself paused, returning the tick it stopped on.
+///
+/// Bounded by `limit` deltas rather than by wall clock: a daemon that never pauses must fail the
+/// assertion below with the tick it reached, not hang until the harness timeout and say nothing.
+fn read_until_paused(reader: &mut BufReader<TcpStream>, limit: usize) -> u64 {
+    let mut last = 0;
+    for _ in 0..limit {
+        let delta = read_delta(reader);
+        last = delta.tick;
+        if delta.speed == protocol::Speed::Paused {
+            return delta.tick;
+        }
+    }
+    panic!("daemon never reported itself paused; reached tick {last}");
+}
+
+/// THE REGRESSION TEST FOR #111. A bare `set_speed` applies when it arrives, so the freeze point
+/// tracked round-trip latency: measured on one devpod with one fresh daemon per capture, the same
+/// recipe froze at tick 39-40 idle, 80 under CPU load, and 225 against a daemon given a 15 s head
+/// start. Two captures meant to differ only by a camera effect therefore froze two DIFFERENT
+/// worlds, and the resulting 0.3636 pp swing in camp near-white was read for three stories as an
+/// instrument noise floor. Naming the tick is what makes a capture pair comparable.
+#[test]
+fn a_scheduled_pause_freezes_the_world_on_exactly_its_tick() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    // Far enough ahead that the command lands first even on a loaded machine; the daemon ticks
+    // every 100 ms, so this is ~3 s.
+    let target = snapshot.tick + 30;
+    send_literal(
+        &mut writer,
+        format!("{{\"type\":\"set_speed\",\"speed\":\"paused\",\"at_tick\":{target}}}\n")
+            .as_bytes(),
+    );
+
+    let landed = read_until_paused(&mut reader, 200);
+    assert_eq!(
+        landed, target,
+        "a scheduled pause must stop the world ON its tick, not wherever the command arrived"
+    );
+
+    // And it STAYS there: a freeze that drifts afterwards is the same defect one step later.
+    for _ in 0..5 {
+        let delta = read_delta(&mut reader);
+        assert_eq!(delta.tick, target, "the frozen world must not advance");
+        assert_eq!(delta.speed, protocol::Speed::Paused);
+    }
+}
+
+/// The daemon cannot rewind, so the one thing it must never do is freeze somewhere else quietly.
+#[test]
+fn a_scheduled_pause_whose_tick_has_already_passed_applies_now_and_says_so() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    // Let the world move past tick 0, then ask for a tick that is certainly gone.
+    let _ = read_delta(&mut reader);
+    assert!(snapshot.tick < 1_000_000);
+    send_literal(
+        &mut writer,
+        b"{\"type\":\"set_speed\",\"speed\":\"paused\",\"at_tick\":0}\n",
+    );
+
+    let log = daemon.next_log();
+    assert!(
+        log.contains("already past") && log.contains("NOT the one requested"),
+        "a late schedule must name itself on stderr; got: {log}"
+    );
+    let landed = read_until_paused(&mut reader, 50);
+    assert!(
+        landed > 0,
+        "a late schedule still pauses, just not where it was asked to"
+    );
+}
+
+/// An explicit "now" must win over a schedule still waiting, or a stale pause fires later over
+/// the top of a running world and nothing explains it.
+#[test]
+fn an_unscheduled_command_cancels_a_pending_schedule() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    let target = snapshot.tick + 10;
+    send_literal(
+        &mut writer,
+        format!("{{\"type\":\"set_speed\",\"speed\":\"paused\",\"at_tick\":{target}}}\n")
+            .as_bytes(),
+    );
+    send_speed(&mut writer, protocol::Speed::Normal);
+
+    // Run well past the cancelled target: the world must still be moving there.
+    let mut last = snapshot.tick;
+    for _ in 0..(target - snapshot.tick + 10) {
+        let delta = read_delta(&mut reader);
+        assert_eq!(
+            delta.speed,
+            protocol::Speed::Normal,
+            "a cancelled schedule must not fire at tick {}",
+            delta.tick
+        );
+        last = delta.tick;
+    }
+    assert!(last > target, "test must run past the cancelled tick");
+}

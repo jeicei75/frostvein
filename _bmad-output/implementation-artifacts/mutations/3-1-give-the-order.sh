@@ -186,48 +186,46 @@ assert old in s
 p.write_text(s.replace(old, ''))
 PY
 
+# RE-POINTED 2026-09-20: adding `at_tick` to SetSpeed for #111 gave that variant a field
+# attribute, and rustfmt then expanded EVERY variant of `Command` to multi-line. The seams
+# below are unchanged -- only their formatting moved.
 mutation "designate discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
 import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()
-old = '    Designate { kind: DesignationKind, rect: Rect },\n'
+old = '    Designate {\n        kind: DesignationKind,\n'
 assert old in s
-p.write_text(s.replace(old, '    #[serde(rename = "mark")]\n    Designate { kind: DesignationKind, rect: Rect },\n'))
+p.write_text(s.replace(old, '    #[serde(rename = "mark")]\n    Designate {\n        kind: DesignationKind,\n'))
 PY
 
 mutation "cancel_designation discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
 import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()
-old = '    CancelDesignation { rect: Rect },\n'
+old = '    CancelDesignation {\n        rect: Rect,\n'
 assert old in s
-p.write_text(s.replace(old, '    #[serde(rename = "erase")]\n    CancelDesignation { rect: Rect },\n'))
+p.write_text(s.replace(old, '    #[serde(rename = "erase")]\n    CancelDesignation {\n        rect: Rect,\n'))
 PY
 
 mutation "place_stockpile discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
 import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()
-old = '    PlaceStockpile { rect: Rect },\n'
+old = '    PlaceStockpile {\n        rect: Rect,\n'
 assert old in s
-p.write_text(s.replace(old, '    #[serde(rename = "store")]\n    PlaceStockpile { rect: Rect },\n'))
+p.write_text(s.replace(old, '    #[serde(rename = "store")]\n    PlaceStockpile {\n        rect: Rect,\n'))
 PY
 
 mutation "remove_stockpile discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
 import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()
-old = '    RemoveStockpile { rect: Rect },\n'
+old = '    RemoveStockpile {\n        rect: Rect,\n'
 assert old in s
-p.write_text(s.replace(old, '    #[serde(rename = "unstore")]\n    RemoveStockpile { rect: Rect },\n'))
+p.write_text(s.replace(old, '    #[serde(rename = "unstore")]\n    RemoveStockpile {\n        rect: Rect,\n'))
 PY
 
 mutation "designate kind field is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
 import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()
-old = '    Designate { kind: DesignationKind, rect: Rect },\n'
-new = '''    Designate {
-        #[serde(rename = "mode")]
-        kind: DesignationKind,
-        rect: Rect,
-    },
-'''
+old = '    Designate {\n        kind: DesignationKind,\n'
+new = '    Designate {\n        #[serde(rename = "mode")]\n        kind: DesignationKind,\n'
 assert old in s
 p.write_text(s.replace(old, new))
 PY
@@ -389,9 +387,9 @@ PY
 mutation "optimistic speed stops updating local state" tui optimistic_speed_keys_compose_before_a_wire_update <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = '        state.speed = speed;\n        Action::Command(Command::SetSpeed { speed })\n'
+old = '        state.speed = speed;\n        Action::Command(Command::SetSpeed {\n'
 assert old in s
-p.write_text(s.replace(old, '        Action::Command(Command::SetSpeed { speed })\n'))
+p.write_text(s.replace(old, '        Action::Command(Command::SetSpeed {\n'))
 PY
 
 mutation "hint bar is dropped" tui status_and_hint_occupy_the_bottom_two_rows <<'PY'

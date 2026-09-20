@@ -126,7 +126,9 @@ import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()
 # Narrowed 2026-08-22: this pinned the WHOLE enum as it stood with one variant, and rotted the
 # moment 2.4 added Save/Load/Quit. Anchor the variant, not its container.
-old = "    SetSpeed { speed: Speed },\n"
+# RE-POINTED 2026-09-20: the variant became multi-line when `at_tick` was added for #111. The row
+# still renames the DISCRIMINATOR and nothing else, which is the seam it has always pinned.
+old = "    SetSpeed {\n        speed: Speed,\n"
 assert s.count(old) == 1
-p.write_text(s.replace(old, "    #[serde(rename = \"set_rate\")]\n    SetSpeed { speed: Speed },\n"))
+p.write_text(s.replace(old, "    #[serde(rename = \"set_rate\")]\n    SetSpeed {\n        speed: Speed,\n"))
 PY

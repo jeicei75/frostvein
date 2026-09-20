@@ -465,7 +465,10 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
     let speed = state.speed;
     let command = |state: &mut ViewState, speed| {
         state.speed = speed;
-        Action::Command(Command::SetSpeed { speed })
+        Action::Command(Command::SetSpeed {
+            speed,
+            at_tick: None,
+        })
     };
     match key.code {
         KeyCode::Char('S') => Action::Command(Command::Save),
@@ -753,6 +756,7 @@ mod tests {
                 Speed::Paused,
                 Action::Command(Command::SetSpeed {
                     speed: Speed::Normal,
+                    at_tick: None,
                 }),
             ),
             (
@@ -760,6 +764,7 @@ mod tests {
                 Speed::Normal,
                 Action::Command(Command::SetSpeed {
                     speed: Speed::Paused,
+                    at_tick: None,
                 }),
             ),
             (
@@ -767,6 +772,7 @@ mod tests {
                 Speed::Fast,
                 Action::Command(Command::SetSpeed {
                     speed: Speed::Paused,
+                    at_tick: None,
                 }),
             ),
             (
@@ -774,12 +780,16 @@ mod tests {
                 Speed::Paused,
                 Action::Command(Command::SetSpeed {
                     speed: Speed::Normal,
+                    at_tick: None,
                 }),
             ),
             (
                 KeyCode::Char('+'),
                 Speed::Normal,
-                Action::Command(Command::SetSpeed { speed: Speed::Fast }),
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Fast,
+                    at_tick: None,
+                }),
             ),
             (KeyCode::Char('+'), Speed::Fast, Action::Ignore),
             (
@@ -787,6 +797,7 @@ mod tests {
                 Speed::Fast,
                 Action::Command(Command::SetSpeed {
                     speed: Speed::Normal,
+                    at_tick: None,
                 }),
             ),
             (
@@ -794,6 +805,7 @@ mod tests {
                 Speed::Normal,
                 Action::Command(Command::SetSpeed {
                     speed: Speed::Paused,
+                    at_tick: None,
                 }),
             ),
             (KeyCode::Char('-'), Speed::Paused, Action::Ignore),
@@ -846,13 +858,17 @@ mod tests {
 
         assert_eq!(
             apply_key(&mut state, press(KeyCode::Char('+')), dims, (80, 24)),
-            Action::Command(Command::SetSpeed { speed: Speed::Fast })
+            Action::Command(Command::SetSpeed {
+                speed: Speed::Fast,
+                at_tick: None
+            })
         );
         assert_eq!(state.speed, Speed::Fast);
         assert_eq!(
             apply_key(&mut state, press(KeyCode::Char('-')), dims, (80, 24)),
             Action::Command(Command::SetSpeed {
                 speed: Speed::Normal,
+                at_tick: None,
             })
         );
         assert_eq!(state.speed, Speed::Normal);
@@ -1548,7 +1564,10 @@ mod tests {
             );
             assert_eq!(
                 apply_key(&mut state, press(KeyCode::Char('+')), dims, (9, 7)),
-                Action::Command(Command::SetSpeed { speed: Speed::Fast })
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Fast,
+                    at_tick: None
+                })
             );
             assert_eq!(state.speed, Speed::Fast);
             assert_eq!(
