@@ -270,13 +270,22 @@ fn read_delta_with_speed(
     panic!("daemon never reported {expected:?}; observed {observed:?}");
 }
 
+/// Bounded at 50 deltas, matching [`read_delta_with_speed`] above.
+///
+/// It was 10, and that was not a considered bound -- it was tight enough to fail under load. A
+/// designation lands about 4 ticks after it is sent on an idle box, but the SEND is what the load
+/// delays: a starved client gets its command to the daemon later, so more ticks pass before the
+/// mark appears. The assertion here is "designations and stockpiles reach both clients", not
+/// "within ten ticks" -- there is no tick contract to pin, and pinning one measured scheduler
+/// contention. Same shape as issue #111, one level down: a latency-bound arrival judged against a
+/// fixed tick window. Still bounded, so a daemon that never applies the command still fails loudly.
 fn read_delta_with_marks(
     reader: &mut BufReader<TcpStream>,
     designations: &[protocol::Designation],
     zones: &[protocol::Zone],
 ) -> protocol::Delta {
     let mut observed = Vec::new();
-    for _ in 0..10 {
+    for _ in 0..50 {
         let update = read_delta(reader);
         observed.push((
             update.tick,
