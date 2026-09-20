@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-19
+last_updated: 2026-09-20
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2362,7 +2362,18 @@ development_status:
   #   STILL OWED and unchanged by the rebase: 11.1b's own recorded figures (camp spread, near-white,
   #     bloom deltas) were measured at 9.7 EV100 and floor 70. The GATE does not pin them, so they
   #     are stale PROSE rather than a red test, and they describe a build that no longer exists.
-  11-1b-the-air-has-depth: in-progress
+  11-1b-the-air-has-depth: done
+  # 2026-09-20: DONE, merged as PR #115 (main c7f67f5). The sitting was held on the vehicle against
+  #   build 5cd523c: AC8 MET (worst p50 3.55 ms against NFR6's 16.67 ms bar), AC9 signed off by
+  #   Wolf, and AC5's deferred near-white ceiling CLOSED -- it held with +0.4449 pp of headroom,
+  #   where the card had predicted a trip. Evidence: 11-1-signoff/task-5b-vehicle-evidence.md.
+  #   All 13 [Review][Patch] items are ticked: ELEVEN were already fixed in the tree and only the
+  #   boxes had not moved, two were genuinely open, and three MORE stale notes were found off the
+  #   review list. Every one was the same failure -- a correction written BESIDE the stale text
+  #   instead of replacing it -- which is why the line below is struck rather than deleted.
+  #   The "STILL OWED" note above is partly discharged: the near-white figures were re-measured at
+  #   the current exposure (n=18) for the bloom floor re-baseline in PR #116.
+  # SUPERSEDED 2026-09-20 -- the vehicle-bound work below was done at the sitting:
   # 2026-09-19: AC1 and AC4 are now MET and the two blocking rulings are recorded on #105/#107.
   # Branch story-11-1b-the-air-has-depth.
   # CODE REVIEWED 2026-09-19 -- see the review block at the bottom. Stays in-progress: the
