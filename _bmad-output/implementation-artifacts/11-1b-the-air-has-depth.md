@@ -177,10 +177,15 @@ Task 1 fixes the instrument before Task 3 leans on it.
         are taken; note the existing order is not alphabetical (F7 lanterns, F8 ambient, F9 torches).
   - [x] Update the three tests pinning the full readout string (`ingest.rs:2489`, `:2508`, `:2594`).
         **Do not weaken them to substring checks** — they pin the whole line on purpose.
-- [ ] **Task 5 — the vehicle read.** (AC: 8, 9) — **cannot be done on a devpod.** No devpod can open
+- [x] **Task 5 — the vehicle read.** (AC: 8, 9) — **cannot be done on a devpod.** No devpod can open
       a window. Write `11-1-signoff/task-5b-vehicle-card.md` naming the exact `--perf-log` runs and
       the frame pair Wolf judges, leave this task UNCHECKED, and hand it to the gingerspice sitting.
       **Invent no fps figure.**
+  - [x] Sitting held 2026-09-20 on build `5cd523c`. Four runs, fresh daemon each, same pause tick,
+        all exited 0. AC8 MET (worst p50 3.55 ms against NFR6's 16.67 ms bar), AC9 signed off, and
+        AC5's deferred ceiling judgement closed. Figures and their limits:
+        `11-1-signoff/task-5b-vehicle-evidence.md`. The card's recipe omitted `--headless`, which
+        `ingest.rs:605` makes load-bearing for a frame-time comparison; corrected before the run.
 - [x] **Task 6 — sabotage.** (AC: 11)
   - [x] Scope-only rows: AO omitted; AO present with MSAA re-enabled; strengthened
         `--lights-steady` consequence. The bloom, effect-switch, key, and readout rows remain
@@ -319,48 +324,75 @@ AO-off reading and the AC3 guard once. Taking (6) earlier baselines the guard tw
       expensive half. Minimum action either way: the vehicle card must say which cost its column
       measures. MED. [feature + blind]
 
-- [ ] [Review][Patch] `--static-world` leaves the daemon paused permanently and daemon-wide; nothing
+**RECONCILED AGAINST THE TREE 2026-09-20.** All thirteen were merged UNTICKED with PR #110, so the
+list read as thirteen items of remaining scope. Eleven were already fixed in the tree and only the
+boxes had not moved; two were genuinely open. An unstruck item does not lose work, it INVENTS it,
+so each box below is ticked against a named `file:line`, not against memory:
+
+| item | settled by |
+| --- | --- |
+| `--static-world` never sends `Normal` (HIGH) | FIXED — `restore_speed_on_exit` sends `Speed::Normal`, `command.rs:214-228` |
+| AC3's guard passes with SSAO absent (HIGH) | FIXED — guard is now an AO-on/AO-off DELTA with the review's figures, `pixel_guard.rs:179-196` |
+| AC11 not met: 10 rows pasted, notes say "ten" | **WAS HALF-OPEN** — table is 19 rows and the AC11 record is right, but the Completion Notes still claimed "ten". Corrected 2026-09-20 |
+| Task 5's card overwrote 11.1a's | FIXED — `task-5-vehicle-card.md` restored, 11.1b's filed at `task-5b-` |
+| Two weak-kill `F13` mutation rows | FIXED — rows swap F11<->F12, with the reason at `mutations/11-1b-the-air-has-depth.sh:59-64` |
+| 11.1a row sabotages the readout LABEL not STATE | FIXED — `the effect readout no longer records its on/off state`, `mutations/11-1a-…sh:53` |
+| `README.md:201` overpromises `--static-world` | FIXED — the flag row now carries the "only if" and the note below it names `fall_snow` and `flicker_projection` |
+| Published noise floors are lucky-tight pairs | FIXED — same-build floors 0.012/0.017 and the ~18x margin recorded at `pixel_guard.rs:190-196` |
+| Wolf's #106 ruling recorded nowhere but the issue | FIXED — recorded in this story, line ~688 |
+| `tech-art-guidelines.md` ships two wrong rows | **WAS OPEN, AND WORSE THAN REPORTED** — the corrected rows were ADDED without deleting the wrong ones, so the table shipped FOUR rows contradicting each other. Duplicates removed 2026-09-20 |
+| File List badly stale | FIXED — rebuilt at the review from `git diff --name-only d3ecdff..HEAD`, 67 files |
+| `sprint-status.yaml` promises "two open items" | FIXED — corrected in the 2026-09-19 review block |
+| `--lights-steady` documented nowhere | FIXED — present in README's flag table and in the note beneath it |
+
+The two that were open are the same failure in two shapes: **a correction that is added beside the
+wrong text instead of replacing it**. The tech-art table is the sharper case — fresh, correct rows
+sitting under stale ones read as done to anyone scanning for whether the fix landed, and a reader
+taking the FIRST `ScreenSpaceAmbientOcclusion` row would have inherited exactly the creases premise
+#106 killed, which is what 11.2 and 11.3 build on.
+
+- [x] [Review][Patch] `--static-world` leaves the daemon paused permanently and daemon-wide; nothing
       ever sends `Normal` [crates/gui/src/command.rs:74-92] — HIGH. [feature]
-- [ ] [Review][Patch] AC3's guard passes with SSAO absent once bloom is off; assert the AO-on/AO-off
+- [x] [Review][Patch] AC3's guard passes with SSAO absent once bloom is off; assert the AO-on/AO-off
       delta, not an absolute level [crates/gui/tests/pixel_guard.rs:165-196] — HIGH. [feature]
-- [ ] [Review][Patch] AC11 is NOT MET: the table holds 12 rows and 10 are pasted; the two
+- [x] [Review][Patch] AC11 is NOT MET: the table holds 12 rows and 10 are pasted; the two
       `--static-world` pause-path rows are missing, and the Completion Notes still say "ten"
       [_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md:398-409] — MED.
       [acceptance + orchestrator]
-- [ ] [Review][Patch] Task 5's card OVERWROTE 11.1a's card, destroying a sibling story's live
+- [x] [Review][Patch] Task 5's card OVERWROTE 11.1a's card, destroying a sibling story's live
       deliverable [_bmad-output/implementation-artifacts/11-1-signoff/task-5-vehicle-card.md] — MED.
       [acceptance + orchestrator]
-- [ ] [Review][Patch] Two mutation rows are WEAK KILLS: retargeting the key to `F13` panics
+- [x] [Review][Patch] Two mutation rows are WEAK KILLS: retargeting the key to `F13` panics
       `lighting_readout`'s `unreachable!()` arm before any key assertion discriminates; swap
       F11<->F12 instead [_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh:59-73]
       — MED. [blind + orchestrator]
-- [ ] [Review][Patch] A re-pointed 11.1a mutation row now sabotages the readout LABEL, not its
+- [x] [Review][Patch] A re-pointed 11.1a mutation row now sabotages the readout LABEL, not its
       STATE, so nothing anywhere sabotages the on/off literal and AC7's state clause is unprotected
       [_bmad-output/implementation-artifacts/mutations/11-1a-a-chosen-exposure-and-a-clean-edge.sh]
       — MED. [acceptance]
-- [ ] [Review][Patch] `README.md:201` still promises `--static-world` makes "two captures differ
+- [x] [Review][Patch] `README.md:201` still promises `--static-world` makes "two captures differ
       only by what you changed"; the fix pauses the DAEMON while `fall_snow` and `flicker_projection`
       run on the wall clock [README.md:201, crates/gui/src/atmosphere.rs:321] — MED, latent
       silent-failure trap. [orchestrator + feature]
-- [ ] [Review][Patch] Published noise floors are lucky-tight pairs: the "600x" margin divides by a
+- [x] [Review][Patch] Published noise floors are lucky-tight pairs: the "600x" margin divides by a
       TWO-sample 0.001 floor, and three independent layers read 69.452-69.487 (spread 0.035, >=35x
       it) — one of them BELOW the guard comment's own stated range
       [crates/gui/tests/pixel_guard.rs:165-172] — MED. [orchestrator + feature + edge]
-- [ ] [Review][Patch] Wolf's #106 ruling (AO accepted as wired, NOT visible from the seat, look
+- [x] [Review][Patch] Wolf's #106 ruling (AO accepted as wired, NOT visible from the seat, look
       deferred to 11.3) is recorded nowhere but the issue — not in this story, not on the board
       [_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md] — MED, latent: 11.2/11.3
       inherit a false premise. [orchestrator]
-- [ ] [Review][Patch] `docs/tech-art-guidelines.md` ships two wrong rows: bloom says "AC4 remains
+- [x] [Review][Patch] `docs/tech-art-guidelines.md` ships two wrong rows: bloom says "AC4 remains
       blocked" after AC4 was met, and AO claims a creases-concentrated signature #106 measured as
       broadly uniform [docs/tech-art-guidelines.md:68-69] — MED. [orchestrator + feature + acceptance]
-- [ ] [Review][Patch] The File List is badly stale — ~25 changed files unlisted, including
+- [x] [Review][Patch] The File List is badly stale — ~25 changed files unlisted, including
       `command.rs` which carries the headline change, four new instrument scripts and 16 PNGs; and
       `tests/headless.rs` is listed UPDATE but was never touched
       [_bmad-output/implementation-artifacts/11-1b-the-air-has-depth.md] — MED.
       [acceptance + orchestrator]
-- [ ] [Review][Patch] `sprint-status.yaml` promises "two open items" and lists one [_bmad-output/implementation-artifacts/sprint-status.yaml]
+- [x] [Review][Patch] `sprint-status.yaml` promises "two open items" and lists one [_bmad-output/implementation-artifacts/sprint-status.yaml]
       — LOW, folded in with the board update. [acceptance + orchestrator]
-- [ ] [Review][Patch] `--lights-steady` is documented nowhere — absent from README's flag table and
+- [x] [Review][Patch] `--lights-steady` is documented nowhere — absent from README's flag table and
       all of `docs/` [README.md:190-204] — LOW, folded in with the README patch above.
       [orchestrator + feature + acceptance]
 
@@ -705,13 +737,46 @@ and the reason is visible rather than mysterious: this review had no self-gate t
 four layers that each built and ran the binaries, and then carried a nineteen-item patch pass with
 three rendered-guard rebuilds, two full mutation-table runs and a full gate inside the same session.
 
+### Vehicle sitting, 2026-09-20 — AC8, AC9, and AC5's deferred ceiling
+
+Full figures, recipe and limits: `11-1-signoff/task-5b-vehicle-evidence.md`. Build `5cd523c`,
+four runs, one fresh `simd.exe` each, same `--static-world` pause tick on all four, all exited 0.
+
+**AC8 — MET.** Steady-state p50, n=166 per run: effects-on **3.33 ms**, `--fx-off fxaa` 3.55,
+`--fx-off ao` 3.42, `--fx-off bloom` 3.36. NFR6's bar is 16.67 ms and the worst of the four is
+3.55 ms — 4.7x of headroom, so no effect costs the bar and the story tunes nothing.
+
+Every effect-OFF run is SLOWER than effects-on. A post-process pass cannot make rendering quicker,
+so no delta here is a cost: each is run-to-run variance and every effect's true cost is below this
+setup's floor. The SIGN carries that, not the size — **one run per condition is not a noise floor**
+(#98), and **no cost figure is published from these deltas**.
+
+**AC9 — SIGNED OFF by Wolf.** `effects-on.png` against `bloom-off.png` at boot framing. Bloom
+reads: the pit floor and lantern cluster blow to white with it on and resolve into readable
+geometry with it off. AO does not read as crease darkening, per #106's ruling; deferred to 11.3.
+
+**AC5's ceiling judgement — CLOSED, the ceiling holds with room.** Measured off the four delivered
+PNGs (not inferred from exit 0), mirroring `near_white_area_fraction`: 0.4824–0.5012% against the
+0.9461% ceiling, **+0.4449 pp of headroom with every effect on**. The card expected a trip — ~0.18 pp
+headless headroom against a recorded 0.4–0.6 pp delivery-GPU penalty — and it did not happen.
+**This does not settle the venue delta**: no same-build headless capture was taken, and the recorded
+penalty was measured in the bright tail, which a night boot framing is not. Bloom's own near-white
+contribution is 0.0121 pp, consistent with a halo local to the camp.
+
+**A gap this sitting exposed.** The pause tick is printed to the console and is NOT in the
+perf-log preamble, and the preamble's content counters read identically whether the daemon was
+restarted or not (#83) — so the artifacts alone cannot show a comparison set is comparable. Closed
+here by Wolf's word at the sitting, which does not survive into the record. The tick belongs in the
+`# run:` line.
+
 ### Completion Notes List
 
 - Task 0: captured the build-specific no-AO/no-bloom controls. The camp flicker floor confirms Task 1 must pin the live flicker clock before bloom is measured.
-- Task 1: implemented and mutation-proved the live `--lights-steady` path, but AC1 is blocked by residual camp-window variance after the clock is pinned. Tasks 2–6 were intentionally not started; Task 5 remains vehicle-only.
-- Task 3: Bloom is installed but AC4 is blocked: its bright-tail p90 did not rise over the new build-specific Hdr/no-bloom floor. No headless ceiling was changed.
-- Task 4: the three-effect command and seat controls are implemented and focused-test green; its story mutations remain deferred by the AC4 stop rule.
-- Task 6: added and ran the remaining bloom, per-name `--fx-off`, F11/F12, and readout sabotages; all ten table rows KILLED. The full repository anchor audit passed after checking the legacy camera/readout rows.
+- Task 1: implemented and mutation-proved the live `--lights-steady` path. **As written 2026-09-18 this note said AC1 was blocked by residual camp-window variance and that Tasks 2–6 had not been started; both were overtaken and the note was never updated.** AC1 is MET (2026-09-19): `--static-world` had never frozen anything despite `README.md:201`, and once it was wired to the `SetSpeed { Paused }` the daemon already accepted, the camp spread collapsed to 0/0/0.0017 pp. Tasks 2–6 are all complete.
+- Task 3: Bloom is installed. **As written this note said AC4 was blocked on a bright-tail p90 that did not rise; that clause was later found unsatisfiable by construction** (`Bloom::default() == NATURAL == EnergyConserving`, `bloom/settings.rs:139,185-189` — an energy-conserving preset cannot raise the bright tail). AC4 is MET on the re-measured statistic: camp median +13, mean +6.88 against same-build floors of 0 and 0.046. No headless ceiling was changed.
+- Task 4: the three-effect command and seat controls are implemented and focused-test green. **The deferral of its mutations under the AC4 stop rule was lifted once AC4 was met**; those rows are in the nineteen-row table and all KILLED.
+- Task 5: held at the gingerspice sitting 2026-09-20 on `5cd523c`. AC8 met, AC9 signed off, AC5's deferred ceiling closed. The card's recipe omitted `--headless`, which `ingest.rs:605` makes load-bearing for a frame-time read; corrected before the run.
+- Task 6: added and ran the remaining bloom, per-name `--fx-off`, F11/F12, and readout sabotages. The 2026-09-18 run KILLED all ten rows the table held THEN; the review added the two `--static-world` pause-path rows and re-pointed others, and the table's current state is **nineteen rows, all KILLED** (see the AC11 record). The full repository anchor audit passed after checking the legacy camera/readout rows.
 
 ### File List
 
@@ -755,6 +820,9 @@ their families rather than one line each.
 - `11-1-signoff/task-5-vehicle-card.md` -- RESTORED to 11.1a's card at the review
 - `11-1-signoff/task-5b-vehicle-card.md` (new, at the review) -- 11.1b's card, at the path the
   Project Structure table always named
+- `11-1-signoff/task-5b-vehicle-evidence.md` (new, 2026-09-20) -- the sitting's record
+- `11-1-signoff/effects-on.{csv,png}`, `fxaa-off.{csv,png}`, `ao-off.{csv,png}`,
+  `bloom-off.{csv,png}` (new, 2026-09-20) -- the four vehicle runs, Wolf's delivered artifacts
 - `11-1-signoff/campstats.py`, `delta.py`, `markdiff.py`, `residual.py` (new instruments)
 - `11-1-signoff/emitter-window-flicker-floor.md`,
   `11-1-signoff/residual-after-the-flicker-pin.md`, `11-1-signoff/wolf-seat-check-d3ecdff.md` (new)
