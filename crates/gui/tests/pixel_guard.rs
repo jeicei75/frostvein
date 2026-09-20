@@ -297,28 +297,36 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
     const BLOOM_HALO_MEAN_FLOOR: f32 = 3.0;
     /// Minimum near-white FALL separating `EnergyConserving` from `Additive`.
     ///
-    /// RE-BASELINED 0.10 -> 0.02 on 2026-09-20, from two measured distributions rather than from
-    /// a number that happens to pass. 12 capture pairs, this guard's own flags, one fresh daemon
-    /// each, all frozen at tick 120:
+    /// RE-BASELINED 0.10 -> 0.00 on 2026-09-20, from two measured distributions rather than from
+    /// a number that happens to pass. This guard's own flags, one fresh daemon per capture, all
+    /// frozen at tick 120:
     ///
-    ///   EnergyConserving (shipped), n=8:  fall +0.0822 .. +0.1399, mean +0.1084, spread 0.0577
-    ///   Additive (`OLD_SCHOOL`),    n=4:  fall -0.3147 .. -0.2448, mean -0.2736, spread 0.0699
+    ///   EnergyConserving (shipped), n=18: fall +0.0490 .. +0.1451, mean +0.1040, range 0.0961
+    ///   Additive (`OLD_SCHOOL`),    n=4:  fall -0.3147 .. -0.2448, mean -0.2736, range 0.0699
     ///
-    /// The two modes sit on OPPOSITE SIDES OF ZERO with a 0.327 pp gap, so the statistic separates
+    /// The two modes sit on OPPOSITE SIDES OF ZERO with a 0.29 pp gap, so the statistic separates
     /// them well; the old bar was simply in the wrong place. 0.10 sat BELOW the mean of the real
     /// distribution, which is why it failed about one run in four no matter how deterministic the
     /// capture became -- a bar inside its own signal's spread is a coin flip, not a guard.
     ///
-    /// Why 0.02: one full observed noise spread below the lowest real fall
-    /// (0.0822 - 0.0577 = 0.0245), which leaves the nearest mutant 0.2648 below it -- 3.8 mutant
-    /// spreads of kill margin. Kept POSITIVE on purpose: any RISE is Additive-like behaviour, so
-    /// a negative floor would accept the very thing this clause exists to catch.
+    /// WHY ZERO, AND WHY THE FIRST ANSWER WAS WRONG. This was first set to 0.02, one noise spread
+    /// below the lowest fall in an EIGHT-pair sample (min 0.0822, spread 0.0577). Ten further runs
+    /// put the minimum at 0.0490 and the range at 0.0961 -- the tail ran well below what eight
+    /// samples showed, and 0.02 was left carrying 0.30 spreads of margin rather than the ~1.0 it
+    /// was chosen for. Eight samples were not a floor either.
+    ///
+    /// Zero is not a weaker bar here, because THIS CLAUSE GUARDS THE MODE, NOT THE STRENGTH.
+    /// `Additive` RAISES near-white, so the sign alone separates the modes and zero still kills
+    /// `OLD_SCHOOL` by 0.2448 pp. A bloom that is merely weak is caught by
+    /// [`BLOOM_HALO_MEDIAN_FLOOR`] and [`BLOOM_HALO_MEAN_FLOOR`] in this same test, which ran at
+    /// 12 and 6.3 against bars of 6 and 3.0. Requiring a specific fall MAGNITUDE here bought
+    /// nothing those two do not already cover, and cost the margin twice over.
     ///
     /// NOT a bar loosened to pass a failing run. The signal shrank ~3x (0.32 pp on `6140ca3`)
     /// because Wolf ruled the exposure 9.7 -> 10.5 EV100 at 11.1a's review -- a deliberate change
     /// to the frame, exactly as `CONTROL_OPEN_SNOW_MEDIAN` tracked it 116 -> 93. That control was
     /// tracked and this floor was not, which is the whole of the second half of issue #111.
-    const BLOOM_NEAR_WHITE_FALL_FLOOR: f32 = 0.02;
+    const BLOOM_NEAR_WHITE_FALL_FLOOR: f32 = 0.00;
 
     // One daemon per capture: the camp window is where the lantern-carrying dwarves walk, so a
     // shared daemon's later freeze tick lands them somewhere else and the delta measures that
