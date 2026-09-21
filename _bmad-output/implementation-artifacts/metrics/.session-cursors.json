@@ -2736,5 +2736,25 @@
     "quota_last": 47.0,
     "schema": 2,
     "turns": 147
+  },
+  "rollout-2026-09-21T08-12-08-01a0c305-bf35-73c2-b5c6-15dd2f7e25de.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 26393856,
+        "input": 310101,
+        "output": 36214
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 26393856,
+    "input": 310101,
+    "last_ts": "2026-09-21T09:40:08.716Z",
+    "marked_at": null,
+    "output": 36214,
+    "primary_only": false,
+    "quota_last": 25.0,
+    "schema": 2,
+    "turns": 181
   }
 }
