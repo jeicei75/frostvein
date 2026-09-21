@@ -563,6 +563,26 @@ pixel window while ruling a bright band across the sky, so it was done by eye on
    archive.** Wolf: what does "issues" look like — a one-frame flash, no visible change at all, or
    artefacts that persist?
 
+**Full gate re-run independently on `a726e75` — RED at 1248s, ONE failure, and it is #119.**
+All ten other rendered-frame guards pass, including both of this story's own
+(`dof_softens_the_far_ridge_while_retaining_camp_focus_and_stars` and
+`haze_lifts_and_softens_the_far_valley_without_swallowing_the_sky`). The gate's own line reads
+`terrace mean AO-on=60.363 AO-off=60.799 darkening=0.436; open-snow LL/LR median=91/93` — matching
+the independent measurements above. **So #119 is the single thing between this story and a green
+gate, and it is a decision, not a defect to fix here.**
+
+Recommended, NOT applied: re-baseline `CONTROL_OPEN_SNOW_MEDIAN` 93 -> 91 with a comment naming
+11.2's haze, exactly as it went 116 -> 93 on 2026-09-19 for Wolf's EV100 ruling. That constant's own
+comment sets the precedent and the reasoning: the assertion is EQUALITY, so a re-baseline is
+"neither weaker nor stronger", and a control must track a deliberate change to the frame. The
+alternative — tuning `FOG_DENSITY_FACTOR` until the old control passes — is the
+[[guard-bounds-the-art-decision]] trap and would let a guard calibrated under a superseded frame
+bound Wolf's ruled haze. **Wolf rules; the story does not move it.**
+
+**A note on reading the gate:** the run was invoked through a pipe, and the harness reported
+`exit code 0` because that was `tail`'s status, not `gate.sh`'s. The gate itself printed
+`GATE RED 1248s`. Read the verdict line, never the pipeline's exit code.
+
 **A harness trap found while testing, worth knowing:** `configured_app` runs no input-clearing
 system, so `ButtonInput::just_pressed` is **sticky** — every `app.update()` with a stale press
 toggles the effect again. A two-tap sequence silently becomes four toggles. Every existing key
