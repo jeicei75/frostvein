@@ -483,11 +483,35 @@ worthless no matter how green the suite is.**
 
 ### Agent Model Used
 
+GPT-5.6-Codex
+
 ### Debug Log References
+
+- Render DoF green (Rec.601): far-ridge 9.3720 → 6.4426 (31.3%), camp 16.6325 → 16.1498 (2.9%), ratio 10.771, sky peak 158 → 157.
+- Render haze green (Rec.601): far median 50 → 69, `lap_mean` 8.6568 → 6.4470 (25.5%), sky median 24 → 25, stars ≥150 32 → 32.
+- AC6 RED at f/1.0: exit 101 only from guard; far 9.4230 → 9.3725 (0.5%), camp 16.4759 → 16.4086 (0.4%), ratio 1.314, sky 158 → 158; no render warning observed.
+- AC7 RED without `VolumetricLight`: exit 101 only from guard; far median 50 → 50, `lap_mean` 8.6573 → 8.6352 (0.3%), sky 24 → 24, stars ≥150 32 → 32; no fog log line observed.
+- Mutation table: all six KILLED; audit: 601 rows apply (11 legacy rows unguarded, none added here).
+- Full gate RED after 1320s only in the previous AO post-stack control: expected LL/LR 93/93, observed 91/93; darkening 0.425. Filed #119.
 
 ### Completion Notes List
 
+- Implemented ruled f/0.05 finite-depth DoF from camera transform to aim point; vertical-ramped density-0.015 volumetric haze with derived ambient intensity; `dof`/`haze` fx-off switches and F1/F2 readout toggles. (Dev first chose F13/F14; a standard
+  keyboard stops at F12, so those toggles were unreachable at the seat while AC12's synthetic
+  key-press test stayed green. Corrected to F1/F2 at orchestrator verification, Wolf's ruling
+  2026-09-21; the keymap is now full and issue #118 carries the rethink.)
+- `apply_effect` retains AO prepasses, Bloom's Hdr, and plain removal. All six named mutations kill their named tests.
+- Blocked: do not tune previous AO control under this story. #119 needs Wolf's decision. AC8 eye check, AC13 vehicle performance, AC14 signoff, four independent controls, and blur proof remain outstanding.
+
 ### File List
+
+- `crates/gui/src/ingest.rs`
+- `crates/gui/tests/pixel_guard.rs`
+- `docs/tech-art-guidelines.md`
+- `_bmad-output/implementation-artifacts/11-2-signoff/vehicle-card.md`
+- `_bmad-output/implementation-artifacts/mutations/11-2-the-miniature.sh`
+- `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh`
+- `_bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh`
 
 ## Change Log
 
@@ -495,3 +519,4 @@ worthless no matter how green the suite is.**
 | --- | --- |
 | 2026-09-21 | Aperture RULED `0.05` (Wolf); haze recipe proved and the floor collision struck — no split. |
 | 2026-09-21 | Story created. Both mechanisms probed live on `7442174` and reverted; `sharpness.py` built and proved both ways; aperture bracket measured; the `capture.rs:1498` floor collision and the recommended split raised for Wolf. |
+| 2026-09-21 | Implemented 11.2 mechanisms and evidence; full gate blocked by #119's previous AO control, so status remains in-progress. |

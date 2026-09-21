@@ -196,8 +196,8 @@ impl CameraEffect {
             Self::Fxaa => KeyCode::F10,
             Self::AmbientOcclusion => KeyCode::F11,
             Self::Bloom => KeyCode::F12,
-            Self::Dof => KeyCode::F13,
-            Self::Haze => KeyCode::F14,
+            Self::Dof => KeyCode::F1,
+            Self::Haze => KeyCode::F2,
         }
     }
 
@@ -1550,9 +1550,9 @@ fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> Stri
                 KeyCode::F10 => "F10",
                 KeyCode::F11 => "F11",
                 KeyCode::F12 => "F12",
-                KeyCode::F13 => "F13",
-                KeyCode::F14 => "F14",
-                _ => unreachable!("the fixed effect keys are F10 through F14"),
+                KeyCode::F1 => "F1",
+                KeyCode::F2 => "F2",
+                _ => unreachable!("the fixed effect keys are F10, F11, F12, F1 and F2"),
             },
             effect.name(),
             if effects_off.is_off(effect) {
@@ -2908,27 +2908,27 @@ mod tests {
             (
                 KeyCode::F10,
                 (0, 1, 1, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa off  F11 ao on  F12 bloom on  F13 dof on  F14 haze on",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa off  F11 ao on  F12 bloom on  F1 dof on  F2 haze on",
             ),
             (
                 KeyCode::F11,
                 (1, 0, 1, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao off  F12 bloom on  F13 dof on  F14 haze on",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao off  F12 bloom on  F1 dof on  F2 haze on",
             ),
             (
                 KeyCode::F12,
                 (1, 1, 0, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom off  F13 dof on  F14 haze on",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom off  F1 dof on  F2 haze on",
             ),
             (
-                KeyCode::F13,
+                KeyCode::F1,
                 (1, 1, 1, 0, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof off  F14 haze on",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof off  F2 haze on",
             ),
             (
-                KeyCode::F14,
+                KeyCode::F2,
                 (1, 1, 1, 1, 0),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze off",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze off",
             ),
         ] {
             let (mut app, _sender, _server) = configured_app(&[]);
@@ -3220,7 +3220,7 @@ mod tests {
 
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze on"
         );
         for (key, source) in [
             (KeyCode::F5, super::LightSource::Sun),
@@ -3239,7 +3239,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze on"
+            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze on"
         );
 
         assert_eq!(
@@ -3325,7 +3325,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze on"
         );
         assert_eq!(
             emissive(&mut app, protocol::LightKind::Campfire),
@@ -3565,7 +3565,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze on"
                 .to_string(),
         ];
         expected.sort();

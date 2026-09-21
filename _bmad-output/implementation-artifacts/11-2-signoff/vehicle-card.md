@@ -13,6 +13,10 @@ vehicle. The devpod has lavapipe only, so it cannot establish NFR6's 60 fps bar.
 Repeat with `--fx-off dof` and `--fx-off haze`, using a new daemon and `vehicle-dof-off` /
 `vehicle-haze-off` filenames. Open the all-effects frame beside both controls.
 
+Live toggles at the seat: **F1 dof**, **F2 haze**, beside F10 fxaa / F11 ao / F12 bloom. The
+readout names each one's state. (F1/F2 rather than F13/F14: a standard keyboard stops at F12 --
+see issue #118, which carries the keymap rethink.)
+
 Questions for Wolf:
 
 1. Does f/0.05 make the far valley soften while the camp remains the focus plane? If not, choose
