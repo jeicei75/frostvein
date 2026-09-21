@@ -4,7 +4,7 @@ baseline_commit: 74421747
 
 # Story 11.2: The Miniature
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
