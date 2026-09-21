@@ -516,6 +516,57 @@ fn dof_softens_the_far_ridge_while_retaining_camp_focus_and_stars() {
     );
 }
 
+/// AC4 repeats the depth separation at the working zoom instead of treating boot framing as a
+/// universal proof. A focal value derived from the transform follows this change without a second
+/// framing formula.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn dof_keeps_depth_separation_at_distance_40() {
+    const FAR_RIDGE: (usize, usize, usize, usize) = (450, 120, 900, 250);
+    const CAMP: (usize, usize, usize, usize) = (500, 400, 760, 620);
+    let flags = [
+        "--static-world",
+        "--lights-steady",
+        "--subdiv",
+        "4",
+        "--distance",
+        "40",
+    ];
+    let (on, width, _) = Daemon::spawn().capture("dof-distance-40-on", &flags);
+    let (off, _, _) = Daemon::spawn().capture(
+        "dof-distance-40-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--distance",
+            "40",
+            "--fx-off",
+            "dof",
+        ],
+    );
+    let far_on = rec601_lap_mean(&on, width, FAR_RIDGE);
+    let far_off = rec601_lap_mean(&off, width, FAR_RIDGE);
+    let camp_on = rec601_lap_mean(&on, width, CAMP);
+    let camp_off = rec601_lap_mean(&off, width, CAMP);
+    let far_fall = (far_off - far_on) / far_off;
+    let camp_fall = (camp_off - camp_on) / camp_off;
+    let ratio = far_fall / camp_fall.max(0.0001);
+    println!(
+        "AC4 pixel guard (Rec.601): far {far_off:.4}->{far_on:.4} ({far_fall:.3}), \
+         camp {camp_off:.4}->{camp_on:.4} ({camp_fall:.3}), ratio={ratio:.3}"
+    );
+    assert!(
+        far_off - far_on > 0.0182,
+        "far-ridge fall must exceed the same-build floor"
+    );
+    assert!(
+        ratio >= 3.0,
+        "distance-40 far/camp fractional ratio {ratio:.3} is below 3"
+    );
+}
+
 /// AC7/AC8: volume haze must raise distant level AND lower its local contrast without dimming sky.
 #[test]
 #[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
