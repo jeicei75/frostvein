@@ -47,3 +47,19 @@ old = '        ambient_intensity: 0.1 * night_lighting().ambient_brightness / 80
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        ambient_intensity: 0.1,\n'))
 PY
+
+mutation "a selected dwarf stops being the focal subject" gui depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    let id = selected.0?;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let id = None::<u32>?;\n'))
+PY
+
+mutation "re-inserted DoF keeps boot framing for a frame" gui toggling_dof_back_on_focuses_the_live_camera_not_boot_framing <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            update_dof_from_camera.after(effect_controls),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            update_dof_from_camera,\n'))
+PY

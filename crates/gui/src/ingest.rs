@@ -1999,9 +1999,35 @@ fn fog_density_ramp_image() -> Image {
     image
 }
 
-fn update_dof_from_camera(mut cameras: Query<(&GlobalTransform, &CameraRig, &mut DepthOfField)>) {
+/// The point depth of field must focus, in render space, or `None` for the rig's own aim point.
+///
+/// A SELECTED DWARF is the subject, and he is not where the aim point is. `frame_selected_dwarf`
+/// centres him through `CameraRig::frame_render_point`, which writes the focus offset from him by
+/// the composition push -- about 7.3 units at `SELECT_DISTANCE`. At boot there is no selection and
+/// the subject IS `world_to_render(rig.focus)`, which is why every boot-framing figure in this
+/// story's record stands unchanged.
+fn dof_subject(
+    selected: &crate::pick::SelectedDwarf,
+    drawn: &crate::pick::DrawnEntities,
+) -> Option<Vec3> {
+    let id = selected.0?;
+    drawn
+        .iter()
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, transform)| transform.translation)
+}
+
+fn update_dof_from_camera(
+    selected: Res<crate::pick::SelectedDwarf>,
+    drawn: crate::pick::DrawnEntities,
+    mut cameras: Query<(&GlobalTransform, &CameraRig, &mut DepthOfField)>,
+) {
+    let subject = dof_subject(&selected, &drawn);
     for (transform, rig, mut dof) in &mut cameras {
-        dof.focal_distance = dof_focal_distance(transform.translation(), rig);
+        dof.focal_distance = match subject {
+            Some(point) => transform.translation().distance(point),
+            None => dof_focal_distance(transform.translation(), rig),
+        };
     }
 }
 
@@ -2956,6 +2982,75 @@ mod tests {
         }
     }
 
+    /// Re-inserting an effect must rebuild it from the LIVE camera, not from boot framing.
+    ///
+    /// `apply_effect` built `DepthOfField` from a fresh `CameraRig::new([64, 64, 9])`, so toggling
+    /// depth of field off and on again after the operator had moved the camera restored focus to
+    /// the BOOT distance rather than the distance to what the camera is now aimed at.
+    /// `update_dof_from_camera` repairs it on the FOLLOWING frame, so the defect renders exactly
+    /// one wrongly-focused frame -- a visible pop at the seat, and invisible to any test that only
+    /// counts components, which is what `effect_keys_toggle_the_live_camera_and_readout` does.
+    #[test]
+    fn toggling_dof_back_on_focuses_the_live_camera_not_boot_framing() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+
+        // Leave boot framing: zoom in and orbit, the two motions AC3 names.
+        {
+            let world = app.world_mut();
+            let mut rigs = world.query::<&mut CameraRig>();
+            let mut rig = rigs.single_mut(world).expect("one camera rig");
+            rig.distance = 40.0;
+            rig.yaw += 0.7;
+        }
+        app.update();
+
+        let expected = {
+            let world = app.world_mut();
+            let mut rigs = world.query::<(&GlobalTransform, &CameraRig)>();
+            let (transform, rig) = rigs.single(world).expect("one camera rig");
+            super::dof_focal_distance(transform.translation(), rig)
+        };
+
+        // `configured_app` runs no input-clearing system, so `just_pressed` is STICKY here: an
+        // update with a stale press toggles the effect again. Clear it after every tap, or a
+        // two-tap sequence silently becomes four toggles.
+        let tap = |app: &mut App, key: KeyCode| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.release(key);
+            input.clear();
+        };
+        let count = |app: &mut App| {
+            let world = app.world_mut();
+            let mut q = world.query_filtered::<&super::DepthOfField, With<CameraRig>>();
+            q.iter(world).count()
+        };
+        tap(&mut app, KeyCode::F1); // depth of field off
+        assert_eq!(
+            count(&mut app),
+            0,
+            "the first tap must remove depth of field"
+        );
+        tap(&mut app, KeyCode::F1); // and back on
+
+        let world = app.world_mut();
+        let mut dofs = world.query_filtered::<&super::DepthOfField, With<CameraRig>>();
+        let dof = dofs
+            .single(world)
+            .expect("depth of field is back on the camera");
+        assert!(
+            (dof.focal_distance - expected).abs() < 1.0,
+            "re-enabling depth of field must focus the LIVE camera: focal_distance={} but the \
+             camera is {expected} from its aim point (boot framing would read about {})",
+            dof.focal_distance,
+            super::depth_of_field_for_boot_camera().focal_distance,
+        );
+    }
+
     /// `--assets` is a RESOLVER: it decides which of two asset trees the client reads. The
     /// decision must be CONSUMED, not merely parsed, so this asserts the branch-changing path in
     /// both directions -- the load prefix and the reported label move together, and neither moves
@@ -3166,6 +3261,75 @@ mod tests {
              floor {}",
             forward.y,
             crate::atmosphere::APPROVED_DOWNWARD_FLOOR
+        );
+    }
+
+    /// Depth of field must focus the SELECTED DWARF, not the rig's aim point.
+    ///
+    /// `frame_selected_dwarf` centres him with `CameraRig::frame_render_point`, which writes the
+    /// focus OFFSET from him by the composition push -- so `rig.focus` lands about 7.3 units short
+    /// of the dwarf at `SELECT_DISTANCE` (33 * 20/90). Focusing `rig.focus` therefore puts the
+    /// figure the operator just picked OUTSIDE the focal plane at the ruled f/0.05, while every
+    /// boot-framing measurement stays correct, because at boot the subject IS the aim point.
+    /// Wolf reported it from the seat, 2026-09-21.
+    #[test]
+    fn depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point() {
+        let snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![protocol::Entity {
+                id: 2,
+                kind: protocol::EntityKind::Dwarf,
+                pos: [1, 0, 0],
+                state: protocol::JobState::Idle,
+                light: None,
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
+        app.update();
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(Some(2)));
+        for _ in 0..3 {
+            app.update();
+        }
+
+        let dwarf = {
+            let world = app.world_mut();
+            let mut q = world.query::<(&WorldProjected, &bevy::prelude::Transform)>();
+            q.iter(world)
+                .find(|(marker, _)| marker.0 == 2)
+                .map(|(_, transform)| transform.translation)
+                .expect("the selected dwarf must be drawn")
+        };
+        let (camera, rig_aim, focal) = {
+            let world = app.world_mut();
+            let mut q = world.query::<(&GlobalTransform, &CameraRig, &super::DepthOfField)>();
+            let (transform, rig, dof) = q.single(world).expect("one camera");
+            (
+                transform.translation(),
+                super::dof_focal_distance(transform.translation(), rig),
+                dof.focal_distance,
+            )
+        };
+        let to_dwarf = camera.distance(dwarf);
+
+        // Discrimination FIRST: if the aim point and the dwarf were the same distance away this
+        // test could not tell the two rules apart, and would pass against either.
+        assert!(
+            (to_dwarf - rig_aim).abs() > 1.0,
+            "this fixture cannot separate the two rules: dwarf at {to_dwarf}, aim point at \
+             {rig_aim}"
+        );
+        assert!(
+            (focal - to_dwarf).abs() < 0.25,
+            "a selected dwarf must be the focal subject: focal_distance={focal} but he stands \
+             {to_dwarf} away (the rig's aim point is {rig_aim})"
         );
     }
 
