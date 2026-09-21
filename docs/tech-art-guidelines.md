@@ -69,6 +69,8 @@ instead — it is a camera property, not a light, and those two tests do not rea
 | `Exposure` (camera) | — | — | 10.5 EV100 | n/a | n/a |
 | `ScreenSpaceAmbientOcclusion` | — | — | default | camera | requires `Msaa::Off`, which fails SILENTLY; darkens the whole frame ~0.6 Rec.601, **not** concentrated at creases — see #106 |
 | `Bloom` | — | — | default `NATURAL` | camera | energy-conserving emitter halo: camp median +13, mean +6.88 against `--fx-off bloom`. Raises the halo and LOWERS the bright tail |
+| `DepthOfField` | — | — | f/0.05, `max_depth` 120 | camera | Wolf's ruling, 2026-09-21. Far-ridge `lap_mean` 13.45 → 8.60 while camp retains 96.8%; finite depth preserves sky cores |
+| `VolumetricFog` / `FogVolume` | white in-scatter | — | density 0.015 | camera / valley | `ambient_intensity = 0.1 × ambient_brightness / 80`; far-ridge median 49 → 69 and `lap_mean` 13.45 → 9.30 |
 | moving light | table-driven by `LightKind` | — | table-driven | table-driven | eye-only |
 
 The sections state no colour, range or amplitude for torch and campfire; those cells stay `—`
@@ -208,7 +210,9 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
   [Keeping the sky outside the camera](#keeping-the-sky-outside-the-camera), not here.
 - Stars sit on a shell, scattered by golden-angle azimuth over a deliberately narrow height band.
   Sizes vary so the shell does not read as a lattice.
-- Sky materials MUST set `fog_enabled: false`.
+- Sky materials MUST set `fog_enabled: false` for `DistanceFog`. ClearColor, unlit stars, and the
+  unlit aurora bypass `Exposure` by three routes, but they do **not** bypass volumetric fog; the
+  `FogVolume` extent and density ramp protect them instead (see #113, routed to 11.3).
 - Torch, campfire, and future lantern properties are one data table containing colour, lumen
   intensity, and range.
 - The light budget **divides, it does not just scale**: a small desaturated ambient lets shadow

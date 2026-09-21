@@ -91,6 +91,56 @@ fn rec601_median(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, u
     values[values.len() / 2]
 }
 
+/// Mean four-neighbour Laplacian of Rec.601 luma, matching 11.2's `sharpness.py` instrument.
+fn rec601_lap_mean(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> f32 {
+    let luma = |x: usize, y: usize| {
+        let [r, g, b, _] = pixels[y * width + x];
+        (r as i32 * 299 + g as i32 * 587 + b as i32 * 114) / 1000
+    };
+    let (x0, y0, x1, y1) = rect;
+    let mut total = 0_i64;
+    let mut count = 0_i64;
+    for y in (y0 + 1)..(y1 - 1) {
+        for x in (x0 + 1)..(x1 - 1) {
+            total += i64::from(
+                (4 * luma(x, y)
+                    - luma(x - 1, y)
+                    - luma(x + 1, y)
+                    - luma(x, y - 1)
+                    - luma(x, y + 1))
+                .abs(),
+            );
+            count += 1;
+        }
+    }
+    total as f32 / count as f32
+}
+
+fn rec601_peak(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> u8 {
+    let (x0, y0, x1, y1) = rect;
+    (y0..y1)
+        .flat_map(|y| (x0..x1).map(move |x| pixels[y * width + x]))
+        .map(|[r, g, b, _]| ((r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000) as u8)
+        .max()
+        .expect("a non-empty measurement window")
+}
+
+fn rec601_count_at_least(
+    pixels: &[[u8; 4]],
+    width: usize,
+    rect: (usize, usize, usize, usize),
+    threshold: u8,
+) -> usize {
+    let (x0, y0, x1, y1) = rect;
+    (y0..y1)
+        .flat_map(|y| (x0..x1).map(move |x| pixels[y * width + x]))
+        .filter(|[r, g, b, _]| {
+            ((u32::from(*r) * 299 + u32::from(*g) * 587 + u32::from(*b) * 114) / 1000)
+                >= u32::from(threshold)
+        })
+        .count()
+}
+
 struct Daemon {
     child: Child,
     port: u16,
@@ -410,6 +460,112 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
             "bloom must not brighten emitter-free open snow: {name} median went {off_snow} -> {on_snow}"
         );
     }
+}
+
+/// AC1/AC2/AC5/AC6: a physical-looking aperture is a silent no-op at this world scale, so this
+/// guard reads the frame rather than only checking that the component exists.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn dof_softens_the_far_ridge_while_retaining_camp_focus_and_stars() {
+    const FAR_RIDGE: (usize, usize, usize, usize) = (450, 120, 900, 250);
+    const CAMP: (usize, usize, usize, usize) = (500, 400, 760, 620);
+    const SKY: (usize, usize, usize, usize) = (60, 10, 460, 110);
+    let (on, width, _) = Daemon::spawn().capture(
+        "dof-on",
+        &["--static-world", "--lights-steady", "--subdiv", "4"],
+    );
+    let (off, _, _) = Daemon::spawn().capture(
+        "dof-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "dof",
+        ],
+    );
+    let far_on = rec601_lap_mean(&on, width, FAR_RIDGE);
+    let far_off = rec601_lap_mean(&off, width, FAR_RIDGE);
+    let camp_on = rec601_lap_mean(&on, width, CAMP);
+    let camp_off = rec601_lap_mean(&off, width, CAMP);
+    let far_fall = (far_off - far_on) / far_off;
+    let camp_fall = (camp_off - camp_on) / camp_off;
+    let ratio = far_fall / camp_fall.max(0.0001);
+    let on_peak = rec601_peak(&on, width, SKY);
+    let off_peak = rec601_peak(&off, width, SKY);
+    println!(
+        "AC1/AC2/AC5 pixel guard (Rec.601): far {far_off:.4}->{far_on:.4} ({far_fall:.3}), \
+         camp {camp_off:.4}->{camp_on:.4} ({camp_fall:.3}), ratio={ratio:.3}, sky peak {off_peak}->{on_peak}"
+    );
+    assert!(
+        far_off - far_on > 0.0182,
+        "far-ridge fall must exceed its 0.0182 same-build floor"
+    );
+    assert!(
+        ratio >= 3.0,
+        "far-ridge fractional fall {far_fall:.3} must be >=3x camp {camp_fall:.3}"
+    );
+    assert!(
+        camp_on >= camp_off * 0.90,
+        "camp focus retained {camp_on:.4}/{camp_off:.4}"
+    );
+    assert!(
+        on_peak.abs_diff(off_peak) <= 3,
+        "sky peak moved {off_peak}->{on_peak}; max is 3"
+    );
+}
+
+/// AC7/AC8: volume haze must raise distant level AND lower its local contrast without dimming sky.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn haze_lifts_and_softens_the_far_valley_without_swallowing_the_sky() {
+    const FAR_RIDGE: (usize, usize, usize, usize) = (450, 120, 900, 250);
+    const SKY: (usize, usize, usize, usize) = (60, 10, 460, 110);
+    let (on, width, _) = Daemon::spawn().capture(
+        "haze-on",
+        &["--static-world", "--lights-steady", "--subdiv", "4"],
+    );
+    let (off, _, _) = Daemon::spawn().capture(
+        "haze-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "haze",
+        ],
+    );
+    let far_on = rec601_median(&on, width, FAR_RIDGE);
+    let far_off = rec601_median(&off, width, FAR_RIDGE);
+    let lap_on = rec601_lap_mean(&on, width, FAR_RIDGE);
+    let lap_off = rec601_lap_mean(&off, width, FAR_RIDGE);
+    let sky_on = rec601_median(&on, width, SKY);
+    let sky_off = rec601_median(&off, width, SKY);
+    let stars_on = rec601_count_at_least(&on, width, SKY, 150);
+    let stars_off = rec601_count_at_least(&off, width, SKY, 150);
+    let lap_fall = (lap_off - lap_on) / lap_off;
+    println!(
+        "AC7/AC8 pixel guard (Rec.601): far median {far_off}->{far_on}, lap {lap_off:.4}->{lap_on:.4} ({lap_fall:.3}), \
+         sky median {sky_off}->{sky_on}, stars>=150 {stars_off}->{stars_on}"
+    );
+    assert!(
+        far_on >= far_off + 10,
+        "far-ridge median must rise >=10: {far_off}->{far_on}"
+    );
+    assert!(
+        lap_fall >= 0.15,
+        "far-ridge contrast must fall >=15%: {lap_fall:.3}"
+    );
+    assert_eq!(
+        stars_on, stars_off,
+        "haze must leave bright star count unchanged"
+    );
+    assert!(
+        sky_on.abs_diff(sky_off) <= 1,
+        "sky median moved {sky_off}->{sky_on}; max is 1"
+    );
 }
 
 impl Daemon {

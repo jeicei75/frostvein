@@ -104,9 +104,9 @@ PY
 mutation "the installed sun is aimed at nothing" gui the_installed_sun_entity_aims_downward_onto_the_valley <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        sun_light_transform(),\n        SunLight,'
+old = '        sun_light_transform(),\n        VolumetricLight,\n        SunLight,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        Transform::default(),\n        SunLight,'))
+p.write_text(s.replace(old, '        Transform::default(),\n        VolumetricLight,\n        SunLight,'))
 PY
 
 mutation "a mesh-drawn tree hides the face BELOW it again" gui a_mesh_drawn_tree_hides_neither_the_face_below_it_nor_the_face_beside_it <<'PY'

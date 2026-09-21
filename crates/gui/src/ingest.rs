@@ -26,13 +26,14 @@ use bevy::{
         ButtonInput,
         mouse::{MouseButton, MouseMotion, MouseWheel},
     },
+    light::{FogVolume, VolumetricFog, VolumetricLight},
     pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
-    post_process::bloom::Bloom,
+    post_process::{bloom::Bloom, dof::DepthOfField},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
-        DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
-        Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform,
-        TransformSystems, Vec2, Vec3, Window, With, Without, px,
+        DirectionalLight, GlobalTransform, GlobalZIndex, KeyCode, Node, PerspectiveProjection,
+        PositionType, Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time,
+        Transform, TransformSystems, Vec2, Vec3, Window, With, Without, px,
     },
     render::renderer::RenderAdapterInfo,
     window::PrimaryWindow,
@@ -40,11 +41,11 @@ use bevy::{
 use bevy::{
     app::PluginGroup,
     app::ScheduleRunnerPlugin,
-    asset::{AssetPlugin, Assets, Handle},
+    asset::{AssetPlugin, Assets, Handle, RenderAssetUsages},
     camera::{Exposure, RenderTarget},
-    image::Image,
+    image::{Image, ImageSampler},
     render::{
-        render_resource::{TextureFormat, TextureUsages},
+        render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
         view::Msaa,
     },
     window::{ExitCondition, WindowPlugin},
@@ -76,12 +77,22 @@ use crate::{
         sync_hover_highlight,
     },
     slice::SliceLevel,
+    transform::world_to_render_f32,
 };
 
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const MESSAGE_QUEUE: usize = 16;
 const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
+
+/// Ruled 2026-09-21: non-physical f/0.05 makes the valley read as a miniature at this scale.
+const DOF_APERTURE_F_STOPS: f32 = 0.05;
+/// Non-physical sky bound: caps background blur so the stars remain present in the frame.
+const DOF_MAX_DEPTH: f32 = 120.0;
+const FOG_DENSITY_FACTOR: f32 = 0.015;
+const FOG_DENSITY_RAMP_HEIGHT: usize = 64;
+const FOG_DENSITY_RAMP_FULL_TO: f32 = 0.54;
+const FOG_DENSITY_RAMP_ZERO_BY: f32 = 0.83;
 
 /// The four independently inspectable contributors to the rendered valley.
 ///
@@ -150,23 +161,33 @@ pub struct LightingToggles {
     ambient: bool,
 }
 
-/// The three seat-toggleable camera effects. This stays a fixed instrument rather than a
+/// The five seat-toggleable camera effects. This stays a fixed instrument rather than a
 /// registry: these are the only concrete effects the client currently ships.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CameraEffect {
     Fxaa,
     AmbientOcclusion,
     Bloom,
+    Dof,
+    Haze,
 }
 
 impl CameraEffect {
-    const ALL: [Self; 3] = [Self::Fxaa, Self::AmbientOcclusion, Self::Bloom];
+    const ALL: [Self; 5] = [
+        Self::Fxaa,
+        Self::AmbientOcclusion,
+        Self::Bloom,
+        Self::Dof,
+        Self::Haze,
+    ];
 
     fn name(self) -> &'static str {
         match self {
             Self::Fxaa => "fxaa",
             Self::AmbientOcclusion => "ao",
             Self::Bloom => "bloom",
+            Self::Dof => "dof",
+            Self::Haze => "haze",
         }
     }
 
@@ -175,6 +196,8 @@ impl CameraEffect {
             Self::Fxaa => KeyCode::F10,
             Self::AmbientOcclusion => KeyCode::F11,
             Self::Bloom => KeyCode::F12,
+            Self::Dof => KeyCode::F13,
+            Self::Haze => KeyCode::F14,
         }
     }
 
@@ -183,7 +206,9 @@ impl CameraEffect {
             "fxaa" => Ok(Self::Fxaa),
             "ao" => Ok(Self::AmbientOcclusion),
             "bloom" => Ok(Self::Bloom),
-            _ => bail!("unknown effect {name:?}; expected fxaa, ao, or bloom"),
+            "dof" => Ok(Self::Dof),
+            "haze" => Ok(Self::Haze),
+            _ => bail!("unknown effect {name:?}; expected fxaa, ao, bloom, dof, or haze"),
         }
     }
 }
@@ -195,6 +220,8 @@ struct EffectsOff {
     fxaa: bool,
     ambient_occlusion: bool,
     bloom: bool,
+    dof: bool,
+    haze: bool,
 }
 
 impl EffectsOff {
@@ -203,6 +230,8 @@ impl EffectsOff {
             CameraEffect::Fxaa => self.fxaa,
             CameraEffect::AmbientOcclusion => self.ambient_occlusion,
             CameraEffect::Bloom => self.bloom,
+            CameraEffect::Dof => self.dof,
+            CameraEffect::Haze => self.haze,
         }
     }
 
@@ -211,6 +240,8 @@ impl EffectsOff {
             CameraEffect::Fxaa => self.fxaa = off,
             CameraEffect::AmbientOcclusion => self.ambient_occlusion = off,
             CameraEffect::Bloom => self.bloom = off,
+            CameraEffect::Dof => self.dof = off,
+            CameraEffect::Haze => self.haze = off,
         }
     }
 
@@ -738,6 +769,7 @@ pub fn client_systems(app: &mut App) {
         (
             setup_camera,
             setup_night_lighting,
+            setup_fog_volume,
             setup_projection_assets,
             setup_atmosphere,
             setup_designate_hint,
@@ -754,6 +786,7 @@ pub fn client_systems(app: &mut App) {
             light_controls,
             effect_controls,
             update_fog_from_camera,
+            update_dof_from_camera.after(effect_controls),
             toggle_overlay,
             crate::perf::mark_perf_frame_on_key,
             fall_snow,
@@ -1406,6 +1439,8 @@ fn setup_camera(
         rig.distance = distance.0.clamp(4.0, 500.0);
     }
     let (fog_start, fog_end) = fog_falloff(rig.distance);
+    let transform = rig.transform();
+    let dof = depth_of_field(transform.translation, &rig);
     let camera = commands
         .spawn((
             Camera3d::default(),
@@ -1414,11 +1449,13 @@ fn setup_camera(
             Fxaa::default(),
             ScreenSpaceAmbientOcclusion::default(),
             Bloom::default(),
+            dof,
+            volumetric_fog(),
             Projection::Perspective(PerspectiveProjection {
                 fov: BOOT_VERTICAL_FOV,
                 ..Default::default()
             }),
-            rig.transform(),
+            transform,
             rig,
             AmbientLight {
                 color: night_lighting().ambient,
@@ -1437,36 +1474,8 @@ fn setup_camera(
         ))
         .id();
     if let Some(effects_off) = effects_off {
-        let mut camera = commands.entity(camera);
-        if effects_off.is_off(CameraEffect::Fxaa) {
-            camera.remove::<Fxaa>();
-        }
-        if effects_off.is_off(CameraEffect::AmbientOcclusion) {
-            // The two prepasses go WITH it, named explicitly. `ScreenSpaceAmbientOcclusion`
-            // `#[require]`s `DepthPrepass` and `NormalPrepass`, and a plain `remove` leaves both
-            // running for the rest of the session: two full-scene GPU passes nothing samples,
-            // while the readout says "ao off". AC8 reads AO's cost on the vehicle as an on/off
-            // delta, so leaving them makes AO look cheaper than it is by exactly its expensive
-            // half.
-            //
-            // NOT `remove_with_requires`, which was tried and CRASHES: it removes the whole
-            // transitive require closure, which overlaps the components the camera needs for its
-            // own render-world sync, and the client dies in `bevy_render::sync_world` with
-            // "Attempting to synchronize an entity that has already been synchronized!" on every
-            // `--fx-off ao` run. No unit test can see that -- `MinimalPlugins` has no render
-            // world, so the component assertions pass on a client that cannot render a frame.
-            camera.remove::<ScreenSpaceAmbientOcclusion>();
-            camera.remove::<DepthPrepass>();
-            camera.remove::<NormalPrepass>();
-        }
-        if effects_off.is_off(CameraEffect::Bloom) {
-            // WITHOUT requires, DELIBERATELY. `Bloom` `#[require]`s `Hdr`, and `Hdr` moves every
-            // pixel in the frame on its own. `--fx-off bloom` is the control AC4's figures are
-            // measured against, and it is only a measure of BLOOM'S MARGINAL contribution while
-            // `Hdr` stays on in both halves. Removing requires here would silently turn that
-            // control into an Hdr+bloom comparison and re-break the attribution the story spent
-            // three documents correcting.
-            camera.remove::<Bloom>();
+        for effect in CameraEffect::ALL {
+            apply_effect(&mut commands, camera, effect, !effects_off.is_off(effect));
         }
     }
     if let Some(handle) = headless_target {
@@ -1487,7 +1496,21 @@ fn setup_night_lighting(mut commands: Commands) {
             ..Default::default()
         },
         sun_light_transform(),
+        VolumetricLight,
         SunLight,
+        ClientLocal,
+    ));
+}
+
+fn setup_fog_volume(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let density_texture = images.add(fog_density_ramp_image());
+    commands.spawn((
+        FogVolume {
+            density_factor: FOG_DENSITY_FACTOR,
+            density_texture: Some(density_texture),
+            ..Default::default()
+        },
+        Transform::from_xyz(64.0, 18.0, -64.0).with_scale(Vec3::new(160.0, 48.0, 160.0)),
         ClientLocal,
     ));
 }
@@ -1527,7 +1550,9 @@ fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> Stri
                 KeyCode::F10 => "F10",
                 KeyCode::F11 => "F11",
                 KeyCode::F12 => "F12",
-                _ => unreachable!("the fixed effect keys are F10 through F12"),
+                KeyCode::F13 => "F13",
+                KeyCode::F14 => "F14",
+                _ => unreachable!("the fixed effect keys are F10 through F14"),
             },
             effect.name(),
             if effects_off.is_off(effect) {
@@ -1595,26 +1620,57 @@ fn effect_controls(
         }
         effects_off.toggle(effect);
         for camera in &cameras {
-            let mut camera = commands.entity(camera);
-            match effect {
-                CameraEffect::Fxaa if effects_off.is_off(effect) => camera.remove::<Fxaa>(),
-                CameraEffect::Fxaa => camera.insert(Fxaa::default()),
-                // AO takes its two prepasses with it; bloom below deliberately LEAVES its `Hdr`.
-                // See `setup_camera` for both reasons, including why this is not
-                // `remove_with_requires`.
-                CameraEffect::AmbientOcclusion if effects_off.is_off(effect) => {
-                    camera.remove::<ScreenSpaceAmbientOcclusion>();
-                    camera.remove::<DepthPrepass>();
-                    camera.remove::<NormalPrepass>()
-                }
-                CameraEffect::AmbientOcclusion => {
-                    camera.insert(ScreenSpaceAmbientOcclusion::default())
-                }
-                CameraEffect::Bloom if effects_off.is_off(effect) => camera.remove::<Bloom>(),
-                CameraEffect::Bloom => camera.insert(Bloom::default()),
-            };
+            apply_effect(&mut commands, camera, effect, !effects_off.is_off(effect));
         }
     }
+}
+
+/// Applies one of the fixed effects at both creation and live-toggle sites.
+///
+/// `remove_with_requires` is deliberately never used: it breaks the renderer's sync closure.
+/// AO owns its prepasses; Bloom deliberately leaves `Hdr` installed for a marginal comparison.
+fn apply_effect(
+    commands: &mut Commands,
+    camera: bevy::prelude::Entity,
+    effect: CameraEffect,
+    on: bool,
+) {
+    let mut camera = commands.entity(camera);
+    match (effect, on) {
+        (CameraEffect::Fxaa, true) => {
+            camera.insert(Fxaa::default());
+        }
+        (CameraEffect::Fxaa, false) => {
+            camera.remove::<Fxaa>();
+        }
+        (CameraEffect::AmbientOcclusion, true) => {
+            camera.insert(ScreenSpaceAmbientOcclusion::default());
+        }
+        (CameraEffect::AmbientOcclusion, false) => {
+            camera.remove::<ScreenSpaceAmbientOcclusion>();
+            camera.remove::<DepthPrepass>();
+            camera.remove::<NormalPrepass>();
+        }
+        // Plain removal deliberately preserves Bloom's required Hdr component.
+        (CameraEffect::Bloom, true) => {
+            camera.insert(Bloom::default());
+        }
+        (CameraEffect::Bloom, false) => {
+            camera.remove::<Bloom>();
+        }
+        (CameraEffect::Dof, true) => {
+            camera.insert(depth_of_field_for_boot_camera());
+        }
+        (CameraEffect::Dof, false) => {
+            camera.remove::<DepthOfField>();
+        }
+        (CameraEffect::Haze, true) => {
+            camera.insert(volumetric_fog());
+        }
+        (CameraEffect::Haze, false) => {
+            camera.remove::<VolumetricFog>();
+        }
+    };
 }
 
 fn apply_lighting_toggles(
@@ -1878,6 +1934,74 @@ fn update_fog_from_camera(mut cameras: Query<(&CameraRig, &mut DistanceFog)>) {
     for (rig, mut fog) in &mut cameras {
         let (start, end) = fog_falloff(rig.distance);
         fog.falloff = FogFalloff::Linear { start, end };
+    }
+}
+
+fn depth_of_field(camera_translation: Vec3, rig: &CameraRig) -> DepthOfField {
+    DepthOfField {
+        focal_distance: dof_focal_distance(camera_translation, rig),
+        aperture_f_stops: DOF_APERTURE_F_STOPS,
+        max_depth: DOF_MAX_DEPTH,
+        ..Default::default()
+    }
+}
+
+/// The transform and aim point are the framing's authoritative geometry. `rig.distance` is the
+/// orbit radius, not the focus distance: at boot it is 90 while the camp is about 61.7 away.
+fn dof_focal_distance(camera_translation: Vec3, rig: &CameraRig) -> f32 {
+    camera_translation.distance(world_to_render_f32(rig.focus))
+}
+
+fn depth_of_field_for_boot_camera() -> DepthOfField {
+    let rig = CameraRig::new([64, 64, 9]);
+    depth_of_field(rig.transform().translation, &rig)
+}
+
+fn volumetric_fog() -> VolumetricFog {
+    VolumetricFog {
+        ambient_color: night_lighting().ambient,
+        // Bevy's 0.1 default matches AmbientLight::default().brightness = 80.0.
+        ambient_intensity: 0.1 * night_lighting().ambient_brightness / 80.0,
+        ..Default::default()
+    }
+}
+
+fn fog_density_ramp_pixels() -> Vec<u8> {
+    (0..FOG_DENSITY_RAMP_HEIGHT)
+        .map(|row| {
+            let v = row as f32 / (FOG_DENSITY_RAMP_HEIGHT - 1) as f32;
+            let density = if v <= FOG_DENSITY_RAMP_FULL_TO {
+                1.0
+            } else if v >= FOG_DENSITY_RAMP_ZERO_BY {
+                0.0
+            } else {
+                1.0 - (v - FOG_DENSITY_RAMP_FULL_TO)
+                    / (FOG_DENSITY_RAMP_ZERO_BY - FOG_DENSITY_RAMP_FULL_TO)
+            };
+            (density * 255.0).round() as u8
+        })
+        .collect()
+}
+
+fn fog_density_ramp_image() -> Image {
+    let mut image = Image::new(
+        Extent3d {
+            width: 1,
+            height: FOG_DENSITY_RAMP_HEIGHT as u32,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D3,
+        fog_density_ramp_pixels(),
+        TextureFormat::R8Unorm,
+        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    );
+    image.sampler = ImageSampler::linear();
+    image
+}
+
+fn update_dof_from_camera(mut cameras: Query<(&GlobalTransform, &CameraRig, &mut DepthOfField)>) {
+    for (transform, rig, mut dof) in &mut cameras {
+        dof.focal_distance = dof_focal_distance(transform.translation(), rig);
     }
 }
 
@@ -2548,6 +2672,59 @@ mod tests {
     }
 
     #[test]
+    fn dof_focus_is_derived_from_the_camera_transform_and_tracks_framing() {
+        let boot = CameraRig::new([64, 64, 9]);
+        let boot_distance = super::dof_focal_distance(boot.transform().translation, &boot);
+        assert!(
+            (boot_distance - 61.7).abs() <= 1.0,
+            "boot focus should be about 61.7, not the rig orbit radius: {boot_distance}"
+        );
+        assert_eq!(
+            boot.distance, 90.0,
+            "fixture must retain the wrong orbit radius"
+        );
+
+        let mut orbit = boot;
+        orbit.yaw += 0.4;
+        let orbit_distance = super::dof_focal_distance(orbit.transform().translation, &orbit);
+        assert!(
+            (orbit_distance - boot_distance).abs() > 0.01,
+            "an orbit must recompute the transform-to-focus distance"
+        );
+
+        let mut zoom = boot;
+        zoom.distance = 40.0;
+        let zoom_distance = super::dof_focal_distance(zoom.transform().translation, &zoom);
+        assert!(
+            (zoom_distance - boot_distance).abs() > 10.0,
+            "a zoom must recompute the transform-to-focus distance"
+        );
+    }
+
+    #[test]
+    fn fog_density_ramp_fades_above_the_skyline_instead_of_ending_at_a_box_face() {
+        let ramp = super::fog_density_ramp_pixels();
+        assert_eq!(ramp.len(), 64);
+        assert_eq!(ramp[0], 255, "the valley floor must retain full density");
+        assert_eq!(ramp[34], 255, "the ramp must stay full through v=0.54");
+        assert!(
+            ramp[43] > 0 && ramp[43] < 255,
+            "the fade band must contain a positive intermediate value"
+        );
+        assert_eq!(ramp[53], 0, "density must be zero above v=0.83");
+    }
+
+    #[test]
+    fn volumetric_fog_ambient_intensity_tracks_the_scenes_ambient_budget() {
+        let fog = super::volumetric_fog();
+        assert_eq!(fog.ambient_intensity, 1.875);
+        assert_eq!(
+            fog.ambient_color,
+            crate::appearance::night_lighting().ambient
+        );
+    }
+
+    #[test]
     fn fx_off_reaches_the_live_camera_and_rejects_unknown_effects() {
         let camera_effects = |app: &mut App| {
             (
@@ -2563,16 +2740,26 @@ mod tests {
                     .query_filtered::<&super::Bloom, With<CameraRig>>()
                     .iter(app.world())
                     .count(),
+                app.world_mut()
+                    .query_filtered::<&super::DepthOfField, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&super::VolumetricFog, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
             )
         };
         let (mut default, _sender, _server) = configured_app(&[]);
         default.update();
-        assert_eq!(camera_effects(&mut default), (1, 1, 1));
+        assert_eq!(camera_effects(&mut default), (1, 1, 1, 1, 1));
         for (name, expected) in [
-            ("fxaa", (0, 1, 1)),
-            ("ao", (1, 0, 1)),
-            ("bloom", (1, 1, 0)),
-            ("fxaa, ao,bloom", (0, 0, 0)),
+            ("fxaa", (0, 1, 1, 1, 1)),
+            ("ao", (1, 0, 1, 1, 1)),
+            ("bloom", (1, 1, 0, 1, 1)),
+            ("dof", (1, 1, 1, 0, 1)),
+            ("haze", (1, 1, 1, 1, 0)),
+            ("fxaa, ao,bloom,dof,haze", (0, 0, 0, 0, 0)),
         ] {
             let (mut disabled, _sender, _server) = configured_app(&["--fx-off", name]);
             disabled.update();
@@ -2630,7 +2817,7 @@ mod tests {
             };
         assert_eq!(
             error.to_string(),
-            "unknown effect \"taa\"; expected fxaa, ao, or bloom"
+            "unknown effect \"taa\"; expected fxaa, ao, bloom, dof, or haze"
         );
     }
 
@@ -2707,23 +2894,41 @@ mod tests {
                     .query_filtered::<&super::Bloom, With<CameraRig>>()
                     .iter(app.world())
                     .count(),
+                app.world_mut()
+                    .query_filtered::<&super::DepthOfField, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&super::VolumetricFog, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
             )
         };
         for (key, expected_effects, expected_readout) in [
             (
                 KeyCode::F10,
-                (0, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa off  F11 ao on  F12 bloom on",
+                (0, 1, 1, 1, 1),
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa off  F11 ao on  F12 bloom on  F13 dof on  F14 haze on",
             ),
             (
                 KeyCode::F11,
-                (1, 0, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao off  F12 bloom on",
+                (1, 0, 1, 1, 1),
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao off  F12 bloom on  F13 dof on  F14 haze on",
             ),
             (
                 KeyCode::F12,
-                (1, 1, 0),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom off",
+                (1, 1, 0, 1, 1),
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom off  F13 dof on  F14 haze on",
+            ),
+            (
+                KeyCode::F13,
+                (1, 1, 1, 0, 1),
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof off  F14 haze on",
+            ),
+            (
+                KeyCode::F14,
+                (1, 1, 1, 1, 0),
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze off",
             ),
         ] {
             let (mut app, _sender, _server) = configured_app(&[]);
@@ -3015,7 +3220,7 @@ mod tests {
 
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze on"
         );
         for (key, source) in [
             (KeyCode::F5, super::LightSource::Sun),
@@ -3034,7 +3239,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on  F11 ao on  F12 bloom on"
+            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze on"
         );
 
         assert_eq!(
@@ -3120,7 +3325,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze on"
         );
         assert_eq!(
             emissive(&mut app, protocol::LightKind::Campfire),
@@ -3360,7 +3565,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F13 dof on  F14 haze on"
                 .to_string(),
         ];
         expected.sort();

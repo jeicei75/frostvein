@@ -17,9 +17,9 @@ PY
 mutation "the startup scene loses its directional fill" gui the_live_startup_scene_spawns_its_camera_lighting_and_atmosphere <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            setup_night_lighting,\n            setup_projection_assets,'
+old = '            setup_night_lighting,\n            setup_fog_volume,\n            setup_projection_assets,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            setup_projection_assets,'))
+p.write_text(s.replace(old, '            setup_fog_volume,\n            setup_projection_assets,'))
 PY
 
 mutation "the startup scene loses its sky and snowfall" gui the_live_startup_scene_spawns_its_camera_lighting_and_atmosphere <<'PY'
@@ -55,9 +55,9 @@ PY
 mutation "fog stops following the camera" gui fog_follows_the_camera_rig_every_frame <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            update_fog_from_camera,\n            toggle_overlay,'
+old = '            update_fog_from_camera,\n            update_dof_from_camera.after(effect_controls),\n            toggle_overlay,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            toggle_overlay,'))
+p.write_text(s.replace(old, '            update_dof_from_camera.after(effect_controls),\n            toggle_overlay,'))
 PY
 
 mutation "the F3 overlay toggle is never registered" gui f3_toggles_the_diagnostic_overlay <<'PY'
