@@ -503,7 +503,74 @@ GPT-5.6-Codex
 - `apply_effect` retains AO prepasses, Bloom's Hdr, and plain removal. All six named mutations kill their named tests.
 - Blocked: do not tune previous AO control under this story. #119 needs Wolf's decision. AC8 eye check, AC13 vehicle performance, AC14 signoff, four independent controls, and blur proof remain outstanding.
 
+### Orchestrator verification (Claude Opus 5, 2026-09-21)
+
+Codex exited 0; verified rather than trusted. No 401/auth line in the run log, three commits all
+authored `Völundr <jeicei75@gmail.com>`, claimed files present, and the gate red exactly as it
+reported. **`codex review --base main` never ran** — its sandbox could not open `/tmp`'s bubblewrap
+mount-registry lock — so the self-gate contributed nothing this story and the code review carries
+that weight alone.
+
+**F13/F14 → F1/F2 (`db4d30b`).** Dev walked upward from F12 for the two new toggles. A standard
+keyboard stops at F12, so both were unreachable at the seat while AC12's synthetic key-press test
+stayed green — a live mechanism no hand can operate, green. `rg` over `crates/gui/src/` put F3–F12
+already in use, leaving F1 and F2 as the only free keys. **The keymap is now fully allocated**;
+issue **#118** carries the rethink Wolf asked for, with the inventory and the constraint that a
+test pressing a `KeyCode` proves nothing about reachability.
+
+**#119 re-attributed by measurement, and one reading corrected.** Codex blamed the haze; the
+failing window `OPEN_SNOW_LL` sits inside the region DoF blurs, so both were tested. Fresh daemon
+per capture, this branch's build:
+
+| capture | open-snow-LL | LR | terrace mean |
+| --- | ---: | ---: | ---: |
+| all effects on | **91** | 93 | 60.423 |
+| `--fx-off dof` | **91** | 93 | 60.301 |
+| `--fx-off haze` | **93** | 93 | 54.954 |
+| `--fx-off dof,haze` | **93** | 93 | 54.700 |
+
+DoF is exonerated; the haze moves it. **91 is stable: 91/91/91/91 across four fresh captures,
+spread 0** — the same standard used when this control was last re-baselined.
+
+I also suspected the haze was eating the AO guard's headroom and **that was overstated**: AO
+darkening reads **~0.44 with haze on** (ao-off 60.860/60.851 against ao-on 60.403/60.403/60.424)
+and **~0.48 with haze off**, against a 0.30 floor. Haze's own marginal cost is ~0.04; the erosion
+from the historical 0.62–0.64 predates this story.
+
+**AC8's human half — DONE.** `seam-check-6194756-all-on.png` opened and compared against
+`seam-check-6194756-haze-off.png`. **No hard edge and no band where the fog volume ends**: the sky
+gradient is continuous from horizon to top, the star field is intact, and the haze reads as aerial
+depth on the far ridge rather than as a dimmer. This is the check a bounded box passed on every
+pixel window while ruling a bright band across the sky, so it was done by eye on the frame.
+
+**Wolf's two findings from the seat, 2026-09-21:**
+
+1. *"focal point should move to dwarf when selected"* — **REAL, fixed in `6194756`.**
+   `frame_selected_dwarf` centres a picked dwarf via `CameraRig::frame_render_point`, which writes
+   the rig focus OFFSET from him by the composition push. Focusing the aim point therefore focused
+   `33 × 20/90 ≈ 7.3` units short of him at `SELECT_DISTANCE`, putting the figure just picked
+   outside the focal plane at f/0.05. RED first: `focal_distance=8.133` while the dwarf stood
+   `1.118` away. `dof_subject` now makes a selected dwarf the focal subject; with no selection the
+   subject is still the rig's aim point, so **every boot-framing figure in this record stands
+   unchanged** and AC3's guard still passes. Mutation row KILLED.
+2. *"turning dof on off has issues"* — **NOT REPRODUCED, and I cannot reproduce it here.** The ECS
+   path is sound: `apply_effect` re-inserts the ruled component (not `DepthOfField::default()`),
+   and `update_dof_from_camera.after(effect_controls)` earns its ordering — Bevy's auto-inserted
+   sync point means the re-inserted component is corrected in the SAME frame, so there is no focus
+   pop. Pinned by a new test and its mutation row (removing `.after(effect_controls)` KILLS it).
+   Headless cannot press keys, so the seat symptom is unreproducible on the devpod. **No issue
+   filed: I have neither a reproduction nor a measurement, and this tracker is a measurement
+   archive.** Wolf: what does "issues" look like — a one-frame flash, no visible change at all, or
+   artefacts that persist?
+
+**A harness trap found while testing, worth knowing:** `configured_app` runs no input-clearing
+system, so `ButtonInput::just_pressed` is **sticky** — every `app.update()` with a stale press
+toggles the effect again. A two-tap sequence silently becomes four toggles. Every existing key
+test presses exactly once, so none of them could see it. Both new tests clear the input after each
+tap and say why.
+
 ### File List
+
 
 - `crates/gui/src/ingest.rs`
 - `crates/gui/tests/pixel_guard.rs`
@@ -512,6 +579,9 @@ GPT-5.6-Codex
 - `_bmad-output/implementation-artifacts/mutations/11-2-the-miniature.sh`
 - `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh`
 - `_bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh`
+- `crates/gui/src/pick.rs` (orchestrator: `DrawnEntities` widened to `pub(crate)` for reuse)
+- `_bmad-output/implementation-artifacts/11-2-signoff/seam-check-6194756-all-on.png` (NEW)
+- `_bmad-output/implementation-artifacts/11-2-signoff/seam-check-6194756-haze-off.png` (NEW)
 
 ## Change Log
 
@@ -520,3 +590,4 @@ GPT-5.6-Codex
 | 2026-09-21 | Aperture RULED `0.05` (Wolf); haze recipe proved and the floor collision struck — no split. |
 | 2026-09-21 | Story created. Both mechanisms probed live on `7442174` and reverted; `sharpness.py` built and proved both ways; aperture bracket measured; the `capture.rs:1498` floor collision and the recommended split raised for Wolf. |
 | 2026-09-21 | Implemented 11.2 mechanisms and evidence; full gate blocked by #119's previous AO control, so status remains in-progress. |
+| 2026-09-21 | Orchestrator verification: F13/F14 → F1/F2 (unreachable keys, #118); #119 re-attributed to haze by measurement, DoF exonerated, LL stable at 91 spread 0; AC8 eye check done, no seam; Wolf's selected-dwarf focus defect fixed and mutation-killed; toggle symptom not reproduced. |
