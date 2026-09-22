@@ -712,9 +712,24 @@ collision with a plugin it never loads, so the reserved keys are now written dow
 key Bevy has claimed, or if two of our own controls collide. Mutation-killed, with the message
 naming both claimants.
 
-Wolf ruled: keep Bevy's overlay (it is a useful instrument), move ours, and free F10 because "fxaa
-switch is not needed in F10 right now". So **dof -> F10, haze -> F3, fxaa loses its seat key** and
-keeps `--fx-off fxaa`. Before choosing, every `KeyCode` binding inside the Bevy crates was checked:
+Wolf ruled: keep Bevy's overlay (it is a useful instrument), move ours, and free a key because
+"fxaa switch is not needed in F10 right now"; then, seeing the result, **reorganise the whole row --
+"bevy F1, F2, effects, lights maybe from biggest to smallest"**. The row now reads:
+
+| key | control |
+| --- | --- |
+| F1 / F2 | Bevy's debug overlay -- reserved |
+| F3 | fps overlay |
+| F4 F5 F6 F7 | effects: haze, dof, bloom, ao -- widest-acting first |
+| F8 F9 F10 F11 F12 | lights: sun, ambient, campfire, torches, lanterns -- biggest reach first |
+| M | perf-log frame mark, pushed off the F row because it is now full |
+| *(none)* | fxaa, `--fx-off fxaa` only |
+
+**The first attempt at that reorganisation put haze on F3 -- already the fps overlay's key.** The
+guard did not catch it, because the guard I had just written enumerated only the lights, the effects
+and the perf mark. A guard that knows about part of the keymap certifies the rest. It now lists
+every key the client binds, each with its site, and the sabotage row for it moves haze onto F3
+specifically. Before choosing, every `KeyCode` binding inside the Bevy crates was checked:
 `picking_debug`'s F3 is only a doc-comment example and its plugin is not in `DefaultPlugins`, and
 `easy_screenshot` (Space, PrintScreen) is not either. **F1 and F2 are the only keys Bevy takes.**
 The keymap still wants the rethink in #118.

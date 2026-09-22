@@ -13,9 +13,9 @@ vehicle. The devpod has lavapipe only, so it cannot establish NFR6's 60 fps bar.
 Repeat with `--fx-off dof` and `--fx-off haze`, using a new daemon and `vehicle-dof-off` /
 `vehicle-haze-off` filenames. Open the all-effects frame beside both controls.
 
-Live toggles at the seat: **F10 dof**, **F3 haze**, beside F11 ao / F12 bloom. The readout names
-each one's state, and fxaa no longer has a key. See the table below for why, and issue #118 for the
-keymap rethink that is still owed.
+Live toggles at the seat, in key order: **F4 haze, F5 dof, F6 bloom, F7 ao**, then
+**F8 sun, F9 ambient, F10 campfire, F11 torches, F12 lanterns**. The readout prints them in that
+same order. See the table below for why the row was rebuilt, and issue #118 for the wider rethink.
 
 **THE KEYS MOVED (2026-09-22). `F1` and `F2` were never ours.** `DefaultPlugins` pulls in
 `bevy_dev_tools::render_debug::RenderDebugOverlayPlugin`, which hardcodes **F1** to cycle a
@@ -29,11 +29,12 @@ Now:
 
 | key | control |
 | --- | --- |
-| **F10** | depth of field (took fxaa's key) |
-| **F3** | haze |
-| F11 / F12 | ao / bloom, unchanged |
-| F1 / F2 | **Bevy's** debug overlay -- kept deliberately, it is a useful instrument |
-| *(none)* | fxaa: no seat key any more, use `--fx-off fxaa` |
+| F1 / F2 | **Bevy's** debug overlay: cycle depth/normal, cycle opacity — reserved, not ours |
+| F3 | fps overlay |
+| **F4 F5 F6 F7** | **effects**: haze, depth of field, bloom, ambient occlusion — widest-acting first |
+| **F8 F9 F10 F11 F12** | **lights**: sun, ambient, campfire, torches, lanterns — biggest reach first |
+| M | mark a frame in the perf log (off the F row: it is full) |
+| *(none)* | fxaa — `--fx-off fxaa` only |
 
 A separate prepass defect was also fixed: dof and haze read the depth prepass but declare it
 nowhere, and only AO did, so turning **F11** off used to pull the depth buffer out from under both.

@@ -44,7 +44,7 @@ import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '            Self::Fxaa => None,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Self::Fxaa => Some(KeyCode::F10),\n'))
+p.write_text(s.replace(old, '            Self::Fxaa => Some(KeyCode::F4),\n'))
 PY
 
 # RESTORED by the 2026-09-19 code review. When 11.1b generalised `FxaaOff` into an effect SET,
@@ -56,9 +56,9 @@ PY
 mutation "the effect readout no longer records its on/off state" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            if effects_off.is_off(effect) {\n                "off"\n            } else {\n                "on"\n            }\n'
+old = '                if effects_off.is_off(effect) {\n                    "off"\n                } else {\n                    "on"\n                }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            "on"\n'))
+p.write_text(s.replace(old, '                "on"\n'))
 PY
 
 mutation "the effect readout no longer names the effect" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'

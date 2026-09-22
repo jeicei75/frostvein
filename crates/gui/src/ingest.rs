@@ -110,21 +110,23 @@ pub enum LightSource {
 }
 
 impl LightSource {
+    /// Ordered biggest reach to smallest, which is also the key order F8..F12 and the order the
+    /// readout prints. Sun and ambient light the whole valley; the rest are placed sources.
     const ALL: [Self; 5] = [
         Self::Sun,
+        Self::Ambient,
         Self::Campfire,
         Self::Torches,
         Self::Lanterns,
-        Self::Ambient,
     ];
 
     fn key(self) -> KeyCode {
         match self {
-            Self::Sun => KeyCode::F5,
-            Self::Campfire => KeyCode::F6,
-            Self::Torches => KeyCode::F9,
-            Self::Lanterns => KeyCode::F7,
-            Self::Ambient => KeyCode::F8,
+            Self::Sun => KeyCode::F8,
+            Self::Ambient => KeyCode::F9,
+            Self::Campfire => KeyCode::F10,
+            Self::Torches => KeyCode::F11,
+            Self::Lanterns => KeyCode::F12,
         }
     }
 
@@ -173,12 +175,16 @@ enum CameraEffect {
 }
 
 impl CameraEffect {
+    /// Ordered widest effect on the frame to narrowest, which is also the key order F4..F7 and the
+    /// order the readout prints: haze recolours the whole valley, depth of field restages it by
+    /// distance, bloom acts on highlights, ambient occlusion only on contact creases. Fxaa is last
+    /// because it has no key at all.
     const ALL: [Self; 5] = [
-        Self::Fxaa,
-        Self::AmbientOcclusion,
-        Self::Bloom,
-        Self::Dof,
         Self::Haze,
+        Self::Dof,
+        Self::Bloom,
+        Self::AmbientOcclusion,
+        Self::Fxaa,
     ];
 
     fn name(self) -> &'static str {
@@ -209,11 +215,11 @@ impl CameraEffect {
     /// issue #118.
     fn key(self) -> Option<KeyCode> {
         match self {
+            Self::Haze => Some(KeyCode::F4),
+            Self::Dof => Some(KeyCode::F5),
+            Self::Bloom => Some(KeyCode::F6),
+            Self::AmbientOcclusion => Some(KeyCode::F7),
             Self::Fxaa => None,
-            Self::AmbientOcclusion => Some(KeyCode::F11),
-            Self::Bloom => Some(KeyCode::F12),
-            Self::Dof => Some(KeyCode::F10),
-            Self::Haze => Some(KeyCode::F3),
         }
     }
 
@@ -1551,42 +1557,44 @@ pub struct SliceReadout;
 pub struct LightingReadout;
 
 fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> String {
-    let mut entries = LightSource::ALL
+    // Printed in KEY ORDER: F1/F2 belong to bevy_dev_tools and F3 to the fps overlay, then the
+    // effects F4..F7, then the lights F8..F12, each block widest-acting first.
+    let mut entries = CameraEffect::ALL
         .into_iter()
-        .map(|source| {
+        .map(|effect| {
             format!(
-                "{} {} {}",
-                match source.key() {
-                    KeyCode::F5 => "F5",
-                    KeyCode::F6 => "F6",
-                    KeyCode::F7 => "F7",
-                    KeyCode::F8 => "F8",
-                    KeyCode::F9 => "F9",
-                    _ => unreachable!("the fixed lighting keys are F5 through F9"),
+                "{}{} {}",
+                match effect.key() {
+                    Some(KeyCode::F4) => "F4 ",
+                    Some(KeyCode::F5) => "F5 ",
+                    Some(KeyCode::F6) => "F6 ",
+                    Some(KeyCode::F7) => "F7 ",
+                    // An effect with no key still reports its state; it just cannot be toggled here.
+                    None => "",
+                    Some(_) => unreachable!("the fixed effect keys are F4 through F7"),
                 },
-                source.name(),
-                if toggles.enabled(source) { "on" } else { "off" }
+                effect.name(),
+                if effects_off.is_off(effect) {
+                    "off"
+                } else {
+                    "on"
+                }
             )
         })
         .collect::<Vec<_>>();
-    entries.extend(CameraEffect::ALL.into_iter().map(|effect| {
+    entries.extend(LightSource::ALL.into_iter().map(|source| {
         format!(
-            "{}{} {}",
-            match effect.key() {
-                Some(KeyCode::F3) => "F3 ",
-                Some(KeyCode::F10) => "F10 ",
-                Some(KeyCode::F11) => "F11 ",
-                Some(KeyCode::F12) => "F12 ",
-                // An effect with no key still reports its state; it just cannot be toggled here.
-                None => "",
-                Some(_) => unreachable!("the fixed effect keys are F3, F10, F11 and F12"),
+            "{} {} {}",
+            match source.key() {
+                KeyCode::F8 => "F8",
+                KeyCode::F9 => "F9",
+                KeyCode::F10 => "F10",
+                KeyCode::F11 => "F11",
+                KeyCode::F12 => "F12",
+                _ => unreachable!("the fixed lighting keys are F8 through F12"),
             },
-            effect.name(),
-            if effects_off.is_off(effect) {
-                "off"
-            } else {
-                "on"
-            }
+            source.name(),
+            if toggles.enabled(source) { "on" } else { "off" }
         )
     }));
     entries.join("  ")
@@ -3018,7 +3026,7 @@ mod tests {
             "both prepasses are present while every effect is on"
         );
 
-        tap(&mut app, KeyCode::F11); // ambient occlusion off
+        tap(&mut app, KeyCode::F7); // ambient occlusion off
         assert_eq!(
             prepasses(&mut app),
             (1, 0),
@@ -3026,15 +3034,15 @@ mod tests {
              only the normal prepass nothing else reads"
         );
 
-        tap(&mut app, KeyCode::F10); // depth of field off
-        tap(&mut app, KeyCode::F3); // haze off
+        tap(&mut app, KeyCode::F5); // depth of field off
+        tap(&mut app, KeyCode::F4); // haze off
         assert_eq!(
             prepasses(&mut app),
             (0, 0),
             "with AO, dof and haze all off nothing samples depth, so the pass must go"
         );
 
-        tap(&mut app, KeyCode::F10); // depth of field back on, AO still off
+        tap(&mut app, KeyCode::F5); // depth of field back on, AO still off
         assert_eq!(
             prepasses(&mut app),
             (1, 0),
@@ -3082,24 +3090,24 @@ mod tests {
         // toggled here -- `--fx-off fxaa` is its only control.
         for (key, expected_effects, expected_readout) in [
             (
-                KeyCode::F11,
+                KeyCode::F7,
                 (1, 0, 1, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao off  F12 bloom on  F10 dof on  F3 haze on",
+                "F4 haze on  F5 dof on  F6 bloom on  F7 ao off  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on",
             ),
             (
-                KeyCode::F12,
+                KeyCode::F6,
                 (1, 1, 0, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom off  F10 dof on  F3 haze on",
+                "F4 haze on  F5 dof on  F6 bloom off  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on",
             ),
             (
-                KeyCode::F10,
+                KeyCode::F5,
                 (1, 1, 1, 0, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof off  F3 haze on",
+                "F4 haze on  F5 dof off  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on",
             ),
             (
-                KeyCode::F3,
+                KeyCode::F4,
                 (1, 1, 1, 1, 0),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze off",
+                "F4 haze off  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on",
             ),
         ] {
             let (mut app, _sender, _server) = configured_app(&[]);
@@ -3161,8 +3169,29 @@ mod tests {
                 bound.push((key, format!("effect {}", effect.name())));
             }
         }
-        // Not reachable through an enum, so named here with its site.
-        bound.push((KeyCode::F4, "perf overlay (perf.rs)".to_string()));
+        // EVERY other key this client binds, with its site. This list is the maintenance burden
+        // and it is the point: the first version of this guard listed only the lights, the effects
+        // and the perf mark, so it cheerfully accepted haze on F3 -- already the fps overlay's key
+        // (`toggle_overlay`, below). A guard that knows about only some of the keymap certifies
+        // the rest. Anything added with `just_pressed` belongs here.
+        for (key, site) in [
+            (KeyCode::F3, "fps overlay (toggle_overlay)"),
+            (KeyCode::KeyM, "perf-log frame mark (perf.rs)"),
+            (KeyCode::KeyC, "capture a frame (ingest.rs)"),
+            (KeyCode::Comma, "slice down (ingest.rs)"),
+            (KeyCode::Period, "slice up (ingest.rs)"),
+            (KeyCode::Space, "issue the queued command (command.rs)"),
+            (
+                KeyCode::Escape,
+                "abort designation / clear selection (designate.rs, pick.rs)",
+            ),
+            (KeyCode::Digit1, "designate dig (designate.rs)"),
+            (KeyCode::Digit2, "designate channel (designate.rs)"),
+            (KeyCode::Digit3, "designate stockpile (designate.rs)"),
+            (KeyCode::Digit4, "designate clear (designate.rs)"),
+        ] {
+            bound.push((key, site.to_string()));
+        }
 
         for (key, reserved_for) in RESERVED_BY_BEVY {
             if let Some((_, ours)) = bound.iter().find(|(bound_key, _)| *bound_key == key) {
@@ -3231,13 +3260,13 @@ mod tests {
             let mut q = world.query_filtered::<&super::DepthOfField, With<CameraRig>>();
             q.iter(world).count()
         };
-        tap(&mut app, KeyCode::F10); // depth of field off
+        tap(&mut app, KeyCode::F5); // depth of field off
         assert_eq!(
             count(&mut app),
             0,
             "the first tap must remove depth of field"
         );
-        tap(&mut app, KeyCode::F10); // and back on
+        tap(&mut app, KeyCode::F5); // and back on
 
         let world = app.world_mut();
         let mut dofs = world.query_filtered::<&super::DepthOfField, With<CameraRig>>();
@@ -3586,14 +3615,14 @@ mod tests {
 
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze on"
+            "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
         );
         for (key, source) in [
-            (KeyCode::F5, super::LightSource::Sun),
-            (KeyCode::F6, super::LightSource::Campfire),
-            (KeyCode::F9, super::LightSource::Torches),
-            (KeyCode::F7, super::LightSource::Lanterns),
-            (KeyCode::F8, super::LightSource::Ambient),
+            (KeyCode::F8, super::LightSource::Sun),
+            (KeyCode::F10, super::LightSource::Campfire),
+            (KeyCode::F11, super::LightSource::Torches),
+            (KeyCode::F12, super::LightSource::Lanterns),
+            (KeyCode::F9, super::LightSource::Ambient),
         ] {
             press(&mut app, key);
             assert!(
@@ -3605,7 +3634,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze on"
+            "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun off  F9 ambient off  F10 campfire off  F11 torches off  F12 lanterns off"
         );
 
         assert_eq!(
@@ -3681,17 +3710,17 @@ mod tests {
         // rewritten every frame by `flicker_projection` inside `ProjectionSet`, so re-enabling
         // worked only by that grace, and the emissive has no such benefactor at all.
         for (key, _) in [
-            (KeyCode::F5, ()),
-            (KeyCode::F6, ()),
-            (KeyCode::F9, ()),
-            (KeyCode::F7, ()),
             (KeyCode::F8, ()),
+            (KeyCode::F9, ()),
+            (KeyCode::F10, ()),
+            (KeyCode::F11, ()),
+            (KeyCode::F12, ()),
         ] {
             press(&mut app, key);
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze on"
+            "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
         );
         assert_eq!(
             emissive(&mut app, protocol::LightKind::Campfire),
@@ -3931,7 +3960,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze on"
+            "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),
         ];
         expected.sort();

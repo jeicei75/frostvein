@@ -155,9 +155,17 @@ has ever reliably caught a stale binary.
 | `Esc` | release the selection, or abort a designation |
 | `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
 | `space` | pause / resume the sim |
-| `F3` / `F4` | fps overlay / mark a frame in the perf log |
-| `F5` `F6` `F7` `F8` `F9` | toggle sun / campfire / lanterns / ambient / torches |
-| `F10` | toggle FXAA |
+| `M` | mark a frame in the perf log |
+| `F1` / `F2` | **Bevy's own** render debug overlay: cycle depth/normal, cycle its opacity |
+| `F3` | fps overlay |
+| `F4` `F5` `F6` `F7` | toggle haze / depth of field / bloom / ambient occlusion — widest-acting first |
+| `F8` `F9` `F10` `F11` `F12` | toggle sun / ambient / campfire / torches / lanterns — biggest reach first |
+
+FXAA has no key; it is `--fx-off fxaa` only. **F1 and F2 belong to `bevy_dev_tools`**, which
+`DefaultPlugins` pulls in automatically — binding anything of ours there means both handlers run,
+which is how 11.2 shipped dof and haze onto a debug overlay. `the_client_keymap_avoids_keys_other_plugins_have_claimed`
+now fails if any control lands on a reserved key or on another of ours. The keymap is still due a
+wider rethink — issue #118.
 
 The slice keys are the **unshifted comma and period**. The on-screen hint calls them `<` / `>`,
 which reads as "shift these", and that has already cost one session — see #102, where naming the

@@ -75,7 +75,7 @@ PY
 mutation "an effect sits on a key bevy_dev_tools already binds" gui the_client_keymap_avoids_keys_other_plugins_have_claimed <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Self::Dof => Some(KeyCode::F10),\n'
+old = '            Self::Dof => Some(KeyCode::F5),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            Self::Dof => Some(KeyCode::F1),\n'))
 PY
@@ -83,7 +83,7 @@ PY
 mutation "two controls of ours land on one key" gui the_client_keymap_avoids_keys_other_plugins_have_claimed <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Self::Haze => Some(KeyCode::F3),\n'
+old = '            Self::Haze => Some(KeyCode::F4),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Self::Haze => Some(KeyCode::F11),\n'))
+p.write_text(s.replace(old, '            Self::Haze => Some(KeyCode::F3),\n'))
 PY

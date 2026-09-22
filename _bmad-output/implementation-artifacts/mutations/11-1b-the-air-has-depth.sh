@@ -62,20 +62,20 @@ PY
 # key-press assertion could discriminate. Both rows reported KILLED and would have reported KILLED
 # even if `effect_controls` ignored the keyboard entirely. A swap stays inside the match, panics
 # nothing, and makes the test notice that F11 now toggles bloom.
-mutation "F11 toggles bloom instead of ambient occlusion" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
+mutation "ambient occlusion takes bloom's key" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Self::AmbientOcclusion => Some(KeyCode::F11),\n'
+old = '            Self::AmbientOcclusion => Some(KeyCode::F7),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Self::AmbientOcclusion => Some(KeyCode::F12),\n'))
+p.write_text(s.replace(old, '            Self::AmbientOcclusion => Some(KeyCode::F6),\n'))
 PY
 
-mutation "F12 toggles ambient occlusion instead of bloom" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
+mutation "bloom takes ambient occlusion's key" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Self::Bloom => Some(KeyCode::F12),\n'
+old = '            Self::Bloom => Some(KeyCode::F6),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Self::Bloom => Some(KeyCode::F11),\n'))
+p.write_text(s.replace(old, '            Self::Bloom => Some(KeyCode::F7),\n'))
 PY
 
 mutation "the effect readout stops recording changed state" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
