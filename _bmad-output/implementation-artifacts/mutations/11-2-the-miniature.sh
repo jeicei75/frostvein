@@ -71,3 +71,11 @@ old = '    let depth = ambient_occlusion || on(CameraEffect::Dof) || on(CameraEf
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let depth = ambient_occlusion;\n'))
 PY
+
+mutation "an effect sits on a key bevy_dev_tools already binds" gui the_client_keymap_avoids_keys_other_plugins_have_claimed <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            Self::Dof => Some(KeyCode::F10),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Self::Dof => Some(KeyCode::F1),\n'))
+PY

@@ -191,13 +191,29 @@ impl CameraEffect {
         }
     }
 
-    fn key(self) -> KeyCode {
+    /// The seat key for this effect, or `None` for one that is CLI-only.
+    ///
+    /// **F1 and F2 are not ours to bind.** `DefaultPlugins` pulls in
+    /// `bevy_dev_tools::render_debug::RenderDebugOverlayPlugin` whenever the `bevy_dev_tools` and
+    /// `bevy_pbr` features are on (`bevy_internal-0.19.0/src/default_plugins.rs:95`), and its
+    /// `handle_input` hardcodes F1 to cycle the depth/normal debug overlay and F2 to cycle that
+    /// overlay's opacity (`bevy_dev_tools-0.19.0/src/render_debug.rs:107` and `:110`). 11.2 put
+    /// dof and haze there, so at the seat those keys ALSO drove Bevy's overlay: the frame went
+    /// black (depth), then green/pink/blue (normals), then sat at half and 80% opacity, while this
+    /// readout cheerfully reported `F1 dof on`. Every test here runs on `MinimalPlugins`, which
+    /// does not include that plugin, so nothing in this suite could see the collision.
+    ///
+    /// Fxaa gives up its key rather than the story's two new effects losing theirs (Wolf,
+    /// 2026-09-22: "fxaa switch is not needed in F10 right now"). It remains fully controllable
+    /// with `--fx-off fxaa`; only the live toggle is gone. The whole keymap is due a rethink --
+    /// issue #118.
+    fn key(self) -> Option<KeyCode> {
         match self {
-            Self::Fxaa => KeyCode::F10,
-            Self::AmbientOcclusion => KeyCode::F11,
-            Self::Bloom => KeyCode::F12,
-            Self::Dof => KeyCode::F1,
-            Self::Haze => KeyCode::F2,
+            Self::Fxaa => None,
+            Self::AmbientOcclusion => Some(KeyCode::F11),
+            Self::Bloom => Some(KeyCode::F12),
+            Self::Dof => Some(KeyCode::F10),
+            Self::Haze => Some(KeyCode::F3),
         }
     }
 
@@ -1555,14 +1571,15 @@ fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> Stri
         .collect::<Vec<_>>();
     entries.extend(CameraEffect::ALL.into_iter().map(|effect| {
         format!(
-            "{} {} {}",
+            "{}{} {}",
             match effect.key() {
-                KeyCode::F10 => "F10",
-                KeyCode::F11 => "F11",
-                KeyCode::F12 => "F12",
-                KeyCode::F1 => "F1",
-                KeyCode::F2 => "F2",
-                _ => unreachable!("the fixed effect keys are F10, F11, F12, F1 and F2"),
+                Some(KeyCode::F3) => "F3 ",
+                Some(KeyCode::F10) => "F10 ",
+                Some(KeyCode::F11) => "F11 ",
+                Some(KeyCode::F12) => "F12 ",
+                // An effect with no key still reports its state; it just cannot be toggled here.
+                None => "",
+                Some(_) => unreachable!("the fixed effect keys are F3, F10, F11 and F12"),
             },
             effect.name(),
             if effects_off.is_off(effect) {
@@ -1625,7 +1642,10 @@ fn effect_controls(
     cameras: Query<bevy::prelude::Entity, With<CameraRig>>,
 ) {
     for effect in CameraEffect::ALL {
-        if !keys.just_pressed(effect.key()) {
+        let Some(key) = effect.key() else {
+            continue;
+        };
+        if !keys.just_pressed(key) {
             continue;
         }
         effects_off.toggle(effect);
@@ -3006,15 +3026,15 @@ mod tests {
              only the normal prepass nothing else reads"
         );
 
-        tap(&mut app, KeyCode::F1); // depth of field off
-        tap(&mut app, KeyCode::F2); // haze off
+        tap(&mut app, KeyCode::F10); // depth of field off
+        tap(&mut app, KeyCode::F3); // haze off
         assert_eq!(
             prepasses(&mut app),
             (0, 0),
             "with AO, dof and haze all off nothing samples depth, so the pass must go"
         );
 
-        tap(&mut app, KeyCode::F1); // depth of field back on, AO still off
+        tap(&mut app, KeyCode::F10); // depth of field back on, AO still off
         assert_eq!(
             prepasses(&mut app),
             (1, 0),
@@ -3057,31 +3077,29 @@ mod tests {
                     .count(),
             )
         };
+        // F1 and F2 are deliberately absent: bevy_dev_tools owns them (see `CameraEffect::key`).
+        // Fxaa has no key at all now, so it appears in the readout without one and cannot be
+        // toggled here -- `--fx-off fxaa` is its only control.
         for (key, expected_effects, expected_readout) in [
-            (
-                KeyCode::F10,
-                (0, 1, 1, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa off  F11 ao on  F12 bloom on  F1 dof on  F2 haze on",
-            ),
             (
                 KeyCode::F11,
                 (1, 0, 1, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao off  F12 bloom on  F1 dof on  F2 haze on",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao off  F12 bloom on  F10 dof on  F3 haze on",
             ),
             (
                 KeyCode::F12,
                 (1, 1, 0, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom off  F1 dof on  F2 haze on",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom off  F10 dof on  F3 haze on",
             ),
             (
-                KeyCode::F1,
+                KeyCode::F10,
                 (1, 1, 1, 0, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof off  F2 haze on",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof off  F3 haze on",
             ),
             (
-                KeyCode::F2,
+                KeyCode::F3,
                 (1, 1, 1, 1, 0),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze off",
+                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze off",
             ),
         ] {
             let (mut app, _sender, _server) = configured_app(&[]);
@@ -3106,6 +3124,63 @@ mod tests {
                 expected_effects,
                 "{key:?} must remove only its named live camera component"
             );
+        }
+    }
+
+    /// No control of ours may sit on a key something else has already claimed.
+    ///
+    /// This is the check that did not exist when 11.2 put dof and haze on F1 and F2 -- keys
+    /// `bevy_dev_tools::render_debug` binds automatically through `DefaultPlugins`. Both handlers
+    /// then ran on every press: ours updated the readout, Bevy's cycled a depth/normal debug
+    /// overlay over the whole frame. `configured_app` builds on `MinimalPlugins`, which does not
+    /// include that plugin, so every key test in this file passed against a keymap that was
+    /// unusable at the seat. A test cannot see a collision with a plugin it never loads, so the
+    /// reserved keys are written down here instead, with the source that proves them.
+    #[test]
+    fn the_client_keymap_avoids_keys_other_plugins_have_claimed() {
+        // `bevy_dev_tools-0.19.0/src/render_debug.rs:107` and `:110`. Reached through
+        // `DefaultPlugins` whenever the `bevy_dev_tools` and `bevy_pbr` features are both on --
+        // `bevy_internal-0.19.0/src/default_plugins.rs:95` -- which is this client's build.
+        const RESERVED_BY_BEVY: [(KeyCode, &str); 2] = [
+            (
+                KeyCode::F1,
+                "bevy_dev_tools render debug overlay: cycle mode",
+            ),
+            (
+                KeyCode::F2,
+                "bevy_dev_tools render debug overlay: cycle opacity",
+            ),
+        ];
+
+        let mut bound: Vec<(KeyCode, String)> = Vec::new();
+        for source in super::LightSource::ALL {
+            bound.push((source.key(), format!("light {}", source.name())));
+        }
+        for effect in super::CameraEffect::ALL {
+            if let Some(key) = effect.key() {
+                bound.push((key, format!("effect {}", effect.name())));
+            }
+        }
+        // Not reachable through an enum, so named here with its site.
+        bound.push((KeyCode::F4, "perf overlay (perf.rs)".to_string()));
+
+        for (key, reserved_for) in RESERVED_BY_BEVY {
+            if let Some((_, ours)) = bound.iter().find(|(bound_key, _)| *bound_key == key) {
+                panic!(
+                    "{key:?} is bound to {ours} but is already taken by {reserved_for}; both \
+                     handlers will run on every press and ours will look broken at the seat"
+                );
+            }
+        }
+
+        for i in 0..bound.len() {
+            for j in (i + 1)..bound.len() {
+                assert_ne!(
+                    bound[i].0, bound[j].0,
+                    "{} and {} are both bound to {:?}",
+                    bound[i].1, bound[j].1, bound[i].0
+                );
+            }
         }
     }
 
@@ -3156,13 +3231,13 @@ mod tests {
             let mut q = world.query_filtered::<&super::DepthOfField, With<CameraRig>>();
             q.iter(world).count()
         };
-        tap(&mut app, KeyCode::F1); // depth of field off
+        tap(&mut app, KeyCode::F10); // depth of field off
         assert_eq!(
             count(&mut app),
             0,
             "the first tap must remove depth of field"
         );
-        tap(&mut app, KeyCode::F1); // and back on
+        tap(&mut app, KeyCode::F10); // and back on
 
         let world = app.world_mut();
         let mut dofs = world.query_filtered::<&super::DepthOfField, With<CameraRig>>();
@@ -3511,7 +3586,7 @@ mod tests {
 
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze on"
         );
         for (key, source) in [
             (KeyCode::F5, super::LightSource::Sun),
@@ -3530,7 +3605,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze on"
+            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze on"
         );
 
         assert_eq!(
@@ -3616,7 +3691,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze on"
         );
         assert_eq!(
             emissive(&mut app, protocol::LightKind::Campfire),
@@ -3856,7 +3931,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on  F1 dof on  F2 haze on"
+            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  fxaa on  F11 ao on  F12 bloom on  F10 dof on  F3 haze on"
                 .to_string(),
         ];
         expected.sort();

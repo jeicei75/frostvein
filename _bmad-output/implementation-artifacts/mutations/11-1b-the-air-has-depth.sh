@@ -65,17 +65,17 @@ PY
 mutation "F11 toggles bloom instead of ambient occlusion" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Self::AmbientOcclusion => KeyCode::F11,\n'
+old = '            Self::AmbientOcclusion => Some(KeyCode::F11),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Self::AmbientOcclusion => KeyCode::F12,\n'))
+p.write_text(s.replace(old, '            Self::AmbientOcclusion => Some(KeyCode::F12),\n'))
 PY
 
 mutation "F12 toggles ambient occlusion instead of bloom" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Self::Bloom => KeyCode::F12,\n'
+old = '            Self::Bloom => Some(KeyCode::F12),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Self::Bloom => KeyCode::F11,\n'))
+p.write_text(s.replace(old, '            Self::Bloom => Some(KeyCode::F11),\n'))
 PY
 
 mutation "the effect readout stops recording changed state" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
