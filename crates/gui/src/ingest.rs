@@ -1473,11 +1473,21 @@ fn setup_camera(
             ClientLocal,
         ))
         .id();
-    if let Some(effects_off) = effects_off {
+    // The removal loop stays behind the `--fx-off` check purely to leave the default path as it
+    // was: `apply_effect` would rebuild depth of field from BOOT framing over the rig-aware
+    // component spawned above. MEASURED 2026-09-22, that is survivable either way --
+    // `update_dof_from_camera` corrects it inside this same first update, so no test that looks
+    // after `app.update()` can tell the two apart, and no frame is drawn wrongly focused.
+    // `sync_prepasses` always runs: the camera spawns with every effect on, so the prepasses must
+    // match whatever set survives this loop rather than rely on AO's `require` to supply them.
+    let all_on = EffectsOff::default();
+    let effects = effects_off.as_deref().unwrap_or(&all_on);
+    if effects_off.is_some() {
         for effect in CameraEffect::ALL {
-            apply_effect(&mut commands, camera, effect, !effects_off.is_off(effect));
+            apply_effect(&mut commands, camera, effect, !effects.is_off(effect));
         }
     }
+    sync_prepasses(&mut commands, camera, effects);
     if let Some(handle) = headless_target {
         // In Bevy 0.19 the render target is its own COMPONENT, not a field on Camera.
         commands
@@ -1621,6 +1631,7 @@ fn effect_controls(
         effects_off.toggle(effect);
         for camera in &cameras {
             apply_effect(&mut commands, camera, effect, !effects_off.is_off(effect));
+            sync_prepasses(&mut commands, camera, &effects_off);
         }
     }
 }
@@ -1648,8 +1659,6 @@ fn apply_effect(
         }
         (CameraEffect::AmbientOcclusion, false) => {
             camera.remove::<ScreenSpaceAmbientOcclusion>();
-            camera.remove::<DepthPrepass>();
-            camera.remove::<NormalPrepass>();
         }
         // Plain removal deliberately preserves Bloom's required Hdr component.
         (CameraEffect::Bloom, true) => {
@@ -1671,6 +1680,35 @@ fn apply_effect(
             camera.remove::<VolumetricFog>();
         }
     };
+}
+
+/// Puts the prepasses on the camera that the currently-enabled effects actually sample.
+///
+/// The prepasses are SHARED, and only `ScreenSpaceAmbientOcclusion` declares them
+/// (`#[require(DepthPrepass, NormalPrepass)]`). `DepthOfField` and `VolumetricFog` declare nothing
+/// and just read the camera's depth prepass, so letting AO's removal take it left them switched on
+/// and sampling a buffer that no longer existed. Ownership is computed from the whole effect set
+/// here rather than guessed at any one toggle site.
+fn sync_prepasses(
+    commands: &mut Commands,
+    camera: bevy::prelude::Entity,
+    effects_off: &EffectsOff,
+) {
+    let on = |effect| !effects_off.is_off(effect);
+    let ambient_occlusion = on(CameraEffect::AmbientOcclusion);
+    // Depth has three consumers; normals have exactly one.
+    let depth = ambient_occlusion || on(CameraEffect::Dof) || on(CameraEffect::Haze);
+    let mut camera = commands.entity(camera);
+    if depth {
+        camera.insert(DepthPrepass);
+    } else {
+        camera.remove::<DepthPrepass>();
+    }
+    if ambient_occlusion {
+        camera.insert(NormalPrepass);
+    } else {
+        camera.remove::<NormalPrepass>();
+    }
 }
 
 fn apply_lighting_toggles(
@@ -2795,11 +2833,14 @@ mod tests {
                 "--fx-off {name:?} must remove only its named live camera components"
             );
         }
-        // The REQUIRED components, which a plain `remove` leaves behind. `--fx-off ao` must take
-        // the prepasses with it, or "ao off" still pays two full-scene GPU passes nothing samples
-        // and AC8's vehicle cost delta under-reports AO by exactly its expensive half. Bloom is
-        // the deliberate opposite: its required `Hdr` must SURVIVE, because `--fx-off bloom` is
-        // the control AC4's marginal figures are measured against.
+        // The REQUIRED components, which a plain `remove` leaves behind. `--fx-off ao` must drop
+        // every pass nothing else samples, or "ao off" pays a full-scene GPU pass for no one and
+        // AC8's vehicle cost delta over-states what turning AO off actually buys. Since 11.2 that
+        // is the NORMAL prepass only: depth of field and haze read the DEPTH prepass and declare
+        // nothing, so it is shared and stays. AO's marginal cost is measured with them on, and a
+        // pass the other two would pay anyway is not part of it. Bloom is the deliberate
+        // opposite: its required `Hdr` must SURVIVE, because `--fx-off bloom` is the control
+        // AC4's marginal figures are measured against.
         let prepasses = |app: &mut App| {
             (
                 app.world_mut()
@@ -2825,8 +2866,16 @@ mod tests {
         no_ao.update();
         assert_eq!(
             prepasses(&mut no_ao),
+            (1, 0, 1),
+            "--fx-off ao must drop the normal prepass only, keep the depth prepass dof and haze \
+             sample, and leave bloom's Hdr alone"
+        );
+        let (mut bare, _sender, _server) = configured_app(&["--fx-off", "ao,dof,haze"]);
+        bare.update();
+        assert_eq!(
+            prepasses(&mut bare),
             (0, 0, 1),
-            "--fx-off ao must remove AO's required prepasses and leave bloom's Hdr alone"
+            "with all three depth consumers off the depth prepass must go too"
         );
         let (mut no_bloom, _sender, _server) = configured_app(&["--fx-off", "bloom"]);
         no_bloom.update();
@@ -2901,6 +2950,84 @@ mod tests {
         assert_eq!(
             steady_before, steady_after,
             "--lights-steady must pin the PointLight intensity the live flicker system writes"
+        );
+    }
+
+    /// Depth of field and haze sample the depth prepass, but only AO declares it.
+    ///
+    /// `ScreenSpaceAmbientOcclusion` is `#[require(DepthPrepass, NormalPrepass)]`; `DepthOfField`
+    /// and `VolumetricFog` declare NOTHING and simply read whatever depth prepass the camera
+    /// happens to carry. Before 11.2 that was harmless -- AO was the only consumer, so "AO off"
+    /// could take both prepasses with it. With two more consumers on the camera, the unconditional
+    /// removal pulls the depth buffer out from under effects that are still switched ON, and the
+    /// readout keeps reporting "F1 dof on". Only toggling AO back on restores it, which is exactly
+    /// what it looked like from the seat: cycling F1 changes nothing, cycling F11 fixes it.
+    ///
+    /// Normals stay AO-only: nothing else samples them, so "AO off" must still drop that pass.
+    #[test]
+    fn turning_ambient_occlusion_off_keeps_the_depth_prepass_dof_and_haze_sample() {
+        let prepasses = |app: &mut App| {
+            (
+                app.world_mut()
+                    .query_filtered::<&bevy::core_pipeline::prepass::DepthPrepass, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&bevy::core_pipeline::prepass::NormalPrepass, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+            )
+        };
+        // `configured_app` runs no input-clearing system, so `just_pressed` is STICKY: clear after
+        // every tap or a two-tap sequence silently becomes four toggles.
+        let tap = |app: &mut App, key: KeyCode| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.release(key);
+            input.clear();
+        };
+
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+        assert_eq!(
+            prepasses(&mut app),
+            (1, 1),
+            "both prepasses are present while every effect is on"
+        );
+
+        tap(&mut app, KeyCode::F11); // ambient occlusion off
+        assert_eq!(
+            prepasses(&mut app),
+            (1, 0),
+            "AO off must keep the depth prepass while dof and haze still sample it, and drop \
+             only the normal prepass nothing else reads"
+        );
+
+        tap(&mut app, KeyCode::F1); // depth of field off
+        tap(&mut app, KeyCode::F2); // haze off
+        assert_eq!(
+            prepasses(&mut app),
+            (0, 0),
+            "with AO, dof and haze all off nothing samples depth, so the pass must go"
+        );
+
+        tap(&mut app, KeyCode::F1); // depth of field back on, AO still off
+        assert_eq!(
+            prepasses(&mut app),
+            (1, 0),
+            "re-enabling dof must bring back the depth prepass it reads, without needing AO"
+        );
+
+        // The same hole at boot: `--fx-off ao` shipped a depth-less depth of field.
+        let (mut boot_no_ao, _sender, _server) = configured_app(&["--fx-off", "ao"]);
+        boot_no_ao.update();
+        assert_eq!(
+            prepasses(&mut boot_no_ao),
+            (1, 0),
+            "--fx-off ao must leave the depth prepass for dof and haze"
         );
     }
 

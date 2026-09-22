@@ -63,3 +63,11 @@ old = '            update_dof_from_camera.after(effect_controls),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            update_dof_from_camera,\n'))
 PY
+
+mutation "ao off takes the depth prepass dof and haze sample" gui turning_ambient_occlusion_off_keeps_the_depth_prepass_dof_and_haze_sample <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    let depth = ambient_occlusion || on(CameraEffect::Dof) || on(CameraEffect::Haze);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let depth = ambient_occlusion;\n'))
+PY
