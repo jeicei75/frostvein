@@ -255,15 +255,25 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     const OPEN_SNOW_LR: (usize, usize, usize, usize) = (950, 590, 1150, 670);
     /// Minimum Rec.601 darkening SSAO must produce in the terrace window.
     const SSAO_TERRACE_DARKENING_FLOOR: f32 = 0.30;
-    /// RE-BASELINED 116 -> 93 on 2026-09-19, when 11.1b was rebased onto 11.1a's reviewed tip.
-    /// This is a CONTROL, an expected post-stack value, and it moved because Wolf ruled the camera
-    /// exposure from 9.7 to 10.5 EV100 at 11.1a's code review -- a deliberate change to the frame,
-    /// not drift, so the control must track it. It is NOT a bar loosened to pass a failing run:
-    /// the assertion is equality, so 93 is neither weaker nor stronger than 116.
+    /// The two open-snow windows are CONTROLS: expected post-stack values, asserted by equality,
+    /// so a re-baseline is neither weaker nor stronger than the value it replaces. They track
+    /// deliberate changes to the frame and would catch drift that is not one.
+    ///
+    /// Both were 116 until 2026-09-19, then 93 when Wolf ruled the camera exposure 9.7 -> 10.5
+    /// EV100 at 11.1a's code review. 11.2's haze now splits them: LL is inside the fog volume's
+    /// depth and reads 91, LR is not and holds at 93. THE TWO WINDOWS NO LONGER SHARE A VALUE,
+    /// which is why this is two constants -- a single one would have to be wrong about one of them.
+    ///
+    /// LL 93 -> 91 is Wolf's ruling on issue #119, the haze being a deliberate frame change. The
+    /// alternative -- tuning `FOG_DENSITY_FACTOR` until the old control passed -- was rejected:
+    /// that lets a validity figure drive the art. Attribution is measured, not assumed: with
+    /// `--fx-off dof` LL still reads 91, with `--fx-off haze` it returns to 93.
     /// Measured on the guard's own flags (`--static-world --lights-steady --subdiv 4`), one fresh
-    /// daemon per capture, FOUR same-build captures: open-snow-LL 93/93/93/93 and open-snow-LR
-    /// 93/93/93/93, spread 0 on both. AO's terrace darkening is unaffected at 0.540 (floor 0.30).
-    const CONTROL_OPEN_SNOW_MEDIAN: u8 = 93;
+    /// daemon per capture, FOUR same-build captures: LL 91/91/91/91, spread 0.
+    /// AO's terrace darkening still clears its floor at 0.431 (floor 0.30).
+    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 91;
+    /// Outside the haze's reach, and unmoved by it -- see `CONTROL_OPEN_SNOW_LL_MEDIAN`.
+    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 93;
 
     // ONE DAEMON PER CAPTURE, and this is load-bearing for a delta. `--static-world` freezes the
     // world at whatever tick it has reached when the client connects, so a second capture against
@@ -308,11 +318,11 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     // "AO acts on creases, not globally" reading this clause once carried is NOT supported --
     // issue #106 carries that AC-bar defect.
     assert_eq!(
-        open_snow_ll_median, CONTROL_OPEN_SNOW_MEDIAN,
+        open_snow_ll_median, CONTROL_OPEN_SNOW_LL_MEDIAN,
         "the all-effects-on open-snow-LL median must hold at its post-stack control"
     );
     assert_eq!(
-        open_snow_lr_median, CONTROL_OPEN_SNOW_MEDIAN,
+        open_snow_lr_median, CONTROL_OPEN_SNOW_LR_MEDIAN,
         "the all-effects-on open-snow-LR median must hold at its post-stack control"
     );
 }
@@ -374,8 +384,9 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
     ///
     /// NOT a bar loosened to pass a failing run. The signal shrank ~3x (0.32 pp on `6140ca3`)
     /// because Wolf ruled the exposure 9.7 -> 10.5 EV100 at 11.1a's review -- a deliberate change
-    /// to the frame, exactly as `CONTROL_OPEN_SNOW_MEDIAN` tracked it 116 -> 93. That control was
-    /// tracked and this floor was not, which is the whole of the second half of issue #111.
+    /// to the frame, exactly as the `CONTROL_OPEN_SNOW_*` medians tracked it 116 -> 93. Those
+    /// controls were tracked and this floor was not, which is the whole of the second half of
+    /// issue #111.
     const BLOOM_NEAR_WHITE_FALL_FLOOR: f32 = 0.00;
 
     // One daemon per capture: the camp window is where the lantern-carrying dwarves walk, so a
