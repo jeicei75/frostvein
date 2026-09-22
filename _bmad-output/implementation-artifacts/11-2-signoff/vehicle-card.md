@@ -13,28 +13,43 @@ vehicle. The devpod has lavapipe only, so it cannot establish NFR6's 60 fps bar.
 Repeat with `--fx-off dof` and `--fx-off haze`, using a new daemon and `vehicle-dof-off` /
 `vehicle-haze-off` filenames. Open the all-effects frame beside both controls.
 
-Live toggles at the seat: **F1 dof**, **F2 haze**, beside F10 fxaa / F11 ao / F12 bloom.
-With the prepass fix, F11 no longer disturbs F1 or F2, and the three can be cycled in any order. The
-readout names each one's state. (F1/F2 rather than F13/F14: a standard keyboard stops at F12 --
-see issue #118, which carries the keymap rethink.)
+Live toggles at the seat: **F10 dof**, **F3 haze**, beside F11 ao / F12 bloom. The readout names
+each one's state, and fxaa no longer has a key. See the table below for why, and issue #118 for the
+keymap rethink that is still owed.
 
-**Before judging either effect, know this (fixed 2026-09-22).** Depth of field and haze both read
-the camera's depth prepass but declare it nowhere; only ambient occlusion did. Turning **F11 (ao)**
-off therefore removed the depth buffer out from under both, and only F11 put it back — cycling F1
-never did. At the seat that read as a black screen and a green/red/blue overlay, and the readout
-still said `F1 dof on` throughout. It is fixed: prepass ownership is now computed from the whole
-effect set. **Judge dof and haze on a build carrying that fix**, and note that any earlier on/off
-comparison made after an F11 press was measuring a broken state.
+**THE KEYS MOVED (2026-09-22). `F1` and `F2` were never ours.** `DefaultPlugins` pulls in
+`bevy_dev_tools::render_debug::RenderDebugOverlayPlugin`, which hardcodes **F1** to cycle a
+depth/normal debug overlay and **F2** to cycle that overlay's opacity. 11.2 had put dof and haze on
+exactly those keys, so every press drove BOTH: the readout said `F1 dof on` while Bevy blacked the
+frame out (depth overlay), painted it green/pink/blue (normal overlay), or left it at half opacity.
+Nothing in the test suite could see it -- the tests build on `MinimalPlugins`, which has no such
+plugin. The seat recordings are what caught it.
+
+Now:
+
+| key | control |
+| --- | --- |
+| **F10** | depth of field (took fxaa's key) |
+| **F3** | haze |
+| F11 / F12 | ao / bloom, unchanged |
+| F1 / F2 | **Bevy's** debug overlay -- kept deliberately, it is a useful instrument |
+| *(none)* | fxaa: no seat key any more, use `--fx-off fxaa` |
+
+A separate prepass defect was also fixed: dof and haze read the depth prepass but declare it
+nowhere, and only AO did, so turning **F11** off used to pull the depth buffer out from under both.
+F11 is now safe to cycle in any order.
 
 Questions for Wolf:
 
 1. Does f/0.05 make the far valley soften while the camp remains the focus plane? If not, choose
    a new value only inside the measured 0.02–0.10 bracket and record it with the pair.
-2. **THE OPEN ONE.** Does the density-0.015 vertical ramp dissolve naturally above the skyline,
-   with no hard band, while the haze reads as air rather than a dimmer? Wolf's first reading was
-   *"haze could be stronger.. cannot see the difference between on/off"* — but that may have been
-   taken in the broken-prepass state above, so **re-compare F2 on/off on the fixed build first**.
-   The instrument agrees it is faint either way: the haze moves the one window it reaches by 2
-   levels out of 255. If it still reads flat, record the ground median and the chosen replacement
-   before changing `FOG_DENSITY_FACTOR` — and expect the LL control to be re-baselined with it.
+2. **THE OPEN ONE -- and it is now a DEFECT, not a tuning question.** Measured inside Wolf's own
+   seat recording (static camera, 9 frames averaged per state, overlay disabled at the time), the
+   haze toggles from on to off and the frame moves **-0.07 levels** -- smaller than the
+   frame-to-frame noise in either state, and flat across every row of the frame. On the devpod
+   (lavapipe) the same toggle moves the whole frame **+3.96 levels** and lifts the mid-distance by
+   about **+10**. **The volumetric fog does nothing at all on the vehicle's GPU.** Do not tune
+   `FOG_DENSITY_FACTOR` against this -- a stronger value multiplied by zero is still zero. What is
+   needed first is why the fog renders here and not there.
+
 3. Record p50 frame times for all effects, DoF off, and haze off; re-read NFR6's 60 fps bar.

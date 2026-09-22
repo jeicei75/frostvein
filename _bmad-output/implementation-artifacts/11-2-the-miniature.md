@@ -664,6 +664,88 @@ compensate for a bug that is now fixed. **Wolf's call: re-check F2 on/off at the
 carrying the prepass fix, before any value moves.** If it still reads flat, the density is chosen
 from his reading — and the LL control is re-baselined again, by the same reasoning as #119.
 
+### The seat recordings, and what they overturned (2026-09-22, afternoon)
+
+Wolf recorded the toggles at the seat. Two recordings settled three things that no instrument on
+this devpod could have reached, and overturned two of my own conclusions.
+
+**1. F1 AND F2 WERE NEVER OURS. This is the whole of "turning dof on off has issues".**
+
+`DefaultPlugins` pulls in `bevy_dev_tools::render_debug::RenderDebugOverlayPlugin` whenever the
+`bevy_dev_tools` and `bevy_pbr` features are both on (`bevy_internal-0.19.0/src/default_plugins.rs:95`),
+and its `handle_input` hardcodes **F1 -> cycle the depth/normal debug overlay** and **F2 -> cycle
+that overlay's opacity** (`bevy_dev_tools-0.19.0/src/render_debug.rs:107` and `:110`). `db4d30b` had
+moved dof and haze onto exactly those keys. Every press therefore drove BOTH handlers.
+
+Wolf's own log lines name it outright:
+
+```
+09:04:56  Debug Overlay: Depth
+09:04:58  Debug Overlay: Normal
+09:05:00  Debug Overlay Disabled
+09:05:02  Debug Overlay: Depth
+09:05:05  Debug Overlay Opacity: 0.5
+09:05:08  Debug Overlay Opacity: 0.8
+```
+
+Measured frame statistics match every one of those events to within half a second, and explain
+every state I had been calling corruption:
+
+| what the frame did | mean luminance | what it actually was |
+| --- | ---: | --- |
+| healthy | 77.6 | no overlay |
+| black | 12.9 | `Debug Overlay: Depth` |
+| green/pink/blue | 156.7 (green excess +22.8) | `Debug Overlay: Normal` |
+| dimmed plateaus | 58.4, then 40.6 | `Opacity 0.5`, then `0.8` |
+
+**There was never any renderer corruption, and my prepass fix was never implicated.** I had
+reasoned from a step-per-toggle pattern to "my `sync_prepasses` churn is a prime suspect"; a
+baseline recording on `74f8cd3` (the commit BEFORE that fix) reproduced every plateau identically,
+which is what exonerated it. Wolf had named the cause in his first sentence -- "depth overlay
+(green, red, blue)" was Bevy's own feature name, and I read it as a description rather than a label.
+
+**The fix, and the reason no test caught it.** Every test here builds on `MinimalPlugins`, which
+does not include that plugin, so AC12's synthetic key-press test handed F1 straight to our handler
+with nothing to shadow it -- green, on a keymap that was unusable at the seat. A test cannot see a
+collision with a plugin it never loads, so the reserved keys are now written down instead:
+`the_client_keymap_avoids_keys_other_plugins_have_claimed` fails if any of our controls lands on a
+key Bevy has claimed, or if two of our own controls collide. Mutation-killed, with the message
+naming both claimants.
+
+Wolf ruled: keep Bevy's overlay (it is a useful instrument), move ours, and free F10 because "fxaa
+switch is not needed in F10 right now". So **dof -> F10, haze -> F3, fxaa loses its seat key** and
+keeps `--fx-off fxaa`. Before choosing, every `KeyCode` binding inside the Bevy crates was checked:
+`picking_debug`'s F3 is only a doc-comment example and its plugin is not in `DefaultPlugins`, and
+`easy_screenshot` (Space, PrintScreen) is not either. **F1 and F2 are the only keys Bevy takes.**
+The keymap still wants the rethink in #118.
+
+**2. THE HAZE DOES NOTHING ON THE VEHICLE'S GPU. Wolf was right and my "faint" reading was wrong.**
+
+Measured inside his first recording, static camera, 9 frames averaged per state, HUD rows excluded,
+during a window where the debug overlay was still disabled (its first event is the F1 press that
+follows):
+
+| | haze OFF | haze ON |
+| --- | ---: | ---: |
+| mean luminance | 77.720 | 77.650 |
+
+**Delta -0.070 levels**, and the across-state difference (mean |d| 0.437) is SMALLER than the
+frame-to-frame noise inside each state (0.486 / 0.430). Flat across every row eighth.
+
+On this devpod the same toggle, measured against a same-build noise floor of 0.30-0.95% of pixels,
+moves the whole frame **+3.96 levels (+6.34%)**, changes **71.7%** of pixels, and lifts the
+mid-distance band by about **+10**. So the fog renders under lavapipe and not on the vehicle.
+
+**My earlier "2 levels out of 255, genuinely faint" was wrong**, and wrong in an instructive way: it
+was the `OPEN_SNOW_LL` control window only, and that window sits in the lower-left of the frame --
+precisely where the row profile shows the haze does nothing (`-0.23`). I generalised a whole-effect
+judgement from a window that is nearly blind to the effect. **Tuning `FOG_DENSITY_FACTOR` is now
+explicitly the wrong move**: a larger number multiplied by zero is still zero.
+
+**3. Depth of field DOES work at the seat.** At equal luminance (77.1), mid-valley Laplacian energy
+is **180 with dof off and 106 with dof on** -- a 41% blur. That half of the story is doing its job
+on the vehicle.
+
 ### File List
 
 
@@ -687,3 +769,4 @@ from his reading — and the LL control is re-baselined again, by the same reaso
 | 2026-09-21 | Implemented 11.2 mechanisms and evidence; full gate blocked by #119's previous AO control, so status remains in-progress. |
 | 2026-09-21 | Orchestrator verification: F13/F14 → F1/F2 (unreachable keys, #118); #119 re-attributed to haze by measurement, DoF exonerated, LL stable at 91 spread 0; AC8 eye check done, no seam; Wolf's selected-dwarf focus defect fixed and mutation-killed; toggle symptom not reproduced. |
 | 2026-09-22 | Wolf's toggle symptom reproduced and root-caused: DoF and haze silently borrowed AO's depth prepass, which AO-off removed. Fixed by `sync_prepasses`, RED first. #119 ruled by Wolf and applied as a re-baseline, the control splitting into LL 91 / LR 93. Haze strength left untouched pending a seat re-check on the fixed build. |
+| 2026-09-22 | Seat recordings: F1/F2 were bevy_dev_tools' debug-overlay keys, which is the entire toggle symptom -- dof -> F10, haze -> F3, fxaa unbound, collision guard added. Haze measured INERT on the vehicle GPU (-0.07 levels) while moving +3.96 on lavapipe; my "faint" reading came from a control window blind to the effect and is withdrawn. |
