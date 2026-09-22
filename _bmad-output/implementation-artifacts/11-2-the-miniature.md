@@ -589,6 +589,81 @@ toggles the effect again. A two-tap sequence silently becomes four toggles. Ever
 test presses exactly once, so none of them could see it. Both new tests clear the input after each
 tap and say why.
 
+### Orchestrator verification, day 2 (Claude Opus 5, 2026-09-22)
+
+Both things this story was blocked on came back from Wolf, and one of them turned the
+"unreproduced" symptom into a real defect with a root cause.
+
+**Wolf's second seat finding REPRODUCED, root-caused and FIXED. It was never a DoF-toggle bug.**
+Asked what "issues" looked like, Wolf described it exactly: *"first off disabled and black screen,
+turn on depth overlay (green, red, blue). Then I need to cycle it to get dof back."* The mechanism:
+
+- `ScreenSpaceAmbientOcclusion` is `#[require(DepthPrepass, NormalPrepass)]`. **`DepthOfField` and
+  `VolumetricFog` declare NOTHING** — verified in the Bevy 0.19.0 sources
+  (`bevy_post_process-0.19.0/src/dof/mod.rs`, `bevy_light-0.19.0/src/volumetric.rs`). Both simply
+  read whatever depth prepass the camera happens to carry.
+- So both of 11.2's new effects were silently borrowing **AO's** depth buffer, and
+  `apply_effect`'s AO-off branch removed both prepasses unconditionally. Before 11.2 that was
+  harmless — AO was the only consumer. **11.2 is what made it bite**, which is why it is fixed
+  here rather than filed.
+- Measured through a synthetic key sequence, `(depth, normal, dof, haze)`:
+
+| step | depth | normal | dof | haze |
+| --- | ---: | ---: | ---: | ---: |
+| boot, everything on | 1 | 1 | 1 | 1 |
+| **F11 ambient occlusion off** | **0** | **0** | 1 | 1 |
+| F1 dof off, then F1 dof on | **0** | 0 | 1 | 1 |
+| **F11 ambient occlusion back on** | **1** | 1 | 1 | 1 |
+| boot with `--fx-off ao` | **0** | **0** | 1 | 1 |
+
+  Cycling **F1 never restores it**; only **F11** does. That is precisely "I need to cycle it to get
+  dof back", and it is why the readout kept reporting `F1 dof on` throughout — the component was
+  there, the buffer it samples was not. **`--fx-off ao` shipped the same depth-less DoF at boot.**
+
+**Why every instrument here said it was fine.** Captured the broken state headlessly
+(`--fx-off ao`, which reproduces it at boot) against a control, one fresh daemon per capture, with
+a same-build noise floor: floor 1.65–5.26% of pixels, DoF-on-vs-off signal 25.75–28.12%. The frame
+renders **correctly on lavapipe** — no black screen, no overlay. The visual damage is
+**venue-sited**, the same devpod-vs-vehicle split as [[capture-ceiling-is-venue-sited]], so no
+amount of headless capture on this box was ever going to show it. The seat was the only instrument
+that could see this, and it did.
+
+**The fix.** Prepass ownership is now computed from the whole effect set in one place
+(`sync_prepasses`) instead of being guessed at a single toggle site: depth is inserted when **any**
+of AO, DoF or haze is on and removed only when all three are off; normals stay AO-only, because
+nothing else samples them. Called from both the boot and live-toggle sites. RED first — the new
+test failed at `(0, 0)` against an expected `(1, 0)` — then green.
+
+One existing expectation changed with it, and it was the buggy one:
+`fx_off_reaches_the_live_camera_and_rejects_unknown_effects` asserted `--fx-off ao` leaves
+`(0, 0, 1)`. It now asserts `(1, 0, 1)`, plus a new `--fx-off ao,dof,haze` case for `(0, 0, 1)`.
+**This weakens nothing.** Its stated purpose was that "ao off" must not pay for a pass nothing
+samples — since 11.2 the depth pass *is* sampled by two other effects, so the pass AO can still be
+charged for is the normal one. AO's marginal cost is measured with DoF and haze on, and a pass the
+other two would pay anyway was never part of it. **AC8's vehicle cost delta should be read that
+way**: `--fx-off ao` now measures SSAO + the normal prepass, not SSAO + both prepasses.
+
+**#119 RULED by Wolf and APPLIED: re-baseline, not a tuned constant.** Re-measured on this build
+first — `terrace mean AO-on=60.417 AO-off=60.848 darkening=0.431; open-snow LL/LR median=91/93`,
+matching yesterday's independent figures. **The two windows no longer share a value**, so the
+single `CONTROL_OPEN_SNOW_MEDIAN` was split into `CONTROL_OPEN_SNOW_LL_MEDIAN = 91` (inside the fog
+volume's depth) and `CONTROL_OPEN_SNOW_LR_MEDIAN = 93` (outside it, unmoved). A single constant
+would now have to be wrong about one of them. `FOG_DENSITY_FACTOR` was **not** touched — tuning the
+art to satisfy a guard is the [[guard-bounds-the-art-decision]] trap Wolf's ruling avoids.
+
+The prepass fix does **not** disturb any figure in this record: at boot every effect is on, so the
+camera carries both prepasses before and after the change. Only `--fx-off ao` captures move, and
+#119's measurements never used one.
+
+**Haze strength — OPEN, and deliberately not tuned.** Wolf, on the same pass: *"haze could be
+stronger.. cannot see the difference between on/off."* The measurement agrees it is faint — the
+haze moves the one window it reaches by **2 levels out of 255** (93 → 91). But the comparison may
+also have been made in the broken state above: **if F11 had been pressed at any point first, the
+haze had no depth buffer when it was judged.** Strengthening it now would risk tuning the art to
+compensate for a bug that is now fixed. **Wolf's call: re-check F2 on/off at the seat on a build
+carrying the prepass fix, before any value moves.** If it still reads flat, the density is chosen
+from his reading — and the LL control is re-baselined again, by the same reasoning as #119.
+
 ### File List
 
 
@@ -611,3 +686,4 @@ tap and say why.
 | 2026-09-21 | Story created. Both mechanisms probed live on `7442174` and reverted; `sharpness.py` built and proved both ways; aperture bracket measured; the `capture.rs:1498` floor collision and the recommended split raised for Wolf. |
 | 2026-09-21 | Implemented 11.2 mechanisms and evidence; full gate blocked by #119's previous AO control, so status remains in-progress. |
 | 2026-09-21 | Orchestrator verification: F13/F14 → F1/F2 (unreachable keys, #118); #119 re-attributed to haze by measurement, DoF exonerated, LL stable at 91 spread 0; AC8 eye check done, no seam; Wolf's selected-dwarf focus defect fixed and mutation-killed; toggle symptom not reproduced. |
+| 2026-09-22 | Wolf's toggle symptom reproduced and root-caused: DoF and haze silently borrowed AO's depth prepass, which AO-off removed. Fixed by `sync_prepasses`, RED first. #119 ruled by Wolf and applied as a re-baseline, the control splitting into LL 91 / LR 93. Haze strength left untouched pending a seat re-check on the fixed build. |
