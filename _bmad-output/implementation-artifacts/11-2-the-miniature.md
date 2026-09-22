@@ -719,11 +719,15 @@ Wolf ruled: keep Bevy's overlay (it is a useful instrument), move ours, and free
 | key | control |
 | --- | --- |
 | F1 / F2 | Bevy's debug overlay -- reserved |
-| F3 | fps overlay |
+| F3 | perf-log frame mark |
 | F4 F5 F6 F7 | effects: haze, dof, bloom, ao -- widest-acting first |
 | F8 F9 F10 F11 F12 | lights: sun, ambient, campfire, torches, lanterns -- biggest reach first |
-| M | perf-log frame mark, pushed off the F row because it is now full |
+| *(none)* | fps overlay -- always on (Wolf: "does not harm now"), and `--capture` forces it off |
 | *(none)* | fxaa, `--fx-off fxaa` only |
+
+The overlay giving up its toggle is what made the row fit: the perf mark had been exiled to `M`
+because F3 was taken, and it came straight back. `the_interactive_overlay_is_on_and_has_no_key_to_restore_it`
+pins the new default, because with no toggle left there is nothing to recover it with.
 
 **The first attempt at that reorganisation put haze on F3 -- already the fps overlay's key.** The
 guard did not catch it, because the guard I had just written enumerated only the lights, the effects

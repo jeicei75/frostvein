@@ -55,20 +55,21 @@ PY
 mutation "fog stops following the camera" gui fog_follows_the_camera_rig_every_frame <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            update_fog_from_camera,\n            update_dof_from_camera.after(effect_controls),\n            toggle_overlay,'
+old = '            update_fog_from_camera,\n            update_dof_from_camera.after(effect_controls),\n            crate::perf::mark_perf_frame_on_key,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            update_dof_from_camera.after(effect_controls),\n            toggle_overlay,'))
+p.write_text(s.replace(old, '            update_dof_from_camera.after(effect_controls),\n            crate::perf::mark_perf_frame_on_key,'))
 PY
 
-mutation "the F3 overlay toggle is never registered" gui f3_toggles_the_diagnostic_overlay <<'PY'
+# RE-POINTED 2026-09-22. The seam is gone: the overlay no longer HAS a toggle. It is simply on,
+# because the F row ran out of keys and F3 became the perf mark. The row's question -- is the
+# diagnostic overlay actually wired up, or only believed to be? -- survives the change, so it now
+# sabotages the default it was given instead of the registration it used to have.
+mutation "the diagnostic overlay is not actually enabled" gui the_interactive_overlay_is_on_and_has_no_key_to_restore_it <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-# ANCHORED ON THE ONE SYMBOL, not on its neighbour. This row asserted the PAIR
-# `toggle_overlay,\n            fall_snow,` and stopped applying the moment story 10.5b
-# registered a system between them -- the row pinned nothing and only the gate's audit said so.
-old = '            toggle_overlay,\n'
+old = '    let mut config = FpsOverlayConfig {\n        enabled: true,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '    let mut config = FpsOverlayConfig {\n        enabled: false,\n'))
 PY
 
 mutation "snow stops falling" gui snow_falls_every_frame <<'PY'

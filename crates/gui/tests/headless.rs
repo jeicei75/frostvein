@@ -3807,8 +3807,14 @@ fn snow_falls_every_frame() {
     );
 }
 
+/// The overlay has no toggle any more, and F3 belongs to the perf log instead.
+///
+/// It was on F3 until 2026-09-22, when the F row ran out of keys and the overlay simply stayed on
+/// (Wolf: "FPS could be on all the time now also .. does not harm"). This asserts the REPLACEMENT
+/// rather than deleting the coverage: pressing F3 must leave the overlay exactly as it was, or the
+/// old toggle is still wired up and is now fighting the perf mark for the same key.
 #[test]
-fn f3_toggles_the_diagnostic_overlay() {
+fn f3_no_longer_toggles_the_diagnostic_overlay() {
     let (mut app, _sender) = live_app(one_tile_snapshot());
     app.update();
     let before = app.world().resource::<FpsOverlayConfig>().enabled;
@@ -3817,8 +3823,8 @@ fn f3_toggles_the_diagnostic_overlay() {
 
     assert_eq!(
         app.world().resource::<FpsOverlayConfig>().enabled,
-        !before,
-        "F3 did not flip the overlay; toggle_overlay is not running"
+        before,
+        "F3 still flips the overlay; it marks the perf log now and the old toggle must be gone"
     );
 }
 

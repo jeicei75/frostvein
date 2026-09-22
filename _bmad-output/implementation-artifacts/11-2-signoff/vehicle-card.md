@@ -30,10 +30,10 @@ Now:
 | key | control |
 | --- | --- |
 | F1 / F2 | **Bevy's** debug overlay: cycle depth/normal, cycle opacity — reserved, not ours |
-| F3 | fps overlay |
+| F3 | mark a frame in the perf log |
 | **F4 F5 F6 F7** | **effects**: haze, depth of field, bloom, ambient occlusion — widest-acting first |
 | **F8 F9 F10 F11 F12** | **lights**: sun, ambient, campfire, torches, lanterns — biggest reach first |
-| M | mark a frame in the perf log (off the F row: it is full) |
+| *(none)* | fps overlay — always on; `--capture` forces it off |
 | *(none)* | fxaa — `--fx-off fxaa` only |
 
 A separate prepass defect was also fixed: dof and haze read the depth prepass but declare it

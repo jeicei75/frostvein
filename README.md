@@ -155,13 +155,13 @@ has ever reliably caught a stale binary.
 | `Esc` | release the selection, or abort a designation |
 | `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
 | `space` | pause / resume the sim |
-| `M` | mark a frame in the perf log |
 | `F1` / `F2` | **Bevy's own** render debug overlay: cycle depth/normal, cycle its opacity |
-| `F3` | fps overlay |
+| `F3` | mark a frame in the perf log |
 | `F4` `F5` `F6` `F7` | toggle haze / depth of field / bloom / ambient occlusion — widest-acting first |
 | `F8` `F9` `F10` `F11` `F12` | toggle sun / ambient / campfire / torches / lanterns — biggest reach first |
 
-FXAA has no key; it is `--fx-off fxaa` only. **F1 and F2 belong to `bevy_dev_tools`**, which
+The fps overlay has no key: it is simply on, and `--capture` forces it off so no measured frame
+carries it. FXAA has no key either; it is `--fx-off fxaa` only. **F1 and F2 belong to `bevy_dev_tools`**, which
 `DefaultPlugins` pulls in automatically — binding anything of ours there means both handlers run,
 which is how 11.2 shipped dof and haze onto a debug overlay. `the_client_keymap_avoids_keys_other_plugins_have_claimed`
 now fails if any control lands on a reserved key or on another of ours. The keymap is still due a

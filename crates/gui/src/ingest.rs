@@ -542,7 +542,7 @@ pub fn run() -> anyhow::Result<()> {
         app.add_plugins(DefaultPlugins.set(asset_plugin))
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(FpsOverlayPlugin {
-                config: overlay_config_off(),
+                config: overlay_config_on(),
             });
     }
     // Registered on BOTH paths, deliberately. The embedded blobs cost nothing to publish and the
@@ -809,7 +809,6 @@ pub fn client_systems(app: &mut App) {
             effect_controls,
             update_fog_from_camera,
             update_dof_from_camera.after(effect_controls),
-            toggle_overlay,
             crate::perf::mark_perf_frame_on_key,
             fall_snow,
             // `Update`, not `Startup`: the tick the pause is SENT at is what makes the frozen
@@ -903,12 +902,17 @@ fn force_capture_overlay_off(app: &mut App) {
     config.frame_time_graph_config.enabled = false;
 }
 
-fn overlay_config_off() -> FpsOverlayConfig {
+/// The diagnostic overlay is simply ON for an interactive run (Wolf, 2026-09-22: "FPS could be on
+/// all the time now also .. does not harm"). It had a toggle on F3, which cost a key on a row that
+/// had run out of them. Captures are unaffected: `force_capture_overlay_off` turns it off whenever
+/// `--capture` is given, on the windowed and headless paths alike, so no measured frame can carry
+/// it.
+fn overlay_config_on() -> FpsOverlayConfig {
     let mut config = FpsOverlayConfig {
-        enabled: false,
+        enabled: true,
         ..Default::default()
     };
-    config.frame_time_graph_config.enabled = false;
+    config.frame_time_graph_config.enabled = true;
     config
 }
 
@@ -1557,7 +1561,7 @@ pub struct SliceReadout;
 pub struct LightingReadout;
 
 fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> String {
-    // Printed in KEY ORDER: F1/F2 belong to bevy_dev_tools and F3 to the fps overlay, then the
+    // Printed in KEY ORDER: F1/F2 belong to bevy_dev_tools and F3 marks the perf log, then the
     // effects F4..F7, then the lights F8..F12, each block widest-acting first.
     let mut entries = CameraEffect::ALL
         .into_iter()
@@ -1807,7 +1811,7 @@ fn setup_slice_readout(
         TextColor(Color::srgb(0.86, 0.91, 1.0)),
         Node {
             position_type: PositionType::Absolute,
-            // Below the F3 overlay, which Bevy pins to the origin at font size 32. The two must be
+            // Below the fps overlay, which Bevy pins to the origin at font size 32. The two must be
             // readable together: AC14's fps reading is taken AT a slice level.
             top: px(44),
             left: px(16),
@@ -2129,14 +2133,6 @@ fn record_perf_frame(
     );
 }
 
-fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut config: ResMut<FpsOverlayConfig>) {
-    if keys.just_pressed(KeyCode::F3) {
-        let enabled = !config.enabled;
-        config.enabled = enabled;
-        config.frame_time_graph_config.enabled = enabled;
-    }
-}
-
 /// The only GUI system that reads protocol message types; it mutates only the mirror.
 fn ingest_messages(
     receiver: Option<Res<IngestReceiver>>,
@@ -2399,6 +2395,23 @@ mod tests {
             embedded,
             crate::project::TREE_SCENE_PATHS,
             "the embedded table and the loader disagree about which pine is which"
+        );
+    }
+
+    /// The interactive overlay is ON, and nothing but a capture may turn it off.
+    ///
+    /// It used to have a toggle on F3; that key now marks the perf log, so if this default is ever
+    /// flipped back to `false` there is no longer any way to get the overlay back at the seat and
+    /// nothing else would notice. The capture half is the test below: the two belong together,
+    /// because "always on" is only safe while every measured frame is still guaranteed to be
+    /// without it.
+    #[test]
+    fn the_interactive_overlay_is_on_and_has_no_key_to_restore_it() {
+        let config = super::overlay_config_on();
+        assert!(config.enabled, "the fps overlay must start enabled");
+        assert!(
+            config.frame_time_graph_config.enabled,
+            "the frame-time graph must start enabled alongside it"
         );
     }
 
@@ -3171,12 +3184,11 @@ mod tests {
         }
         // EVERY other key this client binds, with its site. This list is the maintenance burden
         // and it is the point: the first version of this guard listed only the lights, the effects
-        // and the perf mark, so it cheerfully accepted haze on F3 -- already the fps overlay's key
-        // (`toggle_overlay`, below). A guard that knows about only some of the keymap certifies
+        // and the perf mark, so it cheerfully accepted haze on F3 -- at the time the fps overlay's
+        // toggle key. A guard that knows about only some of the keymap certifies
         // the rest. Anything added with `just_pressed` belongs here.
         for (key, site) in [
-            (KeyCode::F3, "fps overlay (toggle_overlay)"),
-            (KeyCode::KeyM, "perf-log frame mark (perf.rs)"),
+            (KeyCode::F3, "perf-log frame mark (perf.rs)"),
             (KeyCode::KeyC, "capture a frame (ingest.rs)"),
             (KeyCode::Comma, "slice down (ingest.rs)"),
             (KeyCode::Period, "slice up (ingest.rs)"),

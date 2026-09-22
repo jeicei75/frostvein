@@ -255,9 +255,8 @@ impl PerfLog {
     }
 }
 
-/// The mark key: `M` flags the frame it was pressed on. It is off the F row because that
-/// row is full: F1/F2 are bevy_dev_tools', F3 is the fps overlay, and F4-F12 are the effects
-/// and lights.
+/// The mark key: `F3` flags the frame it was pressed on. F3 came free when the fps overlay
+/// stopped needing a toggle and simply stayed on.
 ///
 /// The flag serves a scripted run, which knows in advance that it wants numbers. This serves the
 /// case a scripted run can never reproduce — a human noticing something at the seat — by leaving a
@@ -267,11 +266,13 @@ pub fn mark_perf_frame_on_key(
     keys: Res<bevy::prelude::ButtonInput<bevy::prelude::KeyCode>>,
     log: Option<ResMut<PerfLog>>,
 ) {
-    if !keys.just_pressed(bevy::prelude::KeyCode::KeyM) {
+    if !keys.just_pressed(bevy::prelude::KeyCode::F3) {
         return;
     }
     let Some(mut log) = log else {
-        eprintln!("gui perf-log: M pressed but no --perf-log was given; nothing is being recorded");
+        eprintln!(
+            "gui perf-log: F3 pressed but no --perf-log was given; nothing is being recorded"
+        );
         return;
     };
     log.mark_next_frame();
