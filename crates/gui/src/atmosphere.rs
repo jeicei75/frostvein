@@ -318,7 +318,17 @@ pub fn setup_atmosphere(
     }
 }
 
-pub fn fall_snow(time: Res<Time>, mut flakes: Query<(&Snowflake, &mut Transform)>) {
+/// Held still under `--static-world`. The fall runs on the wall clock, so without this two
+/// captures of one frozen world drew the flakes wherever each run's timing left them -- enough to
+/// swing the distance-40 depth-of-field guard's camp window across its bar from run to run.
+pub fn fall_snow(
+    time: Res<Time>,
+    static_world: Res<crate::command::StaticWorld>,
+    mut flakes: Query<(&Snowflake, &mut Transform)>,
+) {
+    if static_world.0 {
+        return;
+    }
     for (flake, mut transform) in &mut flakes {
         transform.translation.y -= time.delta_secs() * flake.speed;
         if transform.translation.y < CAMP_SURFACE_Y {

@@ -72,7 +72,7 @@ PY
 mutation "live ingest stops re-basing the blend clock" gui ingest::tests::ingesting_a_delta_rebases_the_blend_clock_from_the_wire <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '                clock.observe_tick(mirror.0.tick());\n'
+old = '    clock.observe_tick(mirror.tick());\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
@@ -80,9 +80,9 @@ PY
 mutation "the blend clock is never advanced by frame time" gui production_drives_the_blend_clock_from_frame_time <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = 'blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);'
+old = '        time.delta_secs(),\n        &mut projected,\n    );'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'blend_entities(&mirror.0, &mut clock, 0.0, &mut projected);'))
+p.write_text(s.replace(old, '        0.0,\n        &mut projected,\n    );'))
 PY
 
 mutation "the flicker is never advanced by elapsed time" gui production_drives_the_flicker_from_elapsed_time <<'PY'

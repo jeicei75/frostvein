@@ -123,6 +123,16 @@ impl StaticWorldPause {
         self.landed_at.is_some()
     }
 
+    /// A pause that has already landed, for tests of what a frozen world does next.
+    #[cfg(test)]
+    pub(crate) fn landed_at_tick(tick: u64) -> Self {
+        Self {
+            active: true,
+            landed_at: Some(tick),
+            ..Default::default()
+        }
+    }
+
     /// The tick the daemon reported it stopped at, once it has.
     pub fn landed_at(&self) -> Option<u64> {
         self.landed_at

@@ -717,6 +717,7 @@ pub fn projection_systems(app: &mut App) {
     app.init_resource::<crate::project::TreeReportState>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<TickClock>()
+        .init_resource::<crate::project::DwarfHeadings>()
         .add_systems(Startup, (setup_slice_readout, setup_lighting_readout))
         .add_systems(
             Update,
@@ -726,6 +727,7 @@ pub fn projection_systems(app: &mut App) {
                 reconcile_projection,
                 blend_projection,
                 flicker_projection,
+                crate::project::hold_walk_phase_in_static_world,
                 // Chained after `blend_projection` deliberately: that is the sole writer of
                 // `WalkPhase`, so reading it earlier in the same frame would drive every dwarf
                 // from the previous tick's movement.
@@ -2158,11 +2160,45 @@ fn record_perf_frame(
 }
 
 /// The only GUI system that reads protocol message types; it mutates only the mirror.
+/// Everything one delta changes on the client, in one place so the headless tests drive the SAME
+/// path as the socket. Their helper used to restate these lines by hand, and the copy silently
+/// missed the facing record when it was added.
+pub fn apply_wire_delta(
+    mirror: &mut Mirror,
+    work: &mut ProjectionWork,
+    clock: &mut TickClock,
+    headings: &mut crate::project::DwarfHeadings,
+    delta: Delta,
+) {
+    mirror.apply_delta(delta);
+    headings.record(mirror);
+    clock.observe_tick(mirror.tick());
+    work.dirty_tiles
+        .extend(mirror.changes().tiles.iter().copied());
+}
+
+/// The snapshot twin of [`apply_wire_delta`].
+pub fn apply_wire_snapshot(
+    mirror: &mut Mirror,
+    work: &mut ProjectionWork,
+    clock: &mut TickClock,
+    headings: &mut crate::project::DwarfHeadings,
+    snapshot: Snapshot,
+) -> Result<(), client_core::MirrorError> {
+    mirror.apply_snapshot(snapshot)?;
+    work.snapshot = true;
+    work.dirty_tiles.clear();
+    headings.clear();
+    clock.reset(mirror.tick());
+    Ok(())
+}
+
 fn ingest_messages(
     receiver: Option<Res<IngestReceiver>>,
     mut mirror: ResMut<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
     mut clock: ResMut<TickClock>,
+    mut headings: ResMut<crate::project::DwarfHeadings>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let Some(receiver) = receiver else {
@@ -2175,12 +2211,14 @@ fn ingest_messages(
             .expect("ingest receiver mutex poisoned")
             .try_recv()
         {
-            Ok(Ok(WireMessage::Snapshot(snapshot))) => match mirror.0.apply_snapshot(*snapshot) {
-                Ok(()) => {
-                    work.snapshot = true;
-                    work.dirty_tiles.clear();
-                    clock.reset(mirror.0.tick());
-                }
+            Ok(Ok(WireMessage::Snapshot(snapshot))) => match apply_wire_snapshot(
+                &mut mirror.0,
+                &mut work,
+                &mut clock,
+                &mut headings,
+                *snapshot,
+            ) {
+                Ok(()) => {}
                 Err(error) => {
                     // A frozen window with no diagnostic is worse than a loud exit; the
                     // sibling client bails on this same condition.
@@ -2189,10 +2227,7 @@ fn ingest_messages(
                 }
             },
             Ok(Ok(WireMessage::Delta(delta))) => {
-                mirror.0.apply_delta(*delta);
-                clock.observe_tick(mirror.0.tick());
-                work.dirty_tiles
-                    .extend(mirror.0.changes().tiles.iter().copied());
+                apply_wire_delta(&mut mirror.0, &mut work, &mut clock, &mut headings, *delta);
             }
             Ok(Err(error)) => {
                 eprintln!("server reader stopped: {error:#}");
@@ -2211,6 +2246,7 @@ fn ingest_messages(
 fn blend_projection(
     mirror: Res<MirrorResource>,
     mut clock: ResMut<TickClock>,
+    headings: Res<crate::project::DwarfHeadings>,
     time: Res<Time>,
     mut projected: Query<
         (
@@ -2221,7 +2257,13 @@ fn blend_projection(
         Without<TerrainTile>,
     >,
 ) {
-    blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);
+    blend_entities(
+        &mirror.0,
+        &headings,
+        &mut clock,
+        time.delta_secs(),
+        &mut projected,
+    );
 }
 
 // Each parameter is a distinct ECS partition; bundling them solely to reduce the system signature
@@ -5298,6 +5340,7 @@ mod tests {
             .insert_resource(IngestReceiver(Mutex::new(receiver)))
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
+            .init_resource::<crate::project::DwarfHeadings>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -5343,6 +5386,7 @@ mod tests {
             .insert_resource(IngestReceiver(Mutex::new(receiver)))
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
+            .init_resource::<crate::project::DwarfHeadings>()
             .add_systems(Update, ingest_messages);
         // A full cadence has already elapsed on the client when the delta lands.
         app.world_mut().resource_mut::<TickClock>().advance(0.1);
@@ -5400,6 +5444,7 @@ mod tests {
                 ..Default::default()
             })
             .init_resource::<TickClock>()
+            .init_resource::<crate::project::DwarfHeadings>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -5436,6 +5481,7 @@ mod tests {
             .insert_resource(IngestReceiver(Mutex::new(receiver)))
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
+            .init_resource::<crate::project::DwarfHeadings>()
             .add_systems(Update, ingest_messages);
         // Settle schedule and system entities before ingesting anything.
         app.update();
