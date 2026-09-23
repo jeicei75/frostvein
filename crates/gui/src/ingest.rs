@@ -31,7 +31,7 @@ use bevy::{
     post_process::{bloom::Bloom, dof::DepthOfField},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
-        DirectionalLight, GlobalTransform, GlobalZIndex, KeyCode, Node, PerspectiveProjection,
+        DirectionalLight, GlobalTransform, GlobalZIndex, Has, KeyCode, Node, PerspectiveProjection,
         PositionType, Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time,
         Transform, TransformSystems, Vec2, Vec3, Window, With, Without, px,
     },
@@ -807,6 +807,7 @@ pub fn client_systems(app: &mut App) {
             camera_controls,
             light_controls,
             effect_controls,
+            sync_haze_light.after(effect_controls),
             update_fog_from_camera,
             update_dof_from_camera.after(effect_controls),
             crate::perf::mark_perf_frame_on_key,
@@ -1740,6 +1741,29 @@ fn sync_prepasses(
         camera.insert(NormalPrepass);
     } else {
         camera.remove::<NormalPrepass>();
+    }
+}
+
+/// Puts `VolumetricLight` on the sun only while the haze is on.
+///
+/// Removing `VolumetricFog` from the camera is NOT enough to turn the haze off live. Bevy 0.19's
+/// `extract_volumetric_fog` (`bevy_pbr/src/volumetric_fog/render.rs:240`) only ever INSERTS the
+/// component on the render-world camera, and nothing syncs its removal, so the render world kept
+/// drawing the fog after F4 while the readout said `haze off`. Its one cleanup path fires when no
+/// light carries `VolumetricLight`, so that marker is what the toggle has to move. The marker only
+/// feeds the fog shader; the sun's own lighting and shadows do not read it.
+fn sync_haze_light(
+    mut commands: Commands,
+    effects_off: Res<EffectsOff>,
+    sun: Query<(bevy::prelude::Entity, Has<VolumetricLight>), With<SunLight>>,
+) {
+    let haze = !effects_off.is_off(CameraEffect::Haze);
+    for (entity, has) in &sun {
+        if haze && !has {
+            commands.entity(entity).insert(VolumetricLight);
+        } else if !haze && has {
+            commands.entity(entity).remove::<VolumetricLight>();
+        }
     }
 }
 
@@ -3097,6 +3121,62 @@ mod tests {
             prepasses(&mut boot_no_ao),
             (1, 0),
             "--fx-off ao must leave the depth prepass for dof and haze"
+        );
+    }
+
+    /// F4 must take `VolumetricLight` off the sun, not only `VolumetricFog` off the camera.
+    ///
+    /// The camera removal alone left the render world drawing the fog: Bevy never syncs that
+    /// removal, and its only cleanup fires when no light is volumetric. Wolf saw it at the seat --
+    /// F4 changed nothing, and "haze off" looked like a headless haze-on capture. This test cannot
+    /// see the render world, so it pins the one main-world input Bevy's cleanup reads.
+    #[test]
+    fn the_haze_key_moves_the_suns_volumetric_marker() {
+        let volumetric_suns = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<(), (With<super::SunLight>, With<super::VolumetricLight>)>()
+                .iter(app.world())
+                .count()
+        };
+        let tap = |app: &mut App, key: KeyCode| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.release(key);
+            input.clear();
+        };
+
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+        assert_eq!(
+            volumetric_suns(&mut app),
+            1,
+            "haze on at boot: the sun lights the fog"
+        );
+        tap(&mut app, KeyCode::F4);
+        app.update();
+        assert_eq!(
+            volumetric_suns(&mut app),
+            0,
+            "haze off: with no volumetric light Bevy strips the fog from the render world"
+        );
+        tap(&mut app, KeyCode::F4);
+        app.update();
+        assert_eq!(
+            volumetric_suns(&mut app),
+            1,
+            "haze back on: the marker must return"
+        );
+
+        let (mut boot_off, _sender, _server) = configured_app(&["--fx-off", "haze"]);
+        boot_off.update();
+        boot_off.update();
+        assert_eq!(
+            volumetric_suns(&mut boot_off),
+            0,
+            "--fx-off haze must agree with F4"
         );
     }
 
