@@ -278,6 +278,107 @@ from filed frames, and the story tunes neither.
         count guard and this story does not add a twelfth.
   - [x] Run `audit-mutations.py` **after** `cargo fmt`; formatting alone has orphaned six rows.
 
+### Review Findings
+
+Code review 2026-09-23 on `210b2e4` (4 layers, all completed, none timed out, so there is no
+coverage hole). Layers: Blind Hunter (Sonnet, `crates/gui/src`), Edge Case Hunter (Sonnet, `simd`
++ `gui/tests` + `scripts` + mutation tables), Acceptance Auditor (Opus), Feature Auditor (Opus).
+The R1 territory was reassigned because `sim-core` is untouched and `gui` has no owner. Each tag
+names the layer that raised the finding and its severity.
+
+- [x] [Review][Decision] **The depth prepass premise of `07d7bf8` looks false** [blind MED + accept LOW]
+  - **What the source says:** in Bevy 0.19.0, `DepthOfField` (`dof/mod.rs:766-830`) and
+    `VolumetricFog` (`volumetric_fog/render.rs:285-372`) both bind `ViewDepthTexture`, the main
+    depth buffer. Neither binds the depth prepass. `rg Prepass` over both modules returns nothing.
+  - **Why the old evidence doesn't prove it:** it was component counts plus an `--fx-off ao`
+    capture whose 25-28% difference is AO's own. The black screen at the seat was the key
+    collision, not the prepass.
+  - **Consequence:** `sync_prepasses` keeps an unread `DepthPrepass` whenever AO is off. So AC8's
+    `--fx-off ao` reading understates what AO costs, and the Task 3(a) asymmetry was changed on a
+    premise that looks false. The change is not listed under DEVIATIONS either.
+  - **Status:** PLAUSIBLE, not confirmed; it needs a vehicle frame to settle.
+  - **Options:** (a) restore the AO-owns-both-prepasses rule; (b) keep the change, record it as
+    insurance, and correct the rationale and memory; (c) settle it at the seat first.
+  - **RULED (Wolf, 2026-09-23): (b) now, and file an issue.** The code stays as it is. The
+    rationale is corrected by the patch item below, and the question is settled in **#121**.
+- [x] [Review][Decision] **The haze draws a bright arc in both top corners** [feature MED, found by running it]
+  - **Measured:** row 0 is up to +115 luma brighter than haze-off across x 0-124 and x 1159-1279,
+    fading out by row 7.
+  - **Where it shows:** in `all-on-51b1db3.png`, `seam-check-6194756-all-on.png` and the creation
+    probe. No statistic window covers it, and AC8's eye check said "no band".
+  - **Separately, low-pitch orbits** (`--camera 0.7,0.22,90,64,64,9`): the sky's row medians go
+    from 14 to 45-85, and the aurora disappears.
+  - **AC14 was signed off at boot framing only.** The question for Wolf: accept both, or tune
+    now. Filed as **#120** (`bug`, `route:story`, `route:undecided`).
+  - **RULED (Wolf, 2026-09-23): accepted.** No change in 11.2; #120 stays open.
+- [x] [Review][Decision] **AC13's evidence is thinner than the AC text** [accept MED]
+  - The AC asks for `--perf-log` p50 all-on and with each new effect off. What is recorded is an
+    eye-read fullscreen fps for haze on/off only (60/140); there is no DoF-off figure.
+  - Wolf ruled on the reading, but the ruling is not in the DEVIATIONS list.
+  - The options: record it as a ruled deviation, or take one windowed `--perf-log` with F5 toggled.
+  - **RULED (Wolf, 2026-09-23): record it as a deviation.** Wolf's reason: the perf runs used
+    a small window, and in a small window the fps does not change (~140 either way). The cost
+    only shows fullscreen at 4K, where it was read by eye. The DEVIATIONS patch item carries it.
+- [ ] [Review][Patch] **The DoF focus tests cannot see the camera's position** [blind MED, verified by running it] [crates/gui/src/ingest.rs:3387, :3669]
+  - `configured_app` adds only `MinimalPlugins`, with no `TransformPlugin`, so `GlobalTransform`
+    stays at the origin. A standalone Bevy 0.19 program run by the Blind Hunter showed this.
+  - The oracle calls the same `dof_focal_distance` with the same frozen translation. So the zoom
+    and orbit that AC3 names cannot move the expected value.
+  - Fix: propagate transforms in those tests, then RE-MUTATE the focal-derivation rows.
+- [ ] [Review][Patch] **DoF focus runs one frame behind the camera** [blind MED + feature LOW] [crates/gui/src/ingest.rs:814, :2116]
+  - `update_dof_from_camera` reads `GlobalTransform` in `Update`, before propagation. On a dwarf
+    click, focus reads ~60 while the camera sits ~20 from the dwarf.
+  - Fix: run it in `PostUpdate` after `TransformSystems::Propagate`.
+- [ ] [Review][Patch] **The comment on the F4 haze fix gives the wrong mechanism** [feature LOW + blind (raised as HIGH, downgraded)] [crates/gui/src/ingest.rs:1749-1756; 11-2-signoff/vehicle-card.md Q2]
+  - Bevy's cleanup only visits cameras that still carry `VolumetricFog`. `apply_effect` has
+    already removed it, so the render-world camera keeps its fog components and pipelines.
+  - The fog vanishes because the same branch strips every `FogVolume`.
+  - Patched despite being LOW, because it is a latent silent-failure trap: a future edit that
+    trusts this comment keeps the wrong path.
+- [ ] [Review][Patch] **The README contradicts the code** [accept MED + feature LOW] [README.md:249, ~256]
+  - The `--fx-off` row lists only `fxaa, ao, bloom`; `dof` and `haze` are missing.
+  - The `--static-world` paragraph still says snow keeps falling, but `b5a0e2a` stopped it.
+- [ ] [Review][Patch] **Re-pointed mutation rows have no recorded kill** [accept LOW-MED] [_bmad-output/implementation-artifacts/mutations/]
+  - Nine re-pointed rows have no kill evidence: 11-1a ×2, 11-1b ×3, m2-1 ×3 and 10-7 ×1.
+  - The File List omits the 11-1a and 11-1b tables.
+  - The 11-1a row "FXAA … shadows depth of field" actually sabotages F4, the haze key.
+  - The 11-1b ao row changed meaning and should say so.
+  - Run the nine rows, record which assertion kills. Check whether the "haze returns to daylight
+    density" row kills through the ground-median panic rather than AC7's own clauses.
+- [ ] [Review][Patch] **Correct the prepass rationale (Decision 1, #121)** [crates/gui/src/ingest.rs:1720-1735 doc comment on `sync_prepasses`; the record's day-2 prepass section]
+  - State that Bevy 0.19 source shows DoF and fog binding `ViewDepthTexture`, so keeping the
+    depth prepass is insurance pending #121, not a proven dependency.
+  - Note that AC8's `--fx-off ao` delta may understate AO's cost for the same reason.
+- [ ] [Review][Patch] **The DEVIATIONS list is incomplete** [accept LOW-MED] [11-2-the-miniature.md:842-855]
+  - Missing entries: the Task 3(a) prepass asymmetry change; FXAA losing its live key; the fps
+    overlay made always-on (`67cbcaa`).
+  - `b09d03a` also changed the simd tick loop: a request for the same tick at the same speed is
+    now dropped without a message. That branch has no test or mutation row, and `--pause-at 0` at
+    boot still logs "already past" (edge MED, run live).
+  - AC8's star count sees only the 32 stars that survive DoF, not the 78 at creation.
+  - AC13: record Wolf's ruled deviation with his reason. Small-window perf runs cannot tell
+    the difference; the cost only shows fullscreen at 4K (haze ~60 on vs ~140 off). There is no
+    DoF-off figure and no `--perf-log` p50.
+- [ ] [Review][Patch] **The haze guard's star-count clause could pass vacuously** [edge MED] [crates/gui/tests/pixel_guard.rs:623-626]
+  - `assert_eq!(stars_on, stars_off)` passes at 0 == 0. It reads 32 today; add `stars_off > 0`.
+  - Latent silent-failure trap, so it is patched regardless of severity.
+- [ ] [Review][Patch] **The keymap guard's hand list is incomplete and mislabelled** [accept LOW] [crates/gui/src/ingest.rs:3341-3353]
+  - It omits W/A/S/D/Q/E and Shift/Ctrl.
+  - `KeyC` is labelled "capture a frame" but prints the readout; `Space` is labelled "issue the
+    queued command" but is pause/resume.
+  - A guard that certifies keys it doesn't know is a silent-failure trap, so it is patched.
+- [x] [Review][Defer] Stale key comments: ingest.rs:99 and :325 say F5-F9, perf.rs:3 says F3 shows fps [crates/gui/src/ingest.rs:99] — deferred, LOW
+- [x] [Review][Defer] `simd` repeated `--pause-at`/port silently takes the last value [crates/simd/src/main.rs:74-94] — deferred, LOW
+- [x] [Review][Defer] `push.sh --fast --no-gate` together passes a flag on to `git push` [scripts/push.sh:38-44] — deferred, LOW, fails loud
+- [x] [Review][Defer] `rec601_lap_mean` returns NaN on a rect of ≤2 px; far_fall/lap_fall divisions are unguarded [crates/gui/tests/pixel_guard.rs:95-117, 503] — deferred, LOW, unreachable today
+- [x] [Review][Defer] Two separate 60 s wall-clock timeouts [crates/gui/src/capture.rs:45, command.rs:197] — deferred, LOW
+- [x] [Review][Defer] The fog density texture is 1×64×1 and no comment states that X/Z are uniform on purpose [crates/gui/src/ingest.rs fog_density_ramp_image] — deferred, LOW
+- [x] [Review][Defer] The static-world pause timer counts a slow Startup against its 60 s [crates/gui/src/command.rs:218-243] — deferred, LOW
+- [x] [Review][Defer] No mutation row removes `density_texture` from the fog volume [crates/gui/src/ingest.rs:1549] — deferred, LOW
+- [x] [Review][Defer] The tech-art rows carry creation figures, not this build's (9.41→6.44, 50→69) [docs/tech-art-guidelines.md:72-73] — deferred, LOW
+- [x] [Review][Defer] AC4 passes with a ratio of 3.49 against a bar of 3, and at distance 40 the camp window reads median 155 (not the camp) [crates/gui/tests/pixel_guard.rs] — deferred, LOW
+- [x] [Review][Defer] `sprint-status.yaml` `last_updated` is stale, and the 11-2 comment still says "ready to implement" — deferred, LOW, fix at close
+
 ## Dev Notes
 
 ### Scope guardrails — do NOT
