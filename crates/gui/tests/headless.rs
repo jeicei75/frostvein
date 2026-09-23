@@ -94,34 +94,42 @@ fn press_once(app: &mut App, key: KeyCode) {
 }
 
 fn apply_delta(app: &mut App, delta: Delta) {
-    let (dirty_tiles, tick) = {
-        let mut mirror = app.world_mut().resource_mut::<MirrorResource>();
-        mirror.0.apply_delta(delta);
-        (mirror.0.changes().tiles.clone(), mirror.0.tick())
-    };
-    {
-        let mut work = app.world_mut().resource_mut::<ProjectionWork>();
-        work.dirty_tiles.extend(dirty_tiles);
-    }
     app.world_mut()
-        .resource_mut::<gui::blend::TickClock>()
-        .observe_tick(tick);
+        .run_system_once(
+            move |mut mirror: bevy::prelude::ResMut<MirrorResource>,
+                  mut work: bevy::prelude::ResMut<ProjectionWork>,
+                  mut clock: bevy::prelude::ResMut<gui::blend::TickClock>,
+                  mut headings: bevy::prelude::ResMut<gui::project::DwarfHeadings>| {
+                gui::ingest::apply_wire_delta(
+                    &mut mirror.0,
+                    &mut work,
+                    &mut clock,
+                    &mut headings,
+                    delta.clone(),
+                );
+            },
+        )
+        .expect("the production delta path must run");
 }
 
 fn apply_snapshot(app: &mut App, snapshot: Snapshot) {
-    let tick = {
-        let mut mirror = app.world_mut().resource_mut::<MirrorResource>();
-        mirror.0.apply_snapshot(snapshot).unwrap();
-        mirror.0.tick()
-    };
-    {
-        let mut work = app.world_mut().resource_mut::<ProjectionWork>();
-        work.snapshot = true;
-        work.dirty_tiles.clear();
-    }
     app.world_mut()
-        .resource_mut::<gui::blend::TickClock>()
-        .reset(tick);
+        .run_system_once(
+            move |mut mirror: bevy::prelude::ResMut<MirrorResource>,
+                  mut work: bevy::prelude::ResMut<ProjectionWork>,
+                  mut clock: bevy::prelude::ResMut<gui::blend::TickClock>,
+                  mut headings: bevy::prelude::ResMut<gui::project::DwarfHeadings>| {
+                gui::ingest::apply_wire_snapshot(
+                    &mut mirror.0,
+                    &mut work,
+                    &mut clock,
+                    &mut headings,
+                    snapshot.clone(),
+                )
+                .unwrap();
+            },
+        )
+        .expect("the production snapshot path must run");
 }
 
 fn snapshot(tiles: Vec<Tile>, entities: Vec<Entity>) -> Snapshot {
@@ -1210,9 +1218,16 @@ fn the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops() {
         "walking along sim +x must face render +x and stay level, got {east:?}"
     );
 
-    // STOP. The same position twice: nothing to face, so hold what is already there.
+    // STOP. The same position twice: nothing to face, so hold what is already there. He stops
+    // the way the sim stops him, by starting WORK where he stands: the mirror reports only an
+    // entity that differs, so a stop that repeats him unchanged never reaches the facing code at
+    // all, and the sabotage that deletes the zero-delta guard SURVIVED that version too.
+    let working = Entity {
+        state: JobState::Work,
+        ..dwarf(id, [2, 3, 0])
+    };
     for _ in 0..3 {
-        apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 3, 0])]));
+        apply_delta(&mut app, delta(vec![], vec![working]));
         app.world_mut()
             .resource_mut::<gui::blend::TickClock>()
             .advance(10.0);
@@ -1222,6 +1237,21 @@ fn the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops() {
     assert!(
         (held - east).length() < 0.001,
         "a stopped dwarf must HOLD his last facing, not snap to a default: {east:?} -> {held:?}"
+    );
+
+    // A step and a stand delivered in ONE frame. Facing read once per frame from the mirror's
+    // previous generation saw only the stand and kept him facing east, so a frozen world's
+    // facings depended on how deltas batched into frames and no two captures agreed.
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 1, 0])]));
+    apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 1, 0])]));
+    app.world_mut()
+        .resource_mut::<gui::blend::TickClock>()
+        .advance(10.0);
+    app.update();
+    let south = forward(&mut app);
+    assert!(
+        south.z > 0.9 && south.y.abs() < 0.01,
+        "a step followed by a stand in the same frame must still turn him to face it, got {south:?}"
     );
 }
 
@@ -3807,8 +3837,38 @@ fn snow_falls_every_frame() {
     );
 }
 
+/// `--static-world` holds the snow: it falls on the wall clock, so two captures of one frozen
+/// world drew it wherever each run's timing left it.
 #[test]
-fn f3_toggles_the_diagnostic_overlay() {
+fn snow_holds_still_in_a_static_world() {
+    let (mut app, _sender) = live_app(one_tile_snapshot());
+    app.insert_resource(gui::command::StaticWorld(true));
+    app.update();
+    let heights = |app: &mut App| -> Vec<f32> {
+        app.world_mut()
+            .query_filtered::<&Transform, With<Snowflake>>()
+            .iter(app.world())
+            .map(|t| t.translation.y)
+            .collect()
+    };
+    let before = heights(&mut app);
+    assert!(!before.is_empty(), "no snowflakes to hold");
+    app.update();
+    assert_eq!(
+        heights(&mut app),
+        before,
+        "a static world must not move its snow"
+    );
+}
+
+/// The overlay has no toggle any more, and F3 belongs to the perf log instead.
+///
+/// It was on F3 until 2026-09-22, when the F row ran out of keys and the overlay simply stayed on
+/// (Wolf: "FPS could be on all the time now also .. does not harm"). This asserts the REPLACEMENT
+/// rather than deleting the coverage: pressing F3 must leave the overlay exactly as it was, or the
+/// old toggle is still wired up and is now fighting the perf mark for the same key.
+#[test]
+fn f3_no_longer_toggles_the_diagnostic_overlay() {
     let (mut app, _sender) = live_app(one_tile_snapshot());
     app.update();
     let before = app.world().resource::<FpsOverlayConfig>().enabled;
@@ -3817,8 +3877,8 @@ fn f3_toggles_the_diagnostic_overlay() {
 
     assert_eq!(
         app.world().resource::<FpsOverlayConfig>().enabled,
-        !before,
-        "F3 did not flip the overlay; toggle_overlay is not running"
+        before,
+        "F3 still flips the overlay; it marks the perf log now and the old toggle must be gone"
     );
 }
 

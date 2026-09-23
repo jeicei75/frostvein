@@ -91,6 +91,56 @@ fn rec601_median(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, u
     values[values.len() / 2]
 }
 
+/// Mean four-neighbour Laplacian of Rec.601 luma, matching 11.2's `sharpness.py` instrument.
+fn rec601_lap_mean(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> f32 {
+    let luma = |x: usize, y: usize| {
+        let [r, g, b, _] = pixels[y * width + x];
+        (r as i32 * 299 + g as i32 * 587 + b as i32 * 114) / 1000
+    };
+    let (x0, y0, x1, y1) = rect;
+    let mut total = 0_i64;
+    let mut count = 0_i64;
+    for y in (y0 + 1)..(y1 - 1) {
+        for x in (x0 + 1)..(x1 - 1) {
+            total += i64::from(
+                (4 * luma(x, y)
+                    - luma(x - 1, y)
+                    - luma(x + 1, y)
+                    - luma(x, y - 1)
+                    - luma(x, y + 1))
+                .abs(),
+            );
+            count += 1;
+        }
+    }
+    total as f32 / count as f32
+}
+
+fn rec601_peak(pixels: &[[u8; 4]], width: usize, rect: (usize, usize, usize, usize)) -> u8 {
+    let (x0, y0, x1, y1) = rect;
+    (y0..y1)
+        .flat_map(|y| (x0..x1).map(move |x| pixels[y * width + x]))
+        .map(|[r, g, b, _]| ((r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000) as u8)
+        .max()
+        .expect("a non-empty measurement window")
+}
+
+fn rec601_count_at_least(
+    pixels: &[[u8; 4]],
+    width: usize,
+    rect: (usize, usize, usize, usize),
+    threshold: u8,
+) -> usize {
+    let (x0, y0, x1, y1) = rect;
+    (y0..y1)
+        .flat_map(|y| (x0..x1).map(move |x| pixels[y * width + x]))
+        .filter(|[r, g, b, _]| {
+            ((u32::from(*r) * 299 + u32::from(*g) * 587 + u32::from(*b) * 114) / 1000)
+                >= u32::from(threshold)
+        })
+        .count()
+}
+
 struct Daemon {
     child: Child,
     port: u16,
@@ -205,15 +255,25 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     const OPEN_SNOW_LR: (usize, usize, usize, usize) = (950, 590, 1150, 670);
     /// Minimum Rec.601 darkening SSAO must produce in the terrace window.
     const SSAO_TERRACE_DARKENING_FLOOR: f32 = 0.30;
-    /// RE-BASELINED 116 -> 93 on 2026-09-19, when 11.1b was rebased onto 11.1a's reviewed tip.
-    /// This is a CONTROL, an expected post-stack value, and it moved because Wolf ruled the camera
-    /// exposure from 9.7 to 10.5 EV100 at 11.1a's code review -- a deliberate change to the frame,
-    /// not drift, so the control must track it. It is NOT a bar loosened to pass a failing run:
-    /// the assertion is equality, so 93 is neither weaker nor stronger than 116.
+    /// The two open-snow windows are CONTROLS: expected post-stack values, asserted by equality,
+    /// so a re-baseline is neither weaker nor stronger than the value it replaces. They track
+    /// deliberate changes to the frame and would catch drift that is not one.
+    ///
+    /// Both were 116 until 2026-09-19, then 93 when Wolf ruled the camera exposure 9.7 -> 10.5
+    /// EV100 at 11.1a's code review. 11.2's haze now splits them: LL is inside the fog volume's
+    /// depth and reads 91, LR is not and holds at 93. THE TWO WINDOWS NO LONGER SHARE A VALUE,
+    /// which is why this is two constants -- a single one would have to be wrong about one of them.
+    ///
+    /// LL 93 -> 91 is Wolf's ruling on issue #119, the haze being a deliberate frame change. The
+    /// alternative -- tuning `FOG_DENSITY_FACTOR` until the old control passed -- was rejected:
+    /// that lets a validity figure drive the art. Attribution is measured, not assumed: with
+    /// `--fx-off dof` LL still reads 91, with `--fx-off haze` it returns to 93.
     /// Measured on the guard's own flags (`--static-world --lights-steady --subdiv 4`), one fresh
-    /// daemon per capture, FOUR same-build captures: open-snow-LL 93/93/93/93 and open-snow-LR
-    /// 93/93/93/93, spread 0 on both. AO's terrace darkening is unaffected at 0.540 (floor 0.30).
-    const CONTROL_OPEN_SNOW_MEDIAN: u8 = 93;
+    /// daemon per capture, FOUR same-build captures: LL 91/91/91/91, spread 0.
+    /// AO's terrace darkening still clears its floor at 0.431 (floor 0.30).
+    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 91;
+    /// Outside the haze's reach, and unmoved by it -- see `CONTROL_OPEN_SNOW_LL_MEDIAN`.
+    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 93;
 
     // ONE DAEMON PER CAPTURE, and this is load-bearing for a delta. `--static-world` freezes the
     // world at whatever tick it has reached when the client connects, so a second capture against
@@ -258,11 +318,11 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     // "AO acts on creases, not globally" reading this clause once carried is NOT supported --
     // issue #106 carries that AC-bar defect.
     assert_eq!(
-        open_snow_ll_median, CONTROL_OPEN_SNOW_MEDIAN,
+        open_snow_ll_median, CONTROL_OPEN_SNOW_LL_MEDIAN,
         "the all-effects-on open-snow-LL median must hold at its post-stack control"
     );
     assert_eq!(
-        open_snow_lr_median, CONTROL_OPEN_SNOW_MEDIAN,
+        open_snow_lr_median, CONTROL_OPEN_SNOW_LR_MEDIAN,
         "the all-effects-on open-snow-LR median must hold at its post-stack control"
     );
 }
@@ -324,8 +384,9 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
     ///
     /// NOT a bar loosened to pass a failing run. The signal shrank ~3x (0.32 pp on `6140ca3`)
     /// because Wolf ruled the exposure 9.7 -> 10.5 EV100 at 11.1a's review -- a deliberate change
-    /// to the frame, exactly as `CONTROL_OPEN_SNOW_MEDIAN` tracked it 116 -> 93. That control was
-    /// tracked and this floor was not, which is the whole of the second half of issue #111.
+    /// to the frame, exactly as the `CONTROL_OPEN_SNOW_*` medians tracked it 116 -> 93. Those
+    /// controls were tracked and this floor was not, which is the whole of the second half of
+    /// issue #111.
     const BLOOM_NEAR_WHITE_FALL_FLOOR: f32 = 0.00;
 
     // One daemon per capture: the camp window is where the lantern-carrying dwarves walk, so a
@@ -410,6 +471,168 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
             "bloom must not brighten emitter-free open snow: {name} median went {off_snow} -> {on_snow}"
         );
     }
+}
+
+/// AC1/AC2/AC5/AC6: a physical-looking aperture is a silent no-op at this world scale, so this
+/// guard reads the frame rather than only checking that the component exists.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn dof_softens_the_far_ridge_while_retaining_camp_focus_and_stars() {
+    const FAR_RIDGE: (usize, usize, usize, usize) = (450, 120, 900, 250);
+    const CAMP: (usize, usize, usize, usize) = (500, 400, 760, 620);
+    const SKY: (usize, usize, usize, usize) = (60, 10, 460, 110);
+    let (on, width, _) = Daemon::spawn().capture(
+        "dof-on",
+        &["--static-world", "--lights-steady", "--subdiv", "4"],
+    );
+    let (off, _, _) = Daemon::spawn().capture(
+        "dof-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "dof",
+        ],
+    );
+    let far_on = rec601_lap_mean(&on, width, FAR_RIDGE);
+    let far_off = rec601_lap_mean(&off, width, FAR_RIDGE);
+    let camp_on = rec601_lap_mean(&on, width, CAMP);
+    let camp_off = rec601_lap_mean(&off, width, CAMP);
+    let far_fall = (far_off - far_on) / far_off;
+    let camp_fall = (camp_off - camp_on) / camp_off;
+    let ratio = far_fall / camp_fall.max(0.0001);
+    let on_peak = rec601_peak(&on, width, SKY);
+    let off_peak = rec601_peak(&off, width, SKY);
+    println!(
+        "AC1/AC2/AC5 pixel guard (Rec.601): far {far_off:.4}->{far_on:.4} ({far_fall:.3}), \
+         camp {camp_off:.4}->{camp_on:.4} ({camp_fall:.3}), ratio={ratio:.3}, sky peak {off_peak}->{on_peak}"
+    );
+    assert!(
+        far_off - far_on > 0.0182,
+        "far-ridge fall must exceed its 0.0182 same-build floor"
+    );
+    assert!(
+        ratio >= 3.0,
+        "far-ridge fractional fall {far_fall:.3} must be >=3x camp {camp_fall:.3}"
+    );
+    assert!(
+        camp_on >= camp_off * 0.90,
+        "camp focus retained {camp_on:.4}/{camp_off:.4}"
+    );
+    assert!(
+        on_peak.abs_diff(off_peak) <= 3,
+        "sky peak moved {off_peak}->{on_peak}; max is 3"
+    );
+}
+
+/// AC4 repeats the depth separation at the working zoom instead of treating boot framing as a
+/// universal proof. A focal value derived from the transform follows this change without a second
+/// framing formula.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn dof_keeps_depth_separation_at_distance_40() {
+    const FAR_RIDGE: (usize, usize, usize, usize) = (450, 120, 900, 250);
+    const CAMP: (usize, usize, usize, usize) = (500, 400, 760, 620);
+    let flags = [
+        "--static-world",
+        "--lights-steady",
+        "--subdiv",
+        "4",
+        "--distance",
+        "40",
+    ];
+    let (on, width, _) = Daemon::spawn().capture("dof-distance-40-on", &flags);
+    let (off, _, _) = Daemon::spawn().capture(
+        "dof-distance-40-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--distance",
+            "40",
+            "--fx-off",
+            "dof",
+        ],
+    );
+    let far_on = rec601_lap_mean(&on, width, FAR_RIDGE);
+    let far_off = rec601_lap_mean(&off, width, FAR_RIDGE);
+    let camp_on = rec601_lap_mean(&on, width, CAMP);
+    let camp_off = rec601_lap_mean(&off, width, CAMP);
+    let far_fall = (far_off - far_on) / far_off;
+    let camp_fall = (camp_off - camp_on) / camp_off;
+    let ratio = far_fall / camp_fall.max(0.0001);
+    println!(
+        "AC4 pixel guard (Rec.601): far {far_off:.4}->{far_on:.4} ({far_fall:.3}), \
+         camp {camp_off:.4}->{camp_on:.4} ({camp_fall:.3}), ratio={ratio:.3}"
+    );
+    assert!(
+        far_off - far_on > 0.0182,
+        "far-ridge fall must exceed the same-build floor"
+    );
+    assert!(
+        ratio >= 3.0,
+        "distance-40 far/camp fractional ratio {ratio:.3} is below 3"
+    );
+}
+
+/// AC7/AC8: volume haze must raise distant level AND lower its local contrast without dimming sky.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn haze_lifts_and_softens_the_far_valley_without_swallowing_the_sky() {
+    const FAR_RIDGE: (usize, usize, usize, usize) = (450, 120, 900, 250);
+    const SKY: (usize, usize, usize, usize) = (60, 10, 460, 110);
+    let (on, width, _) = Daemon::spawn().capture(
+        "haze-on",
+        &["--static-world", "--lights-steady", "--subdiv", "4"],
+    );
+    let (off, _, _) = Daemon::spawn().capture(
+        "haze-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "haze",
+        ],
+    );
+    let far_on = rec601_median(&on, width, FAR_RIDGE);
+    let far_off = rec601_median(&off, width, FAR_RIDGE);
+    let lap_on = rec601_lap_mean(&on, width, FAR_RIDGE);
+    let lap_off = rec601_lap_mean(&off, width, FAR_RIDGE);
+    let sky_on = rec601_median(&on, width, SKY);
+    let sky_off = rec601_median(&off, width, SKY);
+    let stars_on = rec601_count_at_least(&on, width, SKY, 150);
+    let stars_off = rec601_count_at_least(&off, width, SKY, 150);
+    let lap_fall = (lap_off - lap_on) / lap_off;
+    println!(
+        "AC7/AC8 pixel guard (Rec.601): far median {far_off}->{far_on}, lap {lap_off:.4}->{lap_on:.4} ({lap_fall:.3}), \
+         sky median {sky_off}->{sky_on}, stars>=150 {stars_off}->{stars_on}"
+    );
+    assert!(
+        far_on >= far_off + 10,
+        "far-ridge median must rise >=10: {far_off}->{far_on}"
+    );
+    assert!(
+        lap_fall >= 0.15,
+        "far-ridge contrast must fall >=15%: {lap_fall:.3}"
+    );
+    // Non-empty FIRST: 0 == 0 would certify a sky with no stars in it at all.
+    assert!(
+        stars_off > 0,
+        "no stars in the haze-off capture, so there is nothing for the haze to preserve"
+    );
+    assert_eq!(
+        stars_on, stars_off,
+        "haze must leave bright star count unchanged"
+    );
+    assert!(
+        sky_on.abs_diff(sky_off) <= 1,
+        "sky median moved {sky_off}->{sky_on}; max is 1"
+    );
 }
 
 impl Daemon {

@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Launch gui.exe against the checkout it was built from — refusing if the two are not the same
-    commit. Run it with no arguments.
+    commit. The seat's everyday launch is `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')`.
 
 .DESCRIPTION
     Story 10.5b Task 4; closes issue #46 (M2-7, "automate the gui.exe rebuild-and-copy — the stamp
@@ -54,12 +54,13 @@
     seat by accident. If you change the dwarf and the client does not move, this is why.
 
 .EXAMPLE
-    ./launch-gui.ps1
-    # checkout = this repo, exe = .bin\gui.exe, assets = <checkout>\assets
+    .\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')
+    # THE SEAT LAUNCH. checkout = this repo, exe = .bin\gui.exe, assets = <checkout>\assets
 
 .EXAMPLE
-    ./launch-gui.ps1 -- --perf-log run.csv
-    # the same launch, plus a frame log; read it afterwards with
+    .\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\run.csv')
+    # the same launch, plus a frame log; extra flags go into the same array. Write output under
+    # .bin\ (gitignored) so the checkout stays clean. Read it afterwards with
     #   python3 scripts/bench/perf_summary.py run.csv
 
 .EXAMPLE

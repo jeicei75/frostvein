@@ -2243,3 +2243,36 @@ the standing frostvein exception that would have forced a patch regardless of se
   deriving it from `CameraEffect::ALL`. AC6 requires the error to name all accepted names and it
   does so correctly today; it starts lying the moment a fourth effect is added — which 11.2 (depth
   of field, volumetric haze) is scheduled to do next. Raised by the Feature Auditor.
+
+## Deferred from: code review of 11-2-the-miniature (2026-09-23)
+
+All LOW. Tags name the layer and severity.
+
+- **Stale key comments** (accept + feature LOW). `crates/gui/src/ingest.rs:99` and `:325` still
+  say lights are F5-F9 (now F8-F12). `crates/gui/src/perf.rs:3` says F3 shows fps; F3 is now the
+  perf mark and the overlay has no key.
+- **`simd` repeated flags** (edge LOW). A second `--pause-at` or a second port positional
+  silently overrides the first (`crates/simd/src/main.rs:74-94`).
+- **`push.sh --fast --no-gate`** (edge LOW). Given together, one flag is forwarded to `git push`,
+  which rejects it with an unrelated error (`scripts/push.sh:38-44`). It fails loud, so it is not a
+  silent trap.
+- **Pixel-guard arithmetic** (edge LOW, unreachable at today's call sites):
+  - `rec601_lap_mean` returns NaN on a rect ≤2 px (`crates/gui/tests/pixel_guard.rs:95-117`).
+  - The `far_fall`/`lap_fall` divisions are unguarded (`:503, :564, :610`); a zero there
+    produces NaN, which fails the comparison loudly.
+- **Two independent 60 s timeouts** (blind LOW). `capture.rs:45` `TICK_WAIT_TIMEOUT` and
+  `command.rs:197` `STATIC_WORLD_PAUSE_TIMEOUT` can drift apart if one is retuned.
+- **The fog density ramp's shape is uncommented** (blind LOW). It is `1×64×1` D3; X/Z are
+  uniform by intent, but no comment says so (`ingest.rs` `fog_density_ramp_image`).
+- **The static-world pause timer counts Startup** (blind LOW). It accumulates `Time<Real>`
+  from the first `Update`, so a slow Startup counts against the 60 s (`command.rs:218-243`).
+- **No mutation row drops `density_texture`** (accept LOW). Nothing sabotages
+  `density_texture: Some(..)` in `setup_fog_volume` (`ingest.rs:1549`). The AC8 guard would
+  probably kill it, but that is unproven.
+- **Tech-art figures are from creation** (accept LOW). `docs/tech-art-guidelines.md:72-73` carry
+  the creation figures (13.45→8.60, 49→69); this build measures 9.41→6.44 and 50→69. They are not
+  labelled as creation values.
+- **AC4's margin is thin** (feature LOW). The ratio is 3.49 against a bar of 3, and at distance
+  40 the camp window reads median 155, so it is no longer looking at the camp.
+- **`sprint-status.yaml` is stale** (accept LOW). `last_updated` is stale, and the 11-2 comment
+  block still ends "ready to implement".

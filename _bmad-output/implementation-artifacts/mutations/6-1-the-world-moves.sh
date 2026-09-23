@@ -31,10 +31,11 @@ mutation "motion capture requires too many ticks" gui capture::tests::motion_ins
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 # 8.2 split the delivered-tick floor into `assert_tick_floor` so an --at-tick capture can
-# scale it; the constant moved to the call site and the row follows it.
-old = 'self.assert_tick_floor(100)'
+# scale it; the constant moved to the call site and the row follows it. 11.2 named it
+# MIN_DELIVERED_TICKS when the capture began waiting for those ticks, and the row follows again.
+old = 'pub const MIN_DELIVERED_TICKS: usize = 100;'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'self.assert_tick_floor(101)'))
+p.write_text(s.replace(old, 'pub const MIN_DELIVERED_TICKS: usize = 101;'))
 PY
 
 mutation "snapshot rewind no longer snaps" gui snapshot_rewind_snaps_at_a_mid_blend_clock <<'PY'
@@ -72,7 +73,7 @@ PY
 mutation "live ingest stops re-basing the blend clock" gui ingest::tests::ingesting_a_delta_rebases_the_blend_clock_from_the_wire <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '                clock.observe_tick(mirror.0.tick());\n'
+old = '    clock.observe_tick(mirror.tick());\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
@@ -80,9 +81,9 @@ PY
 mutation "the blend clock is never advanced by frame time" gui production_drives_the_blend_clock_from_frame_time <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = 'blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);'
+old = '        time.delta_secs(),\n        &mut projected,\n    );'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'blend_entities(&mirror.0, &mut clock, 0.0, &mut projected);'))
+p.write_text(s.replace(old, '        0.0,\n        &mut projected,\n    );'))
 PY
 
 mutation "the flicker is never advanced by elapsed time" gui production_drives_the_flicker_from_elapsed_time <<'PY'

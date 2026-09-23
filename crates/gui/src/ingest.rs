@@ -26,13 +26,14 @@ use bevy::{
         ButtonInput,
         mouse::{MouseButton, MouseMotion, MouseWheel},
     },
+    light::{FogVolume, VolumetricFog, VolumetricLight},
     pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
-    post_process::bloom::Bloom,
+    post_process::{bloom::Bloom, dof::DepthOfField},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
-        DirectionalLight, GlobalZIndex, KeyCode, Node, PerspectiveProjection, PositionType,
-        Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time, Transform,
-        TransformSystems, Vec2, Vec3, Window, With, Without, px,
+        DirectionalLight, GlobalTransform, GlobalZIndex, Has, KeyCode, Node, PerspectiveProjection,
+        PositionType, Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time,
+        Transform, TransformSystems, Vec2, Vec3, Window, With, Without, px,
     },
     render::renderer::RenderAdapterInfo,
     window::PrimaryWindow,
@@ -40,11 +41,11 @@ use bevy::{
 use bevy::{
     app::PluginGroup,
     app::ScheduleRunnerPlugin,
-    asset::{AssetPlugin, Assets, Handle},
+    asset::{AssetPlugin, Assets, Handle, RenderAssetUsages},
     camera::{Exposure, RenderTarget},
-    image::Image,
+    image::{Image, ImageSampler},
     render::{
-        render_resource::{TextureFormat, TextureUsages},
+        render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
         view::Msaa,
     },
     window::{ExitCondition, WindowPlugin},
@@ -76,12 +77,22 @@ use crate::{
         sync_hover_highlight,
     },
     slice::SliceLevel,
+    transform::world_to_render_f32,
 };
 
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 const MESSAGE_QUEUE: usize = 16;
 const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
+
+/// Ruled 2026-09-21: non-physical f/0.05 makes the valley read as a miniature at this scale.
+const DOF_APERTURE_F_STOPS: f32 = 0.05;
+/// Non-physical sky bound: caps background blur so the stars remain present in the frame.
+const DOF_MAX_DEPTH: f32 = 120.0;
+const FOG_DENSITY_FACTOR: f32 = 0.015;
+const FOG_DENSITY_RAMP_HEIGHT: usize = 64;
+const FOG_DENSITY_RAMP_FULL_TO: f32 = 0.54;
+const FOG_DENSITY_RAMP_ZERO_BY: f32 = 0.83;
 
 /// The four independently inspectable contributors to the rendered valley.
 ///
@@ -99,21 +110,23 @@ pub enum LightSource {
 }
 
 impl LightSource {
+    /// Ordered biggest reach to smallest, which is also the key order F8..F12 and the order the
+    /// readout prints. Sun and ambient light the whole valley; the rest are placed sources.
     const ALL: [Self; 5] = [
         Self::Sun,
+        Self::Ambient,
         Self::Campfire,
         Self::Torches,
         Self::Lanterns,
-        Self::Ambient,
     ];
 
     fn key(self) -> KeyCode {
         match self {
-            Self::Sun => KeyCode::F5,
-            Self::Campfire => KeyCode::F6,
-            Self::Torches => KeyCode::F9,
-            Self::Lanterns => KeyCode::F7,
-            Self::Ambient => KeyCode::F8,
+            Self::Sun => KeyCode::F8,
+            Self::Ambient => KeyCode::F9,
+            Self::Campfire => KeyCode::F10,
+            Self::Torches => KeyCode::F11,
+            Self::Lanterns => KeyCode::F12,
         }
     }
 
@@ -150,31 +163,63 @@ pub struct LightingToggles {
     ambient: bool,
 }
 
-/// The three seat-toggleable camera effects. This stays a fixed instrument rather than a
+/// The five seat-toggleable camera effects. This stays a fixed instrument rather than a
 /// registry: these are the only concrete effects the client currently ships.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CameraEffect {
     Fxaa,
     AmbientOcclusion,
     Bloom,
+    Dof,
+    Haze,
 }
 
 impl CameraEffect {
-    const ALL: [Self; 3] = [Self::Fxaa, Self::AmbientOcclusion, Self::Bloom];
+    /// Ordered widest effect on the frame to narrowest, which is also the key order F4..F7 and the
+    /// order the readout prints: haze recolours the whole valley, depth of field restages it by
+    /// distance, bloom acts on highlights, ambient occlusion only on contact creases. Fxaa is last
+    /// because it has no key at all.
+    const ALL: [Self; 5] = [
+        Self::Haze,
+        Self::Dof,
+        Self::Bloom,
+        Self::AmbientOcclusion,
+        Self::Fxaa,
+    ];
 
     fn name(self) -> &'static str {
         match self {
             Self::Fxaa => "fxaa",
             Self::AmbientOcclusion => "ao",
             Self::Bloom => "bloom",
+            Self::Dof => "dof",
+            Self::Haze => "haze",
         }
     }
 
-    fn key(self) -> KeyCode {
+    /// The seat key for this effect, or `None` for one that is CLI-only.
+    ///
+    /// **F1 and F2 are not ours to bind.** `DefaultPlugins` pulls in
+    /// `bevy_dev_tools::render_debug::RenderDebugOverlayPlugin` whenever the `bevy_dev_tools` and
+    /// `bevy_pbr` features are on (`bevy_internal-0.19.0/src/default_plugins.rs:95`), and its
+    /// `handle_input` hardcodes F1 to cycle the depth/normal debug overlay and F2 to cycle that
+    /// overlay's opacity (`bevy_dev_tools-0.19.0/src/render_debug.rs:107` and `:110`). 11.2 put
+    /// dof and haze there, so at the seat those keys ALSO drove Bevy's overlay: the frame went
+    /// black (depth), then green/pink/blue (normals), then sat at half and 80% opacity, while this
+    /// readout cheerfully reported `F1 dof on`. Every test here runs on `MinimalPlugins`, which
+    /// does not include that plugin, so nothing in this suite could see the collision.
+    ///
+    /// Fxaa gives up its key rather than the story's two new effects losing theirs (Wolf,
+    /// 2026-09-22: "fxaa switch is not needed in F10 right now"). It remains fully controllable
+    /// with `--fx-off fxaa`; only the live toggle is gone. The whole keymap is due a rethink --
+    /// issue #118.
+    fn key(self) -> Option<KeyCode> {
         match self {
-            Self::Fxaa => KeyCode::F10,
-            Self::AmbientOcclusion => KeyCode::F11,
-            Self::Bloom => KeyCode::F12,
+            Self::Haze => Some(KeyCode::F4),
+            Self::Dof => Some(KeyCode::F5),
+            Self::Bloom => Some(KeyCode::F6),
+            Self::AmbientOcclusion => Some(KeyCode::F7),
+            Self::Fxaa => None,
         }
     }
 
@@ -183,7 +228,9 @@ impl CameraEffect {
             "fxaa" => Ok(Self::Fxaa),
             "ao" => Ok(Self::AmbientOcclusion),
             "bloom" => Ok(Self::Bloom),
-            _ => bail!("unknown effect {name:?}; expected fxaa, ao, or bloom"),
+            "dof" => Ok(Self::Dof),
+            "haze" => Ok(Self::Haze),
+            _ => bail!("unknown effect {name:?}; expected fxaa, ao, bloom, dof, or haze"),
         }
     }
 }
@@ -195,6 +242,8 @@ struct EffectsOff {
     fxaa: bool,
     ambient_occlusion: bool,
     bloom: bool,
+    dof: bool,
+    haze: bool,
 }
 
 impl EffectsOff {
@@ -203,6 +252,8 @@ impl EffectsOff {
             CameraEffect::Fxaa => self.fxaa,
             CameraEffect::AmbientOcclusion => self.ambient_occlusion,
             CameraEffect::Bloom => self.bloom,
+            CameraEffect::Dof => self.dof,
+            CameraEffect::Haze => self.haze,
         }
     }
 
@@ -211,6 +262,8 @@ impl EffectsOff {
             CameraEffect::Fxaa => self.fxaa = off,
             CameraEffect::AmbientOcclusion => self.ambient_occlusion = off,
             CameraEffect::Bloom => self.bloom = off,
+            CameraEffect::Dof => self.dof = off,
+            CameraEffect::Haze => self.haze = off,
         }
     }
 
@@ -489,7 +542,7 @@ pub fn run() -> anyhow::Result<()> {
         app.add_plugins(DefaultPlugins.set(asset_plugin))
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(FpsOverlayPlugin {
-                config: overlay_config_off(),
+                config: overlay_config_on(),
             });
     }
     // Registered on BOTH paths, deliberately. The embedded blobs cost nothing to publish and the
@@ -664,6 +717,7 @@ pub fn projection_systems(app: &mut App) {
     app.init_resource::<crate::project::TreeReportState>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<TickClock>()
+        .init_resource::<crate::project::DwarfHeadings>()
         .add_systems(Startup, (setup_slice_readout, setup_lighting_readout))
         .add_systems(
             Update,
@@ -673,6 +727,7 @@ pub fn projection_systems(app: &mut App) {
                 reconcile_projection,
                 blend_projection,
                 flicker_projection,
+                crate::project::hold_walk_phase_in_static_world,
                 // Chained after `blend_projection` deliberately: that is the sole writer of
                 // `WalkPhase`, so reading it earlier in the same frame would drive every dwarf
                 // from the previous tick's movement.
@@ -738,6 +793,7 @@ pub fn client_systems(app: &mut App) {
         (
             setup_camera,
             setup_night_lighting,
+            setup_fog_volume,
             setup_projection_assets,
             setup_atmosphere,
             setup_designate_hint,
@@ -753,8 +809,8 @@ pub fn client_systems(app: &mut App) {
             camera_controls,
             light_controls,
             effect_controls,
+            sync_haze_light.after(effect_controls),
             update_fog_from_camera,
-            toggle_overlay,
             crate::perf::mark_perf_frame_on_key,
             fall_snow,
             // `Update`, not `Startup`: the tick the pause is SENT at is what makes the frozen
@@ -794,6 +850,10 @@ pub fn client_systems(app: &mut App) {
         PostUpdate,
         (
             apply_scripted_input.after(TransformSystems::Propagate),
+            // After propagation, so focus reads THIS frame's camera. From `Update` it read the
+            // previous frame's `GlobalTransform`: a dwarf click drew one frame focused about 60
+            // units out while the camera already stood about 20 from him.
+            update_dof_from_camera.after(TransformSystems::Propagate),
             update_pick.after(apply_scripted_input),
             sync_hover_highlight.after(update_pick),
             designation_input.after(update_pick),
@@ -848,12 +908,17 @@ fn force_capture_overlay_off(app: &mut App) {
     config.frame_time_graph_config.enabled = false;
 }
 
-fn overlay_config_off() -> FpsOverlayConfig {
+/// The diagnostic overlay is simply ON for an interactive run (Wolf, 2026-09-22: "FPS could be on
+/// all the time now also .. does not harm"). It had a toggle on F3, which cost a key on a row that
+/// had run out of them. Captures are unaffected: `force_capture_overlay_off` turns it off whenever
+/// `--capture` is given, on the windowed and headless paths alike, so no measured frame can carry
+/// it.
+fn overlay_config_on() -> FpsOverlayConfig {
     let mut config = FpsOverlayConfig {
-        enabled: false,
+        enabled: true,
         ..Default::default()
     };
-    config.frame_time_graph_config.enabled = false;
+    config.frame_time_graph_config.enabled = true;
     config
 }
 
@@ -1406,6 +1471,8 @@ fn setup_camera(
         rig.distance = distance.0.clamp(4.0, 500.0);
     }
     let (fog_start, fog_end) = fog_falloff(rig.distance);
+    let transform = rig.transform();
+    let dof = depth_of_field(transform.translation, &rig);
     let camera = commands
         .spawn((
             Camera3d::default(),
@@ -1414,11 +1481,13 @@ fn setup_camera(
             Fxaa::default(),
             ScreenSpaceAmbientOcclusion::default(),
             Bloom::default(),
+            dof,
+            volumetric_fog(),
             Projection::Perspective(PerspectiveProjection {
                 fov: BOOT_VERTICAL_FOV,
                 ..Default::default()
             }),
-            rig.transform(),
+            transform,
             rig,
             AmbientLight {
                 color: night_lighting().ambient,
@@ -1436,39 +1505,21 @@ fn setup_camera(
             ClientLocal,
         ))
         .id();
-    if let Some(effects_off) = effects_off {
-        let mut camera = commands.entity(camera);
-        if effects_off.is_off(CameraEffect::Fxaa) {
-            camera.remove::<Fxaa>();
-        }
-        if effects_off.is_off(CameraEffect::AmbientOcclusion) {
-            // The two prepasses go WITH it, named explicitly. `ScreenSpaceAmbientOcclusion`
-            // `#[require]`s `DepthPrepass` and `NormalPrepass`, and a plain `remove` leaves both
-            // running for the rest of the session: two full-scene GPU passes nothing samples,
-            // while the readout says "ao off". AC8 reads AO's cost on the vehicle as an on/off
-            // delta, so leaving them makes AO look cheaper than it is by exactly its expensive
-            // half.
-            //
-            // NOT `remove_with_requires`, which was tried and CRASHES: it removes the whole
-            // transitive require closure, which overlaps the components the camera needs for its
-            // own render-world sync, and the client dies in `bevy_render::sync_world` with
-            // "Attempting to synchronize an entity that has already been synchronized!" on every
-            // `--fx-off ao` run. No unit test can see that -- `MinimalPlugins` has no render
-            // world, so the component assertions pass on a client that cannot render a frame.
-            camera.remove::<ScreenSpaceAmbientOcclusion>();
-            camera.remove::<DepthPrepass>();
-            camera.remove::<NormalPrepass>();
-        }
-        if effects_off.is_off(CameraEffect::Bloom) {
-            // WITHOUT requires, DELIBERATELY. `Bloom` `#[require]`s `Hdr`, and `Hdr` moves every
-            // pixel in the frame on its own. `--fx-off bloom` is the control AC4's figures are
-            // measured against, and it is only a measure of BLOOM'S MARGINAL contribution while
-            // `Hdr` stays on in both halves. Removing requires here would silently turn that
-            // control into an Hdr+bloom comparison and re-break the attribution the story spent
-            // three documents correcting.
-            camera.remove::<Bloom>();
+    // The removal loop stays behind the `--fx-off` check purely to leave the default path as it
+    // was: `apply_effect` would rebuild depth of field from BOOT framing over the rig-aware
+    // component spawned above. MEASURED 2026-09-22, that is survivable either way --
+    // `update_dof_from_camera` corrects it in `PostUpdate` of this same first update, so no test
+    // that looks after `app.update()` can tell the two apart, and no frame is drawn wrongly focused.
+    // `sync_prepasses` always runs: the camera spawns with every effect on, so the prepasses must
+    // match whatever set survives this loop rather than rely on AO's `require` to supply them.
+    let all_on = EffectsOff::default();
+    let effects = effects_off.as_deref().unwrap_or(&all_on);
+    if effects_off.is_some() {
+        for effect in CameraEffect::ALL {
+            apply_effect(&mut commands, camera, effect, !effects.is_off(effect));
         }
     }
+    sync_prepasses(&mut commands, camera, effects);
     if let Some(handle) = headless_target {
         // In Bevy 0.19 the render target is its own COMPONENT, not a field on Camera.
         commands
@@ -1487,7 +1538,21 @@ fn setup_night_lighting(mut commands: Commands) {
             ..Default::default()
         },
         sun_light_transform(),
+        VolumetricLight,
         SunLight,
+        ClientLocal,
+    ));
+}
+
+fn setup_fog_volume(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let density_texture = images.add(fog_density_ramp_image());
+    commands.spawn((
+        FogVolume {
+            density_factor: FOG_DENSITY_FACTOR,
+            density_texture: Some(density_texture),
+            ..Default::default()
+        },
+        Transform::from_xyz(64.0, 18.0, -64.0).with_scale(Vec3::new(160.0, 48.0, 160.0)),
         ClientLocal,
     ));
 }
@@ -1502,39 +1567,44 @@ pub struct SliceReadout;
 pub struct LightingReadout;
 
 fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> String {
-    let mut entries = LightSource::ALL
+    // Printed in KEY ORDER: F1/F2 belong to bevy_dev_tools and F3 marks the perf log, then the
+    // effects F4..F7, then the lights F8..F12, each block widest-acting first.
+    let mut entries = CameraEffect::ALL
         .into_iter()
-        .map(|source| {
+        .map(|effect| {
             format!(
-                "{} {} {}",
-                match source.key() {
-                    KeyCode::F5 => "F5",
-                    KeyCode::F6 => "F6",
-                    KeyCode::F7 => "F7",
-                    KeyCode::F8 => "F8",
-                    KeyCode::F9 => "F9",
-                    _ => unreachable!("the fixed lighting keys are F5 through F9"),
+                "{}{} {}",
+                match effect.key() {
+                    Some(KeyCode::F4) => "F4 ",
+                    Some(KeyCode::F5) => "F5 ",
+                    Some(KeyCode::F6) => "F6 ",
+                    Some(KeyCode::F7) => "F7 ",
+                    // An effect with no key still reports its state; it just cannot be toggled here.
+                    None => "",
+                    Some(_) => unreachable!("the fixed effect keys are F4 through F7"),
                 },
-                source.name(),
-                if toggles.enabled(source) { "on" } else { "off" }
+                effect.name(),
+                if effects_off.is_off(effect) {
+                    "off"
+                } else {
+                    "on"
+                }
             )
         })
         .collect::<Vec<_>>();
-    entries.extend(CameraEffect::ALL.into_iter().map(|effect| {
+    entries.extend(LightSource::ALL.into_iter().map(|source| {
         format!(
             "{} {} {}",
-            match effect.key() {
+            match source.key() {
+                KeyCode::F8 => "F8",
+                KeyCode::F9 => "F9",
                 KeyCode::F10 => "F10",
                 KeyCode::F11 => "F11",
                 KeyCode::F12 => "F12",
-                _ => unreachable!("the fixed effect keys are F10 through F12"),
+                _ => unreachable!("the fixed lighting keys are F8 through F12"),
             },
-            effect.name(),
-            if effects_off.is_off(effect) {
-                "off"
-            } else {
-                "on"
-            }
+            source.name(),
+            if toggles.enabled(source) { "on" } else { "off" }
         )
     }));
     entries.join("  ")
@@ -1590,29 +1660,124 @@ fn effect_controls(
     cameras: Query<bevy::prelude::Entity, With<CameraRig>>,
 ) {
     for effect in CameraEffect::ALL {
-        if !keys.just_pressed(effect.key()) {
+        let Some(key) = effect.key() else {
+            continue;
+        };
+        if !keys.just_pressed(key) {
             continue;
         }
         effects_off.toggle(effect);
         for camera in &cameras {
-            let mut camera = commands.entity(camera);
-            match effect {
-                CameraEffect::Fxaa if effects_off.is_off(effect) => camera.remove::<Fxaa>(),
-                CameraEffect::Fxaa => camera.insert(Fxaa::default()),
-                // AO takes its two prepasses with it; bloom below deliberately LEAVES its `Hdr`.
-                // See `setup_camera` for both reasons, including why this is not
-                // `remove_with_requires`.
-                CameraEffect::AmbientOcclusion if effects_off.is_off(effect) => {
-                    camera.remove::<ScreenSpaceAmbientOcclusion>();
-                    camera.remove::<DepthPrepass>();
-                    camera.remove::<NormalPrepass>()
-                }
-                CameraEffect::AmbientOcclusion => {
-                    camera.insert(ScreenSpaceAmbientOcclusion::default())
-                }
-                CameraEffect::Bloom if effects_off.is_off(effect) => camera.remove::<Bloom>(),
-                CameraEffect::Bloom => camera.insert(Bloom::default()),
-            };
+            apply_effect(&mut commands, camera, effect, !effects_off.is_off(effect));
+            sync_prepasses(&mut commands, camera, &effects_off);
+        }
+    }
+}
+
+/// Applies one of the fixed effects at both creation and live-toggle sites.
+///
+/// `remove_with_requires` is deliberately never used: it breaks the renderer's sync closure.
+/// AO owns its prepasses; Bloom deliberately leaves `Hdr` installed for a marginal comparison.
+fn apply_effect(
+    commands: &mut Commands,
+    camera: bevy::prelude::Entity,
+    effect: CameraEffect,
+    on: bool,
+) {
+    let mut camera = commands.entity(camera);
+    match (effect, on) {
+        (CameraEffect::Fxaa, true) => {
+            camera.insert(Fxaa::default());
+        }
+        (CameraEffect::Fxaa, false) => {
+            camera.remove::<Fxaa>();
+        }
+        (CameraEffect::AmbientOcclusion, true) => {
+            camera.insert(ScreenSpaceAmbientOcclusion::default());
+        }
+        (CameraEffect::AmbientOcclusion, false) => {
+            camera.remove::<ScreenSpaceAmbientOcclusion>();
+        }
+        // Plain removal deliberately preserves Bloom's required Hdr component.
+        (CameraEffect::Bloom, true) => {
+            camera.insert(Bloom::default());
+        }
+        (CameraEffect::Bloom, false) => {
+            camera.remove::<Bloom>();
+        }
+        (CameraEffect::Dof, true) => {
+            camera.insert(depth_of_field_for_boot_camera());
+        }
+        (CameraEffect::Dof, false) => {
+            camera.remove::<DepthOfField>();
+        }
+        (CameraEffect::Haze, true) => {
+            camera.insert(volumetric_fog());
+        }
+        (CameraEffect::Haze, false) => {
+            camera.remove::<VolumetricFog>();
+        }
+    };
+}
+
+/// Puts the prepasses on the camera that the currently-enabled effects actually sample.
+///
+/// The prepasses are SHARED, and only `ScreenSpaceAmbientOcclusion` declares them
+/// (`#[require(DepthPrepass, NormalPrepass)]`). Depth is kept for `DepthOfField` and
+/// `VolumetricFog` as INSURANCE, not as a proven dependency: in the Bevy 0.19.0 source both bind
+/// `ViewDepthTexture`, the main depth buffer (`dof/mod.rs:766-830`, `volumetric_fog/render.rs:
+/// 285-372`), and neither names a prepass. The seat symptom this was written for turned out to be
+/// the F1/F2 key collision. Until #121 settles it at the seat, `--fx-off ao` still pays for a depth
+/// pass that may be read by nothing, so AC8's AO cost delta may be understated by that pass.
+/// Ownership is computed from the whole effect set here rather than guessed at any one toggle site.
+fn sync_prepasses(
+    commands: &mut Commands,
+    camera: bevy::prelude::Entity,
+    effects_off: &EffectsOff,
+) {
+    let on = |effect| !effects_off.is_off(effect);
+    let ambient_occlusion = on(CameraEffect::AmbientOcclusion);
+    // Depth has three consumers; normals have exactly one.
+    let depth = ambient_occlusion || on(CameraEffect::Dof) || on(CameraEffect::Haze);
+    let mut camera = commands.entity(camera);
+    if depth {
+        camera.insert(DepthPrepass);
+    } else {
+        camera.remove::<DepthPrepass>();
+    }
+    if ambient_occlusion {
+        camera.insert(NormalPrepass);
+    } else {
+        camera.remove::<NormalPrepass>();
+    }
+}
+
+/// Puts `VolumetricLight` on the sun only while the haze is on.
+///
+/// Removing `VolumetricFog` from the camera is NOT enough to turn the haze off live. Bevy 0.19's
+/// `extract_volumetric_fog` (`bevy_pbr/src/volumetric_fog/render.rs:240`) only ever INSERTS the
+/// component on the render-world camera, and nothing syncs its removal, so the render world kept
+/// drawing the fog after F4 while the readout said `haze off`. Its one cleanup path fires when no
+/// light carries `VolumetricLight`, so that marker is what the toggle has to move.
+///
+/// What that path actually clears matters. It visits only cameras that STILL carry
+/// `VolumetricFog` in the main world, and `apply_effect` has already removed it, so the
+/// render-world camera KEEPS its fog components and pipelines. The fog stops drawing because the
+/// same branch strips every `FogVolume` from the render world, and the fog is drawn only inside a
+/// volume. So F4-off leaves stale render state that `--fx-off haze` never creates. Keep the
+/// `FogVolume` path working; it is what switches the haze off. The marker only feeds the fog
+/// shader; the sun's own lighting and shadows do not read it.
+fn sync_haze_light(
+    mut commands: Commands,
+    effects_off: Res<EffectsOff>,
+    sun: Query<(bevy::prelude::Entity, Has<VolumetricLight>), With<SunLight>>,
+) {
+    let haze = !effects_off.is_off(CameraEffect::Haze);
+    for (entity, has) in &sun {
+        if haze && !has {
+            commands.entity(entity).insert(VolumetricLight);
+        } else if !haze && has {
+            commands.entity(entity).remove::<VolumetricLight>();
         }
     }
 }
@@ -1685,7 +1850,7 @@ fn setup_slice_readout(
         TextColor(Color::srgb(0.86, 0.91, 1.0)),
         Node {
             position_type: PositionType::Absolute,
-            // Below the F3 overlay, which Bevy pins to the origin at font size 32. The two must be
+            // Below the fps overlay, which Bevy pins to the origin at font size 32. The two must be
             // readable together: AC14's fps reading is taken AT a slice level.
             top: px(44),
             left: px(16),
@@ -1881,6 +2046,100 @@ fn update_fog_from_camera(mut cameras: Query<(&CameraRig, &mut DistanceFog)>) {
     }
 }
 
+fn depth_of_field(camera_translation: Vec3, rig: &CameraRig) -> DepthOfField {
+    DepthOfField {
+        focal_distance: dof_focal_distance(camera_translation, rig),
+        aperture_f_stops: DOF_APERTURE_F_STOPS,
+        max_depth: DOF_MAX_DEPTH,
+        ..Default::default()
+    }
+}
+
+/// The transform and aim point are the framing's authoritative geometry. `rig.distance` is the
+/// orbit radius, not the focus distance: at boot it is 90 while the camp is about 61.7 away.
+fn dof_focal_distance(camera_translation: Vec3, rig: &CameraRig) -> f32 {
+    camera_translation.distance(world_to_render_f32(rig.focus))
+}
+
+fn depth_of_field_for_boot_camera() -> DepthOfField {
+    let rig = CameraRig::new([64, 64, 9]);
+    depth_of_field(rig.transform().translation, &rig)
+}
+
+fn volumetric_fog() -> VolumetricFog {
+    VolumetricFog {
+        ambient_color: night_lighting().ambient,
+        // Bevy's 0.1 default matches AmbientLight::default().brightness = 80.0.
+        ambient_intensity: 0.1 * night_lighting().ambient_brightness / 80.0,
+        ..Default::default()
+    }
+}
+
+fn fog_density_ramp_pixels() -> Vec<u8> {
+    (0..FOG_DENSITY_RAMP_HEIGHT)
+        .map(|row| {
+            let v = row as f32 / (FOG_DENSITY_RAMP_HEIGHT - 1) as f32;
+            let density = if v <= FOG_DENSITY_RAMP_FULL_TO {
+                1.0
+            } else if v >= FOG_DENSITY_RAMP_ZERO_BY {
+                0.0
+            } else {
+                1.0 - (v - FOG_DENSITY_RAMP_FULL_TO)
+                    / (FOG_DENSITY_RAMP_ZERO_BY - FOG_DENSITY_RAMP_FULL_TO)
+            };
+            (density * 255.0).round() as u8
+        })
+        .collect()
+}
+
+fn fog_density_ramp_image() -> Image {
+    let mut image = Image::new(
+        Extent3d {
+            width: 1,
+            height: FOG_DENSITY_RAMP_HEIGHT as u32,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D3,
+        fog_density_ramp_pixels(),
+        TextureFormat::R8Unorm,
+        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    );
+    image.sampler = ImageSampler::linear();
+    image
+}
+
+/// The point depth of field must focus, in render space, or `None` for the rig's own aim point.
+///
+/// A SELECTED DWARF is the subject, and he is not where the aim point is. `frame_selected_dwarf`
+/// centres him through `CameraRig::frame_render_point`, which writes the focus offset from him by
+/// the composition push -- about 7.3 units at `SELECT_DISTANCE`. At boot there is no selection and
+/// the subject IS `world_to_render(rig.focus)`, which is why every boot-framing figure in this
+/// story's record stands unchanged.
+fn dof_subject(
+    selected: &crate::pick::SelectedDwarf,
+    drawn: &crate::pick::DrawnEntities,
+) -> Option<Vec3> {
+    let id = selected.0?;
+    drawn
+        .iter()
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, transform)| transform.translation)
+}
+
+fn update_dof_from_camera(
+    selected: Res<crate::pick::SelectedDwarf>,
+    drawn: crate::pick::DrawnEntities,
+    mut cameras: Query<(&GlobalTransform, &CameraRig, &mut DepthOfField)>,
+) {
+    let subject = dof_subject(&selected, &drawn);
+    for (transform, rig, mut dof) in &mut cameras {
+        dof.focal_distance = match subject {
+            Some(point) => transform.translation().distance(point),
+            None => dof_focal_distance(transform.translation(), rig),
+        };
+    }
+}
+
 /// One CSV row per frame, if `--perf-log` asked for it.
 ///
 /// Runs in `Last` so the row describes a frame that has actually been drawn, and reads the same
@@ -1913,20 +2172,46 @@ fn record_perf_frame(
     );
 }
 
-fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut config: ResMut<FpsOverlayConfig>) {
-    if keys.just_pressed(KeyCode::F3) {
-        let enabled = !config.enabled;
-        config.enabled = enabled;
-        config.frame_time_graph_config.enabled = enabled;
-    }
+/// The only GUI system that reads protocol message types; it mutates only the mirror.
+/// Everything one delta changes on the client, in one place so the headless tests drive the SAME
+/// path as the socket. Their helper used to restate these lines by hand, and the copy silently
+/// missed the facing record when it was added.
+pub fn apply_wire_delta(
+    mirror: &mut Mirror,
+    work: &mut ProjectionWork,
+    clock: &mut TickClock,
+    headings: &mut crate::project::DwarfHeadings,
+    delta: Delta,
+) {
+    mirror.apply_delta(delta);
+    headings.record(mirror);
+    clock.observe_tick(mirror.tick());
+    work.dirty_tiles
+        .extend(mirror.changes().tiles.iter().copied());
 }
 
-/// The only GUI system that reads protocol message types; it mutates only the mirror.
+/// The snapshot twin of [`apply_wire_delta`].
+pub fn apply_wire_snapshot(
+    mirror: &mut Mirror,
+    work: &mut ProjectionWork,
+    clock: &mut TickClock,
+    headings: &mut crate::project::DwarfHeadings,
+    snapshot: Snapshot,
+) -> Result<(), client_core::MirrorError> {
+    mirror.apply_snapshot(snapshot)?;
+    work.snapshot = true;
+    work.dirty_tiles.clear();
+    headings.clear();
+    clock.reset(mirror.tick());
+    Ok(())
+}
+
 fn ingest_messages(
     receiver: Option<Res<IngestReceiver>>,
     mut mirror: ResMut<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
     mut clock: ResMut<TickClock>,
+    mut headings: ResMut<crate::project::DwarfHeadings>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let Some(receiver) = receiver else {
@@ -1939,12 +2224,14 @@ fn ingest_messages(
             .expect("ingest receiver mutex poisoned")
             .try_recv()
         {
-            Ok(Ok(WireMessage::Snapshot(snapshot))) => match mirror.0.apply_snapshot(*snapshot) {
-                Ok(()) => {
-                    work.snapshot = true;
-                    work.dirty_tiles.clear();
-                    clock.reset(mirror.0.tick());
-                }
+            Ok(Ok(WireMessage::Snapshot(snapshot))) => match apply_wire_snapshot(
+                &mut mirror.0,
+                &mut work,
+                &mut clock,
+                &mut headings,
+                *snapshot,
+            ) {
+                Ok(()) => {}
                 Err(error) => {
                     // A frozen window with no diagnostic is worse than a loud exit; the
                     // sibling client bails on this same condition.
@@ -1953,10 +2240,7 @@ fn ingest_messages(
                 }
             },
             Ok(Ok(WireMessage::Delta(delta))) => {
-                mirror.0.apply_delta(*delta);
-                clock.observe_tick(mirror.0.tick());
-                work.dirty_tiles
-                    .extend(mirror.0.changes().tiles.iter().copied());
+                apply_wire_delta(&mut mirror.0, &mut work, &mut clock, &mut headings, *delta);
             }
             Ok(Err(error)) => {
                 eprintln!("server reader stopped: {error:#}");
@@ -1975,6 +2259,7 @@ fn ingest_messages(
 fn blend_projection(
     mirror: Res<MirrorResource>,
     mut clock: ResMut<TickClock>,
+    headings: Res<crate::project::DwarfHeadings>,
     time: Res<Time>,
     mut projected: Query<
         (
@@ -1985,7 +2270,13 @@ fn blend_projection(
         Without<TerrainTile>,
     >,
 ) {
-    blend_entities(&mirror.0, &mut clock, time.delta_secs(), &mut projected);
+    blend_entities(
+        &mirror.0,
+        &headings,
+        &mut clock,
+        time.delta_secs(),
+        &mut projected,
+    );
 }
 
 // Each parameter is a distinct ECS partition; bundling them solely to reduce the system signature
@@ -2186,6 +2477,23 @@ mod tests {
         );
     }
 
+    /// The interactive overlay is ON, and nothing but a capture may turn it off.
+    ///
+    /// It used to have a toggle on F3; that key now marks the perf log, so if this default is ever
+    /// flipped back to `false` there is no longer any way to get the overlay back at the seat and
+    /// nothing else would notice. The capture half is the test below: the two belong together,
+    /// because "always on" is only safe while every measured frame is still guaranteed to be
+    /// without it.
+    #[test]
+    fn the_interactive_overlay_is_on_and_has_no_key_to_restore_it() {
+        let config = super::overlay_config_on();
+        assert!(config.enabled, "the fps overlay must start enabled");
+        assert!(
+            config.frame_time_graph_config.enabled,
+            "the frame-time graph must start enabled alongside it"
+        );
+    }
+
     #[test]
     fn capture_forces_the_frame_time_overlay_off() {
         let mut app = App::new();
@@ -2257,7 +2565,10 @@ mod tests {
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap();
         let mut app = App::new();
-        app.add_plugins(bevy::MinimalPlugins)
+        // `TransformPlugin` because `MinimalPlugins` has none: without it every `GlobalTransform`
+        // stays at the origin, and a test reading the camera's position through it certifies
+        // nothing about where the camera is.
+        app.add_plugins((bevy::MinimalPlugins, bevy::transform::TransformPlugin))
             .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
             .init_resource::<bevy::input::ButtonInput<bevy::input::mouse::MouseButton>>()
             .init_resource::<bevy::asset::Assets<bevy::prelude::Mesh>>()
@@ -2468,6 +2779,34 @@ mod tests {
         );
     }
 
+    /// The pause timeout is WALL CLOCK. It was 600 frames, which a fast GPU runs through long
+    /// before the daemon's 10 Hz tick reaches 120 -- the vehicle refused every `--static-world`
+    /// capture at tick 93. Many fast frames must not end the run; enough real time must.
+    #[test]
+    fn static_world_pause_timeout_counts_time_not_frames() {
+        let (mut app, _sender, _server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            Duration::from_millis(1),
+        ));
+        for _ in 0..700 {
+            app.update();
+        }
+        assert!(
+            app.should_exit().is_none(),
+            "700 frames in 0.7 s is a fast GPU, not a daemon that failed to pause"
+        );
+
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            Duration::from_secs(60),
+        ));
+        app.update();
+        assert!(
+            app.should_exit().is_some_and(|exit| exit.is_error()),
+            "a pause still unreported after 60 s must fail the run loudly"
+        );
+    }
+
     /// Space must not quietly resume a run that asked for a frozen world.
     ///
     /// `toggle_pause` took no notice of the flag and queued `SetSpeed { Normal }` on any press, so
@@ -2548,6 +2887,59 @@ mod tests {
     }
 
     #[test]
+    fn dof_focus_is_derived_from_the_camera_transform_and_tracks_framing() {
+        let boot = CameraRig::new([64, 64, 9]);
+        let boot_distance = super::dof_focal_distance(boot.transform().translation, &boot);
+        assert!(
+            (boot_distance - 61.7).abs() <= 1.0,
+            "boot focus should be about 61.7, not the rig orbit radius: {boot_distance}"
+        );
+        assert_eq!(
+            boot.distance, 90.0,
+            "fixture must retain the wrong orbit radius"
+        );
+
+        let mut orbit = boot;
+        orbit.yaw += 0.4;
+        let orbit_distance = super::dof_focal_distance(orbit.transform().translation, &orbit);
+        assert!(
+            (orbit_distance - boot_distance).abs() > 0.01,
+            "an orbit must recompute the transform-to-focus distance"
+        );
+
+        let mut zoom = boot;
+        zoom.distance = 40.0;
+        let zoom_distance = super::dof_focal_distance(zoom.transform().translation, &zoom);
+        assert!(
+            (zoom_distance - boot_distance).abs() > 10.0,
+            "a zoom must recompute the transform-to-focus distance"
+        );
+    }
+
+    #[test]
+    fn fog_density_ramp_fades_above_the_skyline_instead_of_ending_at_a_box_face() {
+        let ramp = super::fog_density_ramp_pixels();
+        assert_eq!(ramp.len(), 64);
+        assert_eq!(ramp[0], 255, "the valley floor must retain full density");
+        assert_eq!(ramp[34], 255, "the ramp must stay full through v=0.54");
+        assert!(
+            ramp[43] > 0 && ramp[43] < 255,
+            "the fade band must contain a positive intermediate value"
+        );
+        assert_eq!(ramp[53], 0, "density must be zero above v=0.83");
+    }
+
+    #[test]
+    fn volumetric_fog_ambient_intensity_tracks_the_scenes_ambient_budget() {
+        let fog = super::volumetric_fog();
+        assert_eq!(fog.ambient_intensity, 1.875);
+        assert_eq!(
+            fog.ambient_color,
+            crate::appearance::night_lighting().ambient
+        );
+    }
+
+    #[test]
     fn fx_off_reaches_the_live_camera_and_rejects_unknown_effects() {
         let camera_effects = |app: &mut App| {
             (
@@ -2563,16 +2955,26 @@ mod tests {
                     .query_filtered::<&super::Bloom, With<CameraRig>>()
                     .iter(app.world())
                     .count(),
+                app.world_mut()
+                    .query_filtered::<&super::DepthOfField, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&super::VolumetricFog, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
             )
         };
         let (mut default, _sender, _server) = configured_app(&[]);
         default.update();
-        assert_eq!(camera_effects(&mut default), (1, 1, 1));
+        assert_eq!(camera_effects(&mut default), (1, 1, 1, 1, 1));
         for (name, expected) in [
-            ("fxaa", (0, 1, 1)),
-            ("ao", (1, 0, 1)),
-            ("bloom", (1, 1, 0)),
-            ("fxaa, ao,bloom", (0, 0, 0)),
+            ("fxaa", (0, 1, 1, 1, 1)),
+            ("ao", (1, 0, 1, 1, 1)),
+            ("bloom", (1, 1, 0, 1, 1)),
+            ("dof", (1, 1, 1, 0, 1)),
+            ("haze", (1, 1, 1, 1, 0)),
+            ("fxaa, ao,bloom,dof,haze", (0, 0, 0, 0, 0)),
         ] {
             let (mut disabled, _sender, _server) = configured_app(&["--fx-off", name]);
             disabled.update();
@@ -2582,11 +2984,14 @@ mod tests {
                 "--fx-off {name:?} must remove only its named live camera components"
             );
         }
-        // The REQUIRED components, which a plain `remove` leaves behind. `--fx-off ao` must take
-        // the prepasses with it, or "ao off" still pays two full-scene GPU passes nothing samples
-        // and AC8's vehicle cost delta under-reports AO by exactly its expensive half. Bloom is
-        // the deliberate opposite: its required `Hdr` must SURVIVE, because `--fx-off bloom` is
-        // the control AC4's marginal figures are measured against.
+        // The REQUIRED components, which a plain `remove` leaves behind. `--fx-off ao` must drop
+        // every pass nothing else samples, or "ao off" pays a full-scene GPU pass for no one and
+        // AC8's vehicle cost delta over-states what turning AO off actually buys. Since 11.2 that
+        // is the NORMAL prepass only: depth of field and haze read the DEPTH prepass and declare
+        // nothing, so it is shared and stays. AO's marginal cost is measured with them on, and a
+        // pass the other two would pay anyway is not part of it. Bloom is the deliberate
+        // opposite: its required `Hdr` must SURVIVE, because `--fx-off bloom` is the control
+        // AC4's marginal figures are measured against.
         let prepasses = |app: &mut App| {
             (
                 app.world_mut()
@@ -2612,8 +3017,16 @@ mod tests {
         no_ao.update();
         assert_eq!(
             prepasses(&mut no_ao),
+            (1, 0, 1),
+            "--fx-off ao must drop the normal prepass only, keep the depth prepass dof and haze \
+             sample, and leave bloom's Hdr alone"
+        );
+        let (mut bare, _sender, _server) = configured_app(&["--fx-off", "ao,dof,haze"]);
+        bare.update();
+        assert_eq!(
+            prepasses(&mut bare),
             (0, 0, 1),
-            "--fx-off ao must remove AO's required prepasses and leave bloom's Hdr alone"
+            "with all three depth consumers off the depth prepass must go too"
         );
         let (mut no_bloom, _sender, _server) = configured_app(&["--fx-off", "bloom"]);
         no_bloom.update();
@@ -2630,7 +3043,7 @@ mod tests {
             };
         assert_eq!(
             error.to_string(),
-            "unknown effect \"taa\"; expected fxaa, ao, or bloom"
+            "unknown effect \"taa\"; expected fxaa, ao, bloom, dof, or haze"
         );
     }
 
@@ -2691,6 +3104,140 @@ mod tests {
         );
     }
 
+    /// Depth of field and haze sample the depth prepass, but only AO declares it.
+    ///
+    /// `ScreenSpaceAmbientOcclusion` is `#[require(DepthPrepass, NormalPrepass)]`; `DepthOfField`
+    /// and `VolumetricFog` declare NOTHING and simply read whatever depth prepass the camera
+    /// happens to carry. Before 11.2 that was harmless -- AO was the only consumer, so "AO off"
+    /// could take both prepasses with it. With two more consumers on the camera, the unconditional
+    /// removal pulls the depth buffer out from under effects that are still switched ON, and the
+    /// readout keeps reporting "F1 dof on". Only toggling AO back on restores it, which is exactly
+    /// what it looked like from the seat: cycling F1 changes nothing, cycling F11 fixes it.
+    ///
+    /// Normals stay AO-only: nothing else samples them, so "AO off" must still drop that pass.
+    #[test]
+    fn turning_ambient_occlusion_off_keeps_the_depth_prepass_dof_and_haze_sample() {
+        let prepasses = |app: &mut App| {
+            (
+                app.world_mut()
+                    .query_filtered::<&bevy::core_pipeline::prepass::DepthPrepass, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&bevy::core_pipeline::prepass::NormalPrepass, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+            )
+        };
+        // `configured_app` runs no input-clearing system, so `just_pressed` is STICKY: clear after
+        // every tap or a two-tap sequence silently becomes four toggles.
+        let tap = |app: &mut App, key: KeyCode| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.release(key);
+            input.clear();
+        };
+
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+        assert_eq!(
+            prepasses(&mut app),
+            (1, 1),
+            "both prepasses are present while every effect is on"
+        );
+
+        tap(&mut app, KeyCode::F7); // ambient occlusion off
+        assert_eq!(
+            prepasses(&mut app),
+            (1, 0),
+            "AO off must keep the depth prepass while dof and haze still sample it, and drop \
+             only the normal prepass nothing else reads"
+        );
+
+        tap(&mut app, KeyCode::F5); // depth of field off
+        tap(&mut app, KeyCode::F4); // haze off
+        assert_eq!(
+            prepasses(&mut app),
+            (0, 0),
+            "with AO, dof and haze all off nothing samples depth, so the pass must go"
+        );
+
+        tap(&mut app, KeyCode::F5); // depth of field back on, AO still off
+        assert_eq!(
+            prepasses(&mut app),
+            (1, 0),
+            "re-enabling dof must bring back the depth prepass it reads, without needing AO"
+        );
+
+        // The same hole at boot: `--fx-off ao` shipped a depth-less depth of field.
+        let (mut boot_no_ao, _sender, _server) = configured_app(&["--fx-off", "ao"]);
+        boot_no_ao.update();
+        assert_eq!(
+            prepasses(&mut boot_no_ao),
+            (1, 0),
+            "--fx-off ao must leave the depth prepass for dof and haze"
+        );
+    }
+
+    /// F4 must take `VolumetricLight` off the sun, not only `VolumetricFog` off the camera.
+    ///
+    /// The camera removal alone left the render world drawing the fog: Bevy never syncs that
+    /// removal, and its only cleanup fires when no light is volumetric. Wolf saw it at the seat --
+    /// F4 changed nothing, and "haze off" looked like a headless haze-on capture. This test cannot
+    /// see the render world, so it pins the one main-world input Bevy's cleanup reads.
+    #[test]
+    fn the_haze_key_moves_the_suns_volumetric_marker() {
+        let volumetric_suns = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<(), (With<super::SunLight>, With<super::VolumetricLight>)>()
+                .iter(app.world())
+                .count()
+        };
+        let tap = |app: &mut App, key: KeyCode| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.release(key);
+            input.clear();
+        };
+
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+        assert_eq!(
+            volumetric_suns(&mut app),
+            1,
+            "haze on at boot: the sun lights the fog"
+        );
+        tap(&mut app, KeyCode::F4);
+        app.update();
+        assert_eq!(
+            volumetric_suns(&mut app),
+            0,
+            "haze off: with no volumetric light Bevy strips the fog from the render world"
+        );
+        tap(&mut app, KeyCode::F4);
+        app.update();
+        assert_eq!(
+            volumetric_suns(&mut app),
+            1,
+            "haze back on: the marker must return"
+        );
+
+        let (mut boot_off, _sender, _server) = configured_app(&["--fx-off", "haze"]);
+        boot_off.update();
+        boot_off.update();
+        assert_eq!(
+            volumetric_suns(&mut boot_off),
+            0,
+            "--fx-off haze must agree with F4"
+        );
+    }
+
     #[test]
     fn effect_keys_toggle_the_live_camera_and_readout() {
         let camera_effects = |app: &mut App| {
@@ -2707,23 +3254,39 @@ mod tests {
                     .query_filtered::<&super::Bloom, With<CameraRig>>()
                     .iter(app.world())
                     .count(),
+                app.world_mut()
+                    .query_filtered::<&super::DepthOfField, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
+                app.world_mut()
+                    .query_filtered::<&super::VolumetricFog, With<CameraRig>>()
+                    .iter(app.world())
+                    .count(),
             )
         };
+        // F1 and F2 are deliberately absent: bevy_dev_tools owns them (see `CameraEffect::key`).
+        // Fxaa has no key at all now, so it appears in the readout without one and cannot be
+        // toggled here -- `--fx-off fxaa` is its only control.
         for (key, expected_effects, expected_readout) in [
             (
-                KeyCode::F10,
-                (0, 1, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa off  F11 ao on  F12 bloom on",
+                KeyCode::F7,
+                (1, 0, 1, 1, 1),
+                "F4 haze on  F5 dof on  F6 bloom on  F7 ao off  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on",
             ),
             (
-                KeyCode::F11,
-                (1, 0, 1),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao off  F12 bloom on",
+                KeyCode::F6,
+                (1, 1, 0, 1, 1),
+                "F4 haze on  F5 dof on  F6 bloom off  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on",
             ),
             (
-                KeyCode::F12,
-                (1, 1, 0),
-                "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom off",
+                KeyCode::F5,
+                (1, 1, 1, 0, 1),
+                "F4 haze on  F5 dof off  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on",
+            ),
+            (
+                KeyCode::F4,
+                (1, 1, 1, 1, 0),
+                "F4 haze off  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on",
             ),
         ] {
             let (mut app, _sender, _server) = configured_app(&[]);
@@ -2749,6 +3312,178 @@ mod tests {
                 "{key:?} must remove only its named live camera component"
             );
         }
+    }
+
+    /// No control of ours may sit on a key something else has already claimed.
+    ///
+    /// This is the check that did not exist when 11.2 put dof and haze on F1 and F2 -- keys
+    /// `bevy_dev_tools::render_debug` binds automatically through `DefaultPlugins`. Both handlers
+    /// then ran on every press: ours updated the readout, Bevy's cycled a depth/normal debug
+    /// overlay over the whole frame. `configured_app` builds on `MinimalPlugins`, which does not
+    /// include that plugin, so every key test in this file passed against a keymap that was
+    /// unusable at the seat. A test cannot see a collision with a plugin it never loads, so the
+    /// reserved keys are written down here instead, with the source that proves them.
+    #[test]
+    fn the_client_keymap_avoids_keys_other_plugins_have_claimed() {
+        // `bevy_dev_tools-0.19.0/src/render_debug.rs:107` and `:110`. Reached through
+        // `DefaultPlugins` whenever the `bevy_dev_tools` and `bevy_pbr` features are both on --
+        // `bevy_internal-0.19.0/src/default_plugins.rs:95` -- which is this client's build.
+        const RESERVED_BY_BEVY: [(KeyCode, &str); 2] = [
+            (
+                KeyCode::F1,
+                "bevy_dev_tools render debug overlay: cycle mode",
+            ),
+            (
+                KeyCode::F2,
+                "bevy_dev_tools render debug overlay: cycle opacity",
+            ),
+        ];
+
+        let mut bound: Vec<(KeyCode, String)> = Vec::new();
+        for source in super::LightSource::ALL {
+            bound.push((source.key(), format!("light {}", source.name())));
+        }
+        for effect in super::CameraEffect::ALL {
+            if let Some(key) = effect.key() {
+                bound.push((key, format!("effect {}", effect.name())));
+            }
+        }
+        // EVERY other key this client binds, with its site. This list is the maintenance burden
+        // and it is the point: the first version of this guard listed only the lights, the effects
+        // and the perf mark, so it cheerfully accepted haze on F3 -- at the time the fps overlay's
+        // toggle key. A guard that knows about only some of the keymap certifies
+        // the rest. Anything added with `just_pressed` OR held with `pressed` belongs here.
+        for (key, site) in [
+            (KeyCode::F3, "perf-log frame mark (perf.rs)"),
+            (KeyCode::KeyC, "print the camera readout (ingest.rs)"),
+            (KeyCode::Comma, "slice down (ingest.rs)"),
+            (KeyCode::Period, "slice up (ingest.rs)"),
+            (KeyCode::Space, "pause / resume the sim (command.rs)"),
+            (KeyCode::KeyA, "yaw, held (camera_controls)"),
+            (KeyCode::KeyD, "yaw, held (camera_controls)"),
+            (KeyCode::KeyW, "pitch, held (camera_controls)"),
+            (KeyCode::KeyS, "pitch, held (camera_controls)"),
+            (KeyCode::KeyE, "zoom, held (camera_controls)"),
+            (KeyCode::KeyQ, "zoom, held (camera_controls)"),
+            (
+                KeyCode::ShiftLeft,
+                "rate multiplier / select pan (camera_controls)",
+            ),
+            (
+                KeyCode::ShiftRight,
+                "rate multiplier / select pan (camera_controls)",
+            ),
+            (KeyCode::ControlLeft, "pan multiplier (camera_controls)"),
+            (KeyCode::ControlRight, "pan multiplier (camera_controls)"),
+            (
+                KeyCode::Escape,
+                "abort designation / clear selection (designate.rs, pick.rs)",
+            ),
+            (KeyCode::Digit1, "designate dig (designate.rs)"),
+            (KeyCode::Digit2, "designate channel (designate.rs)"),
+            (KeyCode::Digit3, "designate stockpile (designate.rs)"),
+            (KeyCode::Digit4, "designate clear (designate.rs)"),
+        ] {
+            bound.push((key, site.to_string()));
+        }
+
+        for (key, reserved_for) in RESERVED_BY_BEVY {
+            if let Some((_, ours)) = bound.iter().find(|(bound_key, _)| *bound_key == key) {
+                panic!(
+                    "{key:?} is bound to {ours} but is already taken by {reserved_for}; both \
+                     handlers will run on every press and ours will look broken at the seat"
+                );
+            }
+        }
+
+        for i in 0..bound.len() {
+            for j in (i + 1)..bound.len() {
+                assert_ne!(
+                    bound[i].0, bound[j].0,
+                    "{} and {} are both bound to {:?}",
+                    bound[i].1, bound[j].1, bound[i].0
+                );
+            }
+        }
+    }
+
+    /// Re-inserting an effect must rebuild it from the LIVE camera, not from boot framing.
+    ///
+    /// `apply_effect` built `DepthOfField` from a fresh `CameraRig::new([64, 64, 9])`, so toggling
+    /// depth of field off and on again after the operator had moved the camera restored focus to
+    /// the BOOT distance rather than the distance to what the camera is now aimed at.
+    /// `update_dof_from_camera` then ran in `Update` and repaired it on the FOLLOWING frame, so the
+    /// defect rendered exactly one wrongly-focused frame -- a visible pop at the seat, and invisible to any test that only
+    /// counts components, which is what `effect_keys_toggle_the_live_camera_and_readout` does.
+    #[test]
+    fn toggling_dof_back_on_focuses_the_live_camera_not_boot_framing() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+
+        // Leave boot framing: zoom in and orbit, the two motions AC3 names.
+        {
+            let world = app.world_mut();
+            let mut rigs = world.query::<&mut CameraRig>();
+            let mut rig = rigs.single_mut(world).expect("one camera rig");
+            rig.distance = 40.0;
+            rig.yaw += 0.7;
+        }
+        app.update();
+
+        // The oracle is the rig's own geometry, not the camera's `GlobalTransform`: this test
+        // must fail if the system reads a camera position that never moved.
+        let expected = {
+            let world = app.world_mut();
+            let mut rigs = world.query::<&CameraRig>();
+            let rig = rigs.single(world).expect("one camera rig");
+            rig.transform()
+                .translation
+                .distance(super::world_to_render_f32(rig.focus))
+        };
+        let boot = super::depth_of_field_for_boot_camera().focal_distance;
+        assert!(
+            (expected - boot).abs() > 5.0,
+            "the zoom must move the focal distance away from boot framing or this test cannot \
+             tell them apart: live {expected}, boot {boot}"
+        );
+
+        // `configured_app` runs no input-clearing system, so `just_pressed` is STICKY here: an
+        // update with a stale press toggles the effect again. Clear it after every tap, or a
+        // two-tap sequence silently becomes four toggles.
+        let tap = |app: &mut App, key: KeyCode| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.release(key);
+            input.clear();
+        };
+        let count = |app: &mut App| {
+            let world = app.world_mut();
+            let mut q = world.query_filtered::<&super::DepthOfField, With<CameraRig>>();
+            q.iter(world).count()
+        };
+        tap(&mut app, KeyCode::F5); // depth of field off
+        assert_eq!(
+            count(&mut app),
+            0,
+            "the first tap must remove depth of field"
+        );
+        tap(&mut app, KeyCode::F5); // and back on
+
+        let world = app.world_mut();
+        let mut dofs = world.query_filtered::<&super::DepthOfField, With<CameraRig>>();
+        let dof = dofs
+            .single(world)
+            .expect("depth of field is back on the camera");
+        assert!(
+            (dof.focal_distance - expected).abs() < 1.0,
+            "re-enabling depth of field must focus the LIVE camera: focal_distance={} but the \
+             camera is {expected} from its aim point (boot framing would read about {})",
+            dof.focal_distance,
+            super::depth_of_field_for_boot_camera().focal_distance,
+        );
     }
 
     /// `--assets` is a RESOLVER: it decides which of two asset trees the client reads. The
@@ -2964,6 +3699,79 @@ mod tests {
         );
     }
 
+    /// Depth of field must focus the SELECTED DWARF, not the rig's aim point.
+    ///
+    /// `frame_selected_dwarf` centres him with `CameraRig::frame_render_point`, which writes the
+    /// focus OFFSET from him by the composition push -- so `rig.focus` lands about 7.3 units short
+    /// of the dwarf at `SELECT_DISTANCE` (33 * 20/90). Focusing `rig.focus` therefore puts the
+    /// figure the operator just picked OUTSIDE the focal plane at the ruled f/0.05, while every
+    /// boot-framing measurement stays correct, because at boot the subject IS the aim point.
+    /// Wolf reported it from the seat, 2026-09-21.
+    #[test]
+    fn depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point() {
+        let snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![protocol::Entity {
+                id: 2,
+                kind: protocol::EntityKind::Dwarf,
+                pos: [1, 0, 0],
+                state: protocol::JobState::Idle,
+                light: None,
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
+        app.update();
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(Some(2)));
+        // ONE update, on purpose: the frame of the selection is the one that must already be
+        // focused. `frame_selected_dwarf` moves the camera in `Update`, so focus computed before
+        // transform propagation read last frame's camera and drew that frame blurred.
+        app.update();
+
+        let dwarf = {
+            let world = app.world_mut();
+            let mut q = world.query::<(&WorldProjected, &bevy::prelude::Transform)>();
+            q.iter(world)
+                .find(|(marker, _)| marker.0 == 2)
+                .map(|(_, transform)| transform.translation)
+                .expect("the selected dwarf must be drawn")
+        };
+        let (camera, rig_aim, focal) = {
+            let world = app.world_mut();
+            let mut q = world.query::<(&CameraRig, &super::DepthOfField)>();
+            let (rig, dof) = q.single(world).expect("one camera");
+            // The rig's own geometry, not `GlobalTransform`, so a system reading a camera that
+            // never moved cannot agree with it by accident.
+            let camera = rig.transform().translation;
+            (
+                camera,
+                camera.distance(super::world_to_render_f32(rig.focus)),
+                dof.focal_distance,
+            )
+        };
+        let to_dwarf = camera.distance(dwarf);
+
+        // Discrimination FIRST: if the aim point and the dwarf were the same distance away this
+        // test could not tell the two rules apart, and would pass against either.
+        assert!(
+            (to_dwarf - rig_aim).abs() > 1.0,
+            "this fixture cannot separate the two rules: dwarf at {to_dwarf}, aim point at \
+             {rig_aim}"
+        );
+        assert!(
+            (focal - to_dwarf).abs() < 0.25,
+            "a selected dwarf must be the focal subject: focal_distance={focal} but he stands \
+             {to_dwarf} away (the rig's aim point is {rig_aim})"
+        );
+    }
+
     #[test]
     fn lighting_keys_change_the_live_scene_and_its_readout() {
         let snapshot = Snapshot {
@@ -3015,14 +3823,14 @@ mod tests {
 
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
+            "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
         );
         for (key, source) in [
-            (KeyCode::F5, super::LightSource::Sun),
-            (KeyCode::F6, super::LightSource::Campfire),
-            (KeyCode::F9, super::LightSource::Torches),
-            (KeyCode::F7, super::LightSource::Lanterns),
-            (KeyCode::F8, super::LightSource::Ambient),
+            (KeyCode::F8, super::LightSource::Sun),
+            (KeyCode::F10, super::LightSource::Campfire),
+            (KeyCode::F11, super::LightSource::Torches),
+            (KeyCode::F12, super::LightSource::Lanterns),
+            (KeyCode::F9, super::LightSource::Ambient),
         ] {
             press(&mut app, key);
             assert!(
@@ -3034,7 +3842,7 @@ mod tests {
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun off  F6 campfire off  F9 torches off  F7 lanterns off  F8 ambient off  F10 fxaa on  F11 ao on  F12 bloom on"
+            "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun off  F9 ambient off  F10 campfire off  F11 torches off  F12 lanterns off"
         );
 
         assert_eq!(
@@ -3110,17 +3918,17 @@ mod tests {
         // rewritten every frame by `flicker_projection` inside `ProjectionSet`, so re-enabling
         // worked only by that grace, and the emissive has no such benefactor at all.
         for (key, _) in [
-            (KeyCode::F5, ()),
-            (KeyCode::F6, ()),
-            (KeyCode::F9, ()),
-            (KeyCode::F7, ()),
             (KeyCode::F8, ()),
+            (KeyCode::F9, ()),
+            (KeyCode::F10, ()),
+            (KeyCode::F11, ()),
+            (KeyCode::F12, ()),
         ] {
             press(&mut app, key);
         }
         assert_eq!(
             readout(&mut app),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
+            "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
         );
         assert_eq!(
             emissive(&mut app, protocol::LightKind::Campfire),
@@ -3360,7 +4168,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear".to_string(),
-            "F5 sun on  F6 campfire on  F9 torches on  F7 lanterns on  F8 ambient on  F10 fxaa on  F11 ao on  F12 bloom on"
+            "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),
         ];
         expected.sort();
@@ -4578,6 +5386,7 @@ mod tests {
             .insert_resource(IngestReceiver(Mutex::new(receiver)))
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
+            .init_resource::<crate::project::DwarfHeadings>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -4623,6 +5432,7 @@ mod tests {
             .insert_resource(IngestReceiver(Mutex::new(receiver)))
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
+            .init_resource::<crate::project::DwarfHeadings>()
             .add_systems(Update, ingest_messages);
         // A full cadence has already elapsed on the client when the delta lands.
         app.world_mut().resource_mut::<TickClock>().advance(0.1);
@@ -4680,6 +5490,7 @@ mod tests {
                 ..Default::default()
             })
             .init_resource::<TickClock>()
+            .init_resource::<crate::project::DwarfHeadings>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -4716,6 +5527,7 @@ mod tests {
             .insert_resource(IngestReceiver(Mutex::new(receiver)))
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
+            .init_resource::<crate::project::DwarfHeadings>()
             .add_systems(Update, ingest_messages);
         // Settle schedule and system entities before ingesting anything.
         app.update();

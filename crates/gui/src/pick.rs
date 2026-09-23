@@ -196,7 +196,7 @@ fn nearest_dwarf_to(
 /// camera. The `Without<Camera3d>` is load-bearing rather than tidy — it is what makes this
 /// query provably disjoint from the `&mut CameraRig, &mut Transform` one beside it, which both
 /// touch `Transform`.
-type DrawnEntities<'w, 's> = Query<
+pub(crate) type DrawnEntities<'w, 's> = Query<
     'w,
     's,
     (&'static WorldProjected, &'static Transform),

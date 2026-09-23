@@ -28,7 +28,11 @@ get: `export PATH="$HOME/.cargo/bin:$PATH"`.
 ```bash
 cargo run -p simd          # prints: listening on 127.0.0.1:7451
 cargo run -p simd -- 0     # 0 = OS-assigned port, printed on stdout
+cargo run -p simd -- 7451 --pause-at 120   # freeze the world on tick 120 for a gui --static-world capture
 ```
+
+`--pause-at 120` matters when a PERSON starts the client: `gui --static-world` asks for the same
+tick-120 freeze, but only reaches the daemon in time if it connects within ~12 s of `simd` starting.
 
 Then, in another shell, behold it:
 
@@ -140,6 +144,39 @@ Windows vehicle, and there `scripts/launch-gui.ps1` is the way in: it refuses to
 whose compiled-in `gui build <sha>` stamp is not the checkout's HEAD, which is the only thing that
 has ever reliably caught a stale binary.
 
+### At the vehicle — how the seat is actually launched
+
+The daemon runs in WSL; the client runs from the Windows checkout (`D:\Workspace\frostvein`) in
+PowerShell. **This is the canonical seat launch, and every story's vehicle card writes its commands
+in this form:**
+
+```powershell
+# WSL
+simd 7451
+
+# PowerShell, from the Windows checkout
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')
+```
+
+The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, and passes the port
+(7451) and `--assets` itself. **Extra client flags go into the same array**, after `--subdiv 4`:
+
+```powershell
+# a frame-time log for NFR6 (read it with: python3 scripts/bench/perf_summary.py <csv>)
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\run.csv')
+
+# a headless capture of a FROZEN world -- restart simd as `simd 7451 --pause-at 120` first,
+# once per capture, or a client started by hand connects after tick 120 and is refused
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--headless','--static-world','--lights-steady','--frames','160','--capture','D:\Workspace\frostvein\.bin\all.png')
+```
+
+- **Write captures and logs under `.bin\`** with an absolute path. It is gitignored, so the checkout
+  stays clean and the launcher can still say the served tree is exactly HEAD.
+- **One fresh `simd` per `--static-world` capture**, started with `--pause-at 120`.
+- `--frames` does not need scaling up on a fast GPU any more: the capture waits for its ticks.
+- Never write a vehicle step as `./target/release/gui ...` or a bare `gui.exe` — that skips the
+  stamp check this launcher exists for.
+
 ### Controls
 
 | Keys | What it does |
@@ -155,9 +192,17 @@ has ever reliably caught a stale binary.
 | `Esc` | release the selection, or abort a designation |
 | `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
 | `space` | pause / resume the sim |
-| `F3` / `F4` | fps overlay / mark a frame in the perf log |
-| `F5` `F6` `F7` `F8` `F9` | toggle sun / campfire / lanterns / ambient / torches |
-| `F10` | toggle FXAA |
+| `F1` / `F2` | **Bevy's own** render debug overlay: cycle depth/normal, cycle its opacity |
+| `F3` | mark a frame in the perf log |
+| `F4` `F5` `F6` `F7` | toggle haze / depth of field / bloom / ambient occlusion — widest-acting first |
+| `F8` `F9` `F10` `F11` `F12` | toggle sun / ambient / campfire / torches / lanterns — biggest reach first |
+
+The fps overlay has no key: it is simply on, and `--capture` forces it off so no measured frame
+carries it. FXAA has no key either; it is `--fx-off fxaa` only. **F1 and F2 belong to `bevy_dev_tools`**, which
+`DefaultPlugins` pulls in automatically — binding anything of ours there means both handlers run,
+which is how 11.2 shipped dof and haze onto a debug overlay. `the_client_keymap_avoids_keys_other_plugins_have_claimed`
+now fails if any control lands on a reserved key or on another of ours. The keymap is still due a
+wider rethink — issue #118.
 
 The slice keys are the **unshifted comma and period**. The on-screen hint calls them `<` / `>`,
 which reads as "shift these", and that has already cost one session — see #102, where naming the
@@ -201,17 +246,20 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | `--subdiv <n>` | terrain subdivision; defaults to the shipped 4, and the recipes pass it anyway so the frame says what it was |
 | `--static-world` | pause the DAEMON for the whole run. Two captures differ only by what you changed **only if** you also pin the flicker and give each capture its own freshly started `simd` — see the note below |
 | `--lights-steady` | pin emitter flicker to a fixed phase, so a capture pair is comparable |
-| `--fx-off <a,b>` | remove named camera effects: `fxaa`, `ao`, `bloom` |
+| `--fx-off <a,b>` | remove named camera effects: `fxaa`, `ao`, `bloom`, `dof`, `haze` |
 | `--lights-off <a,b>` | switch named light sources off for a measurement |
 | `--perf-log <path>` | write a per-frame CSV |
 | `--version` | print `gui build <sha>` and exit |
 
 **`--static-world` pauses the SIM, and that is not the same as a still frame.** It sends the daemon
-`SetSpeed { Paused }` and holds the capture until the daemon reports itself stopped. Two things it
-does NOT stop, because both run on the client's own wall clock: falling snow (`fall_snow`) and
-emitter flicker (`flicker_projection`) — pass `--lights-steady` for the flicker. And the world
-freezes at whatever tick it had reached when the client connected, so **captures you intend to
-compare must each get a freshly started `simd`**. Measured on `6140ca3`: four captures against
+`SetSpeed { Paused, at_tick: 120 }` and holds the capture until the daemon reports itself stopped
+on tick 120; a daemon that froze on any other tick is refused, not captured. Falling snow
+(`fall_snow`) now holds still too. Emitter flicker (`flicker_projection`) still runs on the
+client's wall clock, so pass `--lights-steady` for that. A client that connects after tick 120
+(about 12 s after `simd` starts) cannot get tick 120 any more, so start the daemon with
+`simd <port> --pause-at 120` whenever a person rather than a script starts the client, and give
+each capture you intend to compare its own freshly started `simd`. The history, measured on
+`6140ca3` when the freeze point still followed the connect tick: four captures against
 fresh daemons froze at tick 40 every time and the camp window's near-white spread was 0.0070 pp;
 five captures sharing one daemon froze 35 ticks apart and spread 0.3619 pp — 52x worse, and past
 the bar story 11.1b's AC1 is measured against. This flag was documented as "freeze the sim" while

@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-20
+last_updated: 2026-09-23
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2438,7 +2438,24 @@ development_status:
   #   Task 5's card had OVERWRITTEN 11.1a's card, whose own Task 5 is still unchecked; 11.1a's is
   #     restored and 11.1b's now sits at task-5b-vehicle-card.md as the spec always said.
   # STILL OPEN, and only the vehicle can close it: Task 5, AC8 (perf read), AC9 (Wolf's sign-off).
-  11-2-the-miniature: backlog
+  11-2-the-miniature: done
+  #   Created 2026-09-21. BOTH mechanisms probed LIVE on 7442174 and reverted (creation-probe.md):
+  #     DepthOfField and VolumetricFog both render under lavapipe -- the epic's unknown is answered.
+  #     DepthOfField::default() is a SILENT NO-OP here (coc = 0.09 px at f/1.0); focal_distance =
+  #     rig.distance misses the camp by 46% (the boot composition push makes it 61.7, not 90);
+  #     VolumetricFog at defaults DARKENS (ground median 69 -> 30) and panics capture.rs:1498.
+  #   HAZE SOLVED AT CREATION 2026-09-21, and the floor collision is STRUCK: it was three wrong
+  #     settings, not a guard bounding the art. (1) ambient_intensity is relative to Bevy's
+  #     AmbientLight default of 80, not this scene's 1500 -- derive 0.1*1500/80 = 1.875;
+  #     (2) fog_color stays WHITE, the tech-art "fog = sky colour" rule is a DistanceFog rule and
+  #     volumetric fog ADDS light (sky-coloured fog took the ridge 49->31 instead of 49->69);
+  #     (3) a bounded FogVolume box shows its TOP FACE as a hard band across the sky, which every
+  #     pixel window PASSED -- fix is a vertical density_texture. Proven recipe reads at ground
+  #     median 69, the control's own value. NO SPLIT.
+  #   APERTURE RULED 0.05 by Wolf at creation, against the measured bracket and the filed frame
+  #     (ridge -36.1%, camp -3.2%, 32 of 78 star cores, sky peak 157). NO DECISIONS OUTSTANDING --
+  #     the story is ready to implement. Both look values are re-judged on the vehicle at the
+  #     sitting like every other, AC14.
   11-3-night-falls-day-breaks: backlog
   epic-11-retrospective: optional
 

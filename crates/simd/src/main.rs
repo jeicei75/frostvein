@@ -58,20 +58,45 @@ struct Client {
     stream: TcpStream,
 }
 
-fn main() -> anyhow::Result<()> {
-    // NOTE: args_os, not args — std::env::args panics on non-UTF-8 argv during
-    // iteration, which would bypass anyhow and print a raw backtrace.
-    let port: u16 = match std::env::args_os().nth(1) {
-        Some(arg) => {
-            let text = arg
-                .to_str()
-                .with_context(|| format!("port argument is not valid UTF-8: {arg:?}"))?;
-            text.parse().with_context(|| {
+/// `simd [port] [--pause-at TICK]`.
+///
+/// `--pause-at` lets the DAEMON freeze its own world on a chosen tick. A `gui --static-world`
+/// client schedules the same pause (tick 120), but only if it connects before that tick -- 12 s
+/// after the daemon starts. A script starts the client within a second; a person at the vehicle,
+/// switching windows and running `launch-gui.ps1`, connected at tick 230 and every capture was
+/// refused. With `--pause-at 120` the world stops on 120 however late the client arrives.
+fn parse_args(
+    args: impl IntoIterator<Item = std::ffi::OsString>,
+) -> anyhow::Result<(u16, Option<u64>)> {
+    let mut port = protocol::DEFAULT_PORT;
+    let mut pause_at = None;
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        // NOTE: OsString, not String — std::env::args panics on non-UTF-8 argv during
+        // iteration, which would bypass anyhow and print a raw backtrace.
+        let text = arg
+            .to_str()
+            .with_context(|| format!("argument is not valid UTF-8: {arg:?}"))?
+            .to_owned();
+        if text == "--pause-at" {
+            let value = args.next().context("--pause-at requires a tick")?;
+            let value = value.to_string_lossy();
+            pause_at = Some(
+                value
+                    .parse()
+                    .with_context(|| format!("invalid --pause-at tick {value:?}"))?,
+            );
+        } else {
+            port = text.parse().with_context(|| {
                 format!("invalid port argument {text:?}: expected 0-65535 (0 = OS-assigned)")
-            })?
+            })?;
         }
-        None => protocol::DEFAULT_PORT,
-    };
+    }
+    Ok((port, pause_at))
+}
+
+fn main() -> anyhow::Result<()> {
+    let (port, pause_at) = parse_args(std::env::args_os().skip(1))?;
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("could not bind 127.0.0.1:{port}"))?;
     println!("listening on 127.0.0.1:{}", listener.local_addr()?.port());
@@ -85,6 +110,16 @@ fn main() -> anyhow::Result<()> {
         .context("could not spawn accept thread")?;
 
     let (command_tx, command_rx) = mpsc::channel();
+    if let Some(tick) = pause_at {
+        // The same scheduled pause a client sends, queued before the first tick is drained.
+        command_tx
+            .send(protocol::Command::SetSpeed {
+                speed: protocol::Speed::Paused,
+                at_tick: Some(tick),
+            })
+            .context("could not queue --pause-at")?;
+        println!("pausing at tick {tick} (--pause-at)");
+    }
     let world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
     tick(world, new_rx, live, command_tx, command_rx)
 }
@@ -144,7 +179,11 @@ fn tick(
                     speed: next,
                     at_tick: Some(target),
                 } => {
-                    if world.tick() >= target {
+                    if world.tick() == target && speed == next {
+                        // Already there -- typically `--pause-at` froze the world on the very
+                        // tick this client asks for. Nothing to apply and nothing to warn about.
+                        scheduled_speed = None;
+                    } else if world.tick() >= target {
                         // LOUD, because the daemon cannot rewind: the caller asked to freeze a
                         // world that is already gone. Silence here is what made the freeze point
                         // read as an instrument noise floor for three stories.
@@ -770,6 +809,27 @@ fn excerpt(line: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pause_at_is_parsed_beside_the_port_and_rejects_garbage() {
+        let parse = |args: &[&str]| super::parse_args(args.iter().map(std::ffi::OsString::from));
+        assert_eq!(parse(&[]).unwrap(), (protocol::DEFAULT_PORT, None));
+        assert_eq!(parse(&["7451"]).unwrap(), (7451, None));
+        assert_eq!(
+            parse(&["7451", "--pause-at", "120"]).unwrap(),
+            (7451, Some(120))
+        );
+        assert_eq!(
+            parse(&["--pause-at", "120"]).unwrap(),
+            (protocol::DEFAULT_PORT, Some(120))
+        );
+        assert!(
+            parse(&["--pause-at"]).is_err(),
+            "a missing tick must not be silently dropped"
+        );
+        assert!(parse(&["--pause-at", "soon"]).is_err());
+        assert!(parse(&["nope"]).is_err());
+    }
+
     use super::*;
 
     #[test]

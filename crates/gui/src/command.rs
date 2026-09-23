@@ -1,6 +1,6 @@
-use std::{collections::VecDeque, net::TcpStream, sync::Mutex};
+use std::{collections::VecDeque, net::TcpStream, sync::Mutex, time::Duration};
 
-use bevy::prelude::{ButtonInput, KeyCode, Res, ResMut, Resource};
+use bevy::prelude::{ButtonInput, KeyCode, Real, Res, ResMut, Resource, Time};
 use protocol::{Command, Speed};
 
 /// The GUI's upstream half of the daemon connection. `TcpStream` is Send but not Sync, so the
@@ -96,15 +96,19 @@ pub struct StaticWorldPause {
     active: bool,
     requested: bool,
     landed_at: Option<u64>,
-    waited_frames: u32,
+    waited: Duration,
 }
 
 /// How long the capture will hold for a pause that never arrives before failing LOUDLY.
 ///
 /// A capture that silently waits forever is indistinguishable from a hung daemon, and this project
-/// has paid for enough instruments that report nothing and look fine. At 160 frames this is
-/// comfortably longer than any observed landing (single digits) and still ends the run.
-const STATIC_WORLD_PAUSE_TIMEOUT_FRAMES: u32 = 600;
+/// has paid for enough instruments that report nothing and look fine.
+///
+/// WALL CLOCK, not frames. The landing waits on the daemon's 10 Hz tick, ~12 s from a fresh
+/// daemon to tick 120, and a frame count only measures that on a slow renderer. It was 600 frames,
+/// calibrated on lavapipe; the vehicle's RTX 4080 ran 600 uncapped headless frames by tick 93 and
+/// refused every `--static-world` capture there.
+const STATIC_WORLD_PAUSE_TIMEOUT: Duration = Duration::from_secs(60);
 
 impl StaticWorldPause {
     pub fn new(active: bool) -> Self {
@@ -117,6 +121,16 @@ impl StaticWorldPause {
     /// True once the DAEMON has confirmed it is paused -- not once we asked.
     pub fn landed(&self) -> bool {
         self.landed_at.is_some()
+    }
+
+    /// A pause that has already landed, for tests of what a frozen world does next.
+    #[cfg(test)]
+    pub(crate) fn landed_at_tick(tick: u64) -> Self {
+        Self {
+            active: true,
+            landed_at: Some(tick),
+            ..Default::default()
+        }
     }
 
     /// The tick the daemon reported it stopped at, once it has.
@@ -183,18 +197,21 @@ pub fn confirm_static_world_pause(
     static_world: Res<StaticWorld>,
     mirror: Res<crate::ingest::MirrorResource>,
     mut state: ResMut<StaticWorldPause>,
+    time: Res<Time<Real>>,
     mut exit: bevy::prelude::MessageWriter<bevy::app::AppExit>,
 ) {
     if !static_world.0 || state.landed_at.is_some() {
         return;
     }
     if mirror.0.speed() != Speed::Paused {
-        state.waited_frames += 1;
-        if state.waited_frames == STATIC_WORLD_PAUSE_TIMEOUT_FRAMES {
+        let before = state.waited;
+        state.waited += time.delta();
+        if before < STATIC_WORLD_PAUSE_TIMEOUT && state.waited >= STATIC_WORLD_PAUSE_TIMEOUT {
             eprintln!(
                 "--static-world: the daemon never reported itself paused within \
-                 {STATIC_WORLD_PAUSE_TIMEOUT_FRAMES} frames (last reported speed {:?}, tick {}); \
+                 {:?} (last reported speed {:?}, tick {}); \
                  refusing to capture a world that may still be moving",
+                STATIC_WORLD_PAUSE_TIMEOUT,
                 mirror.0.speed(),
                 mirror.0.tick()
             );

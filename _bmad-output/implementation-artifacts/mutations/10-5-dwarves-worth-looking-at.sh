@@ -67,7 +67,7 @@ PY
 mutation "the blend arm never updates facing" gui the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops <<'ROW'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = "            if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {\n                transform.rotation = rotation;\n            }\n"
+old = "            if let Some(rotation) = headings.0.get(&marker.0) {\n                transform.rotation = *rotation;\n            }\n"
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 ROW

@@ -62,20 +62,20 @@ PY
 # key-press assertion could discriminate. Both rows reported KILLED and would have reported KILLED
 # even if `effect_controls` ignored the keyboard entirely. A swap stays inside the match, panics
 # nothing, and makes the test notice that F11 now toggles bloom.
-mutation "F11 toggles bloom instead of ambient occlusion" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
+mutation "ambient occlusion takes bloom's key" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Self::AmbientOcclusion => KeyCode::F11,\n'
+old = '            Self::AmbientOcclusion => Some(KeyCode::F7),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Self::AmbientOcclusion => KeyCode::F12,\n'))
+p.write_text(s.replace(old, '            Self::AmbientOcclusion => Some(KeyCode::F6),\n'))
 PY
 
-mutation "F12 toggles ambient occlusion instead of bloom" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
+mutation "bloom takes ambient occlusion's key" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Self::Bloom => KeyCode::F12,\n'
+old = '            Self::Bloom => Some(KeyCode::F6),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Self::Bloom => KeyCode::F11,\n'))
+p.write_text(s.replace(old, '            Self::Bloom => Some(KeyCode::F7),\n'))
 PY
 
 mutation "the effect readout stops recording changed state" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
@@ -144,12 +144,17 @@ new = '    eprintln!("sim RESUMED'
 p.write_text(s.replace(old, new))
 PY
 
-mutation "--fx-off ao leaves AO required prepasses running" gui fx_off_reaches_the_live_camera_and_rejects_unknown_effects <<'PY'
+# RE-POINTED 2026-09-22. This row pinned two unconditional `remove`s inside `apply_effect`'s
+# AO-off arm. 11.2 deleted that seam: depth of field and haze read the DEPTH prepass and declare
+# nothing, so AO-off taking it left them sampling a buffer that no longer existed, and prepass
+# ownership moved to `sync_prepasses`. The row's QUESTION is unchanged -- does "ao off" leave a
+# pass running that nothing samples? -- so it now sabotages the pass AO still solely owns.
+mutation "--fx-off ao leaves the normal prepass running" gui fx_off_reaches_the_live_camera_and_rejects_unknown_effects <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            camera.remove::<DepthPrepass>();\n            camera.remove::<NormalPrepass>();\n'
+old = '    if ambient_occlusion {\n        camera.insert(NormalPrepass);\n    } else {\n        camera.remove::<NormalPrepass>();\n    }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '    camera.insert(NormalPrepass);\n'))
 PY
 
 mutation "--fx-off bloom takes Hdr with it, destroying AC4 control" gui fx_off_reaches_the_live_camera_and_rejects_unknown_effects <<'PY'

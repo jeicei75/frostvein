@@ -293,6 +293,28 @@ impl WalkPhase {
     }
 }
 
+/// Where every dwarf's stride is held once a `--static-world` pause has landed, as a fraction of
+/// one stride.
+///
+/// `WalkPhase` sums the distance DRAWN per frame, so it depends on frame timing: two captures of
+/// the world frozen at the same tick froze each dwarf mid-stride at a different pose, and the
+/// campfire stretched that difference into long shadows across the camp window. Holding one phase
+/// makes the frozen pose a decision, like the frozen tick. NOTE: a quarter stride, not zero,
+/// because zero everywhere is exactly what `drive_dwarf_walk` reports as a stalled walk.
+const STATIC_WORLD_WALK_PHASE: f32 = 0.25;
+
+pub fn hold_walk_phase_in_static_world(
+    pause: Option<Res<crate::command::StaticWorldPause>>,
+    mut phases: Query<&mut WalkPhase>,
+) {
+    if !pause.is_some_and(|pause| pause.landed()) {
+        return;
+    }
+    for mut walk in &mut phases {
+        walk.distance = STATIC_WORLD_WALK_PHASE * DWARF_WALK_STRIDE_METRES;
+    }
+}
+
 /// Scene paths in `TreeVariant` order, served from the `embedded://` source.
 ///
 /// The bytes live in `ingest::TREE_ASSETS`; this is the order `tree_scene` indexes by, and
@@ -2093,8 +2115,41 @@ pub fn drive_dwarf_walk(
 }
 
 /// Applies presentation interpolation to dynamic wire projections only.
+/// Each dwarf's facing, recorded as every delta is applied rather than once per frame.
+///
+/// `Mirror::previous_entity` keeps only the generation before the LATEST delta. When two deltas
+/// land in one frame -- a step, then a stand -- the frame sees no move and the step's facing was
+/// never drawn, so which way a dwarf faced depended on how deltas happened to batch into frames.
+/// Two captures of one frozen world disagreed on three of five dwarves, and the campfire threw
+/// the difference across the camp window of the distance-40 depth-of-field guard.
+#[derive(Resource, Default)]
+pub struct DwarfHeadings(std::collections::BTreeMap<u32, bevy::prelude::Quat>);
+
+impl DwarfHeadings {
+    /// Call after EVERY `apply_delta`, before the next one overwrites the previous generation.
+    pub fn record(&mut self, mirror: &Mirror) {
+        for id in &mirror.changes().despawned {
+            self.0.remove(id);
+        }
+        for &id in &mirror.changes().changed {
+            let Some(entity) = mirror.entities().find(|entity| entity.id == id) else {
+                continue;
+            };
+            let previous = mirror.previous_entity(id).map(|previous| previous.pos);
+            if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {
+                self.0.insert(id, rotation);
+            }
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+}
+
 pub fn blend_entities(
     mirror: &Mirror,
+    headings: &DwarfHeadings,
     clock: &mut TickClock,
     elapsed_seconds: f32,
     projected: &mut Query<
@@ -2151,9 +2206,9 @@ pub fn blend_entities(
             }
             // Rotation is written HERE as well as at the spawn, for the same reason the offset is:
             // this is the sole writer after the spawn frame, so a facing set only at the spawn
-            // would be correct for exactly one frame. `None` means hold what is already there.
-            if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {
-                transform.rotation = rotation;
+            // would be correct for exactly one frame. No heading means hold what is already there.
+            if let Some(rotation) = headings.0.get(&marker.0) {
+                transform.rotation = *rotation;
             }
         } else if let Some(position) = items.get(&marker.0) {
             // Items have no previous wire state; snapping is the only wire-true presentation.
@@ -2906,6 +2961,30 @@ mod tests {
     use protocol::{Dims, MessageType, Snapshot, Speed, Tile};
 
     use super::*;
+
+    /// Once a `--static-world` pause lands, every stride is held at one phase -- and not before,
+    /// or a moving world's dwarves would stop walking.
+    #[test]
+    fn a_landed_static_world_holds_every_stride_at_one_phase() {
+        let mut app = bevy::app::App::new();
+        app.add_systems(bevy::app::Update, hold_walk_phase_in_static_world);
+        let dwarf = app.world_mut().spawn(WalkPhase::default()).id();
+
+        app.update();
+        assert_eq!(
+            app.world().get::<WalkPhase>(dwarf).unwrap().phase(),
+            0.0,
+            "no static world: the stride must stay wherever the walk put it"
+        );
+
+        app.insert_resource(crate::command::StaticWorldPause::landed_at_tick(120));
+        app.update();
+        assert!(
+            (app.world().get::<WalkPhase>(dwarf).unwrap().phase() - STATIC_WORLD_WALK_PHASE).abs()
+                < 1e-6,
+            "a landed pause must hold the stride at the chosen phase"
+        );
+    }
 
     /// The startup report's deadline is a promise about a HUMAN'S wait, so it must hold in
     /// seconds as well as frames. Enforced only in frames, it cost this devpod over three minutes

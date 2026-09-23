@@ -1056,6 +1056,32 @@
     "schema": 2,
     "turns": 936
   },
+  "b357770f-b491-4e0e-bffb-6fbbd5b04a29.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 1847123,
+        "cache_read": 58607301,
+        "input": 888,
+        "output": 168421
+      },
+      "claude-sonnet-5": {
+        "cache_creation": 737948,
+        "cache_read": 23152574,
+        "input": 348,
+        "output": 18702
+      }
+    },
+    "cache_creation": 2585071,
+    "cache_read": 81759875,
+    "input": 1236,
+    "last_ts": "2026-09-23T15:31:36.017Z",
+    "marked_at": null,
+    "output": 187123,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 596
+  },
   "b3b54830-ce3d-41b6-93ca-a7cf19628d78.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -1444,6 +1470,26 @@
     "quota_last": null,
     "schema": 2,
     "turns": 210
+  },
+  "fde9ad3f-6552-43d6-8ae0-fb9e8ff9e019.jsonl": {
+    "by_model": {
+      "claude-opus-5": {
+        "cache_creation": 487081,
+        "cache_read": 24232242,
+        "input": 330,
+        "output": 160297
+      }
+    },
+    "cache_creation": 487081,
+    "cache_read": 24232242,
+    "input": 330,
+    "last_ts": "2026-09-21T06:22:29.529Z",
+    "marked_at": null,
+    "output": 160297,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 165
   },
   "ff39ce5d-1295-4d05-b2cb-ea5124daf950.jsonl": {
     "cache_creation": 465870,
@@ -2716,5 +2762,25 @@
     "quota_last": 47.0,
     "schema": 2,
     "turns": 147
+  },
+  "rollout-2026-09-21T08-12-08-01a0c305-bf35-73c2-b5c6-15dd2f7e25de.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 26393856,
+        "input": 310101,
+        "output": 36214
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 26393856,
+    "input": 310101,
+    "last_ts": "2026-09-21T09:40:08.716Z",
+    "marked_at": null,
+    "output": 36214,
+    "primary_only": false,
+    "quota_last": 25.0,
+    "schema": 2,
+    "turns": 181
   }
 }
