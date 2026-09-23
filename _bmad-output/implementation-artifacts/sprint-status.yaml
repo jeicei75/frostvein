@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-21
+last_updated: 2026-09-23
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2438,7 +2438,7 @@ development_status:
   #   Task 5's card had OVERWRITTEN 11.1a's card, whose own Task 5 is still unchecked; 11.1a's is
   #     restored and 11.1b's now sits at task-5b-vehicle-card.md as the spec always said.
   # STILL OPEN, and only the vehicle can close it: Task 5, AC8 (perf read), AC9 (Wolf's sign-off).
-  11-2-the-miniature: review
+  11-2-the-miniature: done
   #   Created 2026-09-21. BOTH mechanisms probed LIVE on 7442174 and reverted (creation-probe.md):
   #     DepthOfField and VolumetricFog both render under lavapipe -- the epic's unknown is answered.
   #     DepthOfField::default() is a SILENT NO-OP here (coc = 0.09 px at f/1.0); focal_distance =

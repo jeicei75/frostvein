@@ -4,7 +4,7 @@ baseline_commit: 74421747
 
 # Story 11.2: The Miniature
 
-Status: review
+Status: done
 
 ## Story
 
@@ -1062,3 +1062,4 @@ mutation rows, or this record, each fast-tier green. The full gate runs again be
 | 2026-09-23 | Haze "inert on the vehicle GPU" withdrawn: F4 never removed the fog from Bevy's render world (`cf5e008`, seat-confirmed). Capture instruments made vehicle-safe: static-world timeout in wall clock (`53b50d2`), deterministic frozen captures -- snow, walk phase, per-delta facing -- which un-flaked the distance-40 DoF guard (`b5a0e2a`), tick-waiting plain captures (`6743fb1`), `simd --pause-at` (`b09d03a`). `push.sh --fast` for branch pushes (`08f7aee`). Full gate GREEN on `b09d03a`. Vehicle card and README rewritten to the seat's `launch-gui.ps1` form. |
 | 2026-09-23 | AC13 read at the seat by Wolf, fullscreen: **haze on ~60 fps, haze off ~140 fps** (~9.5 ms/frame for the volumetric fog; a small window runs ~140 either way, so the cost is per-pixel). Wolf's ruling: accepted as is, **no optimisation now**. If it is revisited, the first knob is `VolumetricFog::step_count` (default 64). The card's headless AC13 runs could not rank the effects (35% within-run drift, unequal run lengths, 720p) and are superseded by this seat reading. |
 | 2026-09-23 | AC14 signed off by Wolf at the seat. Task 0 controls re-taken on `51b1db3` (same-build floor now 0), Task 5 blur proof re-run, AC16 table 18/18 KILLED after re-pointing the sun-marker row, AC15 empty. `simd` deviation and out-of-epic fixes recorded. Status -> review. |
+| 2026-09-23 | Code review: 4 layers, none timed out. Result: 3 decisions ruled (prepass kept, rationale corrected, #121; haze arcs accepted, #120; AC13 recorded as a deviation), 8 patches applied (`d9f0054`), 11 deferred. The patch pass found 10-5's facing row SURVIVING, a hole `b5a0e2a` opened; fixed in `0eb1207`. 20-row re-kill: all KILLED after that fix. **Full gate GREEN on `0eb1207`, 1664 s at `RUST_TEST_THREADS=2`.** Status -> done. |
