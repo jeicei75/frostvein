@@ -4,11 +4,16 @@ Run each command at boot framing with a fresh daemon, then collect the `--perf-l
 vehicle. The devpod has lavapipe only, so it cannot establish NFR6's 60 fps bar.
 
 ```bash
-./target/release/simd 7501 &
+./target/release/simd 7501 --pause-at 120 &
 ./target/release/gui 7501 --headless --static-world --lights-steady --subdiv 4 --frames 160 \
   --capture _bmad-output/implementation-artifacts/11-2-signoff/vehicle-all.png \
   --perf-log _bmad-output/implementation-artifacts/11-2-signoff/vehicle-all.csv
 ```
+
+**Start `simd` with `--pause-at 120` for every `--static-world` capture** (on the vehicle:
+`simd 7451 --pause-at 120` in WSL). Without it a client started by hand connects after tick 120 and
+the capture is refused. A plain capture (no `--static-world`) now waits for its 100 ticks by itself,
+so `--frames` no longer has to be scaled up on a fast GPU.
 
 Repeat with `--fx-off dof` and `--fx-off haze`, using a new daemon and `vehicle-dof-off` /
 `vehicle-haze-off` filenames. Open the all-effects frame beside both controls.

@@ -28,7 +28,11 @@ get: `export PATH="$HOME/.cargo/bin:$PATH"`.
 ```bash
 cargo run -p simd          # prints: listening on 127.0.0.1:7451
 cargo run -p simd -- 0     # 0 = OS-assigned port, printed on stdout
+cargo run -p simd -- 7451 --pause-at 120   # freeze the world on tick 120 for a gui --static-world capture
 ```
+
+`--pause-at 120` matters when a PERSON starts the client: `gui --static-world` asks for the same
+tick-120 freeze, but only reaches the daemon in time if it connects within ~12 s of `simd` starting.
 
 Then, in another shell, behold it:
 
