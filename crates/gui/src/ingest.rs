@@ -2697,6 +2697,34 @@ mod tests {
         );
     }
 
+    /// The pause timeout is WALL CLOCK. It was 600 frames, which a fast GPU runs through long
+    /// before the daemon's 10 Hz tick reaches 120 -- the vehicle refused every `--static-world`
+    /// capture at tick 93. Many fast frames must not end the run; enough real time must.
+    #[test]
+    fn static_world_pause_timeout_counts_time_not_frames() {
+        let (mut app, _sender, _server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            Duration::from_millis(1),
+        ));
+        for _ in 0..700 {
+            app.update();
+        }
+        assert!(
+            app.should_exit().is_none(),
+            "700 frames in 0.7 s is a fast GPU, not a daemon that failed to pause"
+        );
+
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            Duration::from_secs(60),
+        ));
+        app.update();
+        assert!(
+            app.should_exit().is_some_and(|exit| exit.is_error()),
+            "a pause still unreported after 60 s must fail the run loudly"
+        );
+    }
+
     /// Space must not quietly resume a run that asked for a frozen world.
     ///
     /// `toggle_pause` took no notice of the flag and queued `SetSpeed { Normal }` on any press, so
