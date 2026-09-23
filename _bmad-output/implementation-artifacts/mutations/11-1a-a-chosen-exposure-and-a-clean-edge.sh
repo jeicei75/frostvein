@@ -36,10 +36,11 @@ PY
 # SWAP, not F13: same weak-kill correction as 11.1b's F11/F12 rows. Moving a key to F13 kills
 # via `lighting_readout`'s `unreachable!()` arm, which fires before any key-press assertion can
 # discriminate, so the row would report KILLED even with the key handling gone entirely.
-# RE-POINTED 2026-09-22. FXAA no longer has a seat key at all: bevy_dev_tools owns F1/F2, so dof
-# took F10 from it (see `CameraEffect::key`). The row's question -- does the readout really grade
-# which key drives which effect? -- is unchanged, so it now hands fxaa a key again.
-mutation "FXAA takes back a key and shadows depth of field" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
+# RE-POINTED 2026-09-22. FXAA no longer has a seat key at all: bevy_dev_tools owns F1/F2, and
+# the effects now sit on F4-F7 (see `CameraEffect::key`). The row's question -- does the readout
+# really grade which key drives which effect? -- is unchanged, so it now hands fxaa a key again.
+# RENAMED 2026-09-23 (11.2 code review): the key it takes is F4, the HAZE key, not depth of field.
+mutation "FXAA takes back a key and shadows the haze" gui effect_keys_toggle_the_live_camera_and_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '            Self::Fxaa => None,\n'

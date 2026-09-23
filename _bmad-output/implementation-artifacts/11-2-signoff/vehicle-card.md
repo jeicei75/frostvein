@@ -67,7 +67,9 @@ Questions for Wolf:
 2. **Haze -- RESOLVED 2026-09-23, confirmed at the seat.** It was never the GPU: **F4 could not
    turn the haze off live on any machine.** Bevy 0.19 only ever inserts `VolumetricFog` on the
    render-world camera and clears it only when no light carries `VolumetricLight`, so removing it
-   from the camera left the fog drawing. Both halves of the earlier seat recording had haze ON, which
+   from the camera left the fog drawing. (Code review correction: that cleanup skips our camera,
+   because its `VolumetricFog` is already gone. What turns the haze off is the same branch
+   stripping every `FogVolume`. Full account in `sync_haze_light`'s doc comment.) Both halves of the earlier seat recording had haze ON, which
    is why they measured -0.07 levels apart; a headless `--fx-off haze` pair on the 4080 showed the
    real difference. Fixed in `cf5e008` (F4 now moves the sun's `VolumetricLight` too). Remaining
    judgement for AC14 is the strength -- `FOG_DENSITY_FACTOR` and the ramp -- against the art.

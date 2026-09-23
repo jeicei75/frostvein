@@ -620,6 +620,11 @@ fn haze_lifts_and_softens_the_far_valley_without_swallowing_the_sky() {
         lap_fall >= 0.15,
         "far-ridge contrast must fall >=15%: {lap_fall:.3}"
     );
+    // Non-empty FIRST: 0 == 0 would certify a sky with no stars in it at all.
+    assert!(
+        stars_off > 0,
+        "no stars in the haze-off capture, so there is nothing for the haze to preserve"
+    );
     assert_eq!(
         stars_on, stars_off,
         "haze must leave bright star count unchanged"

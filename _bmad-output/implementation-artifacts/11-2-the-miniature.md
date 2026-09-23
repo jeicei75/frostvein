@@ -945,6 +945,12 @@ frame, so removing only the spawn's copy would have survived. Four rows in other
    "Do NOT touch ... `simd`". AC15 itself does not name `simd`. Wolf approved it explicitly as an
    instrument fix: a hand-started client at the vehicle could not reach the tick-120 freeze. No
    wire or sim change -- it queues the existing `SetSpeed { at_tick }` command at startup.
+   **(Code review correction:)** `b09d03a` ALSO changed the tick loop (`simd/src/main.rs:~182`). A
+   scheduled `SetSpeed` for the tick the world is already on, at the speed it already has, is now
+   dropped without a message; it used to hit the LOUD "already past" warning. That branch has no
+   test and no mutation row. `--pause-at 0` on a daemon still at startup speed misses it and logs
+   "already past" on the exact tick it asked for (Edge Case Hunter, observed live). LOW;
+   nobody pauses at tick 0.
 2. **Out-of-epic work landed on this branch**, all Wolf-approved and driven by the sitting:
    F4 render-world leak (`cf5e008`); static-world determinism (`b5a0e2a`, including
    `ingest::apply_wire_delta`, which the headless tests now share with production); tick-waiting
@@ -954,6 +960,31 @@ frame, so removing only the spawn's copy would have survived. Four rows in other
    is in the seat-recordings section above.
 4. **Earlier record corrected, not rewritten**: "haze inert on the vehicle GPU" is withdrawn in place.
    The fog renders identically on the 4080 headless (+3.93 vs +3.95 levels on lavapipe).
+
+**Added by the 2026-09-23 code review** (the close-out list above did not name these):
+
+5. **Task 3(a)'s asymmetry was reversed** (`07d7bf8`). The spec said AO takes `DepthPrepass` and
+   `NormalPrepass` WITH it. Now AO-off keeps depth whenever DoF or haze is on, and the `fx_off`
+   expectation went from (0,0,1) to (1,0,1). The review found that the premise looks FALSE: Bevy
+   0.19's DoF and fog bind `ViewDepthTexture`, not the prepass. **Wolf ruled 2026-09-23: keep the
+   code, correct the rationale** (done in `sync_prepasses`' doc comment), and settle it in
+   **#121**. The day-2 section's claim that the effects "read the camera's depth prepass" is an
+   unproven premise, not a finding. It follows that AC8's `--fx-off ao` delta may understate AO's
+   cost by a depth pass nothing reads.
+6. **FXAA has no live key** any more (F1/F2 belong to bevy_dev_tools). `--fx-off fxaa` is its only
+   switch.
+7. **The fps overlay is always on** (`67cbcaa`). It has no key, and it is forced off only under
+   `--capture`.
+8. **AC13 is a Wolf-ruled deviation.** The AC asks for `--perf-log` p50 frame times with all effects
+   on and with each new effect off. What exists is Wolf's fullscreen 4K eye reading: haze on
+   ~60 fps, haze off ~140. There is no DoF-off figure and no p50. **Wolf's reason (2026-09-23):**
+   the perf runs were taken in a small window, and in a small window the fps does not change
+   (~140 either way). The cost shows only fullscreen at 4K, so a small-window p50 cannot measure
+   it.
+9. **AC8's star clause sees only the stars that survive DoF.** Both haze captures carry DoF, so
+   `stars>=150` reads 32 vs 32, not the 78 at creation (78 vs 78 with DoF off, per the Feature
+   Auditor). That still meets "unchanged from its control", but the haze's effect on the 46 star
+   cores DoF already softens below 150 is not observed.
 
 **Gate:** full gate GREEN on `b09d03a` (1708 s, `RUST_TEST_THREADS=2`); every later commit is docs,
 mutation rows, or this record, each fast-tier green. The full gate runs again before the PR.
@@ -975,6 +1006,8 @@ mutation rows, or this record, each fast-tier green. The full gate runs again be
   `crates/gui/tests/headless.rs`, `crates/simd/src/main.rs` (deviation 1), `README.md`,
   `scripts/push.sh`, `scripts/launch-gui.ps1`, `_bmad/custom/bmad-{create,dev}-story.toml`,
   mutation rows in `6-1-the-world-moves.sh` and `10-5-dwarves-worth-looking-at.sh`,
+  `11-1a-a-chosen-exposure-and-a-clean-edge.sh` and `11-1b-the-air-has-depth.sh` (re-pointed on
+  2026-09-22 but missing from this list until the code review),
   `11-2-signoff/control-51b1db3-{a,b,c,d}.png` and `all-on-51b1db3.png` (NEW)
 
 ## Change Log

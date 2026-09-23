@@ -246,17 +246,20 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | `--subdiv <n>` | terrain subdivision; defaults to the shipped 4, and the recipes pass it anyway so the frame says what it was |
 | `--static-world` | pause the DAEMON for the whole run. Two captures differ only by what you changed **only if** you also pin the flicker and give each capture its own freshly started `simd` — see the note below |
 | `--lights-steady` | pin emitter flicker to a fixed phase, so a capture pair is comparable |
-| `--fx-off <a,b>` | remove named camera effects: `fxaa`, `ao`, `bloom` |
+| `--fx-off <a,b>` | remove named camera effects: `fxaa`, `ao`, `bloom`, `dof`, `haze` |
 | `--lights-off <a,b>` | switch named light sources off for a measurement |
 | `--perf-log <path>` | write a per-frame CSV |
 | `--version` | print `gui build <sha>` and exit |
 
 **`--static-world` pauses the SIM, and that is not the same as a still frame.** It sends the daemon
-`SetSpeed { Paused }` and holds the capture until the daemon reports itself stopped. Two things it
-does NOT stop, because both run on the client's own wall clock: falling snow (`fall_snow`) and
-emitter flicker (`flicker_projection`) — pass `--lights-steady` for the flicker. And the world
-freezes at whatever tick it had reached when the client connected, so **captures you intend to
-compare must each get a freshly started `simd`**. Measured on `6140ca3`: four captures against
+`SetSpeed { Paused, at_tick: 120 }` and holds the capture until the daemon reports itself stopped
+on tick 120; a daemon that froze on any other tick is refused, not captured. Falling snow
+(`fall_snow`) now holds still too. Emitter flicker (`flicker_projection`) still runs on the
+client's wall clock, so pass `--lights-steady` for that. A client that connects after tick 120
+(about 12 s after `simd` starts) cannot get tick 120 any more, so start the daemon with
+`simd <port> --pause-at 120` whenever a person rather than a script starts the client, and give
+each capture you intend to compare its own freshly started `simd`. The history, measured on
+`6140ca3` when the freeze point still followed the connect tick: four captures against
 fresh daemons froze at tick 40 every time and the camp window's near-white spread was 0.0070 pp;
 five captures sharing one daemon froze 35 ticks apart and spread 0.3619 pp — 52x worse, and past
 the bar story 11.1b's AC1 is measured against. This flag was documented as "freeze the sim" while

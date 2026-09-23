@@ -55,9 +55,9 @@ PY
 mutation "fog stops following the camera" gui fog_follows_the_camera_rig_every_frame <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            update_fog_from_camera,\n            update_dof_from_camera.after(effect_controls),\n            crate::perf::mark_perf_frame_on_key,'
+old = '            update_fog_from_camera,\n            crate::perf::mark_perf_frame_on_key,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            update_dof_from_camera.after(effect_controls),\n            crate::perf::mark_perf_frame_on_key,'))
+p.write_text(s.replace(old, '            crate::perf::mark_perf_frame_on_key,'))
 PY
 
 # RE-POINTED 2026-09-22. The seam is gone: the overlay no longer HAS a toggle. It is simply on,

@@ -62,12 +62,18 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    let id = None::<u32>?;\n'))
 PY
 
+# RE-POINTED 2026-09-23 (11.2 code review): the focus system moved to `PostUpdate`, after
+# transform propagation, where it cannot run before `effect_controls`. The sabotage puts it back in
+# `Update` with no ordering at all, which is the defect this row was written for.
 mutation "re-inserted DoF keeps boot framing for a frame" gui toggling_dof_back_on_focuses_the_live_camera_not_boot_framing <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            update_dof_from_camera.after(effect_controls),\n'
+old = '            update_dof_from_camera.after(TransformSystems::Propagate),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            update_dof_from_camera,\n'))
+s = s.replace(old, '')
+anchor = '            crate::perf::mark_perf_frame_on_key,\n'
+assert s.count(anchor) == 1
+p.write_text(s.replace(anchor, '            update_dof_from_camera,\n' + anchor))
 PY
 
 mutation "ao off takes the depth prepass dof and haze sample" gui turning_ambient_occlusion_off_keeps_the_depth_prepass_dof_and_haze_sample <<'PY'
@@ -152,4 +158,36 @@ p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = '            pause_at = Some(\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            let _ = Some::<u64>(\n'))
+PY
+
+# ADDED by the 2026-09-23 code review. Both focus tests read the camera through `GlobalTransform`
+# on a harness with no `TransformPlugin`, so it sat at the origin and their oracle shared the same
+# frozen position. These two mutants read a camera that never moves; before the fix both survived.
+mutation "dof focuses a selected dwarf from a camera frozen at the origin" gui depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            Some(point) => transform.translation().distance(point),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Some(point) => Vec3::ZERO.distance(point),\n'))
+PY
+
+mutation "dof focuses the aim point from a camera frozen at the origin" gui toggling_dof_back_on_focuses_the_live_camera_not_boot_framing <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            None => dof_focal_distance(transform.translation(), rig),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            None => dof_focal_distance(Vec3::ZERO, rig),\n'))
+PY
+
+# The one-frame lag: focus computed in `Update`, before transform propagation, reads last frame's
+# camera, so the frame a dwarf is selected on is drawn focused where the camera USED to be.
+mutation "dof focus runs before transform propagation again" gui depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            update_dof_from_camera.after(TransformSystems::Propagate),\n'
+assert s.count(old) == 1
+s = s.replace(old, '')
+anchor = '            crate::perf::mark_perf_frame_on_key,\n'
+assert s.count(anchor) == 1
+p.write_text(s.replace(anchor, '            update_dof_from_camera.after(effect_controls),\n' + anchor))
 PY

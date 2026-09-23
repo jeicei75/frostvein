@@ -811,7 +811,6 @@ pub fn client_systems(app: &mut App) {
             effect_controls,
             sync_haze_light.after(effect_controls),
             update_fog_from_camera,
-            update_dof_from_camera.after(effect_controls),
             crate::perf::mark_perf_frame_on_key,
             fall_snow,
             // `Update`, not `Startup`: the tick the pause is SENT at is what makes the frozen
@@ -851,6 +850,10 @@ pub fn client_systems(app: &mut App) {
         PostUpdate,
         (
             apply_scripted_input.after(TransformSystems::Propagate),
+            // After propagation, so focus reads THIS frame's camera. From `Update` it read the
+            // previous frame's `GlobalTransform`: a dwarf click drew one frame focused about 60
+            // units out while the camera already stood about 20 from him.
+            update_dof_from_camera.after(TransformSystems::Propagate),
             update_pick.after(apply_scripted_input),
             sync_hover_highlight.after(update_pick),
             designation_input.after(update_pick),
@@ -1505,8 +1508,8 @@ fn setup_camera(
     // The removal loop stays behind the `--fx-off` check purely to leave the default path as it
     // was: `apply_effect` would rebuild depth of field from BOOT framing over the rig-aware
     // component spawned above. MEASURED 2026-09-22, that is survivable either way --
-    // `update_dof_from_camera` corrects it inside this same first update, so no test that looks
-    // after `app.update()` can tell the two apart, and no frame is drawn wrongly focused.
+    // `update_dof_from_camera` corrects it in `PostUpdate` of this same first update, so no test
+    // that looks after `app.update()` can tell the two apart, and no frame is drawn wrongly focused.
     // `sync_prepasses` always runs: the camera spawns with every effect on, so the prepasses must
     // match whatever set survives this loop rather than rely on AO's `require` to supply them.
     let all_on = EffectsOff::default();
@@ -1720,10 +1723,13 @@ fn apply_effect(
 /// Puts the prepasses on the camera that the currently-enabled effects actually sample.
 ///
 /// The prepasses are SHARED, and only `ScreenSpaceAmbientOcclusion` declares them
-/// (`#[require(DepthPrepass, NormalPrepass)]`). `DepthOfField` and `VolumetricFog` declare nothing
-/// and just read the camera's depth prepass, so letting AO's removal take it left them switched on
-/// and sampling a buffer that no longer existed. Ownership is computed from the whole effect set
-/// here rather than guessed at any one toggle site.
+/// (`#[require(DepthPrepass, NormalPrepass)]`). Depth is kept for `DepthOfField` and
+/// `VolumetricFog` as INSURANCE, not as a proven dependency: in the Bevy 0.19.0 source both bind
+/// `ViewDepthTexture`, the main depth buffer (`dof/mod.rs:766-830`, `volumetric_fog/render.rs:
+/// 285-372`), and neither names a prepass. The seat symptom this was written for turned out to be
+/// the F1/F2 key collision. Until #121 settles it at the seat, `--fx-off ao` still pays for a depth
+/// pass that may be read by nothing, so AC8's AO cost delta may be understated by that pass.
+/// Ownership is computed from the whole effect set here rather than guessed at any one toggle site.
 fn sync_prepasses(
     commands: &mut Commands,
     camera: bevy::prelude::Entity,
@@ -1752,8 +1758,15 @@ fn sync_prepasses(
 /// `extract_volumetric_fog` (`bevy_pbr/src/volumetric_fog/render.rs:240`) only ever INSERTS the
 /// component on the render-world camera, and nothing syncs its removal, so the render world kept
 /// drawing the fog after F4 while the readout said `haze off`. Its one cleanup path fires when no
-/// light carries `VolumetricLight`, so that marker is what the toggle has to move. The marker only
-/// feeds the fog shader; the sun's own lighting and shadows do not read it.
+/// light carries `VolumetricLight`, so that marker is what the toggle has to move.
+///
+/// What that path actually clears matters. It visits only cameras that STILL carry
+/// `VolumetricFog` in the main world, and `apply_effect` has already removed it, so the
+/// render-world camera KEEPS its fog components and pipelines. The fog stops drawing because the
+/// same branch strips every `FogVolume` from the render world, and the fog is drawn only inside a
+/// volume. So F4-off leaves stale render state that `--fx-off haze` never creates. Keep the
+/// `FogVolume` path working; it is what switches the haze off. The marker only feeds the fog
+/// shader; the sun's own lighting and shadows do not read it.
 fn sync_haze_light(
     mut commands: Commands,
     effects_off: Res<EffectsOff>,
@@ -2552,7 +2565,10 @@ mod tests {
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap();
         let mut app = App::new();
-        app.add_plugins(bevy::MinimalPlugins)
+        // `TransformPlugin` because `MinimalPlugins` has none: without it every `GlobalTransform`
+        // stays at the origin, and a test reading the camera's position through it certifies
+        // nothing about where the camera is.
+        app.add_plugins((bevy::MinimalPlugins, bevy::transform::TransformPlugin))
             .init_resource::<bevy::input::ButtonInput<bevy::prelude::KeyCode>>()
             .init_resource::<bevy::input::ButtonInput<bevy::input::mouse::MouseButton>>()
             .init_resource::<bevy::asset::Assets<bevy::prelude::Mesh>>()
@@ -3336,13 +3352,29 @@ mod tests {
         // and it is the point: the first version of this guard listed only the lights, the effects
         // and the perf mark, so it cheerfully accepted haze on F3 -- at the time the fps overlay's
         // toggle key. A guard that knows about only some of the keymap certifies
-        // the rest. Anything added with `just_pressed` belongs here.
+        // the rest. Anything added with `just_pressed` OR held with `pressed` belongs here.
         for (key, site) in [
             (KeyCode::F3, "perf-log frame mark (perf.rs)"),
-            (KeyCode::KeyC, "capture a frame (ingest.rs)"),
+            (KeyCode::KeyC, "print the camera readout (ingest.rs)"),
             (KeyCode::Comma, "slice down (ingest.rs)"),
             (KeyCode::Period, "slice up (ingest.rs)"),
-            (KeyCode::Space, "issue the queued command (command.rs)"),
+            (KeyCode::Space, "pause / resume the sim (command.rs)"),
+            (KeyCode::KeyA, "yaw, held (camera_controls)"),
+            (KeyCode::KeyD, "yaw, held (camera_controls)"),
+            (KeyCode::KeyW, "pitch, held (camera_controls)"),
+            (KeyCode::KeyS, "pitch, held (camera_controls)"),
+            (KeyCode::KeyE, "zoom, held (camera_controls)"),
+            (KeyCode::KeyQ, "zoom, held (camera_controls)"),
+            (
+                KeyCode::ShiftLeft,
+                "rate multiplier / select pan (camera_controls)",
+            ),
+            (
+                KeyCode::ShiftRight,
+                "rate multiplier / select pan (camera_controls)",
+            ),
+            (KeyCode::ControlLeft, "pan multiplier (camera_controls)"),
+            (KeyCode::ControlRight, "pan multiplier (camera_controls)"),
             (
                 KeyCode::Escape,
                 "abort designation / clear selection (designate.rs, pick.rs)",
@@ -3380,8 +3412,8 @@ mod tests {
     /// `apply_effect` built `DepthOfField` from a fresh `CameraRig::new([64, 64, 9])`, so toggling
     /// depth of field off and on again after the operator had moved the camera restored focus to
     /// the BOOT distance rather than the distance to what the camera is now aimed at.
-    /// `update_dof_from_camera` repairs it on the FOLLOWING frame, so the defect renders exactly
-    /// one wrongly-focused frame -- a visible pop at the seat, and invisible to any test that only
+    /// `update_dof_from_camera` then ran in `Update` and repaired it on the FOLLOWING frame, so the
+    /// defect rendered exactly one wrongly-focused frame -- a visible pop at the seat, and invisible to any test that only
     /// counts components, which is what `effect_keys_toggle_the_live_camera_and_readout` does.
     #[test]
     fn toggling_dof_back_on_focuses_the_live_camera_not_boot_framing() {
@@ -3398,12 +3430,22 @@ mod tests {
         }
         app.update();
 
+        // The oracle is the rig's own geometry, not the camera's `GlobalTransform`: this test
+        // must fail if the system reads a camera position that never moved.
         let expected = {
             let world = app.world_mut();
-            let mut rigs = world.query::<(&GlobalTransform, &CameraRig)>();
-            let (transform, rig) = rigs.single(world).expect("one camera rig");
-            super::dof_focal_distance(transform.translation(), rig)
+            let mut rigs = world.query::<&CameraRig>();
+            let rig = rigs.single(world).expect("one camera rig");
+            rig.transform()
+                .translation
+                .distance(super::world_to_render_f32(rig.focus))
         };
+        let boot = super::depth_of_field_for_boot_camera().focal_distance;
+        assert!(
+            (expected - boot).abs() > 5.0,
+            "the zoom must move the focal distance away from boot framing or this test cannot \
+             tell them apart: live {expected}, boot {boot}"
+        );
 
         // `configured_app` runs no input-clearing system, so `just_pressed` is STICKY here: an
         // update with a stale press toggles the effect again. Clear it after every tap, or a
@@ -3688,9 +3730,10 @@ mod tests {
         app.update();
         app.world_mut()
             .insert_resource(crate::pick::SelectedDwarf(Some(2)));
-        for _ in 0..3 {
-            app.update();
-        }
+        // ONE update, on purpose: the frame of the selection is the one that must already be
+        // focused. `frame_selected_dwarf` moves the camera in `Update`, so focus computed before
+        // transform propagation read last frame's camera and drew that frame blurred.
+        app.update();
 
         let dwarf = {
             let world = app.world_mut();
@@ -3702,11 +3745,14 @@ mod tests {
         };
         let (camera, rig_aim, focal) = {
             let world = app.world_mut();
-            let mut q = world.query::<(&GlobalTransform, &CameraRig, &super::DepthOfField)>();
-            let (transform, rig, dof) = q.single(world).expect("one camera");
+            let mut q = world.query::<(&CameraRig, &super::DepthOfField)>();
+            let (rig, dof) = q.single(world).expect("one camera");
+            // The rig's own geometry, not `GlobalTransform`, so a system reading a camera that
+            // never moved cannot agree with it by accident.
+            let camera = rig.transform().translation;
             (
-                transform.translation(),
-                super::dof_focal_distance(transform.translation(), rig),
+                camera,
+                camera.distance(super::world_to_render_f32(rig.focus)),
                 dof.focal_distance,
             )
         };
