@@ -2438,7 +2438,7 @@ development_status:
   #   Task 5's card had OVERWRITTEN 11.1a's card, whose own Task 5 is still unchecked; 11.1a's is
   #     restored and 11.1b's now sits at task-5b-vehicle-card.md as the spec always said.
   # STILL OPEN, and only the vehicle can close it: Task 5, AC8 (perf read), AC9 (Wolf's sign-off).
-  11-2-the-miniature: in-progress
+  11-2-the-miniature: review
   #   Created 2026-09-21. BOTH mechanisms probed LIVE on 7442174 and reverted (creation-probe.md):
   #     DepthOfField and VolumetricFog both render under lavapipe -- the epic's unknown is answered.
   #     DepthOfField::default() is a SILENT NO-OP here (coc = 0.09 px at f/1.0); focal_distance =

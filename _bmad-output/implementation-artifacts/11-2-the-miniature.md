@@ -4,7 +4,7 @@ baseline_commit: 74421747
 
 # Story 11.2: The Miniature
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -199,38 +199,38 @@ from filed frames, and the story tunes neither.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — read the creation probe, then confirm the control on YOUR build** (AC1)
-  - [ ] Read `11-2-signoff/creation-probe.md` end to end. The lavapipe probe the epic asks for as
+- [x] **Task 0 — read the creation probe, then confirm the control on YOUR build** (AC1)
+  - [x] Read `11-2-signoff/creation-probe.md` end to end. The lavapipe probe the epic asks for as
         every story's first task is **already done for both mechanisms** — do not repeat it.
-  - [ ] Take four controls on your own branch point and re-run `sharpness.py`. The floors above are
+  - [x] Take four controls on your own branch point and re-run `sharpness.py`. The floors above are
         for `7442174`; a floor is build-specific ([[delta-needs-a-noise-floor]]). Four minimum.
-- [ ] **Task 1 — depth of field on the camera, with a derived focal distance** (AC1, AC2, AC3, AC5)
-  - [ ] Add `DepthOfField` to the camera tuple at `ingest.rs:1408-1437`, beside `Bloom::default()`.
-  - [ ] Add `update_dof_from_camera`, mirroring `update_fog_from_camera` (`ingest.rs:1877-1882`):
+- [x] **Task 1 — depth of field on the camera, with a derived focal distance** (AC1, AC2, AC3, AC5)
+  - [x] Add `DepthOfField` to the camera tuple at `ingest.rs:1408-1437`, beside `Bloom::default()`.
+  - [x] Add `update_dof_from_camera`, mirroring `update_fog_from_camera` (`ingest.rs:1877-1882`):
         query `(&GlobalTransform, &CameraRig, &mut DepthOfField)` and set
         `focal_distance = transform.translation().distance(world_to_render_f32(rig.focus))`.
         Set the same value at spawn so frame 0 is not focused at the default 10.0.
-  - [ ] `DOF_APERTURE_F_STOPS = 0.05` — **Wolf's ruling, 2026-09-21**; do not move it. Name
+  - [x] `DOF_APERTURE_F_STOPS = 0.05` — **Wolf's ruling, 2026-09-21**; do not move it. Name
         `DOF_MAX_DEPTH` beside it. One line each saying they are non-physical on purpose and why
         (see the trap list), and that the aperture is a ruled value.
-  - [ ] Unit test for AC3 on the derivation, driven from a `CameraRig`, not from a rendered frame.
-- [ ] **Task 2 — the rendered guard, and the RED that proves it** (AC1, AC2, AC5, AC6)
-  - [ ] Port `sharpness.py`'s Laplacian statistic into `crates/gui/tests/pixel_guard.rs` beside the
+  - [x] Unit test for AC3 on the derivation, driven from a `CameraRig`, not from a rendered frame.
+- [x] **Task 2 — the rendered guard, and the RED that proves it** (AC1, AC2, AC5, AC6)
+  - [x] Port `sharpness.py`'s Laplacian statistic into `crates/gui/tests/pixel_guard.rs` beside the
         existing Rec.601 helpers and assert AC1's ratio, AC2's retention and AC5's sky peak.
-  - [ ] Run the deliberate RED in Verification below **before** accepting any green.
-- [ ] **Task 3 — the switches** (AC11, AC12)
-  - [ ] Extend `CameraEffect` (`ingest.rs:157-186`) with `Dof` and `Haze`; keys F7/F8 or the next
+  - [x] Run the deliberate RED in Verification below **before** accepting any green.
+- [x] **Task 3 — the switches** (AC11, AC12)
+  - [x] Extend `CameraEffect` (`ingest.rs:157-186`) with `Dof` and `Haze`; keys F7/F8 or the next
         free pair — check `designate.rs` and `slice.rs` for collisions before choosing.
-  - [ ] Follow 11.1a's **insert/remove** pattern, not an `enabled` flag. `DepthOfField` and
+  - [x] Follow 11.1a's **insert/remove** pattern, not an `enabled` flag. `DepthOfField` and
         `VolumetricFog` have **no `#[require]`s**, so a plain `remove` is correct for both and
         `remove_with_requires` must not be used ([[remove-with-requires-strips-render-sync]]).
-  - [ ] The reaches-the-camera test at `ingest.rs:2577-2620` is the shape to copy.
-  - [ ] **Collapse the two effect sites into one helper** (Wolf ruled 2026-09-21 — this de-duplication
+  - [x] The reaches-the-camera test at `ingest.rs:2577-2620` is the shape to copy.
+  - [x] **Collapse the two effect sites into one helper** (Wolf ruled 2026-09-21 — this de-duplication
         IS in scope). `--fx-off` at spawn (`ingest.rs:1438-1470`) and the live key toggles
         (`ingest.rs:1596-1616`) each hand-write an insert/remove arm per effect; with this story that
         is **five effects across two sites**. One `apply_effect(camera, effect, on)` called by both is
         a second concrete caller, not an abstraction with one.
-  - [ ] **Three asymmetries MUST survive the collapse, and each needs a test that fails if it does
+  - [x] **Three asymmetries MUST survive the collapse, and each needs a test that fails if it does
         not** — they are the whole risk of merging these sites:
         (a) AO takes `DepthPrepass` and `NormalPrepass` WITH it, named explicitly;
         (b) `Bloom` is removed WITHOUT its required `Hdr`, deliberately, so `--fx-off bloom` stays a
@@ -239,44 +239,44 @@ from filed frames, and the story tunes neither.
         `MinimalPlugins` tests pass on a client that cannot draw.
         If the helper cannot express all three without a per-effect branch, keep the branch — a
         helper that flattens them is worse than the duplication it removes.
-- [ ] **Task 4 — volumetric haze** (AC7, AC8, AC9, AC10)
-  - [ ] Build the recipe above as written — it is proved, not proposed. `VolumetricFog` on the
+- [x] **Task 4 — volumetric haze** (AC7, AC8, AC9, AC10)
+  - [x] Build the recipe above as written — it is proved, not proposed. `VolumetricFog` on the
         camera, `VolumetricLight` on the sun (`ingest.rs:1483-1490`, already
         `shadow_maps_enabled: true`), one `FogVolume` as a `ClientLocal` entity.
-  - [ ] `ambient_intensity` is **derived, not hardcoded**: write it as
+  - [x] `ambient_intensity` is **derived, not hardcoded**: write it as
         `0.1 * night_lighting().ambient_brightness / 80.0` with a comment naming Bevy's
         `AmbientLight::default().brightness` (`bevy_light/src/ambient_light.rs:36`) as the 80.0, so
         it follows the ambient constant instead of silently going stale. A mutation row pins it.
-  - [ ] Build the density ramp as a procedural `Image`, following `aurora_gradient_image()`
+  - [x] Build the density ramp as a procedural `Image`, following `aurora_gradient_image()`
         (`atmosphere.rs`). A unit test asserts the ramp is full at the valley floor and zero above
         the fade band — a uniform texture would restore the visible top face and every pixel window
         would still pass.
-  - [ ] Leave `fog_color` at its default. Do **not** set it to the sky colour (see the traps).
-- [ ] **Task 5 — the instrument task** (AC1, AC7, AC8)
-  - [ ] The human-visible instrument for this story is
+  - [x] Leave `fog_color` at its default. Do **not** set it to the sky colour (see the traps).
+- [x] **Task 5 — the instrument task** (AC1, AC7, AC8)
+  - [x] The human-visible instrument for this story is
         `gui <port> --headless --static-world --lights-steady --subdiv 4 --frames 160 --capture <png>`
         read through `sharpness.py`. It exists and is proved both ways; the story's own obligation
         is the **test of the instrument** — `blur_proof.py` must be re-run on this branch's control
         and its table pasted into the Dev Agent Record.
-- [ ] **Task 6 — the tech-art doc rows** (AC5, AC9)
-  - [ ] Add the depth-of-field and haze rows to `docs/tech-art-guidelines.md` beside 11.1's
+- [x] **Task 6 — the tech-art doc rows** (AC5, AC9)
+  - [x] Add the depth-of-field and haze rows to `docs/tech-art-guidelines.md` beside 11.1's
         exposure, AO and bloom rows (`:69-71`), each carrying its measured figure, the aperture
         marked as Wolf's ruling of 2026-09-21, and `ambient_intensity` shown as the derivation
         `0.1 × ambient_brightness / 80` rather than as the number 1.875.
-  - [ ] Add one line to the same doc's edge-treatment section recording that the sky bypasses
+  - [x] Add one line to the same doc's edge-treatment section recording that the sky bypasses
         `Exposure` by three routes and does NOT bypass volumetric fog, citing #113. The doc
         currently says only `Sky materials MUST set fog_enabled: false` (`:211`), which is true
         of `DistanceFog` and irrelevant to the haze this story adds.
-- [ ] **Task 7 — the sitting** (AC13, AC14)
-  - [ ] Write `11-2-signoff/vehicle-card.md` naming the exact commands, the frames to capture and
+- [x] **Task 7 — the sitting** (AC13, AC14)
+  - [x] Write `11-2-signoff/vehicle-card.md` naming the exact commands, the frames to capture and
         the questions Wolf is being asked — the aperture from the bracket above, and the haze
         density against the floor.
-- [ ] **Task 8 — mutations and the gate** (AC15, AC16)
-  - [ ] `mutations/11-2-the-miniature.sh`: at minimum the aperture constant, `max_depth`, the focal
+- [x] **Task 8 — mutations and the gate** (AC15, AC16)
+  - [x] `mutations/11-2-the-miniature.sh`: at minimum the aperture constant, `max_depth`, the focal
         derivation, the fog density and the `VolumetricLight` on the sun.
-  - [ ] Every row `assert s.count(old) == 1`, not `assert old in s` — eleven existing rows carry no
+  - [x] Every row `assert s.count(old) == 1`, not `assert old in s` — eleven existing rows carry no
         count guard and this story does not add a twelfth.
-  - [ ] Run `audit-mutations.py` **after** `cargo fmt`; formatting alone has orphaned six rows.
+  - [x] Run `audit-mutations.py` **after** `cargo fmt`; formatting alone has orphaned six rows.
 
 ## Dev Notes
 
@@ -771,6 +771,92 @@ explicitly the wrong move**: a larger number multiplied by zero is still zero.
 is **180 with dof off and 106 with dof on** -- a 41% blur. That half of the story is doing its job
 on the vehicle.
 
+### Close-out (Claude Opus 5.5, 2026-09-23) -- the sitting, the outstanding evidence, and the deviations
+
+**AC14 -- SIGNED OFF by Wolf at the seat, 2026-09-23:** *"I think we are done now what comes to
+AC14 also.. we will tweak it when we have more content etc but overall already now gui starts to
+look damn cool."* Both halves accepted at their shipped values (f/0.05, `FOG_DENSITY_FACTOR`
+0.015 with the ramp); retuning waits for real content. Frame pair filed:
+`11-2-signoff/all-on-51b1db3.png` beside the controls below.
+
+**AC13 -- READ at the seat by Wolf, fullscreen:** haze on ~60 fps, haze off ~140 fps (a small window
+runs ~140 either way, so the cost is per-pixel). Ruled: accepted, no optimisation now. The card's
+headless `--perf-log` runs were not usable for ranking effects -- frame time drifted ~35% within
+each 2.7-6.8 s run -- and the seat reading supersedes them.
+
+**Task 0 -- four controls on this build, and the floor is now ZERO.** `control-51b1db3-{a,b,c,d}.png`
+(`--fx-off dof,haze`, one fresh `simd --pause-at 120` each), all exit 0, read by `sharpness.py`:
+
+| window | `lap_mean` a = b = c = d | spread | all effects on |
+| --- | ---: | ---: | ---: |
+| `far-ridge` | 13.4970 | **0** | 6.4110 |
+| `camp-focus` | 18.3981 | **0** | 16.1508 |
+| `near-foreground` | 8.2366 | **0** | 4.0617 |
+| `sky-stars` | 2.2697 | **0** | 1.8812 |
+
+At creation the same-build spreads were 0.0083-0.1185. They are zero because `b5a0e2a` removed the
+three timing leaks from a frozen capture (snow, walk phase, per-frame facing); a floor of zero is a
+PROPERTY of this build, not a lucky draw, and two same-build captures are now bit-identical.
+
+**Task 5 -- `blur_proof.py` on this branch's control** (`control-51b1db3-a.png`):
+
+| window | sharp | box r=1 | box r=2 | box r=4 |
+| --- | ---: | ---: | ---: | ---: |
+| `far-ridge` | 13.4970 | 4.1554 | 2.2755 | 1.3204 |
+| `camp-focus` | 18.3981 | 6.1253 | 3.5133 | 1.9127 |
+| `near-foreground` | 8.2366 | 2.7415 | 1.6500 | 1.0054 |
+| `sky-stars` | 2.2697 | 1.0113 | 0.8325 | 0.7391 |
+
+**AC16 -- the full table, 18 rows, run on `51b1db3`:**
+
+```
+a physically plausible aperture silently disables miniature blur KILLED
+infinite DoF depth erases the star cores                     KILLED
+focus returns to the rig orbit radius instead of the aim point KILLED
+haze returns to Bevy daylight density                        KILLED
+sun stops participating in the volumetric pass               KILLED
+fog ambient stops following the night ambient budget         KILLED
+a selected dwarf stops being the focal subject               KILLED
+re-inserted DoF keeps boot framing for a frame               KILLED
+ao off takes the depth prepass dof and haze sample           KILLED
+an effect sits on a key bevy_dev_tools already binds         KILLED
+two controls of ours land on one key                         KILLED
+F4 leaves the sun volumetric, so the fog never leaves the render world KILLED
+a frozen world lets its snow fall on the wall clock          KILLED
+a frozen world leaves each stride where frame timing put it  KILLED
+facing is read once per frame, so a batched step never turns the dwarf KILLED
+the static-world pause timeout counts frames again           KILLED
+a plain capture fires on its frames with its ticks still missing KILLED
+simd drops --pause-at on the floor                           KILLED
+
+All mutations killed.
+```
+
+"sun stops participating" was RE-POINTED first: `sync_haze_light` re-inserts `VolumetricLight` every
+frame, so removing only the spawn's copy would have survived. Four rows in other stories' tables
+(6-1 x3, 10-5 x1) were re-pointed at moved seams and shown to KILL.
+
+**AC15** -- `git diff 7442174..HEAD --stat` on `crates/protocol`, `crates/sim-core` and
+`crates/client-core` is empty (checked 2026-09-23).
+
+**DEVIATIONS the review must see:**
+1. **`crates/simd` was touched** (`b09d03a`, `simd --pause-at`), against the Dev Notes guardrail
+   "Do NOT touch ... `simd`". AC15 itself does not name `simd`. Wolf approved it explicitly as an
+   instrument fix: a hand-started client at the vehicle could not reach the tick-120 freeze. No
+   wire or sim change -- it queues the existing `SetSpeed { at_tick }` command at startup.
+2. **Out-of-epic work landed on this branch**, all Wolf-approved and driven by the sitting:
+   F4 render-world leak (`cf5e008`); static-world determinism (`b5a0e2a`, including
+   `ingest::apply_wire_delta`, which the headless tests now share with production); tick-waiting
+   captures (`6743fb1`); wall-clock pause timeout (`53b50d2`); `push.sh --fast` (`08f7aee`); vehicle
+   docs and create/dev-story overrides in the `launch-gui.ps1` form (`e2fa878`).
+3. **Keys differ from Task 3's F7/F8 suggestion**: effects are F4-F7, lights F8-F12 -- the reasoning
+   is in the seat-recordings section above.
+4. **Earlier record corrected, not rewritten**: "haze inert on the vehicle GPU" is withdrawn in place.
+   The fog renders identically on the 4080 headless (+3.93 vs +3.95 levels on lavapipe).
+
+**Gate:** full gate GREEN on `b09d03a` (1708 s, `RUST_TEST_THREADS=2`); every later commit is docs,
+mutation rows, or this record, each fast-tier green. The full gate runs again before the PR.
+
 ### File List
 
 
@@ -784,6 +870,11 @@ on the vehicle.
 - `crates/gui/src/pick.rs` (orchestrator: `DrawnEntities` widened to `pub(crate)` for reuse)
 - `_bmad-output/implementation-artifacts/11-2-signoff/seam-check-6194756-all-on.png` (NEW)
 - `_bmad-output/implementation-artifacts/11-2-signoff/seam-check-6194756-haze-off.png` (NEW)
+- 2026-09-23 close-out: `crates/gui/src/{atmosphere,capture,command,project}.rs`,
+  `crates/gui/tests/headless.rs`, `crates/simd/src/main.rs` (deviation 1), `README.md`,
+  `scripts/push.sh`, `scripts/launch-gui.ps1`, `_bmad/custom/bmad-{create,dev}-story.toml`,
+  mutation rows in `6-1-the-world-moves.sh` and `10-5-dwarves-worth-looking-at.sh`,
+  `11-2-signoff/control-51b1db3-{a,b,c,d}.png` and `all-on-51b1db3.png` (NEW)
 
 ## Change Log
 
@@ -797,3 +888,4 @@ on the vehicle.
 | 2026-09-22 | Seat recordings: F1/F2 were bevy_dev_tools' debug-overlay keys, which is the entire toggle symptom -- dof -> F10, haze -> F3, fxaa unbound, collision guard added. Haze measured INERT on the vehicle GPU (-0.07 levels) while moving +3.96 on lavapipe; my "faint" reading came from a control window blind to the effect and is withdrawn. |
 | 2026-09-23 | Haze "inert on the vehicle GPU" withdrawn: F4 never removed the fog from Bevy's render world (`cf5e008`, seat-confirmed). Capture instruments made vehicle-safe: static-world timeout in wall clock (`53b50d2`), deterministic frozen captures -- snow, walk phase, per-delta facing -- which un-flaked the distance-40 DoF guard (`b5a0e2a`), tick-waiting plain captures (`6743fb1`), `simd --pause-at` (`b09d03a`). `push.sh --fast` for branch pushes (`08f7aee`). Full gate GREEN on `b09d03a`. Vehicle card and README rewritten to the seat's `launch-gui.ps1` form. |
 | 2026-09-23 | AC13 read at the seat by Wolf, fullscreen: **haze on ~60 fps, haze off ~140 fps** (~9.5 ms/frame for the volumetric fog; a small window runs ~140 either way, so the cost is per-pixel). Wolf's ruling: accepted as is, **no optimisation now**. If it is revisited, the first knob is `VolumetricFog::step_count` (default 64). The card's headless AC13 runs could not rank the effects (35% within-run drift, unequal run lengths, 720p) and are superseded by this seat reading. |
+| 2026-09-23 | AC14 signed off by Wolf at the seat. Task 0 controls re-taken on `51b1db3` (same-build floor now 0), Task 5 blur proof re-run, AC16 table 18/18 KILLED after re-pointing the sun-marker row, AC15 empty. `simd` deviation and out-of-epic fixes recorded. Status -> review. |
