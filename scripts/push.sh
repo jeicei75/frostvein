@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Gate, push, and VERIFY the remote actually moved.
 #
-#   scripts/push.sh              # gate, then push the current branch
+#   scripts/push.sh              # full gate, then push the current branch
+#   scripts/push.sh --fast       # fast tier only -- the default for branch pushes (see below)
 #   scripts/push.sh --no-gate    # skip the gate (say why; it prints a warning)
 #
 # WHY THIS EXISTS — issue #76. `.githooks/pre-push` runs the full gate, which is 350-450s. Git
@@ -25,13 +26,20 @@
 # in the README's one-time setup beside `core.hooksPath`. It cannot be committed into the repo —
 # git deliberately does not let a fetched repository dictate the client's ssh options.
 
+# BRANCH PUSHES USE --fast (Wolf, 2026-09-23). The full gate is 30-40 min at the thread count
+# that does not OOM, and a vehicle build cannot wait that long. The FULL gate is required when a
+# PR is created and before it is merged, and before a story is called done.
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 
 run_gate=1
+gate_args=()
 if [ "${1:-}" = "--no-gate" ]; then
   run_gate=0
+  shift
+elif [ "${1:-}" = "--fast" ]; then
+  gate_args=(--fast)
   shift
 fi
 
@@ -43,7 +51,7 @@ fi
 local_sha=$(git rev-parse HEAD)
 
 if [ "$run_gate" -eq 1 ]; then
-  if ! scripts/gate.sh; then
+  if ! scripts/gate.sh "${gate_args[@]}"; then
     echo "push.sh: gate is RED — nothing pushed" >&2
     exit 1
   fi
