@@ -63,3 +63,7 @@ src-assets/export/
 
 # Round 13 per-operation viewport screenshots: the timelapse is the deliverable, not the frames.
 src-assets/renders/*/live/
+
+# Transient per-session phase declaration for the SessionEnd metric hook (phase_state.py).
+# Durable ledger state (.session-cursors.json) IS tracked; this file only lives for one session.
+_bmad-output/implementation-artifacts/metrics/.active-phase.json

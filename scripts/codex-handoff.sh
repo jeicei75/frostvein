@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch Codex (GPT-5.x) non-interactively on a BMAD story handoff.
+# Launch Codex non-interactively on a BMAD story handoff, on the model pinned below.
 #
 # WHY THIS EXISTS: Codex's auth/config live in the workspace-local CODEX_HOME
 # (/workspace/.codex), NOT the default ~/.codex. Without CODEX_HOME set, `codex
@@ -54,18 +54,54 @@ PROMPT="${1:?prompt file required (handoff instructions, read from stdin by code
 RUNLOG="${2:-/tmp/codex-run.log}"
 LASTMSG="${3:-/tmp/codex-last.txt}"
 
+ROOT=/workspace/projects/frostvein
+
+# THE MODEL IS PINNED HERE, not in $CODEX_HOME/config.toml (forge-process 1.8.0, hand-merged).
+# That file is gitignored and per-pod, so the dev model used to live in no tracked file: stable
+# only because nobody touched it, invisible to review, and a Codex TUI `/model` pick saved to that
+# home would have silently changed every later handoff. frostvein paid for exactly that: the
+# model/effort silently drifted between runs (memory codex-delegation-runbook). A `-c` flag
+# outranks config.toml, so this script is now the authority and a model change is a commit.
+# gpt-6-sol since 2026-09-23 (Wolf: the GPT-6 line has no Terra); gpt-5.6-terra before.
+# Its price row is `gpt-6-sol` in _bmad/scripts/session_tokens.py; move both together.
+CODEX_MODEL="gpt-6-sol"
+CODEX_EFFORT="high"
+
+# Codex resolves AGENTS.md upward from its working root and does NOT read CLAUDE.md. frostvein's
+# AGENTS.md is its OWN Codex-facing rules file (not a copy of CLAUDE.md, so the forge's
+# must-be-a-symlink check does not apply here). Without it Codex walks up and reads the forge's
+# generic rules instead; frostvein ran three whole stories that way. Warn loudly rather than fail.
+if [ ! -f "$ROOT/AGENTS.md" ]; then
+  echo "WARNING: no AGENTS.md at $ROOT — Codex will resolve one from a PARENT directory" >&2
+  echo "         and never see frostvein's rules." >&2
+fi
+
 CODEX_HOME=/workspace/.codex codex exec \
   -s workspace-write \
+  -c model="$CODEX_MODEL" \
+  -c model_reasoning_effort="$CODEX_EFFORT" \
   -c approval_policy="never" \
-  -c 'sandbox_workspace_write.writable_roots=["/workspace/projects/frostvein/.git","/workspace/.codex"]' \
+  -c "sandbox_workspace_write.writable_roots=[\"$ROOT/.git\",\"/workspace/.codex\"]" \
   -c sandbox_workspace_write.network_access=true \
-  -C /workspace/projects/frostvein \
+  -C "$ROOT" \
   -o "$LASTMSG" \
   - < "$PROMPT" > "$RUNLOG" 2>&1
 rc=$?
 
-echo "codex exit: $rc  (last message -> $LASTMSG, full log -> $RUNLOG)"
-if grep -q '401\|Missing bearer' "$RUNLOG" 2>/dev/null; then
-  echo "WARNING: 401 in log — check CODEX_HOME/auth (codex login status with CODEX_HOME=/workspace/.codex)" >&2
+echo "codex exit: $rc  (model $CODEX_MODEL/$CODEX_EFFORT; last message -> $LASTMSG, full log -> $RUNLOG)"
+# forge gh-100: anchor to how the error ARRIVES, never a bare `401`. The old guard matched the
+# number anywhere, including inside prompt text Codex echoes back, so clean runs were told to go
+# check `codex login status`. Not restricted to the log tail: auth fails on the FIRST request.
+# KNOWN OPEN upstream (gh-100): `Missing bearer` is still a bare substring and the dev-story
+# handoff prompt echoes that phrase, so this can still false-fire. Wolf's ruling (2026-09-17):
+# capture a real 401 live, commit it as a fixture, THEN anchor to the observed shape.
+if grep -qE '401 Unauthorized|Missing bearer' "$RUNLOG" 2>/dev/null; then
+  echo "WARNING: 401 Unauthorized in log — check CODEX_HOME/auth (codex login status with CODEX_HOME=/workspace/.codex)" >&2
+fi
+# Independent `if`, not an `elif`: auth and quota are separate facts about one run, and an `elif`
+# let the over-firing auth guard SHADOW the quota message on exactly the runs that need it.
+# frostvein's own quota deaths left NO last-msg file (memory codex-quota-exhaustion-8-2).
+if grep -qE "hit your usage limit" "$RUNLOG" 2>/dev/null; then
+  echo "WARNING: Codex stopped on its USAGE LIMIT, not an auth failure — the weekly pool is shared with the forge. The log names the reset time." >&2
 fi
 exit "$rc"

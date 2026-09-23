@@ -545,6 +545,20 @@ class PricingTests(unittest.TestCase):
         # Hand-written literals on purpose — never assert PRICES against itself.
         self.assertEqual(st.PRICES["opus"], {"input": 5.0, "cache_write": 6.25, "cache_read": 0.50, "output": 25.0})
         self.assertEqual(st.PRICES["fable"], {"input": 10.0, "cache_write": 12.50, "cache_read": 1.0, "output": 50.0})
+        self.assertEqual(st.PRICES["opus-5-5"], {"input": 4.0, "cache_write": 5.0, "cache_read": 0.20, "output": 20.0})
+        self.assertEqual(st.PRICES["gpt-6-sol"], {"input": 2.0, "cache_write": 2.50, "cache_read": 0.20, "output": 10.0})
+        self.assertEqual(st.PRICES["gpt-6-luna"], {"input": 0.10, "cache_write": 0.125, "cache_read": 0.01, "output": 0.50})
+        self.assertEqual(st.PRICES["gpt-6-astra"], {"input": 10.0, "cache_write": 12.50, "cache_read": 1.0, "output": 50.0})
+
+    def test_a_new_model_name_bills_at_its_own_row_not_a_broader_one(self):
+        # ORDER MATTERS: "opus" also matches `claude-opus-5-5` and billed it at $5/$25 until
+        # the specific row existed. The real model ids as the transcripts write them:
+        # Claude Code records `claude-opus-5-5`; Codex's catalog slugs are `gpt-6-sol`/`-luna`.
+        self.assertIs(st._rates_for(["claude-opus-5-5"]), st.PRICES["opus-5-5"])
+        self.assertIs(st._rates_for(["claude-opus-5"]), st.PRICES["opus"])
+        self.assertIs(st._rates_for(["gpt-6-sol"]), st.PRICES["gpt-6-sol"])
+        self.assertIs(st._rates_for(["gpt-6-luna"]), st.PRICES["gpt-6-luna"])
+        self.assertIs(st._rates_for(["gpt-6-astra"]), st.PRICES["gpt-6-astra"])
 
 
 class ClaudeParsingTests(unittest.TestCase):

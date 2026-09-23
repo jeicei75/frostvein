@@ -103,9 +103,25 @@ PRICES: dict[str, dict[str, float]] = {
     # 4.1-era $15/$75, so every review figure recorded before 2026-08-01 (e.g. the
     # us-02 review's $81.60) is OVER-stated ~3x. Historical rows are NOT
     # retro-corrected — read them as old-opus-rate equivalents.
+    # Claude Opus 5.5 (the orchestrator/review model from 2026-09-23): $4 in / $20 out,
+    # cache read $0.20, cache write at the 5m 1.25x rate. It sits ABOVE "opus", which
+    # also matches `claude-opus-5-5` and billed it at $5/$25 until this row existed, so
+    # Opus 5.5 rows recorded before it are ~25% OVER-stated. Not retro-corrected.
+    "opus-5-5": {"input": 4.0, "cache_write": 5.0, "cache_read": 0.20, "output": 20.0},
     "opus": {"input": 5.0, "cache_write": 6.25, "cache_read": 0.50, "output": 25.0},
     "sonnet": {"input": 3.0, "cache_write": 3.75, "cache_read": 0.30, "output": 15.0},
     "haiku": {"input": 1.0, "cache_write": 1.25, "cache_read": 0.10, "output": 5.0},
+    # GPT-6 (Codex upgrade, 2026-09-23; no Terra in this line, so 6-sol is the dev model
+    # to try). OpenAI's published Standard short-context rates, read 2026-09-23
+    # (developers.openai.com/api/docs/pricing): Sol $2 in / $0.20 cached / $10 out; Luna
+    # $0.10 / $0.01 / $0.50; Astra $10 / $1 / $50. Cache write at 1.25x input per file convention (OpenAI charges
+    # no separate write fee, so this is a ceiling). Long-context requests bill at the
+    # page's higher long-context rates (~2x); that is NOT modeled, so a long-context
+    # session is UNDER-stated. A `gpt-6-*` model with no row here matches NO key.
+    "gpt-6-sol": {"input": 2.0, "cache_write": 2.50, "cache_read": 0.20, "output": 10.0},
+    "gpt-6-luna": {"input": 0.10, "cache_write": 0.125, "cache_read": 0.01, "output": 0.50},
+    # Astra, the top of the line ($10 / $1 cached / $50), carried in case a run uses it.
+    "gpt-6-astra": {"input": 10.0, "cache_write": 12.50, "cache_read": 1.0, "output": 50.0},
     # gpt-5.6 Sol (Codex dev model 2026-08-01 .. 2026-08-28): $5 in / $30 out, cache read
     # at a 90% discount and cache writes at 1.25x input.
     "gpt-5.6-sol": {"input": 5.0, "cache_write": 6.25, "cache_read": 0.50, "output": 30.0},
