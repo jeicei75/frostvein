@@ -1,22 +1,37 @@
 # Story 11.2 vehicle card — The Miniature
 
-Run each command at boot framing with a fresh daemon, then collect the `--perf-log` CSV p50 on the
-vehicle. The devpod has lavapipe only, so it cannot establish NFR6's 60 fps bar.
+Launch the way the seat always does -- `simd` in WSL, the client through `launch-gui.ps1` from the
+Windows checkout in PowerShell (see the README's *At the vehicle* section). The devpod has lavapipe
+only, so it cannot establish NFR6's 60 fps bar; these runs are vehicle-only.
 
-```bash
-./target/release/simd 7501 --pause-at 120 &
-./target/release/gui 7501 --headless --static-world --lights-steady --subdiv 4 --frames 160 \
-  --capture _bmad-output/implementation-artifacts/11-2-signoff/vehicle-all.png \
-  --perf-log _bmad-output/implementation-artifacts/11-2-signoff/vehicle-all.csv
+**The seat itself** (live toggles, the eye check for AC14):
+
+```powershell
+# WSL
+simd 7451
+# PowerShell
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')
 ```
 
-**Start `simd` with `--pause-at 120` for every `--static-world` capture** (on the vehicle:
-`simd 7451 --pause-at 120` in WSL). Without it a client started by hand connects after tick 120 and
-the capture is refused. A plain capture (no `--static-world`) now waits for its 100 ticks by itself,
-so `--frames` no longer has to be scaled up on a fast GPU.
+**AC13 -- frame times.** Boot framing, one run per configuration, each with a FRESH `simd 7451
+--pause-at 120` (restart it before every run), output under `.bin\` so the checkout stays clean:
 
-Repeat with `--fx-off dof` and `--fx-off haze`, using a new daemon and `vehicle-dof-off` /
-`vehicle-haze-off` filenames. Open the all-effects frame beside both controls.
+```powershell
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--headless','--static-world','--lights-steady','--frames','160','--capture','D:\Workspace\frostvein\.bin\vehicle-all.png','--perf-log','D:\Workspace\frostvein\.bin\vehicle-all.csv')
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--headless','--static-world','--lights-steady','--frames','160','--fx-off','dof','--capture','D:\Workspace\frostvein\.bin\vehicle-dof-off.png','--perf-log','D:\Workspace\frostvein\.bin\vehicle-dof-off.csv')
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--headless','--static-world','--lights-steady','--frames','160','--fx-off','haze','--capture','D:\Workspace\frostvein\.bin\vehicle-haze-off.png','--perf-log','D:\Workspace\frostvein\.bin\vehicle-haze-off.csv')
+```
+
+Read each CSV with `python3 scripts/bench/perf_summary.py <csv>` and open the all-effects frame
+beside both controls. **A headless frame time is not the seat's**: to judge the ~60 fps Wolf saw at
+the seat, also take a WINDOWED `--perf-log` run (the seat launch plus `'--perf-log','...csv'`, pressing F4
+mid-run for a haze-off stretch and F3 to mark it). Compare like with like: the windowed run carries
+the always-on fps overlay and its frame-time graph, which are not free, while the headless runs
+above do not (`--capture` forces the overlay off). Do not score the overlay's cost as 11.2's.
+
+`--pause-at 120` is what lets a hand-started client still freeze on tick 120; without it the
+capture is refused (`asked to freeze at tick 120 but the daemon stopped at ...`). `--frames` does
+not need scaling on the 4080 -- the capture waits for its ticks.
 
 Live toggles at the seat, in key order: **F4 haze, F5 dof, F6 bloom, F7 ao**, then
 **F8 sun, F9 ambient, F10 campfire, F11 torches, F12 lanterns**. The readout prints them in that
@@ -42,20 +57,20 @@ Now:
 | *(none)* | fxaa — `--fx-off fxaa` only |
 
 A separate prepass defect was also fixed: dof and haze read the depth prepass but declare it
-nowhere, and only AO did, so turning **F11** off used to pull the depth buffer out from under both.
-F11 is now safe to cycle in any order.
+nowhere, and only AO did, so turning AO off (then on F11, now **F7**) used to pull the depth
+buffer out from under both. It is now safe to cycle in any order.
 
 Questions for Wolf:
 
 1. Does f/0.05 make the far valley soften while the camp remains the focus plane? If not, choose
    a new value only inside the measured 0.02–0.10 bracket and record it with the pair.
-2. **THE OPEN ONE -- and it is now a DEFECT, not a tuning question.** Measured inside Wolf's own
-   seat recording (static camera, 9 frames averaged per state, overlay disabled at the time), the
-   haze toggles from on to off and the frame moves **-0.07 levels** -- smaller than the
-   frame-to-frame noise in either state, and flat across every row of the frame. On the devpod
-   (lavapipe) the same toggle moves the whole frame **+3.96 levels** and lifts the mid-distance by
-   about **+10**. **The volumetric fog does nothing at all on the vehicle's GPU.** Do not tune
-   `FOG_DENSITY_FACTOR` against this -- a stronger value multiplied by zero is still zero. What is
-   needed first is why the fog renders here and not there.
+2. **Haze -- RESOLVED 2026-09-23, confirmed at the seat.** It was never the GPU: **F4 could not
+   turn the haze off live on any machine.** Bevy 0.19 only ever inserts `VolumetricFog` on the
+   render-world camera and clears it only when no light carries `VolumetricLight`, so removing it
+   from the camera left the fog drawing. Both halves of the earlier seat recording had haze ON, which
+   is why they measured -0.07 levels apart; a headless `--fx-off haze` pair on the 4080 showed the
+   real difference. Fixed in `cf5e008` (F4 now moves the sun's `VolumetricLight` too). Remaining
+   judgement for AC14 is the strength -- `FOG_DENSITY_FACTOR` and the ramp -- against the art.
+   Wolf's seat note: haze + the sun's volumetric light is the heaviest effect; read that in AC13.
 
 3. Record p50 frame times for all effects, DoF off, and haze off; re-read NFR6's 60 fps bar.

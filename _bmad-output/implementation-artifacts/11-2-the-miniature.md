@@ -740,6 +740,12 @@ The keymap still wants the rethink in #118.
 
 **2. THE HAZE DOES NOTHING ON THE VEHICLE'S GPU. Wolf was right and my "faint" reading was wrong.**
 
+> **CORRECTED 2026-09-23 -- the conclusion below is WRONG; the measurement is not.** It was never
+> the GPU. **F4 could not turn the haze off live on any machine**: Bevy 0.19 only inserts
+> `VolumetricFog` on the render-world camera and clears it only when no light is volumetric, so
+> both halves of this recording had haze ON. A headless `--fx-off haze` pair on the 4080 showed the
+> real difference. Fixed in `cf5e008`; Wolf confirmed F4 at the seat. Kept below as the record.
+
 Measured inside his first recording, static camera, 9 frames averaged per state, HUD rows excluded,
 during a window where the debug overlay was still disabled (its first event is the F1 press that
 follows):
@@ -789,3 +795,4 @@ on the vehicle.
 | 2026-09-21 | Orchestrator verification: F13/F14 → F1/F2 (unreachable keys, #118); #119 re-attributed to haze by measurement, DoF exonerated, LL stable at 91 spread 0; AC8 eye check done, no seam; Wolf's selected-dwarf focus defect fixed and mutation-killed; toggle symptom not reproduced. |
 | 2026-09-22 | Wolf's toggle symptom reproduced and root-caused: DoF and haze silently borrowed AO's depth prepass, which AO-off removed. Fixed by `sync_prepasses`, RED first. #119 ruled by Wolf and applied as a re-baseline, the control splitting into LL 91 / LR 93. Haze strength left untouched pending a seat re-check on the fixed build. |
 | 2026-09-22 | Seat recordings: F1/F2 were bevy_dev_tools' debug-overlay keys, which is the entire toggle symptom -- dof -> F10, haze -> F3, fxaa unbound, collision guard added. Haze measured INERT on the vehicle GPU (-0.07 levels) while moving +3.96 on lavapipe; my "faint" reading came from a control window blind to the effect and is withdrawn. |
+| 2026-09-23 | Haze "inert on the vehicle GPU" withdrawn: F4 never removed the fog from Bevy's render world (`cf5e008`, seat-confirmed). Capture instruments made vehicle-safe: static-world timeout in wall clock (`53b50d2`), deterministic frozen captures -- snow, walk phase, per-delta facing -- which un-flaked the distance-40 DoF guard (`b5a0e2a`), tick-waiting plain captures (`6743fb1`), `simd --pause-at` (`b09d03a`). `push.sh --fast` for branch pushes (`08f7aee`). Full gate GREEN on `b09d03a`. Vehicle card and README rewritten to the seat's `launch-gui.ps1` form. |

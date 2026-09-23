@@ -144,6 +144,39 @@ Windows vehicle, and there `scripts/launch-gui.ps1` is the way in: it refuses to
 whose compiled-in `gui build <sha>` stamp is not the checkout's HEAD, which is the only thing that
 has ever reliably caught a stale binary.
 
+### At the vehicle — how the seat is actually launched
+
+The daemon runs in WSL; the client runs from the Windows checkout (`D:\Workspace\frostvein`) in
+PowerShell. **This is the canonical seat launch, and every story's vehicle card writes its commands
+in this form:**
+
+```powershell
+# WSL
+simd 7451
+
+# PowerShell, from the Windows checkout
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')
+```
+
+The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, and passes the port
+(7451) and `--assets` itself. **Extra client flags go into the same array**, after `--subdiv 4`:
+
+```powershell
+# a frame-time log for NFR6 (read it with: python3 scripts/bench/perf_summary.py <csv>)
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\run.csv')
+
+# a headless capture of a FROZEN world -- restart simd as `simd 7451 --pause-at 120` first,
+# once per capture, or a client started by hand connects after tick 120 and is refused
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--headless','--static-world','--lights-steady','--frames','160','--capture','D:\Workspace\frostvein\.bin\all.png')
+```
+
+- **Write captures and logs under `.bin\`** with an absolute path. It is gitignored, so the checkout
+  stays clean and the launcher can still say the served tree is exactly HEAD.
+- **One fresh `simd` per `--static-world` capture**, started with `--pause-at 120`.
+- `--frames` does not need scaling up on a fast GPU any more: the capture waits for its ticks.
+- Never write a vehicle step as `./target/release/gui ...` or a bare `gui.exe` — that skips the
+  stamp check this launcher exists for.
+
 ### Controls
 
 | Keys | What it does |
