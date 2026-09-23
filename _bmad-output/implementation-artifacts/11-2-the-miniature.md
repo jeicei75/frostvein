@@ -319,37 +319,37 @@ names the layer that raised the finding and its severity.
   - **RULED (Wolf, 2026-09-23): record it as a deviation.** Wolf's reason: the perf runs used
     a small window, and in a small window the fps does not change (~140 either way). The cost
     only shows fullscreen at 4K, where it was read by eye. The DEVIATIONS patch item carries it.
-- [ ] [Review][Patch] **The DoF focus tests cannot see the camera's position** [blind MED, verified by running it] [crates/gui/src/ingest.rs:3387, :3669]
+- [x] [Review][Patch] **The DoF focus tests cannot see the camera's position** [blind MED, verified by running it] [crates/gui/src/ingest.rs:3387, :3669]
   - `configured_app` adds only `MinimalPlugins`, with no `TransformPlugin`, so `GlobalTransform`
     stays at the origin. A standalone Bevy 0.19 program run by the Blind Hunter showed this.
   - The oracle calls the same `dof_focal_distance` with the same frozen translation. So the zoom
     and orbit that AC3 names cannot move the expected value.
   - Fix: propagate transforms in those tests, then RE-MUTATE the focal-derivation rows.
-- [ ] [Review][Patch] **DoF focus runs one frame behind the camera** [blind MED + feature LOW] [crates/gui/src/ingest.rs:814, :2116]
+- [x] [Review][Patch] **DoF focus runs one frame behind the camera** [blind MED + feature LOW] [crates/gui/src/ingest.rs:814, :2116]
   - `update_dof_from_camera` reads `GlobalTransform` in `Update`, before propagation. On a dwarf
     click, focus reads ~60 while the camera sits ~20 from the dwarf.
   - Fix: run it in `PostUpdate` after `TransformSystems::Propagate`.
-- [ ] [Review][Patch] **The comment on the F4 haze fix gives the wrong mechanism** [feature LOW + blind (raised as HIGH, downgraded)] [crates/gui/src/ingest.rs:1749-1756; 11-2-signoff/vehicle-card.md Q2]
+- [x] [Review][Patch] **The comment on the F4 haze fix gives the wrong mechanism** [feature LOW + blind (raised as HIGH, downgraded)] [crates/gui/src/ingest.rs:1749-1756; 11-2-signoff/vehicle-card.md Q2]
   - Bevy's cleanup only visits cameras that still carry `VolumetricFog`. `apply_effect` has
     already removed it, so the render-world camera keeps its fog components and pipelines.
   - The fog vanishes because the same branch strips every `FogVolume`.
   - Patched despite being LOW, because it is a latent silent-failure trap: a future edit that
     trusts this comment keeps the wrong path.
-- [ ] [Review][Patch] **The README contradicts the code** [accept MED + feature LOW] [README.md:249, ~256]
+- [x] [Review][Patch] **The README contradicts the code** [accept MED + feature LOW] [README.md:249, ~256]
   - The `--fx-off` row lists only `fxaa, ao, bloom`; `dof` and `haze` are missing.
   - The `--static-world` paragraph still says snow keeps falling, but `b5a0e2a` stopped it.
-- [ ] [Review][Patch] **Re-pointed mutation rows have no recorded kill** [accept LOW-MED] [_bmad-output/implementation-artifacts/mutations/]
+- [x] [Review][Patch] **Re-pointed mutation rows have no recorded kill** [accept LOW-MED] [_bmad-output/implementation-artifacts/mutations/]
   - Nine re-pointed rows have no kill evidence: 11-1a ×2, 11-1b ×3, m2-1 ×3 and 10-7 ×1.
   - The File List omits the 11-1a and 11-1b tables.
   - The 11-1a row "FXAA … shadows depth of field" actually sabotages F4, the haze key.
   - The 11-1b ao row changed meaning and should say so.
   - Run the nine rows, record which assertion kills. Check whether the "haze returns to daylight
     density" row kills through the ground-median panic rather than AC7's own clauses.
-- [ ] [Review][Patch] **Correct the prepass rationale (Decision 1, #121)** [crates/gui/src/ingest.rs:1720-1735 doc comment on `sync_prepasses`; the record's day-2 prepass section]
+- [x] [Review][Patch] **Correct the prepass rationale (Decision 1, #121)** [crates/gui/src/ingest.rs:1720-1735 doc comment on `sync_prepasses`; the record's day-2 prepass section]
   - State that Bevy 0.19 source shows DoF and fog binding `ViewDepthTexture`, so keeping the
     depth prepass is insurance pending #121, not a proven dependency.
   - Note that AC8's `--fx-off ao` delta may understate AO's cost for the same reason.
-- [ ] [Review][Patch] **The DEVIATIONS list is incomplete** [accept LOW-MED] [11-2-the-miniature.md:842-855]
+- [x] [Review][Patch] **The DEVIATIONS list is incomplete** [accept LOW-MED] [11-2-the-miniature.md:842-855]
   - Missing entries: the Task 3(a) prepass asymmetry change; FXAA losing its live key; the fps
     overlay made always-on (`67cbcaa`).
   - `b09d03a` also changed the simd tick loop: a request for the same tick at the same speed is
@@ -359,14 +359,17 @@ names the layer that raised the finding and its severity.
   - AC13: record Wolf's ruled deviation with his reason. Small-window perf runs cannot tell
     the difference; the cost only shows fullscreen at 4K (haze ~60 on vs ~140 off). There is no
     DoF-off figure and no `--perf-log` p50.
-- [ ] [Review][Patch] **The haze guard's star-count clause could pass vacuously** [edge MED] [crates/gui/tests/pixel_guard.rs:623-626]
+- [x] [Review][Patch] **The haze guard's star-count clause could pass vacuously** [edge MED] [crates/gui/tests/pixel_guard.rs:623-626]
   - `assert_eq!(stars_on, stars_off)` passes at 0 == 0. It reads 32 today; add `stars_off > 0`.
   - Latent silent-failure trap, so it is patched regardless of severity.
-- [ ] [Review][Patch] **The keymap guard's hand list is incomplete and mislabelled** [accept LOW] [crates/gui/src/ingest.rs:3341-3353]
+- [x] [Review][Patch] **The keymap guard's hand list is incomplete and mislabelled** [accept LOW] [crates/gui/src/ingest.rs:3341-3353]
   - It omits W/A/S/D/Q/E and Shift/Ctrl.
   - `KeyC` is labelled "capture a frame" but prints the readout; `Space` is labelled "issue the
     queued command" but is pause/resume.
   - A guard that certifies keys it doesn't know is a silent-failure trap, so it is patched.
+- [x] [Review][Patch] **Found in the patch pass: 10-5's "stopped dwarf snaps to a default facing" row SURVIVED** [crates/gui/tests/headless.rs the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops]
+  - `b5a0e2a` stopped the test from ever reaching the zero-delta guard. The test was fixed and
+    the row re-killed; see "AC16 re-kill".
 - [x] [Review][Defer] Stale key comments: ingest.rs:99 and :325 say F5-F9, perf.rs:3 says F3 shows fps [crates/gui/src/ingest.rs:99] — deferred, LOW
 - [x] [Review][Defer] `simd` repeated `--pause-at`/port silently takes the last value [crates/simd/src/main.rs:74-94] — deferred, LOW
 - [x] [Review][Defer] `push.sh --fast --no-gate` together passes a flag on to `git push` [scripts/push.sh:38-44] — deferred, LOW, fails loud
@@ -936,6 +939,42 @@ All mutations killed.
 "sun stops participating" was RE-POINTED first: `sync_haze_light` re-inserts `VolumetricLight` every
 frame, so removing only the spawn's copy would have survived. Four rows in other stories' tables
 (6-1 x3, 10-5 x1) were re-pointed at moved seams and shown to KILL.
+
+**AC16 re-kill, 2026-09-23 code review patch pass, on `d9f0054`.** Twenty rows ran. They were
+every row this branch re-pointed in ANY table (the record above names only four of the thirteen),
+three new rows for the strengthened focus tests, the re-pointed boot-framing row, and the haze
+density row, so that we could read which assertion kills it:
+
+```
+the blend arm never updates facing                           KILLED
+a stopped dwarf snaps to a default facing                    SURVIVED   <- see below
+the walk phase never advances                                KILLED
+the installed sun is aimed at nothing                        KILLED
+FXAA takes back a key and shadows the haze                   KILLED   (renamed; it takes F4)
+the effect readout no longer records its on/off state        KILLED
+ambient occlusion takes bloom's key                          KILLED
+bloom takes ambient occlusion's key                          KILLED
+--fx-off ao leaves the normal prepass running                KILLED
+motion capture requires too many ticks                       KILLED
+live ingest stops re-basing the blend clock                  KILLED
+the blend clock is never advanced by frame time              KILLED
+the startup scene loses its directional fill                 KILLED
+fog stops following the camera                               KILLED   (re-anchored)
+the diagnostic overlay is not actually enabled               KILLED
+haze returns to Bevy daylight density                        KILLED   (pixel_guard.rs:615, AC7's own far-median clause)
+re-inserted DoF keeps boot framing for a frame               KILLED   (re-pointed: unordered in Update)
+dof focuses a selected dwarf from a camera frozen at the origin KILLED (NEW)
+dof focuses the aim point from a camera frozen at the origin KILLED   (NEW)
+dof focus runs before transform propagation again            KILLED   (NEW)
+```
+
+**The survivor is a hole THIS branch opened.** `b5a0e2a` moved facing into
+`DwarfHeadings::record`, which visits only entities the mirror reports as changed, and the mirror
+reports an entity only when it DIFFERS (`client-core` `next != entity`). 10-5's test stopped the
+dwarf by repeating him unchanged, so the zero-delta guard was never reached and deleting it changed
+nothing. The fix is in the test: he now stops the way the sim stops a dwarf, by starting Work where
+he stands. Both sides checked: the real code passes, and the sabotage now fails on the test's own
+`must HOLD` assertion (`east -> (0,0,-1)`, the `looking_to` fallback), not on an earlier assert.
 
 **AC15** -- `git diff 7442174..HEAD --stat` on `crates/protocol`, `crates/sim-core` and
 `crates/client-core` is empty (checked 2026-09-23).

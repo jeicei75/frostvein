@@ -1218,9 +1218,16 @@ fn the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops() {
         "walking along sim +x must face render +x and stay level, got {east:?}"
     );
 
-    // STOP. The same position twice: nothing to face, so hold what is already there.
+    // STOP. The same position twice: nothing to face, so hold what is already there. He stops
+    // the way the sim stops him, by starting WORK where he stands: the mirror reports only an
+    // entity that differs, so a stop that repeats him unchanged never reaches the facing code at
+    // all, and the sabotage that deletes the zero-delta guard SURVIVED that version too.
+    let working = Entity {
+        state: JobState::Work,
+        ..dwarf(id, [2, 3, 0])
+    };
     for _ in 0..3 {
-        apply_delta(&mut app, delta(vec![], vec![dwarf(id, [2, 3, 0])]));
+        apply_delta(&mut app, delta(vec![], vec![working]));
         app.world_mut()
             .resource_mut::<gui::blend::TickClock>()
             .advance(10.0);
