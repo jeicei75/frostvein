@@ -381,7 +381,20 @@ pub struct CaptureState {
     static_world: bool,
     motion: MotionStats,
     lantern: LanternStats,
+    /// When a plain capture reached its frame count still short of [`MIN_DELIVERED_TICKS`].
+    tick_wait_started: Option<std::time::Instant>,
 }
+
+/// The ticks a plain (not `--at-tick`, not `--static-world`) capture must have seen delivered.
+pub const MIN_DELIVERED_TICKS: usize = 100;
+
+/// How long a plain capture waits past its frame count for [`MIN_DELIVERED_TICKS`] to arrive.
+///
+/// `--frames` counted the wait in FRAMES while the daemon ticks at 10 Hz, so it only covered
+/// 100 ticks on a slow renderer: 160 frames is well over 10 s on lavapipe, and 1.6 s on the
+/// vehicle's RTX 4080, which saw 16 ticks and failed. The capture now holds for the ticks
+/// themselves, and this bound keeps a daemon that stopped ticking a loud failure, not a hang.
+const TICK_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 #[derive(Default, Debug)]
 pub struct MotionStats {
@@ -425,7 +438,7 @@ impl MotionStats {
     }
 
     pub fn assert_valid(&self, expect_work: bool) {
-        self.assert_tick_floor(100);
+        self.assert_tick_floor(MIN_DELIVERED_TICKS);
         self.assert_motion(expect_work);
     }
 
@@ -758,7 +771,22 @@ impl CaptureState {
             static_world: false,
             motion: MotionStats::default(),
             lantern: LanternStats::default(),
+            tick_wait_started: None,
         }
+    }
+
+    /// Whether a plain capture is due: its frames are spent AND, when the tick floor will be
+    /// asserted (`floor_applies`), the ticks it demands have arrived -- or [`TICK_WAIT_TIMEOUT`]
+    /// has passed, and the floor will then fail with the count it actually saw.
+    fn plain_capture_due(&mut self, now: std::time::Instant, floor_applies: bool) -> bool {
+        if self.elapsed < self.frames {
+            return false;
+        }
+        if !floor_applies || self.static_world || self.motion.ticks.len() >= MIN_DELIVERED_TICKS {
+            return true;
+        }
+        let started = *self.tick_wait_started.get_or_insert(now);
+        now.duration_since(started) >= TICK_WAIT_TIMEOUT
     }
 
     pub fn at_tick(
@@ -957,7 +985,12 @@ pub fn capture_after_frames(
                 false
             }
         }
-        None => capture.elapsed >= capture.frames,
+        // Wait only for ticks the floor below will actually demand: a scene with no dwarf in view
+        // skips the motion assertions, so holding its capture for ticks would buy nothing.
+        None => capture.plain_capture_due(
+            std::time::Instant::now(),
+            motion_assertions_apply(&mirror.0, slice.level()),
+        ),
     };
     if capture_due {
         // The line comes BEFORE the assertion: a run that fails its thresholds is exactly the
@@ -2076,6 +2109,65 @@ mod tests {
 
         assert_eq!(pixels, vec![[240, 120, 10, 255]]);
         assert_eq!(warm_lit_pixels(&pixels), 1);
+    }
+
+    /// A plain capture waits for its ticks, not only its frames. The vehicle's 4080 spent 160
+    /// frames in 1.6 s, saw 16 ticks, and failed a floor no frame count could have met.
+    #[test]
+    fn a_plain_capture_waits_for_its_ticks_and_not_only_its_frames() {
+        let observe = |capture: &mut CaptureState, ticks: u64| {
+            for tick in 0..ticks {
+                capture.motion.observe(tick, std::iter::empty(), 0, false);
+            }
+        };
+        let start = std::time::Instant::now();
+
+        let mut fast = CaptureState::new(PathBuf::from("x.png"), 160, false);
+        fast.elapsed = 160;
+        observe(&mut fast, 16);
+        assert!(
+            !fast.plain_capture_due(start, true),
+            "160 frames with 16 ticks is a fast GPU, not a finished capture"
+        );
+        assert!(
+            !fast.plain_capture_due(start + TICK_WAIT_TIMEOUT / 2, true),
+            "still inside the wait"
+        );
+        assert!(
+            fast.plain_capture_due(start + TICK_WAIT_TIMEOUT, true),
+            "a daemon that never delivers must end the wait, so the tick floor can fail loudly"
+        );
+
+        let mut arrived = CaptureState::new(PathBuf::from("x.png"), 160, false);
+        arrived.elapsed = 160;
+        observe(&mut arrived, MIN_DELIVERED_TICKS as u64);
+        assert!(
+            arrived.plain_capture_due(start, true),
+            "frames and ticks both met: capture now"
+        );
+
+        let mut early = CaptureState::new(PathBuf::from("x.png"), 160, false);
+        early.elapsed = 159;
+        observe(&mut early, MIN_DELIVERED_TICKS as u64);
+        assert!(
+            !early.plain_capture_due(start, true),
+            "the frame count still has to be spent"
+        );
+
+        let mut frozen =
+            CaptureState::new(PathBuf::from("x.png"), 160, false).with_static_world(true);
+        frozen.elapsed = 160;
+        assert!(
+            frozen.plain_capture_due(start, true),
+            "a static world has no ticks to wait for"
+        );
+
+        let mut empty = CaptureState::new(PathBuf::from("x.png"), 160, false);
+        empty.elapsed = 160;
+        assert!(
+            empty.plain_capture_due(start, false),
+            "no dwarf in view: the floor is skipped, so there is nothing to wait for"
+        );
     }
 
     #[test]
