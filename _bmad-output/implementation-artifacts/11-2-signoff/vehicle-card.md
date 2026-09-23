@@ -73,4 +73,7 @@ Questions for Wolf:
    judgement for AC14 is the strength -- `FOG_DENSITY_FACTOR` and the ramp -- against the art.
    Wolf's seat note: haze + the sun's volumetric light is the heaviest effect; read that in AC13.
 
-3. Record p50 frame times for all effects, DoF off, and haze off; re-read NFR6's 60 fps bar.
+3. **AC13 -- ANSWERED 2026-09-23 at the seat, fullscreen:** haze on ~60 fps, haze off ~140 fps.
+   Wolf: accepted, no optimisation now. The headless runs above could not rank the effects (frame
+   time drifted ~35% within each run and the runs differed in length); keep them for the frames,
+   not for fps.
