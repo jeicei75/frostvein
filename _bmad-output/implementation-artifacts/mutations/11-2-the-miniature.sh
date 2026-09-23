@@ -35,7 +35,13 @@ PY
 mutation "sun stops participating in the volumetric pass" gui haze_lifts_and_softens_the_far_valley_without_swallowing_the_sky ignored <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+# Two writers since 2026-09-23: the spawn, and `sync_haze_light`, which re-inserts the marker every
+# frame the haze is on. Removing only the spawn's copy SURVIVES -- the sync puts it back -- so the
+# sabotage takes both.
 old = '        VolumetricLight,\n'
+assert s.count(old) == 1
+s = s.replace(old, '')
+old = '            commands.entity(entity).insert(VolumetricLight);\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
@@ -86,4 +92,64 @@ p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '            Self::Haze => Some(KeyCode::F4),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            Self::Haze => Some(KeyCode::F3),\n'))
+PY
+
+# 2026-09-23. F4 removed VolumetricFog from the camera only; Bevy never syncs that removal, so the
+# fog kept drawing. The haze key must also take the sun's marker, which is Bevy's one cleanup path.
+mutation "F4 leaves the sun volumetric, so the fog never leaves the render world" gui the_haze_key_moves_the_suns_volumetric_marker <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            commands.entity(entity).remove::<VolumetricLight>();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+# 2026-09-23, the three timing leaks that made two captures of one frozen world disagree.
+mutation "a frozen world lets its snow fall on the wall clock" gui snow_holds_still_in_a_static_world <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '    if static_world.0 {\n        return;\n    }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = static_world;\n'))
+PY
+
+mutation "a frozen world leaves each stride where frame timing put it" gui a_landed_static_world_holds_every_stride_at_one_phase <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        walk.distance = STATIC_WORLD_WALK_PHASE * DWARF_WALK_STRIDE_METRES;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let _ = &mut walk;\n'))
+PY
+
+mutation "facing is read once per frame, so a batched step never turns the dwarf" gui the_dwarf_faces_where_he_is_walking_and_holds_it_when_he_stops <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    headings.record(mirror);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = &headings;\n'))
+PY
+
+# 2026-09-23, the frame-counted waits the vehicle's RTX 4080 broke.
+mutation "the static-world pause timeout counts frames again" gui static_world_pause_timeout_counts_time_not_frames <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '        state.waited += time.delta();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        state.waited += Duration::from_millis(100);\n        let _ = &time;\n'))
+PY
+
+mutation "a plain capture fires on its frames with its ticks still missing" gui a_plain_capture_waits_for_its_ticks_and_not_only_its_frames <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '        if !floor_applies || self.static_world || self.motion.ticks.len() >= MIN_DELIVERED_TICKS {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if true {\n'))
+PY
+
+mutation "simd drops --pause-at on the floor" simd pause_at_is_parsed_beside_the_port_and_rejects_garbage <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            pause_at = Some(\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let _ = Some::<u64>(\n'))
 PY
