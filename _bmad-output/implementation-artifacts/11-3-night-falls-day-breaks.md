@@ -219,7 +219,7 @@ What it established:
         equality test reads all three off the live app).
   - [x] `volumetric_fog()`'s ambient follows the clock's ambient through the same derivation (AC11).
 - [ ] **Task 4 — the opening artifact, and the STOP** (AC12)
-  - [ ] **4a.** Render ≥ 3 candidate day tables at `--clock 12` and one dusk at `--clock 17.5`
+  - [x] **4a.** Render ≥ 3 candidate day tables at `--clock 12` and one dusk at `--clock 17.5`
         (the sun still ~5° up — at 18.25 the key has ramped dark and the frame is ambient-only;
         tell Wolf that the key goes dark AT the horizon, so the warm light is the last hour before
         it). Each candidate is a temporary edit of the PROVISIONAL `day_lighting()` literals in an
@@ -483,6 +483,36 @@ night rim target misses the exact sky colour                 KILLED
 All mutations killed.
 ```
 
+
+### Orchestrator verification (Claude Opus 5.5, 2026-09-24)
+
+Codex exited 1 on its **usage limit** mid-final-status-check; no hand-back message was written, the
+tree was clean and every Task 0-3 commit was already down (11 commits, all `Völundr`, committer
+`jeicei75`; no `--no-verify` in any commit invocation; every pre-commit fast gate GREEN). Wolf reset
+the quota; a probe confirmed Codex is back. Verified rather than trusted:
+
+- **AC2, re-captured independently** on `gui build bb893b2`, fresh `simd --pause-at 120` each: no
+  `--clock` → `clock=22.00 (capture default)`, `--clock 22` → `clock=22.00 (--clock)`, both with the
+  creation line verbatim, and **both `cmp`-identical to `creation-control-53ba44e-a.png`**.
+- **Noon is the probe's day, byte for byte:** `--clock 12` on the real code is `cmp`-identical to
+  `probe-p3-day-flat.png` (ground median 161; `sky-stars` lap_mean 1.8812 → 0.5228).
+- **Scope:** `git diff 0fbb6ce..HEAD --stat` on `crates/{protocol,sim-core,client-core,simd}` and
+  `crates/gui/tests/pixel_guard.rs` is empty.
+- **FULL GATE GREEN on `bb893b2`, 1680 s, `RUST_TEST_THREADS=2`.**
+- **Self-gate did NOT run:** `codex review --base main` died on
+  `app-server socket directory must be a user-owned directory with mode 0700` (a new bubblewrap
+  cause; 11.2's was the `/tmp` lock). The code review carries the full weight.
+- **For the code review, not fixed here:** (1) `key_at` short-circuits `hour == BOOT_HOUR` to
+  `sun_direction()`/night table, so the boot-hour tests never exercise the moon arc (the arc is exact
+  there arithmetically, so the branch is redundant but hides arc mutations at 22.0);
+  (2) `lit_key_never_points_up_or_jumps_in_illuminance` bounds the key step at 2 % of the DAY
+  illuminance (240 lux); AC4 read literally is 2 % of |day − night| = 100 lux, and the sun's 10°
+  horizon ramp steps ~190 lux per 0.01 h.
+- **Task 4a** rendered by the orchestrator in an isolated worktree of `bb893b2` (4 candidates × noon
+  + dusk 17.5): `11-3-signoff/candidates.md`, `candidates-contact-sheet-bb893b2.png`,
+  `candidate-*-bb893b2-h*.png`. Every frame passes the existing band. Candidate D would fail AC9's
+  ≥ 50 % sky bar (−7 %). **STOPPED for Wolf's pick.**
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
@@ -505,6 +535,9 @@ All mutations killed.
 - `crates/gui/tests/capture.rs`
 - `_bmad-output/implementation-artifacts/mutations/9-1-the-frame-stops-blowing-out.sh`
 - `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh`
+- `_bmad-output/implementation-artifacts/11-3-signoff/candidates.md`
+- `_bmad-output/implementation-artifacts/11-3-signoff/candidates-contact-sheet-bb893b2.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/candidate-{A-provisional,B-soft-warm,C-crisp-blue,D-pale-overcast}-bb893b2-h{12,17.5}.png`
 
 ## Change Log
 
@@ -517,3 +550,4 @@ All mutations killed.
 | 2026-09-24 | Task 3 made sky, stars, aurora, fog, rim, and haze ambient follow the hourly light table. |
 | 2026-09-24 | Verified both post-sky boot captures byte-identical to control; killed 19 sitting-1 mutation rows and tightened the running-capture tick guard. |
 | 2026-09-24 | Made the last rim level equal the shared sky value at night; final boot captures stayed byte identical, and the 20th mutation row KILLED. Self-review was blocked by bubblewrap socket permissions. |
+| 2026-09-24 | Orchestrator verification of Tasks 0-3 (AC2 re-captured cmp-identical, noon == probe p3, full gate GREEN 1680 s on `bb893b2`); Task 4a: four candidate day tables rendered in an isolated worktree and filed. STOPPED for Wolf's pick. |
