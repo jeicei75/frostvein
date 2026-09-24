@@ -81,10 +81,10 @@ PY
 
 mutation "a default capture follows the wire tick" gui clock_pin_reaches_the_live_app_and_capture_defaults_to_boot <<'PY'
 import pathlib
-p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        args.clock\n            .or(args.capture.as_ref().map(|_| crate::clock::BOOT_HOUR)),\n'
+p = pathlib.Path('crates/gui/src/clock.rs'); s = p.read_text()
+old = '    pin.0.unwrap_or_else(|| hour_at(mirror.0.tick()))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        args.clock\n            .or(args.capture.as_ref().map(|_| crate::clock::hour_at(capture_start_tick))),\n'))
+p.write_text(s.replace(old, '    let _ = pin;\n    hour_at(mirror.0.tick())\n'))
 PY
 
 mutation "hour advances in whole-hour steps" gui tick_clock_moves_fractionally_and_wraps <<'PY'
