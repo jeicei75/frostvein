@@ -216,13 +216,59 @@ pub fn snowflake_scale(index: usize) -> f32 {
 }
 
 pub fn sun_direction() -> Vec3 {
-    let azimuth = SUN_AZIMUTH_DEGREES.to_radians();
-    let elevation = SUN_ELEVATION_DEGREES.to_radians();
+    direction_from_angles(SUN_AZIMUTH_DEGREES, SUN_ELEVATION_DEGREES)
+}
+
+fn direction_from_angles(azimuth_degrees: f32, elevation_degrees: f32) -> Vec3 {
+    let azimuth = azimuth_degrees.to_radians();
+    let elevation = elevation_degrees.to_radians();
     let horizontal = elevation.cos();
     Vec3::new(
         azimuth.cos() * horizontal,
         -elevation.sin(),
         azimuth.sin() * horizontal,
+    )
+}
+
+pub fn key_at(hour: f32) -> (Vec3, bevy::prelude::Color, f32) {
+    let night = night_lighting();
+    if hour == crate::clock::BOOT_HOUR {
+        return (
+            sun_direction(),
+            night.directional,
+            night.directional_illuminance,
+        );
+    }
+    let (azimuth, elevation, color, budget) = if (6.0..18.0).contains(&hour) {
+        let phase = (hour - 6.0) / 12.0;
+        let elevation = 40.0 * (std::f32::consts::PI * phase).sin();
+        let day = crate::appearance::day_lighting();
+        (
+            SUN_AZIMUTH_DEGREES + 15.0 * (hour - 12.0),
+            elevation,
+            day.directional,
+            day.directional_illuminance,
+        )
+    } else {
+        let moon_hour = if hour < 6.0 { hour + 24.0 } else { hour };
+        let phase = (moon_hour - 18.0) / 12.0;
+        let boot_phase = (crate::clock::BOOT_HOUR - 18.0) / 12.0;
+        let sine = (std::f32::consts::PI * phase).sin();
+        let boot_sine = (std::f32::consts::PI * boot_phase).sin();
+        (
+            SUN_AZIMUTH_DEGREES + 15.0 * (moon_hour - crate::clock::BOOT_HOUR),
+            SUN_ELEVATION_DEGREES * (sine / boot_sine),
+            night.directional,
+            night.directional_illuminance,
+        )
+    };
+    let elevation = elevation.max(0.0);
+    let horizon = (elevation / 10.0).clamp(0.0, 1.0);
+    let horizon = horizon * horizon * (3.0 - 2.0 * horizon);
+    (
+        direction_from_angles(azimuth, elevation),
+        color,
+        budget * horizon,
     )
 }
 
@@ -345,7 +391,7 @@ mod tests {
         APPROVED_DOWNWARD_FLOOR, AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT,
         AURORA_TEXTURE_WIDTH, AURORA_TOP, CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT,
         SNOWFLAKE_DISC_RADIUS, STAR_COUNT, STAR_RADIUS, aurora_core, aurora_curtain_mesh,
-        aurora_gradient_pixels, inside_boot_frustum, snowflake_positions, snowflake_scale,
+        aurora_gradient_pixels, inside_boot_frustum, key_at, snowflake_positions, snowflake_scale,
         snowflake_speed, star_positions, star_scale, sun_direction,
     };
     use crate::appearance::night_lighting;
@@ -415,12 +461,47 @@ mod tests {
 
     #[test]
     fn the_approved_sun_lights_downward() {
-        let direction = sun_direction();
+        let direction = key_at(crate::clock::BOOT_HOUR).0;
         assert!(
             direction.y <= APPROVED_DOWNWARD_FLOOR,
             "sun must travel downward onto the valley; y={} exceeds the approved floor {APPROVED_DOWNWARD_FLOOR}",
             direction.y
         );
+    }
+
+    #[test]
+    fn key_arc_uses_the_approved_boot_direction_and_the_provisional_noon_table() {
+        let (night_direction, night_color, night_lux) = key_at(crate::clock::BOOT_HOUR);
+        assert_eq!(night_direction, sun_direction());
+        assert_eq!(night_color, night_lighting().directional);
+        assert_eq!(night_lux, night_lighting().directional_illuminance);
+        let (noon_direction, noon_color, noon_lux) = key_at(12.0);
+        assert!(noon_direction.y < night_direction.y);
+        assert_eq!(noon_color, crate::appearance::day_lighting().directional);
+        assert_eq!(
+            noon_lux,
+            crate::appearance::day_lighting().directional_illuminance
+        );
+    }
+
+    #[test]
+    fn lit_key_never_points_up_or_jumps_in_illuminance() {
+        assert_eq!(key_at(6.0).2, 0.0, "both keys are dark at dawn");
+        assert_eq!(key_at(18.0).2, 0.0, "both keys are dark at dusk");
+        let mut previous = key_at(0.0).2;
+        let range = crate::appearance::day_lighting().directional_illuminance;
+        for step in 1..=2_400 {
+            let hour = step as f32 * 0.01;
+            let (direction, _, lux) = key_at(hour % 24.0);
+            if lux > 0.0 {
+                assert!(direction.y < 0.0, "lit key points up at hour {hour}");
+            }
+            assert!(
+                (lux - previous).abs() <= 0.02 * range,
+                "key illuminance jumps at hour {hour}: {previous} to {lux}"
+            );
+            previous = lux;
+        }
     }
 
     #[test]

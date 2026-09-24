@@ -1800,10 +1800,13 @@ fn sync_haze_light(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_lighting_toggles(
     toggles: Res<LightingToggles>,
+    mirror: Res<MirrorResource>,
+    pin: Res<crate::clock::ClockPin>,
     mut ambient: Query<&mut AmbientLight, With<Camera3d>>,
-    mut sun: Query<&mut DirectionalLight, With<SunLight>>,
+    mut sun: Query<(&mut DirectionalLight, &mut Transform), With<SunLight>>,
     mut points: Query<(
         &crate::project::ProjectedLight,
         &mut bevy::prelude::PointLight,
@@ -1811,6 +1814,8 @@ fn apply_lighting_toggles(
     assets: Option<Res<crate::project::ProjectionAssets>>,
     mut materials: Option<ResMut<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>>,
 ) {
+    let hour = crate::clock::current_hour(&mirror, &pin);
+    let (direction, color, illuminance) = crate::atmosphere::key_at(hour);
     for mut light in &mut ambient {
         light.brightness = if toggles.enabled(LightSource::Ambient) {
             night_lighting().ambient_brightness
@@ -1818,12 +1823,14 @@ fn apply_lighting_toggles(
             0.0
         };
     }
-    for mut light in &mut sun {
+    for (mut light, mut transform) in &mut sun {
+        light.color = color;
         light.illuminance = if toggles.enabled(LightSource::Sun) {
-            night_lighting().directional_illuminance
+            illuminance
         } else {
             0.0
         };
+        *transform = Transform::from_translation(Vec3::ZERO).looking_to(direction, Vec3::Y);
     }
     for (kind, mut light) in &mut points {
         if !point_light_enabled(&toggles, kind.0) {
@@ -3785,7 +3792,7 @@ mod tests {
     /// `SUN_ELEVATION_DEGREES`, applied to the entity Bevy actually renders from.
     #[test]
     fn the_installed_sun_entity_aims_downward_onto_the_valley() {
-        let (mut app, _sender, _server) = configured_app(&[]);
+        let (mut app, _sender, _server) = configured_app(&["--clock", "22"]);
         app.update();
 
         let mut query = app
@@ -3810,6 +3817,54 @@ mod tests {
              floor {}",
             forward.y,
             crate::atmosphere::APPROVED_DOWNWARD_FLOOR
+        );
+    }
+
+    #[test]
+    fn clock_drives_the_installed_key_direction_color_and_illuminance() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let (light, transform) = app
+            .world_mut()
+            .query_filtered::<(&bevy::prelude::DirectionalLight, &bevy::prelude::Transform), With<super::SunLight>>()
+            .single(app.world())
+            .unwrap();
+        let (direction, color, lux) = crate::atmosphere::key_at(12.0);
+        assert!(
+            transform.forward().as_vec3().distance(direction) < 1e-6,
+            "installed key must aim along the clock direction"
+        );
+        assert_eq!(light.color, color);
+        assert_eq!(light.illuminance, lux);
+    }
+
+    #[test]
+    fn f8_restores_the_clock_key_at_noon() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let lux = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::DirectionalLight, With<super::SunLight>>()
+                .single(app.world())
+                .unwrap()
+                .illuminance
+        };
+        let press = |app: &mut App| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::F8);
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::F8);
+            keys.clear();
+        };
+        press(&mut app);
+        assert_eq!(lux(&mut app), 0.0);
+        press(&mut app);
+        assert_eq!(
+            lux(&mut app),
+            crate::appearance::day_lighting().directional_illuminance,
+            "F8-on must restore noon's key budget"
         );
     }
 

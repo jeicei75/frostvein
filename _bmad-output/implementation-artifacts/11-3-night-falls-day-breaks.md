@@ -185,25 +185,25 @@ What it established:
         `hour_at(1_000) == BOOT_HOUR + 1`, wraps at 24;
         parse accepts `0`, `12`, `23.99`, rejects `24`, `-1`, `x`; a capture without `--clock` is
         pinned at `BOOT_HOUR`; a seat run without `--clock` is not.
-- [ ] **Task 2 — the key light follows the clock** (AC3, AC4, AC10)
-  - [ ] Keep ONE key `DirectionalLight` (the `SunLight` entity, `ingest.rs:1532-1545`): it is the
+- [x] **Task 2 — the key light follows the clock** (AC3, AC4, AC10)
+  - [x] Keep ONE key `DirectionalLight` (the `SunLight` entity, `ingest.rs:1532-1545`): it is the
         moon while the sun is below the horizon and the sun while above. Two shadowed directional
         lights would double the cascade cost and `VolumetricLight` needs a shadow map on each.
-  - [ ] `pub fn key_at(hour) -> (Vec3 direction, Color, f32 illuminance)` in `atmosphere.rs`.
+  - [x] `pub fn key_at(hour) -> (Vec3 direction, Color, f32 illuminance)` in `atmosphere.rs`.
         Symmetric arcs: sun above the horizon 06:00–18:00, moon 18:00–06:00, each body's
         illuminance ramping to 0 at its horizon, so the swap happens where both are dark. The
         moon's arc must return **exactly** `sun_direction()` at `BOOT_HOUR` — see the trap list.
         (Reviewed at creation: with the moon's azimuth sweeping 180° over its 12 h, 15°/h, it rises
         at az −19.96°, peaks ~20.4° at midnight and sets at 160.04° — a sane low winter moon.)
-  - [ ] Route every write through `apply_lighting_toggles` (`ingest.rs:1785-1831`): it rewrites
+  - [x] Route every write through `apply_lighting_toggles` (`ingest.rs:1785-1831`): it rewrites
         illuminance and brightness EVERY FRAME from `night_lighting()`, so a separate clock system
         writing the same fields loses every frame. Make it read the clock's values instead; the
         key's `Transform` gets one writer beside it.
-  - [ ] Convert `the_approved_sun_lights_downward` (`atmosphere.rs:416-424`) and
+  - [x] Convert `the_approved_sun_lights_downward` (`atmosphere.rs:416-424`) and
         `the_installed_sun_entity_aims_downward_onto_the_valley` (`ingest.rs:3673-3701`) to
         pinned-time guards at `BOOT_HOUR`, and add the 0.01 h sweep (AC3 below-horizon invariant,
         AC4 continuity). `APPROVED_DOWNWARD_FLOOR` stays hand-written and unchanged.
-  - [ ] The F8 test at `--clock 12` (AC10) — extend the toggle test at `ingest.rs:3840-3940`.
+  - [x] The F8 test at `--clock 12` (AC10) — extend the toggle test at `ingest.rs:3840-3940`.
 - [ ] **Task 3 — the sky follows the clock** (AC5, AC11)
   - [ ] `ClearColor` (a resource, inserted at `ingest.rs:627`) is written from the clock's sky
         colour; `Exposure` is not touched. Comment on **#113** that 11.3 settled it as "the sky is
@@ -439,11 +439,13 @@ gpt-6-sol (high)
 - Task 0: `cargo build --offline -p gui -p simd` passed; `./target/debug/gui --version` printed `gui build fc3dd08` without `-dirty`.
 - Fresh daemons on ports 7531 and 7532 each paused at tick 120. Both captures printed `warm-lit pixels=23433 ground-median-luminance=69 near-white-area=0.3906% blown-pool=0.3637% p99-luminance=153.5 resolution=1280x720`. `cmp` of the two PNGs exited 0.
 - Task 1 RED: `tick_clock_moves_fractionally_and_wraps`: `left: 22.0 right: 22.5` (hour ignored tick). `clock_flag_accepts_hours_and_rejects_out_of_range_values`: `called Result::unwrap() on an Err value: invalid port`. `clock_pin_reaches_the_live_app_and_capture_defaults_to_boot`: `left: None right: Some(None)`. `an_unpinned_seat_follows_two_wire_snapshots_one_hour_apart`: `left: 0.0 right: 1.0`. `capture_clock_note_names_the_rendered_hour_and_source`: `left: "" right: " clock=12.00 (--clock)"`. All subsequently green. Mutation rows and results will be recorded after the committed table runs.
+- Task 2 RED: `key_arc_uses_the_approved_boot_direction_and_the_provisional_noon_table`: `assertion failed: noon_direction.y < night_direction.y`. `lit_key_never_points_up_or_jumps_in_illuminance`: `both keys are dark at dawn; left: 7000.0 right: 0.0`. `clock_drives_the_installed_key_direction_color_and_illuminance`: installed `Vec3(0.7295178, -0.3033679, 0.61300206)` vs noon `Vec3(0.5864819, -0.6427876, 0.49281135)`. `f8_restores_the_clock_key_at_noon`: `left: 7000.0 right: 12000.0`. The first horizon-ramp version also failed continuity: `key illuminance jumps at hour 6.0699997: 795.18256 to 1061.1969`; the 10° ramp passes the 0.01 h sweep.
 
 ### Completion Notes List
 
 - Task 0: Controls filed as `control-fc3dd08-a.png` and `control-fc3dd08-b.png`; same-build floor is zero.
 - Task 1: `ClockPin` is initialized in `projection_systems` and configured from `--clock` or the capture default. The range line uses `current_hour()` and identifies an explicit pin or capture default. Repointed affected existing mutation rows in 9.1 and 10.7. The new rows are pending the post-commit mutation run.
+- Task 2: One installed directional light follows the sun from 06:00–18:00 and moon otherwise, with zero illuminance at both horizons. At 22:00 it calls the original `sun_direction()` and night table exactly. F8 restores the current key budget. AC2 capture comparison and mutation rows are pending the post-commit checks.
 
 ### File List
 
@@ -451,6 +453,8 @@ gpt-6-sol (high)
 - `_bmad-output/implementation-artifacts/11-3-signoff/control-fc3dd08-a.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/control-fc3dd08-b.png`
 - `crates/gui/src/clock.rs`
+- `crates/gui/src/appearance.rs`
+- `crates/gui/src/atmosphere.rs`
 - `crates/gui/src/lib.rs`
 - `crates/gui/src/ingest.rs`
 - `crates/gui/src/capture.rs`
@@ -465,3 +469,4 @@ gpt-6-sol (high)
 | 2026-09-24 | Story created. Rulings taken (day length 24,000; moving moon, captures pin `--clock`; day artifact gated in Task 4; flat table-driven sky, `Atmosphere` probed and not adopted). Control measured on `53ba44e` (bit-identical pair, RED seen); creation probe in an isolated worktree (8 frames, filed). Adversarial validation pass: 1 critical, 4 high, 7 medium and 4 low findings applied (provisional day table plus two sittings; AC4 swap exemption; dusk at 17.5; AC8 keeps the band; AC9 bars from measurement; `ClockPin` in `projection_systems`; float hour; F4 haze re-writer). |
 | 2026-09-24 | Task 0 controls on `fc3dd08` matched the creation range and each other byte for byte. |
 | 2026-09-24 | Task 1 added the tick-derived hour, explicit and capture-default pinning, and capture clock reporting. |
+| 2026-09-24 | Task 2 moved the single key light through sun and moon arcs and made F8 restore the current hour's key. |

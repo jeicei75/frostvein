@@ -18,7 +18,7 @@ pub struct EntityAppearance {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct NightLighting {
+pub struct LightTable {
     pub sky: Color,
     pub star: Color,
     pub ambient: Color,
@@ -37,8 +37,8 @@ pub struct NightLighting {
 /// ambient/directional tints multiplied onto already-blue materials). This table divides the
 /// budget the other way: a small desaturated ambient so shadow faces go genuinely dark, and a
 /// desaturated cool directional carrying most of the load so lit faces keep their modelling.
-pub fn night_lighting() -> NightLighting {
-    NightLighting {
+pub fn night_lighting() -> LightTable {
+    LightTable {
         sky: Color::srgb_u8(5, 12, 28),
         star: Color::srgb_u8(173, 196, 220),
         ambient: Color::srgb_u8(108, 128, 170),
@@ -46,6 +46,19 @@ pub fn night_lighting() -> NightLighting {
         aurora: Color::srgb_u8(73, 157, 144),
         directional: Color::srgb_u8(178, 200, 240),
         directional_illuminance: 7_000.0,
+    }
+}
+
+// PROVISIONAL — not approved (11.3 Task 4 pick pending).
+pub fn day_lighting() -> LightTable {
+    LightTable {
+        sky: Color::srgb_u8(110, 155, 205),
+        star: night_lighting().star,
+        ambient: Color::srgb_u8(190, 210, 235),
+        ambient_brightness: 4_000.0,
+        aurora: night_lighting().aurora,
+        directional: Color::srgb_u8(255, 244, 228),
+        directional_illuminance: 12_000.0,
     }
 }
 
