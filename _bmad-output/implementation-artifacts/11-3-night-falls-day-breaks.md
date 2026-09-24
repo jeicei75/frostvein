@@ -442,6 +442,7 @@ gpt-6-sol (high)
 - Task 2 RED: `key_arc_uses_the_approved_boot_direction_and_the_provisional_noon_table`: `assertion failed: noon_direction.y < night_direction.y`. `lit_key_never_points_up_or_jumps_in_illuminance`: `both keys are dark at dawn; left: 7000.0 right: 0.0`. `clock_drives_the_installed_key_direction_color_and_illuminance`: installed `Vec3(0.7295178, -0.3033679, 0.61300206)` vs noon `Vec3(0.5864819, -0.6427876, 0.49281135)`. `f8_restores_the_clock_key_at_noon`: `left: 7000.0 right: 12000.0`. The first horizon-ramp version also failed continuity: `key illuminance jumps at hour 6.0699997: 795.18256 to 1061.1969`; the 10° ramp passes the 0.01 h sweep.
 - AC2 after Task 2: rebuilt `gui build dcdbd27` without `-dirty`; fresh daemons on ports 7533 and 7534 paused at tick 120. The no-`--clock` and `--clock 22` captures both printed the creation range figures, with `clock=22.00 (capture default)` and `clock=22.00 (--clock)` respectively. `cmp` of EACH against `control-fc3dd08-a.png` exited 0 (byte identical).
 - Task 3 RED: `hourly_light_table_keeps_night_exact_and_reaches_the_provisional_day`: `left: 0.0 right: 1.0` (day weight at noon). `sky_and_ambient_change_smoothly_over_each_hundredth_hour`: `the dawn sweep must contain a real sky change` (both sides were the night sky). `noon_sky_and_distance_fog_share_the_day_colour`: night `Srgba(0.019607844, 0.047058824, 0.10980392)` vs day `Srgba(0.43137255, 0.60784316, 0.8039216)`. `noon_stars_and_aurora_fade_from_the_live_shared_materials`: `star and aurora handles must reach the live app`. `noon_haze_ambient_survives_f4_off_and_on`: night ambient/intensity `(108,128,170), 1.875` vs day `(190,210,235), 5.0`. `noon_rim_materials_dissolve_toward_the_live_sky`: night rim target vs day sky. All subsequently green. Mutation results are pending the committed table run.
+- AC2 after Task 3: rebuilt `gui build 947e056` without `-dirty`; fresh daemons on ports 7535 and 7536 paused at tick 120. The no-`--clock` and `--clock 22` captures each printed `warm-lit pixels=23433 ground-median-luminance=69 near-white-area=0.3906% blown-pool=0.3637% p99-luminance=153.5 resolution=1280x720`, followed by their correct `clock=22.00` source. `cmp` of EACH against `control-fc3dd08-a.png` exited 0.
 
 ### Completion Notes List
 
@@ -459,6 +460,9 @@ gpt-6-sol (high)
 - `crates/gui/src/appearance.rs`
 - `crates/gui/src/atmosphere.rs`
 - `crates/gui/src/project.rs`
+- `_bmad-output/implementation-artifacts/11-3-signoff/boot-947e056-default.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/boot-947e056-explicit.png`
+- `_bmad-output/implementation-artifacts/mutations/11-3-night-falls-day-breaks.sh`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-default.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-explicit.png`
 - `crates/gui/src/lib.rs`

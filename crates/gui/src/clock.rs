@@ -26,6 +26,7 @@ mod tests {
 
     #[test]
     fn tick_clock_moves_fractionally_and_wraps() {
+        assert_eq!(BOOT_HOUR, 22.0, "the approved boot hour must stay at 22:00");
         assert_eq!(hour_at(0), BOOT_HOUR);
         assert_eq!(hour_at(500), BOOT_HOUR + 0.5);
         assert_eq!(hour_at(1_000), BOOT_HOUR + 1.0);
