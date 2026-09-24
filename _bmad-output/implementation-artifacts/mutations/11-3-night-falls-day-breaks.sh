@@ -1,4 +1,4 @@
-# Story 11.3 sitting 1: clock, key, sky and haze. Run alone after committing source.
+# Story 11.3: clock, key, sky, approved day, speed keys and rendered guard. Run alone after commit.
 
 mutation "hour ignores the wire tick" gui tick_clock_moves_fractionally_and_wraps <<'PY'
 import pathlib
@@ -176,4 +176,140 @@ p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
 old = '    if level >= RIM_LEVELS - 1 {\n        return sky;\n    }\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    if level >= RIM_LEVELS - 1 && sky != night_lighting().sky {\n        return sky;\n    }\n'))
+PY
+
+mutation "approved day sky drifts from candidate A" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        sky: Color::srgb_u8(110, 155, 205),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        sky: Color::srgb_u8(111, 155, 205),\n'))
+PY
+
+mutation "approved day ambient tint drifts" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        ambient: Color::srgb_u8(190, 210, 235),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        ambient: Color::srgb_u8(191, 210, 235),\n'))
+PY
+
+mutation "approved day ambient budget drifts" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        ambient_brightness: 4_000.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        ambient_brightness: 4_001.0,\n'))
+PY
+
+mutation "approved day key tint drifts" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        directional: Color::srgb_u8(255, 244, 228),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        directional: Color::srgb_u8(255, 243, 228),\n'))
+PY
+
+mutation "approved day key budget drifts" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        directional_illuminance: 12_000.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        directional_illuminance: 11_999.0,\n'))
+PY
+
+mutation "sun horizon ramp violates the literal 100 lux bar" gui lit_key_never_points_up_or_jumps_in_illuminance <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '    let ramp_degrees = if (6.0..18.0).contains(&hour) {\n        25.0\n    } else {\n        10.0\n    };\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let ramp_degrees = 10.0;\n'))
+PY
+
+mutation "boot direction no longer comes from the exact moon arc" gui key_arc_uses_the_approved_boot_direction_and_day_table <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '            SUN_AZIMUTH_DEGREES + 15.0 * (moon_hour - crate::clock::BOOT_HOUR),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            SUN_AZIMUTH_DEGREES + 1.0 + 15.0 * (moon_hour - crate::clock::BOOT_HOUR),\n'))
+PY
+
+mutation "plus from Paused fails to request Normal" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '        (Speed::Paused, true, false) => Speed::Normal,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        (Speed::Paused, true, false) => Speed::Paused,\n'))
+PY
+
+mutation "plus from Normal fails to request Fast" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '        (Speed::Normal, true, false) => Speed::Fast,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        (Speed::Normal, true, false) => Speed::Normal,\n'))
+PY
+
+mutation "minus from Fast fails to request Normal" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '        (Speed::Fast, false, true) => Speed::Normal,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        (Speed::Fast, false, true) => Speed::Fast,\n'))
+PY
+
+mutation "minus from Normal fails to request Paused" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '        (Speed::Normal, false, true) => Speed::Paused,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        (Speed::Normal, false, true) => Speed::Normal,\n'))
+PY
+
+mutation "speed end presses send an unwanted command" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '        (Speed::Normal, false, true) => Speed::Paused,\n        _ => return,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        (Speed::Normal, false, true) => Speed::Paused,\n        _ => Speed::Normal,\n'))
+PY
+
+mutation "numpad plus fails to reach speed stepping" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '    let faster = keys.just_pressed(KeyCode::Equal) || keys.just_pressed(KeyCode::NumpadAdd);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let faster = keys.just_pressed(KeyCode::Equal);\n'))
+PY
+
+mutation "numpad minus fails to reach speed stepping" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '    let slower = keys.just_pressed(KeyCode::Minus) || keys.just_pressed(KeyCode::NumpadSubtract);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let slower = keys.just_pressed(KeyCode::Minus);\n'))
+PY
+
+mutation "speed key resumes a static-world capture" gui speed_keys_refuse_static_world_and_space_uses_the_new_pause_state <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '    if static_world.0 {\n        eprintln!("sim stays PAUSED: --static-world holds the world frozen for the whole run");\n        return;\n    }\n    let speed = match (mirror.0.speed(), faster, slower) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = static_world;\n    let speed = match (mirror.0.speed(), faster, slower) {\n'))
+PY
+
+mutation "plus leaves Space using stale paused state" gui speed_keys_refuse_static_world_and_space_uses_the_new_pause_state <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '    paused.0 = speed == Speed::Paused;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = &mut paused;\n'))
+PY
+
+mutation "rendered noon ignores the explicit clock pin" gui night_turns_into_day_on_the_rendered_frame ignored <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/clock.rs'); s = p.read_text()
+old = '    pin.0.unwrap_or_else(|| hour_at(mirror.0.tick()))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = pin;\n    hour_at(mirror.0.tick())\n'))
 PY
