@@ -238,13 +238,6 @@ fn direction_from_angles(azimuth_degrees: f32, elevation_degrees: f32) -> Vec3 {
 
 pub fn key_at(hour: f32) -> (Vec3, bevy::prelude::Color, f32) {
     let night = night_lighting();
-    if hour == crate::clock::BOOT_HOUR {
-        return (
-            sun_direction(),
-            night.directional,
-            night.directional_illuminance,
-        );
-    }
     let (azimuth, elevation, color, budget) = if (6.0..18.0).contains(&hour) {
         let phase = (hour - 6.0) / 12.0;
         let elevation = 40.0 * (std::f32::consts::PI * phase).sin();
@@ -485,7 +478,7 @@ mod tests {
     }
 
     #[test]
-    fn key_arc_uses_the_approved_boot_direction_and_the_provisional_noon_table() {
+    fn key_arc_uses_the_approved_boot_direction_and_day_table() {
         let (night_direction, night_color, night_lux) = key_at(crate::clock::BOOT_HOUR);
         assert_eq!(night_direction, sun_direction());
         assert_eq!(night_color, night_lighting().directional);
