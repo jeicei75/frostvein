@@ -93,9 +93,9 @@ PY
 mutation "a light toggle flips its flag but changes nothing drawn" gui lighting_keys_change_the_live_scene_and_its_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '    app.init_resource::<LightingToggles>();\n    app.init_resource::<LightsSteady>();\n    app.init_resource::<EffectsOff>();\n    app.add_systems(\n        Update,\n        (apply_lighting_toggles, update_lighting_readout)'
+old = '        (apply_lighting_toggles, update_lighting_readout)'
 assert s.count(old) == 1
-new = '    app.init_resource::<LightingToggles>();\n    app.init_resource::<LightsSteady>();\n    app.init_resource::<EffectsOff>();\n    app.add_systems(\n        Update,\n        (update_lighting_readout, update_lighting_readout)'
+new = '        (update_lighting_readout, update_lighting_readout)'
 p.write_text(s.replace(old, new))
 PY
 

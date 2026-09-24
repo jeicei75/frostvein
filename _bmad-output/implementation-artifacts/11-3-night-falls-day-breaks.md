@@ -169,19 +169,19 @@ What it established:
   - [x] Build, check `gui --version` names your HEAD, take two controls with the creation recipe
         (no `--clock` yet — it does not exist). Both must match the creation line above and `cmp`
         identical to each other. File them as `11-3-signoff/control-<sha>-{a,b}.png`.
-- [ ] **Task 1 — the clock** (AC1, AC6, AC7)
-  - [ ] NEW `crates/gui/src/clock.rs`: `TICKS_PER_DAY`, `TICKS_PER_HOUR`, `BOOT_HOUR`,
+- [x] **Task 1 — the clock** (AC1, AC6, AC7)
+  - [x] NEW `crates/gui/src/clock.rs`: `TICKS_PER_DAY`, `TICKS_PER_HOUR`, `BOOT_HOUR`,
         `pub fn hour_at(tick: u64) -> f32`, and `pub struct ClockPin(pub Option<f32>)` (resource).
         One `pub fn current_hour(mirror, pin) -> f32` is the ONLY place the hour is computed.
-  - [ ] `--clock <hour>` in `parse_args_from` (`ingest.rs:1054-1273`): `Args` field, branch and
+  - [x] `--clock <hour>` in `parse_args_from` (`ingest.rs:1054-1273`): `Args` field, branch and
         range check. `ClockPin` is `Some(h)` from `--clock`, else `Some(BOOT_HOUR)` when
         `--capture` is given, else `None` (follow the tick). Insert it where `--lights-steady` is
         inserted (`:667-669`).
-  - [ ] `app.init_resource::<ClockPin>()` in `projection_systems` beside `LightingToggles`
+  - [x] `app.init_resource::<ClockPin>()` in `projection_systems` beside `LightingToggles`
         (`ingest.rs:754`), and register the clock-reading systems there too: `tests/capture.rs` and
         `tests/headless.rs` build apps from `projection_systems` alone and would panic with
         "Resource does not exist" (the comment at `ingest.rs:745-751` records that exact defect).
-  - [ ] Unit tests: `hour_at(0) == BOOT_HOUR`, `hour_at(500) == BOOT_HOUR + 0.5`,
+  - [x] Unit tests: `hour_at(0) == BOOT_HOUR`, `hour_at(500) == BOOT_HOUR + 0.5`,
         `hour_at(1_000) == BOOT_HOUR + 1`, wraps at 24;
         parse accepts `0`, `12`, `23.99`, rejects `24`, `-1`, `x`; a capture without `--clock` is
         pinned at `BOOT_HOUR`; a seat run without `--clock` is not.
@@ -438,16 +438,25 @@ gpt-6-sol (high)
 
 - Task 0: `cargo build --offline -p gui -p simd` passed; `./target/debug/gui --version` printed `gui build fc3dd08` without `-dirty`.
 - Fresh daemons on ports 7531 and 7532 each paused at tick 120. Both captures printed `warm-lit pixels=23433 ground-median-luminance=69 near-white-area=0.3906% blown-pool=0.3637% p99-luminance=153.5 resolution=1280x720`. `cmp` of the two PNGs exited 0.
+- Task 1 RED: `tick_clock_moves_fractionally_and_wraps`: `left: 22.0 right: 22.5` (hour ignored tick). `clock_flag_accepts_hours_and_rejects_out_of_range_values`: `called Result::unwrap() on an Err value: invalid port`. `clock_pin_reaches_the_live_app_and_capture_defaults_to_boot`: `left: None right: Some(None)`. `an_unpinned_seat_follows_two_wire_snapshots_one_hour_apart`: `left: 0.0 right: 1.0`. `capture_clock_note_names_the_rendered_hour_and_source`: `left: "" right: " clock=12.00 (--clock)"`. All subsequently green. Mutation rows and results will be recorded after the committed table runs.
 
 ### Completion Notes List
 
 - Task 0: Controls filed as `control-fc3dd08-a.png` and `control-fc3dd08-b.png`; same-build floor is zero.
+- Task 1: `ClockPin` is initialized in `projection_systems` and configured from `--clock` or the capture default. The range line uses `current_hour()` and identifies an explicit pin or capture default. Repointed affected existing mutation rows in 9.1 and 10.7. The new rows are pending the post-commit mutation run.
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
 - `_bmad-output/implementation-artifacts/11-3-signoff/control-fc3dd08-a.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/control-fc3dd08-b.png`
+- `crates/gui/src/clock.rs`
+- `crates/gui/src/lib.rs`
+- `crates/gui/src/ingest.rs`
+- `crates/gui/src/capture.rs`
+- `crates/gui/tests/capture.rs`
+- `_bmad-output/implementation-artifacts/mutations/9-1-the-frame-stops-blowing-out.sh`
+- `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh`
 
 ## Change Log
 
@@ -455,3 +464,4 @@ gpt-6-sol (high)
 | --- | --- |
 | 2026-09-24 | Story created. Rulings taken (day length 24,000; moving moon, captures pin `--clock`; day artifact gated in Task 4; flat table-driven sky, `Atmosphere` probed and not adopted). Control measured on `53ba44e` (bit-identical pair, RED seen); creation probe in an isolated worktree (8 frames, filed). Adversarial validation pass: 1 critical, 4 high, 7 medium and 4 low findings applied (provisional day table plus two sittings; AC4 swap exemption; dusk at 17.5; AC8 keeps the band; AC9 bars from measurement; `ClockPin` in `projection_systems`; float hour; F4 haze re-writer). |
 | 2026-09-24 | Task 0 controls on `fc3dd08` matched the creation range and each other byte for byte. |
+| 2026-09-24 | Task 1 added the tick-derived hour, explicit and capture-default pinning, and capture clock reporting. |

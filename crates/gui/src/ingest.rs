@@ -665,6 +665,13 @@ fn configure_client_app(
     // comments catalogue: with no `--lights-off` this inserts exactly `Default`, so the absent
     // flag and the present one take the SAME path and neither can rot while the other is tested.
     app.insert_resource(LightingToggles::with_off(&args.lights_off));
+    app.insert_resource(crate::clock::ClockPin(
+        args.clock
+            .or(args.capture.as_ref().map(|_| crate::clock::BOOT_HOUR)),
+    ));
+    if args.clock.is_some() {
+        app.insert_resource(crate::clock::ExplicitClock);
+    }
     app.insert_resource(EffectsOff::with_off(&args.fx_off));
     app.insert_resource(LightsSteady(args.lights_steady));
     app.insert_resource(crate::command::StaticWorld(args.static_world));
@@ -750,6 +757,7 @@ pub fn projection_systems(app: &mut App) {
     // `init_resource` is idempotent, so `client_systems` keeping its own call is not a conflict —
     // each builder now stands up what it registers.
     app.init_resource::<LightingToggles>();
+    app.init_resource::<crate::clock::ClockPin>();
     app.init_resource::<LightsSteady>();
     app.init_resource::<EffectsOff>();
     app.add_systems(
@@ -924,6 +932,7 @@ fn overlay_config_on() -> FpsOverlayConfig {
 
 struct Args {
     port: u16,
+    clock: Option<f32>,
     capture: Option<PathBuf>,
     frames: u32,
     expect_work: bool,
@@ -1070,11 +1079,19 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut lights_steady = false;
     let mut assets = None;
     let mut perf_log = None;
+    let mut clock = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
             let path = args.next().context("--capture requires a path")?;
             capture = Some(PathBuf::from(path));
+        } else if arg == "--clock" {
+            let value = args.next().context("--clock requires 0 <= hour < 24")?;
+            let hour = value.to_string_lossy().parse::<f32>().ok();
+            clock = Some(match hour {
+                Some(hour) if hour.is_finite() && (0.0..24.0).contains(&hour) => hour,
+                _ => bail!("--clock requires 0 <= hour < 24"),
+            });
         } else if arg == "--frames" {
             let value = args.next().context("--frames requires a positive count")?;
             frames = Some(
@@ -1240,6 +1257,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     }
     Ok(Args {
         port,
+        clock,
         capture,
         frames: frames.unwrap_or(DEFAULT_AT_TICK_FRAME_BUDGET),
         expect_work,
@@ -2577,6 +2595,102 @@ mod tests {
             .init_resource::<FpsOverlayConfig>();
         super::configure_client_app(&mut app, mirror, receiver, writer, parsed);
         (app, sender, server)
+    }
+
+    #[test]
+    fn clock_flag_accepts_hours_and_rejects_out_of_range_values() {
+        for (text, expected) in [("0", 0.0), ("12", 12.0), ("23.99", 23.99)] {
+            let args = super::parse_args_from(["--clock".into(), text.into()]).unwrap();
+            assert_eq!(
+                args.clock,
+                Some(expected),
+                "--clock {text} must be retained"
+            );
+        }
+        for text in ["24", "-1", "x"] {
+            let result = super::parse_args_from(["--clock".into(), text.into()]);
+            assert!(
+                result.is_err_and(|error| error.to_string().contains("0 <= hour < 24")),
+                "--clock {text} must name the allowed range"
+            );
+        }
+    }
+
+    #[test]
+    fn clock_pin_reaches_the_live_app_and_capture_defaults_to_boot() {
+        let (seat, _sender, _server) = configured_app(&[]);
+        assert_eq!(
+            seat.world()
+                .get_resource::<crate::clock::ClockPin>()
+                .map(|pin| pin.0),
+            Some(None),
+            "an unpinned seat must follow the daemon tick"
+        );
+        let (capture, _sender, _server) =
+            configured_app(&["--capture", "/tmp/clock-test.png", "--frames", "60"]);
+        assert_eq!(
+            capture
+                .world()
+                .get_resource::<crate::clock::ClockPin>()
+                .map(|pin| pin.0),
+            Some(Some(crate::clock::BOOT_HOUR)),
+            "a capture without --clock must pin the boot hour"
+        );
+        let (noon, _sender, _server) = configured_app(&["--clock", "12"]);
+        assert_eq!(
+            noon.world()
+                .get_resource::<crate::clock::ClockPin>()
+                .map(|pin| pin.0),
+            Some(Some(12.0)),
+            "--clock must reach the app resource"
+        );
+        let late_snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 1_000,
+        };
+        let (late_capture, _sender, _server) = configured_app_with_snapshot(
+            &["--capture", "/tmp/clock-test.png", "--frames", "60"],
+            late_snapshot,
+        );
+        assert_eq!(
+            crate::clock::current_hour(
+                late_capture.world().resource::<super::MirrorResource>(),
+                late_capture.world().resource::<crate::clock::ClockPin>()
+            ),
+            crate::clock::BOOT_HOUR,
+            "a capture must hold the boot hour even when the wire tick is 1,000"
+        );
+    }
+
+    #[test]
+    fn an_unpinned_seat_follows_two_wire_snapshots_one_hour_apart() {
+        let snapshot = |tick| Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick,
+        };
+        let (early, _sender, _server) = configured_app_with_snapshot(&[], snapshot(0));
+        let (late, _sender, _server) = configured_app_with_snapshot(&[], snapshot(1_000));
+        let hour = |app: &App| {
+            crate::clock::current_hour(
+                app.world().resource::<super::MirrorResource>(),
+                app.world().resource::<crate::clock::ClockPin>(),
+            )
+        };
+        assert_eq!(hour(&late) - hour(&early), 1.0);
     }
 
     #[test]
