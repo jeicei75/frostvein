@@ -2704,7 +2704,7 @@ mod tests {
             Some(None),
             "an unpinned seat must follow the daemon tick"
         );
-        let (capture, _sender, _server) =
+        let (mut capture, _sender, _server) =
             configured_app(&["--capture", "/tmp/clock-test.png", "--frames", "60"]);
         assert_eq!(
             capture
@@ -2735,7 +2735,7 @@ mod tests {
         };
         let (late_capture, _sender, _server) = configured_app_with_snapshot(
             &["--capture", "/tmp/clock-test.png", "--frames", "60"],
-            late_snapshot,
+            late_snapshot.clone(),
         );
         assert_eq!(
             crate::clock::current_hour(
@@ -2744,6 +2744,18 @@ mod tests {
             ),
             crate::clock::BOOT_HOUR,
             "a capture must hold the boot hour even when the wire tick is 1,000"
+        );
+        capture
+            .world_mut()
+            .resource_mut::<super::MirrorResource>()
+            .0 = Mirror::from_snapshot(late_snapshot).unwrap();
+        assert_eq!(
+            crate::clock::current_hour(
+                capture.world().resource::<super::MirrorResource>(),
+                capture.world().resource::<crate::clock::ClockPin>()
+            ),
+            crate::clock::BOOT_HOUR,
+            "a running capture must stay at 22 after the wire advances 1,000 ticks"
         );
     }
 
