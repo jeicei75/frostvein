@@ -146,7 +146,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    let _ = mirror;\n    pin.0.unwrap_or(BOOT_HOUR)\n'))
 PY
 
-mutation "hourly table stays night at noon" gui hourly_light_table_keeps_night_exact_and_reaches_the_provisional_day <<'PY'
+mutation "hourly table stays night at noon" gui hourly_light_table_keeps_night_exact_and_reaches_the_approved_day <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
 old = '    if weight == 1.0 {\n        return day;\n    }\n'

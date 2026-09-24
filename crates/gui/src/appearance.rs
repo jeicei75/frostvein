@@ -49,7 +49,6 @@ pub fn night_lighting() -> LightTable {
     }
 }
 
-// PROVISIONAL — not approved (11.3 Task 4 pick pending).
 pub fn day_lighting() -> LightTable {
     LightTable {
         sky: Color::srgb_u8(110, 155, 205),
@@ -393,7 +392,7 @@ mod tests {
     };
 
     #[test]
-    fn hourly_light_table_keeps_night_exact_and_reaches_the_provisional_day() {
+    fn hourly_light_table_keeps_night_exact_and_reaches_the_approved_day() {
         let night = night_lighting();
         let day = day_lighting();
         assert_eq!(day_weight(22.0), 0.0);
@@ -565,6 +564,19 @@ mod tests {
         );
         assert_eq!(lighting.ambient_brightness, 1_500.0);
         assert_eq!(lighting.directional_illuminance, 7_000.0);
+
+        let day = day_lighting();
+        assert_eq!(day.sky.to_srgba().to_u8_array_no_alpha(), [110, 155, 205]);
+        assert_eq!(
+            day.ambient.to_srgba().to_u8_array_no_alpha(),
+            [190, 210, 235]
+        );
+        assert_eq!(day.ambient_brightness, 4_000.0);
+        assert_eq!(
+            day.directional.to_srgba().to_u8_array_no_alpha(),
+            [255, 244, 228]
+        );
+        assert_eq!(day.directional_illuminance, 12_000.0);
 
         let entities = [
             (EntityKind::Dwarf, [151, 116, 96], 0.75),

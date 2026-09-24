@@ -218,7 +218,7 @@ What it established:
   - [x] `DistanceFog.color`, `ClearColor` and the rim target come from ONE value per frame (AC5's
         equality test reads all three off the live app).
   - [x] `volumetric_fog()`'s ambient follows the clock's ambient through the same derivation (AC11).
-- [ ] **Task 4 — the opening artifact, and the STOP** (AC12)
+- [x] **Task 4 — the opening artifact, and the STOP** (AC12)
   - [x] **4a.** Render ≥ 3 candidate day tables at `--clock 12` and one dusk at `--clock 17.5`
         (the sun still ~5° up — at 18.25 the key has ramped dark and the frame is ambient-only;
         tell Wolf that the key goes dark AT the horizon, so the warm light is the last hour before
@@ -228,7 +228,7 @@ What it established:
         its table and range-check line under `11-3-signoff/`. Start from p3 (above).
   - [x] **STOP. Hand the frames to Wolf.** Record his words verbatim in the Dev Agent Record.
         The session resumes at 4b.
-  - [ ] **4b.** Write the picked table into `day_lighting()`, drop the PROVISIONAL marker, and pin
+  - [x] **4b.** Write the picked table into `day_lighting()`, drop the PROVISIONAL marker, and pin
         its literals in `appearance_tables_pin_the_cold_boot_palette` (`appearance.rs:330`) beside
         the night literals. `night_lighting()`'s literals do not change.
 - [ ] **Task 5 — the instrument, and its test** (AC8, AC9)
@@ -436,6 +436,8 @@ gpt-6-sol (high)
 
 ### Debug Log References
 
+- Sitting 2, Task 4b RED: temporarily changed only the candidate A sky literal to `(111,155,205)`; `appearance_tables_pin_the_cold_boot_palette` failed at `appearance.rs:570`: `left: [111, 155, 205] right: [110, 155, 205]`. Restored `(110,155,205)` and the focused test passed. The day literal pin's mutation row is pending Task 8.
+
 - Task 0: `cargo build --offline -p gui -p simd` passed; `./target/debug/gui --version` printed `gui build fc3dd08` without `-dirty`.
 - Fresh daemons on ports 7531 and 7532 each paused at tick 120. Both captures printed `warm-lit pixels=23433 ground-median-luminance=69 near-white-area=0.3906% blown-pool=0.3637% p99-luminance=153.5 resolution=1280x720`. `cmp` of the two PNGs exited 0.
 - Task 1 RED: `tick_clock_moves_fractionally_and_wraps`: `left: 22.0 right: 22.5` (hour ignored tick). `clock_flag_accepts_hours_and_rejects_out_of_range_values`: `called Result::unwrap() on an Err value: invalid port`. `clock_pin_reaches_the_live_app_and_capture_defaults_to_boot`: `left: None right: Some(None)`. `an_unpinned_seat_follows_two_wire_snapshots_one_hour_apart`: `left: 0.0 right: 1.0`. `capture_clock_note_names_the_rendered_hour_and_source`: `left: "" right: " clock=12.00 (--clock)"`. All subsequently green. Mutation rows and results will be recorded after the committed table runs.
@@ -449,6 +451,8 @@ gpt-6-sol (high)
 - Self-gate attempt 1: `codex review --base main` started but could not inspect any diff. Every shell invocation failed before execution with `error building bubblewrap command: app-server socket directory must be a user-owned directory with mode 0700`. It returned no code findings and cannot be counted as a successful review pass.
 
 ### Completion Notes List
+
+- Sitting 2, Task 4b: Wolf's approved candidate A was already the provisional table; removed the provisional marker and pinned its sky, ambient, ambient brightness, directional colour and illuminance as independent literals beside the unchanged night pins.
 
 - Task 0: Controls filed as `control-fc3dd08-a.png` and `control-fc3dd08-b.png`; same-build floor is zero.
 - Task 1: `ClockPin` is initialized in `projection_systems` and configured from `--clock` or the capture default. The range line uses `current_hour()` and identifies an explicit pin or capture default. Repointed affected existing mutation rows in 9.1 and 10.7. The new rows are pending the post-commit mutation run.
@@ -579,3 +583,4 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 | 2026-09-24 | Orchestrator verification of Tasks 0-3 (AC2 re-captured cmp-identical, noon == probe p3, full gate GREEN 1680 s on `bb893b2`); Task 4a: four candidate day tables rendered in an isolated worktree and filed. STOPPED for Wolf's pick. |
 | 2026-09-24 | Wolf ruled permanent `+`/`-` sim-speed keys in the gui (Paused/Normal/Fast via existing `SetSpeed`); throwaway probe branch `probe-11-3-day-toggle` pushed for his live A-D pick. |
 | 2026-09-24 | Wolf picked candidate A live (D recorded as a future overcast table); approved frame filed; STOP released — sitting 2 (4b onward) next. |
+| 2026-09-24 | Task 4b pinned Wolf's approved candidate A as hand-written day literals and removed the provisional marker. |
