@@ -878,6 +878,9 @@ pub fn client_systems(app: &mut App) {
             crate::command::toggle_pause
                 .after(update_pick)
                 .before(send_commands),
+            crate::command::step_speed
+                .after(crate::command::toggle_pause)
+                .before(send_commands),
             // Before `send_commands`, so the hand-back reaches the socket on the frame the
             // exit is requested rather than never.
             crate::command::restore_speed_on_exit.before(send_commands),
@@ -3055,6 +3058,76 @@ mod tests {
         );
     }
 
+    #[test]
+    fn speed_keys_step_from_the_daemon_speed_and_ignore_the_ends() {
+        for (speed, key, expected) in [
+            (Speed::Paused, KeyCode::Equal, Some("normal")),
+            (Speed::Normal, KeyCode::NumpadAdd, Some("fast")),
+            (Speed::Fast, KeyCode::Equal, None),
+            (Speed::Fast, KeyCode::Minus, Some("normal")),
+            (Speed::Normal, KeyCode::NumpadSubtract, Some("paused")),
+            (Speed::Paused, KeyCode::Minus, None),
+        ] {
+            let (mut app, _sender, server) =
+                configured_app_with_snapshot(&[], snapshot_at_tick(8, speed));
+            app.update();
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let actual = read_one_command(&server);
+            let expected = expected.map_or(String::new(), |speed| {
+                format!(r#"{{"type":"set_speed","speed":"{speed}"}}"#)
+            });
+            assert_eq!(actual, expected, "{key:?} from {speed:?}");
+        }
+    }
+
+    #[test]
+    fn speed_keys_refuse_static_world_and_space_uses_the_new_pause_state() {
+        let (mut frozen, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        frozen.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused","at_tick":120}"#
+        );
+        frozen
+            .world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Equal);
+        frozen.update();
+        assert_eq!(
+            read_one_command(&server),
+            "",
+            "speed key must refuse --static-world"
+        );
+
+        let (mut seat, _sender, server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Paused));
+        seat.update();
+        seat.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Equal);
+        seat.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"normal"}"#
+        );
+        {
+            let mut keys = seat.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::Equal);
+            keys.clear();
+            keys.press(KeyCode::Space);
+        }
+        seat.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#,
+            "Space after + must pause the newly running sim"
+        );
+    }
+
     /// A `--static-world` run hands the daemon back at Normal when it ends.
     ///
     /// The daemon's speed is ONE global shared by every client, so before this a `--static-world`
@@ -3563,6 +3636,10 @@ mod tests {
             (KeyCode::Comma, "slice down (ingest.rs)"),
             (KeyCode::Period, "slice up (ingest.rs)"),
             (KeyCode::Space, "pause / resume the sim (command.rs)"),
+            (KeyCode::Equal, "step speed faster (command.rs)"),
+            (KeyCode::NumpadAdd, "step speed faster (command.rs)"),
+            (KeyCode::Minus, "step speed slower (command.rs)"),
+            (KeyCode::NumpadSubtract, "step speed slower (command.rs)"),
             (KeyCode::KeyA, "yaw, held (camera_controls)"),
             (KeyCode::KeyD, "yaw, held (camera_controls)"),
             (KeyCode::KeyW, "pitch, held (camera_controls)"),

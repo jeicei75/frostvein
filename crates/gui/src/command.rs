@@ -308,6 +308,38 @@ pub fn toggle_pause(
     eprintln!("sim {}", if paused.0 { "PAUSED" } else { "running" });
 }
 
+/// Step the daemon's reported speed with the same keys and limits as the TUI.
+pub fn step_speed(
+    keys: Res<ButtonInput<KeyCode>>,
+    static_world: Res<StaticWorld>,
+    mirror: Res<crate::ingest::MirrorResource>,
+    mut paused: ResMut<SimPaused>,
+    mut pending: ResMut<PendingCommands>,
+) {
+    let faster = keys.just_pressed(KeyCode::Equal) || keys.just_pressed(KeyCode::NumpadAdd);
+    let slower = keys.just_pressed(KeyCode::Minus) || keys.just_pressed(KeyCode::NumpadSubtract);
+    if !faster && !slower {
+        return;
+    }
+    if static_world.0 {
+        eprintln!("sim stays PAUSED: --static-world holds the world frozen for the whole run");
+        return;
+    }
+    let speed = match (mirror.0.speed(), faster, slower) {
+        (Speed::Paused, true, false) => Speed::Normal,
+        (Speed::Normal, true, false) => Speed::Fast,
+        (Speed::Fast, false, true) => Speed::Normal,
+        (Speed::Normal, false, true) => Speed::Paused,
+        _ => return,
+    };
+    paused.0 = speed == Speed::Paused;
+    pending.push(Command::SetSpeed {
+        speed,
+        at_tick: None,
+    });
+    eprintln!("sim speed {speed:?}");
+}
+
 /// Sends all commands built by the input systems. Errors deliberately drain the failed queue:
 /// reconnect is outside this story and retrying stale designations would surprise the player.
 pub fn send_commands(mut pending: ResMut<PendingCommands>, sink: Option<Res<CommandSink>>) {
