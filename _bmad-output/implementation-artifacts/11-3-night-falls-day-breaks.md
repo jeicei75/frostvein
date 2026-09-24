@@ -442,6 +442,8 @@ gpt-6-sol (high)
 - Short-circuit removal RED: after deleting the boot-hour branch, the existing boot equality passed through the moon arc. A temporary +1° moon azimuth change made `key_arc_uses_the_approved_boot_direction_and_day_table` fail: `left: Vec3(0.7187084, -0.3033679, 0.6256407) right: Vec3(0.7295178, -0.3033679, 0.6130022)`. Restoring the original moon formula made it green. The fresh AC2 capture pair is still pending.
 - AC2 after short-circuit removal: rebuilt `gui build 0e6a695` without `-dirty`, fresh daemons on ports 7543/7544 paused at tick 120; `boot-0e6a695-{default,explicit}.png` each compared byte-identical to `control-fc3dd08-a.png`.
 - Speed keys RED, before implementation: `speed_keys_step_from_the_daemon_speed_and_ignore_the_ends` failed `Equal from Paused left: "" right: "{\"type\":\"set_speed\",\"speed\":\"normal\"}"`; `speed_keys_refuse_static_world_and_space_uses_the_new_pause_state` failed its seat case with the same empty command versus Normal. Both passed after registering `step_speed` before `send_commands`. The tests read the actual socket command for all four steps, both ignored ends, the static-world refusal, and Space immediately after `+` from Paused. Mutation rows remain pending.
+- AC2 after speed-key wiring: rebuilt `gui build 8d03dca` without `-dirty`, fresh daemons on ports 7545/7546 paused at tick 120; `boot-8d03dca-{default,explicit}.png` each compared byte-identical to `control-fc3dd08-a.png`.
+- Task 5 AC9 RED in Verification: temporarily made `current_hour` ignore `ClockPin`; `night_turns_into_day_on_the_rendered_frame` failed `noon ground must exceed night by more than 10: 69 -> 69` (sky-stars 1.8736 → 1.8736). Restored the source, rebuilt through `cargo test`, and the guard passed on real frames: ground 69 → 161; sky-stars 1.8823 → 0.5127. Further capture repeats and the full ignored suite are pending.
 - Sitting 2, Task 4b RED: temporarily changed only the candidate A sky literal to `(111,155,205)`; `appearance_tables_pin_the_cold_boot_palette` failed at `appearance.rs:570`: `left: [111, 155, 205] right: [110, 155, 205]`. Restored `(110,155,205)` and the focused test passed. The day literal pin's mutation row is pending Task 8.
 
 - Task 0: `cargo build --offline -p gui -p simd` passed; `./target/debug/gui --version` printed `gui build fc3dd08` without `-dirty`.
@@ -566,7 +568,11 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-7ad8b32-explicit.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-0e6a695-default.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-0e6a695-explicit.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/boot-8d03dca-default.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/boot-8d03dca-explicit.png`
 - `crates/gui/src/command.rs`
+- `crates/gui/tests/pixel_guard.rs`
+- `_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh`
 - `_bmad-output/implementation-artifacts/mutations/11-3-night-falls-day-breaks.sh`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-default.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-explicit.png`
@@ -599,3 +605,4 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 | 2026-09-24 | Tightened AC4's key continuity bar to 100 lux per 0.01 h and widened only the sun's horizon ramp to pass it. |
 | 2026-09-24 | Removed the boot-hour key short-circuit so the approved direction is produced by the moon arc itself. |
 | 2026-09-24 | Added permanent gui speed keys from Wolf's ruling using the daemon's reported speed and reconciled Space's pause state. |
+| 2026-09-24 | Added AC9's ignored rendered night-to-noon guard, observed its clock-pin RED, then its green ground and sky changes. |

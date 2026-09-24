@@ -869,6 +869,54 @@ fn switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing() {
     );
 }
 
+/// AC9: the approved candidate A must turn the same frozen valley from moonlit to daylight.
+#[test]
+#[ignore = "renders real frames; scripts/gate.sh runs it in the full tier"]
+fn night_turns_into_day_on_the_rendered_frame() {
+    let night_daemon = Daemon::spawn();
+    let (night, width, height) = night_daemon.capture(
+        "clock-night",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--clock",
+            "22",
+        ],
+    );
+    drop(night_daemon);
+    let day_daemon = Daemon::spawn();
+    let (day, day_width, day_height) = day_daemon.capture(
+        "clock-noon",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--clock",
+            "12",
+        ],
+    );
+    assert_eq!((width, height), (day_width, day_height));
+    let night_ground = gui::capture::median_ground_luminance(&night, width as u32, height as u32);
+    let day_ground = gui::capture::median_ground_luminance(&day, width as u32, height as u32);
+    let sky = (60, 10, 460, 110);
+    let night_stars = rec601_lap_mean(&night, width, sky);
+    let day_stars = rec601_lap_mean(&day, width, sky);
+    println!(
+        "AC9 clock frame: ground {night_ground} -> {day_ground}; sky-stars {night_stars:.4} -> {day_stars:.4}"
+    );
+    assert!(
+        i16::from(day_ground) - i16::from(night_ground) > 10,
+        "noon ground must exceed night by more than 10: {night_ground} -> {day_ground}"
+    );
+    assert!(
+        day_stars <= 0.5 * night_stars,
+        "noon sky-stars must lose at least half their edge energy: {night_stars:.4} -> {day_stars:.4}"
+    );
+}
+
 // AC12's frame-level guard is RETIRED. Issue #108, Wolf's ruling 2026-09-19.
 //
 // `the_fine_mesher_leaves_no_sky_showing_through_the_terrain` resolved sky with an EXACT RGB match
