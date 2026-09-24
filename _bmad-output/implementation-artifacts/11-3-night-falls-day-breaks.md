@@ -440,6 +440,7 @@ gpt-6-sol (high)
 - Fresh daemons on ports 7531 and 7532 each paused at tick 120. Both captures printed `warm-lit pixels=23433 ground-median-luminance=69 near-white-area=0.3906% blown-pool=0.3637% p99-luminance=153.5 resolution=1280x720`. `cmp` of the two PNGs exited 0.
 - Task 1 RED: `tick_clock_moves_fractionally_and_wraps`: `left: 22.0 right: 22.5` (hour ignored tick). `clock_flag_accepts_hours_and_rejects_out_of_range_values`: `called Result::unwrap() on an Err value: invalid port`. `clock_pin_reaches_the_live_app_and_capture_defaults_to_boot`: `left: None right: Some(None)`. `an_unpinned_seat_follows_two_wire_snapshots_one_hour_apart`: `left: 0.0 right: 1.0`. `capture_clock_note_names_the_rendered_hour_and_source`: `left: "" right: " clock=12.00 (--clock)"`. All subsequently green. Mutation rows and results will be recorded after the committed table runs.
 - Task 2 RED: `key_arc_uses_the_approved_boot_direction_and_the_provisional_noon_table`: `assertion failed: noon_direction.y < night_direction.y`. `lit_key_never_points_up_or_jumps_in_illuminance`: `both keys are dark at dawn; left: 7000.0 right: 0.0`. `clock_drives_the_installed_key_direction_color_and_illuminance`: installed `Vec3(0.7295178, -0.3033679, 0.61300206)` vs noon `Vec3(0.5864819, -0.6427876, 0.49281135)`. `f8_restores_the_clock_key_at_noon`: `left: 7000.0 right: 12000.0`. The first horizon-ramp version also failed continuity: `key illuminance jumps at hour 6.0699997: 795.18256 to 1061.1969`; the 10° ramp passes the 0.01 h sweep.
+- AC2 after Task 2: rebuilt `gui build dcdbd27` without `-dirty`; fresh daemons on ports 7533 and 7534 paused at tick 120. The no-`--clock` and `--clock 22` captures both printed the creation range figures, with `clock=22.00 (capture default)` and `clock=22.00 (--clock)` respectively. `cmp` of EACH against `control-fc3dd08-a.png` exited 0 (byte identical).
 
 ### Completion Notes List
 
@@ -455,6 +456,8 @@ gpt-6-sol (high)
 - `crates/gui/src/clock.rs`
 - `crates/gui/src/appearance.rs`
 - `crates/gui/src/atmosphere.rs`
+- `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-default.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-explicit.png`
 - `crates/gui/src/lib.rs`
 - `crates/gui/src/ingest.rs`
 - `crates/gui/src/capture.rs`
