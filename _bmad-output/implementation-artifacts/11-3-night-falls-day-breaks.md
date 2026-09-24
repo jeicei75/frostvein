@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default; 11.2's creation ran on claude-opus-5 
 
 # Story 11.3: Night Falls, Day Breaks
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -258,6 +258,71 @@ What it established:
         `BOOT_HOUR` moved; a capture without `--clock` follows the tick; the hour steps in whole
         hours (integer division); F4-on restores the night haze ambient at noon.
   - [x] Every row `assert s.count(old) == 1`. Run `audit-mutations.py` **after** `cargo fmt`.
+
+### Review Findings
+
+Code review 2026-09-24, run 1 on `d917314` (Claude Opus 5.5 orchestrator). Four layers ran, and each
+had its own warm `CARGO_TARGET_DIR`. **Every layer ran cargo and the binaries, so there is no
+coverage hole.** R1's territories do not name `crates/gui`, so they were reassigned:
+- Blind Hunter (Sonnet) took the pure-logic half: `clock`, `appearance`, `atmosphere`, `project`.
+- Edge Case Hunter (Sonnet) took the wiring half: `ingest`, `capture`, `command`, and the tests.
+- The Acceptance and Feature Auditors (Opus) reviewed the whole diff.
+- The orchestrator reviewed the mutation scripts, docs, README and records inline.
+
+Each finding is labelled with its source layer, then this workflow's HIGH/MED/LOW tier.
+Totals: 2 decision-needed, 3 patch, 13 defer, 3 dismissed. There are no HIGH findings. After Wolf's rulings: 4 patch (left as action items) and 14 defer.
+Review cost: $28.97 over 457 turns, of which subagents were 70.2% of tokens. The reaper then
+reclaimed 146.4 GB under `/tmp`. No stray daemons or pollers were left behind.
+
+**What ran, and what did not.** The Feature Auditor ran a probe build with the capture pin
+removed against a free-running daemon. This is the first time anyone observed the UNPINNED
+seat path live.
+- Hours 18.20→19.25: the sky ramped `[42,63,91]→[5,12,28]` and the stars and aurora came back.
+- Hours 8.67→9.76: a day frame rendered.
+
+Both auditors confirmed that the boot capture, and the `--clock 22` capture, are
+`cmp`-identical to the control, and that `--clock 12` is `cmp`-identical to
+`approved-day-bb893b2.png`. **Not proven:** the `+`/`-` keys in a real window, since no
+headless instrument can press keys. The full cycle at Fast on Wolf's seat is not proven either.
+**AC13 stays OPEN.**
+
+- [x] [Review][Defer] **Predawn frames trip the AC8 value floor, and no one recorded or ruled on it** (feature, MED; issue **#125**) — deferred by Wolf, 2026-09-24: settle it in #125 with the frames in hand; the seat never runs the capture check
+  - Pinned captures at `--clock` 4.0, 4.5, 5.0 and 5.2 exit 101: the ground median reads 54/52/51/52, below the 55 floor. The orchestrator re-ran 4.5 and got 52, a panic at `capture.rs:1563`.
+  - 3.5 reads 55 and 5.4 reads 57. The evening is close as well: 18.7, 18.8 and 18.9 read 57, 56 and 56.
+  - AC8 says the band "applies at every hour", and any trip gets Wolf's ruling. The dev checked only 22, 12 and 17.5.
+  - Probable cause: the moving moon sits low at about 137–148° azimuth, and day ambient starts only at 05:00. The frame reads as a dim night, not a black field.
+  - Options: (a) a per-hour skip of the value floor in the `band_applies` shape; (b) retune the moon's arc or ramp, or start ambient earlier; (c) defer to a follow-up story.
+- [ ] [Review][Patch] **Dusk changed after Wolf's live pick, and the record understates it** (accept, MED; Wolf ruled 2026-09-24: KEEP the 25° ramp, and disclose it in `candidates.md` and vehicle-card Q3, with the numbers, so he judges dawn and dusk live at AC13) [`_bmad-output/implementation-artifacts/11-3-signoff/vehicle-card.md:55-56`, `11-3-signoff/candidates.md`]
+  - Wolf picked A live on `probe-11-3-day-toggle`, which had a 10° sun ramp (`198776e`). `7ad8b32` then widened the sun ramp to 25° to meet AC4's literal 100-lux bar.
+  - At 17:30 the key falls from about 6,400 to about 1,350 lux (−79%). The sun is below full strength before about 08:35 and after about 15:25.
+  - The record says "the wider ramp barely moves it", but that is measured on ground median alone (109→108). The frame is not byte-identical to the filed candidate-A dusk, and its p99 moves 180.2→169.0.
+  - `candidates.md` still says "horizon ramp over the last 10°", and vehicle-card Q3 does not mention the change.
+  - Options: (a) keep 25°, and disclose it on the card and in `candidates.md` so Wolf judges dawn and dusk at AC13; (b) reopen AC4's bar, for example allowing key illuminance a bar of its own.
+- [ ] [Review][Patch] **Mutation row "a default capture follows the wire tick" no longer sabotages the capture default** (accept + orchestrator, MED) [`_bmad-output/implementation-artifacts/mutations/11-3-night-falls-day-breaks.sh:82-88`]
+  - Its payload is byte-identical to the last row's, "rendered noon ignores the explicit clock pin" (`current_hour` ignores every pin).
+  - The Task 8 defect lives at `ingest.rs` `.or(args.capture.as_ref().map(|_| BOOT_HOUR))`. `9bfd18d` had the right payload; `758a561` and `8ba95ce` drifted away from it.
+  - The Dev Agent Record's kill line describes a payload that no longer exists.
+  - Fix: restore the capture-default payload, then re-mutate that row alone.
+- [ ] [Review][Patch] **The vehicle card's pinned noon capture may exit 101 on the seat GPU, with no warning** (feature, MED) [`_bmad-output/implementation-artifacts/11-3-signoff/vehicle-card.md:40-41`]
+  - Devpod noon near-white is 0.8519% against a 0.9461% ceiling, only 0.094 pp of headroom.
+  - The delivery GPU reads bright-tail near-white 0.4–0.6 pp higher (see memory "capture ceiling is venue-sited").
+  - The card says "the capture band applies to both". It should predict a possible exit 101 at noon and say that a 101 there is a venue offset, not a regression.
+- [ ] [Review][Patch] **The card's live night comparison is against a moved moon** (feature, LOW; patched because the card is being edited anyway) [`_bmad-output/implementation-artifacts/11-3-signoff/vehicle-card.md:21-24`]
+  - "The unpinned client begins at 22:00" is true only at daemon tick 0. Every minute before the first frame moves the clock 0.6 h and the moon 9° of azimuth.
+  - Judge the night against the approved moonlit camp from the pinned 22:00 capture. Use the live run for the cycle only.
+- [x] [Review][Defer] `lighting_at()` blends `directional` and `directional_illuminance` that nothing reads (`appearance.rs:94-96`). The key takes those only from `key_at`. So there are two sources for the key, and they disagree between 05:00 and 07:00 (accept LOW) [crates/gui/src/appearance.rs:94] — deferred, YAGNI trap for a future reader
+- [x] [Review][Defer] The new `CaptureClock` struct sits between `capture_after_frames`' doc and lint comments and the function, so the comment now documents the struct. A meaningless `#[allow(clippy::too_many_arguments)]` also sits on the struct (accept LOW) [crates/gui/src/capture.rs:934-943] — deferred
+- [x] [Review][Defer] In the tech-art Lights table, the day rows and the D row were inserted between `night_lighting().directional` and its "↳ before 10.8 … (superseded)" row, which now reads as belonging to D (accept + orchestrator LOW) [docs/tech-art-guidelines.md:61-65] — deferred
+- [x] [Review][Defer] AC5 tests compare ClearColor, fog and rim only at 12:00 and 22:00. No live-app sweep across hours checks that the three stay equal (accept LOW) [crates/gui/src/ingest.rs:4020] — deferred; the code is structurally one value per frame
+- [x] [Review][Defer] The AC6/AC7 tests call `current_hour()` on swapped resources instead of updating the live app, and the unpinned test builds two apps, not one app fed two snapshots. AC7's RED line `clock=22.1x` was never recorded (accept LOW) [crates/gui/src/ingest.rs:2698] — deferred
+- [x] [Review][Defer] AC10's `--lights-off sun`/`ambient` "at every hour" is untested away from the boot hour. It is correct by construction, since `apply_lighting_toggles` is the single writer (accept LOW) [crates/gui/src/ingest.rs:1811] — deferred
+- [x] [Review][Defer] The AC4 sweep does not check key colour or direction continuity while the key is lit. Both are constant or continuous by construction (accept LOW) [crates/gui/src/atmosphere.rs:352] — deferred
+- [x] [Review][Defer] At the 06:00 and 18:00 swaps, key colour and direction change while the outgoing body still carries about 0.006 lux. That is a literal breach of AC4's "exempt only while illuminance is 0", but invisible (blind LOW) [crates/gui/src/atmosphere.rs:262] — deferred
+- [x] [Review][Defer] Pressing `+` twice before the daemon echoes the speed re-sends Normal instead of reaching Fast. `step_speed` reads the echoed `Mirror::speed()`. The TUI does the same (`tui/src/view.rs:484-491`), which matches the ruled "mirror the TUI" (edge LOW) [crates/gui/src/command.rs:225] — deferred
+- [x] [Review][Defer] `--clock 23.9999999` rounds to f32 24.0 and is rejected as "0 <= hour < 24" (edge LOW) [crates/gui/src/ingest.rs:1096] — deferred
+- [x] [Review][Defer] The README says "`+` steps Normal to Fast" and omits Paused→Normal. The controls table is correct (orchestrator LOW) [README.md:182] — deferred
+- [x] [Review][Defer] The `sprint-status.yaml` 11-3 comment block still reads "DEV STARTED -> in-progress … sitting 1" while the status is `review` (orchestrator LOW) [_bmad-output/implementation-artifacts/sprint-status.yaml:2460] — deferred
+- [x] [Review][Defer] The probe binary built from a `git archive` copy stamped itself `d917314` with no `-dirty`, so an archive build's stamp cannot vouch for its content (feature LOW, not this story's code) [crates/gui build stamp] — deferred, pre-existing
 
 ## Dev Notes
 

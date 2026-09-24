@@ -2456,7 +2456,9 @@ development_status:
   #     (ridge -36.1%, camp -3.2%, 32 of 78 star cores, sky peak 157). NO DECISIONS OUTSTANDING --
   #     the story is ready to implement. Both look values are re-judged on the vehicle at the
   #     sitting like every other, AC14.
-  11-3-night-falls-day-breaks: review
+  11-3-night-falls-day-breaks: in-progress
+  #   2026-09-24 CODE REVIEW run 1 on d917314: 0 HIGH. Four patches were LEFT AS ACTION ITEMS (the mutation row, two vehicle-card
+  #     warnings, the dusk disclosure). The predawn floor trip is DEFERRED to #125. AC13 stays open until the vehicle sitting.
   #   2026-09-24 DEV STARTED -> in-progress, delegated to Codex (gpt-6-sol/high), sitting 1 = Tasks 0-4a, STOP at 4a for Wolf's day pick.
   #   Created 2026-09-24 on 0fbb6ce. RULED at creation (Wolf): TICKS_PER_DAY 24,000 (8 min per day at
   #     Fast); the moon MOVES and passes the approved key direction exactly at BOOT_HOUR 22, every
