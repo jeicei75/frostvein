@@ -226,7 +226,7 @@ What it established:
         isolated `git worktree` — never in the shared tree ([[probe-sabotage-leaks-into-wolfs-build]])
         — boot framing, all effects on, fresh `simd --pause-at 120` each. File each frame with
         its table and range-check line under `11-3-signoff/`. Start from p3 (above).
-  - [ ] **STOP. Hand the frames to Wolf.** Record his words verbatim in the Dev Agent Record.
+  - [x] **STOP. Hand the frames to Wolf.** Record his words verbatim in the Dev Agent Record.
         The session resumes at 4b.
   - [ ] **4b.** Write the picked table into `day_lighting()`, drop the PROVISIONAL marker, and pin
         its literals in `appearance_tables_pin_the_cold_boot_palette` (`appearance.rs:330`) beside
@@ -526,6 +526,17 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
   (`command.rs:285`) so Space after `+` does not act on a stale local flag.
 - The live comparison runs on a THROWAWAY branch `probe-11-3-day-toggle` @ `24693c1` (pushed, never
   merged): `T` cycles A->B->C->D, `+`/`-` step the speed; state prints to stderr only.
+- **THE PICK (Task 4, AC12), judged LIVE on the probe at Fast with `T`:** *"I like them all :) well A
+  or D ..hmmhm"*; on the recommendation "ship A as the day, record D as the overcast table for a future
+  weather story": *"yes.. let's do that to get progress..."*. **A ships** — its table is the PROVISIONAL
+  one already in `day_lighting()` (creation probe p3), so 4b drops the marker and pins those literals.
+  Approved frame: `11-3-signoff/approved-day-bb893b2.png` (= `candidate-A-provisional-bb893b2-h12.png`,
+  `cmp`-identical to `probe-p3-day-flat.png`). **D is recorded, not built** (a named overcast table for
+  a later weather story; no code). AC9's bars stand as written against A (ground 69 -> 161, sky-stars
+  -72 %).
+- Wolf, same message: *"I think we need to have swappable configurations anyway to tweak without
+  compiling"* — NOT in 11.3's scope (technical-preferences: no config files before a third concrete
+  use; a story must require runtime change). Routed to its own issue/story.
 
 ### File List
 
@@ -550,6 +561,7 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 - `_bmad-output/implementation-artifacts/mutations/9-1-the-frame-stops-blowing-out.sh`
 - `_bmad-output/implementation-artifacts/mutations/10-7-the-sun-lights-the-valley.sh`
 - `_bmad-output/implementation-artifacts/11-3-signoff/candidates.md`
+- `_bmad-output/implementation-artifacts/11-3-signoff/approved-day-bb893b2.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/candidates-contact-sheet-bb893b2.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/candidate-{A-provisional,B-soft-warm,C-crisp-blue,D-pale-overcast}-bb893b2-h{12,17.5}.png`
 
@@ -566,3 +578,4 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 | 2026-09-24 | Made the last rim level equal the shared sky value at night; final boot captures stayed byte identical, and the 20th mutation row KILLED. Self-review was blocked by bubblewrap socket permissions. |
 | 2026-09-24 | Orchestrator verification of Tasks 0-3 (AC2 re-captured cmp-identical, noon == probe p3, full gate GREEN 1680 s on `bb893b2`); Task 4a: four candidate day tables rendered in an isolated worktree and filed. STOPPED for Wolf's pick. |
 | 2026-09-24 | Wolf ruled permanent `+`/`-` sim-speed keys in the gui (Paused/Normal/Fast via existing `SetSpeed`); throwaway probe branch `probe-11-3-day-toggle` pushed for his live A-D pick. |
+| 2026-09-24 | Wolf picked candidate A live (D recorded as a future overcast table); approved frame filed; STOP released — sitting 2 (4b onward) next. |
