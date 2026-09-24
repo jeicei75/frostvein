@@ -269,7 +269,12 @@ pub fn key_at(hour: f32) -> (Vec3, bevy::prelude::Color, f32) {
         )
     };
     let elevation = elevation.max(0.0);
-    let horizon = (elevation / 10.0).clamp(0.0, 1.0);
+    let ramp_degrees = if (6.0..18.0).contains(&hour) {
+        25.0
+    } else {
+        10.0
+    };
+    let horizon = (elevation / ramp_degrees).clamp(0.0, 1.0);
     let horizon = horizon * horizon * (3.0 - 2.0 * horizon);
     (
         direction_from_angles(azimuth, elevation),
@@ -499,7 +504,9 @@ mod tests {
         assert_eq!(key_at(6.0).2, 0.0, "both keys are dark at dawn");
         assert_eq!(key_at(18.0).2, 0.0, "both keys are dark at dusk");
         let mut previous = key_at(0.0).2;
-        let range = crate::appearance::day_lighting().directional_illuminance;
+        let range = (crate::appearance::day_lighting().directional_illuminance
+            - crate::appearance::night_lighting().directional_illuminance)
+            .abs();
         for step in 1..=2_400 {
             let hour = step as f32 * 0.01;
             let (direction, _, lux) = key_at(hour % 24.0);

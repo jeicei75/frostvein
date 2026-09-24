@@ -436,6 +436,7 @@ gpt-6-sol (high)
 
 ### Debug Log References
 
+- Sitting 2, AC4 RED: changing the key sweep bound from 240 lux (2% of the day value) to 100 lux (2% of the 7,000→12,000 range) failed `lit_key_never_points_up_or_jumps_in_illuminance`: `key illuminance jumps at hour 6.16: 794.86163 to 897.2637`. Widening the SUN horizon ramp to 25° made the 0.01 h sweep green; the moon keeps its 10° ramp and arc. The same sweep already checks sky R/G/B against 2% of each channel's night-to-day range, ambient R/G/B likewise, ambient brightness against 2% of 2,500 = 50, and star/aurora fade against 2% of 1 = 0.02. Equal night/day star and aurora table colours are invariant; their fade factors are the driven values.
 - Sitting 2, Task 4b RED: temporarily changed only the candidate A sky literal to `(111,155,205)`; `appearance_tables_pin_the_cold_boot_palette` failed at `appearance.rs:570`: `left: [111, 155, 205] right: [110, 155, 205]`. Restored `(110,155,205)` and the focused test passed. The day literal pin's mutation row is pending Task 8.
 
 - Task 0: `cargo build --offline -p gui -p simd` passed; `./target/debug/gui --version` printed `gui build fc3dd08` without `-dirty`.
@@ -584,3 +585,4 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 | 2026-09-24 | Wolf ruled permanent `+`/`-` sim-speed keys in the gui (Paused/Normal/Fast via existing `SetSpeed`); throwaway probe branch `probe-11-3-day-toggle` pushed for his live A-D pick. |
 | 2026-09-24 | Wolf picked candidate A live (D recorded as a future overcast table); approved frame filed; STOP released — sitting 2 (4b onward) next. |
 | 2026-09-24 | Task 4b pinned Wolf's approved candidate A as hand-written day literals and removed the provisional marker. |
+| 2026-09-24 | Tightened AC4's key continuity bar to 100 lux per 0.01 h and widened only the sun's horizon ramp to pass it. |

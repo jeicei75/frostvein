@@ -27,7 +27,7 @@ PY
 mutation "the key stays lit at the horizon" gui lit_key_never_points_up_or_jumps_in_illuminance <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = '    let horizon = (elevation / 10.0).clamp(0.0, 1.0);\n'
+old = '    let horizon = (elevation / ramp_degrees).clamp(0.0, 1.0);\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let horizon = 1.0;\n'))
 PY
