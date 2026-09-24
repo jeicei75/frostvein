@@ -443,6 +443,7 @@ gpt-6-sol (high)
 - AC2 after Task 2: rebuilt `gui build dcdbd27` without `-dirty`; fresh daemons on ports 7533 and 7534 paused at tick 120. The no-`--clock` and `--clock 22` captures both printed the creation range figures, with `clock=22.00 (capture default)` and `clock=22.00 (--clock)` respectively. `cmp` of EACH against `control-fc3dd08-a.png` exited 0 (byte identical).
 - Task 3 RED: `hourly_light_table_keeps_night_exact_and_reaches_the_provisional_day`: `left: 0.0 right: 1.0` (day weight at noon). `sky_and_ambient_change_smoothly_over_each_hundredth_hour`: `the dawn sweep must contain a real sky change` (both sides were the night sky). `noon_sky_and_distance_fog_share_the_day_colour`: night `Srgba(0.019607844, 0.047058824, 0.10980392)` vs day `Srgba(0.43137255, 0.60784316, 0.8039216)`. `noon_stars_and_aurora_fade_from_the_live_shared_materials`: `star and aurora handles must reach the live app`. `noon_haze_ambient_survives_f4_off_and_on`: night ambient/intensity `(108,128,170), 1.875` vs day `(190,210,235), 5.0`. `noon_rim_materials_dissolve_toward_the_live_sky`: night rim target vs day sky. All subsequently green. Mutation results are pending the committed table run.
 - AC2 after Task 3: rebuilt `gui build 947e056` without `-dirty`; fresh daemons on ports 7535 and 7536 paused at tick 120. The no-`--clock` and `--clock 22` captures each printed `warm-lit pixels=23433 ground-median-luminance=69 near-white-area=0.3906% blown-pool=0.3637% p99-luminance=153.5 resolution=1280x720`, followed by their correct `clock=22.00` source. `cmp` of EACH against `control-fc3dd08-a.png` exited 0.
+- Mutation run: `scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/11-3-night-falls-day-breaks.sh` ran after commit `9bfd18d`. All 19 rows KILLED. The default-capture row first died on the earlier pin-resource assertion; after `758a561` and `8ba95ce`, its focused rerun KILLED on `a running capture must stay at 22 after the wire advances 1,000 ticks`. `scripts/audit-mutations.py` after `cargo fmt` reported `635 rows, every literal still matches its target`.
 
 ### Completion Notes List
 
@@ -450,6 +451,32 @@ gpt-6-sol (high)
 - Task 1: `ClockPin` is initialized in `projection_systems` and configured from `--clock` or the capture default. The range line uses `current_hour()` and identifies an explicit pin or capture default. Repointed affected existing mutation rows in 9.1 and 10.7. The new rows are pending the post-commit mutation run.
 - Task 2: One installed directional light follows the sun from 06:00–18:00 and moon otherwise, with zero illuminance at both horizons. At 22:00 it calls the original `sun_direction()` and night table exactly. F8 restores the current key budget. AC2 capture comparison and mutation rows are pending the post-commit checks.
 - Task 3: The hourly table drives ClearColor, fog, shared star and aurora materials, rim materials when sky colour changes, camera ambient, and haze ambient. F4-off/on restores the current haze after deferred commands apply. Exact #113 comment for the orchestrator to post: "11.3 settled this as: the sky is authored per hour, not exposed. ClearColor, DistanceFog.color and the rim dissolve target follow the same clock sky colour; Exposure remains 10.5." The comment was not posted here.
+- RED-to-mutation map (each row KILLED): `tick_clock_moves_fractionally_and_wraps` → `hour ignores the wire tick`, `the boot hour moves from 22`, `hour advances in whole-hour steps`; `clock_flag_accepts_hours_and_rejects_out_of_range_values` → `clock parser admits the excluded upper bound`; `clock_pin_reaches_the_live_app_and_capture_defaults_to_boot` → `clock flag parses but never reaches the pin`, `a default capture follows the wire tick`; `an_unpinned_seat_follows_two_wire_snapshots_one_hour_apart` → `current_hour ignores an unpinned snapshot`; `capture_clock_note_names_the_rendered_hour_and_source` → `capture clock note reverses its pin source`; the strengthened `the_range_check_line_reports_the_frame_shape` → `capture range line loses its clock field` (mutation RED at `capture.rs:1952`, clock assertion); `key_arc_uses_the_approved_boot_direction_and_the_provisional_noon_table` → noon-table and direction RED recorded above, while the installed path is killed by `installed key direction stays at the boot aim`; `lit_key_never_points_up_or_jumps_in_illuminance` → `the key stays lit at the horizon`; `clock_drives_the_installed_key_direction_color_and_illuminance` → `installed key direction stays at the boot aim`; `f8_restores_the_clock_key_at_noon` → `F8 restores the night budget at noon`; `hourly_light_table_keeps_night_exact_and_reaches_the_provisional_day` → `hourly table stays night at noon`; `sky_and_ambient_change_smoothly_over_each_hundredth_hour` → `sky and ambient jump at dawn`; `noon_sky_and_distance_fog_share_the_day_colour` → `distance fog keeps the night sky`; `noon_stars_and_aurora_fade_from_the_live_shared_materials` → `stars retain their night colour at noon`, `aurora remains opaque at noon`; `noon_rim_materials_dissolve_toward_the_live_sky` → `rim materials keep the night sky target`; `noon_haze_ambient_survives_f4_off_and_on` → `F4-on reinserts night haze after the clock writer` (mutation RED at the final F4-on assertion). No verification hook was bypassed.
+
+```text
+================ MUTATION RESULTS ================
+hour ignores the wire tick                                   KILLED
+clock flag parses but never reaches the pin                  KILLED
+installed key direction stays at the boot aim                KILLED
+the key stays lit at the horizon                             KILLED
+F8 restores the night budget at noon                         KILLED
+stars retain their night colour at noon                      KILLED
+rim materials keep the night sky target                      KILLED
+distance fog keeps the night sky                             KILLED
+the boot hour moves from 22                                  KILLED
+a default capture follows the wire tick                      KILLED
+hour advances in whole-hour steps                            KILLED
+F4-on reinserts night haze after the clock writer            KILLED
+clock parser admits the excluded upper bound                 KILLED
+capture range line loses its clock field                     KILLED
+capture clock note reverses its pin source                   KILLED
+current_hour ignores an unpinned snapshot                    KILLED
+hourly table stays night at noon                             KILLED
+sky and ambient jump at dawn                                 KILLED
+aurora remains opaque at noon                                KILLED
+
+All mutations killed.
+```
 
 ### File List
 
@@ -481,3 +508,4 @@ gpt-6-sol (high)
 | 2026-09-24 | Task 1 added the tick-derived hour, explicit and capture-default pinning, and capture clock reporting. |
 | 2026-09-24 | Task 2 moved the single key light through sun and moon arcs and made F8 restore the current hour's key. |
 | 2026-09-24 | Task 3 made sky, stars, aurora, fog, rim, and haze ambient follow the hourly light table. |
+| 2026-09-24 | Verified both post-sky boot captures byte-identical to control; killed 19 sitting-1 mutation rows and tightened the running-capture tick guard. |
