@@ -55,7 +55,7 @@ use client_core::Mirror;
 use protocol::{Delta, Dims, Snapshot};
 
 use crate::{
-    appearance::{light_properties, night_lighting},
+    appearance::{day_weight, light_properties, lighting_at, mix_color, night_lighting},
     atmosphere::{fall_snow, setup_atmosphere, sun_light_transform},
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig, camera_readout_line},
@@ -758,6 +758,7 @@ pub fn projection_systems(app: &mut App) {
     // each builder now stands up what it registers.
     app.init_resource::<LightingToggles>();
     app.init_resource::<crate::clock::ClockPin>();
+    app.init_resource::<crate::project::LastRimSky>();
     app.init_resource::<LightsSteady>();
     app.init_resource::<EffectsOff>();
     app.add_systems(
@@ -765,6 +766,10 @@ pub fn projection_systems(app: &mut App) {
         (apply_lighting_toggles, update_lighting_readout)
             .chain()
             .after(ProjectionSet),
+    );
+    app.add_systems(
+        PostUpdate,
+        (update_clock_sky, crate::project::update_rim_for_sky).chain(),
     );
 }
 
@@ -1816,9 +1821,10 @@ fn apply_lighting_toggles(
 ) {
     let hour = crate::clock::current_hour(&mirror, &pin);
     let (direction, color, illuminance) = crate::atmosphere::key_at(hour);
+    let lighting = lighting_at(hour);
     for mut light in &mut ambient {
         light.brightness = if toggles.enabled(LightSource::Ambient) {
-            night_lighting().ambient_brightness
+            lighting.ambient_brightness
         } else {
             0.0
         };
@@ -1852,6 +1858,71 @@ fn apply_lighting_toggles(
         } else {
             bevy::color::LinearRgba::BLACK
         };
+    }
+}
+
+fn update_clock_sky(
+    mirror: Res<MirrorResource>,
+    pin: Res<crate::clock::ClockPin>,
+    mut clear: Option<ResMut<ClearColor>>,
+    mut cameras: Query<
+        (
+            &mut AmbientLight,
+            &mut DistanceFog,
+            Option<&mut VolumetricFog>,
+        ),
+        With<Camera3d>,
+    >,
+    handles: Option<Res<crate::atmosphere::AtmosphereMaterials>>,
+    mut materials: Option<ResMut<Assets<bevy::prelude::StandardMaterial>>>,
+) {
+    let hour = crate::clock::current_hour(&mirror, &pin);
+    let lighting = lighting_at(hour);
+    if let Some(clear) = clear.as_deref_mut()
+        && clear.0 != lighting.sky
+    {
+        clear.0 = lighting.sky;
+    }
+    for (mut ambient, mut fog, haze) in &mut cameras {
+        if ambient.color != lighting.ambient {
+            ambient.color = lighting.ambient;
+        }
+        if fog.color != lighting.sky {
+            fog.color = lighting.sky;
+        }
+        if let Some(mut haze) = haze {
+            let intensity = 0.1 * lighting.ambient_brightness / 80.0;
+            if haze.ambient_color != lighting.ambient {
+                haze.ambient_color = lighting.ambient;
+            }
+            if haze.ambient_intensity != intensity {
+                haze.ambient_intensity = intensity;
+            }
+        }
+    }
+    let (Some(handles), Some(materials)) = (handles, materials.as_deref_mut()) else {
+        return;
+    };
+    let weight = day_weight(hour);
+    let star_color = if weight == 0.0 {
+        lighting.star
+    } else if weight == 1.0 {
+        lighting.sky
+    } else {
+        mix_color(night_lighting().star, lighting.sky, weight)
+    };
+    if materials
+        .get(&handles.star)
+        .is_some_and(|material| material.base_color != star_color)
+    {
+        materials.get_mut(&handles.star).unwrap().base_color = star_color;
+    }
+    let aurora_color = Color::srgba(1.0, 1.0, 1.0, 1.0 - weight);
+    if materials
+        .get(&handles.aurora)
+        .is_some_and(|material| material.base_color != aurora_color)
+    {
+        materials.get_mut(&handles.aurora).unwrap().base_color = aurora_color;
     }
 }
 
@@ -3865,6 +3936,122 @@ mod tests {
             lux(&mut app),
             crate::appearance::day_lighting().directional_illuminance,
             "F8-on must restore noon's key budget"
+        );
+    }
+
+    #[test]
+    fn noon_sky_and_distance_fog_share_the_day_colour() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let day = crate::appearance::day_lighting();
+        assert_eq!(
+            app.world().resource::<bevy::prelude::ClearColor>().0,
+            day.sky
+        );
+        let fog = app
+            .world_mut()
+            .query_filtered::<&super::DistanceFog, With<CameraRig>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(fog.color, day.sky);
+        let ambient = app
+            .world_mut()
+            .query_filtered::<&bevy::prelude::AmbientLight, With<CameraRig>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(ambient.color, day.ambient);
+        assert_eq!(ambient.brightness, day.ambient_brightness);
+    }
+
+    #[test]
+    fn noon_rim_materials_dissolve_toward_the_live_sky() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let assets = app.world().resource::<crate::project::ProjectionAssets>();
+        let materials = app
+            .world()
+            .resource::<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>();
+        let sky = app.world().resource::<bevy::prelude::ClearColor>().0;
+        for slot in &assets.terrain {
+            let rim = materials
+                .get(&slot[crate::appearance::RIM_LEVELS - 1])
+                .unwrap();
+            assert_eq!(rim.base_color, sky, "every rim target must be the live sky");
+        }
+    }
+
+    #[test]
+    fn noon_stars_and_aurora_fade_from_the_live_shared_materials() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let handles = app
+            .world()
+            .get_resource::<crate::atmosphere::AtmosphereMaterials>();
+        assert!(
+            handles.is_some(),
+            "star and aurora handles must reach the live app"
+        );
+        let handles = handles.unwrap();
+        let materials = app
+            .world()
+            .resource::<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>();
+        assert_eq!(
+            materials.get(&handles.star).unwrap().base_color,
+            crate::appearance::day_lighting().sky
+        );
+        assert_eq!(
+            materials
+                .get(&handles.aurora)
+                .unwrap()
+                .base_color
+                .to_srgba()
+                .alpha,
+            0.0
+        );
+    }
+
+    #[test]
+    fn noon_haze_ambient_survives_f4_off_and_on() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let day = crate::appearance::day_lighting();
+        let haze = |app: &mut App| {
+            let fog = app
+                .world_mut()
+                .query_filtered::<&super::VolumetricFog, With<CameraRig>>()
+                .single(app.world())
+                .unwrap();
+            (fog.ambient_color, fog.ambient_intensity)
+        };
+        assert_eq!(
+            haze(&mut app),
+            (day.ambient, 0.1 * day.ambient_brightness / 80.0)
+        );
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::F4);
+        app.update();
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&super::VolumetricFog, With<CameraRig>>()
+                .iter(app.world())
+                .count(),
+            0
+        );
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::F4);
+            keys.clear();
+        }
+        app.update();
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::F4);
+        app.update();
+        assert_eq!(
+            haze(&mut app),
+            (day.ambient, 0.1 * day.ambient_brightness / 80.0),
+            "F4-on must restore the clock's haze ambient"
         );
     }
 

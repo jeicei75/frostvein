@@ -62,6 +62,52 @@ pub fn day_lighting() -> LightTable {
     }
 }
 
+pub fn day_weight(hour: f32) -> f32 {
+    let linear = if (5.0..7.0).contains(&hour) {
+        (hour - 5.0) / 2.0
+    } else if (7.0..17.0).contains(&hour) {
+        1.0
+    } else if (17.0..19.0).contains(&hour) {
+        (19.0 - hour) / 2.0
+    } else {
+        0.0
+    };
+    linear * linear * (3.0 - 2.0 * linear)
+}
+
+pub fn lighting_at(hour: f32) -> LightTable {
+    let weight = day_weight(hour);
+    let night = night_lighting();
+    if weight == 0.0 {
+        return night;
+    }
+    let day = day_lighting();
+    if weight == 1.0 {
+        return day;
+    }
+    LightTable {
+        sky: mix_color(night.sky, day.sky, weight),
+        star: night.star,
+        ambient: mix_color(night.ambient, day.ambient, weight),
+        ambient_brightness: night.ambient_brightness
+            + (day.ambient_brightness - night.ambient_brightness) * weight,
+        aurora: night.aurora,
+        directional: mix_color(night.directional, day.directional, weight),
+        directional_illuminance: night.directional_illuminance
+            + (day.directional_illuminance - night.directional_illuminance) * weight,
+    }
+}
+
+pub(crate) fn mix_color(from: Color, to: Color, weight: f32) -> Color {
+    let from = from.to_srgba();
+    let to = to.to_srgba();
+    Color::srgb(
+        from.red + (to.red - from.red) * weight,
+        from.green + (to.green - from.green) * weight,
+        from.blue + (to.blue - from.blue) * weight,
+    )
+}
+
 pub fn light_properties(kind: LightKind) -> LightProperties {
     match kind {
         // Intensities sized against the boot3 measurement: the white-clip radius scales as
@@ -290,10 +336,17 @@ pub const RIM_LEVELS: usize = 13;
 /// terrain cubes while the simulation census remains 44,984 exposed cells.
 /// What must never change is the rim's own behaviour — colour only, no tiles removed.
 pub fn rim_dissolved_color(base: Color, level: usize) -> Color {
+    rim_dissolved_color_at(base, level, night_lighting().sky)
+}
+
+pub fn rim_dissolved_color_at(base: Color, level: usize, sky: Color) -> Color {
+    if level >= RIM_LEVELS - 1 && sky != night_lighting().sky {
+        return sky;
+    }
     let steps = (RIM_LEVELS - 1) as f32;
     let blend = (level.min(RIM_LEVELS - 1) as f32 / steps).clamp(0.0, 1.0);
     let base = base.to_srgba();
-    let sky = night_lighting().sky.to_srgba();
+    let sky = sky.to_srgba();
     Color::srgb(
         base.red + (sky.red - base.red) * blend,
         base.green + (sky.green - base.green) * blend,
@@ -334,10 +387,81 @@ mod tests {
     use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
     use super::{
-        RIM_LEVELS, designation_color, entity_appearance, foliage_snow_color,
-        hover_highlight_color, light_properties, material_color, night_lighting,
-        rim_dissolved_color, snow_cap_color, zone_color,
+        RIM_LEVELS, day_lighting, day_weight, designation_color, entity_appearance,
+        foliage_snow_color, hover_highlight_color, light_properties, lighting_at, material_color,
+        night_lighting, rim_dissolved_color, snow_cap_color, zone_color,
     };
+
+    #[test]
+    fn hourly_light_table_keeps_night_exact_and_reaches_the_provisional_day() {
+        let night = night_lighting();
+        let day = day_lighting();
+        assert_eq!(day_weight(22.0), 0.0);
+        assert_eq!(day_weight(12.0), 1.0);
+        assert!(day_weight(5.5) > 0.0 && day_weight(5.5) < 1.0);
+        assert_eq!(lighting_at(22.0).sky, night.sky);
+        assert_eq!(lighting_at(22.0).ambient, night.ambient);
+        assert_eq!(
+            lighting_at(22.0).ambient_brightness,
+            night.ambient_brightness
+        );
+        assert_eq!(lighting_at(12.0).sky, day.sky);
+        assert_eq!(lighting_at(12.0).ambient, day.ambient);
+        assert_eq!(lighting_at(12.0).ambient_brightness, day.ambient_brightness);
+    }
+
+    #[test]
+    fn sky_and_ambient_change_smoothly_over_each_hundredth_hour() {
+        let night = night_lighting();
+        let day = day_lighting();
+        assert_ne!(
+            lighting_at(5.5).sky,
+            night.sky,
+            "the dawn sweep must contain a real sky change"
+        );
+        let mut previous = lighting_at(0.0);
+        let mut previous_weight = day_weight(0.0);
+        for step in 1..=2_400 {
+            let hour = step as f32 * 0.01;
+            let current = lighting_at(hour % 24.0);
+            let weight = day_weight(hour % 24.0);
+            assert!(
+                (weight - previous_weight).abs() <= 0.02,
+                "star and aurora fade jumps at hour {hour}"
+            );
+            for (before, after, low, high) in [
+                (previous.sky, current.sky, night.sky, day.sky),
+                (
+                    previous.ambient,
+                    current.ambient,
+                    night.ambient,
+                    day.ambient,
+                ),
+            ] {
+                let before = before.to_srgba();
+                let after = after.to_srgba();
+                let low = low.to_srgba();
+                let high = high.to_srgba();
+                for (a, b, n, d) in [
+                    (before.red, after.red, low.red, high.red),
+                    (before.green, after.green, low.green, high.green),
+                    (before.blue, after.blue, low.blue, high.blue),
+                ] {
+                    assert!(
+                        (a - b).abs() <= 0.02 * (n - d).abs() + f32::EPSILON,
+                        "sky or ambient jumps at hour {hour}: {a} to {b}"
+                    );
+                }
+            }
+            assert!(
+                (current.ambient_brightness - previous.ambient_brightness).abs()
+                    <= 0.02 * (day.ambient_brightness - night.ambient_brightness).abs(),
+                "ambient brightness jumps at hour {hour}"
+            );
+            previous = current;
+            previous_weight = weight;
+        }
+    }
 
     #[test]
     fn appearance_tables_pin_the_cold_boot_palette() {

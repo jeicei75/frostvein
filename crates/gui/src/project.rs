@@ -6,7 +6,7 @@ use std::{
 
 use bevy::prelude::{
     Added, AnimationClip, AnimationGraph, AnimationGraphHandle, AnimationNodeIndex,
-    AnimationPlayer, AssetServer, Assets, ChildOf, Commands, Component, Cuboid,
+    AnimationPlayer, AssetServer, Assets, ChildOf, ClearColor, Commands, Component, Cuboid,
     Entity as BevyEntity, Handle, Mesh, Mesh3d, MeshMaterial3d, Or, Plane3d, PointLight, Query,
     Res, ResMut, Resource, StandardMaterial, Transform, Vec2, Vec3, With, Without,
 };
@@ -22,7 +22,8 @@ use crate::{
     appearance::{
         RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, designation_color,
         entity_appearance, flicker_scale, foliage_snow_color, hover_highlight_color,
-        light_properties, material_color, rim_dissolved_color, snow_cap_color, zone_color,
+        light_properties, material_color, rim_dissolved_color, rim_dissolved_color_at,
+        snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
@@ -245,7 +246,7 @@ pub struct ProjectionAssets {
     snow_cap_mesh: Handle<Mesh>,
     mark_mesh: Handle<Mesh>,
     /// One handle per (surface, rim step); see `rim_level`.
-    terrain: [[Handle<StandardMaterial>; RIM_LEVELS]; TERRAIN_SLOTS.len()],
+    pub(crate) terrain: [[Handle<StandardMaterial>; RIM_LEVELS]; TERRAIN_SLOTS.len()],
     dwarf: Handle<StandardMaterial>,
     torch: Handle<StandardMaterial>,
     campfire: Handle<StandardMaterial>,
@@ -258,6 +259,38 @@ pub struct ProjectionAssets {
     dwarf_scene: Handle<WorldAsset>,
     /// `None` wherever the animation plugin is absent -- every `MinimalPlugins` test.
     dwarf_walk: Option<DwarfWalk>,
+}
+
+#[derive(Resource)]
+pub struct LastRimSky(pub bevy::prelude::Color);
+
+impl Default for LastRimSky {
+    fn default() -> Self {
+        Self(crate::appearance::night_lighting().sky)
+    }
+}
+
+pub fn update_rim_for_sky(
+    clear: Option<Res<ClearColor>>,
+    mut last: ResMut<LastRimSky>,
+    assets: Option<Res<ProjectionAssets>>,
+    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+) {
+    let (Some(clear), Some(assets), Some(materials)) = (clear, assets, materials.as_deref_mut())
+    else {
+        return;
+    };
+    if clear.0 == last.0 {
+        return;
+    }
+    for (slot, handles) in TERRAIN_SLOTS.iter().zip(&assets.terrain) {
+        for (level, handle) in handles.iter().enumerate() {
+            if let Some(mut material) = materials.get_mut(handle) {
+                material.base_color = rim_dissolved_color_at(slot.base_color(), level, clear.0);
+            }
+        }
+    }
+    last.0 = clear.0;
 }
 
 /// The `Walk` clip, wrapped in the one-node graph Bevy needs to play anything.

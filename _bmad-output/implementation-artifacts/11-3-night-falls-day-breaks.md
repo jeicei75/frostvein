@@ -204,20 +204,20 @@ What it established:
         pinned-time guards at `BOOT_HOUR`, and add the 0.01 h sweep (AC3 below-horizon invariant,
         AC4 continuity). `APPROVED_DOWNWARD_FLOOR` stays hand-written and unchanged.
   - [x] The F8 test at `--clock 12` (AC10) — extend the toggle test at `ingest.rs:3840-3940`.
-- [ ] **Task 3 — the sky follows the clock** (AC5, AC11)
-  - [ ] `ClearColor` (a resource, inserted at `ingest.rs:627`) is written from the clock's sky
+- [x] **Task 3 — the sky follows the clock** (AC5, AC11)
+  - [x] `ClearColor` (a resource, inserted at `ingest.rs:627`) is written from the clock's sky
         colour; `Exposure` is not touched. Comment on **#113** that 11.3 settled it as "the sky is
         authored per hour, not exposed" (Wolf's ruling 4), and leave closing it to Wolf.
-  - [ ] Stars: the one shared opaque material (`atmosphere.rs:267-272`) lerps its `base_color`
+  - [x] Stars: the one shared opaque material (`atmosphere.rs:267-272`) lerps its `base_color`
         from `star` toward the current sky colour — no blend mode change, so the night draw is
         untouched. Aurora: multiply its `base_color` alpha (already `AlphaMode::Blend`,
         `:275-282`) from 1 to 0. Store both handles in a resource; today they are stored nowhere.
-  - [ ] Rim: `ProjectionAssets.terrain` (`project.rs:430-436`) holds one handle per
+  - [x] Rim: `ProjectionAssets.terrain` (`project.rs:430-436`) holds one handle per
         (slot, rim level); rewrite their `base_color` with `rim_dissolved_color` against the
         current sky, ONLY when the sky colour changed (`Changed`/compare), never per frame blind.
-  - [ ] `DistanceFog.color`, `ClearColor` and the rim target come from ONE value per frame (AC5's
+  - [x] `DistanceFog.color`, `ClearColor` and the rim target come from ONE value per frame (AC5's
         equality test reads all three off the live app).
-  - [ ] `volumetric_fog()`'s ambient follows the clock's ambient through the same derivation (AC11).
+  - [x] `volumetric_fog()`'s ambient follows the clock's ambient through the same derivation (AC11).
 - [ ] **Task 4 — the opening artifact, and the STOP** (AC12)
   - [ ] **4a.** Render ≥ 3 candidate day tables at `--clock 12` and one dusk at `--clock 17.5`
         (the sun still ~5° up — at 18.25 the key has ramped dark and the frame is ambient-only;
@@ -441,12 +441,14 @@ gpt-6-sol (high)
 - Task 1 RED: `tick_clock_moves_fractionally_and_wraps`: `left: 22.0 right: 22.5` (hour ignored tick). `clock_flag_accepts_hours_and_rejects_out_of_range_values`: `called Result::unwrap() on an Err value: invalid port`. `clock_pin_reaches_the_live_app_and_capture_defaults_to_boot`: `left: None right: Some(None)`. `an_unpinned_seat_follows_two_wire_snapshots_one_hour_apart`: `left: 0.0 right: 1.0`. `capture_clock_note_names_the_rendered_hour_and_source`: `left: "" right: " clock=12.00 (--clock)"`. All subsequently green. Mutation rows and results will be recorded after the committed table runs.
 - Task 2 RED: `key_arc_uses_the_approved_boot_direction_and_the_provisional_noon_table`: `assertion failed: noon_direction.y < night_direction.y`. `lit_key_never_points_up_or_jumps_in_illuminance`: `both keys are dark at dawn; left: 7000.0 right: 0.0`. `clock_drives_the_installed_key_direction_color_and_illuminance`: installed `Vec3(0.7295178, -0.3033679, 0.61300206)` vs noon `Vec3(0.5864819, -0.6427876, 0.49281135)`. `f8_restores_the_clock_key_at_noon`: `left: 7000.0 right: 12000.0`. The first horizon-ramp version also failed continuity: `key illuminance jumps at hour 6.0699997: 795.18256 to 1061.1969`; the 10° ramp passes the 0.01 h sweep.
 - AC2 after Task 2: rebuilt `gui build dcdbd27` without `-dirty`; fresh daemons on ports 7533 and 7534 paused at tick 120. The no-`--clock` and `--clock 22` captures both printed the creation range figures, with `clock=22.00 (capture default)` and `clock=22.00 (--clock)` respectively. `cmp` of EACH against `control-fc3dd08-a.png` exited 0 (byte identical).
+- Task 3 RED: `hourly_light_table_keeps_night_exact_and_reaches_the_provisional_day`: `left: 0.0 right: 1.0` (day weight at noon). `sky_and_ambient_change_smoothly_over_each_hundredth_hour`: `the dawn sweep must contain a real sky change` (both sides were the night sky). `noon_sky_and_distance_fog_share_the_day_colour`: night `Srgba(0.019607844, 0.047058824, 0.10980392)` vs day `Srgba(0.43137255, 0.60784316, 0.8039216)`. `noon_stars_and_aurora_fade_from_the_live_shared_materials`: `star and aurora handles must reach the live app`. `noon_haze_ambient_survives_f4_off_and_on`: night ambient/intensity `(108,128,170), 1.875` vs day `(190,210,235), 5.0`. `noon_rim_materials_dissolve_toward_the_live_sky`: night rim target vs day sky. All subsequently green. Mutation results are pending the committed table run.
 
 ### Completion Notes List
 
 - Task 0: Controls filed as `control-fc3dd08-a.png` and `control-fc3dd08-b.png`; same-build floor is zero.
 - Task 1: `ClockPin` is initialized in `projection_systems` and configured from `--clock` or the capture default. The range line uses `current_hour()` and identifies an explicit pin or capture default. Repointed affected existing mutation rows in 9.1 and 10.7. The new rows are pending the post-commit mutation run.
 - Task 2: One installed directional light follows the sun from 06:00–18:00 and moon otherwise, with zero illuminance at both horizons. At 22:00 it calls the original `sun_direction()` and night table exactly. F8 restores the current key budget. AC2 capture comparison and mutation rows are pending the post-commit checks.
+- Task 3: The hourly table drives ClearColor, fog, shared star and aurora materials, rim materials when sky colour changes, camera ambient, and haze ambient. F4-off/on restores the current haze after deferred commands apply. Exact #113 comment for the orchestrator to post: "11.3 settled this as: the sky is authored per hour, not exposed. ClearColor, DistanceFog.color and the rim dissolve target follow the same clock sky colour; Exposure remains 10.5." The comment was not posted here.
 
 ### File List
 
@@ -456,6 +458,7 @@ gpt-6-sol (high)
 - `crates/gui/src/clock.rs`
 - `crates/gui/src/appearance.rs`
 - `crates/gui/src/atmosphere.rs`
+- `crates/gui/src/project.rs`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-default.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-explicit.png`
 - `crates/gui/src/lib.rs`
@@ -473,3 +476,4 @@ gpt-6-sol (high)
 | 2026-09-24 | Task 0 controls on `fc3dd08` matched the creation range and each other byte for byte. |
 | 2026-09-24 | Task 1 added the tick-derived hour, explicit and capture-default pinning, and capture clock reporting. |
 | 2026-09-24 | Task 2 moved the single key light through sun and moon arcs and made F8 restore the current hour's key. |
+| 2026-09-24 | Task 3 made sky, stars, aurora, fog, rim, and haze ambient follow the hourly light table. |

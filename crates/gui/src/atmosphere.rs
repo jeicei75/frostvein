@@ -5,7 +5,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::{
         AlphaMode, Assets, Commands, Component, Cuboid, Mesh, Mesh3d, MeshMaterial3d, Query, Res,
-        ResMut, StandardMaterial, Time, Transform, Vec3,
+        ResMut, Resource, StandardMaterial, Time, Transform, Vec3,
     },
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
@@ -23,6 +23,12 @@ pub struct Snowflake {
 
 #[derive(Component)]
 pub struct Atmosphere;
+
+#[derive(Resource)]
+pub struct AtmosphereMaterials {
+    pub star: bevy::prelude::Handle<StandardMaterial>,
+    pub aurora: bevy::prelude::Handle<StandardMaterial>,
+}
 
 pub const CAMP_SURFACE_Y: f32 = 9.0;
 pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
@@ -325,6 +331,10 @@ pub fn setup_atmosphere(
         fog_enabled: false,
         cull_mode: None,
         ..Default::default()
+    });
+    commands.insert_resource(AtmosphereMaterials {
+        star: star.clone(),
+        aurora: aurora.clone(),
     });
     // Cap colour, not terrain snow: a flake the same colour as the field it falls over is
     // invisible — settled snow is already the "brighter than terrain" table entry.

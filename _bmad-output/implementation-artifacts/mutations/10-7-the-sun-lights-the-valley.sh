@@ -31,7 +31,7 @@ mutation "make every lighting toggle inert after it flips" gui lighting_keys_cha
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '''        light.brightness = if toggles.enabled(LightSource::Ambient) {
-            night_lighting().ambient_brightness
+            lighting.ambient_brightness
         } else {
             0.0
         };
