@@ -58,6 +58,10 @@ instead — it is a camera property, not a light, and those two tests do not rea
 | `night_lighting().ambient` | `(108, 128, 170)` | `#6C80AA` | 1,500 | cold fill | static |
 | ↳ before 10.8 | `(120, 140, 165)` **(superseded)** | `#788CA5` | 4,500 | — | — |
 | `night_lighting().directional` | `(178, 200, 240)` | `#B2C8F0` | 7,000 | moonlight key | static |
+| `day_lighting().sky` | `(110, 155, 205)` | `#6E9BCD` | — | approved candidate A, flat sky | static |
+| `day_lighting().ambient` | `(190, 210, 235)` | `#BED2EB` | 4,000 | day fill | static |
+| `day_lighting().directional` | `(255, 244, 228)` | `#FFF4E4` | 12,000 | sunlight key | static |
+| future weather: D “pale overcast” (UNBUILT) | sky `(175, 190, 210)`; ambient `(200, 210, 225)`; key `(235, 238, 245)` | — | ambient 5,000; key 8,000 lux | named table for a later weather story | — |
 | ↳ before 10.8 | `(150, 190, 180)` **(superseded)** | `#96BEB4` | 22,000 | — | — |
 | `LightKind::Torch` | — | — | 7M lm | 14 m | bounded, deterministic |
 | ↳ before 10.8 | — | — | 14M lm **(superseded)** | 20 m | — |
@@ -157,7 +161,7 @@ and the per-class budgets are recorded measured decisions, not mechanical checks
 
 ## Value and materials
 
-The boot frame is a night scene.
+The client boots at 22:00, the approved night frame.
 
 - Terrain and foliage colours MUST come from `gui`'s appearance tables, not from beside a draw call.
 - Stone, soil, ice and terrain snow take the approved dark-but-readable night palette. The values
@@ -197,8 +201,14 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
 
 - The sky is an illuminant. The approved night table uses `(108, 128, 170)` ambient at 1,500 and
   `(178, 200, 240)` moonlight at 7,000; ↳ before 10.8, `(120, 140, 165)` / 4,500 ambient and
-  `(150, 190, 180)` / 22,000 directional light are **(superseded)**. This is a light-table ruling:
-  the sky `(5, 12, 28)`, aurora, fog and rim dissolve do not change with it.
+  `(150, 190, 180)` / 22,000 directional light are **(superseded)**. At 22:00 the sky is
+  `(5, 12, 28)` and the aurora, fog and rim retain the approved night look.
+- `TICKS_PER_DAY = 24,000`, `TICKS_PER_HOUR = 1,000`, `BOOT_HOUR = 22.0`. Normal runs a day in
+  40 minutes; Fast in 8 minutes. The single key is the sun from 06:00 to 18:00 and the moon
+  otherwise. Its illuminance reaches zero at either horizon.
+- The clock authors one flat sky colour per frame. `ClearColor`, `DistanceFog.color` and the rim
+  dissolve target use that same colour; stars and aurora fade out by noon. The sky's colour is
+  authored per hour, not exposed. `Exposure` remains 10.5 EV100 at every hour.
 - The aurora MUST be a **curtain on a ring** around the world, not a set of billboards.
 - Its shape comes entirely from a procedurally generated RGBA gradient — the table's aurora colour
   throughout, with alpha forced to exactly zero at the top and bottom edges of the strip by a
@@ -212,7 +222,8 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
   Sizes vary so the shell does not read as a lattice.
 - Sky materials MUST set `fog_enabled: false` for `DistanceFog`. ClearColor, unlit stars, and the
   unlit aurora bypass `Exposure` by three routes, but they do **not** bypass volumetric fog; the
-  `FogVolume` extent and density ramp protect them instead (see #113, routed to 11.3).
+  `FogVolume` extent and density ramp protect them instead. Story 11.3 settled #113 by authoring
+  the sky per hour and keeping `Exposure` fixed at 10.5 EV100.
 - Torch, campfire, and future lantern properties are one data table containing colour, lumen
   intensity, and range.
 - The light budget **divides, it does not just scale**: a small desaturated ambient lets shadow
