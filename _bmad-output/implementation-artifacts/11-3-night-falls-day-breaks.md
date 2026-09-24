@@ -513,6 +513,20 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
   `candidate-*-bb893b2-h*.png`. Every frame passes the existing band. Candidate D would fail AC9's
   ≥ 50 % sky bar (−7 %). **STOPPED for Wolf's pick.**
 
+### Wolf's rulings during sitting 1 (2026-09-24, verbatim where quoted)
+
+- Undecided between A-D from stills: *"need to see live but that requires fast mode and ABCD toggles"*.
+- **Speed keys are PERMANENT, the A-D toggle is temporary:** *"ABCD is temporary .. fast-clock is
+  permanent"*; *"we should have at least pause, normal, fast modes for playing and testing purposes..
+  later on maybe HUD UI under minimap"*. He is NOT asking for a faster Normal. **This overrides the
+  guardrail "Do NOT add a key" for speed only:** the gui gains `+` / `-` (Equal/NumpadAdd,
+  Minus/NumpadSubtract) stepping Paused -> Normal -> Fast and back through the existing
+  `SetSpeed`, mirroring `tui` (`view.rs:483-492`); `Space` keeps pause. No protocol/sim change.
+  To be built in sitting 2 with a test and a mutation row, and reconciled with `SimPaused`
+  (`command.rs:285`) so Space after `+` does not act on a stale local flag.
+- The live comparison runs on a THROWAWAY branch `probe-11-3-day-toggle` @ `24693c1` (pushed, never
+  merged): `T` cycles A->B->C->D, `+`/`-` step the speed; state prints to stderr only.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
@@ -551,3 +565,4 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 | 2026-09-24 | Verified both post-sky boot captures byte-identical to control; killed 19 sitting-1 mutation rows and tightened the running-capture tick guard. |
 | 2026-09-24 | Made the last rim level equal the shared sky value at night; final boot captures stayed byte identical, and the 20th mutation row KILLED. Self-review was blocked by bubblewrap socket permissions. |
 | 2026-09-24 | Orchestrator verification of Tasks 0-3 (AC2 re-captured cmp-identical, noon == probe p3, full gate GREEN 1680 s on `bb893b2`); Task 4a: four candidate day tables rendered in an isolated worktree and filed. STOPPED for Wolf's pick. |
+| 2026-09-24 | Wolf ruled permanent `+`/`-` sim-speed keys in the gui (Paused/Normal/Fast via existing `SetSpeed`); throwaway probe branch `probe-11-3-day-toggle` pushed for his live A-D pick. |
