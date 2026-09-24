@@ -165,8 +165,8 @@ What it established:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — confirm the control on YOUR build** (AC2)
-  - [ ] Build, check `gui --version` names your HEAD, take two controls with the creation recipe
+- [x] **Task 0 — confirm the control on YOUR build** (AC2)
+  - [x] Build, check `gui --version` names your HEAD, take two controls with the creation recipe
         (no `--clock` yet — it does not exist). Both must match the creation line above and `cmp`
         identical to each other. File them as `11-3-signoff/control-<sha>-{a,b}.png`.
 - [ ] **Task 1 — the clock** (AC1, AC6, AC7)
@@ -432,14 +432,26 @@ tui 7451
 
 ### Agent Model Used
 
+gpt-6-sol (high)
+
 ### Debug Log References
+
+- Task 0: `cargo build --offline -p gui -p simd` passed; `./target/debug/gui --version` printed `gui build fc3dd08` without `-dirty`.
+- Fresh daemons on ports 7531 and 7532 each paused at tick 120. Both captures printed `warm-lit pixels=23433 ground-median-luminance=69 near-white-area=0.3906% blown-pool=0.3637% p99-luminance=153.5 resolution=1280x720`. `cmp` of the two PNGs exited 0.
 
 ### Completion Notes List
 
+- Task 0: Controls filed as `control-fc3dd08-a.png` and `control-fc3dd08-b.png`; same-build floor is zero.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
+- `_bmad-output/implementation-artifacts/11-3-signoff/control-fc3dd08-a.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/control-fc3dd08-b.png`
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-09-24 | Story created. Rulings taken (day length 24,000; moving moon, captures pin `--clock`; day artifact gated in Task 4; flat table-driven sky, `Atmosphere` probed and not adopted). Control measured on `53ba44e` (bit-identical pair, RED seen); creation probe in an isolated worktree (8 frames, filed). Adversarial validation pass: 1 critical, 4 high, 7 medium and 4 low findings applied (provisional day table plus two sittings; AC4 swap exemption; dusk at 17.5; AC8 keeps the band; AC9 bars from measurement; `ClockPin` in `projection_systems`; float hour; F4 haze re-writer). |
+| 2026-09-24 | Task 0 controls on `fc3dd08` matched the creation range and each other byte for byte. |
