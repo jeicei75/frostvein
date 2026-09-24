@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default; 11.2's creation ran on claude-opus-5 
 
 # Story 11.3: Night Falls, Day Breaks
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -250,14 +250,14 @@ What it established:
   - [x] Write `11-3-signoff/vehicle-card.md` in the seat's form (below). Questions for Wolf: the
         night vs the approved moonlit camp; the day vs AC12's frame; the dusk; AO at noon (#106);
         NFR6 at noon fullscreen.
-- [ ] **Task 8 — mutations and the gate** (AC14)
-  - [ ] `mutations/11-3-night-falls-day-breaks.sh`, at minimum: the hour ignores the tick; `--clock`
+- [x] **Task 8 — mutations and the gate** (AC14)
+  - [x] `mutations/11-3-night-falls-day-breaks.sh`, at minimum: the hour ignores the tick; `--clock`
         parsed but not applied; the key's direction not driven; a below-horizon key left lit (drop
         the horizon ramp); `apply_lighting_toggles` restores `night_lighting()` at noon; stars not
         faded; the rim target left on the night sky; `DistanceFog.color` left on the night sky;
         `BOOT_HOUR` moved; a capture without `--clock` follows the tick; the hour steps in whole
         hours (integer division); F4-on restores the night haze ambient at noon.
-  - [ ] Every row `assert s.count(old) == 1`. Run `audit-mutations.py` **after** `cargo fmt`.
+  - [x] Every row `assert s.count(old) == 1`. Run `audit-mutations.py` **after** `cargo fmt`.
 
 ## Dev Notes
 
@@ -461,6 +461,53 @@ gpt-6-sol (high)
 - AC2 after final rim fix: rebuilt `gui build b2b8f0f` without `-dirty`; fresh daemons on ports 7537 and 7538 paused at tick 120. Both final captures printed the creation figures (`23433`, `69`, `0.3906%`, `0.3637%`, `153.5`, `1280x720`) plus `clock=22.00 (capture default)` or `clock=22.00 (--clock)`. `cmp` of EACH against `control-fc3dd08-a.png` exited 0. This is the final code's AC2 pair.
 - Self-gate attempt 1: `codex review --base main` started but could not inspect any diff. Every shell invocation failed before execution with `error building bubblewrap command: app-server socket directory must be a user-owned directory with mode 0700`. It returned no code findings and cannot be counted as a successful review pass.
 
+- Task 8 post-commit mutation run: `RUST_TEST_THREADS=2 scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/11-3-night-falls-day-breaks.sh` completed with all 37 rows KILLED. The sitting-2 RED-to-row map is: `appearance_tables_pin_the_cold_boot_palette` (sky `[111,155,205]` vs `[110,155,205]`) → five `approved day ... drifts` rows; `lit_key_never_points_up_or_jumps_in_illuminance` (`6.16: 794.86163 to 897.2637`) → `sun horizon ramp violates the literal 100 lux bar`; `key_arc_uses_the_approved_boot_direction_and_day_table` (`Vec3(0.7187084,-0.3033679,0.6256407)` vs `Vec3(0.7295178,-0.3033679,0.6130022)`) → `boot direction no longer comes from the exact moon arc`; `speed_keys_step_from_the_daemon_speed_and_ignore_the_ends` (`Equal from Paused` sent empty before implementation) → four transition, end-press and two numpad rows; `speed_keys_refuse_static_world_and_space_uses_the_new_pause_state` (missing Normal before implementation, then stale Space sent Normal rather than Paused under sabotage) → static-world and stale-pause rows; `night_turns_into_day_on_the_rendered_frame` (`69 -> 69`) → rendered noon pin row. Each targeted test went red for the intended behavior and green after restoration.
+- `cargo fmt --all` then `python3 scripts/audit-mutations.py`: `653 rows, every literal still matches its target (11 rows carry no count guard)`. The 17 new rows all have `assert s.count(old) == 1`; the 11 unguarded rows are existing repo backlog.
+- Last explicit gate: `RUST_TEST_THREADS=2 scripts/gate.sh --fast` GREEN (72 s). This fast tier skipped `simd/tests/serve.rs` and the rendered pixel guards; the latter were run separately and passed 12/12. The orchestrator's earlier full gate was GREEN on `bb893b2`, before sitting-2 changes. A full post-sitting-2 gate was not run here; Wolf's orchestrator runs it.
+
+```text
+================ MUTATION RESULTS ================
+hour ignores the wire tick                                   KILLED
+clock flag parses but never reaches the pin                  KILLED
+installed key direction stays at the boot aim                KILLED
+the key stays lit at the horizon                             KILLED
+F8 restores the night budget at noon                         KILLED
+stars retain their night colour at noon                      KILLED
+rim materials keep the night sky target                      KILLED
+distance fog keeps the night sky                             KILLED
+the boot hour moves from 22                                  KILLED
+a default capture follows the wire tick                      KILLED
+hour advances in whole-hour steps                            KILLED
+F4-on reinserts night haze after the clock writer            KILLED
+clock parser admits the excluded upper bound                 KILLED
+capture range line loses its clock field                     KILLED
+capture clock note reverses its pin source                   KILLED
+current_hour ignores an unpinned snapshot                    KILLED
+hourly table stays night at noon                             KILLED
+sky and ambient jump at dawn                                 KILLED
+aurora remains opaque at noon                                KILLED
+night rim target misses the exact sky colour                 KILLED
+approved day sky drifts from candidate A                     KILLED
+approved day ambient tint drifts                             KILLED
+approved day ambient budget drifts                           KILLED
+approved day key tint drifts                                 KILLED
+approved day key budget drifts                               KILLED
+sun horizon ramp violates the literal 100 lux bar            KILLED
+boot direction no longer comes from the exact moon arc       KILLED
+plus from Paused fails to request Normal                     KILLED
+plus from Normal fails to request Fast                       KILLED
+minus from Fast fails to request Normal                      KILLED
+minus from Normal fails to request Paused                    KILLED
+speed end presses send an unwanted command                   KILLED
+numpad plus fails to reach speed stepping                    KILLED
+numpad minus fails to reach speed stepping                   KILLED
+speed key resumes a static-world capture                     KILLED
+plus leaves Space using stale paused state                   KILLED
+rendered noon ignores the explicit clock pin                 KILLED
+
+All mutations killed.
+```
+
 ### Completion Notes List
 
 - Sitting 2, Task 4b: Wolf's approved candidate A was already the provisional table; removed the provisional marker and pinned its sky, ambient, ambient brightness, directional colour and illuminance as independent literals beside the unchanged night pins.
@@ -559,6 +606,7 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 ### File List
 
 - `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `_bmad-output/implementation-artifacts/11-3-signoff/control-fc3dd08-a.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/control-fc3dd08-b.png`
 - `crates/gui/src/clock.rs`
@@ -617,3 +665,4 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 | 2026-09-24 | Added permanent gui speed keys from Wolf's ruling using the daemon's reported speed and reconciled Space's pause state. |
 | 2026-09-24 | Added AC9's ignored rendered night-to-noon guard, observed its clock-pin RED, then its green ground and sky changes. |
 | 2026-09-24 | Captured four reproducible night and four reproducible noon frames; documented approved A and future overcast D, clock controls, and Wolf's vehicle sitting. |
+| 2026-09-24 | All 37 story mutations KILLED; audit matched 653 rows after formatting, and the explicit fast gate passed. Moved story to review for Wolf's vehicle sitting. |
