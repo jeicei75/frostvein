@@ -232,22 +232,22 @@ What it established:
         its literals in `appearance_tables_pin_the_cold_boot_palette` (`appearance.rs:330`) beside
         the night literals. `night_lighting()`'s literals do not change.
   - [x] **4c (Wolf's sitting-1 speed ruling).** Add permanent gui `+`/`-` and numpad twins to step the reported daemon speed through Paused, Normal and Fast; refuse `--static-world`, reconcile Space, and cover the live command path and keymap.
-- [ ] **Task 5 — the instrument, and its test** (AC8, AC9)
-  - [ ] The instrument is the capture at a pinned hour:
+- [x] **Task 5 — the instrument, and its test** (AC8, AC9)
+  - [x] The instrument is the capture at a pinned hour:
         `gui <port> --headless --static-world --lights-steady --subdiv 4 --frames 160 --clock <h> --capture <png>`,
         read by its own range-check line (now carrying `clock=`) and by `11-2-signoff/sharpness.py`.
-  - [ ] Its test is AC9's guard. Run the RED in Verification **before** accepting its green.
-  - [ ] Run every existing rendered guard UNEDITED (`cargo test -p gui --test pixel_guard -- --ignored`)
+  - [x] Its test is AC9's guard. Run the RED in Verification **before** accepting its green.
+  - [x] Run every existing rendered guard UNEDITED (`cargo test -p gui --test pixel_guard -- --ignored`)
         — the capture default pin is what keeps them valid (AC2).
-- [ ] **Task 6 — docs** (AC5)
-  - [ ] `docs/tech-art-guidelines.md`: a day row beside the night rows in the Lights table
+- [x] **Task 6 — docs** (AC5)
+  - [x] `docs/tech-art-guidelines.md`: a day row beside the night rows in the Lights table
         (`:48-78`), the clock constants, and the sky-follows-the-clock rule; strike
         "The boot frame is a night scene" (`:160`) into "boots at 22:00"; mark #113's line (`:215`)
         with how 11.3 settled it.
-  - [ ] `README.md`: `--clock` in the flag table (`:238-252`) with the capture default pin, and
+  - [x] `README.md`: `--clock` in the flag table (`:238-252`) with the capture default pin, and
         the seat's Fast route (`tui` + `+`) under "At the vehicle".
-- [ ] **Task 7 — the sitting** (AC13)
-  - [ ] Write `11-3-signoff/vehicle-card.md` in the seat's form (below). Questions for Wolf: the
+- [x] **Task 7 — the sitting** (AC13)
+  - [x] Write `11-3-signoff/vehicle-card.md` in the seat's form (below). Questions for Wolf: the
         night vs the approved moonlit camp; the day vs AC12's frame; the dusk; AO at noon (#106);
         NFR6 at noon fullscreen.
 - [ ] **Task 8 — mutations and the gate** (AC14)
@@ -444,6 +444,9 @@ gpt-6-sol (high)
 - Speed keys RED, before implementation: `speed_keys_step_from_the_daemon_speed_and_ignore_the_ends` failed `Equal from Paused left: "" right: "{\"type\":\"set_speed\",\"speed\":\"normal\"}"`; `speed_keys_refuse_static_world_and_space_uses_the_new_pause_state` failed its seat case with the same empty command versus Normal. Both passed after registering `step_speed` before `send_commands`. The tests read the actual socket command for all four steps, both ignored ends, the static-world refusal, and Space immediately after `+` from Paused. Mutation rows remain pending.
 - AC2 after speed-key wiring: rebuilt `gui build 8d03dca` without `-dirty`, fresh daemons on ports 7545/7546 paused at tick 120; `boot-8d03dca-{default,explicit}.png` each compared byte-identical to `control-fc3dd08-a.png`.
 - Task 5 AC9 RED in Verification: temporarily made `current_hour` ignore `ClockPin`; `night_turns_into_day_on_the_rendered_frame` failed `noon ground must exceed night by more than 10: 69 -> 69` (sky-stars 1.8736 → 1.8736). Restored the source, rebuilt through `cargo test`, and the guard passed on real frames: ground 69 → 161; sky-stars 1.8823 → 0.5127. Further capture repeats and the full ignored suite are pending.
+- Task 5 instrument, four fresh `simd --pause-at 120` captures PER hour on `gui build e237f62` (no `-dirty`), all `--headless --static-world --lights-steady --subdiv 4 --frames 160`: `clock-e237f62-h22-{1,2,3,4}.png` on ports 7552/7554/7556/7558, and `clock-e237f62-h12-{1,2,3,4}.png` on ports 7553/7555/7557/7559. Every 22:00 line was identical: warm-lit 23,433; ground 69; near-white 0.3906%; blown-pool 0.3637%; p99 153.5; `clock=22.00 (--clock)`. Every noon line was identical: warm-lit 10,218; ground 161; near-white 0.8519%; blown-pool 0.5068%; p99 197.4; `clock=12.00 (--clock)`. All exited 0 under the unchanged band. Same-hour SHA-256 hashes match across all four files (night `7221b15c85fe1eceac4afd8205c49adb9ffb601391b4ed8b35e3159653f185b3`; noon `cfdf5e0ed6838488ebca93f5e8df4fb56ab2b8735eafdaf2c4554b2731686103`), so each hour's measured same-build floor is 0. `sharpness.py` reads sky-stars `lap_mean` night 1.8812 → noon 0.5228, a 72% fall; the AC9 guard's pixel window computes 1.8823 → 0.5127 using only the interior pixels.
+- Task 5 full rendered suite: `RUST_TEST_THREADS=2 cargo test --offline -p gui --test pixel_guard -- --ignored` passed **12 passed, 0 failed** in 1679.00 s. The existing guards were unedited; `pixel_guard.rs` adds only AC9's guard.
+- Speed-state test strengthening RED: starting the local `SimPaused` flag in the daemon's Paused state, then removing the speed key's update made `speed_keys_refuse_static_world_and_space_uses_the_new_pause_state` fail: `Space after + must pause the newly running sim; left: {"type":"set_speed","speed":"normal"} right: {"type":"set_speed","speed":"paused"}`. Restoring the update made it green. The matching mutation row is pending Task 8.
 - Sitting 2, Task 4b RED: temporarily changed only the candidate A sky literal to `(111,155,205)`; `appearance_tables_pin_the_cold_boot_palette` failed at `appearance.rs:570`: `left: [111, 155, 205] right: [110, 155, 205]`. Restored `(110,155,205)` and the focused test passed. The day literal pin's mutation row is pending Task 8.
 
 - Task 0: `cargo build --offline -p gui -p simd` passed; `./target/debug/gui --version` printed `gui build fc3dd08` without `-dirty`.
@@ -462,6 +465,8 @@ gpt-6-sol (high)
 
 - Sitting 2, Task 4b: Wolf's approved candidate A was already the provisional table; removed the provisional marker and pinned its sky, ambient, ambient brightness, directional colour and illuminance as independent literals beside the unchanged night pins.
 - Wolf's speed ruling is filed as Task 4c in Tasks/Subtasks. `step_speed` reads `Mirror::speed()` for each step, updates `SimPaused` so Space after `+` pauses, and uses the existing `SetSpeed { at_tick: None }`. `restore_speed_on_exit` remains Normal for static-world sessions and its configured-app socket test remains green.
+- Task 6: documented candidate A's approved day table, clock constants and shared sky colour; D “pale overcast” is a named UNBUILT future weather table only. README now names `--clock`, its capture default, and the gui's own Fast key.
+- Task 7: wrote the vehicle card with the seat's launcher form, a fresh daemon before every static capture, absolute `.bin` outputs, Fast through gui `+`, and Wolf's look/AO/NFR6 questions. Wolf's AC13 sitting has not been observed in this dev run.
 
 - Task 0: Controls filed as `control-fc3dd08-a.png` and `control-fc3dd08-b.png`; same-build floor is zero.
 - Task 1: `ClockPin` is initialized in `projection_systems` and configured from `--clock` or the capture default. The range line uses `current_hour()` and identifies an explicit pin or capture default. Repointed affected existing mutation rows in 9.1 and 10.7. The new rows are pending the post-commit mutation run.
@@ -570,9 +575,14 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-0e6a695-explicit.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-8d03dca-default.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-8d03dca-explicit.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/clock-e237f62-h12-{1,2,3,4}.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/clock-e237f62-h22-{1,2,3,4}.png`
+- `_bmad-output/implementation-artifacts/11-3-signoff/vehicle-card.md`
 - `crates/gui/src/command.rs`
 - `crates/gui/tests/pixel_guard.rs`
 - `_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh`
+- `docs/tech-art-guidelines.md`
+- `README.md`
 - `_bmad-output/implementation-artifacts/mutations/11-3-night-falls-day-breaks.sh`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-default.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-explicit.png`
@@ -606,3 +616,4 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 | 2026-09-24 | Removed the boot-hour key short-circuit so the approved direction is produced by the moon arc itself. |
 | 2026-09-24 | Added permanent gui speed keys from Wolf's ruling using the daemon's reported speed and reconciled Space's pause state. |
 | 2026-09-24 | Added AC9's ignored rendered night-to-noon guard, observed its clock-pin RED, then its green ground and sky changes. |
+| 2026-09-24 | Captured four reproducible night and four reproducible noon frames; documented approved A and future overcast D, clock controls, and Wolf's vehicle sitting. |

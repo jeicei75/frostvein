@@ -3106,6 +3106,10 @@ mod tests {
         let (mut seat, _sender, server) =
             configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Paused));
         seat.update();
+        // The local flag must start in the same paused state that the daemon reported.
+        seat.world_mut()
+            .resource_mut::<crate::command::SimPaused>()
+            .0 = true;
         seat.world_mut()
             .resource_mut::<ButtonInput<KeyCode>>()
             .press(KeyCode::Equal);
