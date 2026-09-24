@@ -573,6 +573,26 @@
     "output": 85528,
     "turns": 60
   },
+  "41f00da4-4a34-4b82-96fd-6c0f7528ee32.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 844201,
+        "cache_read": 55539867,
+        "input": 680,
+        "output": 184734
+      }
+    },
+    "cache_creation": 844201,
+    "cache_read": 55539867,
+    "input": 680,
+    "last_ts": "2026-09-24T11:58:11.187Z",
+    "marked_at": null,
+    "output": 184734,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 294
+  },
   "44ce9deb-fddf-44ac-80e8-ab90e174fb85.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -2802,5 +2822,57 @@
     "quota_last": 25.0,
     "schema": 2,
     "turns": 181
+  },
+  "rollout-2026-09-24T04-58-48-01a0d1c7-cf56-7ba2-8dfd-dd8e0f94e001.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 88320,
+        "input": 28371,
+        "output": 1700
+      },
+      "gpt-6-sol": {
+        "cache_creation": 0,
+        "cache_read": 48222080,
+        "input": 313744,
+        "output": 72977
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 48310400,
+    "input": 342115,
+    "last_ts": "2026-09-24T06:11:53.665Z",
+    "marked_at": null,
+    "output": 74677,
+    "primary_only": false,
+    "quota_last": 42.0,
+    "schema": 2,
+    "turns": 334
+  },
+  "rollout-2026-09-24T09-49-05-01a0d2d1-9457-7311-b13a-807e4cc7ad6b.jsonl": {
+    "by_model": {
+      "gpt-5.6-terra": {
+        "cache_creation": 0,
+        "cache_read": 36864,
+        "input": 9066,
+        "output": 1072
+      },
+      "gpt-6-sol": {
+        "cache_creation": 0,
+        "cache_read": 36329984,
+        "input": 213085,
+        "output": 46140
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 36366848,
+    "input": 222151,
+    "last_ts": "2026-09-24T11:48:24.933Z",
+    "marked_at": null,
+    "output": 47212,
+    "primary_only": false,
+    "quota_last": 13.0,
+    "schema": 2,
+    "turns": 295
   }
 }

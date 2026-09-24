@@ -11,3 +11,6 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-opus-5-5 | 384 | 784 | 1,421,625 | 50,993,164 | 252,469 | 52,668,042 | $22.36 | `69597ea7-eb77-400b-939d-6235a68ac246.jsonl` | 2026-09-24 04:53 UTC · rates 2026-08-31 | 56 | — |
+| dev | codex | gpt-5.6-terra, gpt-6-sol | 334 | 342,115 | 0 | 48,310,400 | 74,677 | 48,727,192 | $11.10 | `rollout-2026-09-24T04-58-48-01a0d1c7-cf56-7ba2-8dfd-dd8e0f94e001.jsonl` | 2026-09-24 11:58 UTC · rates 2026-08-31 | 73 | 16pp |
+| dev | codex | gpt-5.6-terra, gpt-6-sol | 295 | 222,151 | 0 | 36,366,848 | 47,212 | 36,636,211 | $8.19 | `rollout-2026-09-24T09-49-05-01a0d2d1-9457-7311-b13a-807e4cc7ad6b.jsonl` | 2026-09-24 11:58 UTC · rates 2026-08-31 | 119 | 12pp |
+| dev | claude | claude-opus-5-5 | 294 | 680 | 844,201 | 55,539,867 | 184,734 | 56,569,482 | $19.03 | `41f00da4-4a34-4b82-96fd-6c0f7528ee32.jsonl` | 2026-09-24 11:58 UTC · rates 2026-08-31 | 422 | — |

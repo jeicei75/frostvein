@@ -603,6 +603,27 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
   compiling"* — NOT in 11.3's scope (technical-preferences: no config files before a third concrete
   use; a story must require runtime change). Routed to its own issue/story.
 
+### Orchestrator verification, sitting 2 (Claude Opus 5.5, 2026-09-24)
+
+Codex exited 0 with a full hand-back. Verified rather than trusted:
+
+- 10 commits `198776e..6cc4981`, all authored `Völundr`; no `--no-verify` in any commit invocation;
+  no attribution trailers anywhere in `0fbb6ce..HEAD`; tree clean; Status `review` in the story and
+  sprint-status.
+- **Record deviation (not rewritten):** sitting 2 also set the COMMITTER to Völundr
+  (`git -c user.name='Völundr' ... commit`), where the rule keeps the committer `jeicei75`. The
+  commits are unpushed, but rewriting would change the SHAs that the `boot-<sha>-*.png` filenames and
+  this record cite, so it is left and the next handoff prompt names the committer rule.
+- **Independent captures on `gui build 6cc4981`**, fresh `simd --pause-at 120` each: no `--clock` and
+  `--clock 22` both `cmp`-identical to `creation-control-53ba44e-a.png`; `--clock 12` `cmp`-identical
+  to `approved-day-bb893b2.png`; `--clock 17.5` ground median 108 (109 before the 25° sun ramp — the
+  dusk frame is ambient-dominated, so the wider ramp barely moves it).
+- Scope: `crates/{protocol,sim-core,client-core,simd}` unchanged since `0fbb6ce`; `pixel_guard.rs` gained
+  only the AC9 guard (+48 lines).
+- **FULL GATE GREEN on `6cc4981`, 1822 s, `RUST_TEST_THREADS=2`.**
+- Self-gate did not run (same bubblewrap socket error); the code review carries the full weight.
+- Dev cost recorded: Codex $11.10 (16pp) + $8.19 (12pp), orchestrator $19.03.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
@@ -666,3 +687,4 @@ the quota; a probe confirmed Codex is back. Verified rather than trusted:
 | 2026-09-24 | Added AC9's ignored rendered night-to-noon guard, observed its clock-pin RED, then its green ground and sky changes. |
 | 2026-09-24 | Captured four reproducible night and four reproducible noon frames; documented approved A and future overcast D, clock controls, and Wolf's vehicle sitting. |
 | 2026-09-24 | All 37 story mutations KILLED; audit matched 653 rows after formatting, and the explicit fast gate passed. Moved story to review for Wolf's vehicle sitting. |
+| 2026-09-24 | Orchestrator verification of sitting 2: independent AC2/noon captures cmp-identical, full gate GREEN 1822 s on `6cc4981`; committer deviation recorded; dev cost recorded. |
