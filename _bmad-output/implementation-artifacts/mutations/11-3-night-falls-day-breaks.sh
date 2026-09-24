@@ -169,3 +169,11 @@ old = '    let aurora_color = Color::srgba(1.0, 1.0, 1.0, 1.0 - weight);\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let aurora_color = Color::WHITE;\n'))
 PY
+
+mutation "night rim target misses the exact sky colour" gui noon_rim_materials_dissolve_toward_the_live_sky <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '    if level >= RIM_LEVELS - 1 {\n        return sky;\n    }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if level >= RIM_LEVELS - 1 && sky != night_lighting().sky {\n        return sky;\n    }\n'))
+PY

@@ -340,7 +340,7 @@ pub fn rim_dissolved_color(base: Color, level: usize) -> Color {
 }
 
 pub fn rim_dissolved_color_at(base: Color, level: usize, sky: Color) -> Color {
-    if level >= RIM_LEVELS - 1 && sky != night_lighting().sky {
+    if level >= RIM_LEVELS - 1 {
         return sky;
     }
     let steps = (RIM_LEVELS - 1) as f32;

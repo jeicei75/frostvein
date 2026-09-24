@@ -3990,6 +3990,22 @@ mod tests {
                 .unwrap();
             assert_eq!(rim.base_color, sky, "every rim target must be the live sky");
         }
+        let (mut night, _sender, _server) = configured_app(&["--clock", "22"]);
+        night.update();
+        let assets = night.world().resource::<crate::project::ProjectionAssets>();
+        let materials = night
+            .world()
+            .resource::<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>();
+        let sky = night.world().resource::<bevy::prelude::ClearColor>().0;
+        for slot in &assets.terrain {
+            let rim = materials
+                .get(&slot[crate::appearance::RIM_LEVELS - 1])
+                .unwrap();
+            assert_eq!(
+                rim.base_color, sky,
+                "night rim target must equal the live sky exactly"
+            );
+        }
     }
 
     #[test]
