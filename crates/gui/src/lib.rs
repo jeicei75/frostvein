@@ -11,6 +11,7 @@ pub mod designate;
 pub mod ingest;
 pub mod perf;
 pub mod pick;
+pub mod probe;
 pub mod project;
 pub mod slice;
 pub mod transform;

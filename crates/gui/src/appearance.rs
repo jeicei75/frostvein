@@ -51,15 +51,7 @@ pub fn night_lighting() -> LightTable {
 
 // PROVISIONAL — not approved (11.3 Task 4 pick pending).
 pub fn day_lighting() -> LightTable {
-    LightTable {
-        sky: Color::srgb_u8(110, 155, 205),
-        star: night_lighting().star,
-        ambient: Color::srgb_u8(190, 210, 235),
-        ambient_brightness: 4_000.0,
-        aurora: night_lighting().aurora,
-        directional: Color::srgb_u8(255, 244, 228),
-        directional_illuminance: 12_000.0,
-    }
+    crate::probe::day_table(night_lighting())
 }
 
 pub fn day_weight(hour: f32) -> f32 {

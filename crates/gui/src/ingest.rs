@@ -878,6 +878,7 @@ pub fn client_systems(app: &mut App) {
             crate::command::toggle_pause
                 .after(update_pick)
                 .before(send_commands),
+            crate::probe::probe_keys.before(send_commands),
             // Before `send_commands`, so the hand-back reaches the socket on the frame the
             // exit is requested rather than never.
             crate::command::restore_speed_on_exit.before(send_commands),
