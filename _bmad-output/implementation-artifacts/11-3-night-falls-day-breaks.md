@@ -259,6 +259,26 @@ What it established:
         hours (integer division); F4-on restores the night haze ambient at noon.
   - [x] Every row `assert s.count(old) == 1`. Run `audit-mutations.py` **after** `cargo fmt`.
 
+- [ ] **Task 9 — AC13 sitting rulings (Wolf, 2026-09-25)** — see "AC13 vehicle sitting" in the record
+  - [ ] **9a. Nothing in the sky casts shadows.** Stars and snowflakes get `NotShadowCaster` (a
+        star on the 650 m shell threw the one fast "orbiting" shadow Wolf saw; flakes throw
+        streaks, 641 px at 00:00). The aurora casts nothing already (probe `cmp`-identical).
+  - [ ] **9b. Shadow crawl — ruled (b): the direction stays continuous; tune the cascades.**
+        Instrument: 11 pinned captures, 12.000 → 12.050 in 0.005 h steps (sun moves 0.075° per
+        step), per-pixel reversal count on the ground rows. Baseline at `df94475`: 700–830 px
+        change > 6 levels per step, 1,196 px reverse, 456 reverse ≥ 3×; same-clock repeat
+        `cmp`-identical (floor 0). Bevy defaults are in force (4 cascades, 150 m, first bound
+        10 m, 2048 map, Gaussian filtering), and the camera boots at 90 m.
+  - [ ] **9c. Speed tiers — ruled (i): sim-wide, keep Fast, add 2× and 4×.** `protocol::Speed`
+        gains two variants; `simd` periods are 20 / 10 / 5 ms. `+`/`-` in `tui` and `gui` walk
+        Paused → Normal → Fast → 2× → 4×. **Ruled deviation from AC1** (`protocol`, `simd` and
+        `tui` change). Measure the achieved tick rate at 4× before calling it done.
+  - [ ] **9d. The moon is dimmed — ruled "let's fix it".** It is 7,000 lux today, 58% of noon,
+        which is why the night is bright and why twilight dips and then recovers. Render moon
+        candidates in an isolated worktree, then **STOP for Wolf's pick**. This moves the approved
+        boot frame, so AC2's control and the boot-calibrated rendered guards re-baseline AFTER the
+        pick, never before it ([[guard-bounds-the-art-decision]]).
+
 ### Review Findings
 
 Code review 2026-09-24, run 1 on `d917314` (Claude Opus 5.5 orchestrator). Four layers ran, and each
