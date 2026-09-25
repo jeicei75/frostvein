@@ -17,11 +17,12 @@ In PowerShell:
 .\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')
 ```
 
-The unpinned client begins at 22:00 and follows the daemon tick. Press `+` once from Normal to
-Fast; a full day then takes about eight minutes. `-` steps Fast → Normal → Paused, and Space
-pauses or resumes. Check the moonlit night against
-`10-8-signoff/approved-moonlit-camp-3479a43-a.png`, and the noon day against
-`11-3-signoff/approved-day-bb893b2.png`. Keep the client open through dawn and dusk.
+The unpinned client follows the daemon tick, which is 22:00 only at tick 0. Every minute the
+daemon runs before the first frame moves the clock 0.6 h and the moon 9° of azimuth, so **this
+run is for the cycle, not for judging the night** — judge the night from the pinned 22:00
+capture below. Press `+` once from Normal to Fast; a full day then takes about eight minutes.
+`-` steps Fast → Normal → Paused, and Space pauses or resumes. Keep the client open through
+dawn and dusk.
 
 ## Pinned looks
 
@@ -37,6 +38,15 @@ while the daemon pauses at tick 120.
 
 The night and noon captures should print `clock=22.00 (--clock)` and `clock=12.00 (--clock)`.
 The measured devpod ground medians are 69 and 161. The capture band applies to both.
+
+Judge the night from `11-3-night.png` against `10-8-signoff/approved-moonlit-camp-3479a43-a.png`,
+and the noon from `11-3-noon.png` against `11-3-signoff/approved-day-bb893b2.png`.
+
+**The noon capture may exit 101 on this GPU.** The devpod's noon near-white is 0.8519% against a
+0.9461% ceiling, which is only 0.094 pp of headroom. This GPU has read 0.4–0.6 pp higher on
+near-white in the bright tail than the devpod. A 101 at noon with the range-check line blaming
+near-white is that venue offset, not a regression. The PNG may still be written; if it is not,
+judge noon from the live run below. A 101 at 22:00 **is** a regression — report it.
 
 For the live noon look and AO judgement, start `simd 7451` afresh and launch:
 
@@ -55,6 +65,11 @@ The devpod's software renderer cannot establish the seat's NFR6 result.
 2. Does noon match candidate A's approved day frame? Is the day look accepted over the full cycle?
 3. How does dusk at 17:30 read? It has **no warm sunset light**: the key keeps its day colour
    until it darkens at the horizon. Is that acceptable for now?
+   **The sun's ramp changed after your pick.** You picked A on a 10° horizon ramp; `7ad8b32`
+   widened the sun's to 25° for AC4, and you ruled to keep it. The sun is now below full
+   strength before about 08:35 and after about 15:25 (with 10°: 06:58 and 17:02). At 17:30 the
+   key is about 1,350 lux instead of about 6,400 (−79%), so `candidate-A-provisional-bb893b2-h17.5.png`
+   is brighter than what this build renders. Judge dawn and dusk live, in the cycle run.
 4. The haze brightens by day with ambient intensity, while torches, lanterns and campfire are
    unchanged. Keep that treatment?
 5. At noon fullscreen, is AO with F7 worth keeping visually (#106)? What frame rate and frame

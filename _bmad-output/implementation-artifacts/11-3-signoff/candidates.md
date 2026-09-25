@@ -51,10 +51,26 @@ to the creation probe `probe-p3-day-flat.png`.
 ## Things to know before picking
 
 1. **Dusk has no warm light.** The key keeps the DAY colour down to the horizon and only dims
-   (horizon ramp over the last 10°); the sky blends to night between 17:00 and 19:00. A warm
+   (horizon ramp over the last 10° when these frames were rendered — see "Changed after the pick"
+   below); the sky blends to night between 17:00 and 19:00. A warm
    sunset tint is not in the model — adding one is a new ruling, not a table pick.
 2. **The haze brightens by day.** AC11 derives the haze ambient intensity from the ambient
    brightness (`0.1 × brightness / 80`): night 1.875 → A 5.0, B 3.75, C 4.375, D 6.25. That is
    the milky wash over the far ridge in every noon frame, strongest in D.
 3. **Torches, lanterns and the campfire are unchanged by day** (guardrail) — visible as the warm
    pool at camp in every noon frame.
+
+## Changed after the pick — the sun's horizon ramp is now 25°
+
+Wolf picked A live on `probe-11-3-day-toggle`, which carried the 10° sun ramp that rendered the
+frames above. `7ad8b32` then widened the **sun's** ramp to 25° to meet AC4's literal 100-lux step
+bar; the moon keeps 10°. Wolf ruled 2026-09-24 (code review): **keep 25°, disclose it, and judge
+dawn and dusk live at AC13.**
+
+- At 17:30 (sun 5.2° up) the key falls from 6,396 to 1,351 lux (−79%).
+- The sun is now below full strength before about 08:35 and after about 15:25. With the 10° ramp
+  that was before about 06:58 and after about 17:02.
+- The A-dusk frame above is therefore **no longer what the build renders**. On the reviewed
+  build (`6cc4981`/`d917314`, same code) the 17:30 ground median reads 108 (was 109) but p99
+  reads 169.0 (was 180.2), so the ground median alone understates the change. Noon (12:00, sun
+  40° up) is unaffected and stays `cmp`-identical to `approved-day-bb893b2.png`.
