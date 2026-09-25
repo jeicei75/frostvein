@@ -260,19 +260,36 @@ What it established:
   - [x] Every row `assert s.count(old) == 1`. Run `audit-mutations.py` **after** `cargo fmt`.
 
 - [ ] **Task 9 — AC13 sitting rulings (Wolf, 2026-09-25)** — see "AC13 vehicle sitting" in the record
-  - [ ] **9a. Nothing in the sky casts shadows.** Stars and snowflakes get `NotShadowCaster` (a
+  - [x] **9a. Nothing in the sky casts shadows.** Stars and snowflakes get `NotShadowCaster` (a
         star on the 650 m shell threw the one fast "orbiting" shadow Wolf saw; flakes throw
         streaks, 641 px at 00:00). The aurora casts nothing already (probe `cmp`-identical).
+        **Done `82dd716`:** all three spawns are marked (the aurora too, so one headless assertion
+        covers every `Atmosphere` entity); the row `stars cast shadows again` is KILLED. The 5.4 row
+        `aurora curtain loses client local marker` was re-pointed and re-KILLED.
   - [ ] **9b. Shadow crawl — ruled (b): the direction stays continuous; tune the cascades.**
         Instrument: 11 pinned captures, 12.000 → 12.050 in 0.005 h steps (sun moves 0.075° per
         step), per-pixel reversal count on the ground rows. Baseline at `df94475`: 700–830 px
         change > 6 levels per step, 1,196 px reverse, 456 reverse ≥ 3×; same-clock repeat
         `cmp`-identical (floor 0). Bevy defaults are in force (4 cascades, 150 m, first bound
         10 m, 2048 map, Gaussian filtering), and the camera boots at 90 m.
-  - [ ] **9c. Speed tiers — ruled (i): sim-wide, keep Fast, add 2× and 4×.** `protocol::Speed`
+  - [x] **9c. Speed tiers — ruled (i): sim-wide, keep Fast, add 2× and 4×.** `protocol::Speed`
         gains two variants; `simd` periods are 20 / 10 / 5 ms. `+`/`-` in `tui` and `gui` walk
         Paused → Normal → Fast → 2× → 4×. **Ruled deviation from AC1** (`protocol`, `simd` and
         `tui` change). Measure the achieved tick rate at 4× before calling it done.
+        **Done `71711bb`.** Measured on the wire (a mostly idle devpod, 8 s per tier): Normal 9.9,
+        Fast 49.5, Fast2x 97.0 and Fast4x 185.2 ticks/s, so a day at 4× takes about 2 min 10 s. At
+        idle a delta is 834 bytes.
+        **A defect the new tier exposed, and it was fixed:** the gui drains its message queue once per
+        frame, so it absorbs at most `MESSAGE_QUEUE` × fps deltas per second. At 16, a live lavapipe
+        gui (about 2.5 fps) was evicted by the daemon 34 s into a 4× run (`client delta queue full`)
+        and **printed nothing**. Its reader sat blocked on the full queue and never reached the EOF.
+        With the queue at 256, the same run held for 120 s with no eviction (RED and GREEN come from
+        the same instrument, a timestamped daemon log). The seat's 60+ fps absorbs about 960 deltas/s
+        at 16 as well, so this protects slow frames rather than the normal case.
+        Rows: `fast4x runs at the fast2x period`, `gui plus stops at fast`, `gui minus from fast4x
+        drops to normal` and `tui plus stops at fast2x` are all KILLED. Three 2.3 rows were
+        re-pointed and re-KILLED: `plus at fast wraps to paused` (its old payload did not compile),
+        `space key is ignored` and `status line omits the speed`.
   - [ ] **9d. The moon is dimmed — ruled "let's fix it".** It is 7,000 lux today, 58% of noon,
         which is why the night is bright and why twilight dips and then recovers. Render moon
         candidates in an isolated worktree, then **STOP for Wolf's pick**. This moves the approved
