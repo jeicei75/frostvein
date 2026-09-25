@@ -69,6 +69,10 @@ pub enum Speed {
     Paused,
     Normal,
     Fast,
+    /// Twice `Fast` (Wolf, 11.3 sitting: a day at `Fast` takes 8 minutes).
+    Fast2x,
+    /// Four times `Fast`: a day in about 2 minutes.
+    Fast4x,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -422,6 +426,8 @@ mod tests {
             (Speed::Paused, "\"paused\""),
             (Speed::Normal, "\"normal\""),
             (Speed::Fast, "\"fast\""),
+            (Speed::Fast2x, "\"fast2x\""),
+            (Speed::Fast4x, "\"fast4x\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }

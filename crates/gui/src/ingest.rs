@@ -82,7 +82,10 @@ use crate::{
 
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
-const MESSAGE_QUEUE: usize = 16;
+// The frame drains this queue whole, so the gui absorbs at most MESSAGE_QUEUE x fps deltas a second.
+// At 16 a lavapipe gui (~2.5 fps) fell behind Fast4x's ~185 deltas/s and the daemon evicted it
+// SILENTLY 34 s in: the reader sat blocked on this queue and never reached the EOF (11.3).
+const MESSAGE_QUEUE: usize = 256;
 const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
 
 /// Ruled 2026-09-21: non-physical f/0.05 makes the valley read as a miniature at this scale.
@@ -3063,7 +3066,11 @@ mod tests {
         for (speed, key, expected) in [
             (Speed::Paused, KeyCode::Equal, Some("normal")),
             (Speed::Normal, KeyCode::NumpadAdd, Some("fast")),
-            (Speed::Fast, KeyCode::Equal, None),
+            (Speed::Fast, KeyCode::Equal, Some("fast2x")),
+            (Speed::Fast2x, KeyCode::NumpadAdd, Some("fast4x")),
+            (Speed::Fast4x, KeyCode::Equal, None),
+            (Speed::Fast4x, KeyCode::Minus, Some("fast2x")),
+            (Speed::Fast2x, KeyCode::NumpadSubtract, Some("fast")),
             (Speed::Fast, KeyCode::Minus, Some("normal")),
             (Speed::Normal, KeyCode::NumpadSubtract, Some("paused")),
             (Speed::Paused, KeyCode::Minus, None),

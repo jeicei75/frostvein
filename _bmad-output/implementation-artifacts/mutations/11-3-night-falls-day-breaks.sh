@@ -321,3 +321,35 @@ old = '            Transform::from_translation(position).with_scale(Vec3::splat(
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            Transform::from_translation(position).with_scale(Vec3::splat(star_scale(index))),\n            Atmosphere,\n            ClientLocal,\n'))
 PY
+
+mutation "fast4x runs at the fast2x period" simd speed_periods_are_pinned <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = 'const FAST4X_TICK_PERIOD: Duration = Duration::from_millis(5);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'const FAST4X_TICK_PERIOD: Duration = Duration::from_millis(10);\n'))
+PY
+
+mutation "gui plus stops at fast" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '        (Speed::Fast, true, false) => Speed::Fast2x,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "gui minus from fast4x drops to normal" gui speed_keys_step_from_the_daemon_speed_and_ignore_the_ends <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
+old = '        (Speed::Fast4x, false, true) => Speed::Fast2x,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        (Speed::Fast4x, false, true) => Speed::Normal,\n'))
+PY
+
+mutation "tui plus stops at fast2x" tui speed_keys_follow_the_pinned_step_table_and_clamp <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = '            Speed::Fast2x => command(state, Speed::Fast4x),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Speed::Fast2x => Action::Ignore,\n'))
+PY

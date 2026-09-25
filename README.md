@@ -46,7 +46,7 @@ cargo run -p tui -- 7999   # optional arg: the port simd is listening on
 | `<` / `>` | walk down / up one z-level |
 | arrows or `hjkl` | pan the camera |
 | `space` | pause / resume |
-| `+` / `-` | faster / slower (paused → normal → fast) |
+| `+` / `-` | faster / slower (paused → normal → fast → fast2x → fast4x) |
 | `d` / `c` | designate a dig / channel rectangle |
 | `p` | place a stockpile rectangle |
 | `x` | clear designations and stockpiles in a rectangle |
@@ -179,8 +179,8 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 - `--frames` does not need scaling up on a fast GPU any more: the capture waits for its ticks.
 - Never write a vehicle step as `./target/release/gui ...` or a bare `gui.exe` — that skips the
   stamp check this launcher exists for.
-- In the gui, `+` steps Normal to Fast; `-` steps back through Normal to Paused. The TUI's `+`
-  still changes the same daemon speed when it is open.
+- In the gui, `+` steps Paused → Normal → Fast → Fast2x → Fast4x (a day in 40, 8, 4 and 2
+  minutes); `-` steps back. The TUI's `+` still changes the same daemon speed when it is open.
 
 ### Controls
 
@@ -197,7 +197,7 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | `Esc` | release the selection, or abort a designation |
 | `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
 | `space` | pause / resume the sim |
-| `+` / `-` (including numpad) | step the daemon speed Paused ↔ Normal ↔ Fast; end presses do nothing |
+| `+` / `-` (including numpad) | step the daemon speed Paused ↔ Normal ↔ Fast ↔ Fast2x ↔ Fast4x; end presses do nothing |
 | `F1` / `F2` | **Bevy's own** render debug overlay: cycle depth/normal, cycle its opacity |
 | `F3` | mark a frame in the perf log |
 | `F4` `F5` `F6` `F7` | toggle haze / depth of field / bloom / ambient occlusion — widest-acting first |

@@ -385,6 +385,8 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
             Speed::Paused => "paused",
             Speed::Normal => "normal",
             Speed::Fast => "fast",
+            Speed::Fast2x => "fast2x",
+            Speed::Fast4x => "fast4x",
         };
         // `N up` is fixed here because this client's screen axes ARE the world axes: right is
         // +x, down is +y, so north (-y) is always up. It is printed anyway so the two clients
@@ -477,15 +479,19 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             state,
             match speed {
                 Speed::Paused => Speed::Normal,
-                Speed::Normal | Speed::Fast => Speed::Paused,
+                Speed::Normal | Speed::Fast | Speed::Fast2x | Speed::Fast4x => Speed::Paused,
             },
         ),
         KeyCode::Char('+') => match speed {
             Speed::Paused => command(state, Speed::Normal),
             Speed::Normal => command(state, Speed::Fast),
-            Speed::Fast => Action::Ignore,
+            Speed::Fast => command(state, Speed::Fast2x),
+            Speed::Fast2x => command(state, Speed::Fast4x),
+            Speed::Fast4x => Action::Ignore,
         },
         KeyCode::Char('-') => match speed {
+            Speed::Fast4x => command(state, Speed::Fast2x),
+            Speed::Fast2x => command(state, Speed::Fast),
             Speed::Fast => command(state, Speed::Normal),
             Speed::Normal => command(state, Speed::Paused),
             Speed::Paused => Action::Ignore,
@@ -791,7 +797,47 @@ mod tests {
                     at_tick: None,
                 }),
             ),
-            (KeyCode::Char('+'), Speed::Fast, Action::Ignore),
+            (
+                KeyCode::Char('+'),
+                Speed::Fast,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Fast2x,
+                    at_tick: None,
+                }),
+            ),
+            (
+                KeyCode::Char('+'),
+                Speed::Fast2x,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Fast4x,
+                    at_tick: None,
+                }),
+            ),
+            (KeyCode::Char('+'), Speed::Fast4x, Action::Ignore),
+            (
+                KeyCode::Char('-'),
+                Speed::Fast4x,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Fast2x,
+                    at_tick: None,
+                }),
+            ),
+            (
+                KeyCode::Char('-'),
+                Speed::Fast2x,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Fast,
+                    at_tick: None,
+                }),
+            ),
+            (
+                KeyCode::Char(' '),
+                Speed::Fast4x,
+                Action::Command(Command::SetSpeed {
+                    speed: Speed::Paused,
+                    at_tick: None,
+                }),
+            ),
             (
                 KeyCode::Char('-'),
                 Speed::Fast,
@@ -885,7 +931,13 @@ mod tests {
             (KeyCode::Char('S'), Action::Command(Command::Save)),
             (KeyCode::Char('L'), Action::Command(Command::Load)),
         ] {
-            for speed in [Speed::Paused, Speed::Normal, Speed::Fast] {
+            for speed in [
+                Speed::Paused,
+                Speed::Normal,
+                Speed::Fast,
+                Speed::Fast2x,
+                Speed::Fast4x,
+            ] {
                 let mut state = normal_state((0, 0), 0);
                 state.speed = speed;
 
@@ -1427,6 +1479,8 @@ mod tests {
             (Speed::Paused, "paused"),
             (Speed::Normal, "normal"),
             (Speed::Fast, "fast"),
+            (Speed::Fast2x, "fast2x"),
+            (Speed::Fast4x, "fast4x"),
         ] {
             let mut state = normal_state((12, 34), 19);
             state.speed = speed;

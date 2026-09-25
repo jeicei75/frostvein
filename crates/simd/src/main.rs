@@ -19,6 +19,8 @@ use std::{
 
 const TICK_PERIOD: Duration = Duration::from_millis(100);
 const FAST_TICK_PERIOD: Duration = Duration::from_millis(20);
+const FAST2X_TICK_PERIOD: Duration = Duration::from_millis(10);
+const FAST4X_TICK_PERIOD: Duration = Duration::from_millis(5);
 const CLIENT_QUEUE: usize = 16;
 const SAVE_PATH: &str = "frostvein.save";
 /// Must exceed the largest *legal* world, not merely a typical one. Story 3.1 added
@@ -645,6 +647,8 @@ fn period(speed: protocol::Speed) -> Duration {
     match speed {
         protocol::Speed::Paused | protocol::Speed::Normal => TICK_PERIOD,
         protocol::Speed::Fast => FAST_TICK_PERIOD,
+        protocol::Speed::Fast2x => FAST2X_TICK_PERIOD,
+        protocol::Speed::Fast4x => FAST4X_TICK_PERIOD,
     }
 }
 
@@ -842,6 +846,8 @@ mod tests {
         assert_eq!(period(protocol::Speed::Paused), Duration::from_millis(100));
         assert_eq!(period(protocol::Speed::Normal), Duration::from_millis(100));
         assert_eq!(period(protocol::Speed::Fast), Duration::from_millis(20));
+        assert_eq!(period(protocol::Speed::Fast2x), Duration::from_millis(10));
+        assert_eq!(period(protocol::Speed::Fast4x), Duration::from_millis(5));
     }
 
     #[test]

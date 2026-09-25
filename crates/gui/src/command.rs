@@ -328,6 +328,10 @@ pub fn step_speed(
     let speed = match (mirror.0.speed(), faster, slower) {
         (Speed::Paused, true, false) => Speed::Normal,
         (Speed::Normal, true, false) => Speed::Fast,
+        (Speed::Fast, true, false) => Speed::Fast2x,
+        (Speed::Fast2x, true, false) => Speed::Fast4x,
+        (Speed::Fast4x, false, true) => Speed::Fast2x,
+        (Speed::Fast2x, false, true) => Speed::Fast,
         (Speed::Fast, false, true) => Speed::Normal,
         (Speed::Normal, false, true) => Speed::Paused,
         _ => return,

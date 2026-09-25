@@ -204,7 +204,7 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
   `(150, 190, 180)` / 22,000 directional light are **(superseded)**. At 22:00 the sky is
   `(5, 12, 28)` and the aurora, fog and rim retain the approved night look.
 - `TICKS_PER_DAY = 24,000`, `TICKS_PER_HOUR = 1,000`, `BOOT_HOUR = 22.0`. Normal runs a day in
-  40 minutes; Fast in 8 minutes. The single key is the sun from 06:00 to 18:00 and the moon
+  40 minutes, Fast in 8, Fast2x in 4 and Fast4x in 2. The single key is the sun from 06:00 to 18:00 and the moon
   otherwise. Its illuminance reaches zero at either horizon.
 - The clock authors one flat sky colour per frame. `ClearColor`, `DistanceFog.color` and the rim
   dissolve target use that same colour; stars and aurora fade out by noon. The sky's colour is
