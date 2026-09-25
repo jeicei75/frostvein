@@ -27,3 +27,13 @@ and the right is 19:30.
 
 For reference, the noon sun is 12,000 lux. Today's moon is 58% of that; m3000 is 25%, m1500 13%
 and m750 6%.
+
+## Picked: m750 (Wolf, 2026-09-25, *"1 750"*)
+
+The new approved night is `approved-night-750-8d16616.png`: boot, the same as `--clock 22`, two boots
+`cmp`-identical, ground median 54.
+
+**The haze is now nearly inert at night.** `haze-on-off-750-8d16616.png` (top: haze on; bottom:
+haze off). The haze's lift came from scattering the key light, and the key is now 9× dimmer. The
+11.2 guard reads the far-ridge median 46 → 43 with haze on (it *darkens*; the bar is a rise of ≥10)
+and a contrast fall of 7.9% (the bar is ≥15%). Ground median: 54 with haze on, 59 with it off.
