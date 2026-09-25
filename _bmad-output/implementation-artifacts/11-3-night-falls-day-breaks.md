@@ -702,6 +702,34 @@ drifted payload, and it is now true of the right one. The dusk figures in "Orche
 verification, sitting 2" ("barely moves it") understate the change, as the review found. The
 disclosure in `candidates.md` and on card Q3 supersedes them.
 
+### AC13 vehicle sitting (Wolf, 2026-09-25, build `21c65a0`, verbatim where quoted)
+
+Evidence filed in `11-3-signoff/`: `11-3-night.png`, `11-3-noon.png`, `11-3-dusk.png` (pinned
+captures on the seat GPU) and `11-3-noon-window.csv` (the live noon run, F3-marked).
+
+- **Night:** *"night could be darker but it haven't changed so it's not new issue"*.
+- **Flicker (NEW defect):** *"shadows are flickering when sun moves"*.
+- **Sun at night?** *"is sun on also during the night? not sure how sun and moon should switch"*.
+  There is one key light, and it is the moon from 18:00 to 06:00. But the moon is 7,000 lux, 58% of
+  the noon sun, so it reads as a sun.
+- **Moon shadows:** *"moon probably should not throw shadow?"*
+- **Dusk/dawn:** *"dusk and dawn don't realy read"*. From `key_at`, the key goes 12,000 → 0 lux at
+  18:00, back UP to 7,000 by 20:00, then 7,000 → 0 at 06:00, and back up to 12,000 by 08:35.
+  Twilight is a dip, not a transition.
+- **AO (#106):** *"AO is not an issue"*. Marked segments (the first 20 frames after each mark
+  dropped): AO off p50 14.0 ms, AO on 14.1 ms, which is no measurable cost.
+- **Haze:** *"haze is the biggest performance hog still"*. Haze off p50 7.3 / 6.9 ms, haze on
+  16.2 ms. Vsync was on at 144 Hz (6.93 ms per refresh), so the figures bound the cost rather than
+  measure it. Noon with haze sits at NFR6's 60 fps bar at the median, and its p95 is over the bar.
+  The haze cost was accepted in 11.2, and its first knob is `VolumetricFog::step_count`.
+
+**Rulings:** (1) *"let's fix it"*: the moon strength is fixed IN 11.3 (a darker night, and twilight
+that reads). This changes the approved boot frame, so AC2's control and the rendered guards
+calibrated on it re-baseline after Wolf picks. (2) *"verify and fix"*: the shadow flicker is
+verified and then fixed in 11.3. (3) Moon shadows: Wolf asked how real moonlight behaves. The
+recommendation is to keep the shadows and dim the key, so they go low-contrast the way real moon
+shadows do. This is pending his pick among the moon candidates.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
