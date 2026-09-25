@@ -288,7 +288,7 @@ PY
 mutation "ground value floor drops to nothing" gui a_black_field_fails_the_value_floor_that_a_lit_one_passes <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
-old = 'pub const GROUND_LUMINANCE_FLOOR: u8 = 55;'
+old = 'pub const GROUND_LUMINANCE_FLOOR: u8 = 40;'  # re-pointed 2026-09-25: 11.3 moved the floor 55 -> 40
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'pub const GROUND_LUMINANCE_FLOOR: u8 = 1;'))
 PY

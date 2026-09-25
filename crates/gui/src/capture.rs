@@ -594,7 +594,23 @@ const GROUND_WINDOW_Y: (f32, f32) = (0.50, 0.90);
 /// floor was built for is still caught. It does NOT admit ev100 12.0: that frame reads ~32, darker
 /// than the broken ambient-off frame, so no floor can both admit it and catch an ambient
 /// regression — the two requirements collide, and the exposure gave way, not the guard.
-pub const GROUND_LUMINANCE_FLOOR: u8 = 55;
+///
+/// LOWERED 55 -> 40 after Wolf's moon ruling at 11.3's vehicle sitting, 2026-09-25 (moon 7,000 ->
+/// 750 lux). The ruled night read 54 at boot and 50 at its darkest hour, so 55 tripped every hour
+/// from 19:00 to 05:00 (issue #125 was the first sighting). Measured at 750 lux, boot framing,
+/// `--subdiv 4 --frames 160`, fresh `simd --pause-at 120` each:
+///
+///   boot (22:00), FXAA on or off    54   <- FXAA no longer moves it
+///   darkest hour (04:30-05:00)      50   <- the binding genuine frame
+///   `--lights-off sun`              50   <- indistinguishable from predawn; see below
+///   `--lights-off ambient`          27   <- the worst genuine failure still to be caught
+///   round-4 capture (historic)      21
+///
+/// 40 clears ambient-off by 13 and the round-4 class by 19, and sits 10 under the darkest hour.
+/// It can NO LONGER see the key light: at 750 lux the moon moves this median ~4 levels, so a
+/// key-off night reads as predawn. That job belongs to AC2's byte-identity and to the rendered
+/// night-to-noon guard, not to this floor.
+pub const GROUND_LUMINANCE_FLOOR: u8 = 40;
 
 /// The other end of AC9's discipline, added after the boot3 capture measured 156 against the
 /// artifact's 123: a field pushed toward white passes the floor as easily as a correct one.

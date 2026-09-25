@@ -104,6 +104,11 @@ What it established:
    rendered guard in `crates/gui/tests/pixel_guard.rs` passes **unedited**, and no constant in that
    file or in `capture.rs` changes. If byte-identity cannot be reached, the dev stops and reports
    the diff to Wolf — it is not re-baselined.
+   **AMENDED by Wolf's rulings at the AC13 sitting (2026-09-25):** the approved night is now the
+   750-lux moon, with no sky object casting a shadow (Task 9). The control moves to that frame on
+   the implementing build, and the guards that were calibrated on the 7,000-lux night re-baseline
+   with measurements recorded in Task 9d. Byte-identity to the control still holds: boot and
+   `--clock 22` are `cmp`-identical, and two boots are identical to each other.
 3. **The key light follows the clock and never lights from below the horizon.** Sampled every
    0.01 h over 24 h: whenever the key's illuminance is > 0 its forward vector points downward
    (`forward.y < 0`); at 22.0 it is exactly `sun_direction()` with the night table's colour and
@@ -266,7 +271,11 @@ What it established:
         **Done `82dd716`:** all three spawns are marked (the aurora too, so one headless assertion
         covers every `Atmosphere` entity); the row `stars cast shadows again` is KILLED. The 5.4 row
         `aurora curtain loses client local marker` was re-pointed and re-KILLED.
-  - [ ] **9b. Shadow crawl — ruled (b): the direction stays continuous; tune the cascades.**
+  - [x] **9b. Shadow crawl — ruled (b), then ACCEPTED AND FILED as #126** (Wolf: *"2 accept and file"*).
+        (b) measured: a 4096 map gives −28% of the pixels reversing ≥3×, cascades 40→250 m −10%,
+        both −18%. Haze off (+5%) and doubled bias (+8%) are not the cause. The crawl is inherent to
+        rotating the shadow basis; the table and the options are in #126. No code change.
+        Original ruling:
         Instrument: 11 pinned captures, 12.000 → 12.050 in 0.005 h steps (sun moves 0.075° per
         step), per-pixel reversal count on the ground rows. Baseline at `df94475`: 700–830 px
         change > 6 levels per step, 1,196 px reverse, 456 reverse ≥ 3×; same-clock repeat
@@ -290,11 +299,24 @@ What it established:
         drops to normal` and `tui plus stops at fast2x` are all KILLED. Three 2.3 rows were
         re-pointed and re-KILLED: `plus at fast wraps to paused` (its old payload did not compile),
         `space key is ignored` and `status line omits the speed`.
-  - [ ] **9d. The moon is dimmed — ruled "let's fix it".** It is 7,000 lux today, 58% of noon,
+  - [x] **9d. The moon is dimmed — ruled "let's fix it".** It is 7,000 lux today, 58% of noon,
         which is why the night is bright and why twilight dips and then recovers. Render moon
         candidates in an isolated worktree, then **STOP for Wolf's pick**. This moves the approved
         boot frame, so AC2's control and the boot-calibrated rendered guards re-baseline AFTER the
         pick, never before it ([[guard-bounds-the-art-decision]]).
+        **Wolf picked 750 lux (*"1 750"*); the night ambient stays 1,500.** Candidates are in
+        `11-3-signoff/moon/`. Measured at 750 (ground median): boot = `--clock 22` = 54, two boots
+        byte-identical; darkest hour 50 (04:30–05:00); FXAA off 54; key off 50; ambient off 27.
+        Re-baselined, each with its derivation in the code comment:
+        - `GROUND_LUMINANCE_FLOOR` 55 → **40**. It clears ambient-off by 13 and the round-4 black
+          field by 19, and sits 10 under the darkest hour. It can no longer see the key light
+          (key-off reads like predawn), so AC2's byte-identity and AC9's guard carry that. This also
+          settles #125.
+        - The campfire ratio pin 5.097 → **19.256**, ceiling 6.0 → 22.7 (the same 18% headroom). The
+          blown pool is unchanged (0.3569% vs 0.3637%), so the field darkened and the camp did not
+          brighten; `APPROVED_PEAK` is untouched.
+        - `tech-art-guidelines.md`: moon row, cold fill, contrast band and floor rows (the floor row
+          still said 70, stale since 11.1a).
 
 ### Review Findings
 

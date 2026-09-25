@@ -353,3 +353,11 @@ old = '            Speed::Fast2x => command(state, Speed::Fast4x),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            Speed::Fast2x => Action::Ignore,\n'))
 PY
+
+mutation "the moon returns to 7,000 lux" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = '        directional_illuminance: 750.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        directional_illuminance: 7_000.0,\n'))
+PY

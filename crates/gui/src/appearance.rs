@@ -45,7 +45,8 @@ pub fn night_lighting() -> LightTable {
         ambient_brightness: 1_500.0,
         aurora: Color::srgb_u8(73, 157, 144),
         directional: Color::srgb_u8(178, 200, 240),
-        directional_illuminance: 7_000.0,
+        // 7,000 until 11.3's sitting: the moon read as a sun at 58% of noon. Wolf picked 750 (6%).
+        directional_illuminance: 750.0,
     }
 }
 
@@ -563,7 +564,7 @@ mod tests {
             [73, 157, 144]
         );
         assert_eq!(lighting.ambient_brightness, 1_500.0);
-        assert_eq!(lighting.directional_illuminance, 7_000.0);
+        assert_eq!(lighting.directional_illuminance, 750.0);
 
         let day = day_lighting();
         assert_eq!(day.sky.to_srgba().to_u8_array_no_alpha(), [110, 155, 205]);
@@ -747,8 +748,10 @@ mod tests {
 
         // The approved table changes both addends of cold fill (4,500 + 22,000 -> 1,500 +
         // 7,000), so the old 2.93 ratio is no longer the expectation; 14M at the unchanged
-        // 1.40 peak yields 5.10.
-        const APPROVED_RATIO: f32 = 5.097_119;
+        // 1.40 peak yields 5.10. 11.3's sitting then moved the moon 7,000 -> 750 lux (cold fill
+        // 2,250), so the SAME campfire now reads 19.26. The field darkened; the camp did not
+        // brighten: the capture's blown pool read 0.3569% at 750 against 0.3637% at 7,000.
+        const APPROVED_RATIO: f32 = 19.255_783;
         assert!((ratio - APPROVED_RATIO).abs() < 0.000_1, "ratio {ratio}");
 
         // The band above is a broad sanity range and, on its own, STILL would not have caught
@@ -768,8 +771,10 @@ mod tests {
             ratio >= 1.2,
             "the campfire must lift its six-unit neighbourhood above the cold fill; ratio {ratio}"
         );
+        // The ceiling keeps the 18% headroom the 6.0 ceiling had over 5.10. It is a lux proxy;
+        // blow-out itself is pinned by `APPROVED_PEAK` above and by the capture's blown-pool band.
         assert!(
-            ratio <= 6.0,
+            ratio <= 22.7,
             "the campfire must not blow the camp to white — only emissive approaches white (AC9); ratio {ratio}"
         );
     }

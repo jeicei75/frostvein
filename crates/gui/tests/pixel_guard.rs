@@ -271,9 +271,14 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     /// Measured on the guard's own flags (`--static-world --lights-steady --subdiv 4`), one fresh
     /// daemon per capture, FOUR same-build captures: LL 91/91/91/91, spread 0.
     /// AO's terrace darkening still clears its floor at 0.431 (floor 0.30).
-    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 91;
+    ///
+    /// RE-BASELINED 91 -> 55 (LR 93 -> 57) by 11.3's moon ruling (7,000 -> 750 lux, 2026-09-25):
+    /// the open snow darkened with the key, which is what the ruling asked for. Measured on the
+    /// guard's own run; darkening then read 0.561, still clear of 0.30. Two boot captures of that
+    /// build were `cmp`-identical, so the same-build spread is still 0.
+    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 55;
     /// Outside the haze's reach, and unmoved by it -- see `CONTROL_OPEN_SNOW_LL_MEDIAN`.
-    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 93;
+    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 57;
 
     // ONE DAEMON PER CAPTURE, and this is load-bearing for a delta. `--static-world` freezes the
     // world at whatever tick it has reached when the client connects, so a second capture against
@@ -852,7 +857,10 @@ fn switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing() {
     // all-on 101.1, all-off 13.2, a drop of ~87.9, against a same-build noise floor of 0.16.
     // 40.0 sits far above the noise and far below the signal, so it separates "the lights do
     // work" from "the toggles are inert" without pinning today's exposure.
-    const ALL_OFF_DROP_FLOOR: f32 = 40.0;
+    // LOWERED 40 -> 20 by 11.3's moon ruling (7,000 -> 750 lux, 2026-09-25): all-on fell to 49.9,
+    // all-off held 13.2, so the drop fell to 36.8. 20 keeps both properties: 125x the 0.16 noise,
+    // and 16.8 under the signal.
+    const ALL_OFF_DROP_FLOOR: f32 = 20.0;
     assert!(
         lit_mean - dark_mean > ALL_OFF_DROP_FLOOR,
         "switching every source off must visibly darken the frame: {lit_mean:.3} -> {dark_mean:.3} \

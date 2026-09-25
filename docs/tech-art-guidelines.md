@@ -57,7 +57,8 @@ instead — it is a camera property, not a light, and those two tests do not rea
 | --- | --- | --- | --- | --- | --- |
 | `night_lighting().ambient` | `(108, 128, 170)` | `#6C80AA` | 1,500 | cold fill | static |
 | ↳ before 10.8 | `(120, 140, 165)` **(superseded)** | `#788CA5` | 4,500 | — | — |
-| `night_lighting().directional` | `(178, 200, 240)` | `#B2C8F0` | 7,000 | moonlight key | static |
+| `night_lighting().directional` | `(178, 200, 240)` | `#B2C8F0` | 750 | moonlight key (6% of noon) | static |
+| ↳ before 11.3's sitting | — | — | 7,000 **(superseded)** — read as a sun at 58% of noon | — | — |
 | `day_lighting().sky` | `(110, 155, 205)` | `#6E9BCD` | — | approved candidate A, flat sky | static |
 | `day_lighting().ambient` | `(190, 210, 235)` | `#BED2EB` | 4,000 | day fill | static |
 | `day_lighting().directional` | `(255, 244, 228)` | `#FFF4E4` | 12,000 | sunlight key | static |
@@ -118,7 +119,7 @@ artifact camp/field readings, which are ruled in [Sky and lights](#sky-and-light
 | Value | Current | Enforced by |
 | --- | --- | --- |
 | Capture window | x 0.25–0.75, y 0.50–0.90, frame centre | `the_ground_median_reads_the_valley_floor_and_ignores_the_sky` |
-| Floor | 70 median sRGB | `GROUND_LUMINANCE_FLOOR` |
+| Floor | 40 median sRGB (↳ 70, then 55 at 11.1a, **(superseded)**) | `GROUND_LUMINANCE_FLOOR` |
 | Ceiling | 180 median sRGB | `GROUND_LUMINANCE_CEILING` |
 | Statistic | median, never mean | `the_ground_median_reads_the_valley_floor_and_ignores_the_sky` |
 | Artifact: capture window | 123 | eye-only |
@@ -128,10 +129,11 @@ artifact camp/field readings, which are ruled in [Sky and lights](#sky-and-light
 | Artifact: shadows p05 | 28 | eye-only |
 | Caught — round-4 capture | 21, a black field | eye-only |
 | Caught — boot3 capture | 156, p05 87, washed white | eye-only |
-| Contrast band | 1.2x–6.0x campfire-to-cold-fill | `appearance_tables_pin_the_cold_boot_palette` |
-| Approved cold fill | 8,500 (1,500 ambient + 7,000 moonlight) | `campfire_keeps_local_contrast_over_the_midtone_cold_fill` |
+| Contrast band | 1.2x–22.7x campfire-to-cold-fill (↳ 1.2x–6.0x before 11.3's moon, **(superseded)**) | `appearance_tables_pin_the_cold_boot_palette` |
+| Approved cold fill | 2,250 (1,500 ambient + 750 moonlight) | `campfire_keeps_local_contrast_over_the_midtone_cold_fill` |
+| ↳ before 11.3's sitting | 8,500 (1,500 + 7,000) **(superseded)** | — |
 | ↳ before 10.8 | 26,500 (4,500 + 22,000) **(superseded)** | — |
-| Approved campfire contrast | 5.097119x | `campfire_keeps_local_contrast_over_the_midtone_cold_fill` |
+| Approved campfire contrast | 19.255783x (↳ 5.097119x before 11.3's moon, **(superseded)**) | `campfire_keeps_local_contrast_over_the_midtone_cold_fill` |
 | Chromatic term | every light's R/B ≥ 2x the ambient's | `appearance_tables_pin_the_cold_boot_palette` |
 | Contrast, before | a bare 3x floor, no ceiling **(superseded)** | passed by both a black frame and a blown camp |
 | Bench floor | `MIN_TERRAIN_LUMA = 20.0`, one-sided | `pixel_figures` in `valley_bench.py` |
@@ -200,12 +202,13 @@ palette, `snow_cap_color`, `foliage_snow_color` and the blue-at-or-above-red ord
 ## Sky and lights
 
 - The sky is an illuminant. The approved night table uses `(108, 128, 170)` ambient at 1,500 and
-  `(178, 200, 240)` moonlight at 7,000; ↳ before 10.8, `(120, 140, 165)` / 4,500 ambient and
+  `(178, 200, 240)` moonlight at 750 (↳ 7,000 before 11.3's sitting, **(superseded)**); ↳ before 10.8, `(120, 140, 165)` / 4,500 ambient and
   `(150, 190, 180)` / 22,000 directional light are **(superseded)**. At 22:00 the sky is
   `(5, 12, 28)` and the aurora, fog and rim retain the approved night look.
 - `TICKS_PER_DAY = 24,000`, `TICKS_PER_HOUR = 1,000`, `BOOT_HOUR = 22.0`. Normal runs a day in
   40 minutes, Fast in 8, Fast2x in 4 and Fast4x in 2. The single key is the sun from 06:00 to 18:00 and the moon
-  otherwise. Its illuminance reaches zero at either horizon.
+  otherwise. Its illuminance reaches zero at either horizon. The moon light casts shadows; nothing
+  in the sky does (stars, aurora and snowflakes are all `NotShadowCaster`).
 - The clock authors one flat sky colour per frame. `ClearColor`, `DistanceFog.color` and the rim
   dissolve target use that same colour; stars and aurora fade out by noon. The sky's colour is
   authored per hour, not exposed. `Exposure` remains 10.5 EV100 at every hour.

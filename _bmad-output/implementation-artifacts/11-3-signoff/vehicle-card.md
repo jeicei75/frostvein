@@ -3,6 +3,26 @@
 Run `simd` in WSL. Run every client command below in PowerShell from
 `D:\Workspace\frostvein`. The launcher checks that its built client matches HEAD.
 
+## Sitting 2 — after the 2026-09-25 rulings (run this one)
+
+Sitting 1's answers are recorded in the story. This build changes the four things it ruled on:
+- **The moon is 750 lux** (was 7,000). The new night is the approved night; there is no older frame
+  to match it against.
+- **Nothing in the sky casts a shadow.** The fast "orbiting" shadow was a star.
+- **Speeds:** `+` now walks Normal → Fast → Fast2x → Fast4x. A day takes 40 / 8 / 4 / ~2 min.
+- **Shadow crawl is accepted** and filed as #126, so no check is needed.
+
+Run the live cycle below at **Fast4x** (press `+` three times), then the three pinned captures
+further down. On this build the noon capture's 101 warning still stands, and 22:00 must exit 0.
+
+Questions for Wolf:
+1. Does the 750-lux night read as night, with moonlight rather than a sun?
+2. Do dusk and dawn now read as a transition rather than a dip? (Warm sunset light is still not
+   modelled.)
+3. Is Fast4x usable? Does the world keep moving smoothly, with no freeze?
+
+The rest of this card is sitting 1, kept for its record.
+
 ## Live cycle
 
 Start a fresh daemon at tick 0 in WSL:
