@@ -2,6 +2,7 @@ use bevy::{
     asset::RenderAssetUsages,
     color::ColorToPacked,
     image::{Image, ImageSampler},
+    light::NotShadowCaster,
     mesh::{Indices, PrimitiveTopology},
     prelude::{
         AlphaMode, Assets, Commands, Component, Cuboid, Mesh, Mesh3d, MeshMaterial3d, Query, Res,
@@ -342,6 +343,8 @@ pub fn setup_atmosphere(
         ..Default::default()
     });
 
+    // Nothing in the sky casts a shadow (Wolf, 11.3 sitting): once the key moves, a star on the
+    // 650 m shell sweeps its shadow across the valley far faster than any tree's.
     for (index, position) in star_positions().into_iter().enumerate() {
         commands.spawn((
             Mesh3d(cube.clone()),
@@ -349,6 +352,7 @@ pub fn setup_atmosphere(
             Transform::from_translation(position).with_scale(Vec3::splat(star_scale(index))),
             Atmosphere,
             ClientLocal,
+            NotShadowCaster,
         ));
     }
     commands.spawn((
@@ -357,6 +361,7 @@ pub fn setup_atmosphere(
         Transform::IDENTITY,
         Atmosphere,
         ClientLocal,
+        NotShadowCaster,
     ));
     for (index, position) in snowflake_positions().into_iter().enumerate() {
         commands.spawn((
@@ -368,6 +373,7 @@ pub fn setup_atmosphere(
             },
             Atmosphere,
             ClientLocal,
+            NotShadowCaster,
         ));
     }
 }

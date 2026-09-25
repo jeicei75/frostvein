@@ -296,9 +296,9 @@ PY
 mutation "aurora curtain loses client local marker" gui atmosphere_entities_are_client_local_and_never_world_projected <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = '        Atmosphere,\n        ClientLocal,\n    ));'
+old = '        Atmosphere,\n        ClientLocal,\n        NotShadowCaster,\n    ));'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        Atmosphere,\n    ));'))
+p.write_text(s.replace(old, '        Atmosphere,\n        NotShadowCaster,\n    ));'))
 PY
 
 mutation "directional tint goes unpinned" gui appearance_tables_pin_the_cold_boot_palette <<'PY'

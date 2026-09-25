@@ -313,3 +313,11 @@ old = '    pin.0.unwrap_or_else(|| hour_at(mirror.0.tick()))\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let _ = pin;\n    hour_at(mirror.0.tick())\n'))
 PY
+
+mutation "stars cast shadows again" gui the_live_startup_scene_spawns_its_camera_lighting_and_atmosphere <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = '            Transform::from_translation(position).with_scale(Vec3::splat(star_scale(index))),\n            Atmosphere,\n            ClientLocal,\n            NotShadowCaster,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Transform::from_translation(position).with_scale(Vec3::splat(star_scale(index))),\n            Atmosphere,\n            ClientLocal,\n'))
+PY

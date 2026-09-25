@@ -11,6 +11,7 @@ const LANTERN_VISIBLE_INTENSITY_FLOOR: f32 = 1_000_000.0;
 
 use bevy::color::ColorToPacked;
 use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::light::NotShadowCaster;
 use bevy::time::TimeUpdateStrategy;
 use bevy::{
     MinimalPlugins,
@@ -2974,6 +2975,15 @@ fn the_live_startup_scene_spawns_its_camera_lighting_and_atmosphere() {
             .count(),
         STAR_COUNT + SNOWFLAKE_COUNT + 1,
         "setup_atmosphere did not spawn the full sky — stars, snow and the aurora curtain"
+    );
+    // 11.3 sitting: a star on the 650 m shell threw a shadow that swept the valley as the key moved.
+    assert_eq!(
+        app.world_mut()
+            .query_filtered::<(), (With<Atmosphere>, Without<NotShadowCaster>)>()
+            .iter(app.world())
+            .count(),
+        0,
+        "a sky object casts a shadow onto the world"
     );
 }
 

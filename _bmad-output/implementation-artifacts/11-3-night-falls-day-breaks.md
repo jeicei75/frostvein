@@ -750,6 +750,14 @@ verified and then fixed in 11.3. (3) Moon shadows: Wolf asked how real moonlight
 recommendation is to keep the shadows and dim the key, so they go low-contrast the way real moon
 shadows do. This is pending his pick among the moon candidates.
 
+**Rulings, continued (same day):** *"I mean ofc light reflected from moon should cast shadows but now
+I can see some round object orbiting"*, *"moon should not cast it's own shadow"*, and *"there is just
+one shadow that flight over the scene faster than rest .. kind of orbiting .. not a big deal"*. So the
+moon LIGHT keeps its shadows, and sky objects cast none (Task 9a). Flicker: *"1b"*, which keeps the
+direction continuous and tunes the cascades (the step-the-direction option would have needed an AC4
+amendment). Speed: *"fast mode could be double speed from current one ... maybe 2mins around?"*, then
+*"2 i ... keep also current fast mode and add 2x and 4x"* (Task 9c).
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
