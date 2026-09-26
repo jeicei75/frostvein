@@ -610,6 +610,9 @@ const GROUND_WINDOW_Y: (f32, f32) = (0.50, 0.90);
 /// It can NO LONGER see the key light: at 750 lux the moon moves this median ~4 levels, so a
 /// key-off night reads as predawn. That job belongs to AC2's byte-identity and to the rendered
 /// night-to-noon guard, not to this floor.
+///
+/// 11.3's night haze gain (14, 2026-09-26) lifted boot to 64. The other rows above predate it and
+/// were not re-measured; the floor's margin only grew.
 pub const GROUND_LUMINANCE_FLOOR: u8 = 40;
 
 /// The other end of AC9's discipline, added after the boot3 capture measured 156 against the
