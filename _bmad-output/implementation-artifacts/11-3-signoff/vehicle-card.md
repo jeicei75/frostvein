@@ -11,6 +11,11 @@ Sitting 1's answers are recorded in the story. This build changes the four thing
 - **Nothing in the sky casts a shadow.** The fast "orbiting" shadow was a star.
 - **Speeds:** `+` now walks Normal → Fast → Fast2x → Fast4x. A day takes 40 / 8 / 4 / ~2 min.
 - **Shadow crawl is accepted** and filed as #126, so no check is needed.
+- **The night haze is lit 14×** (2026-09-26, Wolf's pick). The key stays at 750; only the haze
+  scatters it harder. Boot ground median 54 → 64: the veil lifts the frame while lit surfaces stay dark.
+- **Sun and moon discs.** Plain unlit spheres at each key's source, about 2° across. The moon is up
+  18:00–06:00, the sun 06:00–18:00. At boot both are above the frame; lower the pitch and turn
+  toward the key to see them. Their look is not tuned yet ("we can tune later on").
 
 Run the live cycle below at **Fast4x** (press `+` three times), then the three pinned captures
 further down. On this build the noon capture's 101 warning still stands, and 22:00 must exit 0.
@@ -20,6 +25,9 @@ Questions for Wolf:
 2. Do dusk and dawn now read as a transition rather than a dip? (Warm sunset light is still not
    modelled.)
 3. Is Fast4x usable? Does the world keep moving smoothly, with no freeze?
+4. Does the night haze read, with the scene still dark enough? Are there shafts when you look toward the moon?
+5. Do the discs sit where their light comes from, and cross the sky with it? This is a consistency
+   check, not a look pick. Box-edge lines seen from outside the haze are known (#120).
 
 The rest of this card is sitting 1, kept for its record.
 

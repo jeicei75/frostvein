@@ -335,6 +335,12 @@ What it established:
         from OUTSIDE the volume (far zoom) got stronger with the gain. A side-wall density fade did
         not move it (reverted), and it is commented on #120. Full gate on `b4a4b9d`: only these two
         guards RED, and both are green on re-run after the change.
+        **Sun disc** (Wolf: *"we can tune later on .. now it's just for consistency and debugging"*),
+        `85f5625`: the moon's size and distance, warm near-white `(255, 248, 230)`, up 06:00–18:00, no fade.
+        Both discs carry `SkyDisc` and share one clock writer. The test now checks each disc against
+        the installed key at 20:00 and 09:00. All 7 rows on it are KILLED (2 new). Full gate GREEN
+        on `339ba34` (1931 s), before the sun. `11-3-signoff/moon/sun-disc-0700-85f5625.png`: it
+        renders a dull beige against the day sky, untuned. Vehicle card: sitting 2 gains Q4 (haze) and Q5 (discs).
 
 ### Review Findings
 
@@ -884,3 +890,4 @@ amendment). Speed: *"fast mode could be double speed from current one ... maybe 
 | 2026-09-24 | Orchestrator verification of sitting 2: independent AC2/noon captures cmp-identical, full gate GREEN 1822 s on `6cc4981`; committer deviation recorded; dev cost recorded. |
 | 2026-09-25 | Patch pass: the four review patches were applied (the mutation row was restored and re-KILLED; the card warns of a noon 101 and judges the night from the pinned capture; the 25° sun ramp was disclosed in `candidates.md` and card Q3). No code change. |
 | 2026-09-26 | Task 9e: the night haze's key-light gain went to 14 (Wolf's pick), and a moon disc was added. The AO open-snow control was re-baselined to 60/59, and bloom's open-snow clause now reads a haze-off pair. The approved night was re-filed (ground median 64). The box-outline lines were commented on #120. |
+| 2026-09-26 | Sun disc added beside the moon's (plain, untuned), and vehicle card sitting 2 gained the haze and disc checks. Full gate GREEN on `339ba34`. |
