@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default; 11.2's creation ran on claude-opus-5 
 
 # Story 11.3: Night Falls, Day Breaks
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -821,6 +821,20 @@ direction continuous and tunes the cascades (the step-the-direction option would
 amendment). Speed: *"fast mode could be double speed from current one ... maybe 2mins around?"*, then
 *"2 i ... keep also current fast mode and add 2x and 4x"* (Task 9c).
 
+### Task 9 code review (orchestrator, short, 2026-09-26, Wolf: *"do short code review and then pr"*)
+
+Scope: code diff `21c65a0..cd0bbde` across 11 files (protocol, simd, tui, gui), done in-session with no parallel layers.
+- [x] [Review][Patch] LOW: `GROUND_LUMINANCE_FLOOR`'s rationale still said boot reads 54, and the gain moved it
+  to 64. The comment now says so (`cd0bbde`, comment only).
+- [x] [Review][Dismiss] The tui keeps `MESSAGE_QUEUE = 16` while the gui went to 256. At Fast4x it drains about 10
+  per ≤50 ms poll plus one render, with the daemon's 16-message queue and the socket buffers behind it. The gui's
+  eviction needed lavapipe's 2.5 fps.
+- [x] [Review][Dismiss] The haze gain blends with the day weight while the key fades at dusk and dawn. The
+  scattered light (lux × gain) peaks below noon's 12,000 and night's 10,500 at every hour checked (for example, 17:30 is
+  about 1,300 × 3.1).
+- Verified clean: every `match` on `Speed` is exhaustive; both discs are `NotShadowCaster`, inside the star
+  shell and outside the camera's reach; the disc test uses a hand-written 640 m oracle.
+
 ### AC13 vehicle sitting 2 (Wolf, 2026-09-26, build `d36ad62`, verbatim where quoted)
 
 1. 750-lux night reads as night, lit by moonlight: *"yes"*.
@@ -906,3 +920,4 @@ Full gate GREEN on `d36ad62` (1893 s, `RUST_TEST_THREADS=2`).
 | 2026-09-26 | Task 9e: the night haze's key-light gain went to 14 (Wolf's pick), and a moon disc was added. The AO open-snow control was re-baselined to 60/59, and bloom's open-snow clause now reads a haze-off pair. The approved night was re-filed (ground median 64). The box-outline lines were commented on #120. |
 | 2026-09-26 | Sun disc added beside the moon's (plain, untuned), and vehicle card sitting 2 gained the haze and disc checks. Full gate GREEN on `339ba34`. |
 | 2026-09-26 | AC13 sitting 2 on `d36ad62`: all five answered; #127 (dawn dip) and #128 (disc positioning) filed for later. Full gate GREEN on `d36ad62`. |
+| 2026-09-26 | Short code review of Task 9: one LOW patch (a stale floor rationale), two dismissals. Status done. |
