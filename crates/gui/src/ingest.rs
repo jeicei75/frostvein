@@ -1882,9 +1882,13 @@ fn update_clock_sky(
         With<Camera3d>,
     >,
     mut volumes: Query<&mut FogVolume>,
-    mut moon: Query<
-        (&mut Transform, &mut bevy::prelude::Visibility),
-        With<crate::atmosphere::Moon>,
+    mut discs: Query<
+        (
+            &mut Transform,
+            &mut bevy::prelude::Visibility,
+            bevy::prelude::Has<crate::atmosphere::Moon>,
+        ),
+        With<crate::atmosphere::SkyDisc>,
     >,
     handles: Option<Res<crate::atmosphere::AtmosphereMaterials>>,
     mut materials: Option<ResMut<Assets<bevy::prelude::StandardMaterial>>>,
@@ -1919,8 +1923,10 @@ fn update_clock_sky(
         }
     }
     let moon_position = crate::atmosphere::moon_position(hour);
-    for (mut transform, mut visibility) in &mut moon {
-        let wanted = if moon_position.is_some() {
+    let sun_position = crate::atmosphere::sun_position(hour);
+    for (mut transform, mut visibility, is_moon) in &mut discs {
+        let position = if is_moon { moon_position } else { sun_position };
+        let wanted = if position.is_some() {
             bevy::prelude::Visibility::Inherited
         } else {
             bevy::prelude::Visibility::Hidden
@@ -1928,7 +1934,7 @@ fn update_clock_sky(
         if *visibility != wanted {
             *visibility = wanted;
         }
-        if let Some(position) = moon_position
+        if let Some(position) = position
             && transform.translation != position
         {
             transform.translation = position;
@@ -4207,10 +4213,10 @@ mod tests {
         );
     }
 
-    /// The night gain and the moon disc follow the clock in the live app. The moon is checked
+    /// The night gain and both sky discs follow the clock in the live app. Each disc is checked
     /// against the key light the app actually installed, not against `moon_position`.
     #[test]
-    fn the_clock_drives_the_haze_gain_and_the_moon() {
+    fn the_clock_drives_the_haze_gain_and_the_sky_discs() {
         let installed = |app: &mut App| {
             let gain = app
                 .world_mut()
@@ -4225,29 +4231,45 @@ mod tests {
                 .unwrap()
                 .forward()
                 .as_vec3();
-            let (moon, visibility) = app
-                .world_mut()
-                .query_filtered::<(&bevy::prelude::Transform, &bevy::prelude::Visibility), With<crate::atmosphere::Moon>>()
-                .single(app.world())
-                .unwrap();
-            (gain, key, moon.translation, *visibility)
+            let disc = |app: &mut App, moon: bool| {
+                let mut query = app.world_mut().query::<(
+                    &bevy::prelude::Transform,
+                    &bevy::prelude::Visibility,
+                    bevy::prelude::Has<crate::atmosphere::Moon>,
+                    bevy::prelude::Has<crate::atmosphere::Sun>,
+                )>();
+                let (transform, visibility, ..) = query
+                    .iter(app.world())
+                    .find(|(_, _, is_moon, is_sun)| if moon { *is_moon } else { *is_sun })
+                    .unwrap();
+                (transform.translation, *visibility)
+            };
+            (gain, key, disc(app, true), disc(app, false))
         };
         let (mut night, _night_sender, _night_server) = configured_app(&["--clock", "20"]);
         night.update();
-        let (gain, key, moon, visibility) = installed(&mut night);
+        let (gain, key, (moon, moon_visibility), (_, sun_visibility)) = installed(&mut night);
         assert_eq!(gain, 14.0, "the night haze scatters the moon 14x");
-        assert_eq!(visibility, bevy::prelude::Visibility::Inherited);
+        assert_eq!(moon_visibility, bevy::prelude::Visibility::Inherited);
+        assert_eq!(sun_visibility, bevy::prelude::Visibility::Hidden);
         let expected = crate::atmosphere::SKY_CENTRE - key * 640.0;
         assert!(
             moon.distance(expected) < 0.01,
             "the disc must hang back along the installed moonlight: {moon} vs {expected}"
         );
 
-        let (mut noon, _noon_sender, _noon_server) = configured_app(&["--clock", "12"]);
-        noon.update();
-        let (gain, _, _, visibility) = installed(&mut noon);
+        // 09:00, not noon: the sun's spawn position is noon's, so only a moved disc passes here.
+        let (mut day, _day_sender, _day_server) = configured_app(&["--clock", "9"]);
+        day.update();
+        let (gain, key, (_, moon_visibility), (sun, sun_visibility)) = installed(&mut day);
         assert_eq!(gain, 1.0, "the sun keeps 11.2's haze");
-        assert_eq!(visibility, bevy::prelude::Visibility::Hidden);
+        assert_eq!(moon_visibility, bevy::prelude::Visibility::Hidden);
+        assert_eq!(sun_visibility, bevy::prelude::Visibility::Inherited);
+        let expected = crate::atmosphere::SKY_CENTRE - key * 640.0;
+        assert!(
+            sun.distance(expected) < 0.01,
+            "the disc must hang back along the installed sunlight: {sun} vs {expected}"
+        );
     }
 
     /// Depth of field must focus the SELECTED DWARF, not the rig's aim point.

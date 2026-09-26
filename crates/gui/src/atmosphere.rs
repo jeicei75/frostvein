@@ -12,7 +12,7 @@ use bevy::{
 };
 
 use crate::{
-    appearance::{moon_color, night_lighting, snow_cap_color},
+    appearance::{moon_color, night_lighting, snow_cap_color, sun_color},
     camera::{BOOT_ASPECT_RATIO, BOOT_VERTICAL_FOV, CameraRig, boot_horizontal_forward},
     project::ClientLocal,
 };
@@ -35,11 +35,18 @@ pub struct AtmosphereMaterials {
 #[derive(Component)]
 pub struct Moon;
 
+#[derive(Component)]
+pub struct Sun;
+
+/// On both the sun and the moon: the one thing the clock writer queries.
+#[derive(Component)]
+pub struct SkyDisc;
+
 /// Between the aurora ring (600) and the star shell (650): the curtain hangs in front of the
-/// moon, and the moon hides the stars behind it.
-pub const MOON_DISTANCE: f32 = 640.0;
-/// About 2 degrees across, four times the real moon, so it reads at this camera's zoom.
-const MOON_RADIUS: f32 = 11.0;
+/// discs, and the discs hide the stars behind them.
+pub const DISC_DISTANCE: f32 = 640.0;
+/// About 2 degrees across, four times the real sun and moon, so they read at this camera's zoom.
+const DISC_RADIUS: f32 = 11.0;
 
 pub const CAMP_SURFACE_Y: f32 = 9.0;
 pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
@@ -289,7 +296,14 @@ pub fn key_at(hour: f32) -> (Vec3, bevy::prelude::Color, f32) {
 
 /// Where the disc hangs: back along the light the moon sends. `None` while the sun is the key.
 pub fn moon_position(hour: f32) -> Option<Vec3> {
-    (!(6.0..18.0).contains(&hour)).then(|| SKY_CENTRE - key_at(hour).0 * MOON_DISTANCE)
+    (!(6.0..18.0).contains(&hour)).then(|| SKY_CENTRE - key_at(hour).0 * DISC_DISTANCE)
+}
+
+/// The sun's disc, the same way. `None` while the moon is the key.
+pub fn sun_position(hour: f32) -> Option<Vec3> {
+    (6.0..18.0)
+        .contains(&hour)
+        .then(|| SKY_CENTRE - key_at(hour).0 * DISC_DISTANCE)
 }
 
 /// The independent floor AC5 asks for: hand-written, deliberately NOT derived from
@@ -385,9 +399,10 @@ pub fn setup_atmosphere(
         ClientLocal,
         NotShadowCaster,
     ));
-    // Placed at the boot hour; `update_clock_sky` moves it with the clock.
+    // Placed at the boot hour; `update_clock_sky` moves both discs with the clock.
+    let disc = meshes.add(Sphere::new(DISC_RADIUS));
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(MOON_RADIUS))),
+        Mesh3d(disc.clone()),
         MeshMaterial3d(moon),
         Transform::from_translation(
             moon_position(crate::clock::BOOT_HOUR).expect("the boot hour is a night hour"),
@@ -395,6 +410,25 @@ pub fn setup_atmosphere(
         // Explicit: the clock hides the disc by day, and only a render plugin would add this.
         Visibility::default(),
         Moon,
+        SkyDisc,
+        Atmosphere,
+        ClientLocal,
+        NotShadowCaster,
+    ));
+    // Unlit and unfaded: the sun is simply up from 06:00 to 18:00.
+    let sun = materials.add(StandardMaterial {
+        base_color: sun_color(),
+        unlit: true,
+        fog_enabled: false,
+        ..Default::default()
+    });
+    commands.spawn((
+        Mesh3d(disc),
+        MeshMaterial3d(sun),
+        Transform::from_translation(sun_position(12.0).expect("noon is a day hour")),
+        Visibility::Hidden,
+        Sun,
+        SkyDisc,
         Atmosphere,
         ClientLocal,
         NotShadowCaster,

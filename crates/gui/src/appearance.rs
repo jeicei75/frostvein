@@ -316,6 +316,11 @@ pub fn material_color(material: Material) -> Color {
 /// Trimmed ~8% at round 7: at the boot pitch the caps dominate the visible area, so the
 /// field's measured brightness tracks THIS albedo more than the light table — boot4 proved
 /// the light lever weak (a 2.6x ambient cut moved the field only 7%).
+/// The sun disc: near-white, a touch warm. Plain for now (Wolf: "we can tune later on").
+pub fn sun_color() -> Color {
+    Color::srgb_u8(255, 248, 230)
+}
+
 /// The moon disc: near-white, a touch cold. Unlit, so this is what the camera sees.
 pub fn moon_color() -> Color {
     Color::srgb_u8(236, 240, 250)
