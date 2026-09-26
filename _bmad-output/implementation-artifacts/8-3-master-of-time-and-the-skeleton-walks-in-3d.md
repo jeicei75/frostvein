@@ -187,9 +187,35 @@ claude-opus-5-5 (orchestrator implemented directly; no Codex delegation for this
 - The 10.10 row "delta-time scaling leaves the key rates per-frame" was re-pointed, because the Ctrl gate
   restructured its line; it was re-KILLED.
 
+### Code review (one fresh reviewer agent, 2026-09-26) — 4 findings, all patched (`3bfebdf`)
+
+- [x] [Review][Patch] MED: `--expect-haul` counted a CARRIED stone. `carry_items` puts it on its carrier's cell
+  every tick, so a hauler standing on the pile passed before any drop. Now a stone counts only when no dwarf
+  stands on its cell. Re-measured GREEN: still **7**, so the earlier 7 were real deliveries.
+- [x] [Review][Patch] MED: WINDOWED captures screenshot the window, UI included; "captures hide the UI" held
+  only for headless frames. The near-white HUD text (luma ~231) fed the near-white ceiling. Every capture now
+  hides the `Hud` texts (`hide_hud_for_capture`, PostStartup).
+- [x] [Review][Patch] LOW: `H` during a capture could turn the fps overlay back on. `toggle_hud` is inert while a
+  `CaptureState` exists.
+- [x] [Review][Patch] LOW: the f32 hour truncated a minute short of elapsed on about 314 of 48,000 ticks
+  (tick 2050 read `00:02` beside `02:03`). Fixed with a 0.001-minute epsilon.
+- Mutation rows: 4 new plus 1 re-pointed, all KILLED.
+- **Recipe trap found while re-running GREEN:** a controller that sends `set_speed` and never reads its socket is
+  evicted within about 80 ms at Fast4x, so its later `normal` never lands. The daemon stayed at Fast4x and evicted
+  the headless gui during its 7 s startup (11.3's lavapipe limit). Set the speed from a FRESH connection each time.
+
 ### Seat sitting (Wolf, 2026-09-26, build `c46ae49`, verbatim)
 
 *"cool.. I think all I wanted works ..also save, load"*: the HUD tweaks (readout, `H`) and `Ctrl+S`/`Ctrl+L` confirmed at the seat.
+
+- **AC6, the haul in both clients:** *"1 works"*.
+- **AC7, both wow beats:** *"2 yes well had to take some time to understand tui but yes it's correct .. problem is
+  proportions but for that we cannot do much.. camp looks wider in gui than tui ..no need to fix now"*. The
+  proportion gap is noted, not filed (most likely the terminal's tall character cells, which squeeze the tui horizontally).
+- **AC7, the six words:** *"3 at this state constant wow gui"*: none is true.
+- The tui opens on z 19 and the camp is at z 9, which the card had omitted; it now says `tui 7451 --z 9` (`348066a`).
+
+**AC6 and AC7 are CLOSED by the seat.**
 
 ### File List
 
@@ -210,3 +236,4 @@ claude-opus-5-5 (orchestrator implemented directly; no Codex delegation for this
 | 2026-09-26 | Story created. Premises checked at `bfe27e4`: pause/speed/snap/two-client/daemon haul done; save/load keys, hint, gui haul instrument and seat sign-off remain. Quit premise corrected (window close, not `Command::Quit`). Haul observation measured via the daemon's snapshot: 0 → 7 on stockpile. |
 | 2026-09-26 | Dev: Tasks 1-3 and 5 built (`2d3f12d`); RED/GREEN recipe observed (0 → exit 101; 7 → exit 0); 12/12 mutations KILLED; vehicle card written. The seat sitting (AC6-7) is pending. |
 | 2026-09-26 | Task 6 (Wolf's HUD tweaks): clock/elapsed/speed readout and `H` HUD toggle (`08406e5`). The 7.1 and M2-1 mutation rows were re-anchored. |
+| 2026-09-26 | Seat: AC6/AC7 closed (*"at this state constant wow gui"*). Review: 4 findings patched, 5 rows KILLED; GREEN re-measured at 7 delivered stones. |
