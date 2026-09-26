@@ -187,6 +187,10 @@ claude-opus-5-5 (orchestrator implemented directly; no Codex delegation for this
 - The 10.10 row "delta-time scaling leaves the key rates per-frame" was re-pointed, because the Ctrl gate
   restructured its line; it was re-KILLED.
 
+### Seat sitting (Wolf, 2026-09-26, build `c46ae49`, verbatim)
+
+*"cool.. I think all I wanted works ..also save, load"*: the HUD tweaks (readout, `H`) and `Ctrl+S`/`Ctrl+L` confirmed at the seat.
+
 ### File List
 
 - `crates/gui/src/command.rs` (`save_load_keys`)

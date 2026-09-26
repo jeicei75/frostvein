@@ -10,8 +10,12 @@ WSL, terminal 1 (a fresh daemon at tick 0), and terminal 2:
 
 ```text
 simd 7451
-tui 7451
+tui 7451 --z 9
 ```
+
+**`--z 9` is required:** the tui opens on z 19, the canopy level with the most standable ground,
+and the camp sits at z 9 (README, "The camp is not on the level you open at"). In the tui, `<`
+and `>` step the level.
 
 PowerShell:
 
