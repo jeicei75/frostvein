@@ -769,6 +769,35 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
     );
 }
 
+/// 8.3's haul instrument, through the real binary: a fresh world has no stockpile, so a capture
+/// that says it is of a delivered haul must FAIL, and say why. Dropping the flag's wiring anywhere
+/// between the parser and the assertion turns this green-exit, which this test refuses.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn expect_haul_fails_a_world_with_no_stone_on_a_stockpile() {
+    let daemon = Daemon::spawn();
+    let out =
+        std::env::temp_dir().join(format!("frostvein-expect-haul-{}.png", std::process::id()));
+    let output = Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg(daemon.port.to_string())
+        .args(["--headless", "--frames", FRAMES, "--expect-haul"])
+        .args(["--capture", out.to_str().expect("a utf-8 scratch path")])
+        .output()
+        .expect("the client must run");
+    let _ = std::fs::remove_file(&out);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("items on stockpile=0"),
+        "the motion line must report the count it judged: {stdout}"
+    );
+    assert!(
+        !output.status.success() && stderr.contains("capture observed no stone on a stockpile"),
+        "a world with no delivered stone must fail --expect-haul by name (exit {:?}): {stderr}",
+        output.status
+    );
+}
+
 /// Issue #77: a capture cut below every dwarf must not demand motion its own slice cannot draw.
 #[test]
 #[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]

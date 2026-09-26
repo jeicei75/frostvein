@@ -376,6 +376,7 @@ pub struct CaptureState {
     requested: bool,
     failed: bool,
     expect_work: bool,
+    expect_haul: bool,
     /// The world is deliberately still (`--static-world`), so the motion instrument's assertions
     /// are false positives rather than findings. See the parse site for why it is never a default.
     static_world: bool,
@@ -404,6 +405,8 @@ pub struct MotionStats {
     pub mid_blend_frames: usize,
     pub max_working: usize,
     pub item_count: usize,
+    /// 8.3: the most stones seen on stockpile tiles at once, a running max like `item_count`.
+    pub items_on_stockpile: usize,
 }
 
 impl MotionStats {
@@ -435,6 +438,21 @@ impl MotionStats {
         // in the run?", and items can be hauled away before the final observed frame.
         self.item_count = self.item_count.max(item_count);
         self.mid_blend_frames += usize::from(mid_blend);
+    }
+
+    /// Stones whose cell is a stockpile tile. Counted per stone, not per tile: the sim can leave
+    /// two on one tile while it repairs a delivery race (7 on 4 tiles was measured at 8.3).
+    pub fn observe_stockpile(&mut self, items: &[[i32; 3]], zones: &[[i32; 3]]) {
+        let on_pile = items.iter().filter(|item| zones.contains(item)).count();
+        self.items_on_stockpile = self.items_on_stockpile.max(on_pile);
+    }
+
+    /// `--expect-haul`: the walking skeleton's last leg, a stone delivered to a stockpile.
+    pub fn assert_haul(&self) {
+        assert!(
+            self.items_on_stockpile >= 1,
+            "capture observed no stone on a stockpile"
+        );
     }
 
     pub fn assert_valid(&self, expect_work: bool) {
@@ -787,6 +805,7 @@ impl CaptureState {
             requested: false,
             failed: false,
             expect_work,
+            expect_haul: false,
             static_world: false,
             motion: MotionStats::default(),
             lantern: LanternStats::default(),
@@ -826,6 +845,11 @@ impl CaptureState {
     #[must_use]
     pub fn with_static_world(mut self, static_world: bool) -> Self {
         self.static_world = static_world;
+        self
+    }
+
+    pub fn with_expect_haul(mut self, expect_haul: bool) -> Self {
+        self.expect_haul = expect_haul;
         self
     }
 
@@ -886,6 +910,15 @@ pub fn accumulate_motion(
             .map(|entity| (entity.id, entity.pos, entity.state)),
         mirror.0.items().count(),
         mid_blend,
+    );
+    capture.motion.observe_stockpile(
+        &mirror.0.items().map(|item| item.pos).collect::<Vec<_>>(),
+        &mirror
+            .0
+            .zones()
+            .iter()
+            .map(|zone| zone.pos)
+            .collect::<Vec<_>>(),
     );
     let lanterns = projected
         .iter()
@@ -1108,12 +1141,13 @@ pub fn capture_after_frames(
             capture.lantern.moved(),
         );
         println!(
-            "motion: ticks observed={} dwarf position changes={} mid-blend frames={} max working dwarves={} item count={}",
+            "motion: ticks observed={} dwarf position changes={} mid-blend frames={} max working dwarves={} item count={} items on stockpile={}",
             capture.motion.ticks.len(),
             capture.motion.position_changes,
             capture.motion.mid_blend_frames,
             capture.motion.max_working,
-            capture.motion.item_count
+            capture.motion.item_count,
+            capture.motion.items_on_stockpile
         );
         // EVERY number is printed above, before ANY assertion below: a run that fails its
         // thresholds is exactly the run whose numbers are needed to diagnose it, and a panic
@@ -1129,6 +1163,9 @@ pub fn capture_after_frames(
             draw.assert_drag_produced_work(drag.mode());
         }
         draw.assert_valid(capture.expect_work);
+        if capture.expect_haul {
+            capture.motion.assert_haul();
+        }
         // A cut below the dwarves hides every lantern, so the lantern assertions would report a
         // defect when the operator merely asked for a lower slice. Ask the MIRROR whether any
         // dwarf is at or below the cut rather than trusting the observation: `observed()` is
@@ -2189,6 +2226,29 @@ mod tests {
 
         assert_eq!(pixels, vec![[240, 120, 10, 255]]);
         assert_eq!(warm_lit_pixels(&pixels), 1);
+    }
+
+    /// 8.3's haul instrument counts STONES on stockpile cells, keeps its maximum, and fails at 0.
+    #[test]
+    fn the_haul_instrument_counts_stones_on_stockpile_tiles() {
+        let mut motion = MotionStats::default();
+        let pile = [[4, 5, 6], [5, 5, 6]];
+        motion.observe_stockpile(&[[1, 1, 6]], &pile);
+        assert_eq!(
+            motion.items_on_stockpile, 0,
+            "a stone off the pile is not delivered"
+        );
+        assert!(
+            std::panic::catch_unwind(|| motion.assert_haul()).is_err(),
+            "no stone on a pile must fail the capture"
+        );
+        // Two on one tile count as two: the sim stacks during its delivery-race repair.
+        motion.observe_stockpile(&[[4, 5, 6], [4, 5, 6], [9, 9, 6]], &pile);
+        assert_eq!(motion.items_on_stockpile, 2);
+        // A running maximum: a later frame with the stones hauled on elsewhere keeps the peak.
+        motion.observe_stockpile(&[], &pile);
+        assert_eq!(motion.items_on_stockpile, 2);
+        motion.assert_haul();
     }
 
     /// A plain capture waits for its ticks, not only its frames. The vehicle's 4080 spent 160

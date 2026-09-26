@@ -702,7 +702,8 @@ fn configure_client_app(
             ),
             None => CaptureState::new(capture, args.frames, args.expect_work),
         }
-        .with_static_world(args.static_world);
+        .with_static_world(args.static_world)
+        .with_expect_haul(args.expect_haul);
         app.insert_resource(capture);
         capture_systems(app);
     }
@@ -884,6 +885,7 @@ pub fn client_systems(app: &mut App) {
             crate::command::step_speed
                 .after(crate::command::toggle_pause)
                 .before(send_commands),
+            crate::command::save_load_keys.before(send_commands),
             // Before `send_commands`, so the hand-back reaches the socket on the frame the
             // exit is requested rather than never.
             crate::command::restore_speed_on_exit.before(send_commands),
@@ -947,6 +949,7 @@ struct Args {
     capture: Option<PathBuf>,
     frames: u32,
     expect_work: bool,
+    expect_haul: bool,
     static_world: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
@@ -1076,6 +1079,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut capture = None;
     let mut frames = None;
     let mut expect_work = false;
+    let mut expect_haul = false;
     let mut static_world = false;
     let mut slice_level = None;
     let mut distance = None;
@@ -1141,6 +1145,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             ));
         } else if arg == "--expect-work" {
             expect_work = true;
+        } else if arg == "--expect-haul" {
+            expect_haul = true;
         } else if arg == "--headless" {
             headless = true;
         } else if arg == "--subdiv" {
@@ -1230,6 +1236,9 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if expect_work && capture.is_none() {
         bail!("--expect-work requires --capture");
     }
+    if expect_haul && capture.is_none() {
+        bail!("--expect-haul requires --capture");
+    }
     if distance.is_some() && capture.is_none() {
         bail!("--distance requires --capture");
     }
@@ -1272,6 +1281,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         capture,
         frames: frames.unwrap_or(DEFAULT_AT_TICK_FRAME_BUDGET),
         expect_work,
+        expect_haul,
         static_world,
         slice_level,
         distance,
@@ -2113,7 +2123,12 @@ fn camera_controls(
         } else {
             1.0
         };
-    let key_scale = time.delta_secs() * multiplier;
+    // Ctrl chords (Ctrl+S save, Ctrl+L load) must not also move the camera.
+    let key_scale = if keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
+        0.0
+    } else {
+        time.delta_secs() * multiplier
+    };
     let yaw = (keys.pressed(KeyCode::KeyD) as i8 - keys.pressed(KeyCode::KeyA) as i8) as f32
         * ORBIT_RATE
         * key_scale;
@@ -3064,6 +3079,97 @@ mod tests {
     /// `toggle_pause` took no notice of the flag and queued `SetSpeed { Normal }` on any press, so
     /// one keystroke at the seat broke the guarantee every figure in the capture is measured
     /// against, with nothing said.
+    /// 8.3: Ctrl+S / Ctrl+L put the existing control commands on the live socket, the bare
+    /// letters do not, and a Ctrl chord does not also move the camera.
+    #[test]
+    fn ctrl_s_saves_and_ctrl_l_loads_on_the_wire() {
+        let (mut app, _sender, server) = configured_app(&[]);
+        app.update();
+        let chord = |app: &mut App, ctrl: bool, key: KeyCode| {
+            {
+                let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+                if ctrl {
+                    keys.press(KeyCode::ControlLeft);
+                }
+                keys.press(key);
+            }
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release_all();
+            keys.clear();
+        };
+        let pitch = |app: &mut App| {
+            app.world_mut()
+                .query::<&CameraRig>()
+                .single(app.world())
+                .unwrap()
+                .pitch
+        };
+
+        let before = pitch(&mut app);
+        chord(&mut app, true, KeyCode::KeyS);
+        assert_eq!(read_one_command(&server), r#"{"type":"save"}"#);
+        assert_eq!(pitch(&mut app), before, "Ctrl+S must not pitch the camera");
+        chord(&mut app, true, KeyCode::KeyL);
+        assert_eq!(read_one_command(&server), r#"{"type":"load"}"#);
+        chord(&mut app, false, KeyCode::KeyL);
+        chord(&mut app, false, KeyCode::KeyS);
+        assert!(
+            read_one_command(&server).is_empty(),
+            "a bare L or S must send the daemon nothing"
+        );
+    }
+
+    #[test]
+    fn expect_haul_parses_only_with_a_capture() {
+        let parse = |args: &[&str]| {
+            super::parse_args_from(
+                args.iter()
+                    .map(std::ffi::OsString::from)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert!(
+            parse(&["--capture", "x.png", "--frames", "10", "--expect-haul"])
+                .unwrap()
+                .expect_haul
+        );
+        assert!(
+            !parse(&["--capture", "x.png", "--frames", "10"])
+                .unwrap()
+                .expect_haul
+        );
+        let Err(error) = parse(&["--expect-haul"]) else {
+            panic!("--expect-haul without --capture must be refused");
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("--expect-haul requires --capture")
+        );
+    }
+
+    #[test]
+    fn ctrl_l_cannot_load_over_a_static_world_run() {
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused","at_tick":120}"#
+        );
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.press(KeyCode::ControlLeft);
+            keys.press(KeyCode::KeyL);
+        }
+        app.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "Ctrl+L must send the daemon nothing under --static-world"
+        );
+    }
+
     #[test]
     fn space_cannot_resume_a_static_world_run() {
         let (mut app, _sender, server) =
@@ -3696,7 +3802,11 @@ mod tests {
             (KeyCode::KeyA, "yaw, held (camera_controls)"),
             (KeyCode::KeyD, "yaw, held (camera_controls)"),
             (KeyCode::KeyW, "pitch, held (camera_controls)"),
-            (KeyCode::KeyS, "pitch, held (camera_controls)"),
+            (
+                KeyCode::KeyS,
+                "pitch, held; save with Ctrl (camera_controls, command.rs)",
+            ),
+            (KeyCode::KeyL, "load, with Ctrl (command.rs)"),
             (KeyCode::KeyE, "zoom, held (camera_controls)"),
             (KeyCode::KeyQ, "zoom, held (camera_controls)"),
             (
@@ -4740,7 +4850,7 @@ mod tests {
                     .resource::<crate::slice::SliceLevel>()
                     .readout(false, None)
             ),
-            "1 dig  2 channel  3 stockpile  4 clear".to_string(),
+            "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
             "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),
         ];
