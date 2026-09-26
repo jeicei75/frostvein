@@ -66,9 +66,11 @@ import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 # RE-ANCHORED 2026-09-03 (story 10.7): the seam moved when the lighting readout joined this
 # Startup tuple. The row still deletes setup_slice_readout and nothing else.
-old = '(setup_slice_readout, setup_lighting_readout)'
+# RE-ANCHORED 2026-09-26 (story 8.3): the clock readout joined the tuple, which rustfmt now
+# breaks one system per line.
+old = '                setup_slice_readout,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '(setup_lighting_readout,)'))
+p.write_text(s.replace(old, ''))
 PY
 mutation "the level readout never follows the cut" gui the_level_readout_is_drawn_on_the_live_path_and_follows_the_cut <<'PY'
 import pathlib

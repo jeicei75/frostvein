@@ -308,6 +308,31 @@ pub fn toggle_pause(
     eprintln!("sim {}", if paused.0 { "PAUSED" } else { "running" });
 }
 
+/// `Ctrl+S` saves and `Ctrl+L` loads, as the existing control commands; the daemon says
+/// `saved tick N` on its own stderr, and a load comes back as a fresh snapshot to every client.
+///
+/// REFUSES the load under `--static-world`, for `toggle_pause`'s reason: a load replaces the frozen
+/// world the whole capture is measured against.
+pub fn save_load_keys(
+    keys: Res<ButtonInput<KeyCode>>,
+    static_world: Res<StaticWorld>,
+    mut pending: ResMut<PendingCommands>,
+) {
+    if !keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
+        return;
+    }
+    if keys.just_pressed(KeyCode::KeyS) {
+        pending.push(Command::Save);
+    }
+    if keys.just_pressed(KeyCode::KeyL) {
+        if static_world.0 {
+            eprintln!("sim NOT LOADED: --static-world holds the world frozen for the whole run");
+        } else {
+            pending.push(Command::Load);
+        }
+    }
+}
+
 /// Step the daemon's reported speed with the same keys and limits as the TUI.
 pub fn step_speed(
     keys: Res<ButtonInput<KeyCode>>,

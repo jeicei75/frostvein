@@ -690,8 +690,9 @@ fn configure_client_app(
     client_systems(app);
     projection_systems(app);
     if let Some(capture) = args.capture {
-        // Capture output must never contain the diagnostic overlay.
+        // Capture output must never contain the diagnostic overlay, or any other HUD text.
         force_capture_overlay_off(app);
+        app.add_systems(bevy::app::PostStartup, hide_hud_for_capture);
         let capture = match args.at_tick {
             Some(ticks_after_start) => CaptureState::at_tick(
                 capture,
@@ -702,7 +703,8 @@ fn configure_client_app(
             ),
             None => CaptureState::new(capture, args.frames, args.expect_work),
         }
-        .with_static_world(args.static_world);
+        .with_static_world(args.static_world)
+        .with_expect_haul(args.expect_haul);
         app.insert_resource(capture);
         capture_systems(app);
     }
@@ -728,7 +730,14 @@ pub fn projection_systems(app: &mut App) {
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<TickClock>()
         .init_resource::<crate::project::DwarfHeadings>()
-        .add_systems(Startup, (setup_slice_readout, setup_lighting_readout))
+        .add_systems(
+            Startup,
+            (
+                setup_slice_readout,
+                setup_lighting_readout,
+                setup_clock_readout,
+            ),
+        )
         .add_systems(
             Update,
             (
@@ -751,7 +760,8 @@ pub fn projection_systems(app: &mut App) {
         // deleting both systems left the suite green — 6.1's untested-drive-line defect on the
         // half of the story the readout exists for. It must read the level AFTER the keyboard has
         // written it, or the displayed level trails the cut by one frame.
-        .add_systems(Update, update_slice_readout.after(ProjectionSet));
+        .add_systems(Update, update_slice_readout.after(ProjectionSet))
+        .add_systems(Update, update_clock_readout.after(ProjectionSet));
     // The toggles resource is initialised HERE, beside the systems that READ it, not only in
     // `client_systems`. Registering a system in one app-builder while its resource is created in
     // another is the same defect this function's own doc comment describes: `crates/gui/tests/
@@ -823,6 +833,7 @@ pub fn client_systems(app: &mut App) {
         Update,
         (
             camera_controls,
+            toggle_hud,
             light_controls,
             effect_controls,
             sync_haze_light.after(effect_controls),
@@ -884,6 +895,7 @@ pub fn client_systems(app: &mut App) {
             crate::command::step_speed
                 .after(crate::command::toggle_pause)
                 .before(send_commands),
+            crate::command::save_load_keys.before(send_commands),
             // Before `send_commands`, so the hand-back reaches the socket on the frame the
             // exit is requested rather than never.
             crate::command::restore_speed_on_exit.before(send_commands),
@@ -947,6 +959,7 @@ struct Args {
     capture: Option<PathBuf>,
     frames: u32,
     expect_work: bool,
+    expect_haul: bool,
     static_world: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
@@ -1076,6 +1089,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut capture = None;
     let mut frames = None;
     let mut expect_work = false;
+    let mut expect_haul = false;
     let mut static_world = false;
     let mut slice_level = None;
     let mut distance = None;
@@ -1141,6 +1155,8 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
             ));
         } else if arg == "--expect-work" {
             expect_work = true;
+        } else if arg == "--expect-haul" {
+            expect_haul = true;
         } else if arg == "--headless" {
             headless = true;
         } else if arg == "--subdiv" {
@@ -1230,6 +1246,9 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if expect_work && capture.is_none() {
         bail!("--expect-work requires --capture");
     }
+    if expect_haul && capture.is_none() {
+        bail!("--expect-haul requires --capture");
+    }
     if distance.is_some() && capture.is_none() {
         bail!("--distance requires --capture");
     }
@@ -1272,6 +1291,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         capture,
         frames: frames.unwrap_or(DEFAULT_AT_TICK_FRAME_BUDGET),
         expect_work,
+        expect_haul,
         static_world,
         slice_level,
         distance,
@@ -1640,6 +1660,118 @@ fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> Stri
     entries.join("  ")
 }
 
+/// Every HUD text this client spawns. `H` hides them all, with the fps overlay.
+#[derive(Component)]
+pub struct Hud;
+
+#[derive(Component)]
+pub struct ClockReadout;
+
+/// 8.3 (Wolf): time of day, sim time elapsed, and the daemon's speed, in one line.
+///
+/// The hour is the RENDERED hour, so it follows a `--clock` pin; elapsed is the daemon tick, so a
+/// load rewinds it with the world.
+fn clock_readout(hour: f32, tick: u64, speed: protocol::Speed) -> String {
+    // The epsilon keeps the f32 hour from truncating a whole minute short (tick 2050 read 00:02
+    // beside `elapsed 0d 02:03`); 0.001 minute is far below what the readout shows.
+    let minute_of_day = (hour * 60.0 + 0.001) as u64;
+    let elapsed = tick * 60 / crate::clock::TICKS_PER_HOUR as u64;
+    let speed = match speed {
+        protocol::Speed::Paused => "paused",
+        protocol::Speed::Normal => "normal",
+        protocol::Speed::Fast => "fast",
+        protocol::Speed::Fast2x => "fast2x",
+        protocol::Speed::Fast4x => "fast4x",
+    };
+    format!(
+        "{:02}:{:02}   elapsed {}d {:02}:{:02}   speed {speed}",
+        minute_of_day / 60 % 24,
+        minute_of_day % 60,
+        elapsed / (24 * 60),
+        elapsed / 60 % 24,
+        elapsed % 60,
+    )
+}
+
+fn setup_clock_readout(
+    mut commands: Commands,
+    mirror: Res<MirrorResource>,
+    pin: Res<crate::clock::ClockPin>,
+) {
+    commands.spawn((
+        Text::new(clock_readout(
+            crate::clock::current_hour(&mirror, &pin),
+            mirror.0.tick(),
+            mirror.0.speed(),
+        )),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::srgb(0.86, 0.91, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(16),
+            right: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        ClockReadout,
+        Hud,
+        ClientLocal,
+    ));
+}
+
+fn update_clock_readout(
+    mirror: Res<MirrorResource>,
+    pin: Res<crate::clock::ClockPin>,
+    mut readout: Query<&mut Text, With<ClockReadout>>,
+) {
+    let text = clock_readout(
+        crate::clock::current_hour(&mirror, &pin),
+        mirror.0.tick(),
+        mirror.0.speed(),
+    );
+    for mut readout in &mut readout {
+        if readout.0 != text {
+            readout.0.clone_from(&text);
+        }
+    }
+}
+
+/// `H` hides or shows the whole HUD: every `Hud` text and Bevy's fps overlay and graph.
+fn toggle_hud(
+    capture: Option<Res<CaptureState>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut hud: Query<&mut bevy::prelude::Visibility, With<Hud>>,
+    overlay: Option<ResMut<FpsOverlayConfig>>,
+    mut hidden: bevy::prelude::Local<bool>,
+) {
+    // A capture holds the HUD hidden for its whole run (`hide_hud_for_capture`); `H` must not
+    // bring it, or the fps overlay, back into a measured frame.
+    if capture.is_some() || !keys.just_pressed(KeyCode::KeyH) {
+        return;
+    }
+    *hidden = !*hidden;
+    for mut visibility in &mut hud {
+        *visibility = if *hidden {
+            bevy::prelude::Visibility::Hidden
+        } else {
+            bevy::prelude::Visibility::Inherited
+        };
+    }
+    if let Some(mut overlay) = overlay {
+        overlay.enabled = !*hidden;
+        overlay.frame_time_graph_config.enabled = !*hidden;
+    }
+}
+
+/// Captures never carry the HUD. Headless frames draw no UI anyway, but a WINDOWED capture
+/// screenshots the window, UI included, and near-white HUD text lands in the capture's measured
+/// near-white fraction.
+fn hide_hud_for_capture(mut hud: Query<&mut bevy::prelude::Visibility, With<Hud>>) {
+    for mut visibility in &mut hud {
+        *visibility = bevy::prelude::Visibility::Hidden;
+    }
+}
+
 fn setup_lighting_readout(
     mut commands: Commands,
     toggles: Res<LightingToggles>,
@@ -1657,6 +1789,7 @@ fn setup_lighting_readout(
         },
         GlobalZIndex(i32::MAX - 16),
         LightingReadout,
+        Hud,
         ClientLocal,
     ));
 }
@@ -2004,6 +2137,7 @@ fn setup_slice_readout(
         // and is drawn underneath it, covering the level number itself.
         GlobalZIndex(i32::MAX - 16),
         SliceReadout,
+        Hud,
         ClientLocal,
     ));
 }
@@ -2113,7 +2247,12 @@ fn camera_controls(
         } else {
             1.0
         };
-    let key_scale = time.delta_secs() * multiplier;
+    // Ctrl chords (Ctrl+S save, Ctrl+L load) must not also move the camera.
+    let key_scale = if keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
+        0.0
+    } else {
+        time.delta_secs() * multiplier
+    };
     let yaw = (keys.pressed(KeyCode::KeyD) as i8 - keys.pressed(KeyCode::KeyA) as i8) as f32
         * ORBIT_RATE
         * key_scale;
@@ -3064,6 +3203,229 @@ mod tests {
     /// `toggle_pause` took no notice of the flag and queued `SetSpeed { Normal }` on any press, so
     /// one keystroke at the seat broke the guarantee every figure in the capture is measured
     /// against, with nothing said.
+    /// 8.3: Ctrl+S / Ctrl+L put the existing control commands on the live socket, the bare
+    /// letters do not, and a Ctrl chord does not also move the camera.
+    #[test]
+    fn ctrl_s_saves_and_ctrl_l_loads_on_the_wire() {
+        let (mut app, _sender, server) = configured_app(&[]);
+        app.update();
+        let chord = |app: &mut App, ctrl: bool, key: KeyCode| {
+            {
+                let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+                if ctrl {
+                    keys.press(KeyCode::ControlLeft);
+                }
+                keys.press(key);
+            }
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release_all();
+            keys.clear();
+        };
+        let pitch = |app: &mut App| {
+            app.world_mut()
+                .query::<&CameraRig>()
+                .single(app.world())
+                .unwrap()
+                .pitch
+        };
+
+        let before = pitch(&mut app);
+        chord(&mut app, true, KeyCode::KeyS);
+        assert_eq!(read_one_command(&server), r#"{"type":"save"}"#);
+        assert_eq!(pitch(&mut app), before, "Ctrl+S must not pitch the camera");
+        chord(&mut app, true, KeyCode::KeyL);
+        assert_eq!(read_one_command(&server), r#"{"type":"load"}"#);
+        chord(&mut app, false, KeyCode::KeyL);
+        chord(&mut app, false, KeyCode::KeyS);
+        assert!(
+            read_one_command(&server).is_empty(),
+            "a bare L or S must send the daemon nothing"
+        );
+    }
+
+    #[test]
+    fn expect_haul_parses_only_with_a_capture() {
+        let parse = |args: &[&str]| {
+            super::parse_args_from(
+                args.iter()
+                    .map(std::ffi::OsString::from)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert!(
+            parse(&["--capture", "x.png", "--frames", "10", "--expect-haul"])
+                .unwrap()
+                .expect_haul
+        );
+        assert!(
+            !parse(&["--capture", "x.png", "--frames", "10"])
+                .unwrap()
+                .expect_haul
+        );
+        let Err(error) = parse(&["--expect-haul"]) else {
+            panic!("--expect-haul without --capture must be refused");
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("--expect-haul requires --capture")
+        );
+    }
+
+    #[test]
+    fn the_clock_readout_names_the_hour_the_elapsed_sim_time_and_the_speed() {
+        assert_eq!(
+            super::clock_readout(22.0, 0, Speed::Normal),
+            "22:00   elapsed 0d 00:00   speed normal"
+        );
+        // f32: hour_at(2050) * 60 is 2.9999..., which truncated a minute short of elapsed.
+        assert_eq!(
+            super::clock_readout(crate::clock::hour_at(2_050), 2_050, Speed::Normal),
+            "00:03   elapsed 0d 02:03   speed normal"
+        );
+        // Two days, three hours and fifteen minutes in: 22:00 + 3:15 wraps to 01:15.
+        let tick = 2 * crate::clock::TICKS_PER_DAY + 3_250;
+        assert_eq!(
+            super::clock_readout(crate::clock::hour_at(tick), tick, Speed::Fast4x),
+            "01:15   elapsed 2d 03:15   speed fast4x"
+        );
+    }
+
+    /// The readout must FOLLOW the wire. The connect snapshot is already in the mirror when Startup
+    /// spawns the text, so only a LATER delta proves the update system runs.
+    #[test]
+    fn the_live_clock_readout_follows_the_daemons_tick_and_speed() {
+        let (mut app, sender, _server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(3_250, Speed::Fast2x));
+        app.update();
+        let readout = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&Text, With<super::ClockReadout>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone()
+        };
+        assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed fast2x");
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(Delta {
+                msg_type: MessageType::Delta,
+                tick: 3_251,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Paused,
+            }))))
+            .unwrap();
+        app.update();
+        assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed paused");
+    }
+
+    #[test]
+    fn h_hides_and_shows_every_hud_text() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+        let visibilities = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::Visibility, With<super::Hud>>()
+                .iter(app.world())
+                .copied()
+                .collect::<Vec<_>>()
+        };
+        let press_h = |app: &mut App| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::KeyH);
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release_all();
+            keys.clear();
+        };
+        // Slice, lighting, clock and the designate hint.
+        assert_eq!(visibilities(&mut app).len(), 4);
+        press_h(&mut app);
+        assert!(
+            visibilities(&mut app)
+                .iter()
+                .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden),
+            "H must hide every HUD text"
+        );
+        let overlay = app.world().resource::<FpsOverlayConfig>();
+        assert!(
+            !overlay.enabled && !overlay.frame_time_graph_config.enabled,
+            "H must hide the fps overlay and its graph too"
+        );
+        press_h(&mut app);
+        assert!(
+            visibilities(&mut app)
+                .iter()
+                .all(|visibility| *visibility == bevy::prelude::Visibility::Inherited),
+            "a second H must bring the HUD back"
+        );
+        let overlay = app.world().resource::<FpsOverlayConfig>();
+        assert!(overlay.enabled && overlay.frame_time_graph_config.enabled);
+    }
+
+    /// A windowed capture screenshots the window, UI included, so a capture hides the HUD for its
+    /// whole run, and `H` cannot bring it (or the fps overlay) back into a measured frame.
+    #[test]
+    fn a_capture_hides_the_hud_and_h_cannot_restore_it() {
+        let (mut app, _sender, _server) =
+            configured_app(&["--capture", "never-written.png", "--frames", "1000"]);
+        app.update();
+        let hidden = |app: &mut App| {
+            let visibilities = app
+                .world_mut()
+                .query_filtered::<&bevy::prelude::Visibility, With<super::Hud>>()
+                .iter(app.world())
+                .copied()
+                .collect::<Vec<_>>();
+            visibilities.len() == 4
+                && visibilities
+                    .iter()
+                    .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden)
+        };
+        assert!(hidden(&mut app), "a capture must hide every HUD text");
+        for _ in 0..2 {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::KeyH);
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release_all();
+            keys.clear();
+        }
+        assert!(hidden(&mut app), "H must not bring the HUD into a capture");
+        assert!(
+            !app.world().resource::<FpsOverlayConfig>().enabled,
+            "H must not bring the fps overlay into a capture"
+        );
+    }
+
+    #[test]
+    fn ctrl_l_cannot_load_over_a_static_world_run() {
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused","at_tick":120}"#
+        );
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.press(KeyCode::ControlLeft);
+            keys.press(KeyCode::KeyL);
+        }
+        app.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "Ctrl+L must send the daemon nothing under --static-world"
+        );
+    }
+
     #[test]
     fn space_cannot_resume_a_static_world_run() {
         let (mut app, _sender, server) =
@@ -3696,7 +4058,12 @@ mod tests {
             (KeyCode::KeyA, "yaw, held (camera_controls)"),
             (KeyCode::KeyD, "yaw, held (camera_controls)"),
             (KeyCode::KeyW, "pitch, held (camera_controls)"),
-            (KeyCode::KeyS, "pitch, held (camera_controls)"),
+            (
+                KeyCode::KeyS,
+                "pitch, held; save with Ctrl (camera_controls, command.rs)",
+            ),
+            (KeyCode::KeyL, "load, with Ctrl (command.rs)"),
+            (KeyCode::KeyH, "hide / show the HUD (ingest.rs)"),
             (KeyCode::KeyE, "zoom, held (camera_controls)"),
             (KeyCode::KeyQ, "zoom, held (camera_controls)"),
             (
@@ -4740,7 +5107,8 @@ mod tests {
                     .resource::<crate::slice::SliceLevel>()
                     .readout(false, None)
             ),
-            "1 dig  2 channel  3 stockpile  4 clear".to_string(),
+            "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
+            "22:00   elapsed 0d 00:00   speed normal".to_string(),
             "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),
         ];

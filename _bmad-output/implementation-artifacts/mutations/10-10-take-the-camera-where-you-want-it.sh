@@ -11,9 +11,9 @@
 mutation "delta-time scaling leaves the key rates per-frame" gui camera_controls_are_scaled_by_elapsed_time <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '    let key_scale = time.delta_secs() * multiplier;\n'
+old = '        time.delta_secs() * multiplier\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    let key_scale = multiplier;\n'))
+p.write_text(s.replace(old, '        multiplier\n'))
 PY
 
 # The MIRROR of the row above, and the reason both exist: a MouseMotion delta is already the

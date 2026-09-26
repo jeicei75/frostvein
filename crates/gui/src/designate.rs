@@ -48,7 +48,9 @@ pub struct DesignateHint;
 
 pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
     match (mode, dragging) {
-        (DesignateMode::None, _) => "1 dig  2 channel  3 stockpile  4 clear",
+        (DesignateMode::None, _) => {
+            "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"
+        }
         (DesignateMode::Dig, false) => "dig: drag to designate  Esc leave",
         (DesignateMode::Dig, true) => "dig: release to designate  Esc abort",
         (DesignateMode::Channel, false) => "channel: drag to designate  Esc leave",
@@ -73,6 +75,7 @@ pub fn setup_designate_hint(mut commands: Commands) {
         },
         GlobalZIndex(i32::MAX - 16),
         DesignateHint,
+        crate::ingest::Hud,
         ClientLocal,
     ));
 }

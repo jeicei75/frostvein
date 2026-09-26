@@ -196,6 +196,8 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | LMB | select the dwarf under the cursor and follow him (with no designate mode armed) |
 | `Esc` | release the selection, or abort a designation |
 | `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
+| `ctrl` + `S` / `ctrl` + `L` | save / load the world (the daemon writes `frostvein.save` and says `saved tick N`; a load snaps every client back). While `ctrl` is held the keyboard camera keys do nothing, so the chord never moves the view |
+| `H` | hide / show the whole HUD: fps overlay, readouts, hint |
 | `space` | pause / resume the sim |
 | `+` / `-` (including numpad) | step the daemon speed Paused ↔ Normal ↔ Fast ↔ Fast2x ↔ Fast4x; end presses do nothing |
 | `F1` / `F2` | **Bevy's own** render debug overlay: cycle depth/normal, cycle its opacity |
@@ -203,7 +205,10 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | `F4` `F5` `F6` `F7` | toggle haze / depth of field / bloom / ambient occlusion — widest-acting first |
 | `F8` `F9` `F10` `F11` `F12` | toggle sun / ambient / campfire / torches / lanterns — biggest reach first |
 
-The fps overlay has no key: it is simply on, and `--capture` forces it off so no measured frame
+The top-right readout reads `22:14   elapsed 0d 02:14   speed fast2x`: the rendered hour (it follows
+`--clock`), the sim time since tick 0 (a load rewinds it), and the daemon's speed.
+
+The fps overlay has no key of its own (`H` hides it with the rest of the HUD): it is simply on, and `--capture` forces it off so no measured frame
 carries it. FXAA has no key either; it is `--fx-off fxaa` only. **F1 and F2 belong to `bevy_dev_tools`**, which
 `DefaultPlugins` pulls in automatically — binding anything of ours there means both handlers run,
 which is how 11.2 shipped dof and haze onto a debug overlay. `the_client_keymap_avoids_keys_other_plugins_have_claimed`
@@ -251,6 +256,7 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | `--distance <d>` | zoom only, capture only — mutually exclusive with `--camera`, which carries its own |
 | `--z <level>` | pin the slice level |
 | `--subdiv <n>` | terrain subdivision; defaults to the shipped 4, and the recipes pass it anyway so the frame says what it was |
+| `--expect-haul` | fail the capture unless a stone was seen on a stockpile tile (`items on stockpile=N` on the `motion:` line) |
 | `--static-world` | pause the DAEMON for the whole run. Two captures differ only by what you changed **only if** you also pin the flicker and give each capture its own freshly started `simd` — see the note below |
 | `--lights-steady` | pin emitter flicker to a fixed phase, so a capture pair is comparable |
 | `--fx-off <a,b>` | remove named camera effects: `fxaa`, `ao`, `bloom`, `dof`, `haze` |
