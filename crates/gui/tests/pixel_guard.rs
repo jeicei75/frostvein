@@ -276,9 +276,13 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     /// the open snow darkened with the key, which is what the ruling asked for. Measured on the
     /// guard's own run; darkening then read 0.561, still clear of 0.30. Two boot captures of that
     /// build were `cmp`-identical, so the same-build spread is still 0.
-    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 55;
-    /// Outside the haze's reach, and unmoved by it -- see `CONTROL_OPEN_SNOW_LL_MEDIAN`.
-    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 57;
+    ///
+    /// RE-BASELINED 55 -> 60 (LR 57 -> 59) by 11.3's night haze ruling (gain 14, 2026-09-26): the
+    /// haze now scatters the moon 14x and lifts open snow in BOTH windows, so LR is no longer
+    /// outside its reach. Measured on the full gate's own run of `b4a4b9d`; darkening 0.451.
+    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 60;
+    /// Was outside the haze's reach until the night gain -- see `CONTROL_OPEN_SNOW_LL_MEDIAN`.
+    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 59;
 
     // ONE DAEMON PER CAPTURE, and this is load-bearing for a delta. `--static-world` freezes the
     // world at whatever tick it has reached when the client connects, so a second capture against
@@ -468,9 +472,37 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
 
     // Only emitters and their halo may BRIGHTEN. These windows hold no emitter; bloom darkens them
     // by a level, which is the EnergyConserving signature, and the bar is that they do not rise.
+    // Measured with the haze OFF (Wolf, 2026-09-26): 11.3's 14x night haze lights the LL window,
+    // and bloom spread that veil into it, 59 -> 60, on every run. The lit haze is not an emitter
+    // this claim is about, so the pair removes it rather than loosening the bar.
+    let (on_clear, _width, _height) = Daemon::spawn().capture(
+        "bloom-on-haze-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "haze",
+        ],
+    );
+    let (off_clear, _width, _height) = Daemon::spawn().capture(
+        "bloom-off-haze-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "bloom,haze",
+        ],
+    );
     for (name, rect) in [("LL", OPEN_SNOW_LL), ("LR", OPEN_SNOW_LR)] {
-        let on_snow = i32::from(rec601_median(&on, width, rect));
-        let off_snow = i32::from(rec601_median(&off, width, rect));
+        let on_snow = i32::from(rec601_median(&on_clear, width, rect));
+        let off_snow = i32::from(rec601_median(&off_clear, width, rect));
+        println!(
+            "AC4 pixel guard (Rec.601): open-snow {name} haze-off bloom-on={on_snow} bloom-off={off_snow}"
+        );
         assert!(
             on_snow <= off_snow,
             "bloom must not brighten emitter-free open snow: {name} median went {off_snow} -> {on_snow}"
