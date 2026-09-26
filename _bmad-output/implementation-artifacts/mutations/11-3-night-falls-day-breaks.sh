@@ -361,3 +361,43 @@ old = '        directional_illuminance: 750.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        directional_illuminance: 7_000.0,\n'))
 PY
+
+mutation "the night haze gain falls back to 11.2's" gui the_clock_drives_the_haze_gain_and_the_moon <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
+old = 'const HAZE_NIGHT_LIGHT_INTENSITY: f32 = 14.0;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'const HAZE_NIGHT_LIGHT_INTENSITY: f32 = 1.0;\n'))
+PY
+
+mutation "the clock never writes the haze gain" gui the_clock_drives_the_haze_gain_and_the_moon <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            volume.light_intensity = lighting.haze_light_intensity;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "the moon stays at its boot position" gui the_clock_drives_the_haze_gain_and_the_moon <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            transform.translation = position;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "the moon stays up by day" gui the_clock_drives_the_haze_gain_and_the_moon <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        } else {\n            bevy::prelude::Visibility::Hidden\n        };\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        } else {\n            bevy::prelude::Visibility::Inherited\n        };\n'))
+PY
+
+mutation "the moon hangs along the light instead of behind it" gui the_clock_drives_the_haze_gain_and_the_moon <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
+old = 'SKY_CENTRE - key_at(hour).0 * MOON_DISTANCE'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'SKY_CENTRE + key_at(hour).0 * MOON_DISTANCE'))
+PY

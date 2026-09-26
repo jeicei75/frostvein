@@ -6,13 +6,13 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::{
         AlphaMode, Assets, Commands, Component, Cuboid, Mesh, Mesh3d, MeshMaterial3d, Query, Res,
-        ResMut, Resource, StandardMaterial, Time, Transform, Vec3,
+        ResMut, Resource, Sphere, StandardMaterial, Time, Transform, Vec3, Visibility,
     },
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 
 use crate::{
-    appearance::{night_lighting, snow_cap_color},
+    appearance::{moon_color, night_lighting, snow_cap_color},
     camera::{BOOT_ASPECT_RATIO, BOOT_VERTICAL_FOV, CameraRig, boot_horizontal_forward},
     project::ClientLocal,
 };
@@ -29,7 +29,17 @@ pub struct Atmosphere;
 pub struct AtmosphereMaterials {
     pub star: bevy::prelude::Handle<StandardMaterial>,
     pub aurora: bevy::prelude::Handle<StandardMaterial>,
+    pub moon: bevy::prelude::Handle<StandardMaterial>,
 }
+
+#[derive(Component)]
+pub struct Moon;
+
+/// Between the aurora ring (600) and the star shell (650): the curtain hangs in front of the
+/// moon, and the moon hides the stars behind it.
+pub const MOON_DISTANCE: f32 = 640.0;
+/// About 2 degrees across, four times the real moon, so it reads at this camera's zoom.
+const MOON_RADIUS: f32 = 11.0;
 
 pub const CAMP_SURFACE_Y: f32 = 9.0;
 pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
@@ -277,6 +287,11 @@ pub fn key_at(hour: f32) -> (Vec3, bevy::prelude::Color, f32) {
     )
 }
 
+/// Where the disc hangs: back along the light the moon sends. `None` while the sun is the key.
+pub fn moon_position(hour: f32) -> Option<Vec3> {
+    (!(6.0..18.0).contains(&hour)).then(|| SKY_CENTRE - key_at(hour).0 * MOON_DISTANCE)
+}
+
 /// The independent floor AC5 asks for: hand-written, deliberately NOT derived from
 /// `SUN_ELEVATION_DEGREES`, and the thing that catches the shipped below-horizon aim returning.
 /// Single-sourced because it now guards TWO levels -- the formula here, and the light actually
@@ -331,9 +346,16 @@ pub fn setup_atmosphere(
         cull_mode: None,
         ..Default::default()
     });
+    let moon = materials.add(StandardMaterial {
+        base_color: moon_color(),
+        unlit: true,
+        fog_enabled: false,
+        ..Default::default()
+    });
     commands.insert_resource(AtmosphereMaterials {
         star: star.clone(),
         aurora: aurora.clone(),
+        moon: moon.clone(),
     });
     // Cap colour, not terrain snow: a flake the same colour as the field it falls over is
     // invisible — settled snow is already the "brighter than terrain" table entry.
@@ -359,6 +381,20 @@ pub fn setup_atmosphere(
         Mesh3d(curtain),
         MeshMaterial3d(aurora),
         Transform::IDENTITY,
+        Atmosphere,
+        ClientLocal,
+        NotShadowCaster,
+    ));
+    // Placed at the boot hour; `update_clock_sky` moves it with the clock.
+    commands.spawn((
+        Mesh3d(meshes.add(Sphere::new(MOON_RADIUS))),
+        MeshMaterial3d(moon),
+        Transform::from_translation(
+            moon_position(crate::clock::BOOT_HOUR).expect("the boot hour is a night hour"),
+        ),
+        // Explicit: the clock hides the disc by day, and only a render plugin would add this.
+        Visibility::default(),
+        Moon,
         Atmosphere,
         ClientLocal,
         NotShadowCaster,

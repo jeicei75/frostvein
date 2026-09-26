@@ -1579,6 +1579,7 @@ fn setup_fog_volume(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         FogVolume {
             density_factor: FOG_DENSITY_FACTOR,
             density_texture: Some(density_texture),
+            light_intensity: night_lighting().haze_light_intensity,
             ..Default::default()
         },
         Transform::from_xyz(64.0, 18.0, -64.0).with_scale(Vec3::new(160.0, 48.0, 160.0)),
@@ -1867,6 +1868,7 @@ fn apply_lighting_toggles(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update_clock_sky(
     mirror: Res<MirrorResource>,
     pin: Res<crate::clock::ClockPin>,
@@ -1878,6 +1880,11 @@ fn update_clock_sky(
             Option<&mut VolumetricFog>,
         ),
         With<Camera3d>,
+    >,
+    mut volumes: Query<&mut FogVolume>,
+    mut moon: Query<
+        (&mut Transform, &mut bevy::prelude::Visibility),
+        With<crate::atmosphere::Moon>,
     >,
     handles: Option<Res<crate::atmosphere::AtmosphereMaterials>>,
     mut materials: Option<ResMut<Assets<bevy::prelude::StandardMaterial>>>,
@@ -1906,6 +1913,27 @@ fn update_clock_sky(
             }
         }
     }
+    for mut volume in &mut volumes {
+        if volume.light_intensity != lighting.haze_light_intensity {
+            volume.light_intensity = lighting.haze_light_intensity;
+        }
+    }
+    let moon_position = crate::atmosphere::moon_position(hour);
+    for (mut transform, mut visibility) in &mut moon {
+        let wanted = if moon_position.is_some() {
+            bevy::prelude::Visibility::Inherited
+        } else {
+            bevy::prelude::Visibility::Hidden
+        };
+        if *visibility != wanted {
+            *visibility = wanted;
+        }
+        if let Some(position) = moon_position
+            && transform.translation != position
+        {
+            transform.translation = position;
+        }
+    }
     let (Some(handles), Some(materials)) = (handles, materials.as_deref_mut()) else {
         return;
     };
@@ -1922,6 +1950,14 @@ fn update_clock_sky(
         .is_some_and(|material| material.base_color != star_color)
     {
         materials.get_mut(&handles.star).unwrap().base_color = star_color;
+    }
+    // The moon fades into the sky exactly as the stars do.
+    let moon_color = mix_color(crate::appearance::moon_color(), lighting.sky, weight);
+    if materials
+        .get(&handles.moon)
+        .is_some_and(|material| material.base_color != moon_color)
+    {
+        materials.get_mut(&handles.moon).unwrap().base_color = moon_color;
     }
     let aurora_color = Color::srgba(1.0, 1.0, 1.0, 1.0 - weight);
     if materials
@@ -4169,6 +4205,49 @@ mod tests {
             (day.ambient, 0.1 * day.ambient_brightness / 80.0),
             "F4-on must restore the clock's haze ambient"
         );
+    }
+
+    /// The night gain and the moon disc follow the clock in the live app. The moon is checked
+    /// against the key light the app actually installed, not against `moon_position`.
+    #[test]
+    fn the_clock_drives_the_haze_gain_and_the_moon() {
+        let installed = |app: &mut App| {
+            let gain = app
+                .world_mut()
+                .query::<&super::FogVolume>()
+                .single(app.world())
+                .unwrap()
+                .light_intensity;
+            let key = app
+                .world_mut()
+                .query_filtered::<&bevy::prelude::Transform, With<super::SunLight>>()
+                .single(app.world())
+                .unwrap()
+                .forward()
+                .as_vec3();
+            let (moon, visibility) = app
+                .world_mut()
+                .query_filtered::<(&bevy::prelude::Transform, &bevy::prelude::Visibility), With<crate::atmosphere::Moon>>()
+                .single(app.world())
+                .unwrap();
+            (gain, key, moon.translation, *visibility)
+        };
+        let (mut night, _night_sender, _night_server) = configured_app(&["--clock", "20"]);
+        night.update();
+        let (gain, key, moon, visibility) = installed(&mut night);
+        assert_eq!(gain, 14.0, "the night haze scatters the moon 14x");
+        assert_eq!(visibility, bevy::prelude::Visibility::Inherited);
+        let expected = crate::atmosphere::SKY_CENTRE - key * 640.0;
+        assert!(
+            moon.distance(expected) < 0.01,
+            "the disc must hang back along the installed moonlight: {moon} vs {expected}"
+        );
+
+        let (mut noon, _noon_sender, _noon_server) = configured_app(&["--clock", "12"]);
+        noon.update();
+        let (gain, _, _, visibility) = installed(&mut noon);
+        assert_eq!(gain, 1.0, "the sun keeps 11.2's haze");
+        assert_eq!(visibility, bevy::prelude::Visibility::Hidden);
     }
 
     /// Depth of field must focus the SELECTED DWARF, not the rig's aim point.

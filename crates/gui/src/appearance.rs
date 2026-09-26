@@ -28,6 +28,9 @@ pub struct LightTable {
     /// saturated green-blue light on blue materials is what turned the boot3 field electric.
     pub directional: Color,
     pub directional_illuminance: f32,
+    /// `FogVolume::light_intensity`: how strongly the haze scatters the key. 11.2 tuned the haze
+    /// under a 7,000-lux moon; at 750 it went nearly inert, so night scatters the key harder.
+    pub haze_light_intensity: f32,
 }
 
 /// The light budget is set from MEASUREMENT, not estimate — twice now. Round 5 scaled the
@@ -37,6 +40,9 @@ pub struct LightTable {
 /// ambient/directional tints multiplied onto already-blue materials). This table divides the
 /// budget the other way: a small desaturated ambient so shadow faces go genuinely dark, and a
 /// desaturated cool directional carrying most of the load so lit faces keep their modelling.
+/// Wolf's pick from 5 / 9.33 / 14 (2026-09-26); 9.33 would have restored the 11.2 look exactly.
+const HAZE_NIGHT_LIGHT_INTENSITY: f32 = 14.0;
+
 pub fn night_lighting() -> LightTable {
     LightTable {
         sky: Color::srgb_u8(5, 12, 28),
@@ -47,6 +53,7 @@ pub fn night_lighting() -> LightTable {
         directional: Color::srgb_u8(178, 200, 240),
         // 7,000 until 11.3's sitting: the moon read as a sun at 58% of noon. Wolf picked 750 (6%).
         directional_illuminance: 750.0,
+        haze_light_intensity: HAZE_NIGHT_LIGHT_INTENSITY,
     }
 }
 
@@ -59,6 +66,7 @@ pub fn day_lighting() -> LightTable {
         aurora: night_lighting().aurora,
         directional: Color::srgb_u8(255, 244, 228),
         directional_illuminance: 12_000.0,
+        haze_light_intensity: 1.0,
     }
 }
 
@@ -95,6 +103,8 @@ pub fn lighting_at(hour: f32) -> LightTable {
         directional: mix_color(night.directional, day.directional, weight),
         directional_illuminance: night.directional_illuminance
             + (day.directional_illuminance - night.directional_illuminance) * weight,
+        haze_light_intensity: night.haze_light_intensity
+            + (day.haze_light_intensity - night.haze_light_intensity) * weight,
     }
 }
 
@@ -306,6 +316,11 @@ pub fn material_color(material: Material) -> Color {
 /// Trimmed ~8% at round 7: at the boot pitch the caps dominate the visible area, so the
 /// field's measured brightness tracks THIS albedo more than the light table — boot4 proved
 /// the light lever weak (a 2.6x ambient cut moved the field only 7%).
+/// The moon disc: near-white, a touch cold. Unlit, so this is what the camera sees.
+pub fn moon_color() -> Color {
+    Color::srgb_u8(236, 240, 250)
+}
+
 pub fn snow_cap_color() -> Color {
     Color::srgb_u8(146, 158, 184)
 }
