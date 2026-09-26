@@ -317,6 +317,24 @@ What it established:
           brighten; `APPROVED_PEAK` is untouched.
         - `tech-art-guidelines.md`: moon row, cold fill, contrast band and floor rows (the floor row
           still said 70, stale since 11.1a).
+  - [x] **9e. The night haze is lit again. Ruled: "Retune haze for night", then *"1 14 2 yes 3 yes"*.**
+        At 750 lux the 11.2 haze guard went RED (far ridge 46 → 43, contrast −7.9%). Wolf's intent:
+        *"whole scene could be darker like in 750 but ofc Moon is in real life bright and have
+        visible lightbeam ... haze needs to still be visible during nights"*. `FogVolume::
+        light_intensity` now follows the hourly table: **14 at night**, 1.0 by day (11.2 unchanged
+        by day). This is the haze's key-light gain, not its density, ramp or volume. Wolf picked from 5 / 9.33 / 14:
+        far ridge 46 → **69**, contrast −31.7%, sky and stars unchanged. A **moon disc** was added
+        (ruled): an unlit sphere about 2° across, 640 m back along the installed moonlight. It is
+        hidden by day and fades with the sky. `b4a4b9d`; 6 rows KILLED (5 new; the 5.4 curtain row was
+        re-pointed because the moon's spawn ends with the same lines). Re-baselined (`b74db48`):
+        AO open-snow control 55/57 → **60/59**; bloom's never-brightens clause now reads a haze-off
+        pair (Wolf), 58 → 58 in both windows, because the lit veil bloomed LL 59 → 60 on every run.
+        **The approved night moved:** ground median 54 → **64**, and boot is still `cmp`-identical to `--clock 22`
+        (`11-3-signoff/moon/approved-night-750-haze14-b4a4b9d.png`). The veil takes back most of
+        the median the moon dimming removed; the lit surfaces stay at 750. A bright box outline seen
+        from OUTSIDE the volume (far zoom) got stronger with the gain. A side-wall density fade did
+        not move it (reverted), and it is commented on #120. Full gate on `b4a4b9d`: only these two
+        guards RED, and both are green on re-run after the change.
 
 ### Review Findings
 
@@ -822,10 +840,13 @@ amendment). Speed: *"fast mode could be double speed from current one ... maybe 
 - `_bmad-output/implementation-artifacts/11-3-signoff/vehicle-card.md`
 - `crates/gui/src/command.rs`
 - `crates/gui/tests/pixel_guard.rs`
+- `crates/gui/tests/headless.rs` (the atmosphere count pins gain the moon)
 - `_bmad-output/implementation-artifacts/mutations/11-1b-the-air-has-depth.sh`
 - `docs/tech-art-guidelines.md`
 - `README.md`
 - `_bmad-output/implementation-artifacts/mutations/11-3-night-falls-day-breaks.sh`
+- `_bmad-output/implementation-artifacts/mutations/5-4-the-cold-boot.sh` (curtain row re-pointed)
+- `_bmad-output/implementation-artifacts/11-3-signoff/moon/` (moon candidates, gain sheet, approved night, #120 evidence)
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-default.png`
 - `_bmad-output/implementation-artifacts/11-3-signoff/boot-dcdbd27-explicit.png`
 - `crates/gui/src/lib.rs`
@@ -862,3 +883,4 @@ amendment). Speed: *"fast mode could be double speed from current one ... maybe 
 | 2026-09-24 | All 37 story mutations KILLED; audit matched 653 rows after formatting, and the explicit fast gate passed. Moved story to review for Wolf's vehicle sitting. |
 | 2026-09-24 | Orchestrator verification of sitting 2: independent AC2/noon captures cmp-identical, full gate GREEN 1822 s on `6cc4981`; committer deviation recorded; dev cost recorded. |
 | 2026-09-25 | Patch pass: the four review patches were applied (the mutation row was restored and re-KILLED; the card warns of a noon 101 and judges the night from the pinned capture; the 25° sun ramp was disclosed in `candidates.md` and card Q3). No code change. |
+| 2026-09-26 | Task 9e: the night haze's key-light gain went to 14 (Wolf's pick), and a moon disc was added. The AO open-snow control was re-baselined to 60/59, and bloom's open-snow clause now reads a haze-off pair. The approved night was re-filed (ground median 64). The box-outline lines were commented on #120. |
