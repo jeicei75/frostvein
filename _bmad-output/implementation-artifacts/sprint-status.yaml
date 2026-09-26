@@ -1325,7 +1325,7 @@ development_status:
   # overruns; every --capture AC is vehicle-bound, since no devpod can open a window.
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.
-  8-3-master-of-time-and-the-skeleton-walks-in-3d: ready-for-dev
+  8-3-master-of-time-and-the-skeleton-walks-in-3d: in-progress
   epic-8-retrospective: optional
 
   # ---- the gfx pass (epics 9 + 10, added to epics.md 2026-08-28) ----
