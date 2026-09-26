@@ -4,7 +4,7 @@ baseline_commit: bfe27e4
 
 # Story 8.3: Master of Time, and the Skeleton Walks in 3D
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -80,7 +80,7 @@ Most of 8.3's epic text is already true. This story builds only the gap.
         `capture observed no stone on a stockpile`.
   - [x] Test the instrument: `observe` with a stone on a zone tile counts 1, off it counts 0; the
         flag's assertion panics at 0 and passes at 1. Mutation rows for the count and the flag.
-- [ ] **Task 4 — seat recipe and sign-off (AC6-7).** ~~Write~~ WRITTEN (`8-3-signoff/vehicle-card.md`); **the sitting is pending.** Write `8-3-signoff/vehicle-card.md` in the
+- [x] **Task 4 — seat recipe and sign-off (AC6-7).** Card written; **sitting done 2026-09-26, AC6/AC7 closed.** Write `8-3-signoff/vehicle-card.md` in the
       launch form (`launch-gui.ps1 -GuiArgs @(...)`, `simd 7451` in WSL). Steps: tui and gui on one
       daemon; in the gui, `1` + drag a SMALL dig (2-3 tiles) beside a SMALL stockpile (`3`); `+` to
       Fast; watch a stone land on the pile in both clients; `Ctrl+S`; dig more; `Ctrl+L` → both snap
@@ -237,3 +237,4 @@ claude-opus-5-5 (orchestrator implemented directly; no Codex delegation for this
 | 2026-09-26 | Dev: Tasks 1-3 and 5 built (`2d3f12d`); RED/GREEN recipe observed (0 → exit 101; 7 → exit 0); 12/12 mutations KILLED; vehicle card written. The seat sitting (AC6-7) is pending. |
 | 2026-09-26 | Task 6 (Wolf's HUD tweaks): clock/elapsed/speed readout and `H` HUD toggle (`08406e5`). The 7.1 and M2-1 mutation rows were re-anchored. |
 | 2026-09-26 | Seat: AC6/AC7 closed (*"at this state constant wow gui"*). Review: 4 findings patched, 5 rows KILLED; GREEN re-measured at 7 delivered stones. |
+| 2026-09-26 | Full gate GREEN on `f949d8e` (2172 s). Status done. Milestone 2 stays OPEN (Wolf): pathfinding, collision and floating trees go to the next milestone via the M2 retrospective. |
