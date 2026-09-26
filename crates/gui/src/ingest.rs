@@ -690,8 +690,9 @@ fn configure_client_app(
     client_systems(app);
     projection_systems(app);
     if let Some(capture) = args.capture {
-        // Capture output must never contain the diagnostic overlay.
+        // Capture output must never contain the diagnostic overlay, or any other HUD text.
         force_capture_overlay_off(app);
+        app.add_systems(bevy::app::PostStartup, hide_hud_for_capture);
         let capture = match args.at_tick {
             Some(ticks_after_start) => CaptureState::at_tick(
                 capture,
@@ -1671,7 +1672,9 @@ pub struct ClockReadout;
 /// The hour is the RENDERED hour, so it follows a `--clock` pin; elapsed is the daemon tick, so a
 /// load rewinds it with the world.
 fn clock_readout(hour: f32, tick: u64, speed: protocol::Speed) -> String {
-    let minute_of_day = (hour * 60.0) as u64;
+    // The epsilon keeps the f32 hour from truncating a whole minute short (tick 2050 read 00:02
+    // beside `elapsed 0d 02:03`); 0.001 minute is far below what the readout shows.
+    let minute_of_day = (hour * 60.0 + 0.001) as u64;
     let elapsed = tick * 60 / crate::clock::TICKS_PER_HOUR as u64;
     let speed = match speed {
         protocol::Speed::Paused => "paused",
@@ -1735,12 +1738,15 @@ fn update_clock_readout(
 
 /// `H` hides or shows the whole HUD: every `Hud` text and Bevy's fps overlay and graph.
 fn toggle_hud(
+    capture: Option<Res<CaptureState>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut hud: Query<&mut bevy::prelude::Visibility, With<Hud>>,
     overlay: Option<ResMut<FpsOverlayConfig>>,
     mut hidden: bevy::prelude::Local<bool>,
 ) {
-    if !keys.just_pressed(KeyCode::KeyH) {
+    // A capture holds the HUD hidden for its whole run (`hide_hud_for_capture`); `H` must not
+    // bring it, or the fps overlay, back into a measured frame.
+    if capture.is_some() || !keys.just_pressed(KeyCode::KeyH) {
         return;
     }
     *hidden = !*hidden;
@@ -1754,6 +1760,15 @@ fn toggle_hud(
     if let Some(mut overlay) = overlay {
         overlay.enabled = !*hidden;
         overlay.frame_time_graph_config.enabled = !*hidden;
+    }
+}
+
+/// Captures never carry the HUD. Headless frames draw no UI anyway, but a WINDOWED capture
+/// screenshots the window, UI included, and near-white HUD text lands in the capture's measured
+/// near-white fraction.
+fn hide_hud_for_capture(mut hud: Query<&mut bevy::prelude::Visibility, With<Hud>>) {
+    for mut visibility in &mut hud {
+        *visibility = bevy::prelude::Visibility::Hidden;
     }
 }
 
@@ -3264,6 +3279,11 @@ mod tests {
             super::clock_readout(22.0, 0, Speed::Normal),
             "22:00   elapsed 0d 00:00   speed normal"
         );
+        // f32: hour_at(2050) * 60 is 2.9999..., which truncated a minute short of elapsed.
+        assert_eq!(
+            super::clock_readout(crate::clock::hour_at(2_050), 2_050, Speed::Normal),
+            "00:03   elapsed 0d 02:03   speed normal"
+        );
         // Two days, three hours and fifteen minutes in: 22:00 + 3:15 wraps to 01:15.
         let tick = 2 * crate::clock::TICKS_PER_DAY + 3_250;
         assert_eq!(
@@ -3347,6 +3367,42 @@ mod tests {
         );
         let overlay = app.world().resource::<FpsOverlayConfig>();
         assert!(overlay.enabled && overlay.frame_time_graph_config.enabled);
+    }
+
+    /// A windowed capture screenshots the window, UI included, so a capture hides the HUD for its
+    /// whole run, and `H` cannot bring it (or the fps overlay) back into a measured frame.
+    #[test]
+    fn a_capture_hides_the_hud_and_h_cannot_restore_it() {
+        let (mut app, _sender, _server) =
+            configured_app(&["--capture", "never-written.png", "--frames", "1000"]);
+        app.update();
+        let hidden = |app: &mut App| {
+            let visibilities = app
+                .world_mut()
+                .query_filtered::<&bevy::prelude::Visibility, With<super::Hud>>()
+                .iter(app.world())
+                .copied()
+                .collect::<Vec<_>>();
+            visibilities.len() == 4
+                && visibilities
+                    .iter()
+                    .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden)
+        };
+        assert!(hidden(&mut app), "a capture must hide every HUD text");
+        for _ in 0..2 {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::KeyH);
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release_all();
+            keys.clear();
+        }
+        assert!(hidden(&mut app), "H must not bring the HUD into a capture");
+        assert!(
+            !app.world().resource::<FpsOverlayConfig>().enabled,
+            "H must not bring the fps overlay into a capture"
+        );
     }
 
     #[test]

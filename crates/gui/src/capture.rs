@@ -440,10 +440,20 @@ impl MotionStats {
         self.mid_blend_frames += usize::from(mid_blend);
     }
 
-    /// Stones whose cell is a stockpile tile. Counted per stone, not per tile: the sim can leave
-    /// two on one tile while it repairs a delivery race (7 on 4 tiles was measured at 8.3).
-    pub fn observe_stockpile(&mut self, items: &[[i32; 3]], zones: &[[i32; 3]]) {
-        let on_pile = items.iter().filter(|item| zones.contains(item)).count();
+    /// Stones DELIVERED to a stockpile tile. A carried stone rides on its carrier's cell every tick
+    /// (`sim-core` `carry_items`), so a hauler standing on the pile, still working the drop, is not
+    /// a delivery: a stone shares no cell with a dwarf once it is down. Counted per stone, not per
+    /// tile, because the sim can briefly leave two on one tile while it repairs a delivery race.
+    pub fn observe_stockpile(
+        &mut self,
+        items: &[[i32; 3]],
+        zones: &[[i32; 3]],
+        dwarves: &[[i32; 3]],
+    ) {
+        let on_pile = items
+            .iter()
+            .filter(|item| zones.contains(item) && !dwarves.contains(item))
+            .count();
         self.items_on_stockpile = self.items_on_stockpile.max(on_pile);
     }
 
@@ -918,6 +928,12 @@ pub fn accumulate_motion(
             .zones()
             .iter()
             .map(|zone| zone.pos)
+            .collect::<Vec<_>>(),
+        &mirror
+            .0
+            .entities()
+            .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+            .map(|entity| entity.pos)
             .collect::<Vec<_>>(),
     );
     let lanterns = projected
@@ -2233,20 +2249,26 @@ mod tests {
     fn the_haul_instrument_counts_stones_on_stockpile_tiles() {
         let mut motion = MotionStats::default();
         let pile = [[4, 5, 6], [5, 5, 6]];
-        motion.observe_stockpile(&[[1, 1, 6]], &pile);
+        motion.observe_stockpile(&[[1, 1, 6]], &pile, &[]);
         assert_eq!(
             motion.items_on_stockpile, 0,
             "a stone off the pile is not delivered"
+        );
+        // In a hauler's hands on the pile: carried stones share the carrier's cell. Not delivered.
+        motion.observe_stockpile(&[[4, 5, 6]], &pile, &[[4, 5, 6]]);
+        assert_eq!(
+            motion.items_on_stockpile, 0,
+            "a carried stone is not delivered"
         );
         assert!(
             std::panic::catch_unwind(|| motion.assert_haul()).is_err(),
             "no stone on a pile must fail the capture"
         );
         // Two on one tile count as two: the sim stacks during its delivery-race repair.
-        motion.observe_stockpile(&[[4, 5, 6], [4, 5, 6], [9, 9, 6]], &pile);
+        motion.observe_stockpile(&[[4, 5, 6], [4, 5, 6], [9, 9, 6]], &pile, &[[5, 5, 6]]);
         assert_eq!(motion.items_on_stockpile, 2);
         // A running maximum: a later frame with the stones hauled on elsewhere keeps the peak.
-        motion.observe_stockpile(&[], &pile);
+        motion.observe_stockpile(&[], &pile, &[]);
         assert_eq!(motion.items_on_stockpile, 2);
         motion.assert_haul();
     }

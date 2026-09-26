@@ -59,9 +59,9 @@ PY
 mutation "the stockpile count ignores the stockpile" gui the_haul_instrument_counts_stones_on_stockpile_tiles <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
-old = '.filter(|item| zones.contains(item))'
+old = '.filter(|item| zones.contains(item) && !dwarves.contains(item))'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '.filter(|_| true)'))
+p.write_text(s.replace(old, '.filter(|item| !dwarves.contains(item))'))
 PY
 
 mutation "the haul assertion never fires in a capture" gui expect_haul_fails_a_world_with_no_stone_on_a_stockpile ignored <<'PY'
@@ -150,4 +150,36 @@ p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '            toggle_hud,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
+PY
+
+mutation "a stone in a hauler's hands counts as delivered" gui the_haul_instrument_counts_stones_on_stockpile_tiles <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
+old = '.filter(|item| zones.contains(item) && !dwarves.contains(item))'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '.filter(|item| zones.contains(item))'))
+PY
+
+mutation "a capture keeps the HUD" gui a_capture_hides_the_hud_and_h_cannot_restore_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        app.add_systems(bevy::app::PostStartup, hide_hud_for_capture);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "H still toggles during a capture" gui a_capture_hides_the_hud_and_h_cannot_restore_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    if capture.is_some() || !keys.just_pressed(KeyCode::KeyH) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if !keys.just_pressed(KeyCode::KeyH) {\n'))
+PY
+
+mutation "the hour truncates a minute short" gui the_clock_readout_names_the_hour_the_elapsed_sim_time_and_the_speed <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    let minute_of_day = (hour * 60.0 + 0.001) as u64;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let minute_of_day = (hour * 60.0) as u64;\n'))
 PY
