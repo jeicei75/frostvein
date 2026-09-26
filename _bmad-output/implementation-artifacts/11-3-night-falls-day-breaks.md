@@ -367,7 +367,7 @@ Both auditors confirmed that the boot capture, and the `--clock 22` capture, are
 `cmp`-identical to the control, and that `--clock 12` is `cmp`-identical to
 `approved-day-bb893b2.png`. **Not proven:** the `+`/`-` keys in a real window, since no
 headless instrument can press keys. The full cycle at Fast on Wolf's seat is not proven either.
-**AC13 stays OPEN.**
+**AC13 stays OPEN.** (↳ closed at sitting 2, 2026-09-26 — see "AC13 vehicle sitting 2".)
 
 - [x] [Review][Defer] **Predawn frames trip the AC8 value floor, and no one recorded or ruled on it** (feature, MED; issue **#125**) — deferred by Wolf, 2026-09-24: settle it in #125 with the frames in hand; the seat never runs the capture check
   - Pinned captures at `--clock` 4.0, 4.5, 5.0 and 5.2 exit 101: the ground median reads 54/52/51/52, below the 55 floor. The orchestrator re-ran 4.5 and got 52, a panic at `capture.rs:1563`.
@@ -821,6 +821,20 @@ direction continuous and tunes the cascades (the step-the-direction option would
 amendment). Speed: *"fast mode could be double speed from current one ... maybe 2mins around?"*, then
 *"2 i ... keep also current fast mode and add 2x and 4x"* (Task 9c).
 
+### AC13 vehicle sitting 2 (Wolf, 2026-09-26, build `d36ad62`, verbatim where quoted)
+
+1. 750-lux night reads as night, lit by moonlight: *"yes"*.
+2. Dusk and dawn read as a transition: *"transition yes but it looks like night goes first darker for
+   a moment before starting to lighten ..ok now anyway no need to fix now"*. Filed as **#127** (the moon
+   key fades out over 05:00–06:00 before the day ramp lifts the frame).
+3. Fast4x: *"yes usable"*.
+4. Night haze reads, with the scene still dark: *"yes"*.
+5. The discs: *"there might be positioning issues but let's tackle those later on..not a big deal and I
+   need to first understand how moon and sun will really act"*. Filed as **#128**.
+
+Overall: *"so overall we will win some titles with this game :D"*. **AC13 is CLOSED by the seat.**
+Full gate GREEN on `d36ad62` (1893 s, `RUST_TEST_THREADS=2`).
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/11-3-night-falls-day-breaks.md`
@@ -891,3 +905,4 @@ amendment). Speed: *"fast mode could be double speed from current one ... maybe 
 | 2026-09-25 | Patch pass: the four review patches were applied (the mutation row was restored and re-KILLED; the card warns of a noon 101 and judges the night from the pinned capture; the 25° sun ramp was disclosed in `candidates.md` and card Q3). No code change. |
 | 2026-09-26 | Task 9e: the night haze's key-light gain went to 14 (Wolf's pick), and a moon disc was added. The AO open-snow control was re-baselined to 60/59, and bloom's open-snow clause now reads a haze-off pair. The approved night was re-filed (ground median 64). The box-outline lines were commented on #120. |
 | 2026-09-26 | Sun disc added beside the moon's (plain, untuned), and vehicle card sitting 2 gained the haze and disc checks. Full gate GREEN on `339ba34`. |
+| 2026-09-26 | AC13 sitting 2 on `d36ad62`: all five answered; #127 (dawn dip) and #128 (disc positioning) filed for later. Full gate GREEN on `d36ad62`. |
