@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-24
+last_updated: 2026-09-26
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -1325,7 +1325,7 @@ development_status:
   # overruns; every --capture AC is vehicle-bound, since no devpod can open a window.
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.
-  8-3-master-of-time-and-the-skeleton-walks-in-3d: backlog
+  8-3-master-of-time-and-the-skeleton-walks-in-3d: ready-for-dev
   epic-8-retrospective: optional
 
   # ---- the gfx pass (epics 9 + 10, added to epics.md 2026-08-28) ----
