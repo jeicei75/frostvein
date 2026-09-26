@@ -161,6 +161,8 @@ fn send_speed(stream: &mut TcpStream, speed: protocol::Speed) {
         protocol::Speed::Paused => b"{\"type\":\"set_speed\",\"speed\":\"paused\"}\n".as_slice(),
         protocol::Speed::Normal => b"{\"type\":\"set_speed\",\"speed\":\"normal\"}\n".as_slice(),
         protocol::Speed::Fast => b"{\"type\":\"set_speed\",\"speed\":\"fast\"}\n".as_slice(),
+        protocol::Speed::Fast2x => b"{\"type\":\"set_speed\",\"speed\":\"fast2x\"}\n".as_slice(),
+        protocol::Speed::Fast4x => b"{\"type\":\"set_speed\",\"speed\":\"fast4x\"}\n".as_slice(),
     };
     stream.write_all(line).expect("speed command must write");
     stream.flush().expect("speed command must flush");

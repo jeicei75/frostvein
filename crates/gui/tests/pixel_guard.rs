@@ -271,9 +271,18 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     /// Measured on the guard's own flags (`--static-world --lights-steady --subdiv 4`), one fresh
     /// daemon per capture, FOUR same-build captures: LL 91/91/91/91, spread 0.
     /// AO's terrace darkening still clears its floor at 0.431 (floor 0.30).
-    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 91;
-    /// Outside the haze's reach, and unmoved by it -- see `CONTROL_OPEN_SNOW_LL_MEDIAN`.
-    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 93;
+    ///
+    /// RE-BASELINED 91 -> 55 (LR 93 -> 57) by 11.3's moon ruling (7,000 -> 750 lux, 2026-09-25):
+    /// the open snow darkened with the key, which is what the ruling asked for. Measured on the
+    /// guard's own run; darkening then read 0.561, still clear of 0.30. Two boot captures of that
+    /// build were `cmp`-identical, so the same-build spread is still 0.
+    ///
+    /// RE-BASELINED 55 -> 60 (LR 57 -> 59) by 11.3's night haze ruling (gain 14, 2026-09-26): the
+    /// haze now scatters the moon 14x and lifts open snow in BOTH windows, so LR is no longer
+    /// outside its reach. Measured on the full gate's own run of `b4a4b9d`; darkening 0.451.
+    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 60;
+    /// Was outside the haze's reach until the night gain -- see `CONTROL_OPEN_SNOW_LL_MEDIAN`.
+    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 59;
 
     // ONE DAEMON PER CAPTURE, and this is load-bearing for a delta. `--static-world` freezes the
     // world at whatever tick it has reached when the client connects, so a second capture against
@@ -463,9 +472,37 @@ fn bloom_lifts_the_camp_halo_without_brightening_open_snow() {
 
     // Only emitters and their halo may BRIGHTEN. These windows hold no emitter; bloom darkens them
     // by a level, which is the EnergyConserving signature, and the bar is that they do not rise.
+    // Measured with the haze OFF (Wolf, 2026-09-26): 11.3's 14x night haze lights the LL window,
+    // and bloom spread that veil into it, 59 -> 60, on every run. The lit haze is not an emitter
+    // this claim is about, so the pair removes it rather than loosening the bar.
+    let (on_clear, _width, _height) = Daemon::spawn().capture(
+        "bloom-on-haze-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "haze",
+        ],
+    );
+    let (off_clear, _width, _height) = Daemon::spawn().capture(
+        "bloom-off-haze-off",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--fx-off",
+            "bloom,haze",
+        ],
+    );
     for (name, rect) in [("LL", OPEN_SNOW_LL), ("LR", OPEN_SNOW_LR)] {
-        let on_snow = i32::from(rec601_median(&on, width, rect));
-        let off_snow = i32::from(rec601_median(&off, width, rect));
+        let on_snow = i32::from(rec601_median(&on_clear, width, rect));
+        let off_snow = i32::from(rec601_median(&off_clear, width, rect));
+        println!(
+            "AC4 pixel guard (Rec.601): open-snow {name} haze-off bloom-on={on_snow} bloom-off={off_snow}"
+        );
         assert!(
             on_snow <= off_snow,
             "bloom must not brighten emitter-free open snow: {name} median went {off_snow} -> {on_snow}"
@@ -852,7 +889,10 @@ fn switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing() {
     // all-on 101.1, all-off 13.2, a drop of ~87.9, against a same-build noise floor of 0.16.
     // 40.0 sits far above the noise and far below the signal, so it separates "the lights do
     // work" from "the toggles are inert" without pinning today's exposure.
-    const ALL_OFF_DROP_FLOOR: f32 = 40.0;
+    // LOWERED 40 -> 20 by 11.3's moon ruling (7,000 -> 750 lux, 2026-09-25): all-on fell to 49.9,
+    // all-off held 13.2, so the drop fell to 36.8. 20 keeps both properties: 125x the 0.16 noise,
+    // and 16.8 under the signal.
+    const ALL_OFF_DROP_FLOOR: f32 = 20.0;
     assert!(
         lit_mean - dark_mean > ALL_OFF_DROP_FLOOR,
         "switching every source off must visibly darken the frame: {lit_mean:.3} -> {dark_mean:.3} \
@@ -866,6 +906,54 @@ fn switching_every_light_off_darkens_the_frame_and_leaves_no_emitter_glowing() {
          all lights off there is still light emitter in the campfire's place\". A source owns a \
          point light AND a baked emissive face; switching only the light leaves the face lit, and \
          {warm} warm pixels is that defect returning."
+    );
+}
+
+/// AC9: the approved candidate A must turn the same frozen valley from moonlit to daylight.
+#[test]
+#[ignore = "renders real frames; scripts/gate.sh runs it in the full tier"]
+fn night_turns_into_day_on_the_rendered_frame() {
+    let night_daemon = Daemon::spawn();
+    let (night, width, height) = night_daemon.capture(
+        "clock-night",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--clock",
+            "22",
+        ],
+    );
+    drop(night_daemon);
+    let day_daemon = Daemon::spawn();
+    let (day, day_width, day_height) = day_daemon.capture(
+        "clock-noon",
+        &[
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--clock",
+            "12",
+        ],
+    );
+    assert_eq!((width, height), (day_width, day_height));
+    let night_ground = gui::capture::median_ground_luminance(&night, width as u32, height as u32);
+    let day_ground = gui::capture::median_ground_luminance(&day, width as u32, height as u32);
+    let sky = (60, 10, 460, 110);
+    let night_stars = rec601_lap_mean(&night, width, sky);
+    let day_stars = rec601_lap_mean(&day, width, sky);
+    println!(
+        "AC9 clock frame: ground {night_ground} -> {day_ground}; sky-stars {night_stars:.4} -> {day_stars:.4}"
+    );
+    assert!(
+        i16::from(day_ground) - i16::from(night_ground) > 10,
+        "noon ground must exceed night by more than 10: {night_ground} -> {day_ground}"
+    );
+    assert!(
+        day_stars <= 0.5 * night_stars,
+        "noon sky-stars must lose at least half their edge energy: {night_stars:.4} -> {day_stars:.4}"
     );
 }
 

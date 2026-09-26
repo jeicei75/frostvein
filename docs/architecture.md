@@ -213,7 +213,7 @@ must equal the sim's carve grid, or the dent drawn is not the dent dug.
 
 | Direction | Messages |
 | --- | --- |
-| client → daemon | `designate` (dig \| channel, rect) · `cancel_designation` (rect) · `place_stockpile` (rect) · `remove_stockpile` (rect) · `set_speed` (pause \| normal \| fast) · `save` · `load` · `quit` |
+| client → daemon | `designate` (dig \| channel, rect) · `cancel_designation` (rect) · `place_stockpile` (rect) · `remove_stockpile` (rect) · `set_speed` (paused \| normal \| fast \| fast2x \| fast4x) · `save` · `load` · `quit` |
 | daemon → client | `snapshot` (connect + after load: dims, tiles, entities, designations, zones, speed, tick) · `delta` (each iteration: dirty tiles + all small state) |
 
 ## Stack

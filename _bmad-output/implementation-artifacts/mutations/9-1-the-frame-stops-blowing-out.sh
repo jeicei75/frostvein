@@ -53,7 +53,7 @@ p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 old = '''    report(&format!(
         "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \\
          near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1} \\
-         resolution={width}x{height}",
+         resolution={width}x{height}{clock_note}",
         near_white * 100.0,
         blown_pool * 100.0
     ));
@@ -62,7 +62,7 @@ assert s.count(old) == 1
 new = '''    let report_line = format!(
         "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \\
          near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1} \\
-         resolution={width}x{height}",
+         resolution={width}x{height}{clock_note}",
         near_white * 100.0,
         blown_pool * 100.0
     );

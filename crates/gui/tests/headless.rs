@@ -11,6 +11,7 @@ const LANTERN_VISIBLE_INTENSITY_FLOOR: f32 = 1_000_000.0;
 
 use bevy::color::ColorToPacked;
 use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::light::NotShadowCaster;
 use bevy::time::TimeUpdateStrategy;
 use bevy::{
     MinimalPlugins,
@@ -2105,11 +2106,11 @@ fn atmosphere_entities_are_client_local_and_never_world_projected() {
         app.world_mut()
             .query::<(&Atmosphere, Option<&ClientLocal>, Option<&WorldProjected>)>();
     let entities = atmosphere.iter(app.world()).collect::<Vec<_>>();
-    // Stars + the aurora curtain + snowflakes. Pinned exactly: a count threshold would
+    // Stars + the aurora curtain + the moon and sun + snowflakes. Pinned exactly: a count threshold would
     // tolerate the marker being dropped from a whole class of atmosphere entity.
     assert_eq!(
         entities.len(),
-        STAR_COUNT + 1 + SNOWFLAKE_COUNT,
+        STAR_COUNT + 3 + SNOWFLAKE_COUNT,
         "the atmosphere spawn count is pinned"
     );
     assert!(
@@ -2972,8 +2973,17 @@ fn the_live_startup_scene_spawns_its_camera_lighting_and_atmosphere() {
             .query::<&Atmosphere>()
             .iter(app.world())
             .count(),
-        STAR_COUNT + SNOWFLAKE_COUNT + 1,
-        "setup_atmosphere did not spawn the full sky — stars, snow and the aurora curtain"
+        STAR_COUNT + SNOWFLAKE_COUNT + 3,
+        "setup_atmosphere did not spawn the full sky — stars, snow, the aurora curtain, moon and sun"
+    );
+    // 11.3 sitting: a star on the 650 m shell threw a shadow that swept the valley as the key moved.
+    assert_eq!(
+        app.world_mut()
+            .query_filtered::<(), (With<Atmosphere>, Without<NotShadowCaster>)>()
+            .iter(app.world())
+            .count(),
+        0,
+        "a sky object casts a shadow onto the world"
     );
 }
 

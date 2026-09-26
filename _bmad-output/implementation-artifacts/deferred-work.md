@@ -2276,3 +2276,45 @@ All LOW. Tags name the layer and severity.
   40 the camp window reads median 155, so it is no longer looking at the camp.
 - **`sprint-status.yaml` is stale** (accept LOW). `last_updated` is stale, and the 11-2 comment
   block still ends "ready to implement".
+
+## Deferred from: code review of 11-3-night-falls-day-breaks (2026-09-24)
+
+These are the LOW tail from run 1 on `d917314`. The two live findings that need a ruling are in
+the story, and one of them is also issue #125.
+
+- **Two sources for the key** (accept LOW). `lighting_at()` blends `directional` and
+  `directional_illuminance`, but nothing reads them (`crates/gui/src/appearance.rs:94-96`). The
+  key takes both only from `key_at`, and the two disagree between 05:00 and 07:00.
+- **A doc comment moved onto the wrong item** (accept LOW). `CaptureClock` was inserted between
+  `capture_after_frames` and its doc and lint comments (`crates/gui/src/capture.rs:934-943`), so
+  those comments now document the struct. A meaningless `too_many_arguments` allow also sits on it.
+- **A superseded row reads as D's** (accept + orchestrator LOW). In the Lights table
+  (`docs/tech-art-guidelines.md:61-65`), the day rows and the D row separate
+  `night_lighting().directional` from its "↳ before 10.8 (superseded)" row.
+- **AC5 is tested at two hours only** (accept LOW). ClearColor, fog and rim are compared at
+  12:00 and 22:00, never swept across hours on the live app.
+- **The AC6/AC7 tests are loose** (accept LOW). They call `current_hour()` on swapped resources,
+  and the unpinned test builds two apps. AC7's RED line `clock=22.1x` was never recorded
+  (`crates/gui/src/ingest.rs:2698`).
+- **`--lights-off` away from the boot hour** (accept LOW). It is untested; it is correct by
+  construction because there is a single writer (`crates/gui/src/ingest.rs:1811`).
+- **Key colour and direction while lit** (accept LOW). The AC4 sweep does not check their
+  continuity; they are constant or continuous by construction.
+- **Key swap at about 0.006 lux** (blind LOW). At 06:00 and 18:00 the colour and direction change
+  while the outgoing body still carries about 0.006 lux. That breaches AC4's "only while 0"
+  literally, but it cannot be seen (`crates/gui/src/atmosphere.rs:262`).
+- **`+` pressed twice before the echo** (edge LOW). The second press re-sends Normal, because
+  `step_speed` reads the echoed speed (`crates/gui/src/command.rs:225`). The TUI does the same
+  (`crates/tui/src/view.rs:484-491`).
+- **`--clock 23.9999999`** (edge LOW). It rounds to f32 24.0 and is rejected
+  (`crates/gui/src/ingest.rs:1096`).
+- **README speed line** (orchestrator LOW). "`+` steps Normal to Fast" omits Paused→Normal
+  (`README.md:182`).
+- **A stale sprint-status comment** (orchestrator LOW). The 11-3 block still reads "DEV STARTED
+  -> in-progress … sitting 1".
+- **An archive build's stamp is clean** (feature LOW, pre-existing). A `gui` built from a
+  `git archive` copy stamps `d917314` with no `-dirty`, so its stamp cannot vouch for its content.
+- **The predawn frames trip the capture value floor** (feature MED, deferred by Wolf 2026-09-24). Tracked in
+  **#125**, and the issue is the state. Between about 03:40 and 05:20 the ground median reads 51–54, against a
+  floor of 55. Wolf's reason for deferring: "settle it in #125 with the frames in hand; the seat never runs
+  the capture check."

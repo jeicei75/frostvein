@@ -308,6 +308,7 @@ fn blown_pool_range_failure_is_a_real_panic_not_a_successful_capture() {
             true,
             9,
             NEAR_FRAMING,
+            "",
         );
     }));
     std::panic::set_hook(previous);
@@ -356,6 +357,7 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
     app.add_plugins(MinimalPlugins)
         .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
         .insert_resource(SliceLevel::pinned(dims, 0))
+        .init_resource::<gui::clock::ClockPin>()
         .insert_resource(CaptureState::at_tick(
             PathBuf::from("unused.png"),
             4,
@@ -434,6 +436,7 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
         .add_plugins(MinimalPlugins)
         .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
         .insert_resource(SliceLevel::pinned(dims, 0))
+        .init_resource::<gui::clock::ClockPin>()
         .insert_resource(CaptureState::at_tick(
             PathBuf::from("unused.png"),
             1,
@@ -788,6 +791,7 @@ fn static_world_skips_the_motion_assertions_on_an_at_tick_capture() {
     app.add_plugins(MinimalPlugins)
         .insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()))
         .insert_resource(SliceLevel::pinned(dims, 0))
+        .init_resource::<gui::clock::ClockPin>()
         .insert_resource(CaptureState::at_tick(out.clone(), 8, 7, 3, false).with_static_world(true))
         .add_systems(Update, capture_after_frames);
     app.world_mut().spawn((TerrainTile([0, 0, 0]),));

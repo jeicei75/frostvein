@@ -64,9 +64,11 @@ PY
 mutation "plus at fast wraps to paused" tui speed_keys_follow_the_pinned_step_table_and_clamp <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = "            Speed::Fast => Action::Ignore,\n"
-assert old in s
-p.write_text(s.replace(old, "            Speed::Fast => command(Speed::Paused),\n", 1))
+# Re-pointed 2026-09-25 (11.3): the ladder now tops out at Fast4x, and `command` takes `state`
+# (the old payload did not compile, so it "killed" on a build error).
+old = "            Speed::Fast4x => Action::Ignore,\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "            Speed::Fast4x => command(state, Speed::Paused),\n"))
 PY
 
 mutation "space key is ignored" tui speed_keys_follow_the_pinned_step_table_and_clamp <<'PY'
@@ -78,7 +80,7 @@ old = '''        KeyCode::Char(' ') => command(
             state,
             match speed {
                 Speed::Paused => Speed::Normal,
-                Speed::Normal | Speed::Fast => Speed::Paused,
+                Speed::Normal | Speed::Fast | Speed::Fast2x | Speed::Fast4x => Speed::Paused,
             },
         ),
 '''
@@ -94,6 +96,8 @@ old = '''        let speed = match state.speed {
             Speed::Paused => "paused",
             Speed::Normal => "normal",
             Speed::Fast => "fast",
+            Speed::Fast2x => "fast2x",
+            Speed::Fast4x => "fast4x",
         };
 '''
 assert s.count(old) == 1

@@ -2,16 +2,17 @@ use bevy::{
     asset::RenderAssetUsages,
     color::ColorToPacked,
     image::{Image, ImageSampler},
+    light::NotShadowCaster,
     mesh::{Indices, PrimitiveTopology},
     prelude::{
         AlphaMode, Assets, Commands, Component, Cuboid, Mesh, Mesh3d, MeshMaterial3d, Query, Res,
-        ResMut, StandardMaterial, Time, Transform, Vec3,
+        ResMut, Resource, Sphere, StandardMaterial, Time, Transform, Vec3, Visibility,
     },
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 
 use crate::{
-    appearance::{night_lighting, snow_cap_color},
+    appearance::{moon_color, night_lighting, snow_cap_color, sun_color},
     camera::{BOOT_ASPECT_RATIO, BOOT_VERTICAL_FOV, CameraRig, boot_horizontal_forward},
     project::ClientLocal,
 };
@@ -23,6 +24,29 @@ pub struct Snowflake {
 
 #[derive(Component)]
 pub struct Atmosphere;
+
+#[derive(Resource)]
+pub struct AtmosphereMaterials {
+    pub star: bevy::prelude::Handle<StandardMaterial>,
+    pub aurora: bevy::prelude::Handle<StandardMaterial>,
+    pub moon: bevy::prelude::Handle<StandardMaterial>,
+}
+
+#[derive(Component)]
+pub struct Moon;
+
+#[derive(Component)]
+pub struct Sun;
+
+/// On both the sun and the moon: the one thing the clock writer queries.
+#[derive(Component)]
+pub struct SkyDisc;
+
+/// Between the aurora ring (600) and the star shell (650): the curtain hangs in front of the
+/// discs, and the discs hide the stars behind them.
+pub const DISC_DISTANCE: f32 = 640.0;
+/// About 2 degrees across, four times the real sun and moon, so they read at this camera's zoom.
+const DISC_RADIUS: f32 = 11.0;
 
 pub const CAMP_SURFACE_Y: f32 = 9.0;
 pub const CAMP_FOCUS: Vec3 = Vec3::new(64.0, CAMP_SURFACE_Y, -64.0);
@@ -216,14 +240,70 @@ pub fn snowflake_scale(index: usize) -> f32 {
 }
 
 pub fn sun_direction() -> Vec3 {
-    let azimuth = SUN_AZIMUTH_DEGREES.to_radians();
-    let elevation = SUN_ELEVATION_DEGREES.to_radians();
+    direction_from_angles(SUN_AZIMUTH_DEGREES, SUN_ELEVATION_DEGREES)
+}
+
+fn direction_from_angles(azimuth_degrees: f32, elevation_degrees: f32) -> Vec3 {
+    let azimuth = azimuth_degrees.to_radians();
+    let elevation = elevation_degrees.to_radians();
     let horizontal = elevation.cos();
     Vec3::new(
         azimuth.cos() * horizontal,
         -elevation.sin(),
         azimuth.sin() * horizontal,
     )
+}
+
+pub fn key_at(hour: f32) -> (Vec3, bevy::prelude::Color, f32) {
+    let night = night_lighting();
+    let (azimuth, elevation, color, budget) = if (6.0..18.0).contains(&hour) {
+        let phase = (hour - 6.0) / 12.0;
+        let elevation = 40.0 * (std::f32::consts::PI * phase).sin();
+        let day = crate::appearance::day_lighting();
+        (
+            SUN_AZIMUTH_DEGREES + 15.0 * (hour - 12.0),
+            elevation,
+            day.directional,
+            day.directional_illuminance,
+        )
+    } else {
+        let moon_hour = if hour < 6.0 { hour + 24.0 } else { hour };
+        let phase = (moon_hour - 18.0) / 12.0;
+        let boot_phase = (crate::clock::BOOT_HOUR - 18.0) / 12.0;
+        let sine = (std::f32::consts::PI * phase).sin();
+        let boot_sine = (std::f32::consts::PI * boot_phase).sin();
+        (
+            SUN_AZIMUTH_DEGREES + 15.0 * (moon_hour - crate::clock::BOOT_HOUR),
+            SUN_ELEVATION_DEGREES * (sine / boot_sine),
+            night.directional,
+            night.directional_illuminance,
+        )
+    };
+    let elevation = elevation.max(0.0);
+    let ramp_degrees = if (6.0..18.0).contains(&hour) {
+        25.0
+    } else {
+        10.0
+    };
+    let horizon = (elevation / ramp_degrees).clamp(0.0, 1.0);
+    let horizon = horizon * horizon * (3.0 - 2.0 * horizon);
+    (
+        direction_from_angles(azimuth, elevation),
+        color,
+        budget * horizon,
+    )
+}
+
+/// Where the disc hangs: back along the light the moon sends. `None` while the sun is the key.
+pub fn moon_position(hour: f32) -> Option<Vec3> {
+    (!(6.0..18.0).contains(&hour)).then(|| SKY_CENTRE - key_at(hour).0 * DISC_DISTANCE)
+}
+
+/// The sun's disc, the same way. `None` while the moon is the key.
+pub fn sun_position(hour: f32) -> Option<Vec3> {
+    (6.0..18.0)
+        .contains(&hour)
+        .then(|| SKY_CENTRE - key_at(hour).0 * DISC_DISTANCE)
 }
 
 /// The independent floor AC5 asks for: hand-written, deliberately NOT derived from
@@ -280,6 +360,17 @@ pub fn setup_atmosphere(
         cull_mode: None,
         ..Default::default()
     });
+    let moon = materials.add(StandardMaterial {
+        base_color: moon_color(),
+        unlit: true,
+        fog_enabled: false,
+        ..Default::default()
+    });
+    commands.insert_resource(AtmosphereMaterials {
+        star: star.clone(),
+        aurora: aurora.clone(),
+        moon: moon.clone(),
+    });
     // Cap colour, not terrain snow: a flake the same colour as the field it falls over is
     // invisible — settled snow is already the "brighter than terrain" table entry.
     let snow = materials.add(StandardMaterial {
@@ -288,6 +379,8 @@ pub fn setup_atmosphere(
         ..Default::default()
     });
 
+    // Nothing in the sky casts a shadow (Wolf, 11.3 sitting): once the key moves, a star on the
+    // 650 m shell sweeps its shadow across the valley far faster than any tree's.
     for (index, position) in star_positions().into_iter().enumerate() {
         commands.spawn((
             Mesh3d(cube.clone()),
@@ -295,6 +388,7 @@ pub fn setup_atmosphere(
             Transform::from_translation(position).with_scale(Vec3::splat(star_scale(index))),
             Atmosphere,
             ClientLocal,
+            NotShadowCaster,
         ));
     }
     commands.spawn((
@@ -303,6 +397,41 @@ pub fn setup_atmosphere(
         Transform::IDENTITY,
         Atmosphere,
         ClientLocal,
+        NotShadowCaster,
+    ));
+    // Placed at the boot hour; `update_clock_sky` moves both discs with the clock.
+    let disc = meshes.add(Sphere::new(DISC_RADIUS));
+    commands.spawn((
+        Mesh3d(disc.clone()),
+        MeshMaterial3d(moon),
+        Transform::from_translation(
+            moon_position(crate::clock::BOOT_HOUR).expect("the boot hour is a night hour"),
+        ),
+        // Explicit: the clock hides the disc by day, and only a render plugin would add this.
+        Visibility::default(),
+        Moon,
+        SkyDisc,
+        Atmosphere,
+        ClientLocal,
+        NotShadowCaster,
+    ));
+    // Unlit and unfaded: the sun is simply up from 06:00 to 18:00.
+    let sun = materials.add(StandardMaterial {
+        base_color: sun_color(),
+        unlit: true,
+        fog_enabled: false,
+        ..Default::default()
+    });
+    commands.spawn((
+        Mesh3d(disc),
+        MeshMaterial3d(sun),
+        Transform::from_translation(sun_position(12.0).expect("noon is a day hour")),
+        Visibility::Hidden,
+        Sun,
+        SkyDisc,
+        Atmosphere,
+        ClientLocal,
+        NotShadowCaster,
     ));
     for (index, position) in snowflake_positions().into_iter().enumerate() {
         commands.spawn((
@@ -314,6 +443,7 @@ pub fn setup_atmosphere(
             },
             Atmosphere,
             ClientLocal,
+            NotShadowCaster,
         ));
     }
 }
@@ -345,7 +475,7 @@ mod tests {
         APPROVED_DOWNWARD_FLOOR, AURORA_BOTTOM, AURORA_RADIUS, AURORA_TEXTURE_HEIGHT,
         AURORA_TEXTURE_WIDTH, AURORA_TOP, CAMP_FOCUS, SKY_CENTRE, SKYLINE_MAX, SNOWFLAKE_COUNT,
         SNOWFLAKE_DISC_RADIUS, STAR_COUNT, STAR_RADIUS, aurora_core, aurora_curtain_mesh,
-        aurora_gradient_pixels, inside_boot_frustum, snowflake_positions, snowflake_scale,
+        aurora_gradient_pixels, inside_boot_frustum, key_at, snowflake_positions, snowflake_scale,
         snowflake_speed, star_positions, star_scale, sun_direction,
     };
     use crate::appearance::night_lighting;
@@ -415,12 +545,49 @@ mod tests {
 
     #[test]
     fn the_approved_sun_lights_downward() {
-        let direction = sun_direction();
+        let direction = key_at(crate::clock::BOOT_HOUR).0;
         assert!(
             direction.y <= APPROVED_DOWNWARD_FLOOR,
             "sun must travel downward onto the valley; y={} exceeds the approved floor {APPROVED_DOWNWARD_FLOOR}",
             direction.y
         );
+    }
+
+    #[test]
+    fn key_arc_uses_the_approved_boot_direction_and_day_table() {
+        let (night_direction, night_color, night_lux) = key_at(crate::clock::BOOT_HOUR);
+        assert_eq!(night_direction, sun_direction());
+        assert_eq!(night_color, night_lighting().directional);
+        assert_eq!(night_lux, night_lighting().directional_illuminance);
+        let (noon_direction, noon_color, noon_lux) = key_at(12.0);
+        assert!(noon_direction.y < night_direction.y);
+        assert_eq!(noon_color, crate::appearance::day_lighting().directional);
+        assert_eq!(
+            noon_lux,
+            crate::appearance::day_lighting().directional_illuminance
+        );
+    }
+
+    #[test]
+    fn lit_key_never_points_up_or_jumps_in_illuminance() {
+        assert_eq!(key_at(6.0).2, 0.0, "both keys are dark at dawn");
+        assert_eq!(key_at(18.0).2, 0.0, "both keys are dark at dusk");
+        let mut previous = key_at(0.0).2;
+        let range = (crate::appearance::day_lighting().directional_illuminance
+            - crate::appearance::night_lighting().directional_illuminance)
+            .abs();
+        for step in 1..=2_400 {
+            let hour = step as f32 * 0.01;
+            let (direction, _, lux) = key_at(hour % 24.0);
+            if lux > 0.0 {
+                assert!(direction.y < 0.0, "lit key points up at hour {hour}");
+            }
+            assert!(
+                (lux - previous).abs() <= 0.02 * range,
+                "key illuminance jumps at hour {hour}: {previous} to {lux}"
+            );
+            previous = lux;
+        }
     }
 
     #[test]

@@ -46,7 +46,7 @@ cargo run -p tui -- 7999   # optional arg: the port simd is listening on
 | `<` / `>` | walk down / up one z-level |
 | arrows or `hjkl` | pan the camera |
 | `space` | pause / resume |
-| `+` / `-` | faster / slower (paused → normal → fast) |
+| `+` / `-` | faster / slower (paused → normal → fast → fast2x → fast4x) |
 | `d` / `c` | designate a dig / channel rectangle |
 | `p` | place a stockpile rectangle |
 | `x` | clear designations and stockpiles in a rectangle |
@@ -168,6 +168,9 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 # a headless capture of a FROZEN world -- restart simd as `simd 7451 --pause-at 120` first,
 # once per capture, or a client started by hand connects after tick 120 and is refused
 .\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--headless','--static-world','--lights-steady','--frames','160','--capture','D:\Workspace\frostvein\.bin\all.png')
+
+# pin noon while judging the approved day frame
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--clock','12')
 ```
 
 - **Write captures and logs under `.bin\`** with an absolute path. It is gitignored, so the checkout
@@ -176,6 +179,8 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 - `--frames` does not need scaling up on a fast GPU any more: the capture waits for its ticks.
 - Never write a vehicle step as `./target/release/gui ...` or a bare `gui.exe` — that skips the
   stamp check this launcher exists for.
+- In the gui, `+` steps Paused → Normal → Fast → Fast2x → Fast4x (a day in 40, 8, 4 and 2
+  minutes); `-` steps back. The TUI's `+` still changes the same daemon speed when it is open.
 
 ### Controls
 
@@ -192,6 +197,7 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | `Esc` | release the selection, or abort a designation |
 | `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
 | `space` | pause / resume the sim |
+| `+` / `-` (including numpad) | step the daemon speed Paused ↔ Normal ↔ Fast ↔ Fast2x ↔ Fast4x; end presses do nothing |
 | `F1` / `F2` | **Bevy's own** render debug overlay: cycle depth/normal, cycle its opacity |
 | `F3` | mark a frame in the perf log |
 | `F4` `F5` `F6` `F7` | toggle haze / depth of field / bloom / ambient occlusion — widest-acting first |
@@ -239,6 +245,7 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | --- | --- |
 | `--headless` | render to an offscreen texture instead of a window |
 | `--capture <path>` | save a PNG, validate its ranges, then exit |
+| `--clock <hour>` | pin the displayed hour (`0 ≤ hour < 24`); without it the clock follows the daemon tick, except every `--capture` defaults to a 22:00 pin |
 | `--frames N` / `--at-tick N` | when to capture |
 | `--camera <yaw,pitch,distance,fx,fy,fz>` | open at a framing; works interactively too |
 | `--distance <d>` | zoom only, capture only — mutually exclusive with `--camera`, which carries its own |

@@ -55,7 +55,7 @@ use client_core::Mirror;
 use protocol::{Delta, Dims, Snapshot};
 
 use crate::{
-    appearance::{light_properties, night_lighting},
+    appearance::{day_weight, light_properties, lighting_at, mix_color, night_lighting},
     atmosphere::{fall_snow, setup_atmosphere, sun_light_transform},
     blend::TickClock,
     camera::{BOOT_VERTICAL_FOV, CameraRig, camera_readout_line},
@@ -82,7 +82,10 @@ use crate::{
 
 const SNAPSHOT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
-const MESSAGE_QUEUE: usize = 16;
+// The frame drains this queue whole, so the gui absorbs at most MESSAGE_QUEUE x fps deltas a second.
+// At 16 a lavapipe gui (~2.5 fps) fell behind Fast4x's ~185 deltas/s and the daemon evicted it
+// SILENTLY 34 s in: the reader sat blocked on this queue and never reached the EOF (11.3).
+const MESSAGE_QUEUE: usize = 256;
 const DEFAULT_AT_TICK_FRAME_BUDGET: u32 = 1_500;
 
 /// Ruled 2026-09-21: non-physical f/0.05 makes the valley read as a miniature at this scale.
@@ -665,6 +668,13 @@ fn configure_client_app(
     // comments catalogue: with no `--lights-off` this inserts exactly `Default`, so the absent
     // flag and the present one take the SAME path and neither can rot while the other is tested.
     app.insert_resource(LightingToggles::with_off(&args.lights_off));
+    app.insert_resource(crate::clock::ClockPin(
+        args.clock
+            .or(args.capture.as_ref().map(|_| crate::clock::BOOT_HOUR)),
+    ));
+    if args.clock.is_some() {
+        app.insert_resource(crate::clock::ExplicitClock);
+    }
     app.insert_resource(EffectsOff::with_off(&args.fx_off));
     app.insert_resource(LightsSteady(args.lights_steady));
     app.insert_resource(crate::command::StaticWorld(args.static_world));
@@ -750,6 +760,8 @@ pub fn projection_systems(app: &mut App) {
     // `init_resource` is idempotent, so `client_systems` keeping its own call is not a conflict —
     // each builder now stands up what it registers.
     app.init_resource::<LightingToggles>();
+    app.init_resource::<crate::clock::ClockPin>();
+    app.init_resource::<crate::project::LastRimSky>();
     app.init_resource::<LightsSteady>();
     app.init_resource::<EffectsOff>();
     app.add_systems(
@@ -757,6 +769,10 @@ pub fn projection_systems(app: &mut App) {
         (apply_lighting_toggles, update_lighting_readout)
             .chain()
             .after(ProjectionSet),
+    );
+    app.add_systems(
+        PostUpdate,
+        (update_clock_sky, crate::project::update_rim_for_sky).chain(),
     );
 }
 
@@ -865,6 +881,9 @@ pub fn client_systems(app: &mut App) {
             crate::command::toggle_pause
                 .after(update_pick)
                 .before(send_commands),
+            crate::command::step_speed
+                .after(crate::command::toggle_pause)
+                .before(send_commands),
             // Before `send_commands`, so the hand-back reaches the socket on the frame the
             // exit is requested rather than never.
             crate::command::restore_speed_on_exit.before(send_commands),
@@ -924,6 +943,7 @@ fn overlay_config_on() -> FpsOverlayConfig {
 
 struct Args {
     port: u16,
+    clock: Option<f32>,
     capture: Option<PathBuf>,
     frames: u32,
     expect_work: bool,
@@ -1070,11 +1090,19 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut lights_steady = false;
     let mut assets = None;
     let mut perf_log = None;
+    let mut clock = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--capture" {
             let path = args.next().context("--capture requires a path")?;
             capture = Some(PathBuf::from(path));
+        } else if arg == "--clock" {
+            let value = args.next().context("--clock requires 0 <= hour < 24")?;
+            let hour = value.to_string_lossy().parse::<f32>().ok();
+            clock = Some(match hour {
+                Some(hour) if hour.is_finite() && (0.0..24.0).contains(&hour) => hour,
+                _ => bail!("--clock requires 0 <= hour < 24"),
+            });
         } else if arg == "--frames" {
             let value = args.next().context("--frames requires a positive count")?;
             frames = Some(
@@ -1240,6 +1268,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     }
     Ok(Args {
         port,
+        clock,
         capture,
         frames: frames.unwrap_or(DEFAULT_AT_TICK_FRAME_BUDGET),
         expect_work,
@@ -1550,6 +1579,7 @@ fn setup_fog_volume(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         FogVolume {
             density_factor: FOG_DENSITY_FACTOR,
             density_texture: Some(density_texture),
+            light_intensity: night_lighting().haze_light_intensity,
             ..Default::default()
         },
         Transform::from_xyz(64.0, 18.0, -64.0).with_scale(Vec3::new(160.0, 48.0, 160.0)),
@@ -1782,10 +1812,13 @@ fn sync_haze_light(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_lighting_toggles(
     toggles: Res<LightingToggles>,
+    mirror: Res<MirrorResource>,
+    pin: Res<crate::clock::ClockPin>,
     mut ambient: Query<&mut AmbientLight, With<Camera3d>>,
-    mut sun: Query<&mut DirectionalLight, With<SunLight>>,
+    mut sun: Query<(&mut DirectionalLight, &mut Transform), With<SunLight>>,
     mut points: Query<(
         &crate::project::ProjectedLight,
         &mut bevy::prelude::PointLight,
@@ -1793,19 +1826,24 @@ fn apply_lighting_toggles(
     assets: Option<Res<crate::project::ProjectionAssets>>,
     mut materials: Option<ResMut<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>>,
 ) {
+    let hour = crate::clock::current_hour(&mirror, &pin);
+    let (direction, color, illuminance) = crate::atmosphere::key_at(hour);
+    let lighting = lighting_at(hour);
     for mut light in &mut ambient {
         light.brightness = if toggles.enabled(LightSource::Ambient) {
-            night_lighting().ambient_brightness
+            lighting.ambient_brightness
         } else {
             0.0
         };
     }
-    for mut light in &mut sun {
+    for (mut light, mut transform) in &mut sun {
+        light.color = color;
         light.illuminance = if toggles.enabled(LightSource::Sun) {
-            night_lighting().directional_illuminance
+            illuminance
         } else {
             0.0
         };
+        *transform = Transform::from_translation(Vec3::ZERO).looking_to(direction, Vec3::Y);
     }
     for (kind, mut light) in &mut points {
         if !point_light_enabled(&toggles, kind.0) {
@@ -1827,6 +1865,112 @@ fn apply_lighting_toggles(
         } else {
             bevy::color::LinearRgba::BLACK
         };
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_clock_sky(
+    mirror: Res<MirrorResource>,
+    pin: Res<crate::clock::ClockPin>,
+    mut clear: Option<ResMut<ClearColor>>,
+    mut cameras: Query<
+        (
+            &mut AmbientLight,
+            &mut DistanceFog,
+            Option<&mut VolumetricFog>,
+        ),
+        With<Camera3d>,
+    >,
+    mut volumes: Query<&mut FogVolume>,
+    mut discs: Query<
+        (
+            &mut Transform,
+            &mut bevy::prelude::Visibility,
+            bevy::prelude::Has<crate::atmosphere::Moon>,
+        ),
+        With<crate::atmosphere::SkyDisc>,
+    >,
+    handles: Option<Res<crate::atmosphere::AtmosphereMaterials>>,
+    mut materials: Option<ResMut<Assets<bevy::prelude::StandardMaterial>>>,
+) {
+    let hour = crate::clock::current_hour(&mirror, &pin);
+    let lighting = lighting_at(hour);
+    if let Some(clear) = clear.as_deref_mut()
+        && clear.0 != lighting.sky
+    {
+        clear.0 = lighting.sky;
+    }
+    for (mut ambient, mut fog, haze) in &mut cameras {
+        if ambient.color != lighting.ambient {
+            ambient.color = lighting.ambient;
+        }
+        if fog.color != lighting.sky {
+            fog.color = lighting.sky;
+        }
+        if let Some(mut haze) = haze {
+            let intensity = 0.1 * lighting.ambient_brightness / 80.0;
+            if haze.ambient_color != lighting.ambient {
+                haze.ambient_color = lighting.ambient;
+            }
+            if haze.ambient_intensity != intensity {
+                haze.ambient_intensity = intensity;
+            }
+        }
+    }
+    for mut volume in &mut volumes {
+        if volume.light_intensity != lighting.haze_light_intensity {
+            volume.light_intensity = lighting.haze_light_intensity;
+        }
+    }
+    let moon_position = crate::atmosphere::moon_position(hour);
+    let sun_position = crate::atmosphere::sun_position(hour);
+    for (mut transform, mut visibility, is_moon) in &mut discs {
+        let position = if is_moon { moon_position } else { sun_position };
+        let wanted = if position.is_some() {
+            bevy::prelude::Visibility::Inherited
+        } else {
+            bevy::prelude::Visibility::Hidden
+        };
+        if *visibility != wanted {
+            *visibility = wanted;
+        }
+        if let Some(position) = position
+            && transform.translation != position
+        {
+            transform.translation = position;
+        }
+    }
+    let (Some(handles), Some(materials)) = (handles, materials.as_deref_mut()) else {
+        return;
+    };
+    let weight = day_weight(hour);
+    let star_color = if weight == 0.0 {
+        lighting.star
+    } else if weight == 1.0 {
+        lighting.sky
+    } else {
+        mix_color(night_lighting().star, lighting.sky, weight)
+    };
+    if materials
+        .get(&handles.star)
+        .is_some_and(|material| material.base_color != star_color)
+    {
+        materials.get_mut(&handles.star).unwrap().base_color = star_color;
+    }
+    // The moon fades into the sky exactly as the stars do.
+    let moon_color = mix_color(crate::appearance::moon_color(), lighting.sky, weight);
+    if materials
+        .get(&handles.moon)
+        .is_some_and(|material| material.base_color != moon_color)
+    {
+        materials.get_mut(&handles.moon).unwrap().base_color = moon_color;
+    }
+    let aurora_color = Color::srgba(1.0, 1.0, 1.0, 1.0 - weight);
+    if materials
+        .get(&handles.aurora)
+        .is_some_and(|material| material.base_color != aurora_color)
+    {
+        materials.get_mut(&handles.aurora).unwrap().base_color = aurora_color;
     }
 }
 
@@ -2580,6 +2724,114 @@ mod tests {
     }
 
     #[test]
+    fn clock_flag_accepts_hours_and_rejects_out_of_range_values() {
+        for (text, expected) in [("0", 0.0), ("12", 12.0), ("23.99", 23.99)] {
+            let args = super::parse_args_from(["--clock".into(), text.into()]).unwrap();
+            assert_eq!(
+                args.clock,
+                Some(expected),
+                "--clock {text} must be retained"
+            );
+        }
+        for text in ["24", "-1", "x"] {
+            let result = super::parse_args_from(["--clock".into(), text.into()]);
+            assert!(
+                result.is_err_and(|error| error.to_string().contains("0 <= hour < 24")),
+                "--clock {text} must name the allowed range"
+            );
+        }
+    }
+
+    #[test]
+    fn clock_pin_reaches_the_live_app_and_capture_defaults_to_boot() {
+        let (seat, _sender, _server) = configured_app(&[]);
+        assert_eq!(
+            seat.world()
+                .get_resource::<crate::clock::ClockPin>()
+                .map(|pin| pin.0),
+            Some(None),
+            "an unpinned seat must follow the daemon tick"
+        );
+        let (mut capture, _sender, _server) =
+            configured_app(&["--capture", "/tmp/clock-test.png", "--frames", "60"]);
+        assert_eq!(
+            capture
+                .world()
+                .get_resource::<crate::clock::ClockPin>()
+                .map(|pin| pin.0),
+            Some(Some(crate::clock::BOOT_HOUR)),
+            "a capture without --clock must pin the boot hour"
+        );
+        let (noon, _sender, _server) = configured_app(&["--clock", "12"]);
+        assert_eq!(
+            noon.world()
+                .get_resource::<crate::clock::ClockPin>()
+                .map(|pin| pin.0),
+            Some(Some(12.0)),
+            "--clock must reach the app resource"
+        );
+        let late_snapshot = Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 1_000,
+        };
+        capture
+            .world_mut()
+            .resource_mut::<super::MirrorResource>()
+            .0 = Mirror::from_snapshot(late_snapshot.clone()).unwrap();
+        assert_eq!(
+            crate::clock::current_hour(
+                capture.world().resource::<super::MirrorResource>(),
+                capture.world().resource::<crate::clock::ClockPin>()
+            ),
+            crate::clock::BOOT_HOUR,
+            "a running capture must stay at 22 after the wire advances 1,000 ticks"
+        );
+        let (late_capture, _sender, _server) = configured_app_with_snapshot(
+            &["--capture", "/tmp/clock-test.png", "--frames", "60"],
+            late_snapshot,
+        );
+        assert_eq!(
+            crate::clock::current_hour(
+                late_capture.world().resource::<super::MirrorResource>(),
+                late_capture.world().resource::<crate::clock::ClockPin>()
+            ),
+            crate::clock::BOOT_HOUR,
+            "a capture must hold the boot hour even when the wire tick is 1,000"
+        );
+    }
+
+    #[test]
+    fn an_unpinned_seat_follows_two_wire_snapshots_one_hour_apart() {
+        let snapshot = |tick| Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick,
+        };
+        let (early, _sender, _server) = configured_app_with_snapshot(&[], snapshot(0));
+        let (late, _sender, _server) = configured_app_with_snapshot(&[], snapshot(1_000));
+        let hour = |app: &App| {
+            crate::clock::current_hour(
+                app.world().resource::<super::MirrorResource>(),
+                app.world().resource::<crate::clock::ClockPin>(),
+            )
+        };
+        assert_eq!(hour(&late) - hour(&early), 1.0);
+    }
+
+    #[test]
     fn a_capture_carries_its_tree_accounting_whether_or_not_it_is_headless() {
         // `expected_cut_face` adds the tree meshes unconditionally, so if this resource is
         // missing the ACTUAL side never gains them and the cut-face assert reads 0 == 265. It
@@ -2848,6 +3100,84 @@ mod tests {
             read_one_command(&server),
             r#"{"type":"set_speed","speed":"paused"}"#,
             "without --static-world, Space must still pause the daemon"
+        );
+    }
+
+    #[test]
+    fn speed_keys_step_from_the_daemon_speed_and_ignore_the_ends() {
+        for (speed, key, expected) in [
+            (Speed::Paused, KeyCode::Equal, Some("normal")),
+            (Speed::Normal, KeyCode::NumpadAdd, Some("fast")),
+            (Speed::Fast, KeyCode::Equal, Some("fast2x")),
+            (Speed::Fast2x, KeyCode::NumpadAdd, Some("fast4x")),
+            (Speed::Fast4x, KeyCode::Equal, None),
+            (Speed::Fast4x, KeyCode::Minus, Some("fast2x")),
+            (Speed::Fast2x, KeyCode::NumpadSubtract, Some("fast")),
+            (Speed::Fast, KeyCode::Minus, Some("normal")),
+            (Speed::Normal, KeyCode::NumpadSubtract, Some("paused")),
+            (Speed::Paused, KeyCode::Minus, None),
+        ] {
+            let (mut app, _sender, server) =
+                configured_app_with_snapshot(&[], snapshot_at_tick(8, speed));
+            app.update();
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            app.update();
+            let actual = read_one_command(&server);
+            let expected = expected.map_or(String::new(), |speed| {
+                format!(r#"{{"type":"set_speed","speed":"{speed}"}}"#)
+            });
+            assert_eq!(actual, expected, "{key:?} from {speed:?}");
+        }
+    }
+
+    #[test]
+    fn speed_keys_refuse_static_world_and_space_uses_the_new_pause_state() {
+        let (mut frozen, _sender, server) =
+            configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
+        frozen.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused","at_tick":120}"#
+        );
+        frozen
+            .world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Equal);
+        frozen.update();
+        assert_eq!(
+            read_one_command(&server),
+            "",
+            "speed key must refuse --static-world"
+        );
+
+        let (mut seat, _sender, server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(8, Speed::Paused));
+        seat.update();
+        // The local flag must start in the same paused state that the daemon reported.
+        seat.world_mut()
+            .resource_mut::<crate::command::SimPaused>()
+            .0 = true;
+        seat.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Equal);
+        seat.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"normal"}"#
+        );
+        {
+            let mut keys = seat.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::Equal);
+            keys.clear();
+            keys.press(KeyCode::Space);
+        }
+        seat.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_speed","speed":"paused"}"#,
+            "Space after + must pause the newly running sim"
         );
     }
 
@@ -3359,6 +3689,10 @@ mod tests {
             (KeyCode::Comma, "slice down (ingest.rs)"),
             (KeyCode::Period, "slice up (ingest.rs)"),
             (KeyCode::Space, "pause / resume the sim (command.rs)"),
+            (KeyCode::Equal, "step speed faster (command.rs)"),
+            (KeyCode::NumpadAdd, "step speed faster (command.rs)"),
+            (KeyCode::Minus, "step speed slower (command.rs)"),
+            (KeyCode::NumpadSubtract, "step speed slower (command.rs)"),
             (KeyCode::KeyA, "yaw, held (camera_controls)"),
             (KeyCode::KeyD, "yaw, held (camera_controls)"),
             (KeyCode::KeyW, "pitch, held (camera_controls)"),
@@ -3671,7 +4005,7 @@ mod tests {
     /// `SUN_ELEVATION_DEGREES`, applied to the entity Bevy actually renders from.
     #[test]
     fn the_installed_sun_entity_aims_downward_onto_the_valley() {
-        let (mut app, _sender, _server) = configured_app(&[]);
+        let (mut app, _sender, _server) = configured_app(&["--clock", "22"]);
         app.update();
 
         let mut query = app
@@ -3696,6 +4030,245 @@ mod tests {
              floor {}",
             forward.y,
             crate::atmosphere::APPROVED_DOWNWARD_FLOOR
+        );
+    }
+
+    #[test]
+    fn clock_drives_the_installed_key_direction_color_and_illuminance() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let (light, transform) = app
+            .world_mut()
+            .query_filtered::<(&bevy::prelude::DirectionalLight, &bevy::prelude::Transform), With<super::SunLight>>()
+            .single(app.world())
+            .unwrap();
+        let (direction, color, lux) = crate::atmosphere::key_at(12.0);
+        assert!(
+            transform.forward().as_vec3().distance(direction) < 1e-6,
+            "installed key must aim along the clock direction"
+        );
+        assert_eq!(light.color, color);
+        assert_eq!(light.illuminance, lux);
+    }
+
+    #[test]
+    fn f8_restores_the_clock_key_at_noon() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let lux = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::DirectionalLight, With<super::SunLight>>()
+                .single(app.world())
+                .unwrap()
+                .illuminance
+        };
+        let press = |app: &mut App| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::F8);
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::F8);
+            keys.clear();
+        };
+        press(&mut app);
+        assert_eq!(lux(&mut app), 0.0);
+        press(&mut app);
+        assert_eq!(
+            lux(&mut app),
+            crate::appearance::day_lighting().directional_illuminance,
+            "F8-on must restore noon's key budget"
+        );
+    }
+
+    #[test]
+    fn noon_sky_and_distance_fog_share_the_day_colour() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let day = crate::appearance::day_lighting();
+        assert_eq!(
+            app.world().resource::<bevy::prelude::ClearColor>().0,
+            day.sky
+        );
+        let fog = app
+            .world_mut()
+            .query_filtered::<&super::DistanceFog, With<CameraRig>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(fog.color, day.sky);
+        let ambient = app
+            .world_mut()
+            .query_filtered::<&bevy::prelude::AmbientLight, With<CameraRig>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(ambient.color, day.ambient);
+        assert_eq!(ambient.brightness, day.ambient_brightness);
+    }
+
+    #[test]
+    fn noon_rim_materials_dissolve_toward_the_live_sky() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let assets = app.world().resource::<crate::project::ProjectionAssets>();
+        let materials = app
+            .world()
+            .resource::<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>();
+        let sky = app.world().resource::<bevy::prelude::ClearColor>().0;
+        for slot in &assets.terrain {
+            let rim = materials
+                .get(&slot[crate::appearance::RIM_LEVELS - 1])
+                .unwrap();
+            assert_eq!(rim.base_color, sky, "every rim target must be the live sky");
+        }
+        let (mut night, _sender, _server) = configured_app(&["--clock", "22"]);
+        night.update();
+        let assets = night.world().resource::<crate::project::ProjectionAssets>();
+        let materials = night
+            .world()
+            .resource::<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>();
+        let sky = night.world().resource::<bevy::prelude::ClearColor>().0;
+        for slot in &assets.terrain {
+            let rim = materials
+                .get(&slot[crate::appearance::RIM_LEVELS - 1])
+                .unwrap();
+            assert_eq!(
+                rim.base_color, sky,
+                "night rim target must equal the live sky exactly"
+            );
+        }
+    }
+
+    #[test]
+    fn noon_stars_and_aurora_fade_from_the_live_shared_materials() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let handles = app
+            .world()
+            .get_resource::<crate::atmosphere::AtmosphereMaterials>();
+        assert!(
+            handles.is_some(),
+            "star and aurora handles must reach the live app"
+        );
+        let handles = handles.unwrap();
+        let materials = app
+            .world()
+            .resource::<bevy::prelude::Assets<bevy::prelude::StandardMaterial>>();
+        assert_eq!(
+            materials.get(&handles.star).unwrap().base_color,
+            crate::appearance::day_lighting().sky
+        );
+        assert_eq!(
+            materials
+                .get(&handles.aurora)
+                .unwrap()
+                .base_color
+                .to_srgba()
+                .alpha,
+            0.0
+        );
+    }
+
+    #[test]
+    fn noon_haze_ambient_survives_f4_off_and_on() {
+        let (mut app, _sender, _server) = configured_app(&["--clock", "12"]);
+        app.update();
+        let day = crate::appearance::day_lighting();
+        let haze = |app: &mut App| {
+            let fog = app
+                .world_mut()
+                .query_filtered::<&super::VolumetricFog, With<CameraRig>>()
+                .single(app.world())
+                .unwrap();
+            (fog.ambient_color, fog.ambient_intensity)
+        };
+        assert_eq!(
+            haze(&mut app),
+            (day.ambient, 0.1 * day.ambient_brightness / 80.0)
+        );
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::F4);
+        app.update();
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&super::VolumetricFog, With<CameraRig>>()
+                .iter(app.world())
+                .count(),
+            0
+        );
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::F4);
+            keys.clear();
+        }
+        app.update();
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::F4);
+        app.update();
+        assert_eq!(
+            haze(&mut app),
+            (day.ambient, 0.1 * day.ambient_brightness / 80.0),
+            "F4-on must restore the clock's haze ambient"
+        );
+    }
+
+    /// The night gain and both sky discs follow the clock in the live app. Each disc is checked
+    /// against the key light the app actually installed, not against `moon_position`.
+    #[test]
+    fn the_clock_drives_the_haze_gain_and_the_sky_discs() {
+        let installed = |app: &mut App| {
+            let gain = app
+                .world_mut()
+                .query::<&super::FogVolume>()
+                .single(app.world())
+                .unwrap()
+                .light_intensity;
+            let key = app
+                .world_mut()
+                .query_filtered::<&bevy::prelude::Transform, With<super::SunLight>>()
+                .single(app.world())
+                .unwrap()
+                .forward()
+                .as_vec3();
+            let disc = |app: &mut App, moon: bool| {
+                let mut query = app.world_mut().query::<(
+                    &bevy::prelude::Transform,
+                    &bevy::prelude::Visibility,
+                    bevy::prelude::Has<crate::atmosphere::Moon>,
+                    bevy::prelude::Has<crate::atmosphere::Sun>,
+                )>();
+                let (transform, visibility, ..) = query
+                    .iter(app.world())
+                    .find(|(_, _, is_moon, is_sun)| if moon { *is_moon } else { *is_sun })
+                    .unwrap();
+                (transform.translation, *visibility)
+            };
+            (gain, key, disc(app, true), disc(app, false))
+        };
+        let (mut night, _night_sender, _night_server) = configured_app(&["--clock", "20"]);
+        night.update();
+        let (gain, key, (moon, moon_visibility), (_, sun_visibility)) = installed(&mut night);
+        assert_eq!(gain, 14.0, "the night haze scatters the moon 14x");
+        assert_eq!(moon_visibility, bevy::prelude::Visibility::Inherited);
+        assert_eq!(sun_visibility, bevy::prelude::Visibility::Hidden);
+        let expected = crate::atmosphere::SKY_CENTRE - key * 640.0;
+        assert!(
+            moon.distance(expected) < 0.01,
+            "the disc must hang back along the installed moonlight: {moon} vs {expected}"
+        );
+
+        // 09:00, not noon: the sun's spawn position is noon's, so only a moved disc passes here.
+        let (mut day, _day_sender, _day_server) = configured_app(&["--clock", "9"]);
+        day.update();
+        let (gain, key, (_, moon_visibility), (sun, sun_visibility)) = installed(&mut day);
+        assert_eq!(gain, 1.0, "the sun keeps 11.2's haze");
+        assert_eq!(moon_visibility, bevy::prelude::Visibility::Hidden);
+        assert_eq!(sun_visibility, bevy::prelude::Visibility::Inherited);
+        let expected = crate::atmosphere::SKY_CENTRE - key * 640.0;
+        assert!(
+            sun.distance(expected) < 0.01,
+            "the disc must hang back along the installed sunlight: {sun} vs {expected}"
         );
     }
 

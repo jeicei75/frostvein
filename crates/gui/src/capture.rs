@@ -594,7 +594,26 @@ const GROUND_WINDOW_Y: (f32, f32) = (0.50, 0.90);
 /// floor was built for is still caught. It does NOT admit ev100 12.0: that frame reads ~32, darker
 /// than the broken ambient-off frame, so no floor can both admit it and catch an ambient
 /// regression — the two requirements collide, and the exposure gave way, not the guard.
-pub const GROUND_LUMINANCE_FLOOR: u8 = 55;
+///
+/// LOWERED 55 -> 40 after Wolf's moon ruling at 11.3's vehicle sitting, 2026-09-25 (moon 7,000 ->
+/// 750 lux). The ruled night read 54 at boot and 50 at its darkest hour, so 55 tripped every hour
+/// from 19:00 to 05:00 (issue #125 was the first sighting). Measured at 750 lux, boot framing,
+/// `--subdiv 4 --frames 160`, fresh `simd --pause-at 120` each:
+///
+///   boot (22:00), FXAA on or off    54   <- FXAA no longer moves it
+///   darkest hour (04:30-05:00)      50   <- the binding genuine frame
+///   `--lights-off sun`              50   <- indistinguishable from predawn; see below
+///   `--lights-off ambient`          27   <- the worst genuine failure still to be caught
+///   round-4 capture (historic)      21
+///
+/// 40 clears ambient-off by 13 and the round-4 class by 19, and sits 10 under the darkest hour.
+/// It can NO LONGER see the key light: at 750 lux the moon moves this median ~4 levels, so a
+/// key-off night reads as predawn. That job belongs to AC2's byte-identity and to the rendered
+/// night-to-noon guard, not to this floor.
+///
+/// 11.3's night haze gain (14, 2026-09-26) lifted boot to 64. The other rows above predate it and
+/// were not re-measured; the floor's margin only grew.
+pub const GROUND_LUMINANCE_FLOOR: u8 = 40;
 
 /// The other end of AC9's discipline, added after the boot3 capture measured 156 against the
 /// artifact's 123: a field pushed toward white passes the floor as easily as a correct one.
@@ -935,11 +954,19 @@ pub struct ScriptedInput<'w> {
 // The capture instrument is one production system so its frame observations retain a single
 // ordering edge. Grouping unrelated ECS queries merely to satisfy this lint would hide that.
 #[allow(clippy::too_many_arguments)]
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct CaptureClock<'w> {
+    mirror: Res<'w, MirrorResource>,
+    pin: Res<'w, crate::clock::ClockPin>,
+    explicit: Option<Res<'w, crate::clock::ExplicitClock>>,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn capture_after_frames(
     mut commands: Commands,
     mut capture: ResMut<CaptureState>,
     slice: Res<SliceLevel>,
-    mirror: Res<MirrorResource>,
+    clock: CaptureClock,
     terrain: Query<&TerrainTile>,
     chunk_cells: Query<&TerrainChunkCells>,
     designations: Query<&ProjectedDesignation>,
@@ -953,6 +980,7 @@ pub fn capture_after_frames(
     static_world_pause: Option<Res<crate::command::StaticWorldPause>>,
     mut exit: MessageWriter<AppExit>,
 ) {
+    let mirror = &clock.mirror;
     if capture.requested || capture.failed {
         return;
     }
@@ -1184,6 +1212,7 @@ pub fn capture_after_frames(
                     .iter()
                     .next()
                     .map_or_else(|| "camera: unavailable".to_string(), camera_readout_line),
+                capture_clock_note(mirror, &clock.pin, clock.explicit.is_some()),
             ))
             .observe(exit_after_capture);
     }
@@ -1342,6 +1371,22 @@ fn exit_after_capture(_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit
     exit.write(AppExit::Success);
 }
 
+fn capture_clock_note(
+    mirror: &MirrorResource,
+    pin: &crate::clock::ClockPin,
+    explicit: bool,
+) -> String {
+    let source = if explicit {
+        "--clock"
+    } else {
+        "capture default"
+    };
+    format!(
+        " clock={:.2} ({source})",
+        crate::clock::current_hour(mirror, pin)
+    )
+}
+
 /// Writes the PNG and only THEN validates it, in one observer.
 ///
 /// The range check deliberately panics on a bad frame, which may end the process before an
@@ -1351,6 +1396,7 @@ fn save_then_validate(
     path: PathBuf,
     slice: SliceLevel,
     framing: String,
+    clock_note: String,
 ) -> impl FnMut(On<ScreenshotCaptured>) {
     move |event: On<ScreenshotCaptured>| {
         let bytes = event
@@ -1373,6 +1419,7 @@ fn save_then_validate(
                 range_band_applies(slice),
                 slice.level(),
                 &framing,
+                &clock_note,
             )
         });
     }
@@ -1460,6 +1507,7 @@ fn assert_calibrated_frame_shape(width: u32, height: u32) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn validate_capture_ranges(
     bytes: &[u8],
     format: TextureFormat,
@@ -1468,6 +1516,7 @@ pub fn validate_capture_ranges(
     band_applies: bool,
     level: i32,
     framing: &str,
+    clock_note: &str,
 ) {
     validate_capture_ranges_with_report(
         bytes,
@@ -1477,6 +1526,7 @@ pub fn validate_capture_ranges(
         band_applies,
         level,
         framing,
+        clock_note,
         |line| println!("{line}"),
     );
 }
@@ -1490,6 +1540,7 @@ fn validate_capture_ranges_with_report(
     band_applies: bool,
     level: i32,
     framing: &str,
+    clock_note: &str,
     mut report: impl FnMut(&str),
 ) {
     let pixels = decode_rgba8(bytes, format);
@@ -1502,7 +1553,7 @@ fn validate_capture_ranges_with_report(
     report(&format!(
         "capture range check: warm-lit pixels={warm} ground-median-luminance={ground} \
          near-white-area={:.4}% blown-pool={:.4}% p99-luminance={p99:.1} \
-         resolution={width}x{height}",
+         resolution={width}x{height}{clock_note}",
         near_white * 100.0,
         blown_pool * 100.0
     ));
@@ -1598,6 +1649,7 @@ mod tests {
                 true,
                 top.level(),
                 TEST_FRAMING,
+                "",
             );
         });
         let at_cut = std::panic::catch_unwind(|| {
@@ -1609,6 +1661,7 @@ mod tests {
                 false,
                 cut.level(),
                 TEST_FRAMING,
+                "",
             );
         });
         std::panic::set_hook(previous);
@@ -1785,6 +1838,7 @@ mod tests {
                 true,
                 9,
                 TEST_FRAMING,
+                "",
             );
         });
         let at_cut = std::panic::catch_unwind(|| {
@@ -1796,6 +1850,7 @@ mod tests {
                 false,
                 8,
                 TEST_FRAMING,
+                "",
             );
         });
         std::panic::set_hook(previous);
@@ -1835,6 +1890,7 @@ mod tests {
                 true,
                 9,
                 TEST_FRAMING,
+                "",
                 |line| {
                     // Latch, never assign: a second report line must not be able to clear this.
                     if line.contains("blown-pool=") && line.contains("p99-luminance=") {
@@ -1905,11 +1961,35 @@ mod tests {
             false,
             9,
             TEST_FRAMING,
+            " clock=12.00 (--clock)",
             |line| lines.push(line.to_string()),
         );
         assert!(
             lines.iter().any(|line| line.contains("resolution=64x64")),
             "the range check must name the frame shape it measured; got {lines:?}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.contains("clock=12.00 (--clock)")),
+            "the range check must name the rendered clock hour; got {lines:?}"
+        );
+    }
+
+    #[test]
+    fn capture_clock_note_names_the_rendered_hour_and_source() {
+        let mirror = crate::ingest::MirrorResource(mirror_with_dwarf_at(1));
+        assert_eq!(
+            capture_clock_note(&mirror, &crate::clock::ClockPin(Some(12.0)), true),
+            " clock=12.00 (--clock)"
+        );
+        assert_eq!(
+            capture_clock_note(
+                &mirror,
+                &crate::clock::ClockPin(Some(crate::clock::BOOT_HOUR)),
+                false
+            ),
+            " clock=22.00 (capture default)"
         );
     }
 

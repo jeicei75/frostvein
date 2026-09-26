@@ -5,6 +5,7 @@ pub mod atmosphere;
 pub mod blend;
 pub mod camera;
 pub mod capture;
+pub mod clock;
 pub mod command;
 pub mod designate;
 pub mod ingest;

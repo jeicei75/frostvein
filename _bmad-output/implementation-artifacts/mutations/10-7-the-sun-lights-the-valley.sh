@@ -3,22 +3,9 @@
 mutation "restore the shipped aurora_core aim" gui the_approved_sun_lights_downward <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/atmosphere.rs'); s = p.read_text()
-old = '''pub fn sun_direction() -> Vec3 {
-    let azimuth = SUN_AZIMUTH_DEGREES.to_radians();
-    let elevation = SUN_ELEVATION_DEGREES.to_radians();
-    let horizontal = elevation.cos();
-    Vec3::new(
-        azimuth.cos() * horizontal,
-        -elevation.sin(),
-        azimuth.sin() * horizontal,
-    )
-}
-'''
+old = '    direction_from_angles(SUN_AZIMUTH_DEGREES, SUN_ELEVATION_DEGREES)\n'
 assert s.count(old) == 1
-new = '''pub fn sun_direction() -> Vec3 {
-    (CAMP_FOCUS - aurora_core()).normalize()
-}
-'''
+new = '    (CAMP_FOCUS - aurora_core()).normalize()\n'
 p.write_text(s.replace(old, new))
 PY
 
@@ -44,14 +31,15 @@ mutation "make every lighting toggle inert after it flips" gui lighting_keys_cha
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '''        light.brightness = if toggles.enabled(LightSource::Ambient) {
-            night_lighting().ambient_brightness
+            lighting.ambient_brightness
         } else {
             0.0
         };
     }
-    for mut light in &mut sun {
+    for (mut light, mut transform) in &mut sun {
+        light.color = color;
         light.illuminance = if toggles.enabled(LightSource::Sun) {
-            night_lighting().directional_illuminance
+            illuminance
         } else {
             0.0
         };
@@ -59,8 +47,9 @@ old = '''        light.brightness = if toggles.enabled(LightSource::Ambient) {
 assert s.count(old) == 1
 new = '''        light.brightness = night_lighting().ambient_brightness;
     }
-    for mut light in &mut sun {
-        light.illuminance = night_lighting().directional_illuminance;
+    for (mut light, mut transform) in &mut sun {
+        light.color = color;
+        light.illuminance = illuminance;
 '''
 s = s.replace(old, new)
 # RE-ANCHORED 2026-09-03: the point-light branch moved to a named predicate when torches got
@@ -93,9 +82,9 @@ PY
 mutation "a light toggle flips its flag but changes nothing drawn" gui lighting_keys_change_the_live_scene_and_its_readout <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '    app.init_resource::<LightingToggles>();\n    app.init_resource::<LightsSteady>();\n    app.init_resource::<EffectsOff>();\n    app.add_systems(\n        Update,\n        (apply_lighting_toggles, update_lighting_readout)'
+old = '        (apply_lighting_toggles, update_lighting_readout)'
 assert s.count(old) == 1
-new = '    app.init_resource::<LightingToggles>();\n    app.init_resource::<LightsSteady>();\n    app.init_resource::<EffectsOff>();\n    app.add_systems(\n        Update,\n        (update_lighting_readout, update_lighting_readout)'
+new = '        (update_lighting_readout, update_lighting_readout)'
 p.write_text(s.replace(old, new))
 PY
 

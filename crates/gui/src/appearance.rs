@@ -18,7 +18,7 @@ pub struct EntityAppearance {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct NightLighting {
+pub struct LightTable {
     pub sky: Color,
     pub star: Color,
     pub ambient: Color,
@@ -28,6 +28,9 @@ pub struct NightLighting {
     /// saturated green-blue light on blue materials is what turned the boot3 field electric.
     pub directional: Color,
     pub directional_illuminance: f32,
+    /// `FogVolume::light_intensity`: how strongly the haze scatters the key. 11.2 tuned the haze
+    /// under a 7,000-lux moon; at 750 it went nearly inert, so night scatters the key harder.
+    pub haze_light_intensity: f32,
 }
 
 /// The light budget is set from MEASUREMENT, not estimate — twice now. Round 5 scaled the
@@ -37,16 +40,82 @@ pub struct NightLighting {
 /// ambient/directional tints multiplied onto already-blue materials). This table divides the
 /// budget the other way: a small desaturated ambient so shadow faces go genuinely dark, and a
 /// desaturated cool directional carrying most of the load so lit faces keep their modelling.
-pub fn night_lighting() -> NightLighting {
-    NightLighting {
+/// Wolf's pick from 5 / 9.33 / 14 (2026-09-26); 9.33 would have restored the 11.2 look exactly.
+const HAZE_NIGHT_LIGHT_INTENSITY: f32 = 14.0;
+
+pub fn night_lighting() -> LightTable {
+    LightTable {
         sky: Color::srgb_u8(5, 12, 28),
         star: Color::srgb_u8(173, 196, 220),
         ambient: Color::srgb_u8(108, 128, 170),
         ambient_brightness: 1_500.0,
         aurora: Color::srgb_u8(73, 157, 144),
         directional: Color::srgb_u8(178, 200, 240),
-        directional_illuminance: 7_000.0,
+        // 7,000 until 11.3's sitting: the moon read as a sun at 58% of noon. Wolf picked 750 (6%).
+        directional_illuminance: 750.0,
+        haze_light_intensity: HAZE_NIGHT_LIGHT_INTENSITY,
     }
+}
+
+pub fn day_lighting() -> LightTable {
+    LightTable {
+        sky: Color::srgb_u8(110, 155, 205),
+        star: night_lighting().star,
+        ambient: Color::srgb_u8(190, 210, 235),
+        ambient_brightness: 4_000.0,
+        aurora: night_lighting().aurora,
+        directional: Color::srgb_u8(255, 244, 228),
+        directional_illuminance: 12_000.0,
+        haze_light_intensity: 1.0,
+    }
+}
+
+pub fn day_weight(hour: f32) -> f32 {
+    let linear = if (5.0..7.0).contains(&hour) {
+        (hour - 5.0) / 2.0
+    } else if (7.0..17.0).contains(&hour) {
+        1.0
+    } else if (17.0..19.0).contains(&hour) {
+        (19.0 - hour) / 2.0
+    } else {
+        0.0
+    };
+    linear * linear * (3.0 - 2.0 * linear)
+}
+
+pub fn lighting_at(hour: f32) -> LightTable {
+    let weight = day_weight(hour);
+    let night = night_lighting();
+    if weight == 0.0 {
+        return night;
+    }
+    let day = day_lighting();
+    if weight == 1.0 {
+        return day;
+    }
+    LightTable {
+        sky: mix_color(night.sky, day.sky, weight),
+        star: night.star,
+        ambient: mix_color(night.ambient, day.ambient, weight),
+        ambient_brightness: night.ambient_brightness
+            + (day.ambient_brightness - night.ambient_brightness) * weight,
+        aurora: night.aurora,
+        directional: mix_color(night.directional, day.directional, weight),
+        directional_illuminance: night.directional_illuminance
+            + (day.directional_illuminance - night.directional_illuminance) * weight,
+        haze_light_intensity: night.haze_light_intensity
+            + (day.haze_light_intensity - night.haze_light_intensity) * weight,
+    }
+}
+
+pub(crate) fn mix_color(from: Color, to: Color, weight: f32) -> Color {
+    let from = from.to_srgba();
+    let to = to.to_srgba();
+    Color::srgb(
+        from.red + (to.red - from.red) * weight,
+        from.green + (to.green - from.green) * weight,
+        from.blue + (to.blue - from.blue) * weight,
+    )
 }
 
 pub fn light_properties(kind: LightKind) -> LightProperties {
@@ -247,6 +316,16 @@ pub fn material_color(material: Material) -> Color {
 /// Trimmed ~8% at round 7: at the boot pitch the caps dominate the visible area, so the
 /// field's measured brightness tracks THIS albedo more than the light table — boot4 proved
 /// the light lever weak (a 2.6x ambient cut moved the field only 7%).
+/// The sun disc: near-white, a touch warm. Plain for now (Wolf: "we can tune later on").
+pub fn sun_color() -> Color {
+    Color::srgb_u8(255, 248, 230)
+}
+
+/// The moon disc: near-white, a touch cold. Unlit, so this is what the camera sees.
+pub fn moon_color() -> Color {
+    Color::srgb_u8(236, 240, 250)
+}
+
 pub fn snow_cap_color() -> Color {
     Color::srgb_u8(146, 158, 184)
 }
@@ -277,10 +356,17 @@ pub const RIM_LEVELS: usize = 13;
 /// terrain cubes while the simulation census remains 44,984 exposed cells.
 /// What must never change is the rim's own behaviour — colour only, no tiles removed.
 pub fn rim_dissolved_color(base: Color, level: usize) -> Color {
+    rim_dissolved_color_at(base, level, night_lighting().sky)
+}
+
+pub fn rim_dissolved_color_at(base: Color, level: usize, sky: Color) -> Color {
+    if level >= RIM_LEVELS - 1 {
+        return sky;
+    }
     let steps = (RIM_LEVELS - 1) as f32;
     let blend = (level.min(RIM_LEVELS - 1) as f32 / steps).clamp(0.0, 1.0);
     let base = base.to_srgba();
-    let sky = night_lighting().sky.to_srgba();
+    let sky = sky.to_srgba();
     Color::srgb(
         base.red + (sky.red - base.red) * blend,
         base.green + (sky.green - base.green) * blend,
@@ -321,10 +407,81 @@ mod tests {
     use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
     use super::{
-        RIM_LEVELS, designation_color, entity_appearance, foliage_snow_color,
-        hover_highlight_color, light_properties, material_color, night_lighting,
-        rim_dissolved_color, snow_cap_color, zone_color,
+        RIM_LEVELS, day_lighting, day_weight, designation_color, entity_appearance,
+        foliage_snow_color, hover_highlight_color, light_properties, lighting_at, material_color,
+        night_lighting, rim_dissolved_color, snow_cap_color, zone_color,
     };
+
+    #[test]
+    fn hourly_light_table_keeps_night_exact_and_reaches_the_approved_day() {
+        let night = night_lighting();
+        let day = day_lighting();
+        assert_eq!(day_weight(22.0), 0.0);
+        assert_eq!(day_weight(12.0), 1.0);
+        assert!(day_weight(5.5) > 0.0 && day_weight(5.5) < 1.0);
+        assert_eq!(lighting_at(22.0).sky, night.sky);
+        assert_eq!(lighting_at(22.0).ambient, night.ambient);
+        assert_eq!(
+            lighting_at(22.0).ambient_brightness,
+            night.ambient_brightness
+        );
+        assert_eq!(lighting_at(12.0).sky, day.sky);
+        assert_eq!(lighting_at(12.0).ambient, day.ambient);
+        assert_eq!(lighting_at(12.0).ambient_brightness, day.ambient_brightness);
+    }
+
+    #[test]
+    fn sky_and_ambient_change_smoothly_over_each_hundredth_hour() {
+        let night = night_lighting();
+        let day = day_lighting();
+        assert_ne!(
+            lighting_at(5.5).sky,
+            night.sky,
+            "the dawn sweep must contain a real sky change"
+        );
+        let mut previous = lighting_at(0.0);
+        let mut previous_weight = day_weight(0.0);
+        for step in 1..=2_400 {
+            let hour = step as f32 * 0.01;
+            let current = lighting_at(hour % 24.0);
+            let weight = day_weight(hour % 24.0);
+            assert!(
+                (weight - previous_weight).abs() <= 0.02,
+                "star and aurora fade jumps at hour {hour}"
+            );
+            for (before, after, low, high) in [
+                (previous.sky, current.sky, night.sky, day.sky),
+                (
+                    previous.ambient,
+                    current.ambient,
+                    night.ambient,
+                    day.ambient,
+                ),
+            ] {
+                let before = before.to_srgba();
+                let after = after.to_srgba();
+                let low = low.to_srgba();
+                let high = high.to_srgba();
+                for (a, b, n, d) in [
+                    (before.red, after.red, low.red, high.red),
+                    (before.green, after.green, low.green, high.green),
+                    (before.blue, after.blue, low.blue, high.blue),
+                ] {
+                    assert!(
+                        (a - b).abs() <= 0.02 * (n - d).abs() + f32::EPSILON,
+                        "sky or ambient jumps at hour {hour}: {a} to {b}"
+                    );
+                }
+            }
+            assert!(
+                (current.ambient_brightness - previous.ambient_brightness).abs()
+                    <= 0.02 * (day.ambient_brightness - night.ambient_brightness).abs(),
+                "ambient brightness jumps at hour {hour}"
+            );
+            previous = current;
+            previous_weight = weight;
+        }
+    }
 
     #[test]
     fn appearance_tables_pin_the_cold_boot_palette() {
@@ -427,7 +584,20 @@ mod tests {
             [73, 157, 144]
         );
         assert_eq!(lighting.ambient_brightness, 1_500.0);
-        assert_eq!(lighting.directional_illuminance, 7_000.0);
+        assert_eq!(lighting.directional_illuminance, 750.0);
+
+        let day = day_lighting();
+        assert_eq!(day.sky.to_srgba().to_u8_array_no_alpha(), [110, 155, 205]);
+        assert_eq!(
+            day.ambient.to_srgba().to_u8_array_no_alpha(),
+            [190, 210, 235]
+        );
+        assert_eq!(day.ambient_brightness, 4_000.0);
+        assert_eq!(
+            day.directional.to_srgba().to_u8_array_no_alpha(),
+            [255, 244, 228]
+        );
+        assert_eq!(day.directional_illuminance, 12_000.0);
 
         let entities = [
             (EntityKind::Dwarf, [151, 116, 96], 0.75),
@@ -598,8 +768,10 @@ mod tests {
 
         // The approved table changes both addends of cold fill (4,500 + 22,000 -> 1,500 +
         // 7,000), so the old 2.93 ratio is no longer the expectation; 14M at the unchanged
-        // 1.40 peak yields 5.10.
-        const APPROVED_RATIO: f32 = 5.097_119;
+        // 1.40 peak yields 5.10. 11.3's sitting then moved the moon 7,000 -> 750 lux (cold fill
+        // 2,250), so the SAME campfire now reads 19.26. The field darkened; the camp did not
+        // brighten: the capture's blown pool read 0.3569% at 750 against 0.3637% at 7,000.
+        const APPROVED_RATIO: f32 = 19.255_783;
         assert!((ratio - APPROVED_RATIO).abs() < 0.000_1, "ratio {ratio}");
 
         // The band above is a broad sanity range and, on its own, STILL would not have caught
@@ -619,8 +791,10 @@ mod tests {
             ratio >= 1.2,
             "the campfire must lift its six-unit neighbourhood above the cold fill; ratio {ratio}"
         );
+        // The ceiling keeps the 18% headroom the 6.0 ceiling had over 5.10. It is a lux proxy;
+        // blow-out itself is pinned by `APPROVED_PEAK` above and by the capture's blown-pool band.
         assert!(
-            ratio <= 6.0,
+            ratio <= 22.7,
             "the campfire must not blow the camp to white — only emissive approaches white (AC9); ratio {ratio}"
         );
     }

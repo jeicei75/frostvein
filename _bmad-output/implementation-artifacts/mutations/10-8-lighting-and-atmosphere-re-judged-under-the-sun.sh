@@ -50,7 +50,7 @@ PY
 mutation "restore the shipped directional illuminance" gui appearance_tables_pin_the_cold_boot_palette <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/appearance.rs'); s = p.read_text()
-old = 'directional_illuminance: 7_000.0,'
+old = 'directional_illuminance: 750.0,'  # re-pointed 2026-09-25: 11.3 moved the moon 7,000 -> 750
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'directional_illuminance: 22_000.0,'))
 PY

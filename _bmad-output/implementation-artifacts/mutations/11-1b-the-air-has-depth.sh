@@ -130,9 +130,9 @@ PY
 mutation "Space resumes a --static-world run" gui space_cannot_resume_a_static_world_run <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/command.rs'); s = p.read_text()
-old = '    if static_world.0 {\n        eprintln!("sim stays PAUSED: --static-world holds the world frozen for the whole run");\n        return;\n    }\n'
+old = '    if static_world.0 {\n        eprintln!("sim stays PAUSED: --static-world holds the world frozen for the whole run");\n        return;\n    }\n    paused.0 = !paused.0;\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '    paused.0 = !paused.0;\n'))
 PY
 
 mutation "a --static-world run never hands the daemon back" gui a_static_world_run_hands_the_daemon_back_at_normal <<'PY'
