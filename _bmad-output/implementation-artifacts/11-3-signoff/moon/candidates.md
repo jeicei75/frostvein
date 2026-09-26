@@ -30,10 +30,35 @@ and m750 6%.
 
 ## Picked: m750 (Wolf, 2026-09-25, *"1 750"*)
 
-The new approved night is `approved-night-750-8d16616.png`: boot, the same as `--clock 22`, two boots
+The approved night was `approved-night-750-8d16616.png` (now `superseded-night-750-no-haze-8d16616.png`, see below): boot, the same as `--clock 22`, two boots
 `cmp`-identical, ground median 54.
 
 **The haze is now nearly inert at night.** `haze-on-off-750-8d16616.png` (top: haze on; bottom:
 haze off). The haze's lift came from scattering the key light, and the key is now 9× dimmer. The
 11.2 guard reads the far-ridge median 46 → 43 with haze on (it *darkens*; the bar is a rise of ≥10)
 and a contrast fall of 7.9% (the bar is ≥15%). Ground median: 54 with haze on, 59 with it off.
+
+## Night haze gain: picked 14 (Wolf, 2026-09-26, *"1 14"*)
+
+Wolf's intent: *"whole scene could be darker like in 750 but ofc Moon is in real life bright and
+have visible lightbeam ... haze needs to still be visible during nights"*. So the key stays at 750,
+and the haze alone scatters it harder: `FogVolume::light_intensity` follows the hourly table, 14 at
+night and 1.0 by day (11.2's haze). Density, ramp and volume are untouched.
+
+`haze-night-gain-sheet-9e9f6d8-plus-gain.png` (haze off / 5 / 9.33 / 14). Night haze guard, far
+ridge median and contrast fall: gain 5 46 → 53, 19.8% (fails the +10 bar); 9.33 46 → 61, 26.5%
+(the 11.2 strength exactly, 7,000/750); **14: 46 → 69, 31.7%**. Sky and stars are unchanged at every gain.
+
+**The new approved night is `approved-night-750-haze14-b4a4b9d.png`:** boot, `cmp`-identical to
+`--clock 22`. **Ground median 64** (54 without the gain, 69 on the old 7,000-lux night): the veil
+lifts the median most of the way back, while the lit surfaces stay at 750.
+
+**Moon disc (Wolf: *"2 yes"*).** An unlit sphere about 2° across, 640 m back along the installed
+moonlight. It is hidden by day and fades with the sky like the stars. At boot it sits above the
+frame. `moon-disc-and-shafts-2000-b4a4b9d.png` is 20:00 from 200 m out (top: haze on, showing the
+shafts under the ridge; bottom: haze off).
+
+**Box outline lines (#120, commented).** From outside the volume, the box's edges draw bright
+lines, and the gain makes them much stronger. A side-wall density fade did not move them (135/140
+luma with or without it, 13/14 with haze off), so it was reverted; see
+`box-edge-side-fade-no-effect.png` (top: before, bottom: with the fade).
