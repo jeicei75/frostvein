@@ -47,9 +47,10 @@ p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 # registration, where it carries the ordering edges that keep it reading a rig this frame's
 # systems have already written. The row still drops camera_controls out of the update tuple and
 # nothing else.
-old = '            camera_controls,\n            light_controls,'
+# RE-ANCHORED 2026-09-26 (story 8.3): toggle_hud now follows camera_controls in the tuple.
+old = '            camera_controls,\n            toggle_hud,'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            light_controls,'))
+p.write_text(s.replace(old, '            toggle_hud,'))
 PY
 
 mutation "fog stops following the camera" gui fog_follows_the_camera_rig_every_frame <<'PY'

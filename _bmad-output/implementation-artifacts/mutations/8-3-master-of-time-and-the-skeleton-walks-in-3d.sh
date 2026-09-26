@@ -87,3 +87,67 @@ old = '    if expect_haul && capture.is_none() {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    if false && expect_haul && capture.is_none() {\n'))
 PY
+
+mutation "the clock readout never follows the wire" gui the_live_clock_readout_follows_the_daemons_tick_and_speed <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        .add_systems(Update, update_clock_readout.after(ProjectionSet));\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ';\n'))
+PY
+
+mutation "elapsed forgets whole days" gui the_clock_readout_names_the_hour_the_elapsed_sim_time_and_the_speed <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    let elapsed = tick * 60 / crate::clock::TICKS_PER_HOUR as u64;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let elapsed = (tick % crate::clock::TICKS_PER_DAY) * 60 / crate::clock::TICKS_PER_HOUR as u64;\n'))
+PY
+
+mutation "the readout names the wrong speed" gui the_clock_readout_names_the_hour_the_elapsed_sim_time_and_the_speed <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        protocol::Speed::Fast4x => "fast4x",\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        protocol::Speed::Fast4x => "fast",\n'))
+PY
+
+mutation "H hides nothing" gui h_hides_and_shows_every_hud_text <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        *visibility = if *hidden {\n            bevy::prelude::Visibility::Hidden\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        *visibility = if *hidden {\n            bevy::prelude::Visibility::Inherited\n'))
+PY
+
+mutation "a second H cannot bring the HUD back" gui h_hides_and_shows_every_hud_text <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    *hidden = !*hidden;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    *hidden = true;\n'))
+PY
+
+mutation "H leaves the fps overlay on" gui h_hides_and_shows_every_hud_text <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        overlay.enabled = !*hidden;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "the hint escapes the HUD toggle" gui h_hides_and_shows_every_hud_text <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
+old = '        crate::ingest::Hud,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "the HUD toggle is never registered" gui h_hides_and_shows_every_hud_text <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '            toggle_hud,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY

@@ -75,6 +75,7 @@ pub fn setup_designate_hint(mut commands: Commands) {
         },
         GlobalZIndex(i32::MAX - 16),
         DesignateHint,
+        crate::ingest::Hud,
         ClientLocal,
     ));
 }

@@ -729,7 +729,14 @@ pub fn projection_systems(app: &mut App) {
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<TickClock>()
         .init_resource::<crate::project::DwarfHeadings>()
-        .add_systems(Startup, (setup_slice_readout, setup_lighting_readout))
+        .add_systems(
+            Startup,
+            (
+                setup_slice_readout,
+                setup_lighting_readout,
+                setup_clock_readout,
+            ),
+        )
         .add_systems(
             Update,
             (
@@ -752,7 +759,8 @@ pub fn projection_systems(app: &mut App) {
         // deleting both systems left the suite green — 6.1's untested-drive-line defect on the
         // half of the story the readout exists for. It must read the level AFTER the keyboard has
         // written it, or the displayed level trails the cut by one frame.
-        .add_systems(Update, update_slice_readout.after(ProjectionSet));
+        .add_systems(Update, update_slice_readout.after(ProjectionSet))
+        .add_systems(Update, update_clock_readout.after(ProjectionSet));
     // The toggles resource is initialised HERE, beside the systems that READ it, not only in
     // `client_systems`. Registering a system in one app-builder while its resource is created in
     // another is the same defect this function's own doc comment describes: `crates/gui/tests/
@@ -824,6 +832,7 @@ pub fn client_systems(app: &mut App) {
         Update,
         (
             camera_controls,
+            toggle_hud,
             light_controls,
             effect_controls,
             sync_haze_light.after(effect_controls),
@@ -1650,6 +1659,104 @@ fn lighting_readout(toggles: &LightingToggles, effects_off: &EffectsOff) -> Stri
     entries.join("  ")
 }
 
+/// Every HUD text this client spawns. `H` hides them all, with the fps overlay.
+#[derive(Component)]
+pub struct Hud;
+
+#[derive(Component)]
+pub struct ClockReadout;
+
+/// 8.3 (Wolf): time of day, sim time elapsed, and the daemon's speed, in one line.
+///
+/// The hour is the RENDERED hour, so it follows a `--clock` pin; elapsed is the daemon tick, so a
+/// load rewinds it with the world.
+fn clock_readout(hour: f32, tick: u64, speed: protocol::Speed) -> String {
+    let minute_of_day = (hour * 60.0) as u64;
+    let elapsed = tick * 60 / crate::clock::TICKS_PER_HOUR as u64;
+    let speed = match speed {
+        protocol::Speed::Paused => "paused",
+        protocol::Speed::Normal => "normal",
+        protocol::Speed::Fast => "fast",
+        protocol::Speed::Fast2x => "fast2x",
+        protocol::Speed::Fast4x => "fast4x",
+    };
+    format!(
+        "{:02}:{:02}   elapsed {}d {:02}:{:02}   speed {speed}",
+        minute_of_day / 60 % 24,
+        minute_of_day % 60,
+        elapsed / (24 * 60),
+        elapsed / 60 % 24,
+        elapsed % 60,
+    )
+}
+
+fn setup_clock_readout(
+    mut commands: Commands,
+    mirror: Res<MirrorResource>,
+    pin: Res<crate::clock::ClockPin>,
+) {
+    commands.spawn((
+        Text::new(clock_readout(
+            crate::clock::current_hour(&mirror, &pin),
+            mirror.0.tick(),
+            mirror.0.speed(),
+        )),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::srgb(0.86, 0.91, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(16),
+            right: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        ClockReadout,
+        Hud,
+        ClientLocal,
+    ));
+}
+
+fn update_clock_readout(
+    mirror: Res<MirrorResource>,
+    pin: Res<crate::clock::ClockPin>,
+    mut readout: Query<&mut Text, With<ClockReadout>>,
+) {
+    let text = clock_readout(
+        crate::clock::current_hour(&mirror, &pin),
+        mirror.0.tick(),
+        mirror.0.speed(),
+    );
+    for mut readout in &mut readout {
+        if readout.0 != text {
+            readout.0.clone_from(&text);
+        }
+    }
+}
+
+/// `H` hides or shows the whole HUD: every `Hud` text and Bevy's fps overlay and graph.
+fn toggle_hud(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut hud: Query<&mut bevy::prelude::Visibility, With<Hud>>,
+    overlay: Option<ResMut<FpsOverlayConfig>>,
+    mut hidden: bevy::prelude::Local<bool>,
+) {
+    if !keys.just_pressed(KeyCode::KeyH) {
+        return;
+    }
+    *hidden = !*hidden;
+    for mut visibility in &mut hud {
+        *visibility = if *hidden {
+            bevy::prelude::Visibility::Hidden
+        } else {
+            bevy::prelude::Visibility::Inherited
+        };
+    }
+    if let Some(mut overlay) = overlay {
+        overlay.enabled = !*hidden;
+        overlay.frame_time_graph_config.enabled = !*hidden;
+    }
+}
+
 fn setup_lighting_readout(
     mut commands: Commands,
     toggles: Res<LightingToggles>,
@@ -1667,6 +1774,7 @@ fn setup_lighting_readout(
         },
         GlobalZIndex(i32::MAX - 16),
         LightingReadout,
+        Hud,
         ClientLocal,
     ));
 }
@@ -2014,6 +2122,7 @@ fn setup_slice_readout(
         // and is drawn underneath it, covering the level number itself.
         GlobalZIndex(i32::MAX - 16),
         SliceReadout,
+        Hud,
         ClientLocal,
     ));
 }
@@ -3150,6 +3259,82 @@ mod tests {
     }
 
     #[test]
+    fn the_clock_readout_names_the_hour_the_elapsed_sim_time_and_the_speed() {
+        assert_eq!(
+            super::clock_readout(22.0, 0, Speed::Normal),
+            "22:00   elapsed 0d 00:00   speed normal"
+        );
+        // Two days, three hours and fifteen minutes in: 22:00 + 3:15 wraps to 01:15.
+        let tick = 2 * crate::clock::TICKS_PER_DAY + 3_250;
+        assert_eq!(
+            super::clock_readout(crate::clock::hour_at(tick), tick, Speed::Fast4x),
+            "01:15   elapsed 2d 03:15   speed fast4x"
+        );
+    }
+
+    /// The readout must FOLLOW the wire: the snapshot lands after Startup has spawned the text.
+    #[test]
+    fn the_live_clock_readout_follows_the_daemons_tick_and_speed() {
+        let (mut app, _sender, _server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(3_250, Speed::Fast2x));
+        app.update();
+        app.update();
+        let text = app
+            .world_mut()
+            .query_filtered::<&Text, With<super::ClockReadout>>()
+            .single(app.world())
+            .unwrap()
+            .0
+            .clone();
+        assert_eq!(text, "01:15   elapsed 0d 03:15   speed fast2x");
+    }
+
+    #[test]
+    fn h_hides_and_shows_every_hud_text() {
+        let (mut app, _sender, _server) = configured_app(&[]);
+        app.update();
+        let visibilities = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&bevy::prelude::Visibility, With<super::Hud>>()
+                .iter(app.world())
+                .copied()
+                .collect::<Vec<_>>()
+        };
+        let press_h = |app: &mut App| {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::KeyH);
+            app.update();
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release_all();
+            keys.clear();
+        };
+        // Slice, lighting, clock and the designate hint.
+        assert_eq!(visibilities(&mut app).len(), 4);
+        press_h(&mut app);
+        assert!(
+            visibilities(&mut app)
+                .iter()
+                .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden),
+            "H must hide every HUD text"
+        );
+        let overlay = app.world().resource::<FpsOverlayConfig>();
+        assert!(
+            !overlay.enabled && !overlay.frame_time_graph_config.enabled,
+            "H must hide the fps overlay and its graph too"
+        );
+        press_h(&mut app);
+        assert!(
+            visibilities(&mut app)
+                .iter()
+                .all(|visibility| *visibility == bevy::prelude::Visibility::Inherited),
+            "a second H must bring the HUD back"
+        );
+        let overlay = app.world().resource::<FpsOverlayConfig>();
+        assert!(overlay.enabled && overlay.frame_time_graph_config.enabled);
+    }
+
+    #[test]
     fn ctrl_l_cannot_load_over_a_static_world_run() {
         let (mut app, _sender, server) =
             configured_app_with_snapshot(&["--static-world"], snapshot_at_tick(8, Speed::Normal));
@@ -3807,6 +3992,7 @@ mod tests {
                 "pitch, held; save with Ctrl (camera_controls, command.rs)",
             ),
             (KeyCode::KeyL, "load, with Ctrl (command.rs)"),
+            (KeyCode::KeyH, "hide / show the HUD (ingest.rs)"),
             (KeyCode::KeyE, "zoom, held (camera_controls)"),
             (KeyCode::KeyQ, "zoom, held (camera_controls)"),
             (
@@ -4851,6 +5037,7 @@ mod tests {
                     .readout(false, None)
             ),
             "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
+            "22:00   elapsed 0d 00:00   speed normal".to_string(),
             "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),
         ];
