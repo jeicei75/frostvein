@@ -3272,21 +3272,36 @@ mod tests {
         );
     }
 
-    /// The readout must FOLLOW the wire: the snapshot lands after Startup has spawned the text.
+    /// The readout must FOLLOW the wire. The connect snapshot is already in the mirror when Startup
+    /// spawns the text, so only a LATER delta proves the update system runs.
     #[test]
     fn the_live_clock_readout_follows_the_daemons_tick_and_speed() {
-        let (mut app, _sender, _server) =
+        let (mut app, sender, _server) =
             configured_app_with_snapshot(&[], snapshot_at_tick(3_250, Speed::Fast2x));
         app.update();
+        let readout = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&Text, With<super::ClockReadout>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone()
+        };
+        assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed fast2x");
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(Delta {
+                msg_type: MessageType::Delta,
+                tick: 3_251,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Paused,
+            }))))
+            .unwrap();
         app.update();
-        let text = app
-            .world_mut()
-            .query_filtered::<&Text, With<super::ClockReadout>>()
-            .single(app.world())
-            .unwrap()
-            .0
-            .clone();
-        assert_eq!(text, "01:15   elapsed 0d 03:15   speed fast2x");
+        assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed paused");
     }
 
     #[test]

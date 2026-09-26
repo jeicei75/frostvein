@@ -85,6 +85,15 @@ Most of 8.3's epic text is already true. This story builds only the gap.
       daemon; in the gui, `1` + drag a SMALL dig (2-3 tiles) beside a SMALL stockpile (`3`); `+` to
       Fast; watch a stone land on the pile in both clients; `Ctrl+S`; dig more; `Ctrl+L` → both snap
       back; then the two wow beats and the six words. Record Wolf's answers verbatim in the story.
+- [x] **Task 6 — Wolf's HUD tweaks (2026-09-26: *"1) time of the day 2) how long (sim time) sim has been
+      running 3 game speed 4 hud on/off (i mean all fps and hints and modes hidden/visible)"*).** `08406e5`.
+  - [x] A top-right readout `HH:MM   elapsed Nd HH:MM   speed <name>` (`ingest.rs` `clock_readout`). The hour
+        is the RENDERED hour (`clock::current_hour`, so it follows `--clock`), elapsed is the daemon tick (a
+        load rewinds it), and the speed is the daemon's own.
+  - [x] `H` hides or shows every `Hud`-marked text (slice, lighting, clock, designate hint) plus Bevy's fps
+        overlay and graph. `H` was unbound; it is added to the keymap guard.
+  - [x] Tests: format at two ticks; the live readout follows a snapshot that arrives after Startup; `H` hides
+        all 4 texts and the overlay, and a second `H` restores them. The wiring test pins the readout's boot text.
 - [x] **Task 5 — docs.** README `### Controls`: add `ctrl + S` / `ctrl + L` rows and the Ctrl camera
       rule. README flags list: `--expect-haul`.
 
@@ -196,3 +205,4 @@ claude-opus-5-5 (orchestrator implemented directly; no Codex delegation for this
 |---|---|
 | 2026-09-26 | Story created. Premises checked at `bfe27e4`: pause/speed/snap/two-client/daemon haul done; save/load keys, hint, gui haul instrument and seat sign-off remain. Quit premise corrected (window close, not `Command::Quit`). Haul observation measured via the daemon's snapshot: 0 → 7 on stockpile. |
 | 2026-09-26 | Dev: Tasks 1-3 and 5 built (`2d3f12d`); RED/GREEN recipe observed (0 → exit 101; 7 → exit 0); 12/12 mutations KILLED; vehicle card written. The seat sitting (AC6-7) is pending. |
+| 2026-09-26 | Task 6 (Wolf's HUD tweaks): clock/elapsed/speed readout and `H` HUD toggle (`08406e5`). The 7.1 and M2-1 mutation rows were re-anchored. |

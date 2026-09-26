@@ -23,6 +23,10 @@ PowerShell:
 `1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load`.
 Is all of it inside the window? (Captures hide the UI, so only the seat can check this.)
 
+**The new readout, top-right:** `22:00   elapsed 0d 00:00   speed normal` on a fresh daemon. Press `+` and
+watch the speed name change and the hour and elapsed time run faster. **Press `H`:** the fps overlay, the
+readouts and the hint all disappear; press `H` again and they all come back.
+
 ## 2. The walking skeleton, end to end (AC6)
 
 In the **gui**:
@@ -52,7 +56,8 @@ Restart for a clean boot: stop the gui, restart `simd 7451`, relaunch the gui.
 3. Is any of these true of this client: **ugly, flat, cluttered, confusing, lifeless, camera unusable?**
 
 ## Questions for Wolf
-1. Does the hint fit, and does it tell you the keys you need?
+1. Does the hint fit, and does it tell you the keys you need? Is the time / elapsed / speed readout right,
+   and does `H` hide and restore the whole HUD?
 2. Did the stone reach the stockpile, in both clients?
 3. Did `Ctrl+S` save (simd line) without moving the camera, and did `Ctrl+L` snap both clients back?
 4. Both wow beats: yes or no, each.
