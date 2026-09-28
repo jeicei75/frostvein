@@ -32,6 +32,91 @@ fn is_standable(world: &World, pos: Pos) -> bool {
 }
 
 #[test]
+fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let emitters: BTreeSet<Pos> = world.emitters().into_iter().map(|(_, p, _)| p).collect();
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(
+            Pos {
+                x: camp.x - 2,
+                y: camp.y - 2,
+                ..camp
+            },
+            Pos {
+                x: camp.x + 2,
+                y: camp.y + 2,
+                ..camp
+            },
+        ),
+    });
+    let emitter_zones: Vec<_> = world
+        .zones()
+        .into_iter()
+        .filter(|p| emitters.contains(p))
+        .collect();
+
+    let mut digs = Vec::new();
+    for y in camp.y - 7..=camp.y + 7 {
+        for x in camp.x - 7..=camp.x + 7 {
+            let pos = Pos { x, y, z: camp.z };
+            if matches!(world.tile(pos), Some(Tile::Solid(material)) if material != Material::TreeTrunk)
+                && [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+                    .into_iter()
+                    .any(|(nx, ny)| {
+                        is_standable(
+                            &world,
+                            Pos {
+                                x: nx,
+                                y: ny,
+                                z: camp.z,
+                            },
+                        )
+                    })
+            {
+                digs.push(pos);
+            }
+        }
+    }
+    digs.sort_by_key(|p| (p.x.abs_diff(camp.x) + p.y.abs_diff(camp.y), *p));
+    assert!(digs.len() >= 30, "only {} nearby digs", digs.len());
+    for pos in digs.into_iter().take(30) {
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(pos, pos),
+        });
+    }
+
+    let mut previous = world.carrying();
+    let mut pickups_after_full = 0;
+    let mut max_stones_on_emitter = 0;
+    for tick in 0..4_000 {
+        world.step();
+        let carrying = world.carrying();
+        if tick >= 2_000 {
+            pickups_after_full += previous
+                .iter()
+                .zip(&carrying)
+                .filter(|((_, before), (_, after))| before.is_none() && after.is_some())
+                .count();
+        }
+        previous = carrying;
+        max_stones_on_emitter = max_stones_on_emitter.max(
+            world
+                .items()
+                .iter()
+                .filter(|(_, pos)| emitters.contains(pos))
+                .count(),
+        );
+    }
+    assert_eq!(max_stones_on_emitter, 0, "stone on an emitter cell");
+    assert!(
+        emitter_zones.is_empty() && pickups_after_full == 0,
+        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2000: {pickups_after_full} (expected 0)"
+    );
+}
+
+#[test]
 fn idle_dwarves_stay_standable_and_inside_the_camp() {
     let mut world = World::generate(42, Dims::DEFAULT);
     let camp = world.camp_origin();

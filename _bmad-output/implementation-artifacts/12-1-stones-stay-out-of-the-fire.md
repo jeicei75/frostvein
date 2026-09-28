@@ -79,28 +79,28 @@ of the refusal.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — RED first (AC1, AC3).** Write the scenario test (skeleton below) in
+- [x] **Task 0 — RED first (AC1, AC3).** Write the scenario test (skeleton below) in
   `crates/sim-core/tests/scenario.rs` and run it on the unfixed code. Paste the failing assertion
   messages and the measured pick-up count into the Debug Log. The emitter-zone and the pick-up
   asserts must fail. The stone-on-emitter assert is expected to pass today; it is a regression
   guard, and the log says so. Record the AC1 finding in the Debug Log.
-- [ ] **Task 1 — sim-core: the filter and the refusal (AC2, AC4).**
-  - [ ] `Refusal` enum (NEW, `lib.rs` beside `SimCommand`):
+- [x] **Task 1 — sim-core: the filter and the refusal (AC2, AC4).**
+  - [x] `Refusal` enum (NEW, `lib.rs` beside `SimCommand`):
         `#[derive(Debug, Clone, Copy, PartialEq, Eq)] pub enum Refusal { PlaceStockpile { rect: Rect } }`.
-  - [ ] `apply_command(&mut self, command: SimCommand) -> Option<Refusal>`. It returns
+  - [x] `apply_command(&mut self, command: SimCommand) -> Option<Refusal>`. It returns
         **`Option`, not `Result`**: 58 call sites outside `lib.rs` ignore the return, and
         `Result` is `#[must_use]`, so `clippy -D warnings` would fail on every one of them.
-  - [ ] `PlaceStockpile` keeps a position only if `is_walkable(&terrain, &blocked, pos)`, the same
+  - [x] `PlaceStockpile` keeps a position only if `is_walkable(&terrain, &blocked, pos)`, the same
         predicate movement uses. Build `blocked` from the emitter positions (`blocked_cells` on
         `self.emitters()`). Zero kept → return `Some(Refusal::PlaceStockpile { rect })`, where `rect`
         is the command's rect as received. The out-of-bounds early return (`lib.rs:1391-1399`)
         returns that same refusal for `PlaceStockpile` and `None` for the other three commands.
-  - [ ] `work_positions` gains `blocked: &BTreeSet<Pos>`. The haul `free` set filters with
+  - [x] `work_positions` gains `blocked: &BTreeSet<Pos>`. The haul `free` set filters with
         `is_walkable(terrain, blocked, *pos)` instead of `terrain.is_standable(*pos)`. Both callers
         (`lib.rs:401`, `:836`) already hold `blocked`. Update the five unit-test calls
         (`lib.rs:2289-2312`) and add one unit test: zones `{fire}`, blocked `{fire}`, stone
         elsewhere → both legs empty. This is the old-save case.
-  - [ ] Unit tests: an all-emitter rect → `Some(refusal)` and zones unchanged; an all-rock rect →
+  - [x] Unit tests: an all-emitter rect → `Some(refusal)` and zones unchanged; an all-rock rect →
         `Some`; an off-map rect → `Some`; a 3×3 around the fire → `None` with 8 zones added;
         `Designate`/`Cancel`/`Remove` → `None`.
 - [ ] **Task 2 — protocol + simd: the wire (AC4, AC5).**
@@ -262,6 +262,8 @@ no `refused`. Restore it, and B shows it again. Exit 0 is not a result; the text
 
 ### Project Structure Notes
 
+- `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`
+- `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
 - `crates/sim-core/src/lib.rs`: UPDATE (`Refusal`, `apply_command`, `work_positions`, unit tests)
 - `crates/sim-core/tests/scenario.rs`: UPDATE (the red scenario test)
 - `crates/protocol/src/lib.rs`: UPDATE (`Refusal`, `Delta::refusals`, wire test)
@@ -285,14 +287,28 @@ no `refused`. Restore it, and B shows it again. Exit 0 is not a result; the text
 
 ### Agent Model Used
 
+gpt-6-sol
+
 ### Debug Log References
+
+- Task 0 RED on unfixed code: `zone on an emitter: [Pos { x: 64, y: 64, z: 9 }]; pick-ups after t=2000: 221 (expected 0)`. The stone-on-emitter assertion passed before this failure; maximum observed on an emitter was 0. This confirms #134's unreachable emitter-zone pickup/drop loop and beside-fire pile, not a stone entering the fire cell.
+- Task 0/1 GREEN: scenario, old-save haul unit test, and all-invalid/partial stockpile unit test passed with `cargo test --offline -p sim-core` targeted invocations.
 
 ### Completion Notes List
 
+- Task 0 and Task 1: exclude emitters from placed zones and haul goals; return typed refusal for empty stockpiles.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`
+- `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
+- `crates/sim-core/src/lib.rs`
+- `crates/sim-core/tests/scenario.rs`
+- `_bmad-output/implementation-artifacts/12-1-stones-stay-out-of-the-fire.md`
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-09-28 | Tasks 0–1: scenario RED recorded; emitter filtering and sim refusal GREEN. |
 | 2026-09-28 | Story created on `a96ab48`. #134 reproduced by a sim probe: never on the emitter cell; the emitter zone cell drives an endless pick-up/drop loop and stacks stones beside the fire. Refusal RED observed live in the tui. Refusal shape: typed `refusals` on the next delta. |

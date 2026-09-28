@@ -41,7 +41,7 @@ mutation "PlaceStockpile ignores is_standable" sim-core stockpile_keeps_exactly_
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''                    positions()
-                        .filter(|pos| terrain.is_standable(*pos))
+                        .filter(|pos| is_walkable(terrain, &blocked, *pos))
                         .collect()
 '''
 assert old in s

@@ -89,7 +89,7 @@ PY
 mutation "free stockpile tiles ignore standability" sim-core a_stockpile_tile_whose_floor_is_gone_is_never_a_delivery_target <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                .filter(|pos| terrain.is_standable(*pos) && !stored.contains(pos))\n'
+old = '                .filter(|pos| is_walkable(terrain, blocked, *pos) && !stored.contains(pos))\n'
 assert old in s
 p.write_text(s.replace(old, '                .filter(|pos| !stored.contains(pos))\n'))
 PY
@@ -97,9 +97,9 @@ PY
 mutation "free stockpile tiles ignore stored stones" sim-core a_full_stockpile_parks_the_haul_job_until_a_free_tile_appears <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                .filter(|pos| terrain.is_standable(*pos) && !stored.contains(pos))\n'
+old = '                .filter(|pos| is_walkable(terrain, blocked, *pos) && !stored.contains(pos))\n'
 assert old in s
-p.write_text(s.replace(old, '                .filter(|pos| terrain.is_standable(*pos))\n'))
+p.write_text(s.replace(old, '                .filter(|pos| is_walkable(terrain, blocked, *pos))\n'))
 PY
 
 mutation "the pick-up leg drops the free-tile gate" sim-core a_full_stockpile_parks_the_haul_job_until_a_free_tile_appears <<'PY'
