@@ -2940,5 +2940,25 @@
     "quota_last": 13.0,
     "schema": 2,
     "turns": 295
+  },
+  "rollout-2026-09-28T17-14-55-01a0e903-3018-7f63-b77c-bfa5ba207df9.jsonl": {
+    "by_model": {
+      "gpt-6-sol": {
+        "cache_creation": 0,
+        "cache_read": 40615680,
+        "input": 226107,
+        "output": 47095
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 40615680,
+    "input": 226107,
+    "last_ts": "2026-09-28T17:57:44.836Z",
+    "marked_at": null,
+    "output": 47095,
+    "primary_only": false,
+    "quota_last": 29.0,
+    "schema": 2,
+    "turns": 326
   }
 }

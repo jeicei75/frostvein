@@ -289,6 +289,7 @@ gpt-6-sol
 
 ### Debug Log References
 
+- Orchestrator verification (Claude, 2026-09-28): FULL `scripts/gate.sh` GREEN on `a812bbe` at `RUST_TEST_THREADS=2`, 1882 s (cargo test 138 s, pixel guards 1710 s, mutation tables still apply). 10 commits all author Völundr / committer jeicei75, no trailers, no `--no-verify`. Codex dev $9.05 (326 turns, gpt-6-sol/high, 13pp quota).
 - Additional post-commit boundary sabotage (`scripts/mutate.sh /tmp/12-1-boundary-red.sh`): `stockpile_refuses_only_when_every_cell_is_invalid` failed at `crates/sim-core/src/lib.rs:2365:9` with `assertion left == right failed` (KILLED); `empty_stockpile_surface_still_reaches_the_sim` failed at `crates/gui/src/designate.rs:315:9` with `assertion left == right failed` (KILLED). Both restored targeted tests passed.
 - Protocol wire compatibility: the test pins the exact compact no-refusal delta JSON line. Separate post-commit sabotage (`scripts/mutate.sh /tmp/12-1-wire-red.sh`) removed `skip_serializing_if`; `refusal_wire_is_literal_and_empty_delta_wire_is_unchanged` failed at `crates/protocol/src/lib.rs:259:9` with `assertion left == right failed` (0 passed, 1 failed), KILLED. Restored targeted test passed.
 - Post-strengthening verification: the five-row mutation table was rerun after committing the second-client daemon assertion; all five rows were KILLED again. `RUST_TEST_THREADS=2 cargo test --offline -p simd --test serve --quiet` was rerun on restored source: 66 passed, 0 failed.
