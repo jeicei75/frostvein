@@ -145,9 +145,9 @@ of the refusal.
         `PlaceStockpile { rect: picked_rect }` so the sim judges and refuses it
         (`commands_for`, `designate.rs:221-240`). Today it sends nothing, which is the silent no-op
         NFR11 forbids. Channel is unchanged.
-- [ ] **Task 4 — the instrument, tested (AC6).** The instrument is `tui --frames N --key ...`
+- [x] **Task 4 — the instrument, tested (AC6).** The instrument is `tui --frames N --key ...`
   against the real daemon (recipe below); the story extends its status row.
-  - [ ] Test the instrument through the real binary in `tui/tests/client.rs`. A stub daemon sends
+  - [x] Test the instrument through the real binary in `tui/tests/client.rs`. A stub daemon sends
         one delta carrying a refusal, then plain deltas. Assert that the streamed status rows
         contain the text from that frame on. A second stub run with no refusal must show no
         `refused` in any row.
@@ -291,11 +291,13 @@ gpt-6-sol
 
 ### Debug Log References
 
+- Task 4 GREEN: `streamed_refusal_stays_on_the_status_row_across_plain_deltas` and `refusal_hud_follows_wire_and_clears_on_the_next_world_command` passed. The TUI stub sent one refused delta then plain deltas; the GUI test drove a world command after the plain delta.
 - Task 0 RED on unfixed code: `zone on an emitter: [Pos { x: 64, y: 64, z: 9 }]; pick-ups after t=2000: 221 (expected 0)`. The stone-on-emitter assertion passed before this failure; maximum observed on an emitter was 0. This confirms #134's unreachable emitter-zone pickup/drop loop and beside-fire pile, not a stone entering the fire cell.
 - Task 0/1 GREEN: scenario, old-save haul unit test, and all-invalid/partial stockpile unit test passed with `cargo test --offline -p sim-core` targeted invocations.
 
 ### Completion Notes List
 
+- Task 4: test both visible status instruments through the streaming TUI binary and GUI ingest/HUD systems.
 - Task 3: clients retain the shared refusal text until their next world command; GUI empty-surface stockpile drags reach the sim.
 - Task 2: broadcast typed refusals in the next delta; empty lists preserve the old JSON shape. Protocol literal and real daemon acceptance/refusal tests pass.
 - Task 0 and Task 1: exclude emitters from placed zones and haul goals; return typed refusal for empty stockpiles.
@@ -324,6 +326,7 @@ gpt-6-sol
 
 | Date | Change |
 | --- | --- |
+| 2026-09-28 | Task 4: pin refusal persistence and clearing with client instrument tests. |
 | 2026-09-28 | Task 3: show persistent refusals in TUI and GUI; empty-surface GUI stockpile sends a command. |
 | 2026-09-28 | Task 2: add typed broadcast refusals to delta; protocol and daemon tests GREEN. |
 | 2026-09-28 | Tasks 0–1: scenario RED recorded; emitter filtering and sim refusal GREEN. |

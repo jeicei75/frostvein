@@ -202,6 +202,87 @@ fn captured_ticks(status_lines: &[String]) -> Vec<u64> {
         .collect()
 }
 
+fn capture_refusal_frames(refused: bool) -> Vec<String> {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind refusal stub");
+    let port = listener.local_addr().unwrap().port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("4")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tui capture");
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream.write_all(snapshot_line().as_bytes()).unwrap();
+        for tick in 8..=11 {
+            let mut delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: protocol::Speed::Normal,
+                refusals: Vec::new(),
+            };
+            if refused && tick == 9 {
+                delta.refusals.push(protocol::Refusal::PlaceStockpile {
+                    rect: protocol::Rect {
+                        min: [64, 64, 8],
+                        max: [64, 64, 8],
+                    },
+                });
+            }
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .unwrap();
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    let status = child.wait().unwrap();
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    server.join().unwrap();
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+    stdout
+        .lines()
+        .map(strip_ansi)
+        .filter(|line| line.starts_with("tick "))
+        .collect()
+}
+
+#[test]
+fn streamed_refusal_stays_on_the_status_row_across_plain_deltas() {
+    let refused = capture_refusal_frames(true);
+    assert_eq!(refused.len(), 4, "{refused:?}");
+    assert!(!refused[0].contains("refused"));
+    for line in &refused[1..] {
+        assert!(line.contains("stockpile refused: no valid cells"), "{line}");
+    }
+    let plain = capture_refusal_frames(false);
+    assert_eq!(plain.len(), 4, "{plain:?}");
+    assert!(
+        plain.iter().all(|line| !line.contains("refused")),
+        "{plain:?}"
+    );
+}
+
 fn capture_load_frames(send_load: bool) -> Vec<String> {
     const SAVED_TICK: u64 = 3;
     const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;

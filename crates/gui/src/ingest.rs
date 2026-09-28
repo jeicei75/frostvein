@@ -3342,6 +3342,73 @@ mod tests {
     }
 
     #[test]
+    fn refusal_hud_follows_wire_and_clears_on_the_next_world_command() {
+        use crate::{
+            designate::{DesignateMode, DragAnchor, DragMode},
+            pick::{Face, PickedCell, PickedTile},
+        };
+        let (mut app, sender, _server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(0, Speed::Normal));
+        app.update();
+        let hud = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&Text, With<crate::designate::RefusalHint>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone()
+        };
+        let expected = protocol::Refusal::PlaceStockpile {
+            rect: protocol::Rect {
+                min: [64, 64, 8],
+                max: [64, 64, 8],
+            },
+        };
+        let delta = |tick, refusals| Delta {
+            msg_type: MessageType::Delta,
+            tick,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            refusals,
+        };
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(delta(1, vec![expected])))))
+            .unwrap();
+        app.update();
+        assert_eq!(hud(&mut app), client_core::refusal_text(&expected));
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(delta(2, Vec::new())))))
+            .unwrap();
+        app.update();
+        assert_eq!(hud(&mut app), client_core::refusal_text(&expected));
+
+        let picked = PickedCell {
+            tile: [0, 0, 0],
+            face: Face::Top,
+        };
+        app.world_mut().insert_resource(PickedTile(Some(picked)));
+        app.world_mut().insert_resource(DesignateMode::Stockpile);
+        app.world_mut().insert_resource(DragAnchor(Some(picked)));
+        app.world_mut()
+            .insert_resource(DragMode(Some(DesignateMode::Stockpile)));
+        {
+            let mut mouse = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+            mouse.press(MouseButton::Left);
+            mouse.clear();
+            mouse.release(MouseButton::Left);
+        }
+        app.world_mut()
+            .run_system_once(crate::designate::designation_input)
+            .unwrap();
+        app.update();
+        assert_eq!(hud(&mut app), "");
+    }
+
+    #[test]
     fn h_hides_and_shows_every_hud_text() {
         let (mut app, _sender, _server) = configured_app(&[]);
         app.update();
