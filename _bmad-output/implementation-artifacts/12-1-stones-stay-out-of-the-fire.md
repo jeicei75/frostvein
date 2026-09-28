@@ -103,25 +103,25 @@ of the refusal.
   - [x] Unit tests: an all-emitter rect → `Some(refusal)` and zones unchanged; an all-rock rect →
         `Some`; an off-map rect → `Some`; a 3×3 around the fire → `None` with 8 zones added;
         `Designate`/`Cancel`/`Remove` → `None`.
-- [ ] **Task 2 — protocol + simd: the wire (AC4, AC5).**
-  - [ ] `protocol` (NEW type):
+- [x] **Task 2 — protocol + simd: the wire (AC4, AC5).**
+  - [x] `protocol` (NEW type):
         `#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)] #[serde(tag = "command", rename_all = "snake_case")] pub enum Refusal { PlaceStockpile { rect: Rect } }`.
         On `Delta`, add a last field:
         `#[serde(default, skip_serializing_if = "Vec::is_empty")] pub refusals: Vec<Refusal>`.
         Pin the wire with a literal test:
         `"refusals":[{"command":"place_stockpile","rect":{"min":[64,64,8],"max":[64,64,8]}}]`
         round-trips, and `DELTA_WIRE` (no refusals) still round-trips byte-identical.
-  - [ ] `bridge.rs`: add `rect_out` (the mirror of `rect_in`, `:182`) and
+  - [x] `bridge.rs`: add `rect_out` (the mirror of `rect_in`, `:182`) and
         `pub(crate) fn refusal_out(sim_core::Refusal) -> protocol::Refusal`, an exhaustive `match`
         with no wildcard. `delta(world, speed, refusals: Vec<protocol::Refusal>)`.
-  - [ ] `simd/src/main.rs` `tick`: `let mut refusals = Vec::new();` before the command loop
+  - [x] `simd/src/main.rs` `tick`: `let mut refusals = Vec::new();` before the command loop
         (`:169`). The `PlaceStockpile` arm (`:234`) does
         `refusals.extend(world.apply_command(..).map(bridge::refusal_out))`. The other arms discard
         the `None`. Pass `refusals` to `bridge::delta` (`:292`).
-  - [ ] Extend `serve.rs::the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells`
+  - [x] Extend `serve.rs::the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells`
         (`:417-438`). The rejected (solid) stockpile must appear in a delta's `refusals` with its
         rect, and the accepted one must not. The real daemon is the judge.
-  - [ ] Every `protocol::Delta { .. }` struct literal gains `refusals: Vec::new()`. There are about
+  - [x] Every `protocol::Delta { .. }` struct literal gains `refusals: Vec::new()`. There are about
         35 of them across `gui/tests/{capture,headless}.rs`, `gui/src/ingest.rs`,
         `tui/tests/client.rs`, `client-core/src/lib.rs`, `simd/tests/serve.rs` and `bridge.rs`.
         Let the compiler list them.
@@ -296,10 +296,20 @@ gpt-6-sol
 
 ### Completion Notes List
 
+- Task 2: broadcast typed refusals in the next delta; empty lists preserve the old JSON shape. Protocol literal and real daemon acceptance/refusal tests pass.
 - Task 0 and Task 1: exclude emitters from placed zones and haul goals; return typed refusal for empty stockpiles.
 
 ### File List
 
+- `crates/protocol/src/lib.rs`
+- `crates/simd/src/bridge.rs`
+- `crates/simd/src/main.rs`
+- `crates/simd/tests/serve.rs`
+- `crates/client-core/src/lib.rs`
+- `crates/tui/tests/client.rs`
+- `crates/gui/src/ingest.rs`
+- `crates/gui/tests/headless.rs`
+- `crates/gui/tests/capture.rs`
 - `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`
 - `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
 - `crates/sim-core/src/lib.rs`
@@ -310,5 +320,6 @@ gpt-6-sol
 
 | Date | Change |
 | --- | --- |
+| 2026-09-28 | Task 2: add typed broadcast refusals to delta; protocol and daemon tests GREEN. |
 | 2026-09-28 | Tasks 0–1: scenario RED recorded; emitter filtering and sim refusal GREEN. |
 | 2026-09-28 | Story created on `a96ab48`. #134 reproduced by a sim probe: never on the emitter cell; the emitter zone cell drives an endless pick-up/drop loop and stacks stones beside the fire. Refusal RED observed live in the tui. Refusal shape: typed `refusals` on the next delta. |

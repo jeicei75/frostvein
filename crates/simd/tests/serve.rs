@@ -433,6 +433,16 @@ fn the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells() {
         .as_bytes(),
     );
     let zoned = read_delta_with_marks(&mut reader, &[], &[protocol::Zone { pos: standable }]);
+    assert_eq!(
+        zoned.refusals,
+        vec![protocol::Refusal::PlaceStockpile {
+            rect: protocol::Rect {
+                min: solid,
+                max: solid
+            }
+        }],
+        "the rejected stockpile must be broadcast in the next delta"
+    );
     assert!(
         !zoned.zones.iter().any(|zone| zone.pos == solid),
         "a stockpile at the picked (solid) cell must be dropped; the daemon kept {:?}",

@@ -139,9 +139,9 @@ PY
 mutation "the hint escapes the HUD toggle" gui h_hides_and_shows_every_hud_text <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '        crate::ingest::Hud,\n'
+old = '        DesignateHint,\n        crate::ingest::Hud,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '        DesignateHint,\n'))
 PY
 
 mutation "the HUD toggle is never registered" gui h_hides_and_shows_every_hud_text <<'PY'

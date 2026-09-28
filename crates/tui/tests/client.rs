@@ -52,6 +52,8 @@ fn delta_line_with_speed(tick: u64, speed: protocol::Speed) -> String {
         zones: Vec::new(),
         items: Vec::new(),
         speed,
+
+        refusals: Vec::new(),
     };
     format!(
         "{}\n",
@@ -509,6 +511,8 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             prelude.push_str(&format!("{}\n", serde_json::to_string(&delta).unwrap()));
         }
@@ -557,6 +561,8 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -707,6 +713,8 @@ fn capture_dig_replay(changes: bool) -> String {
                     .into_iter()
                     .collect(),
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -881,6 +889,8 @@ fn capture_growing_world(with_features: bool) -> String {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -1018,6 +1028,8 @@ fn capture_haul_replay(changes: bool) -> String {
                 zones: vec![protocol::Zone { pos: PILE }],
                 items: vec![protocol::Item { id: 12, pos: stone }],
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -1154,6 +1166,8 @@ fn moving_delta_line(tick: u64, x: i32) -> String {
         zones: Vec::new(),
         items: Vec::new(),
         speed: protocol::Speed::Normal,
+
+        refusals: Vec::new(),
     };
     format!(
         "{}\n",
@@ -1302,6 +1316,8 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
             zones: Vec::new(),
             items: Vec::new(),
             speed: protocol::Speed::Normal,
+
+            refusals: Vec::new(),
         };
         stream
             .write_all(

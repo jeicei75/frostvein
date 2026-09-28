@@ -347,6 +347,8 @@ mod tests {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
+
+            refusals: Vec::new(),
         });
 
         assert_eq!(mirror.tile([1, 0, 0]), Some(Tile::Solid(Material::Stone)));
@@ -374,6 +376,8 @@ mod tests {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
+
+            refusals: Vec::new(),
         });
 
         let replacement = Snapshot {
@@ -461,6 +465,8 @@ mod tests {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+
+            refusals: Vec::new(),
         });
 
         assert_eq!(mirror.changes().spawned, vec![8]);

@@ -267,6 +267,9 @@ p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 5.2 moved `tui` onto the shared client-core mirror, which rotted this
 # anchor. The seam itself is unchanged.
 old = '''            Ok(Ok(Msg::Delta(delta))) => {
+                if let Some(refusal) = delta.refusals.last() {
+                    state.refusal = Some(*refusal);
+                }
                 mirror.apply_delta(*delta);
 '''
 assert s.count(old) == 1

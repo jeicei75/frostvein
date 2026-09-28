@@ -326,12 +326,13 @@ PY
 
 mutation "daemon swaps place and remove stockpile" simd designation_and_stockpile_changes_reach_both_clients <<'PY'
 import pathlib
+import re
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-s = s.replace('world.apply_command(sim_core::SimCommand::PlaceStockpile {', 'world.apply_command(sim_core::SimCommand::SWAP {', 1)
-s = s.replace('world.apply_command(sim_core::SimCommand::RemoveStockpile {', 'world.apply_command(sim_core::SimCommand::PlaceStockpile {', 1)
-s = s.replace('world.apply_command(sim_core::SimCommand::SWAP {', 'world.apply_command(sim_core::SimCommand::RemoveStockpile {', 1)
-assert 'SimCommand::SWAP' not in s
-p.write_text(s)
+place = 'sim_core::SimCommand::PlaceStockpile {'
+remove = 'sim_core::SimCommand::RemoveStockpile {'
+assert s.count(place) == 1 and s.count(remove) == 1
+p.write_text(re.sub(r'sim_core::SimCommand::(?:PlaceStockpile|RemoveStockpile) \{',
+    lambda m: remove if m.group() == place else place, s))
 PY
 
 mutation "x commits only CancelDesignation" tui remove_mode_commits_cancel_then_remove_stockpile_for_the_same_rect <<'PY'

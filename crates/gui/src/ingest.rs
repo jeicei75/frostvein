@@ -3156,6 +3156,8 @@ mod tests {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: Speed::Paused,
+
+                refusals: Vec::new(),
             }))))
             .unwrap();
         // Two frames: one ingests the delta into the mirror, the next reads the mirror's speed.
@@ -3318,6 +3320,8 @@ mod tests {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: Speed::Paused,
+
+                refusals: Vec::new(),
             }))))
             .unwrap();
         app.update();
@@ -5337,6 +5341,8 @@ mod tests {
                     zones: Vec::new(),
                     items: Vec::new(),
                     speed: Speed::Normal,
+
+                    refusals: Vec::new(),
                 }))))
                 .unwrap();
             app.update();
@@ -6319,6 +6325,8 @@ mod tests {
                     zones: Vec::new(),
                     items: Vec::new(),
                     speed: Speed::Normal,
+
+                    refusals: Vec::new(),
                 }))))
                 .unwrap();
         }
@@ -6366,6 +6374,8 @@ mod tests {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: Speed::Normal,
+
+                refusals: Vec::new(),
             }))))
             .unwrap();
         let mut app = App::new();

@@ -166,6 +166,7 @@ fn tick(
     // latency-bound, which is issue #111.
     let mut scheduled_speed: Option<(u64, protocol::Speed)> = None;
     loop {
+        let mut refusals = Vec::new();
         for command in command_rx.try_iter() {
             match command {
                 protocol::Command::SetSpeed {
@@ -232,9 +233,13 @@ fn tick(
                     });
                 }
                 protocol::Command::PlaceStockpile { rect } => {
-                    world.apply_command(sim_core::SimCommand::PlaceStockpile {
-                        rect: bridge::rect_in(rect),
-                    });
+                    refusals.extend(
+                        world
+                            .apply_command(sim_core::SimCommand::PlaceStockpile {
+                                rect: bridge::rect_in(rect),
+                            })
+                            .map(bridge::refusal_out),
+                    );
                 }
                 protocol::Command::RemoveStockpile { rect } => {
                     world.apply_command(sim_core::SimCommand::RemoveStockpile {
@@ -291,7 +296,7 @@ fn tick(
         }
         let delta_line = Arc::new(format!(
             "{}\n",
-            serde_json::to_string(&bridge::delta(&mut world, speed))?
+            serde_json::to_string(&bridge::delta(&mut world, speed, refusals))?
         ));
         broadcast(&mut clients, &delta_line);
 

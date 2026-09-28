@@ -25,6 +25,9 @@ p = pathlib.Path('crates/tui/src/main.rs'); s = p.read_text()
 # -- "your test is weak" when the truth was "your sabotage is broken". Re-pointed, and given the
 # count guard the house format requires so it can never rot silently again.
 old = '''                Ok(Ok(Msg::Delta(delta))) => {
+                    if let Some(refusal) = delta.refusals.last() {
+                        state.refusal = Some(*refusal);
+                    }
                     mirror.apply_delta(*delta);
                     state.speed = mirror.speed();
                     needs_redraw = true;

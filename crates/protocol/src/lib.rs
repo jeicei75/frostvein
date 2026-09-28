@@ -89,6 +89,12 @@ pub struct Rect {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "command", rename_all = "snake_case")]
+pub enum Refusal {
+    PlaceStockpile { rect: Rect },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
     SetSpeed {
@@ -195,6 +201,9 @@ pub struct Delta {
     pub zones: Vec<Zone>,
     pub items: Vec<Item>,
     pub speed: Speed,
+    /// NOTE: every attached client sees every refusal in the broadcast delta.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refusals: Vec<Refusal>,
 }
 
 #[cfg(test)]
@@ -229,6 +238,30 @@ mod tests {
         "items": [{"id": 12, "pos": [1, 2, 3]}],
         "speed": "fast"
     }"#;
+
+    #[test]
+    fn refusal_wire_is_literal_and_empty_delta_wire_is_unchanged() {
+        let literal = r#"{"command":"place_stockpile","rect":{"min":[64,64,8],"max":[64,64,8]}}"#;
+        let refusal: Refusal = serde_json::from_str(literal).unwrap();
+        assert_eq!(
+            refusal,
+            Refusal::PlaceStockpile {
+                rect: Rect {
+                    min: [64, 64, 8],
+                    max: [64, 64, 8]
+                }
+            }
+        );
+        assert_eq!(serde_json::to_string(&refusal).unwrap(), literal);
+        let mut plain: Delta = serde_json::from_str(DELTA_WIRE).unwrap();
+        assert!(plain.refusals.is_empty());
+        let plain_value: serde_json::Value = serde_json::from_str(DELTA_WIRE).unwrap();
+        assert_eq!(serde_json::to_value(&plain).unwrap(), plain_value);
+        plain.refusals.push(refusal);
+        let encoded = serde_json::to_string(&plain).unwrap();
+        assert!(encoded.contains(&format!(r#""refusals":[{literal}]"#)));
+        assert_eq!(serde_json::from_str::<Delta>(&encoded).unwrap(), plain);
+    }
 
     const COMMAND_WIRE: &str = r#"{"type":"set_speed","speed":"paused"}"#;
 

@@ -385,6 +385,8 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+
+            refusals: Vec::new(),
         });
     app.update();
     assert!(
@@ -413,6 +415,8 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+
+            refusals: Vec::new(),
         });
     app.update();
     assert!(
@@ -537,6 +541,8 @@ fn draw_count_instrument_follows_projected_marks_from_live_ingest() {
             ],
             items: Vec::new(),
             speed: Speed::Normal,
+
+            refusals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -559,6 +565,8 @@ fn draw_count_instrument_follows_projected_marks_from_live_ingest() {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+
+            refusals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -809,6 +817,8 @@ fn static_world_skips_the_motion_assertions_on_an_at_tick_capture() {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+
+            refusals: Vec::new(),
         });
     // The assertions run at the moment the capture is requested. Reaching this line at all is the
     // result: with the flag honoured on one arm only, this update panicked.
