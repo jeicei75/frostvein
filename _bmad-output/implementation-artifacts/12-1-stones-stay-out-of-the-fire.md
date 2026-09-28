@@ -289,6 +289,7 @@ gpt-6-sol
 
 ### Debug Log References
 
+- Post-strengthening verification: the five-row mutation table was rerun after committing the second-client daemon assertion; all five rows were KILLED again. `RUST_TEST_THREADS=2 cargo test --offline -p simd --test serve --quiet` was rerun on restored source: 66 passed, 0 failed.
 - Task 2 broadcast check: the daemon test attached a second client before the refused command and asserted its delta carried the same refusal; targeted test passed.
 - Task 5 mutation verification (`scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/12-1.sh`, run alone after commit):
   - `stockpile keeps emitter zones` — `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire` — KILLED: `panicked at crates/sim-core/tests/scenario.rs:113:5`; test result FAILED, 0 passed, 1 failed.
