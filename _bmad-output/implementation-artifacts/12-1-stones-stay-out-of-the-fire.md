@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 11.3's creation
 
 # Story 12.1: Stones Stay Out of the Fire
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -76,6 +76,12 @@ of the refusal.
 8. At the seat, Wolf places a stockpile around the campfire, hauls into it, and sees no stone on or
    in the fire. A single-cell stockpile on the fire shows the refusal in the gui and in an attached
    tui.
+
+9. **(Added 2026-09-28, Wolf's ruling on #153.)** No stockpile cell ever holds more than one
+   uncarried stone. When a carrier's delivery fails, it drops the stone where it stands unless that
+   tile is a stockpile cell already holding a stone. In that case it drops it on the nearest
+   walkable tile that is not an occupied stockpile cell. Heaps on open ground stay allowed, as
+   today.
 
 ## Tasks / Subtasks
 
@@ -178,6 +184,30 @@ of the refusal.
   the fire; (c) `3`, then drag one cell on the fire, and the refusal shows in both clients. Ask
   Wolf "is this the case you saw?" and record the answer under AC1. Then run the full
   `scripts/gate.sh` (see [[gate-ooms-at-default-parallelism]]: `RUST_TEST_THREADS=2`).
+
+- [ ] **Task 7 — #153: one stone per stockpile cell when the pile fills (AC9). Added 2026-09-28 at
+  the seat, by Wolf's ruling.** Found by running after Task 1's fix: 26 stones on 24 cells, 3 on one
+  corner. The orchestrator's probe (worktree, since deleted) found the mechanism. With 24/24 cells
+  full, two carriers still walking to the last free cell `(65,66,9)` arrived and dropped on it, at
+  ticks 1808 and 1883. The comment at the haul `free` set ("self-healing ... it repaths") is false
+  once `free` is empty.
+  - [ ] RED first: a scenario test on `DEFAULT_SEED` that places a 5×5 stockpile centred on the
+        camp and designates a 15×15 dig centred on the camp (one `Designate` rect,
+        `camp ± 7` at `camp.z`). Tick 8,000 and assert at EVERY tick that no stockpile cell holds
+        more than one UNCARRIED stone. A carried stone reports its carrier's position, so exclude
+        stones in `world.carrying()`. Add a positive assertion too: by the end, every zone cell
+        holds exactly one stone. Record the RED message (the tick and cell) in the Debug Log.
+  - [ ] Fix in `sim-core` at the drop site: `release_claim`, or whatever the RED trace shows
+        actually drops the stone. Drop at the carrier's tile unless it is an occupied stockpile cell;
+        otherwise at the nearest `is_walkable` tile that is not an occupied stockpile cell.
+        Choose "nearest" deterministically (a BFS with a fixed neighbour order, or ties broken by
+        `Pos` order). Correct the false "self-healing" comment.
+  - [ ] Unit test: a carrier standing on an occupied stockpile cell releases its claim → the stone
+        lands on a non-zone neighbour, and the stockpile cell still holds one stone.
+  - [ ] Add both tests to `mutations/12-1.sh` (revert the drop rule → both reddens), run them, and
+        record them KILLED.
+  - [ ] Determinism: an existing scenario/determinism test must still pass. The drop site changes
+        only in the occupied-stockpile case.
 
 ### Scenario test skeleton (Task 0)
 
