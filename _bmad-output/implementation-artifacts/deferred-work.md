@@ -408,9 +408,9 @@ below as "what one layer found", not as "what is wrong with 3.3".
   standable tiles, so a rect entirely in rock adds zero zones and the player is told nothing — no
   mark, no message, no refusal. The auditor hit this for real: aiming one z level low produced a
   capture with zero of every glyph and exit 0, which is indistinguishable from "hauling is broken".
-  Pre-existing since 3.1 (the same is true of a dig rect that hits nothing diggable), so not caused
-  by this story. **Revisit when** a story touches command feedback or the status line — the cheap fix
-  is telling the player how many tiles a command actually took.
+  Pre-existing since 3.1. **CLOSED in Story 12.1:** an all-invalid stockpile now returns a typed
+  refusal in the next broadcast delta, shown by both clients. The dig twin (a dig rect hitting
+  nothing diggable) remains open.
 
 - **The client's opening camera z is nondeterministic** [`crates/tui/src/view.rs`, `initial`] —
   LAYER: feature-auditor (story 3.3 review). `initial` takes z from `snapshot.entities.first()`, i.e.
