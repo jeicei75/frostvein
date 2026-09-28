@@ -55,3 +55,11 @@ old = '            let drop_pos = if occupied.contains(&pos) {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            let drop_pos = if false {\n'))
 PY
+
+mutation "tui draws stored stones grey" tui a_stone_on_a_stockpile_cell_draws_in_the_stockpile_colour <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = '                stored_item_cell()\n            } else {\n                item_cell()\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                item_cell()\n            } else {\n                item_cell()\n'))
+PY

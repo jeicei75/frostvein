@@ -340,7 +340,11 @@ p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
 # which rotted this anchor. The seam is unchanged.
 old = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
-            framebuffer.cells[index] = item_cell();
+            framebuffer.cells[index] = if mirror.zones().iter().any(|zone| zone.pos == item.pos) {
+                stored_item_cell()
+            } else {
+                item_cell()
+            };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
     }
@@ -348,7 +352,11 @@ old = '''    for item in mirror.items() {
 assert s.count(old) == 1
 new = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
-            framebuffer.cells[index] = item_cell();
+            framebuffer.cells[index] = if mirror.zones().iter().any(|zone| zone.pos == item.pos) {
+                stored_item_cell()
+            } else {
+                item_cell()
+            };
         }
     }
     for item in mirror.items() {
