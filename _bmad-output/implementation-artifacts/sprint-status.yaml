@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-08-25
+# last_updated: 2026-09-28
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-26
+last_updated: 2026-09-28
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -1200,7 +1200,7 @@ development_status:
   7-2-read-the-working-zoom: done
   # Covered by the M2-to-date retrospective filed as Epic 5's: epic-5-retro-2026-08-23.md
   epic-7-retrospective: done
-  epic-8: in-progress
+  epic-8: done
   # M2's hardest input work and the main story-count driver, isolated on purpose.
   # IF PICKING PROVES EASY, 8.1 AND 8.2 COLLAPSE INTO ONE AND M2 LANDS AT 10.
   # HEADLESS HALF DONE 2026-08-25 -> review. Codex dev in one run, six commits, CADENCE FLOOR MET
@@ -1326,7 +1326,10 @@ development_status:
   # THE MILESTONE GATE: the walking skeleton runs end to end in the Bevy client, and
   # Wolf signs off BOTH wow beats in one sitting plus the six anti-requirement words.
   8-3-master-of-time-and-the-skeleton-walks-in-3d: done
-  epic-8-retrospective: optional
+  # M2 CLOSED 2026-09-28. ONE retrospective covers Epics 8, 9, 10 and 11 (Wolf's scope ruling,
+  # same precedent as Epics 5-7), filed as Epic 8's record: epic-8-retro-2026-09-28.md.
+  # Action items M2-24..M2-34 live as GitHub issues labelled action-item.
+  epic-8-retrospective: done
 
   # ---- the gfx pass (epics 9 + 10, added to epics.md 2026-08-28) ----
   # EXECUTION ORDER IS NOT NUMERIC ORDER. RULED 2026-08-28 (Wolf): Epic 9, then Epic 10,
@@ -1337,7 +1340,7 @@ development_status:
   # SCOPE, STATED HONESTLY: M2 was planned at 10-14 stories and sits at 11. These nine are
   # added scope ruled by Wolf, not cap slippage -- the cap governed the path to the walking
   # skeleton, which 8.1-8.2 delivered.
-  epic-9: in-progress
+  epic-9: done
   # Every story here is gated by a CONCRETE MEASURED DEFECT already on the record (deferred-work.md
   # or named by Wolf at the 8.2 vehicle sessions) -- this is what the standing art rule (2026-08-22)
   # requires, and none of it is taste-driven tuning. Closes the visual halves of FR31/FR34 via
@@ -1390,10 +1393,11 @@ development_status:
   # changes, terrain-dependent tests and capture recipes need re-checking, and mutation rows anchored
   # near worldgen literals may APPLY-FAIL. It also pushes valley-floor luminance UP while 9.1 pushes
   # it DOWN -- the 70-180 band watches both.
-  epic-9-retrospective: optional
+  # Covered by the M2-close retrospective filed as Epic 8's: epic-8-retro-2026-09-28.md
+  epic-9-retrospective: done
   # EPIC 10 OPENS 2026-08-29 with story 10.1. Execution order stands: Epic 9 (closed), then
   # Epic 10, then 8.3 closes the milestone.
-  epic-10: in-progress
+  epic-10: done
   # The PRD's asset-pipeline trigger has fired -- it held authored assets until "a concrete case
   # forces the decision -- dwarves are the expected first case", and the PRD predicted right.
   # RULED 2026-08-28 (Wolf): the pipeline is Blender -> glTF via Bevy's NATIVE loader, SUPERSEDING
@@ -2212,9 +2216,10 @@ development_status:
                           # NOT here and deliberately: the rim dissolve and fog (10.8 Ruling 3
                           # defect (d), still deferred -- same defect, different lever, so they
                           # must be judged one at a time).
-  epic-10-retrospective: optional
+  # Covered by the M2-close retrospective filed as Epic 8's: epic-8-retro-2026-09-28.md
+  epic-10-retrospective: done
 
-  epic-11: in-progress
+  epic-11: done
   # THE ART-SHOT LOOK. Added 2026-09-08 (Wolf) out of 10.8's creation. FEATURES, not re-tuning:
   # ambient occlusion + bloom + exposure (11.1), depth of field + volumetric haze (11.2), a
   # day/night cycle that BOOTS AT NIGHT (11.3). EXECUTION ORDER IS NOT NUMERIC ORDER for the
@@ -2470,7 +2475,8 @@ development_status:
   #     Wolf "might change my mind", so nothing may foreclose it. #113 and #106 land here.
   #   Control on 53ba44e: two boot captures cmp-IDENTICAL, ground median 69; RED --lights-off sun -> 50.
   #   NOTE the board picks 8.3 first by number; the 2026-08-28/09-08 rulings put 11.3 before it.
-  epic-11-retrospective: optional
+  # Covered by the M2-close retrospective filed as Epic 8's: epic-8-retro-2026-09-28.md
+  epic-11-retrospective: done
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).
 #
