@@ -1,0 +1,298 @@
+---
+baseline_commit: a96ab48
+model: claude-opus-5-5  # session default, same as 11.3's creation
+---
+
+# Story 12.1: Stones Stay Out of the Fire
+
+Status: ready-for-dev
+
+## Story
+
+As the boss,
+I want hauled stones to land in the stockpile and never in the campfire, and to be told when a
+stockpile I place is refused,
+so that my camp looks right and I never wonder whether an order was ignored.
+
+## Not stacked — branch off `main`
+
+`main` is `a96ab48` (PR #151 merged), clean. Branch `story-12-1-stones-stay-out-of-the-fire`
+already exists and carries the sprint-planning board edit (Epic 12 added). Closes **#134**. Epic 12's
+nine standing ACs (`epics.md`, "Standing acceptance criteria") bind this story and are not restated.
+
+## Found at creation — #134's case, reproduced (AC1's record, to be confirmed at the seat)
+
+A throwaway scenario probe on `DEFAULT_SEED` (camp `(64,64,9)`) settled which case it is. It was
+run and then deleted. **No stone ever reaches the emitter's own cell.** Movement already refuses
+it (`is_walkable`, `lib.rs:530`), and a delivery is a drop where the carrier stands. The real
+defect is one level up:
+
+- `PlaceStockpile` accepts the fire's cell (`lib.rs:1480-1488`, `is_standable` only), and the haul
+  `free` set counts it as a free tile (`lib.rs:697-702`). It is **free forever and unreachable**.
+- The pick-up leg is gated only on `!free.is_empty()` (`lib.rs:712`), so dwarves keep picking up
+  a stone they can never deliver. A* fails, `retry_claim` → `release_claim` drops the stone wherever
+  the carrier stands, and 20 ticks later the loop repeats.
+- **Measured.** Case A is a 5×5 stockpile centred on the fire plus 30 digs. The pile was full by
+  t≈2000. Pick-ups kept climbing: 109 → 216 → 330 at t=2000/3000/4000. Three stones ended **stacked
+  on one zone cell diagonal to the fire** (`(+1,+1)`), and every one of the fire's 8 neighbours held
+  stones. `max stones on an emitter cell = 0` throughout. Case B is a stockpile on the fire's cell
+  only plus 1 dig. The same stone was picked up 98 times in 3,000 ticks and never delivered.
+- The gui draws the campfire as a 0.55-cell cube at its cell centre (`appearance.rs:397`,
+  `project.rs:1818-1821`), and stones at their own cell centre (`project.rs:1937`). A stone on a
+  neighbour cell does **not** geometrically intersect the fire. It can only overlap it in
+  projection from a low camera. **Wolf's seat answer to "is this what you saw" is recorded in
+  Task 6.**
+
+Live RED of the refusal half, taken on `a96ab48` (`simd 7481`, fresh):
+`tui 7481 --frames 12 --z 9 --key p,enter,enter` → the daemon's zones became `[[64,64,9]]`, which
+is the campfire cell, accepted. `tui 7481 --frames 12 --z 8 --key p,enter,enter` (solid rock) →
+zones unchanged, and the status line read `tick 39  normal  z 8/31  dwarves 5  N up`, with no word
+of the refusal.
+
+## Acceptance Criteria
+
+1. The story's Debug Log records #134's case as found above: stones never on the emitter cell;
+   the emitter cell accepted as an unreachable stockpile tile drives an endless pick-up/drop loop
+   and stacks stones beside the fire. Wolf's seat answer is added in Task 6.
+2. A `PlaceStockpile` rect never makes a light emitter's cell a stockpile cell, and no haul's
+   delivery goal ever includes an emitter cell, **including a zone loaded from an older save**.
+3. A scenario test on `DEFAULT_SEED`, **red before the fix and recorded as red**, places a 5×5
+   stockpile centred on the campfire, digs nearby, and asserts all three of these: no zone on an
+   emitter cell; no stone on an emitter cell at any tick; zero pick-ups once the reachable
+   stockpile is full.
+4. A `PlaceStockpile` rect that yields zero valid cells is refused by the sim. That covers all rock,
+   all emitter, or entirely off the map. The refusal reaches every attached client in the **next
+   delta** as a typed entry. A rect with at least one valid cell is not a refusal.
+5. Refusal wire shape (AD-4/AD-6, **the pattern every later M3 filter follows**): `Delta` gains
+   `refusals`, a list of `protocol::Refusal`. That type is an enum internally tagged by `command`,
+   and its one variant is `PlaceStockpile { rect }`. The list is omitted from the JSON when empty,
+   so every existing delta line is byte-identical. No client pre-checks the rule.
+6. Both clients show `stockpile refused: no valid cells` after a refused stockpile: the tui on its
+   status row, the gui as a HUD line. The text stays until that client sends its next world
+   command. The text comes from one function in `client-core`.
+7. The parent spine's "Command acknowledgement" convention is amended on the record. Accepted
+   commands still acknowledge through their effect. Refused ones are reported in the next delta's
+   `refusals`.
+8. At the seat, Wolf places a stockpile around the campfire, hauls into it, and sees no stone on or
+   in the fire. A single-cell stockpile on the fire shows the refusal in the gui and in an attached
+   tui.
+
+## Tasks / Subtasks
+
+- [ ] **Task 0 — RED first (AC1, AC3).** Write the scenario test (skeleton below) in
+  `crates/sim-core/tests/scenario.rs` and run it on the unfixed code. Paste the failing assertion
+  messages and the measured pick-up count into the Debug Log. The emitter-zone and the pick-up
+  asserts must fail. The stone-on-emitter assert is expected to pass today; it is a regression
+  guard, and the log says so. Record the AC1 finding in the Debug Log.
+- [ ] **Task 1 — sim-core: the filter and the refusal (AC2, AC4).**
+  - [ ] `Refusal` enum (NEW, `lib.rs` beside `SimCommand`):
+        `#[derive(Debug, Clone, Copy, PartialEq, Eq)] pub enum Refusal { PlaceStockpile { rect: Rect } }`.
+  - [ ] `apply_command(&mut self, command: SimCommand) -> Option<Refusal>`. It returns
+        **`Option`, not `Result`**: 58 call sites outside `lib.rs` ignore the return, and
+        `Result` is `#[must_use]`, so `clippy -D warnings` would fail on every one of them.
+  - [ ] `PlaceStockpile` keeps a position only if `is_walkable(&terrain, &blocked, pos)`, the same
+        predicate movement uses. Build `blocked` from the emitter positions (`blocked_cells` on
+        `self.emitters()`). Zero kept → return `Some(Refusal::PlaceStockpile { rect })`, where `rect`
+        is the command's rect as received. The out-of-bounds early return (`lib.rs:1391-1399`)
+        returns that same refusal for `PlaceStockpile` and `None` for the other three commands.
+  - [ ] `work_positions` gains `blocked: &BTreeSet<Pos>`. The haul `free` set filters with
+        `is_walkable(terrain, blocked, *pos)` instead of `terrain.is_standable(*pos)`. Both callers
+        (`lib.rs:401`, `:836`) already hold `blocked`. Update the five unit-test calls
+        (`lib.rs:2289-2312`) and add one unit test: zones `{fire}`, blocked `{fire}`, stone
+        elsewhere → both legs empty. This is the old-save case.
+  - [ ] Unit tests: an all-emitter rect → `Some(refusal)` and zones unchanged; an all-rock rect →
+        `Some`; an off-map rect → `Some`; a 3×3 around the fire → `None` with 8 zones added;
+        `Designate`/`Cancel`/`Remove` → `None`.
+- [ ] **Task 2 — protocol + simd: the wire (AC4, AC5).**
+  - [ ] `protocol` (NEW type):
+        `#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)] #[serde(tag = "command", rename_all = "snake_case")] pub enum Refusal { PlaceStockpile { rect: Rect } }`.
+        On `Delta`, add a last field:
+        `#[serde(default, skip_serializing_if = "Vec::is_empty")] pub refusals: Vec<Refusal>`.
+        Pin the wire with a literal test:
+        `"refusals":[{"command":"place_stockpile","rect":{"min":[64,64,8],"max":[64,64,8]}}]`
+        round-trips, and `DELTA_WIRE` (no refusals) still round-trips byte-identical.
+  - [ ] `bridge.rs`: add `rect_out` (the mirror of `rect_in`, `:182`) and
+        `pub(crate) fn refusal_out(sim_core::Refusal) -> protocol::Refusal`, an exhaustive `match`
+        with no wildcard. `delta(world, speed, refusals: Vec<protocol::Refusal>)`.
+  - [ ] `simd/src/main.rs` `tick`: `let mut refusals = Vec::new();` before the command loop
+        (`:169`). The `PlaceStockpile` arm (`:234`) does
+        `refusals.extend(world.apply_command(..).map(bridge::refusal_out))`. The other arms discard
+        the `None`. Pass `refusals` to `bridge::delta` (`:292`).
+  - [ ] Extend `serve.rs::the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells`
+        (`:417-438`). The rejected (solid) stockpile must appear in a delta's `refusals` with its
+        rect, and the accepted one must not. The real daemon is the judge.
+  - [ ] Every `protocol::Delta { .. }` struct literal gains `refusals: Vec::new()`. There are about
+        35 of them across `gui/tests/{capture,headless}.rs`, `gui/src/ingest.rs`,
+        `tui/tests/client.rs`, `client-core/src/lib.rs`, `simd/tests/serve.rs` and `bridge.rs`.
+        Let the compiler list them.
+- [ ] **Task 3 — both clients show it (AC6).**
+  - [ ] `client-core`: `pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str`, an
+        exhaustive `match` returning `"stockpile refused: no valid cells"`. It is the only
+        definition of the text.
+  - [ ] tui: `ViewState` gets `pub refusal: Option<protocol::Refusal>`. Both `Msg::Delta` arms
+        (`main.rs:312-329` interactive, `:450-462` `stream_frames`) set it from
+        `delta.refusals.last()` when non-empty and never clear it on an empty delta. `apply_key`
+        clears it when it returns a world command (the dig, channel, stockpile or clear commit).
+        `render` (`view.rs:377-410`) appends two spaces plus `refusal_text(..)` to the status row
+        when `Some`; the quit prompt still wins. Update the `ViewState` literal in
+        `initial_view_opens_on_the_level_with_the_most_standable_ground` (`view.rs:1884`).
+  - [ ] gui: a `LastRefusal(Option<protocol::Refusal>)` resource. The `WireMessage::Delta` arm of
+        `ingest_messages` (`ingest.rs:2492-2540`) sets it the same way. A HUD `Text` tagged `Hud`
+        and `ClientLocal`, one line above the designate hint (`designate.rs:65`), shows
+        `refusal_text` or nothing. `designate.rs`'s release handler sets `LastRefusal(None)` when
+        it pushes commands.
+  - [ ] gui, stockpile only: when a stockpile drag's `surface` is empty, push
+        `PlaceStockpile { rect: picked_rect }` so the sim judges and refuses it
+        (`commands_for`, `designate.rs:221-240`). Today it sends nothing, which is the silent no-op
+        NFR11 forbids. Channel is unchanged.
+- [ ] **Task 4 — the instrument, tested (AC6).** The instrument is `tui --frames N --key ...`
+  against the real daemon (recipe below); the story extends its status row.
+  - [ ] Test the instrument through the real binary in `tui/tests/client.rs`. A stub daemon sends
+        one delta carrying a refusal, then plain deltas. Assert that the streamed status rows
+        contain the text from that frame on. A second stub run with no refusal must show no
+        `refused` in any row.
+  - [ ] gui: an in-crate test in `ingest.rs` modelled on
+        `the_live_clock_readout_follows_the_daemons_tick_and_speed` (`:3298`). Inject a `Delta`
+        with a refusal and the HUD text equals `refusal_text`. Inject a later plain delta and it is
+        unchanged. Push a command and it is empty.
+- [ ] **Task 5 — the record (AC7, AC1).**
+  - [ ] Amend the "Command acknowledgement" row in
+        `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md`
+        with an `Amended 2026-MM-DD (Story 12.1)` note. It covers: refusals ride the next delta's
+        `refusals` and go to every client; the sim decides; every later filter adds a `Refusal`
+        variant.
+  - [ ] `deferred-work.md:406` ("stockpile on solid rock is a silent no-op"): mark it
+        **CLOSED in Story 12.1**. Its dig twin (a dig rect hitting nothing diggable) stays open;
+        say so on the entry.
+  - [ ] Mutation set `_bmad-output/implementation-artifacts/mutations/12-1.sh`, every row KILLED:
+        (1) drop the `is_walkable` filter in `PlaceStockpile` → the scenario test fails;
+        (2) revert the `free` filter to `is_standable` → the old-save unit test fails;
+        (3) simd discards the refusal → the `serve.rs` test fails;
+        (4) the tui never renders `refusal` → the client test fails;
+        (5) the gui never sets `LastRefusal` → the ingest test fails.
+- [ ] **Task 6 — seat (AC8), then the full gate.** Write `12-1-signoff/vehicle-card.md` in the seat's
+  launch form. In WSL: `simd 7451`. In PowerShell from the Windows checkout:
+  `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')`. Attach a tui in WSL with `tui 7451`.
+  The card has three steps: (a) `3`, then drag a 5×5 stockpile centred on the campfire;
+  (b) `1`, then dig a few blocks nearby, `+` to speed up, and watch the ring fill with nothing in
+  the fire; (c) `3`, then drag one cell on the fire, and the refusal shows in both clients. Ask
+  Wolf "is this the case you saw?" and record the answer under AC1. Then run the full
+  `scripts/gate.sh` (see [[gate-ooms-at-default-parallelism]]: `RUST_TEST_THREADS=2`).
+
+### Scenario test skeleton (Task 0)
+
+```rust
+#[test]
+fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin(); // (64,64,9) on DEFAULT_SEED
+    let emitters: BTreeSet<Pos> = world.emitters().into_iter().map(|(_, p, _)| p).collect();
+    world.apply_command(SimCommand::PlaceStockpile { rect: rect(
+        Pos { x: camp.x - 2, y: camp.y - 2, ..camp }, Pos { x: camp.x + 2, y: camp.y + 2, ..camp }) });
+    assert!(world.zones().iter().all(|z| !emitters.contains(z)), "zone on an emitter: {:?}", world.zones());
+    // Designate ~30 single-cell digs: non-tree Solid cells at camp.z with a standable 4-neighbour,
+    // nearest the camp first (the probe found 30 within r<=7 on DEFAULT_SEED).
+    // Tick 4,000, counting per-dwarf carrying None->Some transitions:
+    //   - every tick: no item on an emitter cell;
+    //   - in a window after the pile is full (measure when; pre-fix it was full by ~2,000): 0 pick-ups.
+}
+```
+
+## Dev Notes
+
+### Scope guardrails (do NOT)
+
+- Do not address a refusal to only the issuing connection. The delta is broadcast, and the refusal
+  rides it. `// NOTE:` on `Delta::refusals`: every attached client sees every refusal.
+- Do not add a refusal for `Designate`, `CancelDesignation` or `RemoveStockpile`. A dig on nothing
+  stays a silent no-op (deferred-work, now its own open entry). The enum is the extension point.
+- Do not add a `reason` field or a second variant. One variant means one reason ("no valid cells").
+- Do not teach the gui drag preview (`client_core::surface_targets`) about emitters. The preview
+  over the fire shows one cell the sim will not keep. `// NOTE:` it; that is a client restating a
+  sim rule, which is AD-4's line.
+- Do not fix the general "only free tile is unreachable" loop, where a standable zone cell is
+  sealed off. It is the same pick-up/drop mechanism without a fire. It belongs with #132 (12.3,
+  FR51). Add it there as a comment, or ask Wolf.
+- Do not add a new server message type. Both clients `bail!` on an unknown `type` (tui
+  `main.rs:517`, gui `ingest.rs:2665`), and every extra tui message costs a `--frames` frame.
+
+### What already exists (build on it)
+
+- `is_walkable` + `blocked_cells` (`lib.rs:530-545`): the one "can a dwarf stand here" rule (#74).
+  The stockpile and the free set now ask it too.
+- `spawn_dwarves` already excludes emitter cells (`lib.rs:1594-1606`), using the same idea at spawn.
+- `serve.rs:318` already sends a rejected stockpile before an accepted one and asserts the drop.
+  Extend it; do not write a second daemon test.
+- Delta assembly happens once per loop iteration and after paused command intake (AD-2), so a
+  refusal is in the very next delta (NFR2 ~200 ms).
+- `tui --frames N --z Z --key ...` streams real frames; its cursor opens at the map centre
+  `(64,64)`, which is the campfire on `DEFAULT_SEED`.
+
+### Key decisions & traps
+
+- **`Option<Refusal>`, not `Result`**: see Task 1. This is a compile-clean choice, not a style
+  choice.
+- **`skip_serializing_if` keeps the wire byte-identical when nothing is refused.** Pinned wire
+  literals and every recorded capture stay valid.
+- **Adding a `Delta` field breaks every struct literal** (~35). This is mechanical. Do not reach for
+  `..Default::default()`, because `Delta` has no `Default`, and adding one is not this story's job.
+- **A partial stockpile is not a refusal.** A 5×5 over the fire keeps 24 cells and reports nothing.
+- **Refusal text lives only in `client-core::refusal_text`**, like the colour table is data. A
+  second draw site would drift.
+- **The gui can only produce an all-rock stockpile through the new empty-surface path.**
+  `surface_targets` follows the ground, so its common refusal is the all-emitter drag.
+
+### Verification (recipe; the RED half was run at creation, see "Found at creation")
+
+```bash
+cargo build -q -p simd -p tui
+./target/debug/simd 7481 &                       # fresh daemon, DEFAULT_SEED
+# A. all-emitter: the cursor opens on the campfire at z 9
+./target/debug/tui 7481 --frames 12 --z 9 --key p,enter,enter | sed 's/\x1b\[[0-9;]*m//g' | rg 'tick '
+#   GREEN: the last status rows contain "stockpile refused: no valid cells"; daemon zones stay []
+# B. all-rock: z 8 under the camp is solid
+./target/debug/tui 7481 --frames 12 --z 8 --key p,enter,enter | sed 's/\x1b\[[0-9;]*m//g' | rg 'tick '
+#   GREEN: same text. RED (a96ab48, observed): A left zone [[64,64,9]]; B's rows had no "refused".
+# Zones check: read one snapshot line from the port; `zones` must not contain [64,64,9].
+pkill -x simd
+```
+
+Deliberate RED after the fix: mutation row (3) (simd discards the refusal) → recipe B's rows show
+no `refused`. Restore it, and B shows it again. Exit 0 is not a result; the text in the row is.
+
+### Project Structure Notes
+
+- `crates/sim-core/src/lib.rs`: UPDATE (`Refusal`, `apply_command`, `work_positions`, unit tests)
+- `crates/sim-core/tests/scenario.rs`: UPDATE (the red scenario test)
+- `crates/protocol/src/lib.rs`: UPDATE (`Refusal`, `Delta::refusals`, wire test)
+- `crates/simd/src/{bridge.rs,main.rs}`, `crates/simd/tests/serve.rs`: UPDATE
+- `crates/client-core/src/lib.rs`: UPDATE (`refusal_text`, Delta literals)
+- `crates/tui/src/{main.rs,view.rs}`, `crates/tui/tests/client.rs`: UPDATE
+- `crates/gui/src/{ingest.rs,designate.rs}`, `crates/gui/tests/{headless,capture}.rs`: UPDATE
+- `_bmad-output/implementation-artifacts/mutations/12-1.sh`, `12-1-signoff/vehicle-card.md`: NEW
+- Parent `ARCHITECTURE-SPINE.md`, `deferred-work.md`: UPDATE (the record)
+
+### References
+
+- `epics.md` Epic 12 intro (order, standing ACs) and Story 12.1; PRD `prd-frostvein-2026-09-28`
+  FR50, NFR11
+- Parent spine `architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md`: AD-2, AD-4, AD-6, AD-10,
+  and Consistency Conventions ("Command acknowledgement", "Vocabulary enums")
+- Issue #134; `deferred-work.md:406`
+- `docs/technical-preferences.md` (M2-26 scenario tests for sim, M2-27 reproduce first)
+
+## Dev Agent Record
+
+### Agent Model Used
+
+### Debug Log References
+
+### Completion Notes List
+
+### File List
+
+## Change Log
+
+| Date | Change |
+| --- | --- |
+| 2026-09-28 | Story created on `a96ab48`. #134 reproduced by a sim probe: never on the emitter cell; the emitter zone cell drives an endless pick-up/drop loop and stacks stones beside the fire. Refusal RED observed live in the tui. Refusal shape: typed `refusals` on the next delta. |
