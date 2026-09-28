@@ -2679,6 +2679,39 @@ mod tests {
     }
 
     #[test]
+    fn release_claim_avoids_an_occupied_stockpile_cell() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dwarf_pos = world.dwarves()[0].1;
+        let far_away = Pos { x: 0, y: 0, z: 1 };
+        world.ecs.resource_mut::<super::Zones>().0.insert(dwarf_pos);
+        world.ecs.spawn((super::Item, super::Id(11), dwarf_pos));
+        world.ecs.spawn((super::Item, super::Id(12), far_away));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(12);
+
+        super::release_claim(&mut world.ecs, entity);
+
+        let items = world.items();
+        assert!(items.contains(&(super::Id(11), dwarf_pos)));
+        let dropped = items.iter().find(|(id, _)| *id == super::Id(12)).unwrap().1;
+        assert_ne!(dropped, dwarf_pos);
+        assert!(!world.zones().contains(&dropped));
+        assert_eq!(
+            dwarf_pos.x.abs_diff(dropped.x)
+                + dwarf_pos.y.abs_diff(dropped.y)
+                + dwarf_pos.z.abs_diff(dropped.z),
+            1,
+            "the nearest open tile is a neighbour"
+        );
+        assert_eq!(world.carrying()[0], (super::Id(0), None));
+    }
+
+    #[test]
     fn reaction_delay_table_is_pinned() {
         let expected = [
             [28, 19, 26],
