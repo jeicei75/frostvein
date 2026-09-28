@@ -1,7 +1,8 @@
 ---
 # M1 pass (2026-08-02) completed steps 1-3. M2 pass (2026-08-09) restarts the count.
+# M3 pass (2026-09-28) restarts it again; M2 finished at [1, 2, 3, 4].
 stepsCompleted: [1, 2, 3, 4]
-milestone: 2
+milestone: 3
 inputDocuments:
   # Milestone 1 (inherited by reference, still binding)
   - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-01/prd.md
@@ -20,6 +21,11 @@ inputDocuments:
   # Gfx pass (2026-08-28, additive — Epics 9–10 appended, nothing above regenerated)
   - _bmad-output/implementation-artifacts/deferred-work.md
   - docs/tech-art-guidelines.md
+  # Milestone 3 (2026-09-28, additive — nothing above regenerated; no M3 architecture, the M2 spine binds)
+  - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-09-28/prd.md
+  - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-09-28/reconcile-inputs.md
+  - _bmad-output/implementation-artifacts/epic-8-retro-2026-09-28.md
+  - GitHub issues #132-#136 (defects), #142-#148 (retro action items)
 ---
 
 # frostvein - Epic Breakdown
@@ -86,6 +92,37 @@ FR36: The player can select tiles and rectangles in the 3D view with the mouse �
 
 FR37: The Bevy client is a `protocol`-only consumer — connects, receives snapshot, applies per-tick deltas, coexists with concurrent TUI clients on the same daemon (M1's FR19). `sim-core` and `simd` need no structural change for it.
 
+#### Milestone 3 — game functionality (FR38–FR52)
+
+Source: `prds/prd-frostvein-2026-09-28/prd.md` (final). FR IDs continue the global numbering; feature groups continue at F14. M1/M2 FRs stay binding except where the PRD's **What M3 changes** reopens them: M1 FR5 (FIFO now within a trade), M1 FR12 (items gain kinds), M1's "no production beyond dig → stone → stockpile" (reopened for collecting only), M1's "nothing falls" (items and trees only), M2's "no mine crystals" (now gems), the parity rule (narrowed by NFR10), and M1 FR17 (goals travel as typed data; their rules live only in the sim).
+
+**F14 — Dwarves you can tell apart.**
+
+FR38: Every dwarf has a name and a distinct colouring, both world state: seeded, deterministic, sent over the wire, saved. Clients render identity, never invent it (NFR5).
+FR39: The player tells the dwarves apart at a glance in the Bevy client, in the world and when one is selected; a selected dwarf stays sharp when the camera zooms in (#136). The TUI shows names.
+FR40 *(stretch — first cut)*: The dwarf model is prepared for per-dwarf variation beyond colour. Preparation only; ships no new variants.
+
+**F15 — Trades and concurrent work.**
+
+FR41: Three jobs exist — dig, haul, cut tree. Cutting removes the whole tree and yields wood items at its base. Dig no longer takes tree tiles (today it removes trees tile by tile for nothing, `lib.rs:1422/:931`).
+FR42: Each dwarf has one profession (miner, hauler, woodcutter) and claims only jobs of that profession, FIFO within the trade. Dig, haul and cut run concurrently; hauls no longer wait behind a dig backlog. A dwarf with no work in its trade idles and wanders; it never helps other trades.
+FR43: The player assigns and changes professions in the Bevy client by selecting a dwarf (new selection + UI work). Each dwarf starts with a seeded default profession, and the five always include at least one miner, one hauler and one woodcutter — a fresh world is playable before any assignment.
+FR44: The player designates trees for cutting in the Bevy client, the same way they designate digging.
+FR45: Dwarves visibly perform their work — dig, haul (carrying) and cut animations, each driven only by real sim state and timed to the sim's work. The art hard stop (M2-24) governs every round: a ledger row per round; after two rounds Wolf's eye has not judged converging, the loop returns to Wolf, who rules ship-plain or park.
+
+**F16 — Resources and goals.**
+
+FR46: Worldgen places minerals and gems inside the rock — seeded, deterministic, gems rarer than minerals. Digging a mineral or gem cell yields an item of that kind, hauled like stone. The set is small and fixed (one or two minerals, one gem); exact kinds and placement tuned in the story.
+FR47: A chained tutorial runs in the sim: collect N wood, then N minerals, then N gems. A resource counts only once in a stockpile; progress is the current total of that kind across all stockpiles (items stockpiled before the goal started count). A completed goal stays completed. Goals and progress are world state, on the wire and saved; targets are hardcoded constants.
+FR48: Both clients show the current goal and its progress; the player sees a goal complete, and the game says so when the chain completes. No fail state; play continues after the chain.
+
+**F17 — Movement and sim defects.**
+
+FR49 (#133): At most one dwarf per tile. A dwarf whose next step is occupied waits or routes around. Two dwarves head-on in a one-wide tunnel both get moving within a bounded number of ticks that the scenario test names: the lower id backs off or reroutes; if it has nowhere to go, the other backs off.
+FR50 (#134): Stockpile placement, hauls and falling items never leave an item on, or visibly inside, a light emitter (the campfire). The story first establishes whether today's stones sit on the emitter's own cell or on a neighbour its model overlaps.
+FR51 (#132): No dwarf stays stuck after digging. A dwarf that cannot reach its job, or whose job lost its support, releases it within a bounded number of ticks and goes on with other work; the designation stays queued and retried, never silently dropped (M1 FR8 holds). Reproduced first as a red scenario test.
+FR52 (#135): Nothing is left floating above a dug-out block — items fall to the next supporting surface, trees fall or are removed, no dwarf stands on air. The story picks the simplest rule that reads right. Unsupported terrain and cave-ins stay out.
+
 ### NonFunctional Requirements
 
 NFR1: Platform — phase one targets the WSL2 devpod and any decent terminal emulator over SSH; no other platforms. Nothing in phase one may preclude the long-term multi-machine server + client shape, and nothing builds for it.
@@ -120,6 +157,12 @@ NFR6: **Feels alive, Bevy bar (measured).** Sustained **60 fps at working zoom**
  Client-agnostic ack bar: in any client, a player command's effect is visible in the issuing client within ~200 ms (one tick + one frame), met by the no-explicit-ack convention. NFR2 is TUI-specific and explicitly does **not** stretch to this client.
 NFR7: **Determinism unchanged.** FR27–FR29 land inside worldgen and sim state, so seed + command log ⇒ identical state must survive them; scenario tests cover trees and light emitters like any other world state.
 NFR8: **Gate grows sibling probes.** `scripts/gate.sh` gains the `gui` and `client-core` twins of the `tui` no-`sim-core`-edge probe, so the AD-1 edge stays guarded for the client that matters most.
+
+#### Milestone 3 (NFR9–NFR11)
+
+NFR9: **Determinism holds.** Identity, professions, resources, goals and one-per-tile movement all live in sim state; seed + command log ⇒ identical state; scenario tests cover each.
+NFR10: **Parity rule, narrowed (amendment on the record).** Every sim change reaches the TUI as display — names, professions, new item kinds, goal progress (professions added by Wolf, 2026-09-28; M1 FR22 anticipated them). Profession assignment and tree designation are Bevy-only commands in M3; the TUI gains no new input. Side effect: the TUI can no longer drive a cut or a profession change end to end; scenario tests cover the sim.
+NFR11: **Refuse loudly.** A command the sim refuses (a stockpile on rock, a cut on a non-tree tile, …) is visible to the player, never silently discarded. M3 adds several new filters; this is the known trap for them (8.2's silent-filter class; `deferred-work.md:406`).
 
 ### Additional Requirements
 
@@ -163,6 +206,41 @@ From the Architecture Spine (AD-1…AD-12, conventions, stack, structural seed):
 - **Art:** procedural/code-first; no asset pipeline in the base build. Authored assets enter only when a concrete case forces the decision on the record (dwarves expected first). This **overturns, on the record**, M1's "models authored as code, never as assets, ever" — that constraint's premise no longer holds. A **tech-art-guidelines deliverable** is owed: its procedural-era half (value discipline, sky-as-illuminant, material rules) by the first `gui` visual stories; its asset-contract half arrives with the pipeline.
 - **Story rules still binding (M1 `docs/technical-preferences.md`):** vertical slices, never horizontal layers; every story ends with something observable; a story fits one dev-agent session; **every story names its observability instrument in a task and tests the instrument**; a scripted capture must be reproducible and range-check its own output — **exit 0 is not a result**.
 - **Decisions owed inside M2 stories (spine Deferred; the spine binds only the outcome):** the **z-slice control mechanism** (UX-DR3); the **world-edge treatment** (UX-DR12); and the **vista mountain silhouette** — should in-grid terrain give the skyline peaks backlit by the aurora within 128×128×32? M1's FR2 assumed "modest rolling hills" **for pathfinding, not for the vista register**, so this needs conscious revisiting on the record at worldgen tuning, never silent stretching. Also recorded as deferred with explicit triggers, building nothing now: native Windows build (trigger: Wolf calls for it), asset pipeline via MagicaVoxel `.vox`/`bevy_vox_scene` (trigger: a story needs authored assets — unverified against bevy 0.19, re-verify at trigger time), golden-image CI (trigger: a deterministic driver-stable render path exists; not planned), and trimming bevy features (trigger: a measured gate-time or binary-size problem).
+
+#### Milestone 3 — from the inherited spines, the M2-close retro and the PRD reconciliation
+
+**No M3 architecture pass (Wolf, 2026-09-28).** The M2 spine (`architecture-frostvein-2026-08-09`) and, through it, the M1 spine bind unchanged. **No new crate and no new dependency edge** — the six-crate graph stays the closed set. **Each wire change lands in `protocol` with the story that needs it** (AD-6: enums never strings, `sim-core` source of truth, exhaustive `match` bridges), and that story names its wire diff the way AD-16 named M2's.
+
+- **Wire growth M3 implies** (per story, never up front): dwarf identity (name, colour) and profession on the dwarf entity; a kind on `Item` (`protocol/src/lib.rs:167` already carries the NOTE for it); mineral and gem `Material` variants; goal state (kind, target, progress, completed); two new world-mutating commands — set profession and designate cut — which ride the AD-10 queue.
+- **Colour is an id on the wire, not RGB** (parent convention: wire carries ids, the id → RGB table lives in the client). FR38's "distinct colouring … sent over the wire" is satisfied by a per-dwarf colour id mapped by `gui`'s and `tui`'s tables (confirmed by Wolf, 2026-09-28).
+- **AD-8:** goals and per-dwarf identity ride every delta as full-resend small state. Cut marks go under the same 4,096 designation cap as dig marks (3.2).
+- **AD-11:** `SaveState` grows with names, colours, professions, item kinds and goal state; the save → load → tick N ≡ never-saved gate test covers each.
+- **AD-7:** names, colours, default professions and mineral/gem placement come from purpose-named seed streams; FR49's tie-break is by entity id, never by iteration order.
+- **Spine amendments owed** (surfaced, not silently contradicted):
+  - **AD-12** says job-kind stories "add variants and execution systems, never claiming logic". FR42 changes the one claiming system to filter by profession. The claiming system stays single; its filter grows.
+  - **AD-16** says digging a tree tile drops no item and wood is deferred. FR41 supersedes that: dig refuses tree tiles, and the cut job yields wood.
+  - **"No explicit ack messages"** (parent convention). NFR11 needs a refusal the player can see, and a client-side pre-check would be game logic in a client (AD-4). So a refusal must come from the sim over the wire. The first story that adds a filter owns this shape.
+- **AD-14/AD-15:** work animations are presentation of world-projected dwarves, driven by the job state and progress on the wire. The client never times the work itself.
+- **AD-5 (plain A\*) stands** for FR49: an occupied tile is a routing cost or a wait, not a new pathfinder.
+- **Story-level watch items** from `reconcile-inputs.md` and `deferred-work.md`, settled in the story that meets them:
+  - #133: `settle` dropping a dwarf onto an occupied tile, spawn placement, and a dwarf idling on a dig face's only access cell.
+  - Haul jobs are not bounded by `MAX_DESIGNATIONS` (`:379`), and item counts grow with kinds.
+  - Clear cannot reach a second standable cell (`:1025`). Underground mining may trigger it.
+- **Process (M2-close retro, recorded in `docs/technical-preferences.md` 2026-09-28):**
+  - **One M3 epic that grows by stories**, with a new epic only if the milestone goal changes (M2-25).
+  - Sim work is judged by red-first scenario tests. Look and UX work reaches Wolf's seat before review (M2-26).
+  - Every defect story starts from a red scenario test or an observed live repro (M2-27).
+  - The art hard stop governs FR40 and FR45 (M2-24).
+- **Cap: 10–14 stories, soft.** Stretching is allowed when called out on the record. Cut order: FR40, then FR52's trees (keep falling items), then the gem tier of FR46/FR47.
+- **Outside the cap:**
+  - The tooling stories M2-28..31 (#142–#145).
+  - The retro's hygiene and records items M2-33/M2-34 (#147, #148).
+  - Neighbour issues folded into those stories (Wolf, 2026-09-28): #81 goes with #143 (same script); #46 is superseded by #144; #72 and #88 (flaky under full-gate load) go with #145; #104 and #89 (mutate.sh leaves artifacts mutated / grades a stale simd) become one small tooling fix.
+- **Order constraints:**
+  - Identity and the first work animation reach the seat in the milestone's **first half** (look work is not back-loaded).
+  - The retro's defect order is #134 → #132 → #135.
+  - **#132 is fixed before #133 lands**, so that a collision deadlock cannot be confused with #132's unknown stall (reconcile 1.2).
+- **Baseline:** today's five dwarves and today's worldgen. No TUI regression ships.
 
 ### UX Design Requirements
 
@@ -217,6 +295,12 @@ UX-DR21: The player selects tiles and rectangles in the 3D view **with the mouse
 
 UX-DR22: **The sign-off gate, both halves.** *Opening:* no visually subjective story is implemented before Wolf has approved a cheap "here is what you will see" artifact for it — target frame, mock, sketch, or generated reference of *our actual world* at the framing being built, **one artifact per visual story**. *Closing:* the story is done only when Wolf has **viewed the built result live** and compared it against the approved artifact. This is the structural fix for the FR24 defect class — a spec that is meetable, implemented, and not what was wanted, which no review layer can catch by construction. **4.1a was lost at live viewing, not at spec time.** Per AD-17, `gui --capture` output serves the closing half and never replaces the opening half.
 
+#### Milestone 3
+
+No UX design contract exists for M3. The Bevy-side UI it needs — dwarf selection, profession assignment, cut designation, goal display, work animations — is specified by FR39, FR43, FR44, FR45 and FR48, and judged at Wolf's seat early (M2-26).
+
+**UX-DR22's opening half, narrowed for M3 (Wolf, 2026-09-28):** every look story except the work animations still starts from a cheap "here is what you will see" draft that Wolf approves before it is built. That covers identity, the selected dwarf, the profession UI, cut designation and goal display. The **work animations (FR45) skip the draft** and go straight to the seat, under the art hard stop. The closing half, Wolf viewing the built result live, binds every look story.
+
 ### FR Coverage Map
 
 FR1: Epic 1 - Fixed-size seeded voxel world with icy layered terrain
@@ -263,6 +347,26 @@ FR37: Epic 5 - The Bevy client as a `protocol`-only consumer, coexisting with co
 **NFR coverage:** NFR5 (no drift) is a bar on every `gui` story, not one story's work. NFR6 lands as an instrument in Epic 5 (the envelope proof measures it; the vista bar is re-checked there) and is re-measured under full load in Epics 6 and 8. NFR7 lands with Epic 5's worldgen story. NFR8's probes land with the crates that need them — `client-core` and `gui`, both in Epic 5.
 
 **UX-DR coverage:** Epic 5 — UX-DR1, 2, 4, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 20. Epic 6 — UX-DR9, 14, 19. Epic 7 — UX-DR3, 17, 18. Epic 8 — UX-DR21. **UX-DR22 (the sign-off gate, both halves) binds every visually subjective story in every epic.**
+
+#### Milestone 3 (FR38–FR52)
+
+FR38: Epic 12 - Per-dwarf name and colour id as seeded, saved, wire-carried world state
+FR39: Epic 12 - Dwarves distinguishable at a glance in the Bevy client; a selected dwarf stays sharp when zoomed (#136); the TUI shows names
+FR40: Epic 12 - *(stretch, first cut)* Dwarf model prepared for per-dwarf variation
+FR41: Epic 12 - Dig, haul and cut-tree jobs; cutting fells the whole tree and yields wood; dig refuses tree tiles
+FR42: Epic 12 - One profession per dwarf, claiming FIFO within its trade; dig, haul and cut run concurrently
+FR43: Epic 12 - Profession assignment by selecting a dwarf in the Bevy client; seeded defaults cover all three trades
+FR44: Epic 12 - Tree-cut designation in the Bevy client
+FR45: Epic 12 - Dig, haul and cut animations driven by sim state (art hard stop)
+FR46: Epic 12 - Seeded minerals and gems in the rock, dug into haulable items
+FR47: Epic 12 - Chained tutorial goals in the sim (wood, then minerals, then gems), counted from stockpile totals
+FR48: Epic 12 - Goal and progress shown in both clients; completion announced; play continues
+FR49: Epic 12 - One dwarf per tile, with the lower-id head-on tie-break (#133)
+FR50: Epic 12 - No item on or visibly inside a light emitter (#134)
+FR51: Epic 12 - No dwarf stuck after digging; unreachable or unsupported jobs are released and retried (#132)
+FR52: Epic 12 - Items fall to support, trees fall or are removed, no dwarf on air (#135)
+
+**NFR coverage (M3):** NFR9 (determinism), NFR10 (TUI display parity, including professions) and NFR11 (refuse loudly) are bars on every Epic 12 story, not one story's work.
 
 ## Epic List
 
@@ -357,6 +461,18 @@ volumetric haze; a day/night cycle that boots at night — each judged bench-the
 **FRs covered:** none new — added scope ruled by Wolf. NFR5's carve-out governs the cycle (pure
 atmosphere, client-side, never sim meaning); NFR6 governs every effect (60 fps at working zoom on
 the vehicle, measured with `--perf-log`, not eyeballed). Runs after 10.8, before 8.3.
+
+---
+
+## Epic List — Milestone 3 (added 2026-09-28)
+
+**One epic, growing by stories** (M2-25; retro ruling that M3 is one epic). Cap 10–14 stories, soft: stretching is allowed when called out on the record. Cut order: FR40, then FR52's trees, then the gem tier of FR46/FR47. **The tooling and hygiene action items (#142–#148, plus the issues folded into them) are NOT in this epic** (Wolf, 2026-09-28). They run beside it as GitHub issues, with no story files and outside the cap.
+
+### Epic 12: A Crew with Trades
+Wolf starts a fresh world and can tell his five dwarves apart by name and colour. Each one has a trade: miner, hauler or woodcutter. He designates digs and tree cuts, and watches mining, hauling and felling happen at the same time. Minerals and gems come out of the rock and wood comes from the pines. A short tutorial chain (wood, then minerals, then gems) gives the first session a direction, announces when it's done, and play carries on. Along the way, the four sim defects Wolf found at the M2 close (#132–#135) are fixed, each with a scenario test that was red first.
+**FRs covered:** FR38–FR52. NFR9–NFR11 bind every story in the epic.
+**Why one epic:** professions, the cut job, resources, goals and occupancy all change the same places in `sim-core` (the job market, `settle`, worldgen, the dwarf entity). The risk boundary that seat feedback could move, the look work, is handled inside the epic by the first-half rule.
+**Order constraints:** identity and the first work animation reach the seat in the first half; defects go #134 → #132 → #135, with #132 fixed before #133; professions and the cut job come before anything that needs concurrent work; the first story that adds a command filter decides the NFR11 refusal shape; resources exist before the goals that count them.
 
 ---
 
@@ -2288,3 +2404,343 @@ capture that does not pin the clock is not evidence.
 **Given** the vehicle,
 **Then** Wolf watches one full cycle at fast-forward and signs off both halves: the night against
 10.8's approved frame, the day against an artifact he approved before it was built.
+
+---
+
+## Epic 12: A Crew with Trades
+
+Wolf starts a fresh world and can tell his five dwarves apart by name and colour. Each one has a trade: miner, hauler or woodcutter. He designates digs and tree cuts, and watches mining, hauling and felling happen at the same time. Minerals and gems come out of the rock and wood comes from the pines. A short tutorial chain (wood, then minerals, then gems) gives the first session a direction, announces when it's done, and play carries on. Along the way, the four sim defects Wolf found at the M2 close (#132–#135) are fixed, each with a scenario test that was red first.
+
+**Twelve stories and one stretch, inside the 10–14 cap.** Cut order if the cap bites: 12.13 (FR40), then the tree half of 12.11, then the gem tier of 12.10 and 12.12. The tooling and hygiene action items (#142–#148) are not in this epic; they run beside it as issues.
+
+**Order is load-bearing** (approved 2026-09-28):
+- Identity (12.2) and the first work animation (12.5) land in the first half.
+- The defects go #134 (12.1) → #132 (12.3) → #135 (12.11), and #132 is fixed before #133 (12.9).
+- 12.1 is the first story to add a command filter, so it decides how a refusal reaches the player; every later filter uses that shape.
+- Professions (12.4) come before concurrent work, and wood (12.7) and ore (12.10) exist before the goals that count them (12.12).
+
+**Standing acceptance criteria — every Epic 12 story, not restated below:**
+1. `scripts/gate.sh` is green, run in full, before the story is done.
+2. **Sim work is proven by deterministic scenario tests** (seed → commands → tick N → assert). **Defect stories start from a red test** (or an observed live repro), recorded before the fix (M2-27).
+3. **New sim state is deterministic and saved** (NFR9, AD-7, AD-11): a scenario test shows seed + command log ⇒ identical state, and the save → load → tick N ≡ never-saved → tick N gate test covers the new state.
+4. **Wire changes land in `protocol` with this story, and the story names its wire diff** (AD-6: enums never strings; `sim-core` is the source of truth; `simd` bridges by exhaustive `match`). No other story's wire shape is added early.
+5. **TUI display parity, no TUI regression** (NFR10): anything new in the sim that the player should see reaches the TUI as display. The TUI gains no new input in M3.
+6. **Refuse loudly** (NFR11): a command the sim refuses is visible in the issuing client, in the shape 12.1 decides. A mark or rect that applies to zero tiles is a refusal, never a silent no-op.
+7. **Look stories:**
+   - They start from a cheap "here is what you will see" draft that Wolf approves before the look is built. The **work animations (12.5, 12.8) skip the draft** and go straight to the seat.
+   - Every look story is done only when Wolf has viewed the result live at the seat (UX-DR22 closing half, M2-26).
+   - Art rounds follow the hard stop (M2-24): a ledger row for every round. After two rounds Wolf's eye has not judged converging, the loop returns to Wolf, who rules whether it ships plain or is parked.
+8. **Every story names its observability instrument in a task, with its exact command, and tests it.** Exit 0 is not a result.
+9. NFR6 still holds on the vehicle for any story that adds rendering.
+
+### Story 12.1: Stones Stay Out of the Fire
+
+As the boss,
+I want hauled stones to land in the stockpile and never in the campfire, and to be told when a stockpile I place is refused,
+So that my camp looks right and I never wonder whether an order was ignored.
+
+**Acceptance Criteria:**
+
+**Given** #134 is unconfirmed in its cause,
+**When** the story begins,
+**Then** it first records which case Wolf saw: stones on the emitter's own cell, or on a neighbouring cell that the campfire model visually overlaps. That is established by a red scenario test or an observed live repro, and the fix targets the case found (FR50).
+
+**Given** a stockpile rect placed over a light emitter's cell (and, if the repro shows it, a cell the emitter's model overlaps),
+**When** the sim applies it,
+**Then** those cells never become stockpile cells, and no haul ever sets an item down on them (FR50)
+**And** a scenario test that was red before the fix shows a camp-adjacent stockpile never receiving a stone on or inside the campfire.
+
+**Given** a stockpile rect that yields zero valid cells (all rock, or all emitter),
+**When** the sim refuses it,
+**Then** the issuing client shows the refusal. This closes `deferred-work.md:406`'s "stockpile on rock is a silent no-op" (NFR11).
+
+**Given** this is M3's first command filter,
+**When** the refusal shape is chosen,
+**Then** the story records it as the pattern every later filter follows:
+- a typed refusal from the sim over the wire, not a client-side pre-check, since game rules must not live in a client (AD-4);
+- the spine's "no explicit ack messages" convention is amended on the record;
+- the refusal is shown in both clients.
+
+**Given** the fix,
+**Then** #134 closes with its red-then-green scenario test, and at the seat Wolf sees no stone in the fire after a haul to a camp-adjacent stockpile.
+
+### Story 12.2: Five Dwarves You Can Name
+
+As the boss,
+I want each dwarf to have a name and a colour of their own,
+So that I can tell them apart at a glance and care which one is doing what.
+
+**Acceptance Criteria:**
+
+**Given** worldgen,
+**When** the five dwarves spawn,
+**Then** each has a name and a colour id, both seeded from a purpose-named stream. The names are distinct among the five, and so are the colours. Both are world state: sent over the wire, saved, never invented by a client (FR38, NFR5)
+**And** the colour travels as an **id**; `gui` and `tui` each map it to RGB through their colour tables (confirmed by Wolf, 2026-09-28).
+
+**Given** the Bevy client at working zoom,
+**When** Wolf looks at the valley,
+**Then** each dwarf reads as its own colour on the model. When a dwarf is selected, its name is shown (FR39).
+
+**Given** a selected dwarf and the camera zoomed in on it,
+**Then** the dwarf is sharp, not blurred by depth of field. The story also records what depth of field focuses on when nothing is selected. #136 closes with that rule (FR39).
+
+**Given** the TUI,
+**Then** it shows the dwarves' names (FR39, NFR10).
+
+**Given** the look,
+**Then** Wolf approves a draft of the per-dwarf colouring and the name display before it is built. At the seat he can name each of the five by sight (success criterion 2).
+
+### Story 12.3: No Dwarf Stuck After Digging
+
+As the boss,
+I want a dwarf that cannot finish its job to let go of it and move on,
+So that my crew never freezes in place with work still waiting.
+
+**Acceptance Criteria:**
+
+**Given** #132 is unreproduced,
+**When** the story begins,
+**Then** it reproduces the stuck dwarf as a **red scenario test** first. The retro's two suspects are an unreachable designation retried forever with no way to abandon it, and a channel job orphaned when its support was dug. **If neither reproduces, the story stops and reports to Wolf** rather than fixing a guessed cause (M2-27).
+
+**Given** a dwarf whose job has become unreachable, or has lost its support,
+**When** ticks pass,
+**Then** it releases the job within a bounded number of ticks, which the scenario test names, and goes on with other work (FR51)
+**And** the designation stays queued and is retried, never silently dropped (M1 FR8).
+
+**Given** the fix,
+**Then** #132 closes with its red-then-green test, and the walking-skeleton scenario test stays green.
+
+### Story 12.4: Every Dwarf Has a Trade
+
+As the boss,
+I want each dwarf to have a trade and to work only at it,
+So that digging, hauling and felling can all go on at once instead of queueing behind each other.
+
+**Acceptance Criteria:**
+
+**Given** the job market,
+**When** a dwarf claims work,
+**Then** it claims only jobs of its own profession: a miner digs and channels, and a hauler hauls. The woodcutter's trade has no job kind until 12.7 adds cutting. Claiming is FIFO within that trade (FR42)
+**And** the single claiming system stays single; only its filter grows. The AD-12 amendment is recorded on the spine.
+
+**Given** a fresh world,
+**When** the five dwarves spawn,
+**Then** each has a seeded default profession, and the five always include at least one miner, one hauler and one woodcutter, for every seed. A property test over many seeds pins that (FR43).
+
+**Given** a dig backlog and a stockpile,
+**When** the sim runs,
+**Then** hauling starts while digging is still going on. A scenario test shows the first stone reaching the stockpile before the dig backlog is exhausted, so the 8.3 "hauls queue behind digs" symptom is gone (FR42).
+
+**Given** a dwarf with no work in its trade (such as a woodcutter before any tree can be cut),
+**Then** it idles and wanders. It never takes another trade's job (FR42).
+
+**Given** the TUI,
+**Then** it shows each dwarf's profession (NFR10, added by Wolf 2026-09-28).
+
+### Story 12.5: Dwarves at Work — Dig and Haul
+
+As the boss,
+I want to see a miner swing at the rock and a hauler carry the stone,
+So that the valley shows work being done, not dwarves standing still.
+
+**Acceptance Criteria:**
+
+**Given** a dwarf working a dig or channel job,
+**Then** it plays a dig animation. **Given** a dwarf carrying an item, **then** it plays a carry animation and the item is visibly held. Each is driven only by sim state on the wire; the client never invents a state (FR45, NFR5, AD-15).
+
+**Given** the sim's speed,
+**Then** the animations follow the sim: they are timed to the sim's work, fast-forward speeds them up, and pause freezes them. The walk cycle's speed trap is not repeated.
+
+**Given** the headless gui tests,
+**Then** a test shows that the dig and carry clips play from the matching wire state and stop when it ends (AD-17 rung 2).
+
+**Given** the art,
+**Then** it goes straight to Wolf's seat without a draft, under the hard stop: a ledger row per round. After two rounds Wolf's eye has not judged converging, the loop returns to Wolf, who rules whether it ships plain or is parked (FR45, M2-24).
+
+### Story 12.6: Wolf Gives Them Their Trades
+
+As the boss,
+I want to select a dwarf and change their trade,
+So that I can shape my crew to the work I want done.
+
+**Acceptance Criteria:**
+
+**Given** a dwarf selected in the Bevy client,
+**Then** its name and profession are shown, and Wolf can set it to miner, hauler or woodcutter (FR43).
+
+**Given** that choice,
+**When** it is made,
+**Then** a set-profession command rides the AD-10 queue. This is the first time a selection sends anything over the wire. The dwarf's profession changes in world state, and both clients show it (NFR10).
+
+**Given** a dwarf reassigned while holding a job of its old trade,
+**When** the command applies,
+**Then** the job is released back to the queue, not lost, and a dwarf of the right trade claims it. A scenario test pins this.
+
+**Given** a set-profession command the sim cannot apply (an unknown dwarf id),
+**Then** it is refused loudly (NFR11).
+
+**Given** the look,
+**Then** Wolf approves a draft of the selection and profession UI before it is built, and the TUI gains no new input (NFR10).
+
+### Story 12.7: Timber
+
+As the boss,
+I want to mark trees for cutting and have my woodcutters fell them for wood,
+So that the pines become something my fortress collects.
+
+**Acceptance Criteria:**
+
+**Given** a woodcutter and a tree marked for cutting,
+**When** the woodcutter works it,
+**Then** the **whole tree** leaves the world and wood items appear at its base. The story defines what "one tree" is, and a scenario test pins that cutting one tree leaves a neighbouring tree standing (FR41).
+
+**Given** items,
+**Then** they gain a **kind** (stone, wood). Wood is hauled and stockpiled like stone, and the item kind is on the wire and saved (M1 FR12 reopened).
+
+**Given** a dig or channel mark over tree tiles,
+**Then** dig no longer takes tree tiles. The AD-16 supersession is recorded on the spine. **Given** a cut mark over no tree at all, **then** it is refused loudly (FR41, NFR11).
+
+**Given** the Bevy client,
+**Then** Wolf designates cuts the same way he designates digs (drag a rect, in its own designation mode), and can cancel them. Cut marks count toward the same 4,096 designation cap (FR44, 3.2).
+
+**Given** the TUI,
+**Then** it shows cut marks and wood items (NFR10).
+
+**Given** the look,
+**Then** Wolf approves a draft of the cut marks and wood items before they are built.
+
+### Story 12.8: Dwarves at Work — The Cut
+
+As the boss,
+I want to see a woodcutter swing at the tree,
+So that felling reads as work like digging does.
+
+**Acceptance Criteria:**
+
+**Given** a dwarf working a cut job,
+**Then** it plays a cut animation, driven only by wire state and timed to the sim's work, following speed and pause as 12.5's animations do (FR45).
+
+**Given** the headless gui tests,
+**Then** the cut clip plays from the matching wire state and stops when it ends (AD-17 rung 2).
+
+**Given** the art,
+**Then** it goes straight to the seat under the same hard stop as 12.5.
+
+**Given** a fresh world at the seat,
+**When** Wolf assigns professions and designates a dig, a stockpile and a cut,
+**Then** he watches dig, haul and cut happen at the same time, in one sitting, and each animation reads, unless he ruled under FR45 that it ships plain or is parked (success criterion 1). This is the first story where all three trades and their animations exist.
+
+### Story 12.9: One Dwarf per Tile
+
+As the boss,
+I want dwarves to step around each other instead of through each other,
+So that my crew looks like bodies in a real place.
+
+**Acceptance Criteria:**
+
+**Given** a dwarf whose next step is occupied by another dwarf,
+**Then** it waits or routes around it. At most one dwarf stands on a tile, at every tick (FR49). Plain A* stands: an occupied tile is a wait or a routing cost, not a new pathfinder (AD-5).
+
+**Given** two dwarves meeting head-on in a one-wide tunnel,
+**Then** both are moving again within a bounded number of ticks that the scenario test names. The lower-id dwarf backs off or reroutes; if it has nowhere to go, the other backs off (FR49).
+
+**Given** the edge cases named at reconciliation,
+**Then** each has a scenario test:
+- `settle` never drops a dwarf onto an occupied tile;
+- spawn places the five on distinct tiles;
+- a dwarf idling on a dig face's only access cell does not block the miner forever.
+
+**Given** the story lands after #132's fix,
+**Then** 12.3's test and the walking-skeleton scenario test stay green. #133 closes.
+
+### Story 12.10: Ore in the Rock
+
+As the boss,
+I want my miners to find minerals and gems in the mountain,
+So that digging deeper is worth it.
+
+**Acceptance Criteria:**
+
+**Given** worldgen,
+**Then** it places one or two mineral kinds and one gem kind inside the rock, seeded and deterministic, with gems rarer than minerals. The exact kinds and placement are tuned in the story (FR46)
+**And** they are new `Material` variants on the wire.
+
+**Given** a miner digging a mineral or gem cell,
+**Then** an item of that kind appears, and it is hauled and stockpiled like stone (FR46).
+
+**Given** both clients,
+**Then** mineral and gem cells and items are distinguishable from stone and from each other (TUI glyphs and colours; `gui` material table) (NFR10).
+
+**Given** the look,
+**Then** Wolf approves a draft of how ore reads in the rock before it is built.
+
+### Story 12.11: Nothing Floats
+
+As the boss,
+I want things above a dug-out block to come down,
+So that the world never shows stones hanging or trees standing on air.
+
+**Acceptance Criteria:**
+
+**Given** #135 is unreproduced,
+**When** the story begins,
+**Then** it reproduces floating items and a floating tree as red scenario tests first (M2-27).
+
+**Given** an item whose supporting tile is dug out,
+**Then** it falls to the next supporting surface, and never onto or into a light emitter (FR52, FR50)
+**And** any haul job for it follows the item's live position, so the job does not retry forever (`lib.rs:709`).
+
+**Given** a tree whose support is dug out,
+**Then** it falls or is removed, whichever is the simplest rule that reads right. The story records the rule (FR52). *This half is the second item on the cut list.*
+
+**Given** any dig or channel,
+**Then** no dwarf is left standing on air (FR52).
+
+**Given** unsupported terrain,
+**Then** nothing changes. Cave-ins stay out of scope.
+
+**Given** the fix,
+**Then** #135 closes with its red-then-green tests.
+
+### Story 12.12: The First Goals
+
+As the boss,
+I want the game to give me a short chain of goals and tell me when I meet them,
+So that my first session has a direction without ever ending the game.
+
+**Acceptance Criteria:**
+
+**Given** a fresh world,
+**Then** the sim runs a chain of goals: collect N wood, then N minerals, then N gems, with hardcoded target constants (FR47).
+
+**Given** a goal's progress,
+**Then** it is the current total of that kind across all stockpiles, and items stockpiled before the goal started count. A completed goal stays completed, even if stock later drops (FR47).
+
+**Given** the wire,
+**Then** goals travel as typed state (kind, target, progress, completed) and are saved. The rules that advance them live only in the sim (M1 FR17, NFR5).
+
+**Given** both clients,
+**Then** each shows the current goal and its progress, the player sees a goal complete, and the game says so when the chain completes. There is no fail state, and play continues after the chain (FR48, NFR10).
+
+**Given** the default seed,
+**Then** a scenario test drives the chain to completion with scripted commands. That proves the targets are reachable in the default world, gems included (success criterion 3).
+
+**Given** the look,
+**Then** Wolf approves a draft of the goal display and the completion announcement before they are built. At the seat, the chain completes in play (success criterion 3).
+
+### Story 12.13 *(stretch — first cut)*: Ready for More Faces
+
+As the boss,
+I want the dwarf model prepared for per-dwarf variation beyond colour,
+So that later milestones can give each dwarf a look of their own without redoing the model.
+
+**Acceptance Criteria:**
+
+**Given** the dwarf model,
+**Then** it is prepared for per-dwarf variation beyond colour, and ships **no new variants** (FR40).
+
+**Given** the art,
+**Then** it is Wolf's hands or a seat he can watch live, under the hard stop (M2-24).
+
+**Given** cap pressure,
+**Then** this story is the first cut, before anything else in the epic.
