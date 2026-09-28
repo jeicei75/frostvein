@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 11.3's creation
 
 # Story 12.1: Stones Stay Out of the Fire
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -155,16 +155,16 @@ of the refusal.
         `the_live_clock_readout_follows_the_daemons_tick_and_speed` (`:3298`). Inject a `Delta`
         with a refusal and the HUD text equals `refusal_text`. Inject a later plain delta and it is
         unchanged. Push a command and it is empty.
-- [ ] **Task 5 — the record (AC7, AC1).**
-  - [ ] Amend the "Command acknowledgement" row in
+- [x] **Task 5 — the record (AC7, AC1).**
+  - [x] Amend the "Command acknowledgement" row in
         `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md`
         with an `Amended 2026-MM-DD (Story 12.1)` note. It covers: refusals ride the next delta's
         `refusals` and go to every client; the sim decides; every later filter adds a `Refusal`
         variant.
-  - [ ] `deferred-work.md:406` ("stockpile on solid rock is a silent no-op"): mark it
+  - [x] `deferred-work.md:406` ("stockpile on solid rock is a silent no-op"): mark it
         **CLOSED in Story 12.1**. Its dig twin (a dig rect hitting nothing diggable) stays open;
         say so on the entry.
-  - [ ] Mutation set `_bmad-output/implementation-artifacts/mutations/12-1.sh`, every row KILLED:
+  - [x] Mutation set `_bmad-output/implementation-artifacts/mutations/12-1.sh`, every row KILLED:
         (1) drop the `is_walkable` filter in `PlaceStockpile` → the scenario test fails;
         (2) revert the `free` filter to `is_standable` → the old-save unit test fails;
         (3) simd discards the refusal → the `serve.rs` test fails;
@@ -262,8 +262,6 @@ no `refused`. Restore it, and B shows it again. Exit 0 is not a result; the text
 
 ### Project Structure Notes
 
-- `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`
-- `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
 - `crates/sim-core/src/lib.rs`: UPDATE (`Refusal`, `apply_command`, `work_positions`, unit tests)
 - `crates/sim-core/tests/scenario.rs`: UPDATE (the red scenario test)
 - `crates/protocol/src/lib.rs`: UPDATE (`Refusal`, `Delta::refusals`, wire test)
@@ -291,12 +289,25 @@ gpt-6-sol
 
 ### Debug Log References
 
+- Task 2 broadcast check: the daemon test attached a second client before the refused command and asserted its delta carried the same refusal; targeted test passed.
+- Task 5 mutation verification (`scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/12-1.sh`, run alone after commit):
+  - `stockpile keeps emitter zones` — `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire` — KILLED: `panicked at crates/sim-core/tests/scenario.rs:113:5`; test result FAILED, 0 passed, 1 failed.
+  - `old save haul goals include emitters` — `an_old_save_zone_on_an_emitter_is_no_haul_goal` — KILLED: `assertion failed: super::work_positions(&terrain, &blocked, &zones, &items, job, ...)`; test result FAILED, 0 passed, 1 failed.
+  - `daemon discards stockpile refusal` — `the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells` — KILLED: `assertion left == right failed: the rejected stockpile must be broadcast in the next delta`; test result FAILED, 0 passed, 1 failed.
+  - `tui omits refusal status` — `streamed_refusal_stays_on_the_status_row_across_plain_deltas` — KILLED: `panicked at crates/tui/tests/client.rs:276:9`; test result FAILED, 0 passed, 1 failed.
+  - `gui drops last refusal` — `refusal_hud_follows_wire_and_clears_on_the_next_world_command` — KILLED: `assertion left == right failed` at `crates/gui/src/ingest.rs:3382:9`; test result FAILED, 0 passed, 1 failed.
+- Task 6 daemon tests: `RUST_TEST_THREADS=2 cargo test --offline -p simd --test serve --quiet` → 66 passed, 0 failed.
+- Task 6 manual live verification on fresh `simd` port 43767, `tui --frames 12 --key p,enter,enter`:
+  - A emitter, `--z 9`: 12 status rows, 7 with refusal; last row `tick 14  normal  z 9/31  dwarves 5  N up  stockpile refused: no valid cells`; snapshot zones `[]`.
+  - B rock, `--z 8`: 12 status rows, 7 with refusal; last row `tick 26  normal  z 8/31  dwarves 5  N up  stockpile refused: no valid cells`; final snapshot zones `[]`.
+- The pre-commit fast gate was green on each successful commit. The full `scripts/gate.sh` without arguments was not run by request; seat verification remains pending.
 - Task 4 GREEN: `streamed_refusal_stays_on_the_status_row_across_plain_deltas` and `refusal_hud_follows_wire_and_clears_on_the_next_world_command` passed. The TUI stub sent one refused delta then plain deltas; the GUI test drove a world command after the plain delta.
 - Task 0 RED on unfixed code: `zone on an emitter: [Pos { x: 64, y: 64, z: 9 }]; pick-ups after t=2000: 221 (expected 0)`. The stone-on-emitter assertion passed before this failure; maximum observed on an emitter was 0. This confirms #134's unreachable emitter-zone pickup/drop loop and beside-fire pile, not a stone entering the fire cell.
 - Task 0/1 GREEN: scenario, old-save haul unit test, and all-invalid/partial stockpile unit test passed with `cargo test --offline -p sim-core` targeted invocations.
 
 ### Completion Notes List
 
+- Task 5: amended the acknowledgement convention and closed the stockpile feedback item. All five mutation rows KILLED. Task 6 card and real-daemon verification are done; Wolf seat check remains pending.
 - Task 4: test both visible status instruments through the streaming TUI binary and GUI ingest/HUD systems.
 - Task 3: clients retain the shared refusal text until their next world command; GUI empty-surface stockpile drags reach the sim.
 - Task 2: broadcast typed refusals in the next delta; empty lists preserve the old JSON shape. Protocol literal and real daemon acceptance/refusal tests pass.
@@ -304,28 +315,41 @@ gpt-6-sol
 
 ### File List
 
-- `crates/tui/src/main.rs`
-- `crates/tui/src/view.rs`
+- `_bmad-output/implementation-artifacts/12-1-signoff/vehicle-card.md`
+- `_bmad-output/implementation-artifacts/12-1-stones-stay-out-of-the-fire.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/metrics/.session-cursors.json`
+- `_bmad-output/implementation-artifacts/metrics/12-1-stones-stay-out-of-the-fire.md`
+- `_bmad-output/implementation-artifacts/mutations/12-1.sh`
+- `_bmad-output/implementation-artifacts/mutations/2-1-the-world-runs-on-its-own-clock.sh`
+- `_bmad-output/implementation-artifacts/mutations/2-3-master-of-time.sh`
+- `_bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`
+- `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`
+- `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
+- `_bmad-output/implementation-artifacts/mutations/8-3-master-of-time-and-the-skeleton-walks-in-3d.sh`
+- `_bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md`
+- `crates/client-core/src/lib.rs`
 - `crates/gui/src/designate.rs`
+- `crates/gui/src/ingest.rs`
+- `crates/gui/tests/capture.rs`
+- `crates/gui/tests/headless.rs`
 - `crates/protocol/src/lib.rs`
+- `crates/sim-core/src/lib.rs`
+- `crates/sim-core/tests/scenario.rs`
 - `crates/simd/src/bridge.rs`
 - `crates/simd/src/main.rs`
 - `crates/simd/tests/serve.rs`
-- `crates/client-core/src/lib.rs`
+- `crates/tui/src/main.rs`
+- `crates/tui/src/view.rs`
 - `crates/tui/tests/client.rs`
-- `crates/gui/src/ingest.rs`
-- `crates/gui/tests/headless.rs`
-- `crates/gui/tests/capture.rs`
-- `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`
-- `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
-- `crates/sim-core/src/lib.rs`
-- `crates/sim-core/tests/scenario.rs`
-- `_bmad-output/implementation-artifacts/12-1-stones-stay-out-of-the-fire.md`
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-09-28 | Task 5: amend acknowledgement record, close deferred stockpile item, and kill all five mutations. Task 6 live recipe green; seat pending. |
 | 2026-09-28 | Task 4: pin refusal persistence and clearing with client instrument tests. |
 | 2026-09-28 | Task 3: show persistent refusals in TUI and GUI; empty-surface GUI stockpile sends a command. |
 | 2026-09-28 | Task 2: add typed broadcast refusals to delta; protocol and daemon tests GREEN. |

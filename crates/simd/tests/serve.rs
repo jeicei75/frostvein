@@ -416,6 +416,8 @@ fn the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells() {
 
     // Stockpiles run through the same filter. Send the rejected one FIRST so the accepted one
     // that follows proves both were processed.
+    let mut observer = BufReader::new(daemon.connect());
+    let _ = read_snapshot(&mut observer);
     send_literal(
         &mut writer,
         format!(
@@ -442,6 +444,11 @@ fn the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells() {
             }
         }],
         "the rejected stockpile must be broadcast in the next delta"
+    );
+    let observed = read_delta_with_marks(&mut observer, &[], &[protocol::Zone { pos: standable }]);
+    assert_eq!(
+        observed.refusals, zoned.refusals,
+        "every attached client sees the refusal"
     );
     assert!(
         !zoned.zones.iter().any(|zone| zone.pos == solid),
