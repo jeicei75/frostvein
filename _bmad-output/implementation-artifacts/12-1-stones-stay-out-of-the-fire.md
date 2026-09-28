@@ -289,6 +289,7 @@ gpt-6-sol
 
 ### Debug Log References
 
+- Protocol wire compatibility: the test now pins the exact compact no-refusal delta JSON line; targeted protocol test passed.
 - Post-strengthening verification: the five-row mutation table was rerun after committing the second-client daemon assertion; all five rows were KILLED again. `RUST_TEST_THREADS=2 cargo test --offline -p simd --test serve --quiet` was rerun on restored source: 66 passed, 0 failed.
 - Task 2 broadcast check: the daemon test attached a second client before the refused command and asserted its delta carried the same refusal; targeted test passed.
 - Task 5 mutation verification (`scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/12-1.sh`, run alone after commit):

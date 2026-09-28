@@ -257,6 +257,10 @@ mod tests {
         assert!(plain.refusals.is_empty());
         let plain_value: serde_json::Value = serde_json::from_str(DELTA_WIRE).unwrap();
         assert_eq!(serde_json::to_value(&plain).unwrap(), plain_value);
+        assert_eq!(
+            serde_json::to_string(&plain).unwrap(),
+            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"items":[{"id":12,"pos":[1,2,3]}],"speed":"fast"}"#
+        );
         plain.refusals.push(refusal);
         let encoded = serde_json::to_string(&plain).unwrap();
         assert!(encoded.contains(&format!(r#""refusals":[{literal}]"#)));
