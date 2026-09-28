@@ -39,3 +39,19 @@ old = '                    last_refusal.0 = Some(*refusal);\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    last_refusal.0 = None;\n'))
 PY
+
+mutation "retry drop stacks a full stockpile" sim-core a_full_stockpile_never_stacks_uncarried_stones <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            let drop_pos = if occupied.contains(&pos) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let drop_pos = if false {\n'))
+PY
+
+mutation "release drop stacks an occupied stockpile" sim-core release_claim_avoids_an_occupied_stockpile_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            let drop_pos = if occupied.contains(&pos) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let drop_pos = if false {\n'))
+PY

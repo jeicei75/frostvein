@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 11.3's creation
 
 # Story 12.1: Stones Stay Out of the Fire
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -185,28 +185,28 @@ of the refusal.
   Wolf "is this the case you saw?" and record the answer under AC1. Then run the full
   `scripts/gate.sh` (see [[gate-ooms-at-default-parallelism]]: `RUST_TEST_THREADS=2`).
 
-- [ ] **Task 7 — #153: one stone per stockpile cell when the pile fills (AC9). Added 2026-09-28 at
+- [x] **Task 7 — #153: one stone per stockpile cell when the pile fills (AC9). Added 2026-09-28 at
   the seat, by Wolf's ruling.** Found by running after Task 1's fix: 26 stones on 24 cells, 3 on one
   corner. The orchestrator's probe (worktree, since deleted) found the mechanism. With 24/24 cells
   full, two carriers still walking to the last free cell `(65,66,9)` arrived and dropped on it, at
   ticks 1808 and 1883. The comment at the haul `free` set ("self-healing ... it repaths") is false
   once `free` is empty.
-  - [ ] RED first: a scenario test on `DEFAULT_SEED` that places a 5×5 stockpile centred on the
+  - [x] RED first: a scenario test on `DEFAULT_SEED` that places a 5×5 stockpile centred on the
         camp and designates a 15×15 dig centred on the camp (one `Designate` rect,
         `camp ± 7` at `camp.z`). Tick 8,000 and assert at EVERY tick that no stockpile cell holds
         more than one UNCARRIED stone. A carried stone reports its carrier's position, so exclude
         stones in `world.carrying()`. Add a positive assertion too: by the end, every zone cell
         holds exactly one stone. Record the RED message (the tick and cell) in the Debug Log.
-  - [ ] Fix in `sim-core` at the drop site: `release_claim`, or whatever the RED trace shows
+  - [x] Fix in `sim-core` at the drop site: `release_claim`, or whatever the RED trace shows
         actually drops the stone. Drop at the carrier's tile unless it is an occupied stockpile cell;
         otherwise at the nearest `is_walkable` tile that is not an occupied stockpile cell.
         Choose "nearest" deterministically (a BFS with a fixed neighbour order, or ties broken by
         `Pos` order). Correct the false "self-healing" comment.
-  - [ ] Unit test: a carrier standing on an occupied stockpile cell releases its claim → the stone
+  - [x] Unit test: a carrier standing on an occupied stockpile cell releases its claim → the stone
         lands on a non-zone neighbour, and the stockpile cell still holds one stone.
-  - [ ] Add both tests to `mutations/12-1.sh` (revert the drop rule → both reddens), run them, and
+  - [x] Add both tests to `mutations/12-1.sh` (revert the drop rule → both reddens), run them, and
         record them KILLED.
-  - [ ] Determinism: an existing scenario/determinism test must still pass. The drop site changes
+  - [x] Determinism: an existing scenario/determinism test must still pass. The drop site changes
         only in the occupied-stockpile case.
 
 ### Scenario test skeleton (Task 0)
@@ -319,6 +319,11 @@ gpt-6-sol
 
 ### Debug Log References
 
+- Task 7 RED on current code (`cargo test --offline -p sim-core --test scenario a_full_stockpile_never_stacks_uncarried_stones -- --nocapture`): `tick 1809: Pos { x: 65, y: 66, z: 9 } holds 2 uncarried stones`; `test result: FAILED. 0 passed; 1 failed`. The test excludes IDs in `world.carrying()` and asserts all 24 zone cells hold exactly one uncarried stone at tick 8,000.
+- Task 7 drop trace (temporary manual `eprintln!`, removed before commit): `TRACE retry tick=1809 pos=Some(Pos { x: 65, y: 66, z: 9 }) carrying=Some(Carrying(Some(34)))`. No delivery trace fired in that window. The stale goal reaches `retry_claim` → `release_claim`, which wrote stone 34 onto the occupied zone cell.
+- Task 7 mutation verification (`scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/12-1.sh`, run alone after fix commits): all seven rows KILLED. New rows: `retry drop stacks a full stockpile` → `a_full_stockpile_never_stacks_uncarried_stones` FAILED at `scenario.rs:167`; `release drop stacks an occupied stockpile` → `release_claim_avoids_an_occupied_stockpile_cell` FAILED at `lib.rs:2702` (`left != right`). Existing five rows also KILLED: `stockpile keeps emitter zones`, `old save haul goals include emitters`, `daemon discards stockpile refusal`, `tui omits refusal status`, `gui drops last refusal`.
+- Task 7 restored-source verification: `cargo test --offline -p sim-core` → 118 passed, 0 failed, 1 ignored (60 unit, 10 save/load, 32 scenario, 16 worldgen); `RUST_TEST_THREADS=2 cargo test --offline -p simd --test serve` → 66 passed, 0 failed. The existing `same_seed_and_commands_remain_deterministic` and race scenarios passed. The pre-commit fast gate passed on both code commits; full `scripts/gate.sh` was not run by request.
+- Task 7 required an update to the existing race scenario: it now asserts the second carrier drops off the occupied stockpile cell, then hauls to a newly opened cell. Two Story 3.3 mutation anchors were re-pointed after the drop code changed; `scripts/audit-mutations.py` reported all 694 rows applicable before the new Task 7 rows were added.
 - Orchestrator verification (Claude, 2026-09-28): FULL `scripts/gate.sh` GREEN on `a812bbe` at `RUST_TEST_THREADS=2`, 1882 s (cargo test 138 s, pixel guards 1710 s, mutation tables still apply). 10 commits all author Völundr / committer jeicei75, no trailers, no `--no-verify`. Codex dev $9.05 (326 turns, gpt-6-sol/high, 13pp quota).
 - Additional post-commit boundary sabotage (`scripts/mutate.sh /tmp/12-1-boundary-red.sh`): `stockpile_refuses_only_when_every_cell_is_invalid` failed at `crates/sim-core/src/lib.rs:2365:9` with `assertion left == right failed` (KILLED); `empty_stockpile_surface_still_reaches_the_sim` failed at `crates/gui/src/designate.rs:315:9` with `assertion left == right failed` (KILLED). Both restored targeted tests passed.
 - Protocol wire compatibility: the test pins the exact compact no-refusal delta JSON line. Separate post-commit sabotage (`scripts/mutate.sh /tmp/12-1-wire-red.sh`) removed `skip_serializing_if`; `refusal_wire_is_literal_and_empty_delta_wire_is_unchanged` failed at `crates/protocol/src/lib.rs:259:9` with `assertion left == right failed` (0 passed, 1 failed), KILLED. Restored targeted test passed.
@@ -341,6 +346,7 @@ gpt-6-sol
 
 ### Completion Notes List
 
+- Task 7: occupied stockpile drops relocate to the nearest walkable nonoccupied cell in deterministic `Pos` order; open-ground heaps remain possible. The 8,000-tick scenario fills all 24 zone cells without stacking. Task 6's Wolf seat check remains pending.
 - Task 5: amended the acknowledgement convention and closed the stockpile feedback item. All five mutation rows KILLED. Task 6 card and real-daemon verification are done; Wolf seat check remains pending.
 - Task 4: test both visible status instruments through the streaming TUI binary and GUI ingest/HUD systems.
 - Task 3: clients retain the shared refusal text until their next world command; GUI empty-surface stockpile drags reach the sim.
@@ -383,6 +389,7 @@ gpt-6-sol
 
 | Date | Change |
 | --- | --- |
+| 2026-09-28 | Task 7: prevent retry drops from stacking on occupied stockpile cells; pin the race, kill seven mutations, and pass sim-core and daemon suites. |
 | 2026-09-28 | Task 5: amend acknowledgement record, close deferred stockpile item, and kill all five mutations. Task 6 live recipe green; seat pending. |
 | 2026-09-28 | Task 4: pin refusal persistence and clearing with client instrument tests. |
 | 2026-09-28 | Task 3: show persistent refusals in TUI and GUI; empty-surface GUI stockpile sends a command. |
