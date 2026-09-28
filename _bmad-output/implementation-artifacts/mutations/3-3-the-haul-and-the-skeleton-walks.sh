@@ -171,14 +171,11 @@ PY
 mutation "the drop does not move the stone" sim-core a_haul_walks_picks_up_walks_and_drops_in_two_work_runs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# The same write appears in `carry_items`; anchor on release_claim's surrounding `if let`.
-old = '''        if let (Some(pos), Some(stone)) = (dropped_at, item_entity(ecs, item)) {
-            *ecs.get_mut::<Pos>(stone)
-                .expect("every stone has a position") = pos;
-        }
+old = '''            *ecs.get_mut::<Pos>(stone)
+                .expect("every stone has a position") = drop_pos;
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '            let _ = drop_pos;\n'))
 PY
 
 mutation "the drop removes a designation at job.target" sim-core a_haul_walks_picks_up_walks_and_drops_in_two_work_runs <<'PY'
@@ -216,19 +213,12 @@ PY
 mutation "release_claim does not drop the carried stone" sim-core release_claim_drops_the_carried_stone_at_the_dwarfs_tile <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''    if let Some(item) = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0) {
-        let dropped_at = ecs.get::<Pos>(entity).copied();
-        if let (Some(pos), Some(stone)) = (dropped_at, item_entity(ecs, item)) {
-            *ecs.get_mut::<Pos>(stone)
-                .expect("every stone has a position") = pos;
-        }
-        if let Some(mut carrying) = ecs.get_mut::<Carrying>(entity) {
-            carrying.0 = None;
-        }
-    }
-'''
-assert old in s
-p.write_text(s.replace(old, ''))
+start = '        let dropped_at = ecs.get::<Pos>(entity).copied();\n'
+end = '        if let Some(mut carrying) = ecs.get_mut::<Carrying>(entity) {\n'
+assert s.count(start) == 1 and s.count(end) == 1
+before, rest = s.split(start, 1)
+_, after = rest.split(end, 1)
+p.write_text(before + end + after)
 PY
 
 mutation "CancelDesignation cancels haul jobs too" sim-core cancelling_marks_over_a_stone_never_drops_its_haul_job <<'PY'

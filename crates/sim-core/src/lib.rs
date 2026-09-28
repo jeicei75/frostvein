@@ -277,14 +277,8 @@ fn create_haul_jobs(ecs: &mut EcsWorld) {
         // stands on a stockpile tile, AND is the LOWEST-ID uncarried stone on that tile. Everything
         // else uncarried is LOOSE.
         //
-        // The lowest-id clause is the repair mechanism for a real race review found: two carriers
-        // can both be walking to the last free tile, the first delivers, and the second — now
-        // standing on a tile that is no longer in its goal set — is retried, and `release_claim`
-        // drops its stone where it stands. Two stones on one tile. Under the old rule both counted
-        // as stored, so both jobs were retired and the stack was permanent and invisible. Now the
-        // extra one stays loose, keeps (or regains) a haul job, and re-hauls itself to a genuinely
-        // free tile. It cannot thrash: the pick-up leg is gated on a free tile existing, and a
-        // delivery only ever targets a free tile, so the stone it is standing on is never a goal.
+        // The lowest-id clause still recognizes extra stones in an older save as loose. New
+        // retry drops avoid making a stack; the pick-up leg waits for a free stockpile tile.
         // `uncarried_stones` is ascending by item id, so "first seen per tile" IS "lowest id".
         let mut occupied: BTreeSet<Pos> = BTreeSet::new();
         let mut stored: BTreeSet<u32> = BTreeSet::new();
@@ -692,9 +686,8 @@ fn work_positions(
                 carrying.is_none_or(|carried| carried == item),
                 "a dwarf only ever carries the stone of the haul job it holds"
             );
-            // One stone per stockpile tile (Wolf, 2026-08-07). Recomputed every tick and never
-            // cached: that is what makes two carriers converging on one free tile self-healing —
-            // the moment the first drops, the tile leaves the second's goal set and it repaths.
+            // Recompute free stockpile tiles every tick. If two carriers converge on the last
+            // free tile, the second can arrive after it fills; release_claim drops off-zone.
             let stored: BTreeSet<Pos> = items
                 .values()
                 .copied()
@@ -749,14 +742,77 @@ fn item_entity(ecs: &EcsWorld, item: u32) -> Option<Entity> {
 }
 
 fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
-    // A dwarf that stops holding a job stops carrying its stone, and drops it where it stands.
+    // A dwarf that stops holding a job stops carrying its stone, and drops it where it stands
+    // unless that would stack stones on a stockpile cell.
     // Doing it here is what keeps every abnormal exit — a vanished job, a retry, a cancel, a
     // retire — from welding a stone to an idle dwarf.
     if let Some(item) = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0) {
         let dropped_at = ecs.get::<Pos>(entity).copied();
         if let (Some(pos), Some(stone)) = (dropped_at, item_entity(ecs, item)) {
+            let zones = &ecs.resource::<Zones>().0;
+            let occupied: BTreeSet<Pos> = uncarried_stones(ecs)
+                .values()
+                .copied()
+                .filter(|cell| zones.contains(cell))
+                .collect();
+            let drop_pos = if occupied.contains(&pos) {
+                let blocked = blocked_cells(
+                    ecs.query_filtered::<&Pos, With<Emitter>>()
+                        .iter(ecs)
+                        .collect::<Vec<_>>()
+                        .into_iter(),
+                );
+                let terrain = ecs.resource::<Terrain>();
+                let mut seen = BTreeSet::from([pos]);
+                let mut frontier = BTreeSet::from([pos]);
+                let mut nearest = None;
+                while !frontier.is_empty() && nearest.is_none() {
+                    let mut next = BTreeSet::new();
+                    for cell in frontier {
+                        if is_walkable(terrain, &blocked, cell) && !occupied.contains(&cell) {
+                            nearest = Some(cell);
+                            break;
+                        }
+                        for candidate in [
+                            Pos {
+                                x: cell.x - 1,
+                                ..cell
+                            },
+                            Pos {
+                                x: cell.x + 1,
+                                ..cell
+                            },
+                            Pos {
+                                y: cell.y - 1,
+                                ..cell
+                            },
+                            Pos {
+                                y: cell.y + 1,
+                                ..cell
+                            },
+                            Pos {
+                                z: cell.z - 1,
+                                ..cell
+                            },
+                            Pos {
+                                z: cell.z + 1,
+                                ..cell
+                            },
+                        ] {
+                            if terrain.tile(candidate).is_some() && seen.insert(candidate) {
+                                next.insert(candidate);
+                            }
+                        }
+                    }
+                    frontier = next;
+                }
+                // NOTE: an entirely full, isolated map has no legal drop tile.
+                nearest.expect("an occupied stockpile has a walkable drop tile nearby")
+            } else {
+                pos
+            };
             *ecs.get_mut::<Pos>(stone)
-                .expect("every stone has a position") = pos;
+                .expect("every stone has a position") = drop_pos;
         }
         if let Some(mut carrying) = ecs.get_mut::<Carrying>(entity) {
             carrying.0 = None;

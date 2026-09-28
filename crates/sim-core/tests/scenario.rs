@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use sim_core::{
     DesignationKind, Dims, Job, JobId, JobKind, JobState, Material, Pos, Rect, SavedDwarf,
@@ -114,6 +114,68 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         emitter_zones.is_empty() && pickups_after_full == 0,
         "zone on an emitter: {emitter_zones:?}; pick-ups after t=2000: {pickups_after_full} (expected 0)"
     );
+}
+
+#[test]
+fn a_full_stockpile_never_stacks_uncarried_stones() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(
+            Pos {
+                x: camp.x - 2,
+                y: camp.y - 2,
+                ..camp
+            },
+            Pos {
+                x: camp.x + 2,
+                y: camp.y + 2,
+                ..camp
+            },
+        ),
+    });
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(
+            Pos {
+                x: camp.x - 7,
+                y: camp.y - 7,
+                ..camp
+            },
+            Pos {
+                x: camp.x + 7,
+                y: camp.y + 7,
+                ..camp
+            },
+        ),
+    });
+    let zones: BTreeSet<_> = world.zones().into_iter().collect();
+    assert_eq!(zones.len(), 24);
+
+    for tick in 1..=8_000 {
+        world.step();
+        let carried: BTreeSet<_> = world
+            .carrying()
+            .into_iter()
+            .filter_map(|(_, id)| id)
+            .collect();
+        let mut counts: BTreeMap<Pos, usize> = BTreeMap::new();
+        for (id, pos) in world.items() {
+            if !carried.contains(&id.0) && zones.contains(&pos) {
+                let count = counts.entry(pos).or_default();
+                *count += 1;
+                assert!(
+                    *count <= 1,
+                    "tick {tick}: {pos:?} holds {count} uncarried stones"
+                );
+            }
+        }
+        if tick == 8_000 {
+            for zone in &zones {
+                assert_eq!(counts.get(zone), Some(&1), "zone {zone:?} is not full");
+            }
+        }
+    }
 }
 
 #[test]
@@ -1176,12 +1238,8 @@ fn removing_every_stockpile_drops_the_carried_stone_and_a_new_pile_revives_the_j
 
 /// Two carriers converging on the LAST free stockpile tile is a real race, found at 3.3's review:
 /// the first delivers, and the second — standing on a tile that has just left its goal set — is
-/// retried, and `release_claim` drops its stone where it stands. Two stones on one tile.
-///
-/// The rule under test is the repair, not the prevention (Wolf's call at review): the extra stone
-/// stays LOOSE rather than counting as stored, so it keeps a haul job and re-hauls itself the
-/// moment a genuinely free tile exists. Under the old "any stone on a zone tile is stored" rule
-/// both jobs were retired and the stack was permanent, with nothing in the sim able to see it.
+/// retried, and `release_claim` drops its stone on a nearby open tile. The extra stone remains
+/// loose and can be hauled once another stockpile cell opens.
 #[test]
 fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
     let dims = Dims { x: 12, y: 3, z: 3 };
@@ -1266,23 +1324,15 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             .collect()
     };
 
-    // Let the race resolve. The stack may FORM — that is the race, and preventing it is not what
-    // this rule does — but it must never be left with no job to fix it.
-    let mut saw_stack = false;
+    // Let the race resolve. Neither delivery nor retry may leave two uncarried stones on the pile.
     for _ in 0..200 {
         world.step();
-        if stored_on(&world, pile).len() > 1 {
-            saw_stack = true;
-            assert!(
-                !world.jobs().is_empty(),
-                "a stacked tile with no queued job is a permanent, invisible violation"
-            );
-        }
+        assert!(stored_on(&world, pile).len() <= 1, "race stacked the pile");
     }
-    assert!(
-        saw_stack,
-        "the race did not occur, so this test proves nothing — check the fixture"
-    );
+    assert_eq!(stored_on(&world, pile).len(), 1, "no delivery occurred");
+    assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
+    assert_eq!(world.items().len(), 2, "the retry lost its stone");
+    assert_eq!(world.jobs().len(), 1, "the loose stone lost its haul job");
 
     // Now give the pile somewhere to put the extra stone. It must sort itself out with no further
     // intervention, and end with one stone per tile.
