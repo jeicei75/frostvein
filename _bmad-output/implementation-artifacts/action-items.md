@@ -800,3 +800,118 @@ buffer. Testable without a window by feeding synthetic frame times and asserting
 **Pairs with** the deferred "re-benchmark the fine terrain path UNDER LOAD" item in
 `deferred-work.md` — that run is where this instrument earns its keep, because "is it still
 smooth?" stops being answerable by eye once a fortress is busy.
+
+## Epic 8 — M2 close (Epics 8–11) — 11 items
+
+Committed at the M2-close retrospective, 2026-09-28 (`epic-8-retro-2026-09-28.md`), all approved by
+Wolf as listed. IDs continue the M2 series (M2-20..23 were opened between retros). Status lives on
+the issue.
+
+### M2-24 (#138)
+
+**Action.** Art hard stop: hand-authored art is Wolf's hands or a seat he can WATCH live; any
+delegated art loop returns to Wolf after 2 rounds his eye has not judged converging, and every round
+gets a ledger row. Record in `docs/technical-preferences.md`.
+
+**Owner.** Amelia · **Route.** skill-rule · **Status.** open
+
+**Why.** 13 blind BlenderMCP dwarf rounds, $891.22 / 4,651 turns, on no story ledger; three gameable
+spec metrics were gamed. Wolf ranked it the costliest challenge of Epics 8–11: *"I almost lost my faith"*.
+
+### M2-25 (#139)
+
+**Action.** Epic rule: new work joins the nearest related epic as a STORY; a new epic only for a new
+milestone goal. Record in `docs/technical-preferences.md`.
+
+**Owner.** Alice · **Route.** skill-rule · **Status.** open
+
+**Why.** Wolf 2026-09-28: *"creating new stories are ok … creating completely new Epics all the time
+for all new features is not ok if we already have somewhat related Epic."* Scope growth is welcome
+when it supports the original scope and moves the game forward.
+
+### M2-26 (#140)
+
+**Action.** Live gate early: look/UX work reaches the seat before review; sim work is judged by
+deterministic scenario tests. Record in `docs/technical-preferences.md`.
+
+**Owner.** Amelia · **Route.** skill-rule · **Status.** open
+
+**Why.** The seat caught what green instruments missed (sun under the map, F1/F2 collision, inert
+haze toggle, floating dwarf). Wolf: *"some of the things are damn difficult to decide from screenshots"*.
+
+### M2-27 (#141)
+
+**Action.** Reproduce before a story exists: every defect story starts from a red scenario test or an
+observed live repro, never from a record alone.
+
+**Owner.** Dana · **Route.** skill-rule · **Status.** open
+
+**Why.** Most epic premises in Epics 8–11 were false at story creation (10.4 3/6, 10.7 4/5, 10.5 6/9);
+9.2 was written to fix a defect fixed two days earlier. #132 is unreproduced today.
+
+### M2-28 (#142)
+
+**Action.** `scripts/push.sh`: do not re-run the fast tier on a branch push of a clean tree whose
+commits already went through the pre-commit hook. The full gate stays at PR.
+
+**Owner.** Charlie · **Route.** story · **Status.** open
+
+**Why.** Wolf: the ~90 s push *"feels a bit too much"*; it repeats work the hook already did.
+
+### M2-29 (#143)
+
+**Action.** `scripts/launch-gui.ps1`: check out the commit the binary's stamp names instead of
+fetching the branch tip.
+
+**Owner.** Charlie · **Route.** story · **Status.** open
+
+**Why.** Wolf: the launcher *"fetches new changes which breaks the setup if there are any new ones
+after I have copied bin."*
+
+### M2-30 (#144)
+
+**Action.** One WSL vehicle script: build simd + tui + the Windows gui.exe (mingw target), copy the
+exe to the Windows path, start simd — Windows then only runs the launcher.
+
+**Owner.** Charlie · **Route.** story · **Status.** open
+
+**Why.** Wolf's loop is five manual steps (two builds, simd start, copy, pull).
+
+### M2-31 (#145)
+
+**Action.** `scripts/gate.sh` caps itself by default: nice/ionice, bounded cargo build jobs,
+`RUST_TEST_THREADS=2`.
+
+**Owner.** Winston · **Route.** story · **Status.** open
+
+**Why.** The full gate (1,700–1,930 s) *"sometimes make whole WSL on its knees so all other work is
+disturbed in other devpods"*; it killed WSL once.
+
+### M2-32 (#146)
+
+**Action.** Dispose of the never-encoded M2 items: apply #44 (silence alone kills a review layer) and
+#45 (review territories re-mapped for M3's sim work) as one-line edits to
+`_bmad/custom/bmad-code-review.toml`; close #43, #47, #48 as superseded by live-gate-early; retire the
+Codex self-gate (#49).
+
+**Owner.** Amelia · **Route.** skill-rule · **Status.** open
+
+**Why.** RULED by Wolf 2026-09-28. The self-gate did not complete once in 20 stories.
+
+### M2-33 (#147)
+
+**Action.** Hygiene: verify each against the tree and close the fixed-but-open issues #46, #75, #77,
+#98, #105, #107.
+
+**Owner.** Amelia · **Route.** story · **Status.** open
+
+**Note.** Done in the retro itself: epics 8–11 and their retros `done` on the board; story headers of
+10.8 and 11.1b corrected from `in-progress` to `done`.
+
+### M2-34 (#148)
+
+**Action.** Records: put the dwarf rounds' $891.22 / 4,651 turns on a ledger row (per-round reports
+under `src-assets/prompts/`); bring `docs/project-brief.md` up to the M2 reality (Bevy client,
+authored assets) — PRD criterion 5 passes only literally while the brief describes the M1 Unreal plan.
+
+**Owner.** Paige · **Route.** story · **Status.** open
