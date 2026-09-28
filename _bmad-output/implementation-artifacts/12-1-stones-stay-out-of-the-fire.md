@@ -125,23 +125,23 @@ of the refusal.
         35 of them across `gui/tests/{capture,headless}.rs`, `gui/src/ingest.rs`,
         `tui/tests/client.rs`, `client-core/src/lib.rs`, `simd/tests/serve.rs` and `bridge.rs`.
         Let the compiler list them.
-- [ ] **Task 3 — both clients show it (AC6).**
-  - [ ] `client-core`: `pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str`, an
+- [x] **Task 3 — both clients show it (AC6).**
+  - [x] `client-core`: `pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str`, an
         exhaustive `match` returning `"stockpile refused: no valid cells"`. It is the only
         definition of the text.
-  - [ ] tui: `ViewState` gets `pub refusal: Option<protocol::Refusal>`. Both `Msg::Delta` arms
+  - [x] tui: `ViewState` gets `pub refusal: Option<protocol::Refusal>`. Both `Msg::Delta` arms
         (`main.rs:312-329` interactive, `:450-462` `stream_frames`) set it from
         `delta.refusals.last()` when non-empty and never clear it on an empty delta. `apply_key`
         clears it when it returns a world command (the dig, channel, stockpile or clear commit).
         `render` (`view.rs:377-410`) appends two spaces plus `refusal_text(..)` to the status row
         when `Some`; the quit prompt still wins. Update the `ViewState` literal in
         `initial_view_opens_on_the_level_with_the_most_standable_ground` (`view.rs:1884`).
-  - [ ] gui: a `LastRefusal(Option<protocol::Refusal>)` resource. The `WireMessage::Delta` arm of
+  - [x] gui: a `LastRefusal(Option<protocol::Refusal>)` resource. The `WireMessage::Delta` arm of
         `ingest_messages` (`ingest.rs:2492-2540`) sets it the same way. A HUD `Text` tagged `Hud`
         and `ClientLocal`, one line above the designate hint (`designate.rs:65`), shows
         `refusal_text` or nothing. `designate.rs`'s release handler sets `LastRefusal(None)` when
         it pushes commands.
-  - [ ] gui, stockpile only: when a stockpile drag's `surface` is empty, push
+  - [x] gui, stockpile only: when a stockpile drag's `surface` is empty, push
         `PlaceStockpile { rect: picked_rect }` so the sim judges and refuses it
         (`commands_for`, `designate.rs:221-240`). Today it sends nothing, which is the silent no-op
         NFR11 forbids. Channel is unchanged.
@@ -151,7 +151,7 @@ of the refusal.
         one delta carrying a refusal, then plain deltas. Assert that the streamed status rows
         contain the text from that frame on. A second stub run with no refusal must show no
         `refused` in any row.
-  - [ ] gui: an in-crate test in `ingest.rs` modelled on
+  - [x] gui: an in-crate test in `ingest.rs` modelled on
         `the_live_clock_readout_follows_the_daemons_tick_and_speed` (`:3298`). Inject a `Delta`
         with a refusal and the HUD text equals `refusal_text`. Inject a later plain delta and it is
         unchanged. Push a command and it is empty.
@@ -296,11 +296,15 @@ gpt-6-sol
 
 ### Completion Notes List
 
+- Task 3: clients retain the shared refusal text until their next world command; GUI empty-surface stockpile drags reach the sim.
 - Task 2: broadcast typed refusals in the next delta; empty lists preserve the old JSON shape. Protocol literal and real daemon acceptance/refusal tests pass.
 - Task 0 and Task 1: exclude emitters from placed zones and haul goals; return typed refusal for empty stockpiles.
 
 ### File List
 
+- `crates/tui/src/main.rs`
+- `crates/tui/src/view.rs`
+- `crates/gui/src/designate.rs`
 - `crates/protocol/src/lib.rs`
 - `crates/simd/src/bridge.rs`
 - `crates/simd/src/main.rs`
@@ -320,6 +324,7 @@ gpt-6-sol
 
 | Date | Change |
 | --- | --- |
+| 2026-09-28 | Task 3: show persistent refusals in TUI and GUI; empty-surface GUI stockpile sends a command. |
 | 2026-09-28 | Task 2: add typed broadcast refusals to delta; protocol and daemon tests GREEN. |
 | 2026-09-28 | Tasks 0–1: scenario RED recorded; emitter filtering and sim refusal GREEN. |
 | 2026-09-28 | Story created on `a96ab48`. #134 reproduced by a sim probe: never on the emitter cell; the emitter zone cell drives an endless pick-up/drop loop and stacks stones beside the fire. Refusal RED observed live in the tui. Refusal shape: typed `refusals` on the next delta. |

@@ -31,6 +31,7 @@ pub struct ViewState {
     pub cursor: (i64, i64),
     pub anchor: Option<(i64, i64)>,
     pub speed: Speed,
+    pub refusal: Option<protocol::Refusal>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,6 +176,7 @@ pub fn initial(mirror: &Mirror, z_override: Option<i32>) -> ViewState {
         cursor: camera,
         anchor: None,
         speed: mirror.speed(),
+        refusal: None,
     }
 }
 
@@ -392,14 +394,19 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         // +x, down is +y, so north (-y) is always up. It is printed anyway so the two clients
         // can be compared without knowing that — the Bevy client's boot camera is yawed ~40
         // degrees and its north lands DOWN-LEFT, which is the mismatch that cost a session.
-        format!(
+        let mut status = format!(
             "tick {}  {}  z {}/{}  dwarves {}  N up",
             mirror.tick(),
             speed,
             state.z,
             mirror.dims().z.saturating_sub(1),
             dwarves
-        )
+        );
+        if let Some(refusal) = &state.refusal {
+            status.push_str("  ");
+            status.push_str(client_core::refusal_text(refusal));
+        }
+        status
     };
     let status_y = h - 2;
     for (x, glyph) in (0..w).zip(status.chars()) {
@@ -472,7 +479,7 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             at_tick: None,
         })
     };
-    match key.code {
+    let action = match key.code {
         KeyCode::Char('S') => Action::Command(Command::Save),
         KeyCode::Char('L') => Action::Command(Command::Load),
         KeyCode::Char(' ') => command(
@@ -592,7 +599,15 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             Action::Redraw
         }
         _ => Action::Ignore,
+    };
+    if matches!(
+        action,
+        Action::Command(Command::Designate { .. } | Command::PlaceStockpile { .. })
+            | Action::Commands(_)
+    ) {
+        state.refusal = None;
     }
+    action
 }
 
 fn move_cursor(state: &mut ViewState, dx: i64, dy: i64, dims: Dims, viewport: (u16, u16)) {
@@ -750,6 +765,7 @@ mod tests {
             cursor: camera,
             anchor: None,
             speed: Speed::Normal,
+            refusal: None,
         }
     }
 
@@ -1897,6 +1913,7 @@ mod tests {
                 cursor: (4, 3),
                 anchor: None,
                 speed: Speed::Normal,
+                refusal: None,
             }
         );
     }

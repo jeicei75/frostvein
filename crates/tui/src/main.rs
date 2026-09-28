@@ -317,6 +317,9 @@ stockpile sits ONE LEVEL UP. Re-read with --z set to one of the levels above.",
                     needs_redraw = true;
                 }
                 Ok(Ok(Msg::Delta(delta))) => {
+                    if let Some(refusal) = delta.refusals.last() {
+                        state.refusal = Some(*refusal);
+                    }
                     mirror.apply_delta(*delta);
                     state.speed = mirror.speed();
                     needs_redraw = true;
@@ -454,6 +457,9 @@ fn stream_frames(
                 state.speed = mirror.speed();
             }
             Ok(Ok(Msg::Delta(delta))) => {
+                if let Some(refusal) = delta.refusals.last() {
+                    state.refusal = Some(*refusal);
+                }
                 mirror.apply_delta(*delta);
                 state.speed = mirror.speed();
             }

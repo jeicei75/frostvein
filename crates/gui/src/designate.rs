@@ -46,6 +46,40 @@ pub struct DragMode(pub Option<DesignateMode>);
 #[derive(bevy::prelude::Component)]
 pub struct DesignateHint;
 
+#[derive(bevy::prelude::Component)]
+pub struct RefusalHint;
+
+pub fn setup_refusal_hint(mut commands: Commands) {
+    commands.spawn((
+        Text::new(""),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::srgb(1.0, 0.72, 0.55)),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(44),
+            left: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        RefusalHint,
+        crate::ingest::Hud,
+        ClientLocal,
+    ));
+}
+
+pub fn update_refusal_hint(
+    last: Res<crate::ingest::LastRefusal>,
+    mut hints: bevy::prelude::Query<&mut Text, bevy::prelude::With<RefusalHint>>,
+) {
+    if !last.is_changed() {
+        return;
+    }
+    let text = last.0.as_ref().map(client_core::refusal_text).unwrap_or("");
+    for mut hint in &mut hints {
+        *hint = Text::new(text);
+    }
+}
+
 pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
     match (mode, dragging) {
         (DesignateMode::None, _) => {
@@ -109,6 +143,7 @@ pub fn designation_input(
     mut anchor: ResMut<DragAnchor>,
     mut drag_mode: ResMut<DragMode>,
     mut pending: ResMut<PendingCommands>,
+    mut last_refusal: ResMut<crate::ingest::LastRefusal>,
 ) {
     if keys.just_pressed(KeyCode::Digit1) {
         *mode = DesignateMode::Dig;
@@ -156,7 +191,9 @@ pub fn designation_input(
                 designation_target(mirror, anchor_cell, mode),
                 designation_target(mirror, release_cell, mode),
             ));
+            // NOTE: surface preview does not filter emitters; the sim decides whether a zone is valid.
             for command in commands_for(mode, picked_rect, &surface) {
+                last_refusal.0 = None;
                 pending.push(command);
             }
         }
@@ -232,6 +269,9 @@ fn commands_for(mode: DesignateMode, picked_rect: Rect, surface: &[Rect]) -> Vec
                 rect: *rect,
             })
             .collect(),
+        DesignateMode::Stockpile if surface.is_empty() => {
+            vec![Command::PlaceStockpile { rect: picked_rect }]
+        }
         DesignateMode::Stockpile => surface
             .iter()
             .map(|rect| Command::PlaceStockpile { rect: *rect })
@@ -266,6 +306,19 @@ mod tests {
     /// call sites that care about the distinction spell it out.
     fn commands_at(mode: DesignateMode, rect: Rect) -> Vec<Command> {
         commands_for(mode, rect, &[rect])
+    }
+
+    #[test]
+    fn empty_stockpile_surface_still_reaches_the_sim() {
+        let picked = Rect {
+            min: [64, 64, 9],
+            max: [64, 64, 9],
+        };
+        assert_eq!(
+            commands_for(DesignateMode::Stockpile, picked, &[]),
+            vec![Command::PlaceStockpile { rect: picked }]
+        );
+        assert!(commands_for(DesignateMode::Channel, picked, &[]).is_empty());
     }
 
     #[test]

@@ -728,7 +728,8 @@ pub fn projection_systems(app: &mut App) {
     app.init_resource::<PickedTile>();
     app.init_resource::<crate::project::TreeReportState>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
-    app.init_resource::<TickClock>()
+    app.init_resource::<LastRefusal>()
+        .init_resource::<TickClock>()
         .init_resource::<crate::project::DwarfHeadings>()
         .add_systems(
             Startup,
@@ -811,6 +812,7 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<DragAnchor>()
         .init_resource::<LightingToggles>()
         .init_resource::<LastCameraReadout>()
+        .init_resource::<LastRefusal>()
         .init_resource::<crate::pick::SelectedDwarf>()
         .add_message::<MouseMotion>()
         .add_message::<MouseWheel>();
@@ -823,6 +825,7 @@ pub fn client_systems(app: &mut App) {
             setup_projection_assets,
             setup_atmosphere,
             setup_designate_hint,
+            crate::designate::setup_refusal_hint,
             log_adapter,
         ),
     )
@@ -901,6 +904,9 @@ pub fn client_systems(app: &mut App) {
             crate::command::restore_speed_on_exit.before(send_commands),
             send_commands.after(designation_input),
             update_designate_hint.after(designation_input),
+            crate::designate::update_refusal_hint
+                .after(ingest_messages)
+                .after(designation_input),
         ),
     )
     // `Last`, so the row describes a frame that has actually been drawn.
@@ -2203,6 +2209,9 @@ fn camera_readout(
 #[derive(Resource, Default, Debug)]
 pub struct LastCameraReadout(pub Option<String>);
 
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct LastRefusal(pub Option<protocol::Refusal>);
+
 fn log_adapter(adapter: Option<Res<RenderAdapterInfo>>) {
     if let Some(adapter) = adapter {
         println!(
@@ -2495,6 +2504,7 @@ fn ingest_messages(
     mut work: ResMut<ProjectionWork>,
     mut clock: ResMut<TickClock>,
     mut headings: ResMut<crate::project::DwarfHeadings>,
+    mut last_refusal: ResMut<LastRefusal>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let Some(receiver) = receiver else {
@@ -2523,6 +2533,9 @@ fn ingest_messages(
                 }
             },
             Ok(Ok(WireMessage::Delta(delta))) => {
+                if let Some(refusal) = delta.refusals.last() {
+                    last_refusal.0 = Some(*refusal);
+                }
                 apply_wire_delta(&mut mirror.0, &mut work, &mut clock, &mut headings, *delta);
             }
             Ok(Err(error)) => {
@@ -3349,7 +3362,7 @@ mod tests {
             keys.clear();
         };
         // Slice, lighting, clock and the designate hint.
-        assert_eq!(visibilities(&mut app).len(), 4);
+        assert_eq!(visibilities(&mut app).len(), 5);
         press_h(&mut app);
         assert!(
             visibilities(&mut app)
@@ -3387,7 +3400,7 @@ mod tests {
                 .iter(app.world())
                 .copied()
                 .collect::<Vec<_>>();
-            visibilities.len() == 4
+            visibilities.len() == 5
                 && visibilities
                     .iter()
                     .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden)
@@ -5113,6 +5126,7 @@ mod tests {
             ),
             "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
             "22:00   elapsed 0d 00:00   speed normal".to_string(),
+            "".to_string(),
             "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),
         ];
@@ -6336,6 +6350,7 @@ mod tests {
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
             .init_resource::<crate::project::DwarfHeadings>()
+            .init_resource::<super::LastRefusal>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -6384,6 +6399,7 @@ mod tests {
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
             .init_resource::<crate::project::DwarfHeadings>()
+            .init_resource::<super::LastRefusal>()
             .add_systems(Update, ingest_messages);
         // A full cadence has already elapsed on the client when the delta lands.
         app.world_mut().resource_mut::<TickClock>().advance(0.1);
@@ -6442,6 +6458,7 @@ mod tests {
             })
             .init_resource::<TickClock>()
             .init_resource::<crate::project::DwarfHeadings>()
+            .init_resource::<super::LastRefusal>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -6479,6 +6496,7 @@ mod tests {
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
             .init_resource::<crate::project::DwarfHeadings>()
+            .init_resource::<super::LastRefusal>()
             .add_systems(Update, ingest_messages);
         // Settle schedule and system entities before ingesting anything.
         app.update();
