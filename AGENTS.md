@@ -78,37 +78,9 @@ Each one is cheap here and expensive later.
    an acceptable record.
 6. **Respect the story's scope guardrails literally.** If you believe a wire shape or a
    capability is missing, stop and say so rather than adding it.
-7. **Run `codex review --base main` before you hand back.** Not instead of the gate — after
-   it, as the last thing you do. Read what it says with two classes in mind, because Epic 1's
-   review caught them repeatedly and they are cheap to fix now:
-   - **self-referential tests** — a test that proves ordering rather than mapping because
-     both sides run through the function under test;
-   - **unbounded I/O** — any read, write, accept or queue without a bound.
-
-   Fix what it legitimately finds. In your final message, say what it raised and what you did
-   about each item. If you disagree with a finding, say so and why — do not silently drop it.
-
-   Two things to expect. It is **slow**: budget real wall-clock, it ran past ten minutes on
-   story 2.1's ~650-line diff. And if it fails to start for an environmental reason, that is
-   rule 3 territory — report it and leave the production code correct. Story 2.1's attempt
-   died with `Read-only file system (os error 30)` because `CODEX_HOME` sat outside the
-   writable root; `scripts/codex-handoff.sh` now lists it, but that fix has never actually
-   been exercised, so **you may be the first run to prove it works.** Say plainly whether it
-   ran.
-
-   **HARD CAP: at most THREE self-gate passes per story** (Wolf, 2026-08-06). Stop earlier the
-   moment a pass returns no actionable finding. If the third pass still raises something real,
-   **do not run a fourth** — fix what it found, then say so explicitly in your final message so
-   the reviewer knows the self-gate was still finding defects when it was cut off. That is
-   information the review needs, not a failure.
-
-   Why there is a cap at all: each pass spawns its **own** Codex session and re-reads the whole
-   branch diff every poll turn. At story 3.2 six passes consumed roughly **a third to a half of
-   the entire weekly Codex quota**, and the story exhausted the quota outright — blocking the
-   next story's dev for six days. The dollar figure hides this completely (it priced those six
-   passes at 23% of story spend). Codex bills a **weekly quota**, not tokens, so passes are
-   rationed in percentage points, not dollars. The passes do earn their keep — 3.2's six raised
-   17 legitimate findings — which is why the cap is three rather than one.
+7. **Do not run `codex review --base main`.** The pre-handback self-gate is retired (Wolf,
+   2026-09-28, M2-12 / #49): it did not complete once in 20 stories. The code review and the
+   live gate carry that weight.
 
 ## Command hygiene
 

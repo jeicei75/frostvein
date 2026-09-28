@@ -89,6 +89,19 @@ sentence and proceed.
   a recipe that needs a specific level passes `--z` rather than assuming, and asserts a
   non-zero count of what it came to see before drawing any conclusion. **Exit 0 is not a
   result.**
+- **New work joins the nearest related epic as a story.** A new epic only for a new
+  milestone goal (M2-25, Wolf 2026-09-28). Scope that serves the milestone may grow by
+  stories; opening Epic 11 when the look already had Epic 10 was the thing to avoid.
+- **Live gate early.** Look and UX work reaches Wolf's seat before review; sim work is
+  judged by deterministic scenario tests (M2-26). The seat caught what green instruments
+  missed — the sun under the map, the F1/F2 key collision, the inert haze toggle.
+- **Reproduce before a story exists.** Every defect story starts from a red scenario test
+  or an observed live repro, never from a record alone (M2-27). Most Epic 8–11 premises
+  were false at story creation, and 9.2 was written to fix a defect fixed two days earlier.
+- **Art hard stop.** Hand-authored art is Wolf's hands or a seat he can watch live. A
+  delegated art loop returns to Wolf after two rounds his eye has not judged converging,
+  and every round gets a ledger row (M2-24). The 13 blind dwarf rounds cost $891.22 on no
+  ledger.
 
 ## Dev workflow
 - Every story: `scripts/gate.sh` green before done — `cargo fmt --check`, `cargo clippy
