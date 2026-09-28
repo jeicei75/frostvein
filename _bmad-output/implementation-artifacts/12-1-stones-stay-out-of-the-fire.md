@@ -209,6 +209,15 @@ of the refusal.
   - [x] Determinism: an existing scenario/determinism test must still pass. The drop site changes
         only in the occupied-stockpile case.
 
+- [x] **Task 8 — the tui shows a stored stone as stored (Wolf's ruling 2026-09-28, at the seat).**
+  Wolf read a full pile in the tui as "the fire is inside the stockpile". A stone draws `*` over
+  the zone's `≡` in the same grey as a loose stone, so a full pile leaves no trace of the stockpile.
+  Implemented by Claude directly, because Codex hit its 5-hour limit (Wolf's choice).
+  - [x] `palette::stored_item_cell()`: `*` in the stockpile green, `zone_cell().fg`. `render` draws
+        it for a stone on a zone cell; a loose stone stays `item_cell()`.
+  - [x] View test, RED first: a stone on a zone cell renders `stored_item_cell()`, a stone off the
+        zone renders `item_cell()`. Add a mutation row to `mutations/12-1.sh` and record it KILLED.
+
 ### Scenario test skeleton (Task 0)
 
 ```rust
@@ -319,6 +328,9 @@ gpt-6-sol
 
 ### Debug Log References
 
+- Task 8 (Claude, directly; Codex was at its 5-hour limit): RED on ``d13df15``, where `view::tests::a_stone_on_a_stockpile_cell_draws_in_the_stockpile_colour` failed at `view.rs:1169` with `left: Cell { glyph: '*', fg: (176, 172, 160) }` and `right: Cell { glyph: '*', fg: (88, 190, 118) }`. GREEN at `2fcfa21`: tui 47 + 17 passed. Mutation `tui draws stored stones grey` KILLED. The full `12-1.sh` table, rerun by the orchestrator: 8/8 KILLED.
+- Task 8 rotted two older rows' anchors, and the pre-commit hook caught it (`mutation tables still apply FAILED`, commit refused): 3.2's `items draw above entities` and 3.3's `stone counting and stone drawing use different filters`. I re-pointed both at the new draw expression, `audit-mutations.py` reported 697/697 applicable, and both re-ran ALONE and were KILLED.
+- Task 7, verified by the orchestrator: Codex hit its 5-hour usage limit after its two code commits (`47561ec`, `3d6d2ad`), with its record still uncommitted. The orchestrator committed that record as `d13df15` and reran `12-1.sh` independently: 7/7 KILLED.
 - Task 7 RED on current code (`cargo test --offline -p sim-core --test scenario a_full_stockpile_never_stacks_uncarried_stones -- --nocapture`): `tick 1809: Pos { x: 65, y: 66, z: 9 } holds 2 uncarried stones`; `test result: FAILED. 0 passed; 1 failed`. The test excludes IDs in `world.carrying()` and asserts all 24 zone cells hold exactly one uncarried stone at tick 8,000.
 - Task 7 drop trace (temporary manual `eprintln!`, removed before commit): `TRACE retry tick=1809 pos=Some(Pos { x: 65, y: 66, z: 9 }) carrying=Some(Carrying(Some(34)))`. No delivery trace fired in that window. The stale goal reaches `retry_claim` → `release_claim`, which wrote stone 34 onto the occupied zone cell.
 - Task 7 mutation verification (`scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/12-1.sh`, run alone after fix commits): all seven rows KILLED. New rows: `retry drop stacks a full stockpile` → `a_full_stockpile_never_stacks_uncarried_stones` FAILED at `scenario.rs:167`; `release drop stacks an occupied stockpile` → `release_claim_avoids_an_occupied_stockpile_cell` FAILED at `lib.rs:2702` (`left != right`). Existing five rows also KILLED: `stockpile keeps emitter zones`, `old save haul goals include emitters`, `daemon discards stockpile refusal`, `tui omits refusal status`, `gui drops last refusal`.
@@ -346,6 +358,7 @@ gpt-6-sol
 
 ### Completion Notes List
 
+- Task 8: a stone on a stockpile cell draws `*` in the stockpile green (`stored_item_cell`); a loose stone stays grey. This is a tui-only change, and the gui is unchanged.
 - Task 7: occupied stockpile drops relocate to the nearest walkable nonoccupied cell in deterministic `Pos` order; open-ground heaps remain possible. The 8,000-tick scenario fills all 24 zone cells without stacking. Task 6's Wolf seat check remains pending.
 - Task 5: amended the acknowledgement convention and closed the stockpile feedback item. All five mutation rows KILLED. Task 6 card and real-daemon verification are done; Wolf seat check remains pending.
 - Task 4: test both visible status instruments through the streaming TUI binary and GUI ingest/HUD systems.
@@ -355,6 +368,8 @@ gpt-6-sol
 
 ### File List
 
+- `crates/tui/src/palette.rs`
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh`
 - `_bmad-output/implementation-artifacts/12-1-signoff/vehicle-card.md`
 - `_bmad-output/implementation-artifacts/12-1-stones-stay-out-of-the-fire.md`
 - `_bmad-output/implementation-artifacts/deferred-work.md`
@@ -389,6 +404,7 @@ gpt-6-sol
 
 | Date | Change |
 | --- | --- |
+| 2026-09-28 | Task 8: stored stones draw in the stockpile green in the tui (Wolf's seat ruling), implemented by Claude directly. Two older mutation anchors re-pointed and re-killed. |
 | 2026-09-28 | Task 7: prevent retry drops from stacking on occupied stockpile cells; pin the race, kill seven mutations, and pass sim-core and daemon suites. |
 | 2026-09-28 | Task 5: amend acknowledgement record, close deferred stockpile item, and kill all five mutations. Task 6 live recipe green; seat pending. |
 | 2026-09-28 | Task 4: pin refusal persistence and clearing with client instrument tests. |
