@@ -1536,3 +1536,182 @@ fn the_client_loop_renders_a_frame_per_streamed_delta() {
         "a frame was rendered for the connect snapshot rather than for a streamed delta"
     );
 }
+
+fn identified_dwarf(
+    id: u32,
+    name: protocol::DwarfName,
+    colour: protocol::DwarfColour,
+) -> protocol::Entity {
+    protocol::Entity {
+        identity: Some(protocol::Identity { name, colour }),
+        id,
+        ..dwarf_at(id as i32 + 4)
+    }
+}
+
+/// Streams a snapshot with Durin (red, id 0) and Nori (blue, id 1), one unchanged delta, then a
+/// delta that swaps their identities, through the real `tui --frames 2`, and returns stdout.
+fn capture_roster(no_color: bool) -> String {
+    use protocol::{DwarfColour::*, DwarfName::*};
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind stub daemon");
+    let port = listener
+        .local_addr()
+        .expect("read stub daemon address")
+        .port();
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tui"));
+    command
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("2")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if no_color {
+        command.env("NO_COLOR", "1");
+    } else {
+        command.env_remove("NO_COLOR");
+    }
+    let mut child = command.spawn().expect("spawn tui");
+
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("tui must connect");
+        let crew = vec![
+            identified_dwarf(0, Durin, Red),
+            identified_dwarf(1, Nori, Blue),
+        ];
+        let swapped = vec![
+            identified_dwarf(0, Nori, Blue),
+            identified_dwarf(1, Durin, Red),
+        ];
+        let snapshot = protocol::Snapshot {
+            msg_type: protocol::MessageType::Snapshot,
+            dims: WIDE_DIMS,
+            tiles: vec![protocol::Tile::Solid(protocol::Material::Ice); 256],
+            entities: crew.clone(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: protocol::Speed::Normal,
+            tick: SNAPSHOT_TICK,
+        };
+        stream
+            .write_all(
+                format!(
+                    "{}\n",
+                    serde_json::to_string(&snapshot).expect("encode stub snapshot")
+                )
+                .as_bytes(),
+            )
+            .expect("send stub snapshot");
+        for (tick, entities) in [(8, crew), (9, swapped)] {
+            let delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick,
+                tiles: Vec::new(),
+                entities,
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: protocol::Speed::Normal,
+                refusals: Vec::new(),
+            };
+            stream
+                .write_all(
+                    format!(
+                        "{}\n",
+                        serde_json::to_string(&delta).expect("encode stub delta")
+                    )
+                    .as_bytes(),
+                )
+                .expect("send stub delta");
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout pipe")
+        .read_to_string(&mut stdout)
+        .expect("read tui stdout");
+    let status = child.wait().expect("wait for tui");
+    server.join().expect("stub daemon thread panicked");
+    assert!(status.success(), "tui exited with {status}");
+    stdout
+}
+
+/// The raw (SGR intact) row directly above each frame's `tick ` status row.
+fn roster_rows(stdout: &str) -> Vec<String> {
+    let strip = |line: &str| {
+        let mut plain = String::new();
+        let mut chars = line.chars();
+        while let Some(c) = chars.next() {
+            if c == '\u{1b}' {
+                for escape in chars.by_ref() {
+                    if escape.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            } else {
+                plain.push(c);
+            }
+        }
+        plain
+    };
+    let lines: Vec<&str> = stdout.lines().collect();
+    (1..lines.len())
+        .filter(|&i| strip(lines[i]).starts_with("tick "))
+        .map(|i| lines[i - 1].to_string())
+        .collect()
+}
+
+/// Colour of Red and Blue from `palette::dwarf_colour`, as the terminal receives it.
+const RED_SGR: &str = "38;2;178;58;52";
+const BLUE_SGR: &str = "38;2;60;98;186";
+
+#[test]
+fn the_roster_row_names_each_dwarf_in_his_colour_and_follows_an_identity_swap() {
+    let rows = roster_rows(&capture_roster(false));
+
+    assert_eq!(rows.len(), 2, "one roster row per frame: {rows:?}");
+    assert!(
+        rows[0].contains(&format!("{RED_SGR}mDurin"))
+            && rows[0].contains(&format!("{BLUE_SGR}mNori")),
+        "frame 1 must name Durin in red then Nori in blue: {:?}",
+        rows[0]
+    );
+    assert!(
+        rows[1].contains(&format!("{BLUE_SGR}mNori"))
+            && rows[1].contains(&format!("{RED_SGR}mDurin")),
+        "frame 2 must show the swapped identities: {:?}",
+        rows[1]
+    );
+    assert!(
+        rows[1].find("Nori") < rows[1].find("Durin"),
+        "the swap must reorder the row (ascending by id): {:?}",
+        rows[1]
+    );
+    assert!(rows[0].find("Durin") < rows[0].find("Nori"));
+}
+
+#[test]
+fn the_roster_names_survive_no_color() {
+    let stdout = capture_roster(true);
+    let rows = roster_rows(&stdout);
+
+    assert!(
+        !stdout.contains("38;2;178;58;52"),
+        "NO_COLOR must strip colour"
+    );
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows[0].contains("Durin") && rows[0].contains("Nori"),
+        "{:?}",
+        rows[0]
+    );
+    assert!(
+        rows[1].find("Nori") < rows[1].find("Durin"),
+        "{:?}",
+        rows[1]
+    );
+}

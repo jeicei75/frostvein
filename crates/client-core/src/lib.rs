@@ -13,6 +13,28 @@ pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
     }
 }
 
+/// The one spelling of a dwarf's name, shared by both clients.
+pub fn dwarf_name_text(name: protocol::DwarfName) -> &'static str {
+    match name {
+        protocol::DwarfName::Durin => "Durin",
+        protocol::DwarfName::Dvalin => "Dvalin",
+        protocol::DwarfName::Nori => "Nori",
+        protocol::DwarfName::Ori => "Ori",
+        protocol::DwarfName::Dori => "Dori",
+        protocol::DwarfName::Bifur => "Bifur",
+        protocol::DwarfName::Bofur => "Bofur",
+        protocol::DwarfName::Gloin => "Gloin",
+        protocol::DwarfName::Nain => "Nain",
+        protocol::DwarfName::Thrain => "Thrain",
+        protocol::DwarfName::Frar => "Frar",
+        protocol::DwarfName::Loni => "Loni",
+        protocol::DwarfName::Regin => "Regin",
+        protocol::DwarfName::Alf => "Alf",
+        protocol::DwarfName::Fjalar => "Fjalar",
+        protocol::DwarfName::Frosti => "Frosti",
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Changes {
     pub tiles: Vec<[i32; 3]>,
