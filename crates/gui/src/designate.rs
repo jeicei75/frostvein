@@ -269,13 +269,12 @@ fn commands_for(mode: DesignateMode, picked_rect: Rect, surface: &[Rect]) -> Vec
                 rect: *rect,
             })
             .collect(),
-        DesignateMode::Stockpile if surface.is_empty() => {
-            vec![Command::PlaceStockpile { rect: picked_rect }]
-        }
-        DesignateMode::Stockpile => surface
-            .iter()
-            .map(|rect| Command::PlaceStockpile { rect: *rect })
-            .collect(),
+        DesignateMode::Stockpile if surface.is_empty() => vec![Command::PlaceStockpile {
+            rects: vec![picked_rect],
+        }],
+        DesignateMode::Stockpile => vec![Command::PlaceStockpile {
+            rects: surface.to_vec(),
+        }],
         // Clear means "remove what is under the cursor", and after the targeting fix that is two
         // different cells: a dig sits at the cell the ray hit, while a channel or a stockpile
         // sits one cell across the entered face. Clearing only one of them leaves the other
@@ -316,9 +315,37 @@ mod tests {
         };
         assert_eq!(
             commands_for(DesignateMode::Stockpile, picked, &[]),
-            vec![Command::PlaceStockpile { rect: picked }]
+            vec![Command::PlaceStockpile {
+                rects: vec![picked]
+            }]
         );
         assert!(commands_for(DesignateMode::Channel, picked, &[]).is_empty());
+    }
+
+    #[test]
+    fn a_stockpile_drag_over_several_rects_is_one_command() {
+        // One command per rect let the sim refuse the campfire's lone cell of a drag that zoned
+        // the ring around it; the whole drag must reach the sim as one decision.
+        let picked = Rect {
+            min: [62, 62, 9],
+            max: [62, 66, 9],
+        };
+        let surface = [
+            Rect {
+                min: [62, 62, 9],
+                max: [62, 63, 9],
+            },
+            Rect {
+                min: [62, 64, 10],
+                max: [62, 66, 10],
+            },
+        ];
+        assert_eq!(
+            commands_for(DesignateMode::Stockpile, picked, &surface),
+            vec![Command::PlaceStockpile {
+                rects: surface.to_vec()
+            }]
+        );
     }
 
     #[test]
@@ -365,7 +392,7 @@ mod tests {
         );
         assert_eq!(
             commands_at(DesignateMode::Stockpile, rect),
-            vec![Command::PlaceStockpile { rect }]
+            vec![Command::PlaceStockpile { rects: vec![rect] }]
         );
         assert_ne!(
             commands_at(DesignateMode::Channel, rect),

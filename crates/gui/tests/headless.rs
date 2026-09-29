@@ -2849,7 +2849,7 @@ fn mouse_drag_uses_the_anchor_level_and_clears_its_anchor_on_release() {
             .resource::<PendingCommands>()
             .commands()
             .iter()
-            .copied()
+            .cloned()
             .collect::<Vec<_>>(),
         vec![protocol::Command::Designate {
             kind: DesignationKind::Dig,
@@ -2904,7 +2904,7 @@ fn mouse_designation_on_a_sliced_underground_level_round_trips_to_a_projected_ma
             .resource::<PendingCommands>()
             .commands()
             .iter()
-            .copied()
+            .cloned()
             .collect::<Vec<_>>(),
         vec![protocol::Command::Designate {
             kind: DesignationKind::Dig,
@@ -3956,7 +3956,7 @@ fn queued(app: &App) -> Vec<protocol::Command> {
         .resource::<PendingCommands>()
         .commands()
         .iter()
-        .copied()
+        .cloned()
         .collect()
 }
 
@@ -4025,7 +4025,7 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
         (
             KeyCode::Digit3,
             vec![protocol::Command::PlaceStockpile {
-                rect: at(standable),
+                rects: vec![at(standable)],
             }],
         ),
         // Clear must reach BOTH cells: the dig at the cell the ray hit, and the channel or

@@ -32,8 +32,8 @@ PY
 mutation "daemon accepts inverted rectangles" simd invalid_rects_are_logged_dropped_and_leave_the_client_connected <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''                        if let Some(rect) = command_rect(&command)
-                            && !rect_is_valid(rect)
+old = '''                        if let Some(rects) = command_rects(&command)
+                            && (rects.is_empty() || !rects.iter().all(rect_is_valid))
                         {
                             eprintln!("invalid client rect: {}", excerpt(text));
                             continue;

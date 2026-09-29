@@ -763,51 +763,29 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
                         .into_iter(),
                 );
                 let terrain = ecs.resource::<Terrain>();
+                // Breadth-first over the tiles the carrier can walk to, so the drop is never
+                // behind a wall or on a level it cannot reach.
                 let mut seen = BTreeSet::from([pos]);
                 let mut frontier = BTreeSet::from([pos]);
                 let mut nearest = None;
                 while !frontier.is_empty() && nearest.is_none() {
                     let mut next = BTreeSet::new();
                     for cell in frontier {
-                        if is_walkable(terrain, &blocked, cell) && !occupied.contains(&cell) {
+                        if !occupied.contains(&cell) {
                             nearest = Some(cell);
                             break;
                         }
-                        for candidate in [
-                            Pos {
-                                x: cell.x - 1,
-                                ..cell
-                            },
-                            Pos {
-                                x: cell.x + 1,
-                                ..cell
-                            },
-                            Pos {
-                                y: cell.y - 1,
-                                ..cell
-                            },
-                            Pos {
-                                y: cell.y + 1,
-                                ..cell
-                            },
-                            Pos {
-                                z: cell.z - 1,
-                                ..cell
-                            },
-                            Pos {
-                                z: cell.z + 1,
-                                ..cell
-                            },
-                        ] {
-                            if terrain.tile(candidate).is_some() && seen.insert(candidate) {
+                        for candidate in astar_neighbours(terrain, &blocked, cell) {
+                            if seen.insert(candidate) {
                                 next.insert(candidate);
                             }
                         }
                     }
                     frontier = next;
                 }
-                // NOTE: an entirely full, isolated map has no legal drop tile.
-                nearest.expect("an occupied stockpile has a walkable drop tile nearby")
+                // NOTE: a carrier whose whole reachable ground is full stockpile keeps the
+                // stack on its own tile rather than stop the sim.
+                nearest.unwrap_or(pos)
             } else {
                 pos
             };
@@ -1428,6 +1406,39 @@ impl World {
 
     pub fn drain_dirty(&mut self) -> Vec<(Pos, Tile)> {
         self.ecs.resource_mut::<Terrain>().drain_dirty()
+    }
+
+    /// One player's stockpile drag, which is several rects over uneven ground. It is refused only
+    /// when no rect in it holds a valid cell: a drag that zones the ring around the campfire has
+    /// not been refused just because the fire's own cell was left alone in one of its rects.
+    ///
+    /// NOTE: the refusal names the drag's bounding box, which can span levels; nothing reads the
+    /// rect beyond the command it names.
+    pub fn place_stockpile(&mut self, rects: &[Rect]) -> Option<Refusal> {
+        let mut refused = 0;
+        for rect in rects {
+            if self
+                .apply_command(SimCommand::PlaceStockpile { rect: *rect })
+                .is_some()
+            {
+                refused += 1;
+            }
+        }
+        let first = rects.first()?;
+        (refused == rects.len()).then(|| Refusal::PlaceStockpile {
+            rect: rects.iter().fold(*first, |bounds, rect| Rect {
+                min: Pos {
+                    x: bounds.min.x.min(rect.min.x.min(rect.max.x)),
+                    y: bounds.min.y.min(rect.min.y.min(rect.max.y)),
+                    z: bounds.min.z.min(rect.min.z.min(rect.max.z)),
+                },
+                max: Pos {
+                    x: bounds.max.x.max(rect.min.x.max(rect.max.x)),
+                    y: bounds.max.y.max(rect.min.y.max(rect.max.y)),
+                    z: bounds.max.z.max(rect.min.z.max(rect.max.z)),
+                },
+            }),
+        })
     }
 
     /// AD-10: `simd` calls this at loop-iteration start, in arrival order, including while
@@ -2411,6 +2422,47 @@ mod tests {
     }
 
     #[test]
+    fn a_drag_is_refused_only_when_none_of_its_rects_has_a_valid_cell() {
+        let mut world = World::generate(super::DEFAULT_SEED, Dims::DEFAULT);
+        let fire = world.camp_origin();
+        let cell = |dy: i32| super::Rect {
+            min: Pos {
+                y: fire.y + dy,
+                ..fire
+            },
+            max: Pos {
+                y: fire.y + dy,
+                ..fire
+            },
+        };
+        // The gui's column drag through the fire: one rect per cell, the fire's alone.
+        let column: Vec<_> = (-2..=2).map(cell).collect();
+        assert_eq!(world.place_stockpile(&column), None);
+        assert_eq!(world.zones().len(), 4);
+
+        let rock = super::Rect {
+            min: Pos {
+                z: fire.z - 1,
+                ..fire
+            },
+            max: Pos {
+                z: fire.z - 1,
+                ..fire
+            },
+        };
+        assert_eq!(
+            world.place_stockpile(&[cell(0), rock]),
+            Some(super::Refusal::PlaceStockpile {
+                rect: super::Rect {
+                    min: rock.min,
+                    max: fire,
+                },
+            })
+        );
+        assert_eq!(world.zones().len(), 4);
+    }
+
+    #[test]
     fn stockpile_refuses_only_when_every_cell_is_invalid() {
         let mut world = World::generate(super::DEFAULT_SEED, Dims::DEFAULT);
         let fire = world.camp_origin();
@@ -2709,6 +2761,55 @@ mod tests {
             "the nearest open tile is a neighbour"
         );
         assert_eq!(world.carrying()[0], (super::Id(0), None));
+    }
+
+    #[test]
+    fn release_claim_drops_where_the_carrier_can_walk() {
+        // A walled pocket three cells long: the carrier on a full pile cell, a second full pile
+        // cell, then one free cell. By grid distance the top of a wall is as near as the free
+        // cell and sorts first, but no dwarf can reach it without a ramp.
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let p = world.dwarves()[0].1;
+        let pocket = [p, Pos { y: p.y + 1, ..p }, Pos { y: p.y + 2, ..p }];
+        for x in p.x - 1..=p.x + 1 {
+            for y in p.y - 1..=p.y + 3 {
+                let cell = Pos { x, y, ..p };
+                let below = Pos { z: p.z - 1, ..cell };
+                if pocket.contains(&cell) {
+                    world.set_tile(cell, Tile::Empty);
+                    world.set_tile(below, Tile::Solid(Material::Stone));
+                } else {
+                    world.set_tile(cell, Tile::Solid(Material::Stone));
+                }
+            }
+        }
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .extend([pocket[0], pocket[1]]);
+        world.ecs.spawn((super::Item, super::Id(11), pocket[1]));
+        world
+            .ecs
+            .spawn((super::Item, super::Id(12), Pos { x: 0, y: 0, z: 1 }));
+        world.ecs.spawn((super::Item, super::Id(13), pocket[0]));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(12);
+
+        super::release_claim(&mut world.ecs, entity);
+
+        let dropped = world
+            .items()
+            .into_iter()
+            .find(|(id, _)| *id == super::Id(12))
+            .unwrap()
+            .1;
+        assert_eq!(dropped, pocket[2], "the drop must be inside the pocket");
     }
 
     #[test]

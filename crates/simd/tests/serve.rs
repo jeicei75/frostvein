@@ -421,7 +421,7 @@ fn the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells() {
     send_literal(
         &mut writer,
         format!(
-            "{{\"type\":\"place_stockpile\",\"rect\":{}}}\n",
+            "{{\"type\":\"place_stockpile\",\"rects\":[{}]}}\n",
             rect(solid)
         )
         .as_bytes(),
@@ -429,7 +429,7 @@ fn the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells() {
     send_literal(
         &mut writer,
         format!(
-            "{{\"type\":\"place_stockpile\",\"rect\":{}}}\n",
+            "{{\"type\":\"place_stockpile\",\"rects\":[{}]}}\n",
             rect(standable)
         )
         .as_bytes(),
@@ -505,13 +505,10 @@ fn a_surface_following_drag_lands_its_whole_footprint_and_nothing_else() {
         cells.len(),
         rects.len()
     );
-    for rect in &rects {
-        let line = format!(
-            "{{\"type\":\"place_stockpile\",\"rect\":{{\"min\":{:?},\"max\":{:?}}}}}\n",
-            rect.min, rect.max
-        );
-        send_literal(&mut writer, line.as_bytes());
-    }
+    // The gui sends the whole drag as one command.
+    let line = serde_json::to_string(&protocol::Command::PlaceStockpile { rects })
+        .expect("a stockpile command encodes");
+    send_literal(&mut writer, format!("{line}\n").as_bytes());
 
     let mut expected: Vec<protocol::Zone> = cells
         .iter()
@@ -1506,7 +1503,7 @@ fn designation_and_stockpile_changes_reach_both_clients() {
 
     let stockpile_pos = first_snapshot.entities[0].pos;
     let stockpile = format!(
-        "{{\"type\":\"place_stockpile\",\"rect\":{{\"min\":{stockpile_pos:?},\"max\":{stockpile_pos:?}}}}}\n"
+        "{{\"type\":\"place_stockpile\",\"rects\":[{{\"min\":{stockpile_pos:?},\"max\":{stockpile_pos:?}}}]}}\n"
     );
     send_literal(&mut writer, stockpile.as_bytes());
     let zones = vec![protocol::Zone { pos: stockpile_pos }];
@@ -1603,7 +1600,7 @@ fn invalid_rects_are_logged_dropped_and_leave_the_client_connected() {
 
     send_literal(
         &mut writer,
-        b"{\"type\":\"place_stockpile\",\"rect\":{\"min\":[1,2,3],\"max\":[1,2,4]}}\n",
+        b"{\"type\":\"place_stockpile\",\"rects\":[{\"min\":[1,2,3],\"max\":[1,2,4]}]}\n",
     );
     let two_z_log = daemon.next_log();
     assert!(
@@ -1614,6 +1611,16 @@ fn invalid_rects_are_logged_dropped_and_leave_the_client_connected() {
     assert_eq!(after_two_z.tick, paused.tick);
     assert!(after_two_z.designations.is_empty());
     assert!(after_two_z.zones.is_empty());
+
+    send_literal(
+        &mut writer,
+        b"{\"type\":\"place_stockpile\",\"rects\":[]}\n",
+    );
+    let empty_log = daemon.next_log();
+    assert!(
+        empty_log.contains("invalid client rect"),
+        "an empty stockpile drag must be rejected: {empty_log}"
+    );
 
     send_literal(
         &mut writer,
@@ -1773,7 +1780,7 @@ fn a_designated_dig_and_a_stockpile_stream_a_stone_onto_a_zone_tile() {
     }
     assert!(saw_fast, "daemon never applied the fast command");
     let stockpile = format!(
-        "{{\"type\":\"place_stockpile\",\"rect\":{{\"min\":{pile:?},\"max\":{pile:?}}}}}\n"
+        "{{\"type\":\"place_stockpile\",\"rects\":[{{\"min\":{pile:?},\"max\":{pile:?}}}]}}\n"
     );
     send_literal(&mut writer, stockpile.as_bytes());
     let designate = format!(

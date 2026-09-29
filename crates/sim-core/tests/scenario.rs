@@ -109,6 +109,18 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
                 .count(),
         );
     }
+    let zones = world.zones();
+    let filled: BTreeSet<Pos> = world
+        .items()
+        .into_iter()
+        .map(|(_, pos)| pos)
+        .filter(|pos| zones.contains(pos))
+        .collect();
+    assert_eq!(
+        filled.len(),
+        zones.len(),
+        "the pile must fill, or every other assertion here holds with nothing hauled"
+    );
     assert_eq!(max_stones_on_emitter, 0, "stone on an emitter cell");
     assert!(
         emitter_zones.is_empty() && pickups_after_full == 0,

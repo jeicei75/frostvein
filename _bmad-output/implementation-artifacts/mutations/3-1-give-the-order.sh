@@ -208,9 +208,9 @@ PY
 mutation "place_stockpile discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
 import pathlib
 p = pathlib.Path('crates/protocol/src/lib.rs'); s = p.read_text()
-old = '    PlaceStockpile {\n        rect: Rect,\n'
+old = '    PlaceStockpile {\n        rects: Vec<Rect>,\n'
 assert old in s
-p.write_text(s.replace(old, '    #[serde(rename = "store")]\n    PlaceStockpile {\n        rect: Rect,\n'))
+p.write_text(s.replace(old, '    #[serde(rename = "store")]\n    PlaceStockpile {\n        rects: Vec<Rect>,\n'))
 PY
 
 mutation "remove_stockpile discriminator is renamed" protocol decodes_and_reencodes_the_documented_command_wire_format <<'PY'
@@ -328,11 +328,12 @@ mutation "daemon swaps place and remove stockpile" simd designation_and_stockpil
 import pathlib
 import re
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-place = 'sim_core::SimCommand::PlaceStockpile {'
+# 12.1 review: a place is one drag through `place_stockpile`, so the swap spells both halves.
+place = '                    refusals.extend(world.place_stockpile(&rects).map(bridge::refusal_out));\n'
 remove = 'sim_core::SimCommand::RemoveStockpile {'
 assert s.count(place) == 1 and s.count(remove) == 1
-p.write_text(re.sub(r'sim_core::SimCommand::(?:PlaceStockpile|RemoveStockpile) \{',
-    lambda m: remove if m.group() == place else place, s))
+s = s.replace(remove, 'sim_core::SimCommand::PlaceStockpile {')
+p.write_text(s.replace(place, '                    for rect in rects { world.apply_command(sim_core::SimCommand::RemoveStockpile { rect }); }\n'))
 PY
 
 mutation "x commits only CancelDesignation" tui remove_mode_commits_cancel_then_remove_stockpile_for_the_same_rect <<'PY'

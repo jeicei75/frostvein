@@ -94,7 +94,7 @@ pub enum Refusal {
     PlaceStockpile { rect: Rect },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
     SetSpeed {
@@ -124,8 +124,11 @@ pub enum Command {
     CancelDesignation {
         rect: Rect,
     },
+    /// One player drag. A drag over uneven ground is several rects, and the daemon refuses it only
+    /// when none of them holds a valid cell; one rect per command refused the lone campfire cell
+    /// of a drag that zoned everything around it.
     PlaceStockpile {
-        rect: Rect,
+        rects: Vec<Rect>,
     },
     RemoveStockpile {
         rect: Rect,
@@ -402,12 +405,12 @@ mod tests {
                 },
             ),
             (
-                r#"{"type":"place_stockpile","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
+                r#"{"type":"place_stockpile","rects":[{"min":[1,2,3],"max":[4,5,3]}]}"#,
                 Command::PlaceStockpile {
-                    rect: Rect {
+                    rects: vec![Rect {
                         min: [1, 2, 3],
                         max: [4, 5, 3],
-                    },
+                    }],
                 },
             ),
             (
@@ -548,10 +551,10 @@ mod tests {
             ),
             (
                 Command::PlaceStockpile {
-                    rect: Rect {
+                    rects: vec![Rect {
                         min: [0, 0, 0],
                         max: [0, 0, 0],
-                    },
+                    }],
                 },
                 "place_stockpile",
             ),

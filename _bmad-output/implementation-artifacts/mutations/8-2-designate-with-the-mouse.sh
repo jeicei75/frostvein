@@ -152,10 +152,9 @@ PY
 mutation "stockpile placement issues nothing" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '''        DesignateMode::Stockpile => surface
-            .iter()
-            .map(|rect| Command::PlaceStockpile { rect: *rect })
-            .collect(),'''
+old = '''        DesignateMode::Stockpile => vec![Command::PlaceStockpile {
+            rects: surface.to_vec(),
+        }],'''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        DesignateMode::Stockpile => Vec::new(),'))
 PY

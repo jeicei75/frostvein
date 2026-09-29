@@ -1068,10 +1068,10 @@ fn capture_haul_replay(changes: bool) -> String {
         assert_eq!(
             serde_json::from_str::<protocol::Command>(&line).expect("decode stockpile command"),
             protocol::Command::PlaceStockpile {
-                rect: protocol::Rect {
+                rects: vec![protocol::Rect {
                     min: PILE,
                     max: PILE,
-                },
+                }],
             }
         );
 

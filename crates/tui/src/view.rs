@@ -43,7 +43,7 @@ pub enum Mode {
     Remove,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     Redraw,
     Quit,
@@ -540,7 +540,9 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
                         kind: DesignationKind::Channel,
                         rect,
                     }),
-                    Mode::Stockpile => Action::Command(Command::PlaceStockpile { rect }),
+                    Mode::Stockpile => {
+                        Action::Command(Command::PlaceStockpile { rects: vec![rect] })
+                    }
                     Mode::Remove => Action::Commands([
                         Command::CancelDesignation { rect },
                         Command::RemoveStockpile { rect },
@@ -1731,6 +1733,35 @@ mod tests {
     }
 
     #[test]
+    fn a_refusal_stays_until_this_client_sends_a_world_command() {
+        let dims = Dims { x: 20, y: 20, z: 3 };
+        let refusal = protocol::Refusal::PlaceStockpile {
+            rect: protocol::Rect {
+                min: [2, 3, 1],
+                max: [2, 3, 1],
+            },
+        };
+        let mut state = normal_state((2, 3), 1);
+        state.refusal = Some(refusal);
+
+        for key in ['+', 'p'] {
+            let _ = apply_key(&mut state, press(KeyCode::Char(key)), dims, (9, 7));
+        }
+        let _ = apply_key(&mut state, press(KeyCode::Enter), dims, (9, 7));
+        assert_eq!(
+            state.refusal,
+            Some(refusal),
+            "a speed change or an unfinished drag is not a world command"
+        );
+
+        assert!(matches!(
+            apply_key(&mut state, press(KeyCode::Enter), dims, (9, 7)),
+            Action::Command(Command::PlaceStockpile { .. })
+        ));
+        assert_eq!(state.refusal, None, "the next world command clears it");
+    }
+
+    #[test]
     fn second_enter_commits_each_single_command_mode_and_stays_in_mode() {
         let dims = Dims { x: 20, y: 20, z: 3 };
         // NOTE: a literal, deliberately. `apply_key` builds its rect with `rect_on_level`,
@@ -1757,7 +1788,11 @@ mod tests {
                     rect,
                 },
             ),
-            ('p', Mode::Stockpile, Command::PlaceStockpile { rect }),
+            (
+                'p',
+                Mode::Stockpile,
+                Command::PlaceStockpile { rects: vec![rect] },
+            ),
         ] {
             let mut state = normal_state((2, 3), 1);
             let _ = apply_key(&mut state, press(KeyCode::Char(key)), dims, (9, 7));
