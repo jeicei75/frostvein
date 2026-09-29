@@ -271,7 +271,7 @@ Protocol v0 message list (logical — field detail is owned by the code):
 
 | Direction | Messages |
 | --- | --- |
-| client → daemon | `designate` (dig \| channel, rect), `cancel_designation` (rect), `place_stockpile` (rect), `remove_stockpile` (rect), `set_speed` (pause \| normal \| fast), `save`, `load`, `quit` |
+| client → daemon | `designate` (dig \| channel, rect), `cancel_designation` (rect), `place_stockpile` (rects: one drag, 12.1), `remove_stockpile` (rect), `set_speed` (pause \| normal \| fast), `save`, `load`, `quit` |
 | daemon → client | `snapshot` (on connect and after `load`: dims, tiles, entities, designations, zones, speed, tick), `delta` (per tick, per AD-8) |
 
 ## Capability → Architecture Map

@@ -110,7 +110,7 @@ def main():
     send({"type": "designate", "kind": "dig", "rect": DIG_RECT})
 
     rect = stockpile_rect(snapshot())
-    send({"type": "place_stockpile", "rect": rect})
+    send({"type": "place_stockpile", "rects": [rect]})
     print(f"stockpile at {rect['min'][:2]}–{rect['max'][:2]} (z {Z_GROUND}), chosen from the snapshot")
 
     send({"type": "designate", "kind": "channel", "rect": CHANNEL_RECT})

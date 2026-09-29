@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 11.3's creation
 
 # Story 12.1: Stones Stay Out of the Fire
 
-Status: review
+Status: done
 
 ## Story
 
@@ -77,10 +77,12 @@ of the refusal.
    in the fire. A single-cell stockpile on the fire shows the refusal in the gui and in an attached
    tui.
 
-9. **(Added 2026-09-28, Wolf's ruling on #153.)** No stockpile cell ever holds more than one
-   uncarried stone. When a carrier's delivery fails, it drops the stone where it stands unless that
+9. **(Added 2026-09-28, Wolf's ruling on #153; narrowed 2026-09-29 at review.)** A carrier never
+   drops a stone onto a stockpile cell that already holds one. (A channel's stone and a pile placed
+   over a heap can still stack; that is #154.) When a carrier's delivery fails, it drops the stone where it stands unless that
    tile is a stockpile cell already holding a stone. In that case it drops it on the nearest
-   walkable tile that is not an occupied stockpile cell. Heaps on open ground stay allowed, as
+   tile it can walk to that is not an occupied stockpile cell (reachability added at review; if
+   none exists it keeps the stone on its own tile rather than stop the sim). Heaps on open ground stay allowed, as
    today.
 
 ## Tasks / Subtasks
@@ -176,7 +178,7 @@ of the refusal.
         (3) simd discards the refusal → the `serve.rs` test fails;
         (4) the tui never renders `refusal` → the client test fails;
         (5) the gui never sets `LastRefusal` → the ingest test fails.
-- [ ] **Task 6 — seat (AC8), then the full gate.** Write `12-1-signoff/vehicle-card.md` in the seat's
+- [x] **Task 6 — seat (AC8), then the full gate.** Write `12-1-signoff/vehicle-card.md` in the seat's
   launch form. In WSL: `simd 7451`. In PowerShell from the Windows checkout:
   `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')`. Attach a tui in WSL with `tui 7451`.
   The card has three steps: (a) `3`, then drag a 5×5 stockpile centred on the campfire;
@@ -186,7 +188,9 @@ of the refusal.
   `scripts/gate.sh` (see [[gate-ooms-at-default-parallelism]]: `RUST_TEST_THREADS=2`).
   - **Seat, 2026-09-29: (a)–(d) all yes (Wolf).** AC1 answer: partly this case. What he saw as
     stones in the fire was also the tui font (#152): the wide `♨` glyph draws half into the east
-    tile, so a stone beside the fire looked like it overlapped it. The full gate is still to run.
+    tile, so a stone beside the fire looked like it overlapped it.
+  - **Full gate GREEN on `dc07358` (after the review patches), 2652 s at `RUST_TEST_THREADS=1`**, pixel guards
+    included (at 2 threads, `f878eff` had tripped 4 pixel guards on load).
 
 - [x] **Task 7 — #153: one stone per stockpile cell when the pile fills (AC9). Added 2026-09-28 at
   the seat, by Wolf's ruling.** Found by running after Task 1's fix: 26 stones on 24 cells, 3 on one
@@ -239,6 +243,67 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
     //   - in a window after the pile is full (measure when; pre-fix it was full by ~2,000): 0 pick-ups.
 }
 ```
+
+### Review Findings
+
+Code review 2026-09-29, run 1 on `eaf5130` (fresh session). Four layers, each ran the binaries in its own
+`CARGO_TARGET_DIR`: Blind Hunter (Sonnet, sim-core + client-core), Edge Case Hunter (Sonnet, shells + tests),
+Acceptance Auditor and Feature Auditor (Opus, whole diff). No layer timed out. Layer and severity on every item.
+
+- [x] [Review][Patch] (Decision resolved by Wolf 2026-09-29: **one command per drag** — `PlaceStockpile` carries all of a drag's rects and the sim refuses only when the whole drag has no valid cell.) **A gui drag through an emitter shows a false "stockpile refused: no valid cells"** (feature+accept, MED) —
+  `client_core::rects_for_cells` merges runs along x only, and `commands_for` sends one `PlaceStockpile` per run
+  (`crates/client-core/src/lib.rs:267`, `crates/gui/src/designate.rs:274`). When the fire is alone in its run (a 1-wide
+  column drag, or row neighbours at another height), that one-cell rect is refused while the rest of the drag is
+  zoned. Confirmed on a real daemon: the 5 commands the gui emits for a column drag `(64,62..66,9)` zoned 4 cells and
+  broadcast a refusal for `(64,64,9)` to every client. AC4 intent: a drag with a valid cell is not a refusal. The seat's
+  5×5 keeps the fire inside a row run, so it could not see this.
+- [x] [Review][Decision] (Resolved by Wolf 2026-09-29: **narrow AC9 to the carrier-drop rule; the other two routes are #154**.) **AC9's "never" is broader than what was built** (accept, LOW-MED) — the carrier-drop rule holds,
+  but two older routes still put 2 uncarried stones on one pile cell, both confirmed by probe: a channel spawns its stone
+  at `job.target` even when that is a full pile cell (`crates/sim-core/src/lib.rs:1029`), and `PlaceStockpile` over an
+  existing open-ground heap is accepted with the heap intact.
+- [x] [Review][Patch] **The release drop search walks through rock and across z-levels** (blind+accept, MED) — the BFS in
+  `release_claim` expands into any in-bounds tile, so "nearest" is grid distance. Blind's probe dropped a stone two
+  cells away through a wall, unreachable from the carrier (`dwarf (65,65,25) dropped (63,65,25) reachable=false`).
+  The `expect` also panics the daemon when no legal tile exists. Fix: search over `astar_neighbours` from the carrier's
+  tile; if nothing is reachable, drop where it stands instead of panicking [crates/sim-core/src/lib.rs:766]
+- [x] [Review][Patch] **The campfire scenario test has no positive assertion that the pile filled** (edge, MED; also the
+  dev session's suspected finding) — every assertion in `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire`
+  holds if nothing is ever hauled. It fills today (probe: `zones=24 stored=24`), but the test does not say so. Assert the
+  stored count equals the zone count [crates/sim-core/tests/scenario.rs:523]
+- [x] [Review][Patch] **Nothing tests the tui clearing its refusal on the next world command** (accept, MED) — the behaviour
+  is right, but replacing `state.refusal = None;` with a no-op left the whole tui suite green (48 + 17). Add the test and
+  a mutation row [crates/tui/src/view.rs:607]
+- [x] [Review][Patch] **Stale "seat pending" wording** (accept, LOW; this file) — the Task 5 and Task 7 completion notes
+  predate the 2026-09-29 seat.
+- [x] [Review][Defer] tui draws any stone on a pile cell green, including a second, loose one; two stones show as one `*` (edge, LOW) [crates/tui/src/view.rs:315] — deferred, depends on the AC9 decision
+- [x] [Review][Defer] tui status row cuts the refusal text below ~80 columns (edge+feature, LOW) [crates/tui/src/view.rs:1002] — deferred
+- [x] [Review][Defer] the `--frames 12` verification recipe misses the refusal on a sped-up daemon (feature, LOW) — deferred, recipe only
+- [x] [Review][Defer] simd drops a malformed `place_stockpile` rect (`rect_is_valid`) with a log line and no refusal (edge, LOW) [crates/simd/src/main.rs:766] — deferred, unreachable from either client
+- [x] [Review][Defer] gui and tui clear the refusal on slightly different command sets (edge, LOW) [crates/gui/src/designate.rs:194] — deferred
+- [x] [Review][Defer] an old save's zone cell under an emitter stays in `Zones` and draws as stockpile; nothing prunes it (blind, LOW) — deferred, no haul targets it
+- [x] [Review][Defer] three mutation proofs cited in the Debug Log live only in `/tmp` scripts, not `mutations/12-1.sh` (accept, LOW) — deferred
+
+**Patch pass closure table** (2026-09-29, same session as the review, `bce432c` + `dc07358`). Mutation rows run with
+`scripts/mutate.sh` on a scratch table of the 13 `12-1.sh` rows plus the 4 re-pointed older rows: **17/17 KILLED**, each
+by the assertion named below.
+
+| Item | Fix written for | Then tested from | Named fixture / sabotage |
+| --- | --- | --- | --- |
+| False refusal on a split drag | the gui's multi-rect drag | the sim, with the gui's exact column shape (5 one-cell rects, fire alone) | `a_drag_is_refused_only_when_none_of_its_rects_has_a_valid_cell` (sim: 4 zoned, no refusal; all-invalid drag refused with the bounding box); rows "a drag is refused when any rect is" and "gui sends one stockpile command per rect" KILLED; serve `a_surface_following_drag_lands_its_whole_footprint_and_nothing_else` now sends the drag as ONE command and still lands 36/36 |
+| Drop search through rock | a carrier on a full pile cell | a pre-existing walled pocket where the wall top sorts first by grid distance | `release_claim_drops_where_the_carrier_can_walk`: RED on the unfixed code `left: (63,65,25)` (two cells through the wall, the blind hunter's exact probe result), GREEN `(65,67,25)`; row "drop search walks through rock" KILLED ("the drop must be inside the pocket") |
+| Scenario vacuity | the campfire scenario | a sim where no haul ever finds a free cell | row "campfire pile never fills" KILLED on the new message. The assertion was first placed BEFORE the emitter checks and absorbed row "stockpile keeps emitter zones"; moved last (`dc07358`) and both rows re-run, each killed by its own assertion |
+| tui refusal clear untested | the tui's `apply_key` | `+` and an unfinished drag (must NOT clear), then a commit (must clear) | `a_refusal_stays_until_this_client_sends_a_world_command`; row "tui refusal never clears" KILLED ("the next world command clears it") |
+| Stale wording | this record | n/a | text only |
+
+Rows re-pointed because the wire change moved their anchors: 12.1 "daemon discards stockpile refusal"; 3.1
+"place_stockpile discriminator is renamed", "daemon swaps place and remove stockpile"; 5.2 "daemon accepts inverted
+rectangles"; 8.2 "stockpile placement issues nothing". `audit-mutations.py`: 702 rows, every literal matches.
+The daemon now also rejects an empty `rects` drag as an invalid client rect (serve test extended).
+
+Dismissed (6): pick-up leg's `is_standable` on an emitter (no stone can be on one); multi-client refusal ordering and
+Load (by design, NOTE on `Delta::refusals`); gui empty-surface fallback at the anchor z (Task 3 by design); generic
+refusal text and partial rects not refused (AC4 scope); O(items×zones) tui render; full gate not yet green on the final
+code (Task 6 is still open for exactly that, not a code finding).
 
 ## Dev Notes
 
@@ -363,8 +428,8 @@ gpt-6-sol
 ### Completion Notes List
 
 - Task 8: a stone on a stockpile cell draws `*` in the stockpile green (`stored_item_cell`); a loose stone stays grey. This is a tui-only change, and the gui is unchanged.
-- Task 7: occupied stockpile drops relocate to the nearest walkable nonoccupied cell in deterministic `Pos` order; open-ground heaps remain possible. The 8,000-tick scenario fills all 24 zone cells without stacking. Task 6's Wolf seat check remains pending.
-- Task 5: amended the acknowledgement convention and closed the stockpile feedback item. All five mutation rows KILLED. Task 6 card and real-daemon verification are done; Wolf seat check remains pending.
+- Task 7: occupied stockpile drops relocate to the nearest walkable nonoccupied cell in deterministic `Pos` order; open-ground heaps remain possible. The 8,000-tick scenario fills all 24 zone cells without stacking. (Seat passed 2026-09-29; the review made the search reachability-bound.)
+- Task 5: amended the acknowledgement convention and closed the stockpile feedback item. All five mutation rows KILLED. Task 6 card and real-daemon verification are done; the seat passed 2026-09-29.
 - Task 4: test both visible status instruments through the streaming TUI binary and GUI ingest/HUD systems.
 - Task 3: clients retain the shared refusal text until their next world command; GUI empty-surface stockpile drags reach the sim.
 - Task 2: broadcast typed refusals in the next delta; empty lists preserve the old JSON shape. Protocol literal and real daemon acceptance/refusal tests pass.
@@ -385,11 +450,16 @@ gpt-6-sol
 - `_bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`
 - `_bmad-output/implementation-artifacts/mutations/3-1-give-the-order.sh`
 - `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
+- `_bmad-output/implementation-artifacts/mutations/5-2-one-mirror-two-clients.sh`
+- `_bmad-output/implementation-artifacts/mutations/8-2-designate-with-the-mouse.sh`
 - `_bmad-output/implementation-artifacts/mutations/8-3-master-of-time-and-the-skeleton-walks-in-3d.sh`
 - `_bmad-output/implementation-artifacts/mutations/m2-1-live-app-systems.sh`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md`
+- `docs/architecture.md`
+- `scripts/task6-designate.py`
 - `crates/client-core/src/lib.rs`
+- `crates/gui/src/command.rs`
 - `crates/gui/src/designate.rs`
 - `crates/gui/src/ingest.rs`
 - `crates/gui/tests/capture.rs`
@@ -408,6 +478,8 @@ gpt-6-sol
 
 | Date | Change |
 | --- | --- |
+| 2026-09-29 | Full gate GREEN on `dc07358` (2652 s, 1 thread); status `done`. `scripts/task6-designate.py` moved to the `rects` shape and re-run on a live daemon (4 zones, nothing rejected). |
+| 2026-09-29 | Review run 1 (4 layers) and patch pass: a stockpile drag is one command (wire change, Wolf's ruling), the drop search is reachability-bound, AC9 narrowed (#154), two tests added and the scenario strengthened. 17/17 rows KILLED. |
 | 2026-09-29 | Task 6 seat: Wolf passed (a)–(d). The apparent overlap was partly the #152 font. |
 | 2026-09-28 | Task 8: stored stones draw in the stockpile green in the tui (Wolf's seat ruling), implemented by Claude directly. Two older mutation anchors re-pointed and re-killed. |
 | 2026-09-28 | Task 7: prevent retry drops from stacking on occupied stockpile cells; pin the race, kill seven mutations, and pass sim-core and daemon suites. |

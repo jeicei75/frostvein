@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-09-28
+# last_updated: 2026-09-29
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-28
+last_updated: 2026-09-29
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2487,7 +2487,7 @@ development_status:
   # rules (12.1 -> 12.3 -> 12.11 defects, 12.3 before 12.9, 12.2 + 12.5 in the first half, 12.4
   # before concurrent work, 12.7 + 12.10 before 12.12). 12.1 decides the refusal shape every later
   # command filter uses. Tooling items #142-#148 run beside the epic as issues, NOT stories here.
-  12-1-stones-stay-out-of-the-fire: review
+  12-1-stones-stay-out-of-the-fire: done
   #   Created 2026-09-28 on a96ab48. #134 REPRODUCED by a sim probe: no stone ever reaches the
   #     emitter's own cell; the fire's cell is accepted as a stockpile tile that is free forever
   #     and unreachable, so dwarves pick up and drop the same stone endlessly (98 pick-ups, 0
