@@ -524,6 +524,22 @@ fn a_surface_following_drag_lands_its_whole_footprint_and_nothing_else() {
     );
 }
 
+fn dwarf_identities(snapshot: &protocol::Snapshot) -> Vec<(u32, protocol::Identity)> {
+    let mut identities: Vec<_> = snapshot
+        .entities
+        .iter()
+        .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        .map(|entity| {
+            (
+                entity.id,
+                entity.identity.expect("every dwarf carries an identity"),
+            )
+        })
+        .collect();
+    identities.sort_by_key(|(id, _)| *id);
+    identities
+}
+
 #[test]
 fn save_then_load_rewinds_every_client() {
     let daemon = Daemon::spawn();
@@ -533,8 +549,25 @@ fn save_then_load_rewinds_every_client() {
         .expect("first client write half must clone");
     let mut first = BufReader::new(first_stream);
     let mut second = BufReader::new(daemon.connect());
-    let _ = read_snapshot(&mut first);
+    let connect_snapshot = read_snapshot(&mut first);
     let _ = read_snapshot(&mut second);
+    let connect_identities = dwarf_identities(&connect_snapshot);
+    assert_eq!(
+        connect_identities
+            .iter()
+            .map(|(_, identity)| identity.name as u8)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        5
+    );
+    assert_eq!(
+        connect_identities
+            .iter()
+            .map(|(_, identity)| identity.colour as u8)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        5
+    );
 
     send_literal(&mut first_writer, b"{\"type\":\"save\"}\n");
     let saved_tick = parse_saved_tick(&daemon.next_log());
@@ -557,6 +590,8 @@ fn save_then_load_rewinds_every_client() {
 
     assert_eq!(first_loaded.tick, saved_tick);
     assert_eq!(second_loaded.tick, saved_tick);
+    assert_eq!(dwarf_identities(&first_loaded), connect_identities);
+    assert_eq!(dwarf_identities(&second_loaded), connect_identities);
     assert!(first_loaded.tick < first_tick);
     assert!(second_loaded.tick < second_tick);
 }
@@ -669,6 +704,43 @@ fn duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking() {
         log.contains("save reuses dwarf id 0"),
         "unexpected duplicate-id log: {log}"
     );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn repeated_dwarf_name_or_colour_save_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    for (repeat_name, expected) in [
+        (true, "save reuses dwarf name"),
+        (false, "save reuses dwarf colour"),
+    ] {
+        let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        if repeat_name {
+            state.dwarves[1].identity.name = state.dwarves[0].identity.name;
+        } else {
+            state.dwarves[1].identity.colour = state.dwarves[0].identity.colour;
+        }
+        fs::write(
+            daemon.save_path(),
+            serde_json::to_vec(&state).expect("encode repeated-identity save fixture"),
+        )
+        .expect("write repeated-identity save fixture");
+
+        send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+        let log = daemon.next_log();
+        assert!(
+            log.contains(expected),
+            "unexpected repeated-identity log: {log}"
+        );
+    }
 
     let first = read_delta(&mut reader).tick;
     let second = read_delta(&mut reader).tick;

@@ -192,6 +192,7 @@ fn dwarf(id: u32, pos: [i32; 3]) -> Entity {
         pos,
         state: JobState::Idle,
         light: None,
+        identity: None,
     }
 }
 
@@ -202,6 +203,7 @@ fn lantern_dwarf(id: u32, pos: [i32; 3]) -> Entity {
         pos,
         state: JobState::Idle,
         light: Some(protocol::LightKind::Lantern),
+        identity: None,
     }
 }
 
@@ -1273,6 +1275,7 @@ fn the_floor_drop_does_not_move_the_cube_kinds() {
             pos: [0, 0, 0],
             state: JobState::Idle,
             light: None,
+            identity: None,
         }],
     ));
     app.update();
@@ -1471,6 +1474,7 @@ fn production_drives_the_flicker_from_elapsed_time() {
         pos: [0, 0, 0],
         state: JobState::Idle,
         light: Some(protocol::LightKind::Torch),
+        identity: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
     app.update();
@@ -1495,6 +1499,7 @@ fn flickered_light_survives_a_later_production_reconciliation() {
         pos: [0, 0, 0],
         state: JobState::Idle,
         light: Some(protocol::LightKind::Torch),
+        identity: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
     app.update();
@@ -1532,6 +1537,7 @@ fn campfire_light_casts_shadows_and_is_not_rewritten_by_a_later_reconciliation()
         pos: [0, 0, 0],
         state: JobState::Idle,
         light: Some(protocol::LightKind::Campfire),
+        identity: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![campfire]));
     app.update();
@@ -1597,6 +1603,7 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         pos: [1, 0, 0],
         state: JobState::Idle,
         light: None,
+        identity: None,
     };
     let dwarf_one = Entity {
         id: 1,
@@ -1604,6 +1611,7 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         pos: [0, 0, 0],
         state: JobState::Idle,
         light: None,
+        identity: None,
     };
     let mut app = headless_app(snapshot(
         vec![Tile::Solid(Material::Ice), Tile::Empty],
@@ -1790,6 +1798,7 @@ fn despawning_world_projection_then_reconciling_recreates_the_same_scene() {
         pos: [1, 0, 0],
         state: JobState::Idle,
         light: None,
+        identity: None,
     };
     // AC11 says "marks included", so the snapshot must actually carry marks — reviewed
     // 2026-08-21, this test used an empty designation and zone list, so every assertion in it was
@@ -1890,6 +1899,7 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             pos: [60 + id as i32, 64, 9],
             state: JobState::Idle,
             light: Some(protocol::LightKind::Torch),
+            identity: None,
         })
         .chain(std::iter::once(Entity {
             id: 4,
@@ -1897,6 +1907,7 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             pos: [64, 64, 9],
             state: JobState::Idle,
             light: Some(protocol::LightKind::Campfire),
+            identity: None,
         }))
         .chain(std::iter::once(Entity {
             id: 5,
@@ -1904,6 +1915,7 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             pos: [64, 65, 9],
             state: JobState::Idle,
             light: None,
+            identity: None,
         }))
         .collect();
     let mut app = headless_app(snapshot_with_dims(
@@ -1942,6 +1954,7 @@ fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
             pos: [60 + id as i32, 64, 9],
             state: JobState::Idle,
             light: Some(protocol::LightKind::Torch),
+            identity: None,
         })
         .chain(std::iter::once(Entity {
             id: 4,
@@ -1949,6 +1962,7 @@ fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
             pos: [64, 64, 9],
             state: JobState::Idle,
             light: Some(protocol::LightKind::Campfire),
+            identity: None,
         }))
         .chain((5..10).map(|id| lantern_dwarf(id, [60 + id as i32 - 5, 65, 9])))
         .collect();

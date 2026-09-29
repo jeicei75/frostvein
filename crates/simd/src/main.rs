@@ -513,9 +513,17 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
         let mut seen_ids = BTreeSet::new();
         let mut claimed_job_ids = BTreeSet::new();
         let mut carried_items = BTreeSet::new();
+        let mut seen_names = BTreeSet::new();
+        let mut seen_colours = BTreeSet::new();
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {
                 bail!("save reuses dwarf id {}", dwarf.id);
+            }
+            if !seen_names.insert(dwarf.identity.name) {
+                bail!("save reuses dwarf name {:?}", dwarf.identity.name);
+            }
+            if !seen_colours.insert(dwarf.identity.colour) {
+                bail!("save reuses dwarf colour {:?}", dwarf.identity.colour);
             }
             if let Some(job_id) = dwarf.current_job {
                 let job_id = sim_core::JobId(job_id);
