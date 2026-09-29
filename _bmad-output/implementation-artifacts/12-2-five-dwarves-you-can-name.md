@@ -92,29 +92,29 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
        line and the tui roster row.
     2. The no-selection DoF rule: focus stays on the rig's orbit centre.
     3. Old saves do not load: the load is refused with a log line, and there is no migration.
-- [ ] **Task 1: sim-core identity (AC1, AC2).**
-  - [ ] `lib.rs`, beside `LightKind`: `pub enum DwarfName { Durin, Dvalin, Nori, Ori, Dori, Bifur, Bofur, Gloin, Nain, Thrain, Frar, Loni, Regin, Alf, Fjalar, Frosti }`,
+- [x] **Task 1: sim-core identity (AC1, AC2).**
+  - [x] `lib.rs`, beside `LightKind`: `pub enum DwarfName { Durin, Dvalin, Nori, Ori, Dori, Bifur, Bofur, Gloin, Nain, Thrain, Frar, Loni, Regin, Alf, Fjalar, Frosti }`,
         `pub enum DwarfColour { Red, Gold, Green, Blue, Purple }`, and
         `#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)] pub struct Identity { pub name: DwarfName, pub colour: DwarfColour }`.
         The enums derive `Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize`,
         and each has a `pub const ALL: [Self; N]` in declaration order. The shuffles read `ALL`.
-  - [ ] `const STREAM_IDENTITY: u64 = 0x4944_454e_5449_5459; // "IDENTITY"` beside the others
+  - [x] `const STREAM_IDENTITY: u64 = 0x4944_454e_5449_5459; // "IDENTITY"` beside the others
         (`lib.rs:26-29`). In `generate` (`:1198`), seed `ChaCha8Rng::seed_from_u64(seed ^ STREAM_IDENTITY)`.
         Copy `DwarfName::ALL` and `DwarfColour::ALL` into arrays, `shuffle` each
         (`rand::seq::SliceRandom`, rand 0.10.2), and assign index `i` to the i-th dwarf in
         ascending id order. `spawn_dwarves` (`:1675`) takes the identities as a parameter and adds
         `Identity` to the spawn bundle (`:1699`). **Do not draw from `spawn_rng`**; that shifts
         every spawn position.
-  - [ ] Add `pub fn identities(&self) -> Vec<(Id, Identity)>`, sorted by id. It is a sibling
+  - [x] Add `pub fn identities(&self) -> Vec<(Id, Identity)>`, sorted by id. It is a sibling
         reader, like `carrying()` (`:1617`). **Do not widen `dwarves()`**: its tuple has about 90
         destructuring call sites.
-  - [ ] `save.rs`: `SavedDwarf` gains `pub identity: Identity` (stays `Copy`). `to_save`
+  - [x] `save.rs`: `SavedDwarf` gains `pub identity: Identity` (stays `Copy`). `to_save`
         (`:1248`) and `from_save` (`:1341`) carry it. The `filter_map` in `to_save` silently drops
         a dwarf missing any component (comment `:1240-1243`), so add the component at both spawn
         sites. Fix the 4 test literals (`save_load.rs:346,356`, `scenario.rs:1283,1293`).
         **Old saves (no `identity`) fail to decode**, and simd logs and refuses the load. That
         is intended. `// NOTE:` it on the field.
-  - [ ] Tests:
+  - [x] Tests:
         - `worldgen.rs::five_dwarves_on_walkable_surface` (`:657`) also asserts 5 distinct names
           and 5 distinct colours.
         - `same_seed_produces_identical_worlds` (`:54`) also compares `identities()`.
@@ -123,41 +123,41 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
           `same_seed_and_commands_remain_deterministic` (`scenario.rs:1397`) also compare
           `identities()`.
         - The existing spawn-position tests must pass untouched.
-- [ ] **Task 2: protocol + simd (AC3; the wire diff above).**
-  - [ ] `protocol`: the three types and the field, as in "Wire diff". Fix every `Entity { .. }`
+- [x] **Task 2: protocol + simd (AC3; the wire diff above).**
+  - [x] `protocol`: the three types and the field, as in "Wire diff". Fix every `Entity { .. }`
         literal (about 56; let the compiler list them). Emitters and fixture dwarves that don't
         care get `identity: None`.
-  - [ ] Pin tests in `protocol`:
+  - [x] Pin tests in `protocol`:
         - the existing entity literal (`:301`) and the delta literal (`:265`) stay byte-identical;
         - NEW literal `{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null,"identity":{"name":"durin","colour":"red"}}`
           round-trips;
         - `every_material_and_tile_variant_has_a_pinned_wire_name` (`:447`) gains blocks for
           both enums.
-  - [ ] `bridge.rs`: `dwarf_name` and `dwarf_colour` as exhaustive `match`es with no wildcard,
+  - [x] `bridge.rs`: `dwarf_name` and `dwarf_colour` as exhaustive `match`es with no wildcard,
         beside `light_kind` (`:158`). Both dwarf maps (`:22`, `:81`) set
         `identity: Some(..)` from `world.identities()`, looked up by id. Keep them identical;
         extract one `dwarf_entity` fn if it keeps them so.
-  - [ ] `simd/src/main.rs` save validation (dwarf loop `:516`): `bail!` on a repeated name or a
+  - [x] `simd/src/main.rs` save validation (dwarf loop `:516`): `bail!` on a repeated name or a
         repeated colour. Add one `serve.rs` test in the shape of
         `duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking` (`:652`).
-  - [ ] Extend `save_then_load_rewinds_every_client` (`serve.rs:528`): the connect snapshot carries
+  - [x] Extend `save_then_load_rewinds_every_client` (`serve.rs:528`): the connect snapshot carries
         5 distinct names and 5 distinct colours, and the post-load snapshot carries the same
         `(id, identity)` set.
-- [ ] **Task 3: client-core + tui (AC4).**
-  - [ ] `client-core`: `pub fn dwarf_name_text(name: protocol::DwarfName) -> &'static str`, an
+- [x] **Task 3: client-core + tui (AC4).**
+  - [x] `client-core`: `pub fn dwarf_name_text(name: protocol::DwarfName) -> &'static str`, an
         exhaustive `match` (`Durin => "Durin"`, …). It is the only spelling of a name, shared by
         both clients, like `refusal_text` (`lib.rs:10`).
-  - [ ] `tui/src/palette.rs`: `pub fn dwarf_colour(colour: protocol::DwarfColour) -> Rgb`, an
+  - [x] `tui/src/palette.rs`: `pub fn dwarf_colour(colour: protocol::DwarfColour) -> Rgb`, an
         exhaustive `match` using the approved hexes. Pin it in `every_look_is_pinned` (`:200`).
         **The `☺` glyph keeps its job-state colour**; the pinned state colours and `WALK_SGR`
         (`tests/client.rs:1353`) must not change.
-  - [ ] `view.rs::render` (`:228`): `map_h = h - 3`, and the roster row goes at `h-3`. Draw each
+  - [x] `view.rs::render` (`:228`): `map_h = h - 3`, and the roster row goes at `h-3`. Draw each
         name with `dwarf_colour` as `fg`, joined by two spaces, ascending by id, truncated to `w`.
         A dwarf with `identity: None` is skipped. The second `map_h` site (`:626`, the camera
         clamp) must match. Otherwise the cursor can scroll under the roster.
         Repoint `status_and_hint_occupy_the_bottom_two_rows` (`:1449`),
         `one_row_terminal_renders_blank` (`:981`), and the h=3 status tests (`:1440`, `:2044`).
-  - [ ] **The instrument is `tui --frames N` (real binary).** Add a `tests/client.rs` test with a
+  - [x] **The instrument is `tui --frames N` (real binary).** Add a `tests/client.rs` test with a
         stub daemon that sends a snapshot with two identified dwarves. Assert that the row above
         the `tick ` row contains both names, and that one name is wrapped in its colour's SGR.
         Then send a delta that swaps their identities and assert the row changes. Under
@@ -356,6 +356,10 @@ Exit 0 is not a result; the ratio is.
 ### Debug Log References
 
 ### Completion Notes List
+
+- Tasks 1-3 done (dev agent, sonnet-5.5). Commits: 1b4f8c7 (sim-core), 6a56a89 (protocol + simd), 8ad0fce and 00c9314 (tui roster).
+- Re-pointed two mutation tables the change broke: `2-2-...sh` (spawn_dwarves call gained `identities`) and `6-2-...sh` (the two bridge dwarf maps are now one `dwarf_entities` fn, so both rows hit the single site).
+- Deviations: `render` now blanks below 3 rows (was 2), because three rows are reserved. The cursor-pan unit test viewport went (5,5) to (5,7) so a wrong map_h in `apply_key` is killed (3 and 4 rows pan identically). A `dwarf_name_text` spelling pin test in client-core was added because the client test only checked substrings.
 
 ### File List
 
