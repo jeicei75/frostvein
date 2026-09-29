@@ -162,23 +162,23 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
         the `tick ` row contains both names, and that one name is wrapped in its colour's SGR.
         Then send a delta that swaps their identities and assert the row changes. Under
         `NO_COLOR=1`, the names still appear. Use `capture_walking_dwarf` (`:1359`) as the model.
-- [ ] **Task 4: gui instrument `--select ID`, then #136 RED → fix (AC7).**
-  - [ ] `parse_args_from` (`ingest.rs:1093`): `--select <id>` sets the startup `SelectedDwarf`.
+- [x] **Task 4: gui instrument `--select ID`, then #136 RED → fix (AC7).**
+  - [x] `parse_args_from` (`ingest.rs:1093`): `--select <id>` sets the startup `SelectedDwarf`.
         Trap: `frame_selected_dwarf` (`pick.rs:217`) sets `rig.distance = SELECT_DISTANCE`
         whenever the selection `is_changed()`, which includes the first frame, so a
         `--distance D` passed alongside would be overwritten. `--distance` must win when given.
         Add a parse test.
-  - [ ] Test the instrument: a pixel guard in `tests/pixel_guard.rs` captures
+  - [x] Test the instrument: a pixel guard in `tests/pixel_guard.rs` captures
         `--select A` and `--select B` (two dwarves of different colour) at `--clock 12`, with
         the harness flags and one fresh daemon per capture (`:287`). The centre window must
         change between the two captures. After Task 5, each window's mean colour must be nearer
         its own dwarf's table colour than the other's.
-  - [ ] **RED first:** a pixel guard captures `--select 0 --distance 4` twice, once with DoF on
+  - [x] **RED first:** a pixel guard captures `--select 0 --distance 4` twice, once with DoF on
         and once with `--fx-off dof`. It compares `rec601_lap_mean` (`:95`) over a centre window
         sized to the dwarf. Record the failing ratio in the Debug Log. **If the RED ratio is
         already ≥ 0.8, stop and report to Wolf; #136 would then not be reproduced at the pinned
         venue.**
-  - [ ] Fix, selected path only. Focus on the body, not the feet: `translation` plus half the
+  - [x] Fix, selected path only. Focus on the body, not the feet: `translation` plus half the
         drawn figure height. Also make the aperture follow the focal distance so the subject
         stays in focus at close range; clamping or scaling `aperture_f_stops` are both fine.
         The no-selection path (`dof_focal_distance`, `ingest.rs:2352`) and its constants must
@@ -187,11 +187,11 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
         `:4204` must pass untouched. Update
         `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` (`:4735`) to the
         body point.
-- [ ] **Task 5: gui tunic colour (AC5). Only after Task 0.**
-  - [ ] `appearance.rs`, beside `entity_appearance` (`:377`):
+- [x] **Task 5: gui tunic colour (AC5). Only after Task 0.**
+  - [x] `appearance.rs`, beside `entity_appearance` (`:377`):
         `pub fn dwarf_tunic_color(colour: protocol::DwarfColour) -> Color`, with the approved
         hexes, exhaustive, and pinned in the palette pin test (`:590-612`).
-  - [ ] Build 5 recoloured atlases plus 5 `StandardMaterial`s, one per colour id, cloned from the
+  - [x] Build 5 recoloured atlases plus 5 `StandardMaterial`s, one per colour id, cloned from the
         GLB's material. Use the draft's rule: the tunic cells only, each texel becomes
         `colour × lum(texel) / max tunic lum`.
         - Name the cells in one const (`TUNIC_CELLS: [(u32, u32); 5]`), with a `// NOTE:` that
@@ -201,21 +201,21 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
         - **Colour-space trap** ([[colour-space-bug-hides-as-palette-mismatch]]): the atlas is
           sRGB. Recolour in sRGB bytes, and assert in a test that a non-tunic texel is
           byte-identical after recolouring.
-  - [ ] Apply the material per dwarf. When a dwarf's scene instance has spawned, swap its
+  - [x] Apply the material per dwarf. When a dwarf's scene instance has spawned, swap its
         mesh's `MeshMaterial3d` for its colour's material. Use `Added<MeshMaterial3d<StandardMaterial>>`
         and walk `ChildOf` up to the `WorldProjected` dwarf, as `drive_dwarf_walk` does
         (`project.rs:2077`). Leave the `AnimationPlayer` and the hierarchy untouched.
-  - [ ] Carry the colour on the projected dwarf as a component set at spawn (`project.rs:1795`).
+  - [x] Carry the colour on the projected dwarf as a component set at spawn (`project.rs:1795`).
         The existing-entity branch re-applies it when the mirror's identity differs, beside the
         `light` re-sync (`:1762-1776`).
-  - [ ] Headless tests (`tests/headless.rs`):
+  - [x] Headless tests (`tests/headless.rs`):
         - two dwarves of different colour end up with different material handles;
         - a snapshot that swaps their identities swaps the handles.
         - Unverified at creation: whether the GLB scene instance spawns under the headless
           minimal plugins. If it does not, assert on the projected dwarf's colour component and
           on the colour → material lookup instead, say so in the Debug Log, and the Task 4
           pixel guard carries the on-model evidence.
-- [ ] **Task 6: gui name line (AC6). Only after Task 0.** Add a HUD `Text` tagged `Hud` and
+- [x] **Task 6: gui name line (AC6). Only after Task 0.** Add a HUD `Text` tagged `Hud` and
   `ClientLocal`, placed per the approved draft, using the clock-readout pattern
   (`setup_clock_readout` `ingest.rs:1702`). Its text is `dwarf_name_text` for the selected id,
   its `TextColor` is `dwarf_tunic_color`, and it is empty with no selection. Captures hide every
@@ -355,13 +355,28 @@ Exit 0 is not a result; the ratio is.
 
 ### Debug Log References
 
+- Task 4 RED, on `5d0cacf` (before the fix): `--select 0 --distance 4 --clock 12`, window (540,170)-(740,390), Rec.601 Laplacian mean, DoF off 5.8911, DoF on 2.2679, **ratio 0.385** (< 0.8, so no halt). Fix at `8ae5f2c`.
+- Task 4 GREEN: DoF off 5.8911, DoF on 5.8893, **ratio 1.000**.
+- Existing guards after the fix, unedited: `dof_softens_the_far_ridge_while_retaining_camp_focus_and_stars` (ratio 11.753) and `dof_keeps_depth_separation_at_distance_40` (ratio 3.303) pass.
+- The fix: the selected subject is his body (`translation` + half of `DWARF_HEIGHT_CELLS` = 0.375), and the aperture scales by `(61.7/focal)^2` when the focal distance is under boot's (`selected_aperture`). The no-selection arm still writes `DOF_APERTURE_F_STOPS`.
+- Task 4 `--select` guard: at `--clock 12` the tunics wash to about (195,160,165) (red and purple read alike), so the guard uses `--clock 8`. Chromaticity margins 0.040 (dwarf 0, purple) and 0.077 (dwarf 2, red); with every dwarf painted red dwarf 0 reads 0.020; the floor is 0.03.
+- Task 5: the real GLB atlas keeps its CPU pixels (no `no readable CPU pixels` line in a capture, and the tunics render coloured on the model). The GLB scene does NOT spawn under the headless `MinimalPlugins` (no `AssetServer`), so the headless test stands in a mesh child of each projected dwarf carrying a synthetic base material and atlas; from there the production path runs. The pixel guard carries the on-model evidence.
+- Task 4 mutation finding: focusing the FEET (the pre-#136 point) is NOT killed by the #136 pixel guard, because the widened aperture leaves the figure sharp either way (ratio 1.000). The unit test `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` kills it (tolerance tightened 0.25 to 0.03 with a discrimination assert), and an unscaled aperture is killed by the pixel guard (ratio 0.468).
+
 ### Completion Notes List
+
+- Tasks 4-6 done (dev agent, sonnet-5.5). Commits: `5d0cacf` (`--select`), `57c9d1a` (RED guard), `06d3b94`+`d191d9b` (`--select` guard), `8ae5f2c` (the #136 fix), `8846b15` (tunic recolour), `46e9554` (focus test tightened), `9ac89c7` (HUD name).
+- Re-pointed mutation rows (sabotage and killing test unchanged): `10-10-...sh` (the follow-pins-zoom row), `11-2-the-miniature.sh` (two frozen-camera DoF rows), `5-3-a-window-onto-the-valley.sh` (the reconcile find gained a fourth tuple element), `8-3-...sh` (the clock-readout row, now chained before the name readout).
+- Deviations: the `--select` guard runs at `--clock 8`, not 12 (see Debug Log). Three existing HUD-count tests went 5 to 6 texts for the new name line. `DwarfColour` has no `ALL` in `protocol`, so the client keeps its own `TUNIC_COLOURS` order.
 
 - Tasks 1-3 done (dev agent, sonnet-5.5). Commits: 1b4f8c7 (sim-core), 6a56a89 (protocol + simd), 8ad0fce and 00c9314 (tui roster).
 - Re-pointed two mutation tables the change broke: `2-2-...sh` (spawn_dwarves call gained `identities`) and `6-2-...sh` (the two bridge dwarf maps are now one `dwarf_entities` fn, so both rows hit the single site).
 - Deviations: `render` now blanks below 3 rows (was 2), because three rows are reserved. The cursor-pan unit test viewport went (5,5) to (5,7) so a wrong map_h in `apply_key` is killed (3 and 4 rows pan identically). A `dwarf_name_text` spelling pin test in client-core was added because the client test only checked substrings.
 
 ### File List
+
+- `crates/gui/src/{ingest.rs,pick.rs,project.rs,appearance.rs}`, `crates/gui/tests/{headless.rs,pixel_guard.rs}`
+- Mutation tables re-pointed: `mutations/{10-10-take-the-camera-where-you-want-it,11-2-the-miniature,5-3-a-window-onto-the-valley,8-3-master-of-time-and-the-skeleton-walks-in-3d}.sh`
 
 ## Change Log
 
