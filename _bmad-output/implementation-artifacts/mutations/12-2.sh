@@ -75,7 +75,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '.map(|(_, transform)| transform.translation)\n'))
 PY
 
-mutation "selected aperture not scaled" gui a_selected_dwarf_at_the_closest_zoom_is_sharp_with_dof_on <<'PY'
+mutation "selected aperture not scaled" gui a_selected_dwarf_at_the_closest_zoom_is_sharp_with_dof_on ignored <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
 old = '    DOF_APERTURE_F_STOPS * (boot / focal_distance).powi(2).max(1.0)\n'
