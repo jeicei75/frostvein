@@ -4915,8 +4915,16 @@ mod tests {
             "this fixture cannot separate the two rules: dwarf at {to_dwarf}, aim point at \
              {rig_aim}"
         );
+        // And the body point must be distinguishable from his feet, or focusing the feet (the
+        // pre-#136 rule) would pass: the camera looks down, so half a figure moves the distance
+        // by only a fraction of it.
+        let to_feet = camera.distance(dwarf - bevy::prelude::Vec3::Y * 0.375);
         assert!(
-            (focal - to_dwarf).abs() < 0.25,
+            (to_dwarf - to_feet).abs() > 0.1,
+            "this fixture cannot separate his body from his feet: {to_dwarf} vs {to_feet}"
+        );
+        assert!(
+            (focal - to_dwarf).abs() < 0.03,
             "a selected dwarf must be the focal subject: focal_distance={focal} but he stands \
              {to_dwarf} away (the rig's aim point is {rig_aim})"
         );
