@@ -1,4 +1,7 @@
-# 12.2 look draft: what you will see (for Wolf's approval before the look is built)
+# 12.2 look draft: what you will see
+
+**APPROVED by Wolf, 2026-09-29, unchanged** ("1 ok 2 ok 3 ok": this draft, the no-selection DoF
+rule, and old saves not loading).
 
 Epic 12 standing AC 7: Wolf approves this before the gui look is built. Made at story creation,
 2026-09-29, on `16be274`.

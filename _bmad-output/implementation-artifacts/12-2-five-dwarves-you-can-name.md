@@ -39,8 +39,7 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
   NEAREST. There is no tunic slot. A UV→skin-joint census of the shipped GLB found the tunic
   cells: row 9 cols 0–3 and row 10 col 15 (32-px cells; see `12-2-signoff/draft.md`).
 - **Look draft made at creation**: `12-2-signoff/draft.md` + `draft-crew.png` (a Blender render of
-  the real GLB with the tunic cells recoloured). **Wolf's approval is recorded in Task 0. Tasks 5
-  and 6 do not start until it is.**
+  the real GLB with the tunic cells recoloured). **Wolf approved it unchanged on 2026-09-29 (Task 0).**
 
 ## Wire diff (standing AC 4)
 
@@ -84,10 +83,15 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: draft approval (standing AC 7).** Wolf approves or amends `12-2-signoff/draft.md`
+- [x] **Task 0: draft approval (standing AC 7).** Wolf approves or amends `12-2-signoff/draft.md`
   (tunic colours, name pool, gui name line, tui roster row, the no-selection DoF rule). Record
   his words and date here. If he changes a hex or a name, update `draft.md` and use his values in
   Tasks 1, 3 and 5. Tasks 1–4 may run before approval. **Tasks 5–6 may not.**
+  - **Approved 2026-09-29, unchanged (Wolf, at story creation: "1 ok 2 ok 3 ok").**
+    1. The draft as written: tunic-only colour in the five hexes, the 16-name pool, the gui name
+       line and the tui roster row.
+    2. The no-selection DoF rule: focus stays on the rig's orbit centre.
+    3. Old saves do not load: the load is refused with a log line, and there is no migration.
 - [ ] **Task 1: sim-core identity (AC1, AC2).**
   - [ ] `lib.rs`, beside `LightKind`: `pub enum DwarfName { Durin, Dvalin, Nori, Ori, Dori, Bifur, Bofur, Gloin, Nain, Thrain, Frar, Loni, Regin, Alf, Fjalar, Frosti }`,
         `pub enum DwarfColour { Red, Gold, Green, Blue, Purple }`, and
@@ -359,4 +363,5 @@ Exit 0 is not a result; the ratio is.
 
 | Date | Change |
 | --- | --- |
+| 2026-09-29 | Task 0: Wolf approved the draft, the no-selection DoF rule and the no-old-saves rule, all unchanged. |
 | 2026-09-29 | Story created on `16be274`. RED observed live: the wire carries no identity and the tui shows no names. #136 premise corrected: DoF already follows the selection, but focuses his feet with an aperture tuned for boot distance. Look draft rendered from the real GLB (`12-2-signoff/`). |
