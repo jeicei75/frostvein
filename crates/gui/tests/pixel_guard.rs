@@ -634,16 +634,92 @@ fn window_diff(
     total as f32 / (3 * (x1 - x0) * (y1 - y0)) as f32
 }
 
-/// The instrument test for `--select`: two captures that select different dwarves must frame
-/// different dwarves, so the centre window changes. Without this the `#136` guard below could be
-/// measuring a flag that parses and selects nothing.
+/// Mean colour of a rectangle as CHROMATICITY (each channel over the channel sum). Lighting
+/// scales a tunic's brightness and the warm sun pulls every chromaticity toward orange, so a
+/// distance in RGB or a hue angle calls a lit purple "red"; what survives is which of two frames'
+/// windows lies nearer a given table colour.
+fn chromaticity_mean(
+    pixels: &[[u8; 4]],
+    width: usize,
+    rect: (usize, usize, usize, usize),
+) -> [f32; 3] {
+    let (x0, y0, x1, y1) = rect;
+    let mut sum = [0_u64; 3];
+    for y in y0..y1 {
+        for x in x0..x1 {
+            for c in 0..3 {
+                sum[c] += u64::from(pixels[y * width + x][c]);
+            }
+        }
+    }
+    let total = (sum[0] + sum[1] + sum[2]) as f32;
+    sum.map(|c| c as f32 / total)
+}
+
+fn chromaticity_of_hex(rgb: [u8; 3]) -> [f32; 3] {
+    let total = rgb.iter().map(|c| f32::from(*c)).sum::<f32>();
+    rgb.map(|c| f32::from(c) / total)
+}
+
+fn chromaticity_distance(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a.iter()
+        .zip(b)
+        .map(|(a, b)| (a - b).powi(2))
+        .sum::<f32>()
+        .sqrt()
+}
+
+impl Daemon {
+    /// The colour id the daemon's snapshot gives dwarf `id`, read off the wire the client reads.
+    fn dwarf_colour(&self, id: u64) -> String {
+        let stream = std::net::TcpStream::connect(("127.0.0.1", self.port))
+            .expect("the daemon must accept a probe connection");
+        let mut line = String::new();
+        BufReader::new(stream)
+            .read_line(&mut line)
+            .expect("the daemon must send its snapshot first");
+        let snapshot: serde_json::Value = serde_json::from_str(&line).expect("a json snapshot");
+        snapshot["entities"]
+            .as_array()
+            .expect("entities")
+            .iter()
+            .find(|entity| entity["kind"] == "dwarf" && entity["id"] == id)
+            .and_then(|entity| entity["identity"]["colour"].as_str())
+            .expect("the dwarf must carry an identity colour")
+            .to_owned()
+    }
+}
+
+/// The approved tunic hexes (`12-2-signoff/draft.md`), by wire name. Written out here, not read from
+/// the client, so the guard is an independent oracle for what the client paints.
+fn tunic_hex(colour: &str) -> [u8; 3] {
+    match colour {
+        "red" => [0xB2, 0x3A, 0x34],
+        "gold" => [0xD6, 0xA4, 0x2C],
+        "green" => [0x3E, 0x92, 0x4C],
+        "blue" => [0x3C, 0x62, 0xBA],
+        "purple" => [0x80, 0x4C, 0xA8],
+        other => panic!("unknown colour id {other}"),
+    }
+}
+
+/// The instrument test for `--select`, and AC5 on the rendered model: two captures that select
+/// different dwarves must frame different dwarves, so the centre window changes, and each frame's
+/// torso must read nearer its own dwarf's approved tunic colour than the other's.
 ///
 /// Distance 4 and DoF off, so neither the selection zoom nor blur is in the comparison. One fresh
-/// daemon per capture; noon (`--clock 12`) so the hue evidence of Task 5 is daylight.
+/// daemon per capture (the world is the same: a fresh daemon freezes at the same tick and seeds
+/// the same identities); `--clock 8`, not the noon 12: at noon the exposure washes every tunic to about (195, 160, 165) and red and purple read alike (measured), while at 8 the two windows' chromaticities are 0.36/0.31/0.32 and 0.43/0.29/0.28.
 #[test]
 #[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
-fn select_frames_a_different_dwarf_per_id() {
+fn select_frames_a_different_dwarf_per_id_and_wears_his_own_colour() {
     const DWARF: (usize, usize, usize, usize) = (540, 170, 740, 390);
+    /// Tunic-only windows (skirt cloth for dwarf 0, back cloth for dwarf 2; no beard, skin or pack)
+    /// at distance 4, read off the captures. NOTE: tied to `DEFAULT_SEED`'s dwarf positions.
+    const TUNIC_A: (usize, usize, usize, usize) = (614, 304, 646, 332);
+    const TUNIC_B: (usize, usize, usize, usize) = (592, 266, 628, 300);
+    /// Chromaticity distance each tunic window must lie nearer its own table colour by.
+    const TUNIC_MARGIN_FLOOR: f32 = 0.02;
     /// Mean per-channel change the centre window must show between the two selections.
     const WINDOW_CHANGE_FLOOR: f32 = 5.0;
     let flags = |id: &'static str| {
@@ -653,7 +729,7 @@ fn select_frames_a_different_dwarf_per_id() {
             "--subdiv",
             "4",
             "--clock",
-            "12",
+            "8",
             "--fx-off",
             "dof",
             "--distance",
@@ -662,13 +738,45 @@ fn select_frames_a_different_dwarf_per_id() {
             id,
         ]
     };
-    let (a, width, _) = Daemon::spawn().capture("select-a", &flags("0"));
-    let (b, _, _) = Daemon::spawn().capture("select-b", &flags("2"));
+    let daemon_a = Daemon::spawn();
+    let colour_a = daemon_a.dwarf_colour(0);
+    let (a, width, _) = daemon_a.capture("select-a", &flags("0"));
+    let daemon_b = Daemon::spawn();
+    let colour_b = daemon_b.dwarf_colour(2);
+    let (b, _, _) = daemon_b.capture("select-b", &flags("2"));
+    assert_ne!(
+        colour_a, colour_b,
+        "the two selected dwarves must differ in colour"
+    );
     let change = window_diff(&a, &b, width, DWARF);
-    println!("--select guard: centre window change between dwarf 0 and 2 = {change:.3}");
+    let (chroma_a, chroma_b) = (
+        chromaticity_mean(&a, width, TUNIC_A),
+        chromaticity_mean(&b, width, TUNIC_B),
+    );
+    let (table_a, table_b) = (
+        chromaticity_of_hex(tunic_hex(&colour_a)),
+        chromaticity_of_hex(tunic_hex(&colour_b)),
+    );
+    // How much nearer each window lies to its own dwarf's table colour than the OTHER window does.
+    let margin_a =
+        chromaticity_distance(chroma_b, table_a) - chromaticity_distance(chroma_a, table_a);
+    let margin_b =
+        chromaticity_distance(chroma_a, table_b) - chromaticity_distance(chroma_b, table_b);
+    println!(
+        "--select guard: window change {change:.3}; dwarf 0 ({colour_a}) chromaticity {chroma_a:?} \
+         margin {margin_a:.4}; dwarf 2 ({colour_b}) {chroma_b:?} margin {margin_b:.4}"
+    );
     assert!(
         change >= WINDOW_CHANGE_FLOOR,
         "--select 0 and --select 2 frame the same picture (window change {change:.3})"
+    );
+    assert!(
+        margin_a >= TUNIC_MARGIN_FLOOR,
+        "dwarf 0's tunic ({colour_a}) is not nearer {colour_a} than dwarf 2's is: margin {margin_a:.4}"
+    );
+    assert!(
+        margin_b >= TUNIC_MARGIN_FLOOR,
+        "dwarf 2's tunic ({colour_b}) is not nearer {colour_b} than dwarf 0's is: margin {margin_b:.4}"
     );
 }
 
