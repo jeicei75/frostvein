@@ -225,7 +225,7 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
   - select B → B's name;
   - clear the selection → empty.
 - [ ] **Task 7: the record.**
-  - [ ] Write mutation set `_bmad-output/implementation-artifacts/mutations/12-2.sh`. Every row
+  - [x] Write mutation set `_bmad-output/implementation-artifacts/mutations/12-2.sh`. Every row
         must be KILLED, by the test named:
         1. identity drawn from `spawn_rng` → a spawn-position or identity test;
         2. `from_save` ignores the saved identity → `save_load_then_tick…`;
@@ -362,6 +362,7 @@ Exit 0 is not a result; the ratio is.
 - Task 4 `--select` guard: at `--clock 12` the tunics wash to about (195,160,165) (red and purple read alike), so the guard uses `--clock 8`. Chromaticity margins 0.040 (dwarf 0, purple) and 0.077 (dwarf 2, red); with every dwarf painted red dwarf 0 reads 0.020; the floor is 0.03.
 - Task 5: the real GLB atlas keeps its CPU pixels (no `no readable CPU pixels` line in a capture, and the tunics render coloured on the model). The GLB scene does NOT spawn under the headless `MinimalPlugins` (no `AssetServer`), so the headless test stands in a mesh child of each projected dwarf carrying a synthetic base material and atlas; from there the production path runs. The pixel guard carries the on-model evidence.
 - Task 4 mutation finding: focusing the FEET (the pre-#136 point) is NOT killed by the #136 pixel guard, because the widened aperture leaves the figure sharp either way (ratio 1.000). The unit test `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` kills it (tolerance tightened 0.25 to 0.03 with a discrimination assert), and an unscaled aperture is killed by the pixel guard (ratio 0.468).
+- Task 7 mutation table `mutations/12-2.sh` (`64e9237`, `a9d89d5`), run with `RUST_TEST_THREADS=1 scripts/mutate.sh`, all 10 KILLED: 1 identity from `spawn_rng` by `spawn_positions_for_seed_42_are_pinned`; 2 `from_save` ignores identity by `save_load_then_tick_matches_never_saved`; 3 one colour by `five_dwarves_on_walkable_surface`; 4 bridge `identity: None` by `save_then_load_rewinds_every_client`; 5 no roster by `the_roster_row_names_each_dwarf_in_his_colour_and_follows_an_identity_swap`; 6 one material and 7 reconcile ignores identity change, both by `a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it`; 8 HUD never shows the name by `the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears`; 9 DoF focus on `translation` by `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` (not the pixel guard); 10 aperture unscaled by the pixel guard `a_selected_dwarf_at_the_closest_zoom_is_sharp_with_dof_on`. Row 10 targets an `#[ignore]`d test, so it needs mutate.sh's `ignored` argument (the first run reported NOT-RUN).
 
 ### Completion Notes List
 
@@ -377,6 +378,7 @@ Exit 0 is not a result; the ratio is.
 
 - `crates/gui/src/{ingest.rs,pick.rs,project.rs,appearance.rs}`, `crates/gui/tests/{headless.rs,pixel_guard.rs}`
 - Mutation tables re-pointed: `mutations/{10-10-take-the-camera-where-you-want-it,11-2-the-miniature,5-3-a-window-onto-the-valley,8-3-master-of-time-and-the-skeleton-walks-in-3d}.sh`
+- Task 7/8 files: `mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`
 
 ## Change Log
 
