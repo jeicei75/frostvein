@@ -57,6 +57,7 @@ fn same_seed_produces_identical_worlds() {
 
     assert_eq!(first.tiles(), second.tiles());
     assert_eq!(first.dwarves(), second.dwarves());
+    assert_eq!(first.identities(), second.identities());
 }
 
 #[test]
@@ -674,6 +675,25 @@ fn five_dwarves_on_walkable_surface() {
         5
     );
 
+    let identities = world.identities();
+    assert_eq!(identities.len(), 5);
+    assert_eq!(
+        identities
+            .iter()
+            .map(|(_, identity)| identity.name)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        5
+    );
+    assert_eq!(
+        identities
+            .iter()
+            .map(|(_, identity)| identity.colour)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        5
+    );
+
     for (_, pos, _, _) in dwarves {
         assert_eq!(world.tile(pos), Some(Tile::Empty));
         assert!(matches!(
@@ -685,4 +705,17 @@ fn five_dwarves_on_walkable_surface() {
             Some(Tile::Solid(_))
         ));
     }
+}
+
+#[test]
+fn different_seeds_give_different_name_sets() {
+    let names = |seed| {
+        World::generate(seed, Dims::DEFAULT)
+            .identities()
+            .into_iter()
+            .map(|(_, identity)| identity.name)
+            .collect::<BTreeSet<_>>()
+    };
+
+    assert_ne!(names(DEFAULT_SEED), names(42));
 }
