@@ -109,6 +109,11 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
                 .count(),
         );
     }
+    assert_eq!(max_stones_on_emitter, 0, "stone on an emitter cell");
+    assert!(
+        emitter_zones.is_empty() && pickups_after_full == 0,
+        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2000: {pickups_after_full} (expected 0)"
+    );
     let zones = world.zones();
     let filled: BTreeSet<Pos> = world
         .items()
@@ -120,11 +125,6 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         filled.len(),
         zones.len(),
         "the pile must fill, or every other assertion here holds with nothing hauled"
-    );
-    assert_eq!(max_stones_on_emitter, 0, "stone on an emitter cell");
-    assert!(
-        emitter_zones.is_empty() && pickups_after_full == 0,
-        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2000: {pickups_after_full} (expected 0)"
     );
 }
 
