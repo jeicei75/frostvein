@@ -969,6 +969,8 @@ struct Args {
     static_world: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
+    /// `--select <id>`: start with this dwarf selected, as if he had been clicked.
+    select: Option<u32>,
     camera: Option<CameraStart>,
     cursor: Option<Vec2>,
     at_tick: Option<u64>,
@@ -1099,6 +1101,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut static_world = false;
     let mut slice_level = None;
     let mut distance = None;
+    let mut select = None;
     let mut camera = None;
     let mut cursor = None;
     let mut at_tick = None;
@@ -1204,6 +1207,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                 bail!("--distance must be finite");
             }
             distance = Some(parsed);
+        } else if arg == "--select" {
+            let value = args.next().context("--select requires a dwarf id")?;
+            select = Some(
+                value
+                    .to_string_lossy()
+                    .parse()
+                    .context("invalid --select id")?,
+            );
         } else if arg == "--camera" {
             let value = args
                 .next()
@@ -1301,6 +1312,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         static_world,
         slice_level,
         distance,
+        select,
         camera,
         cursor,
         at_tick,
@@ -1478,6 +1490,9 @@ fn mode_key(mode: DesignateMode) -> KeyCode {
 fn insert_capture_resources(app: &mut App, args: &Args) {
     if let Some(distance) = args.distance {
         app.insert_resource(CaptureDistance(distance));
+    }
+    if let Some(id) = args.select {
+        app.insert_resource(crate::pick::SelectedDwarf(Some(id)));
     }
     if let Some(camera) = args.camera {
         app.insert_resource(camera);
@@ -4732,6 +4747,84 @@ mod tests {
     /// figure the operator just picked OUTSIDE the focal plane at the ruled f/0.05, while every
     /// boot-framing measurement stays correct, because at boot the subject IS the aim point.
     /// Wolf reported it from the seat, 2026-09-21.
+    /// `--select` must reach the live selection, and an explicit `--distance` must survive it:
+    /// `frame_selected_dwarf` drops the zoom to `SELECT_DISTANCE` on the frame the selection
+    /// changes, and the startup selection is a change on frame one.
+    #[test]
+    fn the_select_flag_starts_a_selection_and_distance_still_wins() {
+        let one_dwarf = || Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![protocol::Entity {
+                id: 2,
+                kind: protocol::EntityKind::Dwarf,
+                pos: [1, 0, 0],
+                state: protocol::JobState::Idle,
+                light: None,
+                identity: None,
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let parsed = super::parse_args_from(
+            ["--select", "2"]
+                .iter()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>(),
+        )
+        .expect("--select takes a dwarf id");
+        let mut app = App::new();
+        super::insert_capture_resources(&mut app, &parsed);
+        assert_eq!(
+            app.world().resource::<crate::pick::SelectedDwarf>().0,
+            Some(2),
+            "a parsed --select must reach the resource the camera and DoF read"
+        );
+        assert!(
+            super::parse_args_from([std::ffi::OsString::from("--select")]).is_err(),
+            "--select needs a value"
+        );
+        assert!(
+            super::parse_args_from(["--select", "x"].iter().map(std::ffi::OsString::from)).is_err(),
+            "--select needs a numeric id"
+        );
+
+        let rig_distance = |args: &[&str]| {
+            let (mut app, _sender, _server) = configured_app_with_snapshot(args, one_dwarf());
+            app.update();
+            app.update();
+            let world = app.world_mut();
+            world
+                .query::<&CameraRig>()
+                .single(world)
+                .expect("one camera")
+                .distance
+        };
+        assert_eq!(
+            rig_distance(&["--capture", "x.png", "--frames", "1", "--select", "2"]),
+            20.0,
+            "with no --distance the selection still drops the zoom to the readable one"
+        );
+        assert_eq!(
+            rig_distance(&[
+                "--capture",
+                "x.png",
+                "--frames",
+                "1",
+                "--select",
+                "2",
+                "--distance",
+                "4"
+            ]),
+            4.0,
+            "an explicit --distance must win over the selection's zoom"
+        );
+    }
+
     #[test]
     fn depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point() {
         let snapshot = Snapshot {

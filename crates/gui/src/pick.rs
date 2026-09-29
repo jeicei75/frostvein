@@ -217,6 +217,7 @@ pub(crate) type DrawnEntities<'w, 's> = Query<
 pub fn frame_selected_dwarf(
     selected: Res<SelectedDwarf>,
     drawn: DrawnEntities,
+    capture_distance: Option<Res<crate::ingest::CaptureDistance>>,
     mut cameras: Query<(&mut CameraRig, &mut Transform), With<Camera3d>>,
 ) {
     let Some(id) = selected.0 else {
@@ -231,7 +232,8 @@ pub fn frame_selected_dwarf(
         // is the operator's again afterwards. Holding it at `SELECT_DISTANCE` every frame would
         // centre him and then refuse to let anyone pull back for context, which is a worse camera
         // than the one this story replaced.
-        if selected.is_changed() {
+        // An explicit `--distance` wins: `--select` would otherwise overwrite it on frame one.
+        if selected.is_changed() && capture_distance.is_none() {
             rig.distance = SELECT_DISTANCE;
         }
         rig.frame_render_point(target);
