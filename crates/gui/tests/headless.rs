@@ -4761,3 +4761,136 @@ fn walk_phase(app: &mut App, id: u32) -> f32 {
         .map(|(_, phase)| phase.phase())
         .expect("the dwarf must carry a WalkPhase")
 }
+
+/// 12.2 AC5: each dwarf's tunic material follows his identity's colour, and a snapshot that gives
+/// an existing id a different identity re-colours him.
+///
+/// The GLB scene does not spawn under `MinimalPlugins` (no `AssetServer`, so `WorldAssetRoot`
+/// holds the default handle and spawns nothing), so this stands in a scene instance the way Bevy
+/// would spawn one: a mesh child of each projected dwarf, carrying the GLB's material and atlas.
+/// Everything from there is the production path (`reconcile` -> `ProjectedTunic` ->
+/// `apply_dwarf_tunics`); the Task 4 pixel guard carries the on-model evidence.
+#[test]
+fn a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it() {
+    use bevy::image::Image;
+    use bevy::prelude::ChildOf;
+    use protocol::{DwarfColour, DwarfName, Identity};
+
+    fn named(id: u32, x: i32, colour: DwarfColour) -> Entity {
+        Entity {
+            identity: Some(Identity {
+                name: DwarfName::Durin,
+                colour,
+            }),
+            ..dwarf(id, [x, 0, 0])
+        }
+    }
+    let both = |first: DwarfColour, second: DwarfColour| {
+        snapshot(
+            vec![Tile::Empty, Tile::Empty],
+            vec![named(1, 0, first), named(2, 1, second)],
+        )
+    };
+    let mut app = headless_app(both(DwarfColour::Red, DwarfColour::Blue));
+    app.init_resource::<Assets<Image>>();
+    app.update();
+
+    // A grey atlas whose brightest tunic texel (row 9, col 0) is white, standing in for the GLB's.
+    let atlas = {
+        let mut data = vec![90_u8; 512 * 512 * 4];
+        for texel in data.chunks_exact_mut(4) {
+            texel[3] = 255;
+        }
+        data[(9 * 32 * 512) * 4..][..4].copy_from_slice(&[255, 255, 255, 255]);
+        Image::new(
+            bevy::render::render_resource::Extent3d {
+                width: 512,
+                height: 512,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            data,
+            bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+            bevy::asset::RenderAssetUsages::default(),
+        )
+    };
+    let atlas = app.world_mut().resource_mut::<Assets<Image>>().add(atlas);
+    let base = app
+        .world_mut()
+        .resource_mut::<Assets<StandardMaterial>>()
+        .add(StandardMaterial {
+            base_color_texture: Some(atlas),
+            ..Default::default()
+        });
+    let dwarves: Vec<(u32, BevyEntity)> = app
+        .world_mut()
+        .query::<(BevyEntity, &WorldProjected)>()
+        .iter(app.world())
+        .filter(|(_, marker)| marker.0 == 1 || marker.0 == 2)
+        .map(|(entity, marker)| (marker.0, entity))
+        .collect();
+    assert_eq!(dwarves.len(), 2);
+    let mut meshes = Vec::new();
+    for (id, dwarf_entity) in &dwarves {
+        let mesh = app
+            .world_mut()
+            .spawn((
+                Mesh3d::default(),
+                MeshMaterial3d(base.clone()),
+                ChildOf(*dwarf_entity),
+            ))
+            .id();
+        meshes.push((*id, mesh));
+    }
+    app.update();
+
+    let handle_of = |app: &mut App, id: u32| {
+        let mesh = meshes.iter().find(|(m, _)| *m == id).unwrap().1;
+        app.world()
+            .get::<MeshMaterial3d<StandardMaterial>>(mesh)
+            .unwrap()
+            .0
+            .clone()
+    };
+    let (red, blue) = (handle_of(&mut app, 1), handle_of(&mut app, 2));
+    assert_ne!(
+        red, base,
+        "the GLB's material must be replaced by a tunic material"
+    );
+    assert_ne!(blue, base);
+    assert_ne!(
+        red, blue,
+        "different colours must end up with different material handles"
+    );
+    // The handles are the RIGHT ones: the recoloured atlas's white texel is the approved hex.
+    let texel = |app: &mut App, handle: &bevy::prelude::Handle<StandardMaterial>| {
+        let texture = app
+            .world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(handle)
+            .unwrap()
+            .base_color_texture
+            .clone()
+            .unwrap();
+        app.world()
+            .resource::<Assets<Image>>()
+            .get(&texture)
+            .unwrap()
+            .data
+            .as_ref()
+            .unwrap()[(9 * 32 * 512) * 4..][..3]
+            .to_vec()
+    };
+    assert_eq!(texel(&mut app, &red), [0xB2, 0x3A, 0x34]);
+    assert_eq!(texel(&mut app, &blue), [0x3C, 0x62, 0xBA]);
+
+    // A load: the same ids, swapped identities.
+    apply_snapshot(&mut app, both(DwarfColour::Blue, DwarfColour::Red));
+    app.update();
+    assert_eq!(
+        handle_of(&mut app, 1),
+        blue,
+        "id 1 must take the blue tunic"
+    );
+    assert_eq!(handle_of(&mut app, 2), red, "id 2 must take the red tunic");
+}

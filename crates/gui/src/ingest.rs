@@ -753,6 +753,7 @@ pub fn projection_systems(app: &mut App) {
                 // from the previous tick's movement.
                 crate::project::start_dwarf_walk,
                 crate::project::drive_dwarf_walk,
+                crate::project::apply_dwarf_tunics,
             )
                 .chain()
                 .in_set(ProjectionSet),

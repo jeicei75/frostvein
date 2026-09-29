@@ -51,9 +51,10 @@ import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 # Narrowed 2026-08-22: 6.1 widened this query tuple to carry the projected light, so the old
 # two-element anchor stopped matching. Anchor the find alone.
-old = 'projected.iter().find(|(_, marker, _)| marker.0 == id)'
+# Re-pointed 2026-09-29: 12.2 widened the tuple again (tunic); sabotage unchanged.
+old = 'projected.iter().find(|(_, marker, _, _)| marker.0 == id)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'projected.iter().find(|(_, marker, _)| marker.0 == 0)'))
+p.write_text(s.replace(old, 'projected.iter().find(|(_, marker, _, _)| marker.0 == 0)'))
 PY
 
 mutation "camera pitch clamp is removed" gui orbit_reaches_every_yaw_and_clamps_pitch <<'PY'
