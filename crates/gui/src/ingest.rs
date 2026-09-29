@@ -2415,6 +2415,11 @@ fn fog_density_ramp_image() -> Image {
     image
 }
 
+/// The drawn height of a dwarf, in cells: the authored 1.2 m figure times `METRES_TO_CELLS`.
+// NOTE: 1.2 m is the r17 asset's height; a new dwarf asset must update it. The focus point below
+// is half of it.
+const DWARF_HEIGHT_CELLS: f32 = 1.2 * crate::project::METRES_TO_CELLS;
+
 /// The point depth of field must focus, in render space, or `None` for the rig's own aim point.
 ///
 /// A SELECTED DWARF is the subject, and he is not where the aim point is. `frame_selected_dwarf`
@@ -2422,6 +2427,10 @@ fn fog_density_ramp_image() -> Image {
 /// the composition push -- about 7.3 units at `SELECT_DISTANCE`. At boot there is no selection and
 /// the subject IS `world_to_render(rig.focus)`, which is why every boot-framing figure in this
 /// story's record stands unchanged.
+///
+/// His BODY, not his `Transform`: the asset's origin is his feet, so `translation` is the ground
+/// under him and, at the closest zoom, the plane through his boots leaves his head off the focal
+/// plane (#136).
 fn dof_subject(
     selected: &crate::pick::SelectedDwarf,
     drawn: &crate::pick::DrawnEntities,
@@ -2430,7 +2439,19 @@ fn dof_subject(
     drawn
         .iter()
         .find(|(marker, _)| marker.0 == id)
-        .map(|(_, transform)| transform.translation)
+        .map(|(_, transform)| transform.translation + Vec3::Y * (DWARF_HEIGHT_CELLS / 2.0))
+}
+
+/// The aperture for a selected subject `focal_distance` away.
+///
+/// `DOF_APERTURE_F_STOPS` was tuned at the boot framing, about 61.7 units from the camp. The circle
+/// of confusion goes as 1/(N * focal^2), so the same f-stop at distance 4 is `(61.7/4)^2` = 238x
+/// blurrier for the same offset from the focal plane, and a dwarf's own head is off it. Scaling the
+/// f-stop by the square of the ratio holds the blur at what boot framing has; it only ever widens
+/// (`max`), so a subject farther than boot keeps the tuned value.
+fn selected_aperture(focal_distance: f32) -> f32 {
+    let boot = depth_of_field_for_boot_camera().focal_distance;
+    DOF_APERTURE_F_STOPS * (boot / focal_distance).powi(2).max(1.0)
 }
 
 fn update_dof_from_camera(
@@ -2440,10 +2461,16 @@ fn update_dof_from_camera(
 ) {
     let subject = dof_subject(&selected, &drawn);
     for (transform, rig, mut dof) in &mut cameras {
-        dof.focal_distance = match subject {
-            Some(point) => transform.translation().distance(point),
-            None => dof_focal_distance(transform.translation(), rig),
-        };
+        match subject {
+            Some(point) => {
+                dof.focal_distance = transform.translation().distance(point);
+                dof.aperture_f_stops = selected_aperture(dof.focal_distance);
+            }
+            None => {
+                dof.focal_distance = dof_focal_distance(transform.translation(), rig);
+                dof.aperture_f_stops = DOF_APERTURE_F_STOPS;
+            }
+        }
     }
 }
 
@@ -4859,10 +4886,12 @@ mod tests {
             let mut q = world.query::<(&WorldProjected, &bevy::prelude::Transform)>();
             q.iter(world)
                 .find(|(marker, _)| marker.0 == 2)
-                .map(|(_, transform)| transform.translation)
+                // His FEET are his `Transform`; the subject is his body, half of the 0.75-cell
+                // figure up (#136). Written as a literal so the test is not the constant.
+                .map(|(_, transform)| transform.translation + bevy::prelude::Vec3::Y * 0.375)
                 .expect("the selected dwarf must be drawn")
         };
-        let (camera, rig_aim, focal) = {
+        let (camera, rig_aim, focal, aperture) = {
             let world = app.world_mut();
             let mut q = world.query::<(&CameraRig, &super::DepthOfField)>();
             let (rig, dof) = q.single(world).expect("one camera");
@@ -4873,6 +4902,7 @@ mod tests {
                 camera,
                 camera.distance(super::world_to_render_f32(rig.focus)),
                 dof.focal_distance,
+                dof.aperture_f_stops,
             )
         };
         let to_dwarf = camera.distance(dwarf);
@@ -4888,6 +4918,14 @@ mod tests {
             (focal - to_dwarf).abs() < 0.25,
             "a selected dwarf must be the focal subject: focal_distance={focal} but he stands \
              {to_dwarf} away (the rig's aim point is {rig_aim})"
+        );
+        // The aperture follows the focal distance: f/0.05 was tuned 61.7 units out, and CoC goes
+        // as 1/(N * focal^2). Independent oracle: 0.05 * (61.7 / focal)^2.
+        let expected = 0.05 * (61.7 / to_dwarf).powi(2);
+        assert!(
+            (aperture - expected).abs() / expected < 0.05,
+            "the selected aperture must scale with the focal distance: f/{aperture} at {to_dwarf}, \
+             expected about f/{expected}"
         );
     }
 

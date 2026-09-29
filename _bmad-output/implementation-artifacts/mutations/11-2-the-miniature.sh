@@ -166,17 +166,19 @@ PY
 mutation "dof focuses a selected dwarf from a camera frozen at the origin" gui depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            Some(point) => transform.translation().distance(point),\n'
+# re-pointed 2026-09-29: 12.2 made the arm a block (body focus + aperture); sabotage unchanged
+old = '                dof.focal_distance = transform.translation().distance(point);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            Some(point) => Vec3::ZERO.distance(point),\n'))
+p.write_text(s.replace(old, '                dof.focal_distance = Vec3::ZERO.distance(point);\n'))
 PY
 
 mutation "dof focuses the aim point from a camera frozen at the origin" gui toggling_dof_back_on_focuses_the_live_camera_not_boot_framing <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            None => dof_focal_distance(transform.translation(), rig),\n'
+# re-pointed 2026-09-29: 12.2 made the arm a block (aperture reset); sabotage unchanged
+old = '                dof.focal_distance = dof_focal_distance(transform.translation(), rig);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            None => dof_focal_distance(Vec3::ZERO, rig),\n'))
+p.write_text(s.replace(old, '                dof.focal_distance = dof_focal_distance(Vec3::ZERO, rig);\n'))
 PY
 
 # The one-frame lag: focus computed in `Update`, before transform propagation, reads last frame's
