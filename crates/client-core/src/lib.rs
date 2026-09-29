@@ -337,6 +337,31 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn every_dwarf_name_has_its_one_spelling() {
+        use protocol::DwarfName::*;
+        for (name, text) in [
+            (Durin, "Durin"),
+            (Dvalin, "Dvalin"),
+            (Nori, "Nori"),
+            (Ori, "Ori"),
+            (Dori, "Dori"),
+            (Bifur, "Bifur"),
+            (Bofur, "Bofur"),
+            (Gloin, "Gloin"),
+            (Nain, "Nain"),
+            (Thrain, "Thrain"),
+            (Frar, "Frar"),
+            (Loni, "Loni"),
+            (Regin, "Regin"),
+            (Alf, "Alf"),
+            (Fjalar, "Fjalar"),
+            (Frosti, "Frosti"),
+        ] {
+            assert_eq!(dwarf_name_text(name), text);
+        }
+    }
+
     fn snapshot() -> Snapshot {
         Snapshot {
             msg_type: MessageType::Snapshot,

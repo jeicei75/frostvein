@@ -1745,7 +1745,7 @@ mod tests {
     #[test]
     fn cursor_moves_clamps_and_pans_camera_only_after_crossing_the_window_edge() {
         let dims = Dims { x: 20, y: 20, z: 3 };
-        let viewport = (5, 6);
+        let viewport = (5, 7);
         let mut state = normal_state((5, 5), 1);
         let _ = apply_key(&mut state, press(KeyCode::Char('d')), dims, viewport);
 
