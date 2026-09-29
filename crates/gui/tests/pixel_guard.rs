@@ -615,6 +615,63 @@ fn dof_keeps_depth_separation_at_distance_40() {
     );
 }
 
+/// Mean absolute per-channel difference of one rectangle between two frames of the same size.
+fn window_diff(
+    a: &[[u8; 4]],
+    b: &[[u8; 4]],
+    width: usize,
+    rect: (usize, usize, usize, usize),
+) -> f32 {
+    let (x0, y0, x1, y1) = rect;
+    let mut total = 0_u64;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            for c in 0..3 {
+                total += u64::from(a[y * width + x][c].abs_diff(b[y * width + x][c]));
+            }
+        }
+    }
+    total as f32 / (3 * (x1 - x0) * (y1 - y0)) as f32
+}
+
+/// The instrument test for `--select`: two captures that select different dwarves must frame
+/// different dwarves, so the centre window changes. Without this the `#136` guard below could be
+/// measuring a flag that parses and selects nothing.
+///
+/// Distance 4 and DoF off, so neither the selection zoom nor blur is in the comparison. One fresh
+/// daemon per capture; noon (`--clock 12`) so the hue evidence of Task 5 is daylight.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn select_frames_a_different_dwarf_per_id() {
+    const DWARF: (usize, usize, usize, usize) = (540, 170, 740, 390);
+    /// Mean per-channel change the centre window must show between the two selections.
+    const WINDOW_CHANGE_FLOOR: f32 = 5.0;
+    let flags = |id: &'static str| {
+        [
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--clock",
+            "12",
+            "--fx-off",
+            "dof",
+            "--distance",
+            "4",
+            "--select",
+            id,
+        ]
+    };
+    let (a, width, _) = Daemon::spawn().capture("select-a", &flags("0"));
+    let (b, _, _) = Daemon::spawn().capture("select-b", &flags("2"));
+    let change = window_diff(&a, &b, width, DWARF);
+    println!("--select guard: centre window change between dwarf 0 and 2 = {change:.3}");
+    assert!(
+        change >= WINDOW_CHANGE_FLOOR,
+        "--select 0 and --select 2 frame the same picture (window change {change:.3})"
+    );
+}
+
 /// #136, on the rendered frame: a selected dwarf at the closest zoom must be sharp.
 ///
 /// The same capture twice, DoF on and `--fx-off dof`, one fresh daemon each. The window is sized to
