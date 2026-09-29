@@ -126,6 +126,15 @@ pub fn item_cell() -> Cell {
     }
 }
 
+/// A stone on a stockpile cell: the stone glyph in the stockpile's colour, so a full pile still
+/// reads as a pile once every `≡` is covered.
+pub fn stored_item_cell() -> Cell {
+    Cell {
+        glyph: item_cell().glyph,
+        fg: zone_cell().fg,
+    }
+}
+
 /// One dwarf sharing a cell with one or more stones — the loaded twin of `☺`.
 // NOTE: the glyph states co-location, which is a carry in every case the sim produces except a
 // dwarf standing on a loose stone it does not hold.
@@ -240,6 +249,13 @@ mod tests {
             Cell {
                 glyph: '*',
                 fg: (176, 172, 160),
+            }
+        );
+        assert_eq!(
+            stored_item_cell(),
+            Cell {
+                glyph: '*',
+                fg: (88, 190, 118),
             }
         );
         assert_eq!(

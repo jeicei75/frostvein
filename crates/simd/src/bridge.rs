@@ -59,7 +59,11 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
 /// second time and loses those changes for good. Safe today because the tick loop
 /// encodes once and shares the resulting `Arc<String>`; Story 2.2 is the first to have
 /// a real producer of dirty tiles, so keep the single-call discipline.
-pub fn delta(world: &mut sim_core::World, speed: protocol::Speed) -> protocol::Delta {
+pub fn delta(
+    world: &mut sim_core::World,
+    speed: protocol::Speed,
+    refusals: Vec<protocol::Refusal>,
+) -> protocol::Delta {
     protocol::Delta {
         msg_type: protocol::MessageType::Delta,
         tick: world.tick(),
@@ -107,6 +111,8 @@ pub fn delta(world: &mut sim_core::World, speed: protocol::Speed) -> protocol::D
             })
             .collect(),
         speed,
+
+        refusals,
     }
 }
 
@@ -183,6 +189,21 @@ pub(crate) fn rect_in(rect: protocol::Rect) -> sim_core::Rect {
     sim_core::Rect {
         min: pos_in(rect.min),
         max: pos_in(rect.max),
+    }
+}
+
+fn rect_out(rect: sim_core::Rect) -> protocol::Rect {
+    protocol::Rect {
+        min: pos_out(rect.min),
+        max: pos_out(rect.max),
+    }
+}
+
+pub(crate) fn refusal_out(refusal: sim_core::Refusal) -> protocol::Refusal {
+    match refusal {
+        sim_core::Refusal::PlaceStockpile { rect } => protocol::Refusal::PlaceStockpile {
+            rect: rect_out(rect),
+        },
     }
 }
 
@@ -392,7 +413,7 @@ mod tests {
     fn every_dwarf_carries_a_lantern_in_snapshot_and_delta_without_duplication() {
         let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
         let snapshot = snapshot(&world, protocol::Speed::Normal);
-        let delta = delta(&mut world, protocol::Speed::Normal);
+        let delta = delta(&mut world, protocol::Speed::Normal, Vec::new());
 
         for (name, entities) in [("snapshot", snapshot.entities), ("delta", delta.entities)] {
             let dwarves: Vec<_> = entities
@@ -471,7 +492,7 @@ mod tests {
             .collect();
 
         let snap = snapshot(&world, protocol::Speed::Normal);
-        let update = delta(&mut world, protocol::Speed::Normal);
+        let update = delta(&mut world, protocol::Speed::Normal, Vec::new());
         assert_eq!(&snap.entities[5..], expected);
         assert_eq!(&update.entities[5..], expected);
         assert!(
@@ -548,7 +569,7 @@ mod tests {
         assert!(world.set_tile(pos, sim_core::Tile::Solid(sim_core::Material::Ice)));
         world.step();
 
-        let update = delta(&mut world, protocol::Speed::Fast);
+        let update = delta(&mut world, protocol::Speed::Fast, Vec::new());
         assert_eq!(update.msg_type, protocol::MessageType::Delta);
         assert_eq!(update.tick, 1);
         assert_eq!(
@@ -575,7 +596,11 @@ mod tests {
         assert_eq!(update.speed, protocol::Speed::Fast);
 
         world.step();
-        assert!(delta(&mut world, protocol::Speed::Fast).tiles.is_empty());
+        assert!(
+            delta(&mut world, protocol::Speed::Fast, Vec::new())
+                .tiles
+                .is_empty()
+        );
     }
 
     #[test]
@@ -608,7 +633,7 @@ mod tests {
         assert_eq!(snap.designations, expected_designations);
         assert_eq!(snap.zones, expected_zones);
 
-        let update = delta(&mut world, protocol::Speed::Normal);
+        let update = delta(&mut world, protocol::Speed::Normal, Vec::new());
         assert_eq!(update.designations, expected_designations);
         assert_eq!(update.zones, expected_zones);
     }

@@ -165,6 +165,7 @@ fn delta_at(tick: u64, tiles: Vec<TileChange>, entities: Vec<Entity>) -> Delta {
         zones: Vec::new(),
         items: Vec::new(),
         speed: Speed::Normal,
+        refusals: Vec::new(),
     }
 }
 
@@ -356,6 +357,7 @@ fn designation_delta_projects_in_the_same_update_that_ingests_it() {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+            refusals: Vec::new(),
         }))))
         .unwrap();
 
@@ -484,6 +486,7 @@ fn a_designation_kind_change_restyles_the_existing_position_mark() {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+            refusals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -765,6 +768,7 @@ fn snapshot_then_delta_in_one_frame_leaves_no_stale_marks() {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+            refusals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -803,6 +807,7 @@ fn send_empty_designation_delta(app: &mut App, tiles: Vec<TileChange>) {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+            refusals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -2844,7 +2849,7 @@ fn mouse_drag_uses_the_anchor_level_and_clears_its_anchor_on_release() {
             .resource::<PendingCommands>()
             .commands()
             .iter()
-            .copied()
+            .cloned()
             .collect::<Vec<_>>(),
         vec![protocol::Command::Designate {
             kind: DesignationKind::Dig,
@@ -2899,7 +2904,7 @@ fn mouse_designation_on_a_sliced_underground_level_round_trips_to_a_projected_ma
             .resource::<PendingCommands>()
             .commands()
             .iter()
-            .copied()
+            .cloned()
             .collect::<Vec<_>>(),
         vec![protocol::Command::Designate {
             kind: DesignationKind::Dig,
@@ -2923,6 +2928,7 @@ fn mouse_designation_on_a_sliced_underground_level_round_trips_to_a_projected_ma
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+            refusals: Vec::new(),
         }))))
         .unwrap();
 
@@ -3950,7 +3956,7 @@ fn queued(app: &App) -> Vec<protocol::Command> {
         .resource::<PendingCommands>()
         .commands()
         .iter()
-        .copied()
+        .cloned()
         .collect()
 }
 
@@ -4019,7 +4025,7 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
         (
             KeyCode::Digit3,
             vec![protocol::Command::PlaceStockpile {
-                rect: at(standable),
+                rects: vec![at(standable)],
             }],
         ),
         // Clear must reach BOTH cells: the dig at the cell the ray hit, and the channel or
@@ -4371,6 +4377,7 @@ fn a_buried_channel_mark_climbs_onto_the_rock_covering_it() {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+            refusals: Vec::new(),
         }))))
         .unwrap();
     app.update();

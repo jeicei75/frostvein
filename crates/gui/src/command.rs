@@ -553,7 +553,7 @@ mod tests {
             "every command past the bound must leave a counted trace, not just an stderr line"
         );
         assert_eq!(
-            pending.commands().front().copied(),
+            pending.commands().front().cloned(),
             Some(dig(0)),
             "the bound drops the NEWEST command; the queued ones are already the player's"
         );

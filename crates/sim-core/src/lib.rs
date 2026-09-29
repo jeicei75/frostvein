@@ -88,6 +88,11 @@ pub enum SimCommand {
     RemoveStockpile { rect: Rect },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refusal {
+    PlaceStockpile { rect: Rect },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dims {
     pub x: u32,
@@ -272,14 +277,8 @@ fn create_haul_jobs(ecs: &mut EcsWorld) {
         // stands on a stockpile tile, AND is the LOWEST-ID uncarried stone on that tile. Everything
         // else uncarried is LOOSE.
         //
-        // The lowest-id clause is the repair mechanism for a real race review found: two carriers
-        // can both be walking to the last free tile, the first delivers, and the second — now
-        // standing on a tile that is no longer in its goal set — is retried, and `release_claim`
-        // drops its stone where it stands. Two stones on one tile. Under the old rule both counted
-        // as stored, so both jobs were retired and the stack was permanent and invisible. Now the
-        // extra one stays loose, keeps (or regains) a haul job, and re-hauls itself to a genuinely
-        // free tile. It cannot thrash: the pick-up leg is gated on a free tile existing, and a
-        // delivery only ever targets a free tile, so the stone it is standing on is never a goal.
+        // The lowest-id clause still recognizes extra stones in an older save as loose. New
+        // retry drops avoid making a stack; the pick-up leg waits for a free stockpile tile.
         // `uncarried_stones` is ascending by item id, so "first seen per tile" IS "lowest id".
         let mut occupied: BTreeSet<Pos> = BTreeSet::new();
         let mut stored: BTreeSet<u32> = BTreeSet::new();
@@ -398,7 +397,7 @@ fn claim_jobs(
         }
         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
         // set serves every candidate.
-        let goals = work_positions(&terrain, &zones.0, &items, job, None);
+        let goals = work_positions(&terrain, &blocked, &zones.0, &items, job, None);
         let mut attempted = false;
         let mut assigned = false;
         for (entity, id, pos, current, carrying) in &mut dwarves {
@@ -659,6 +658,7 @@ fn astar(
 /// crossing the pile never blocks a tile for anyone else.
 fn work_positions(
     terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
     zones: &BTreeSet<Pos>,
     items: &BTreeMap<u32, Pos>,
     job: Job,
@@ -686,9 +686,8 @@ fn work_positions(
                 carrying.is_none_or(|carried| carried == item),
                 "a dwarf only ever carries the stone of the haul job it holds"
             );
-            // One stone per stockpile tile (Wolf, 2026-08-07). Recomputed every tick and never
-            // cached: that is what makes two carriers converging on one free tile self-healing —
-            // the moment the first drops, the tile leaves the second's goal set and it repaths.
+            // Recompute free stockpile tiles every tick. If two carriers converge on the last
+            // free tile, the second can arrive after it fills; release_claim drops off-zone.
             let stored: BTreeSet<Pos> = items
                 .values()
                 .copied()
@@ -697,8 +696,8 @@ fn work_positions(
             let free: BTreeSet<Pos> = zones
                 .iter()
                 .copied()
-                // Zone tiles are validated standable at command time and never re-checked.
-                .filter(|pos| terrain.is_standable(*pos) && !stored.contains(pos))
+                // NOTE: a standable zone cell sealed off from every dwarf can still cause retries (#132).
+                .filter(|pos| is_walkable(terrain, blocked, *pos) && !stored.contains(pos))
                 .collect();
             if carrying.is_some() {
                 return free;
@@ -743,14 +742,55 @@ fn item_entity(ecs: &EcsWorld, item: u32) -> Option<Entity> {
 }
 
 fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
-    // A dwarf that stops holding a job stops carrying its stone, and drops it where it stands.
+    // A dwarf that stops holding a job stops carrying its stone, and drops it where it stands
+    // unless that would stack stones on a stockpile cell.
     // Doing it here is what keeps every abnormal exit — a vanished job, a retry, a cancel, a
     // retire — from welding a stone to an idle dwarf.
     if let Some(item) = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0) {
         let dropped_at = ecs.get::<Pos>(entity).copied();
         if let (Some(pos), Some(stone)) = (dropped_at, item_entity(ecs, item)) {
+            let zones = &ecs.resource::<Zones>().0;
+            let occupied: BTreeSet<Pos> = uncarried_stones(ecs)
+                .values()
+                .copied()
+                .filter(|cell| zones.contains(cell))
+                .collect();
+            let drop_pos = if occupied.contains(&pos) {
+                let blocked = blocked_cells(
+                    ecs.query_filtered::<&Pos, With<Emitter>>()
+                        .iter(ecs)
+                        .collect::<Vec<_>>()
+                        .into_iter(),
+                );
+                let terrain = ecs.resource::<Terrain>();
+                // Breadth-first over the tiles the carrier can walk to, so the drop is never
+                // behind a wall or on a level it cannot reach.
+                let mut seen = BTreeSet::from([pos]);
+                let mut frontier = BTreeSet::from([pos]);
+                let mut nearest = None;
+                while !frontier.is_empty() && nearest.is_none() {
+                    let mut next = BTreeSet::new();
+                    for cell in frontier {
+                        if !occupied.contains(&cell) {
+                            nearest = Some(cell);
+                            break;
+                        }
+                        for candidate in astar_neighbours(terrain, &blocked, cell) {
+                            if seen.insert(candidate) {
+                                next.insert(candidate);
+                            }
+                        }
+                    }
+                    frontier = next;
+                }
+                // NOTE: a carrier whose whole reachable ground is full stockpile keeps the
+                // stack on its own tile rather than stop the sim.
+                nearest.unwrap_or(pos)
+            } else {
+                pos
+            };
             *ecs.get_mut::<Pos>(stone)
-                .expect("every stone has a position") = pos;
+                .expect("every stone has a position") = drop_pos;
         }
         if let Some(mut carrying) = ecs.get_mut::<Carrying>(entity) {
             carrying.0 = None;
@@ -835,6 +875,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             let stones = uncarried_stones(ecs);
             work_positions(
                 ecs.resource::<Terrain>(),
+                &blocked,
                 &ecs.resource::<Zones>().0,
                 &stones,
                 job,
@@ -1367,10 +1408,43 @@ impl World {
         self.ecs.resource_mut::<Terrain>().drain_dirty()
     }
 
+    /// One player's stockpile drag, which is several rects over uneven ground. It is refused only
+    /// when no rect in it holds a valid cell: a drag that zones the ring around the campfire has
+    /// not been refused just because the fire's own cell was left alone in one of its rects.
+    ///
+    /// NOTE: the refusal names the drag's bounding box, which can span levels; nothing reads the
+    /// rect beyond the command it names.
+    pub fn place_stockpile(&mut self, rects: &[Rect]) -> Option<Refusal> {
+        let mut refused = 0;
+        for rect in rects {
+            if self
+                .apply_command(SimCommand::PlaceStockpile { rect: *rect })
+                .is_some()
+            {
+                refused += 1;
+            }
+        }
+        let first = rects.first()?;
+        (refused == rects.len()).then(|| Refusal::PlaceStockpile {
+            rect: rects.iter().fold(*first, |bounds, rect| Rect {
+                min: Pos {
+                    x: bounds.min.x.min(rect.min.x.min(rect.max.x)),
+                    y: bounds.min.y.min(rect.min.y.min(rect.max.y)),
+                    z: bounds.min.z.min(rect.min.z.min(rect.max.z)),
+                },
+                max: Pos {
+                    x: bounds.max.x.max(rect.min.x.max(rect.max.x)),
+                    y: bounds.max.y.max(rect.min.y.max(rect.max.y)),
+                    z: bounds.max.z.max(rect.min.z.max(rect.max.z)),
+                },
+            }),
+        })
+    }
+
     /// AD-10: `simd` calls this at loop-iteration start, in arrival order, including while
     /// paused. Designation intake changes marks only; it is not world advancement.
     // NOTE: command ordering is explicit at the call site rather than enforced by `.chain()`.
-    pub fn apply_command(&mut self, command: SimCommand) {
+    pub fn apply_command(&mut self, command: SimCommand) -> Option<Refusal> {
         let dims = self.dims();
         let rect = match command {
             SimCommand::Designate { rect, .. }
@@ -1395,7 +1469,10 @@ impl World {
             || min.y >= dims.y as i32
             || min.z >= dims.z as i32
         {
-            return;
+            return match command {
+                SimCommand::PlaceStockpile { rect } => Some(Refusal::PlaceStockpile { rect }),
+                _ => None,
+            };
         }
         let min = Pos {
             x: min.x.max(0),
@@ -1478,12 +1555,16 @@ impl World {
                 }
             }
             SimCommand::PlaceStockpile { .. } => {
+                let blocked = blocked_cells(self.emitters().iter().map(|(_, pos, _)| pos));
                 let standable: Vec<_> = {
                     let terrain = self.ecs.resource::<Terrain>();
                     positions()
-                        .filter(|pos| terrain.is_standable(*pos))
+                        .filter(|pos| is_walkable(terrain, &blocked, *pos))
                         .collect()
                 };
+                if standable.is_empty() {
+                    return Some(Refusal::PlaceStockpile { rect });
+                }
                 let mut zones = self.ecs.resource_mut::<Zones>();
                 zones.0.extend(standable);
             }
@@ -1494,6 +1575,7 @@ impl World {
                 }
             }
         }
+        None
     }
 
     /// Sorted ascending by `Pos`.
@@ -1694,7 +1776,10 @@ mod tests {
         time::Instant,
     };
 
-    use super::{Dims, Job, JobId, JobKind, JobState, Jobs, Material, Pos, Terrain, Tile, World};
+    use super::{
+        DesignationKind, Dims, Job, JobId, JobKind, JobState, Jobs, Material, Pos, SimCommand,
+        Terrain, Tile, World,
+    };
 
     fn flat_terrain(x: u32, y: u32) -> Terrain {
         let dims = Dims { x, y, z: 2 };
@@ -2271,6 +2356,7 @@ mod tests {
     #[test]
     fn haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile() {
         let terrain = flat_terrain(5, 1);
+        let blocked = BTreeSet::new();
         let pile = Pos { x: 0, y: 0, z: 1 };
         let zones = BTreeSet::from([pile]);
         let standing = Pos { x: 2, y: 0, z: 1 };
@@ -2286,31 +2372,167 @@ mod tests {
 
         let reachable = BTreeMap::from([(12, standing)]);
         assert_eq!(
-            super::work_positions(&terrain, &zones, &reachable, job, None),
+            super::work_positions(&terrain, &blocked, &zones, &reachable, job, None),
             BTreeSet::from([standing]),
             "a standable stone with a free pile tile is its own work position"
         );
         assert_eq!(
-            super::work_positions(&terrain, &zones, &reachable, job, Some(12)),
+            super::work_positions(&terrain, &blocked, &zones, &reachable, job, Some(12)),
             BTreeSet::from([pile]),
             "a carrying dwarf is sent to the free pile tile"
         );
 
         let unstandable = BTreeMap::from([(12, sunken)]);
         assert!(
-            super::work_positions(&terrain, &zones, &unstandable, job, None).is_empty(),
+            super::work_positions(&terrain, &blocked, &zones, &unstandable, job, None).is_empty(),
             "a stone on unstandable ground has no work position"
         );
 
         // The pile itself holding a stored stone leaves both legs empty.
         let occupied = BTreeMap::from([(12, standing), (13, pile)]);
         assert!(
-            super::work_positions(&terrain, &zones, &occupied, job, None).is_empty(),
+            super::work_positions(&terrain, &blocked, &zones, &occupied, job, None).is_empty(),
             "the pick-up leg must be gated on a free tile existing"
         );
         assert!(
-            super::work_positions(&terrain, &zones, &occupied, job, Some(12)).is_empty(),
+            super::work_positions(&terrain, &blocked, &zones, &occupied, job, Some(12)).is_empty(),
             "a full pile is no delivery target"
+        );
+    }
+
+    #[test]
+    fn an_old_save_zone_on_an_emitter_is_no_haul_goal() {
+        let terrain = flat_terrain(5, 1);
+        let fire = Pos { x: 0, y: 0, z: 1 };
+        let stone = Pos { x: 2, y: 0, z: 1 };
+        let blocked = BTreeSet::from([fire]);
+        let zones = BTreeSet::from([fire]);
+        let items = BTreeMap::from([(12, stone)]);
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 12 },
+            target: stone,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(super::work_positions(&terrain, &blocked, &zones, &items, job, None).is_empty());
+        assert!(
+            super::work_positions(&terrain, &blocked, &zones, &items, job, Some(12)).is_empty()
+        );
+    }
+
+    #[test]
+    fn a_drag_is_refused_only_when_none_of_its_rects_has_a_valid_cell() {
+        let mut world = World::generate(super::DEFAULT_SEED, Dims::DEFAULT);
+        let fire = world.camp_origin();
+        let cell = |dy: i32| super::Rect {
+            min: Pos {
+                y: fire.y + dy,
+                ..fire
+            },
+            max: Pos {
+                y: fire.y + dy,
+                ..fire
+            },
+        };
+        // The gui's column drag through the fire: one rect per cell, the fire's alone.
+        let column: Vec<_> = (-2..=2).map(cell).collect();
+        assert_eq!(world.place_stockpile(&column), None);
+        assert_eq!(world.zones().len(), 4);
+
+        let rock = super::Rect {
+            min: Pos {
+                z: fire.z - 1,
+                ..fire
+            },
+            max: Pos {
+                z: fire.z - 1,
+                ..fire
+            },
+        };
+        assert_eq!(
+            world.place_stockpile(&[cell(0), rock]),
+            Some(super::Refusal::PlaceStockpile {
+                rect: super::Rect {
+                    min: rock.min,
+                    max: fire,
+                },
+            })
+        );
+        assert_eq!(world.zones().len(), 4);
+    }
+
+    #[test]
+    fn stockpile_refuses_only_when_every_cell_is_invalid() {
+        let mut world = World::generate(super::DEFAULT_SEED, Dims::DEFAULT);
+        let fire = world.camp_origin();
+        let fire_rect = super::Rect {
+            min: fire,
+            max: fire,
+        };
+        assert_eq!(
+            world.apply_command(SimCommand::PlaceStockpile { rect: fire_rect }),
+            Some(super::Refusal::PlaceStockpile { rect: fire_rect })
+        );
+        assert!(world.zones().is_empty());
+
+        let rock = Pos {
+            z: fire.z - 1,
+            ..fire
+        };
+        let rock_rect = super::Rect {
+            min: rock,
+            max: rock,
+        };
+        assert_eq!(
+            world.apply_command(SimCommand::PlaceStockpile { rect: rock_rect }),
+            Some(super::Refusal::PlaceStockpile { rect: rock_rect })
+        );
+        let off = Pos {
+            x: -1,
+            y: -1,
+            z: -1,
+        };
+        let off_rect = super::Rect { min: off, max: off };
+        assert_eq!(
+            world.apply_command(SimCommand::PlaceStockpile { rect: off_rect }),
+            Some(super::Refusal::PlaceStockpile { rect: off_rect })
+        );
+        assert!(world.zones().is_empty());
+
+        let around = super::Rect {
+            min: Pos {
+                x: fire.x - 1,
+                y: fire.y - 1,
+                ..fire
+            },
+            max: Pos {
+                x: fire.x + 1,
+                y: fire.y + 1,
+                ..fire
+            },
+        };
+        assert_eq!(
+            world.apply_command(SimCommand::PlaceStockpile { rect: around }),
+            None
+        );
+        assert_eq!(world.zones().len(), 8);
+        assert!(!world.zones().contains(&fire));
+
+        assert_eq!(
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Dig,
+                rect: rock_rect
+            }),
+            None
+        );
+        assert_eq!(
+            world.apply_command(SimCommand::CancelDesignation { rect: rock_rect }),
+            None
+        );
+        assert_eq!(
+            world.apply_command(SimCommand::RemoveStockpile { rect: around }),
+            None
         );
     }
 
@@ -2506,6 +2728,88 @@ mod tests {
         assert_eq!(world.carrying()[0], (super::Id(0), None));
         assert_eq!(world.claims()[0].1, None);
         assert_eq!(world.dwarves()[0].2, JobState::Idle);
+    }
+
+    #[test]
+    fn release_claim_avoids_an_occupied_stockpile_cell() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dwarf_pos = world.dwarves()[0].1;
+        let far_away = Pos { x: 0, y: 0, z: 1 };
+        world.ecs.resource_mut::<super::Zones>().0.insert(dwarf_pos);
+        world.ecs.spawn((super::Item, super::Id(11), dwarf_pos));
+        world.ecs.spawn((super::Item, super::Id(12), far_away));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(12);
+
+        super::release_claim(&mut world.ecs, entity);
+
+        let items = world.items();
+        assert!(items.contains(&(super::Id(11), dwarf_pos)));
+        let dropped = items.iter().find(|(id, _)| *id == super::Id(12)).unwrap().1;
+        assert_ne!(dropped, dwarf_pos);
+        assert!(!world.zones().contains(&dropped));
+        assert_eq!(
+            dwarf_pos.x.abs_diff(dropped.x)
+                + dwarf_pos.y.abs_diff(dropped.y)
+                + dwarf_pos.z.abs_diff(dropped.z),
+            1,
+            "the nearest open tile is a neighbour"
+        );
+        assert_eq!(world.carrying()[0], (super::Id(0), None));
+    }
+
+    #[test]
+    fn release_claim_drops_where_the_carrier_can_walk() {
+        // A walled pocket three cells long: the carrier on a full pile cell, a second full pile
+        // cell, then one free cell. By grid distance the top of a wall is as near as the free
+        // cell and sorts first, but no dwarf can reach it without a ramp.
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let p = world.dwarves()[0].1;
+        let pocket = [p, Pos { y: p.y + 1, ..p }, Pos { y: p.y + 2, ..p }];
+        for x in p.x - 1..=p.x + 1 {
+            for y in p.y - 1..=p.y + 3 {
+                let cell = Pos { x, y, ..p };
+                let below = Pos { z: p.z - 1, ..cell };
+                if pocket.contains(&cell) {
+                    world.set_tile(cell, Tile::Empty);
+                    world.set_tile(below, Tile::Solid(Material::Stone));
+                } else {
+                    world.set_tile(cell, Tile::Solid(Material::Stone));
+                }
+            }
+        }
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .extend([pocket[0], pocket[1]]);
+        world.ecs.spawn((super::Item, super::Id(11), pocket[1]));
+        world
+            .ecs
+            .spawn((super::Item, super::Id(12), Pos { x: 0, y: 0, z: 1 }));
+        world.ecs.spawn((super::Item, super::Id(13), pocket[0]));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(12);
+
+        super::release_claim(&mut world.ecs, entity);
+
+        let dropped = world
+            .items()
+            .into_iter()
+            .find(|(id, _)| *id == super::Id(12))
+            .unwrap()
+            .1;
+        assert_eq!(dropped, pocket[2], "the drop must be inside the pocket");
     }
 
     #[test]

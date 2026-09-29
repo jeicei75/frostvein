@@ -7,6 +7,12 @@ use std::collections::BTreeMap;
 use protocol::{Delta, Designation, Dims, Entity, Item, Rect, Snapshot, Speed, Tile, Zone};
 use thiserror::Error;
 
+pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
+    match refusal {
+        protocol::Refusal::PlaceStockpile { .. } => "stockpile refused: no valid cells",
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Changes {
     pub tiles: Vec<[i32; 3]>,
@@ -239,6 +245,7 @@ fn standable_in_column(
 /// true since the AC was written. RULED 2026-08-27 (Wolf): the standable modes follow the
 /// surface. Dig keeps the single-z rule, where cutting one level into a slope is the point.
 pub fn surface_targets(mirror: &Mirror, level: i32, a: [i32; 3], b: [i32; 3]) -> Vec<[i32; 3]> {
+    // NOTE: emitter filtering belongs to the sim; the drag preview does not duplicate that rule.
     let mut cells = Vec::new();
     for y in a[1].min(b[1])..=a[1].max(b[1]) {
         for x in a[0].min(b[0])..=a[0].max(b[0]) {
@@ -347,6 +354,8 @@ mod tests {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
+
+            refusals: Vec::new(),
         });
 
         assert_eq!(mirror.tile([1, 0, 0]), Some(Tile::Solid(Material::Stone)));
@@ -374,6 +383,8 @@ mod tests {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
+
+            refusals: Vec::new(),
         });
 
         let replacement = Snapshot {
@@ -461,6 +472,8 @@ mod tests {
             zones: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
+
+            refusals: Vec::new(),
         });
 
         assert_eq!(mirror.changes().spawned, vec![8]);

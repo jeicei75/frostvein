@@ -214,7 +214,7 @@ graph LR
 | Vocabulary enums | material, profession/job kind are defined in `sim-core` (source of truth), mirrored as serde enums in `protocol`, bridged in `simd` by exhaustive `match` with no wildcard arm — vocabulary drift is a compile error |
 | Shared constants | `protocol` exports `DEFAULT_PORT`; neither binary hardcodes its own |
 | Color | wire carries material/profession identifiers, never RGB; the id → RGB mapping (24-bit truecolor) is a data table in `tui` — never hardcoded per draw site. (Amended 2026-08-09: "shared by the future raycast view" is stale — the raycast view was withdrawn; the pattern instead extends to `gui`'s light/appearance table, M2 spine AD-16) |
-| Command acknowledgement | no explicit ack messages; a command's effect appearing in the next delta is the acknowledgement (meets NFR2's ~200 ms bar) |
+| Command acknowledgement | Accepted commands acknowledge through their effect in the next delta (meets NFR2's ~200 ms bar). Amended 2026-09-28 (Story 12.1): the sim decides refusals; they ride the next delta's `refusals` list and are broadcast to every attached client. Each later filtered command adds a `Refusal` variant. |
 | Malformed client input | `simd` logs and drops the line; the sim never crashes on client input |
 | Errors | `thiserror` in `sim-core`/`protocol`, `anyhow` in `simd`/`tui` |
 | Constants | hardcoded at use site; promote to a constants module on reuse; to config only when a story needs runtime change |
@@ -271,7 +271,7 @@ Protocol v0 message list (logical — field detail is owned by the code):
 
 | Direction | Messages |
 | --- | --- |
-| client → daemon | `designate` (dig \| channel, rect), `cancel_designation` (rect), `place_stockpile` (rect), `remove_stockpile` (rect), `set_speed` (pause \| normal \| fast), `save`, `load`, `quit` |
+| client → daemon | `designate` (dig \| channel, rect), `cancel_designation` (rect), `place_stockpile` (rects: one drag, 12.1), `remove_stockpile` (rect), `set_speed` (pause \| normal \| fast), `save`, `load`, `quit` |
 | daemon → client | `snapshot` (on connect and after `load`: dims, tiles, entities, designations, zones, speed, tick), `delta` (per tick, per AD-8) |
 
 ## Capability → Architecture Map

@@ -728,7 +728,8 @@ pub fn projection_systems(app: &mut App) {
     app.init_resource::<PickedTile>();
     app.init_resource::<crate::project::TreeReportState>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
-    app.init_resource::<TickClock>()
+    app.init_resource::<LastRefusal>()
+        .init_resource::<TickClock>()
         .init_resource::<crate::project::DwarfHeadings>()
         .add_systems(
             Startup,
@@ -811,6 +812,7 @@ pub fn client_systems(app: &mut App) {
         .init_resource::<DragAnchor>()
         .init_resource::<LightingToggles>()
         .init_resource::<LastCameraReadout>()
+        .init_resource::<LastRefusal>()
         .init_resource::<crate::pick::SelectedDwarf>()
         .add_message::<MouseMotion>()
         .add_message::<MouseWheel>();
@@ -823,6 +825,7 @@ pub fn client_systems(app: &mut App) {
             setup_projection_assets,
             setup_atmosphere,
             setup_designate_hint,
+            crate::designate::setup_refusal_hint,
             log_adapter,
         ),
     )
@@ -901,6 +904,9 @@ pub fn client_systems(app: &mut App) {
             crate::command::restore_speed_on_exit.before(send_commands),
             send_commands.after(designation_input),
             update_designate_hint.after(designation_input),
+            crate::designate::update_refusal_hint
+                .after(ingest_messages)
+                .after(designation_input),
         ),
     )
     // `Last`, so the row describes a frame that has actually been drawn.
@@ -2203,6 +2209,9 @@ fn camera_readout(
 #[derive(Resource, Default, Debug)]
 pub struct LastCameraReadout(pub Option<String>);
 
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct LastRefusal(pub Option<protocol::Refusal>);
+
 fn log_adapter(adapter: Option<Res<RenderAdapterInfo>>) {
     if let Some(adapter) = adapter {
         println!(
@@ -2495,6 +2504,7 @@ fn ingest_messages(
     mut work: ResMut<ProjectionWork>,
     mut clock: ResMut<TickClock>,
     mut headings: ResMut<crate::project::DwarfHeadings>,
+    mut last_refusal: ResMut<LastRefusal>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let Some(receiver) = receiver else {
@@ -2523,6 +2533,9 @@ fn ingest_messages(
                 }
             },
             Ok(Ok(WireMessage::Delta(delta))) => {
+                if let Some(refusal) = delta.refusals.last() {
+                    last_refusal.0 = Some(*refusal);
+                }
                 apply_wire_delta(&mut mirror.0, &mut work, &mut clock, &mut headings, *delta);
             }
             Ok(Err(error)) => {
@@ -3156,6 +3169,8 @@ mod tests {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: Speed::Paused,
+
+                refusals: Vec::new(),
             }))))
             .unwrap();
         // Two frames: one ingests the delta into the mirror, the next reads the mirror's speed.
@@ -3318,10 +3333,79 @@ mod tests {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: Speed::Paused,
+
+                refusals: Vec::new(),
             }))))
             .unwrap();
         app.update();
         assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed paused");
+    }
+
+    #[test]
+    fn refusal_hud_follows_wire_and_clears_on_the_next_world_command() {
+        use crate::{
+            designate::{DesignateMode, DragAnchor, DragMode},
+            pick::{Face, PickedCell, PickedTile},
+        };
+        let (mut app, sender, _server) =
+            configured_app_with_snapshot(&[], snapshot_at_tick(0, Speed::Normal));
+        app.update();
+        let hud = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&Text, With<crate::designate::RefusalHint>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone()
+        };
+        let expected = protocol::Refusal::PlaceStockpile {
+            rect: protocol::Rect {
+                min: [64, 64, 8],
+                max: [64, 64, 8],
+            },
+        };
+        let delta = |tick, refusals| Delta {
+            msg_type: MessageType::Delta,
+            tick,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            refusals,
+        };
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(delta(1, vec![expected])))))
+            .unwrap();
+        app.update();
+        assert_eq!(hud(&mut app), client_core::refusal_text(&expected));
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(delta(2, Vec::new())))))
+            .unwrap();
+        app.update();
+        assert_eq!(hud(&mut app), client_core::refusal_text(&expected));
+
+        let picked = PickedCell {
+            tile: [0, 0, 0],
+            face: Face::Top,
+        };
+        app.world_mut().insert_resource(PickedTile(Some(picked)));
+        app.world_mut().insert_resource(DesignateMode::Stockpile);
+        app.world_mut().insert_resource(DragAnchor(Some(picked)));
+        app.world_mut()
+            .insert_resource(DragMode(Some(DesignateMode::Stockpile)));
+        {
+            let mut mouse = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+            mouse.press(MouseButton::Left);
+            mouse.clear();
+            mouse.release(MouseButton::Left);
+        }
+        app.world_mut()
+            .run_system_once(crate::designate::designation_input)
+            .unwrap();
+        app.update();
+        assert_eq!(hud(&mut app), "");
     }
 
     #[test]
@@ -3345,7 +3429,7 @@ mod tests {
             keys.clear();
         };
         // Slice, lighting, clock and the designate hint.
-        assert_eq!(visibilities(&mut app).len(), 4);
+        assert_eq!(visibilities(&mut app).len(), 5);
         press_h(&mut app);
         assert!(
             visibilities(&mut app)
@@ -3383,7 +3467,7 @@ mod tests {
                 .iter(app.world())
                 .copied()
                 .collect::<Vec<_>>();
-            visibilities.len() == 4
+            visibilities.len() == 5
                 && visibilities
                     .iter()
                     .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden)
@@ -5109,6 +5193,7 @@ mod tests {
             ),
             "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
             "22:00   elapsed 0d 00:00   speed normal".to_string(),
+            "".to_string(),
             "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),
         ];
@@ -5337,6 +5422,8 @@ mod tests {
                     zones: Vec::new(),
                     items: Vec::new(),
                     speed: Speed::Normal,
+
+                    refusals: Vec::new(),
                 }))))
                 .unwrap();
             app.update();
@@ -6319,6 +6406,8 @@ mod tests {
                     zones: Vec::new(),
                     items: Vec::new(),
                     speed: Speed::Normal,
+
+                    refusals: Vec::new(),
                 }))))
                 .unwrap();
         }
@@ -6328,6 +6417,7 @@ mod tests {
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
             .init_resource::<crate::project::DwarfHeadings>()
+            .init_resource::<super::LastRefusal>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -6366,6 +6456,8 @@ mod tests {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: Speed::Normal,
+
+                refusals: Vec::new(),
             }))))
             .unwrap();
         let mut app = App::new();
@@ -6374,6 +6466,7 @@ mod tests {
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
             .init_resource::<crate::project::DwarfHeadings>()
+            .init_resource::<super::LastRefusal>()
             .add_systems(Update, ingest_messages);
         // A full cadence has already elapsed on the client when the delta lands.
         app.world_mut().resource_mut::<TickClock>().advance(0.1);
@@ -6432,6 +6525,7 @@ mod tests {
             })
             .init_resource::<TickClock>()
             .init_resource::<crate::project::DwarfHeadings>()
+            .init_resource::<super::LastRefusal>()
             .add_systems(Update, ingest_messages);
 
         app.update();
@@ -6469,6 +6563,7 @@ mod tests {
             .init_resource::<ProjectionWork>()
             .init_resource::<TickClock>()
             .init_resource::<crate::project::DwarfHeadings>()
+            .init_resource::<super::LastRefusal>()
             .add_systems(Update, ingest_messages);
         // Settle schedule and system entities before ingesting anything.
         app.update();

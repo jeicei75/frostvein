@@ -408,9 +408,9 @@ below as "what one layer found", not as "what is wrong with 3.3".
   standable tiles, so a rect entirely in rock adds zero zones and the player is told nothing — no
   mark, no message, no refusal. The auditor hit this for real: aiming one z level low produced a
   capture with zero of every glyph and exit 0, which is indistinguishable from "hauling is broken".
-  Pre-existing since 3.1 (the same is true of a dig rect that hits nothing diggable), so not caused
-  by this story. **Revisit when** a story touches command feedback or the status line — the cheap fix
-  is telling the player how many tiles a command actually took.
+  Pre-existing since 3.1. **CLOSED in Story 12.1:** an all-invalid stockpile now returns a typed
+  refusal in the next broadcast delta, shown by both clients. The dig twin (a dig rect hitting
+  nothing diggable) remains open.
 
 - **The client's opening camera z is nondeterministic** [`crates/tui/src/view.rs`, `initial`] —
   LAYER: feature-auditor (story 3.3 review). `initial` takes z from `snapshot.entities.first()`, i.e.
@@ -2318,3 +2318,25 @@ the story, and one of them is also issue #125.
   **#125**, and the issue is the state. Between about 03:40 and 05:20 the ground median reads 51–54, against a
   floor of 55. Wolf's reason for deferring: "settle it in #125 with the frames in hand; the seat never runs
   the capture check."
+
+## Deferred from: code review of 12-1-stones-stay-out-of-the-fire (2026-09-29)
+
+- **A second stone on a pile cell draws as stored** (edge LOW). The tui paints any stone on a zone cell
+  green, though the sim treats a second one as loose; two stones show as one `*`
+  (`crates/tui/src/view.rs:315`). Only reachable through the routes in 12.1's AC9 decision.
+- **The tui status row cuts the refusal** (edge+feature LOW). The refusal is appended after a ~40-78
+  character row and truncated to the terminal width, so below ~80 columns it reads `...no valid cel` or
+  vanishes (`crates/tui/src/view.rs:1002`).
+- **`--frames 12` misses a refusal at speed** (feature LOW). The headless tui reads only the backlog
+  behind the connect snapshot; on a fast4x daemon the refusal first showed at frame 71.
+- **A malformed stockpile rect is not refused** (edge LOW). `rect_is_valid` failures (min > max, or
+  min.z != max.z) are logged and dropped with no `Refusal` (`crates/simd/src/main.rs:766`). Neither
+  client can send one.
+- **The two clients clear the refusal on different commands** (edge LOW). The gui clears only when a
+  drag produced a command (`crates/gui/src/designate.rs:194`); the tui clears on Designate,
+  PlaceStockpile and Commands (`crates/tui/src/view.rs:607`).
+- **An old save's emitter zone cell is never pruned** (blind LOW). No haul targets it after 12.1, but it
+  stays in `Zones` and the clients draw it as stockpile until the player removes it.
+- **Three cited mutation proofs are not in the table** (accept LOW). `/tmp/12-1-boundary-red.sh` and
+  `/tmp/12-1-wire-red.sh` rows (emitter unit test, empty gui drag, `skip_serializing_if`) are not in
+  `mutations/12-1.sh`, so the gate never re-checks them.

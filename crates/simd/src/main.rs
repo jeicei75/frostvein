@@ -166,6 +166,7 @@ fn tick(
     // latency-bound, which is issue #111.
     let mut scheduled_speed: Option<(u64, protocol::Speed)> = None;
     loop {
+        let mut refusals = Vec::new();
         for command in command_rx.try_iter() {
             match command {
                 protocol::Command::SetSpeed {
@@ -231,10 +232,9 @@ fn tick(
                         rect: bridge::rect_in(rect),
                     });
                 }
-                protocol::Command::PlaceStockpile { rect } => {
-                    world.apply_command(sim_core::SimCommand::PlaceStockpile {
-                        rect: bridge::rect_in(rect),
-                    });
+                protocol::Command::PlaceStockpile { rects } => {
+                    let rects: Vec<_> = rects.into_iter().map(bridge::rect_in).collect();
+                    refusals.extend(world.place_stockpile(&rects).map(bridge::refusal_out));
                 }
                 protocol::Command::RemoveStockpile { rect } => {
                     world.apply_command(sim_core::SimCommand::RemoveStockpile {
@@ -291,7 +291,7 @@ fn tick(
         }
         let delta_line = Arc::new(format!(
             "{}\n",
-            serde_json::to_string(&bridge::delta(&mut world, speed))?
+            serde_json::to_string(&bridge::delta(&mut world, speed, refusals))?
         ));
         broadcast(&mut clients, &delta_line);
 
@@ -761,8 +761,8 @@ fn read_inbound(stream: TcpStream, command_tx: mpsc::Sender<protocol::Command>) 
                 let text = text.trim_end();
                 match serde_json::from_str::<protocol::Command>(text) {
                     Ok(command) => {
-                        if let Some(rect) = command_rect(&command)
-                            && !rect_is_valid(rect)
+                        if let Some(rects) = command_rects(&command)
+                            && (rects.is_empty() || !rects.iter().all(rect_is_valid))
                         {
                             eprintln!("invalid client rect: {}", excerpt(text));
                             continue;
@@ -785,12 +785,12 @@ fn read_inbound(stream: TcpStream, command_tx: mpsc::Sender<protocol::Command>) 
     }
 }
 
-fn command_rect(command: &protocol::Command) -> Option<&protocol::Rect> {
+fn command_rects(command: &protocol::Command) -> Option<&[protocol::Rect]> {
     match command {
         protocol::Command::Designate { rect, .. }
         | protocol::Command::CancelDesignation { rect }
-        | protocol::Command::PlaceStockpile { rect }
-        | protocol::Command::RemoveStockpile { rect } => Some(rect),
+        | protocol::Command::RemoveStockpile { rect } => Some(std::slice::from_ref(rect)),
+        protocol::Command::PlaceStockpile { rects } => Some(rects),
         protocol::Command::SetSpeed { .. }
         | protocol::Command::Save
         | protocol::Command::Load

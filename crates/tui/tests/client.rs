@@ -52,6 +52,8 @@ fn delta_line_with_speed(tick: u64, speed: protocol::Speed) -> String {
         zones: Vec::new(),
         items: Vec::new(),
         speed,
+
+        refusals: Vec::new(),
     };
     format!(
         "{}\n",
@@ -198,6 +200,87 @@ fn captured_ticks(status_lines: &[String]) -> Vec<u64> {
                 .expect("status tick must be numeric")
         })
         .collect()
+}
+
+fn capture_refusal_frames(refused: bool) -> Vec<String> {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind refusal stub");
+    let port = listener.local_addr().unwrap().port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("4")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tui capture");
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream.write_all(snapshot_line().as_bytes()).unwrap();
+        for tick in 8..=11 {
+            let mut delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: protocol::Speed::Normal,
+                refusals: Vec::new(),
+            };
+            if refused && tick == 9 {
+                delta.refusals.push(protocol::Refusal::PlaceStockpile {
+                    rect: protocol::Rect {
+                        min: [64, 64, 8],
+                        max: [64, 64, 8],
+                    },
+                });
+            }
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .unwrap();
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    let status = child.wait().unwrap();
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    server.join().unwrap();
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+    stdout
+        .lines()
+        .map(strip_ansi)
+        .filter(|line| line.starts_with("tick "))
+        .collect()
+}
+
+#[test]
+fn streamed_refusal_stays_on_the_status_row_across_plain_deltas() {
+    let refused = capture_refusal_frames(true);
+    assert_eq!(refused.len(), 4, "{refused:?}");
+    assert!(!refused[0].contains("refused"));
+    for line in &refused[1..] {
+        assert!(line.contains("stockpile refused: no valid cells"), "{line}");
+    }
+    let plain = capture_refusal_frames(false);
+    assert_eq!(plain.len(), 4, "{plain:?}");
+    assert!(
+        plain.iter().all(|line| !line.contains("refused")),
+        "{plain:?}"
+    );
 }
 
 fn capture_load_frames(send_load: bool) -> Vec<String> {
@@ -509,6 +592,8 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             prelude.push_str(&format!("{}\n", serde_json::to_string(&delta).unwrap()));
         }
@@ -557,6 +642,8 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -707,6 +794,8 @@ fn capture_dig_replay(changes: bool) -> String {
                     .into_iter()
                     .collect(),
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -881,6 +970,8 @@ fn capture_growing_world(with_features: bool) -> String {
                 zones: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -977,10 +1068,10 @@ fn capture_haul_replay(changes: bool) -> String {
         assert_eq!(
             serde_json::from_str::<protocol::Command>(&line).expect("decode stockpile command"),
             protocol::Command::PlaceStockpile {
-                rect: protocol::Rect {
+                rects: vec![protocol::Rect {
                     min: PILE,
                     max: PILE,
-                },
+                }],
             }
         );
 
@@ -1018,6 +1109,8 @@ fn capture_haul_replay(changes: bool) -> String {
                 zones: vec![protocol::Zone { pos: PILE }],
                 items: vec![protocol::Item { id: 12, pos: stone }],
                 speed: protocol::Speed::Normal,
+
+                refusals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -1154,6 +1247,8 @@ fn moving_delta_line(tick: u64, x: i32) -> String {
         zones: Vec::new(),
         items: Vec::new(),
         speed: protocol::Speed::Normal,
+
+        refusals: Vec::new(),
     };
     format!(
         "{}\n",
@@ -1302,6 +1397,8 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
             zones: Vec::new(),
             items: Vec::new(),
             speed: protocol::Speed::Normal,
+
+            refusals: Vec::new(),
         };
         stream
             .write_all(

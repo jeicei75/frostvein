@@ -6,7 +6,7 @@ use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
     BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, carrier_cell, crowd_cell, cursor_cell, designation_cell,
-    dim, entity_cell, item_cell, pending_rect_cell, tile_cell, zone_cell,
+    dim, entity_cell, item_cell, pending_rect_cell, stored_item_cell, tile_cell, zone_cell,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +31,7 @@ pub struct ViewState {
     pub cursor: (i64, i64),
     pub anchor: Option<(i64, i64)>,
     pub speed: Speed,
+    pub refusal: Option<protocol::Refusal>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +43,7 @@ pub enum Mode {
     Remove,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     Redraw,
     Quit,
@@ -175,6 +176,7 @@ pub fn initial(mirror: &Mirror, z_override: Option<i32>) -> ViewState {
         cursor: camera,
         anchor: None,
         speed: mirror.speed(),
+        refusal: None,
     }
 }
 
@@ -310,7 +312,11 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
     let mut item_counts = BTreeMap::new();
     for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
-            framebuffer.cells[index] = item_cell();
+            framebuffer.cells[index] = if mirror.zones().iter().any(|zone| zone.pos == item.pos) {
+                stored_item_cell()
+            } else {
+                item_cell()
+            };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
     }
@@ -392,14 +398,19 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         // +x, down is +y, so north (-y) is always up. It is printed anyway so the two clients
         // can be compared without knowing that — the Bevy client's boot camera is yawed ~40
         // degrees and its north lands DOWN-LEFT, which is the mismatch that cost a session.
-        format!(
+        let mut status = format!(
             "tick {}  {}  z {}/{}  dwarves {}  N up",
             mirror.tick(),
             speed,
             state.z,
             mirror.dims().z.saturating_sub(1),
             dwarves
-        )
+        );
+        if let Some(refusal) = &state.refusal {
+            status.push_str("  ");
+            status.push_str(client_core::refusal_text(refusal));
+        }
+        status
     };
     let status_y = h - 2;
     for (x, glyph) in (0..w).zip(status.chars()) {
@@ -472,7 +483,7 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             at_tick: None,
         })
     };
-    match key.code {
+    let action = match key.code {
         KeyCode::Char('S') => Action::Command(Command::Save),
         KeyCode::Char('L') => Action::Command(Command::Load),
         KeyCode::Char(' ') => command(
@@ -529,7 +540,9 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
                         kind: DesignationKind::Channel,
                         rect,
                     }),
-                    Mode::Stockpile => Action::Command(Command::PlaceStockpile { rect }),
+                    Mode::Stockpile => {
+                        Action::Command(Command::PlaceStockpile { rects: vec![rect] })
+                    }
                     Mode::Remove => Action::Commands([
                         Command::CancelDesignation { rect },
                         Command::RemoveStockpile { rect },
@@ -592,7 +605,15 @@ pub fn apply_key(state: &mut ViewState, key: KeyEvent, dims: Dims, viewport: (u1
             Action::Redraw
         }
         _ => Action::Ignore,
+    };
+    if matches!(
+        action,
+        Action::Command(Command::Designate { .. } | Command::PlaceStockpile { .. })
+            | Action::Commands(_)
+    ) {
+        state.refusal = None;
     }
+    action
 }
 
 fn move_cursor(state: &mut ViewState, dx: i64, dy: i64, dims: Dims, viewport: (u16, u16)) {
@@ -750,6 +771,7 @@ mod tests {
             cursor: camera,
             anchor: None,
             speed: Speed::Normal,
+            refusal: None,
         }
     }
 
@@ -1129,6 +1151,31 @@ mod tests {
         snapshot.entities.clear();
         let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
         assert_eq!(framebuffer.cell(1, 1).glyph, '*');
+    }
+
+    /// Wolf, 2026-09-28: a full pile drew only grey `*`s, the same as loose stones, and read as
+    /// "the fire is inside the stockpile". A stored stone must look stored.
+    #[test]
+    fn a_stone_on_a_stockpile_cell_draws_in_the_stockpile_colour() {
+        let mut snapshot = empty_snapshot(Dims { x: 5, y: 3, z: 2 });
+        snapshot.zones = vec![Zone { pos: [1, 1, 1] }, Zone { pos: [2, 1, 1] }];
+        snapshot.items = vec![
+            Item {
+                id: 5,
+                pos: [1, 1, 1],
+            },
+            Item {
+                id: 6,
+                pos: [3, 1, 1],
+            },
+        ];
+
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
+
+        assert_eq!(framebuffer.cell(1, 1), stored_item_cell());
+        assert_eq!(framebuffer.cell(2, 1), zone_cell());
+        assert_eq!(framebuffer.cell(3, 1), item_cell());
+        assert_ne!(stored_item_cell().fg, item_cell().fg);
     }
 
     #[test]
@@ -1686,6 +1733,35 @@ mod tests {
     }
 
     #[test]
+    fn a_refusal_stays_until_this_client_sends_a_world_command() {
+        let dims = Dims { x: 20, y: 20, z: 3 };
+        let refusal = protocol::Refusal::PlaceStockpile {
+            rect: protocol::Rect {
+                min: [2, 3, 1],
+                max: [2, 3, 1],
+            },
+        };
+        let mut state = normal_state((2, 3), 1);
+        state.refusal = Some(refusal);
+
+        for key in ['+', 'p'] {
+            let _ = apply_key(&mut state, press(KeyCode::Char(key)), dims, (9, 7));
+        }
+        let _ = apply_key(&mut state, press(KeyCode::Enter), dims, (9, 7));
+        assert_eq!(
+            state.refusal,
+            Some(refusal),
+            "a speed change or an unfinished drag is not a world command"
+        );
+
+        assert!(matches!(
+            apply_key(&mut state, press(KeyCode::Enter), dims, (9, 7)),
+            Action::Command(Command::PlaceStockpile { .. })
+        ));
+        assert_eq!(state.refusal, None, "the next world command clears it");
+    }
+
+    #[test]
     fn second_enter_commits_each_single_command_mode_and_stays_in_mode() {
         let dims = Dims { x: 20, y: 20, z: 3 };
         // NOTE: a literal, deliberately. `apply_key` builds its rect with `rect_on_level`,
@@ -1712,7 +1788,11 @@ mod tests {
                     rect,
                 },
             ),
-            ('p', Mode::Stockpile, Command::PlaceStockpile { rect }),
+            (
+                'p',
+                Mode::Stockpile,
+                Command::PlaceStockpile { rects: vec![rect] },
+            ),
         ] {
             let mut state = normal_state((2, 3), 1);
             let _ = apply_key(&mut state, press(KeyCode::Char(key)), dims, (9, 7));
@@ -1897,6 +1977,7 @@ mod tests {
                 cursor: (4, 3),
                 anchor: None,
                 speed: Speed::Normal,
+                refusal: None,
             }
         );
     }

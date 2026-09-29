@@ -89,6 +89,12 @@ pub struct Rect {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "command", rename_all = "snake_case")]
+pub enum Refusal {
+    PlaceStockpile { rect: Rect },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
     SetSpeed {
@@ -118,8 +124,11 @@ pub enum Command {
     CancelDesignation {
         rect: Rect,
     },
+    /// One player drag. A drag over uneven ground is several rects, and the daemon refuses it only
+    /// when none of them holds a valid cell; one rect per command refused the lone campfire cell
+    /// of a drag that zoned everything around it.
     PlaceStockpile {
-        rect: Rect,
+        rects: Vec<Rect>,
     },
     RemoveStockpile {
         rect: Rect,
@@ -195,6 +204,9 @@ pub struct Delta {
     pub zones: Vec<Zone>,
     pub items: Vec<Item>,
     pub speed: Speed,
+    /// NOTE: every attached client sees every refusal in the broadcast delta.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refusals: Vec<Refusal>,
 }
 
 #[cfg(test)]
@@ -229,6 +241,34 @@ mod tests {
         "items": [{"id": 12, "pos": [1, 2, 3]}],
         "speed": "fast"
     }"#;
+
+    #[test]
+    fn refusal_wire_is_literal_and_empty_delta_wire_is_unchanged() {
+        let literal = r#"{"command":"place_stockpile","rect":{"min":[64,64,8],"max":[64,64,8]}}"#;
+        let refusal: Refusal = serde_json::from_str(literal).unwrap();
+        assert_eq!(
+            refusal,
+            Refusal::PlaceStockpile {
+                rect: Rect {
+                    min: [64, 64, 8],
+                    max: [64, 64, 8]
+                }
+            }
+        );
+        assert_eq!(serde_json::to_string(&refusal).unwrap(), literal);
+        let mut plain: Delta = serde_json::from_str(DELTA_WIRE).unwrap();
+        assert!(plain.refusals.is_empty());
+        let plain_value: serde_json::Value = serde_json::from_str(DELTA_WIRE).unwrap();
+        assert_eq!(serde_json::to_value(&plain).unwrap(), plain_value);
+        assert_eq!(
+            serde_json::to_string(&plain).unwrap(),
+            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"items":[{"id":12,"pos":[1,2,3]}],"speed":"fast"}"#
+        );
+        plain.refusals.push(refusal);
+        let encoded = serde_json::to_string(&plain).unwrap();
+        assert!(encoded.contains(&format!(r#""refusals":[{literal}]"#)));
+        assert_eq!(serde_json::from_str::<Delta>(&encoded).unwrap(), plain);
+    }
 
     const COMMAND_WIRE: &str = r#"{"type":"set_speed","speed":"paused"}"#;
 
@@ -365,12 +405,12 @@ mod tests {
                 },
             ),
             (
-                r#"{"type":"place_stockpile","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
+                r#"{"type":"place_stockpile","rects":[{"min":[1,2,3],"max":[4,5,3]}]}"#,
                 Command::PlaceStockpile {
-                    rect: Rect {
+                    rects: vec![Rect {
                         min: [1, 2, 3],
                         max: [4, 5, 3],
-                    },
+                    }],
                 },
             ),
             (
@@ -511,10 +551,10 @@ mod tests {
             ),
             (
                 Command::PlaceStockpile {
-                    rect: Rect {
+                    rects: vec![Rect {
                         min: [0, 0, 0],
                         max: [0, 0, 0],
-                    },
+                    }],
                 },
                 "place_stockpile",
             ),

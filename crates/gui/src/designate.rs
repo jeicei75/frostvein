@@ -46,6 +46,40 @@ pub struct DragMode(pub Option<DesignateMode>);
 #[derive(bevy::prelude::Component)]
 pub struct DesignateHint;
 
+#[derive(bevy::prelude::Component)]
+pub struct RefusalHint;
+
+pub fn setup_refusal_hint(mut commands: Commands) {
+    commands.spawn((
+        Text::new(""),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::srgb(1.0, 0.72, 0.55)),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(44),
+            left: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        RefusalHint,
+        crate::ingest::Hud,
+        ClientLocal,
+    ));
+}
+
+pub fn update_refusal_hint(
+    last: Res<crate::ingest::LastRefusal>,
+    mut hints: bevy::prelude::Query<&mut Text, bevy::prelude::With<RefusalHint>>,
+) {
+    if !last.is_changed() {
+        return;
+    }
+    let text = last.0.as_ref().map(client_core::refusal_text).unwrap_or("");
+    for mut hint in &mut hints {
+        *hint = Text::new(text);
+    }
+}
+
 pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
     match (mode, dragging) {
         (DesignateMode::None, _) => {
@@ -109,6 +143,7 @@ pub fn designation_input(
     mut anchor: ResMut<DragAnchor>,
     mut drag_mode: ResMut<DragMode>,
     mut pending: ResMut<PendingCommands>,
+    mut last_refusal: ResMut<crate::ingest::LastRefusal>,
 ) {
     if keys.just_pressed(KeyCode::Digit1) {
         *mode = DesignateMode::Dig;
@@ -156,7 +191,9 @@ pub fn designation_input(
                 designation_target(mirror, anchor_cell, mode),
                 designation_target(mirror, release_cell, mode),
             ));
+            // NOTE: surface preview does not filter emitters; the sim decides whether a zone is valid.
             for command in commands_for(mode, picked_rect, &surface) {
+                last_refusal.0 = None;
                 pending.push(command);
             }
         }
@@ -232,10 +269,12 @@ fn commands_for(mode: DesignateMode, picked_rect: Rect, surface: &[Rect]) -> Vec
                 rect: *rect,
             })
             .collect(),
-        DesignateMode::Stockpile => surface
-            .iter()
-            .map(|rect| Command::PlaceStockpile { rect: *rect })
-            .collect(),
+        DesignateMode::Stockpile if surface.is_empty() => vec![Command::PlaceStockpile {
+            rects: vec![picked_rect],
+        }],
+        DesignateMode::Stockpile => vec![Command::PlaceStockpile {
+            rects: surface.to_vec(),
+        }],
         // Clear means "remove what is under the cursor", and after the targeting fix that is two
         // different cells: a dig sits at the cell the ray hit, while a channel or a stockpile
         // sits one cell across the entered face. Clearing only one of them leaves the other
@@ -266,6 +305,47 @@ mod tests {
     /// call sites that care about the distinction spell it out.
     fn commands_at(mode: DesignateMode, rect: Rect) -> Vec<Command> {
         commands_for(mode, rect, &[rect])
+    }
+
+    #[test]
+    fn empty_stockpile_surface_still_reaches_the_sim() {
+        let picked = Rect {
+            min: [64, 64, 9],
+            max: [64, 64, 9],
+        };
+        assert_eq!(
+            commands_for(DesignateMode::Stockpile, picked, &[]),
+            vec![Command::PlaceStockpile {
+                rects: vec![picked]
+            }]
+        );
+        assert!(commands_for(DesignateMode::Channel, picked, &[]).is_empty());
+    }
+
+    #[test]
+    fn a_stockpile_drag_over_several_rects_is_one_command() {
+        // One command per rect let the sim refuse the campfire's lone cell of a drag that zoned
+        // the ring around it; the whole drag must reach the sim as one decision.
+        let picked = Rect {
+            min: [62, 62, 9],
+            max: [62, 66, 9],
+        };
+        let surface = [
+            Rect {
+                min: [62, 62, 9],
+                max: [62, 63, 9],
+            },
+            Rect {
+                min: [62, 64, 10],
+                max: [62, 66, 10],
+            },
+        ];
+        assert_eq!(
+            commands_for(DesignateMode::Stockpile, picked, &surface),
+            vec![Command::PlaceStockpile {
+                rects: surface.to_vec()
+            }]
+        );
     }
 
     #[test]
@@ -312,7 +392,7 @@ mod tests {
         );
         assert_eq!(
             commands_at(DesignateMode::Stockpile, rect),
-            vec![Command::PlaceStockpile { rect }]
+            vec![Command::PlaceStockpile { rects: vec![rect] }]
         );
         assert_ne!(
             commands_at(DesignateMode::Channel, rect),
