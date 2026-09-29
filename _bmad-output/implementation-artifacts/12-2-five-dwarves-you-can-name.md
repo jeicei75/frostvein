@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1's creation
 
 # Story 12.2: Five Dwarves You Can Name
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
