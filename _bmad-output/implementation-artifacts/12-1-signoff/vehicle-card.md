@@ -14,4 +14,6 @@ Note: Windows Terminal draws `♨` and the dwarf glyphs as wide emoji that overl
 
 Wolf: is this the case you saw?
 
-Seat result / AC1 answer: pending Wolf's sitting.
+Seat result / AC1 answer (Wolf, 2026-09-29): (a)–(d) all yes. On "is this the case you saw": partly. The
+stones he saw "in" the fire were also the font (#152). The `♨` glyph draws half into the next tile, so a
+stone beside the fire looked like it overlapped it when it did not.

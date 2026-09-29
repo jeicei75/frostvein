@@ -184,6 +184,9 @@ of the refusal.
   the fire; (c) `3`, then drag one cell on the fire, and the refusal shows in both clients. Ask
   Wolf "is this the case you saw?" and record the answer under AC1. Then run the full
   `scripts/gate.sh` (see [[gate-ooms-at-default-parallelism]]: `RUST_TEST_THREADS=2`).
+  - **Seat, 2026-09-29: (a)–(d) all yes (Wolf).** AC1 answer: partly this case. What he saw as
+    stones in the fire was also the tui font (#152): the wide `♨` glyph draws half into the east
+    tile, so a stone beside the fire looked like it overlapped it. The full gate is still to run.
 
 - [x] **Task 7 — #153: one stone per stockpile cell when the pile fills (AC9). Added 2026-09-28 at
   the seat, by Wolf's ruling.** Found by running after Task 1's fix: 26 stones on 24 cells, 3 on one
@@ -405,6 +408,7 @@ gpt-6-sol
 
 | Date | Change |
 | --- | --- |
+| 2026-09-29 | Task 6 seat: Wolf passed (a)–(d). The apparent overlap was partly the #152 font. |
 | 2026-09-28 | Task 8: stored stones draw in the stockpile green in the tui (Wolf's seat ruling), implemented by Claude directly. Two older mutation anchors re-pointed and re-killed. |
 | 2026-09-28 | Task 7: prevent retry drops from stacking on occupied stockpile cells; pin the race, kill seven mutations, and pass sim-core and daemon suites. |
 | 2026-09-28 | Task 5: amend acknowledgement record, close deferred stockpile item, and kill all five mutations. Task 6 live recipe green; seat pending. |
