@@ -615,6 +615,50 @@ fn dof_keeps_depth_separation_at_distance_40() {
     );
 }
 
+/// #136, on the rendered frame: a selected dwarf at the closest zoom must be sharp.
+///
+/// The same capture twice, DoF on and `--fx-off dof`, one fresh daemon each. The window is sized to
+/// the dwarf's figure at distance 4 (the composition push puts him left of centre); the rest of it
+/// is flat noon snow, so the Laplacian is his.
+///
+/// RED, measured on `5d0cacf` (before the fix): see the story's Debug Log for the ratio.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn a_selected_dwarf_at_the_closest_zoom_is_sharp_with_dof_on() {
+    const DWARF: (usize, usize, usize, usize) = (540, 170, 740, 390);
+    /// AC7: DoF-on sharpness must be at least this fraction of the DoF-off sharpness.
+    const SHARPNESS_FLOOR: f32 = 0.8;
+    let flags = [
+        "--static-world",
+        "--lights-steady",
+        "--subdiv",
+        "4",
+        "--clock",
+        "12",
+        "--select",
+        "0",
+        "--distance",
+        "4",
+    ];
+    let (on, width, _) = Daemon::spawn().capture("select-dof-on", &flags);
+    let (off, _, _) = Daemon::spawn().capture(
+        "select-dof-off",
+        &[&flags[..], &["--fx-off", "dof"]].concat(),
+    );
+    let sharp_on = rec601_lap_mean(&on, width, DWARF);
+    let sharp_off = rec601_lap_mean(&off, width, DWARF);
+    let ratio = sharp_on / sharp_off;
+    println!(
+        "#136 pixel guard (Rec.601 Laplacian): dwarf window DoF-off {sharp_off:.4} DoF-on \
+         {sharp_on:.4} ratio={ratio:.3}"
+    );
+    assert!(
+        ratio >= SHARPNESS_FLOOR,
+        "a selected dwarf at distance 4 blurs under DoF: sharpness ratio {ratio:.3} \
+         ({sharp_on:.4}/{sharp_off:.4}) is below {SHARPNESS_FLOOR}"
+    );
+}
+
 /// AC7/AC8: volume haze must raise distant level AND lower its local contrast without dimming sky.
 #[test]
 #[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
