@@ -729,6 +729,7 @@ pub fn projection_systems(app: &mut App) {
     app.init_resource::<crate::project::TreeReportState>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<LastRefusal>()
+        .init_resource::<crate::pick::SelectedDwarf>()
         .init_resource::<TickClock>()
         .init_resource::<crate::project::DwarfHeadings>()
         .add_systems(
@@ -737,6 +738,7 @@ pub fn projection_systems(app: &mut App) {
                 setup_slice_readout,
                 setup_lighting_readout,
                 setup_clock_readout,
+                setup_name_readout,
             ),
         )
         .add_systems(
@@ -763,7 +765,8 @@ pub fn projection_systems(app: &mut App) {
         // half of the story the readout exists for. It must read the level AFTER the keyboard has
         // written it, or the displayed level trails the cut by one frame.
         .add_systems(Update, update_slice_readout.after(ProjectionSet))
-        .add_systems(Update, update_clock_readout.after(ProjectionSet));
+        .add_systems(Update, update_clock_readout.after(ProjectionSet))
+        .add_systems(Update, update_name_readout.after(ProjectionSet));
     // The toggles resource is initialised HERE, beside the systems that READ it, not only in
     // `client_systems`. Registering a system in one app-builder while its resource is created in
     // another is the same defect this function's own doc comment describes: `crates/gui/tests/
@@ -1688,6 +1691,58 @@ pub struct Hud;
 
 #[derive(Component)]
 pub struct ClockReadout;
+
+/// The selected dwarf's name, in his tunic colour. Empty with no selection.
+#[derive(Component)]
+pub struct NameReadout;
+
+fn setup_name_readout(mut commands: Commands) {
+    commands.spawn((
+        Text::new(""),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::WHITE),
+        // Under the clock readout, on the same right edge.
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(48),
+            right: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        NameReadout,
+        Hud,
+        ClientLocal,
+    ));
+}
+
+fn update_name_readout(
+    mirror: Res<MirrorResource>,
+    selected: Res<crate::pick::SelectedDwarf>,
+    mut readout: Query<(&mut Text, &mut TextColor), With<NameReadout>>,
+) {
+    let identity = selected.0.and_then(|id| {
+        mirror
+            .0
+            .entities()
+            .find(|entity| entity.id == id)
+            .and_then(|entity| entity.identity)
+    });
+    let (text, color) = match identity {
+        Some(identity) => (
+            client_core::dwarf_name_text(identity.name),
+            crate::appearance::dwarf_tunic_color(identity.colour),
+        ),
+        None => ("", Color::WHITE),
+    };
+    for (mut readout, mut text_color) in &mut readout {
+        if readout.0 != text {
+            readout.0 = text.to_owned();
+        }
+        if text_color.0 != color {
+            text_color.0 = color;
+        }
+    }
+}
 
 /// 8.3 (Wolf): time of day, sim time elapsed, and the daemon's speed, in one line.
 ///
@@ -3384,6 +3439,56 @@ mod tests {
         assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed paused");
     }
 
+    /// 12.2 AC6. Captures hide every HUD element, so the evidence is this test: the name line
+    /// shows the SELECTED dwarf's name in his tunic colour, and nothing with no selection.
+    #[test]
+    fn the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears() {
+        use protocol::{DwarfColour, DwarfName, Identity};
+        let named = |id, x, name, colour| protocol::Entity {
+            id,
+            kind: protocol::EntityKind::Dwarf,
+            pos: [x, 0, 0],
+            state: protocol::JobState::Idle,
+            light: None,
+            identity: Some(Identity { name, colour }),
+        };
+        let mut snapshot = snapshot_at_tick(0, Speed::Normal);
+        snapshot.entities = vec![
+            named(4, 0, DwarfName::Durin, DwarfColour::Red),
+            named(7, 1, DwarfName::Bifur, DwarfColour::Blue),
+        ];
+        let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
+        app.update();
+        let readout = |app: &mut App| {
+            let world = app.world_mut();
+            let (text, colour) = world
+                .query_filtered::<(&Text, &bevy::prelude::TextColor), With<super::NameReadout>>()
+                .single(world)
+                .unwrap();
+            (
+                text.0.clone(),
+                bevy::color::ColorToPacked::to_u8_array_no_alpha(colour.0.to_srgba()),
+            )
+        };
+        assert_eq!(readout(&mut app).0, "", "no selection shows nothing");
+        let select = |app: &mut App, id| {
+            app.world_mut()
+                .insert_resource(crate::pick::SelectedDwarf(id));
+            app.update();
+        };
+        select(&mut app, Some(4));
+        // Independent oracle: the approved hexes, written out.
+        assert_eq!(readout(&mut app), ("Durin".to_owned(), [0xB2, 0x3A, 0x34]));
+        select(&mut app, Some(7));
+        assert_eq!(readout(&mut app), ("Bifur".to_owned(), [0x3C, 0x62, 0xBA]));
+        select(&mut app, None);
+        assert_eq!(
+            readout(&mut app).0,
+            "",
+            "clearing the selection empties the line"
+        );
+    }
+
     #[test]
     fn refusal_hud_follows_wire_and_clears_on_the_next_world_command() {
         use crate::{
@@ -3471,8 +3576,8 @@ mod tests {
             keys.release_all();
             keys.clear();
         };
-        // Slice, lighting, clock and the designate hint.
-        assert_eq!(visibilities(&mut app).len(), 5);
+        // Slice, lighting, clock, the selected dwarf's name and the designate hint.
+        assert_eq!(visibilities(&mut app).len(), 6);
         press_h(&mut app);
         assert!(
             visibilities(&mut app)
@@ -3510,7 +3615,7 @@ mod tests {
                 .iter(app.world())
                 .copied()
                 .collect::<Vec<_>>();
-            visibilities.len() == 5
+            visibilities.len() == 6
                 && visibilities
                     .iter()
                     .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden)
@@ -5337,6 +5442,8 @@ mod tests {
             ),
             "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
             "22:00   elapsed 0d 00:00   speed normal".to_string(),
+            "".to_string(),
+            // The selected dwarf's name line, empty with no selection.
             "".to_string(),
             "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),

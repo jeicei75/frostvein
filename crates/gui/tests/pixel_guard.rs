@@ -719,7 +719,9 @@ fn select_frames_a_different_dwarf_per_id_and_wears_his_own_colour() {
     const TUNIC_A: (usize, usize, usize, usize) = (614, 304, 646, 332);
     const TUNIC_B: (usize, usize, usize, usize) = (592, 266, 628, 300);
     /// Chromaticity distance each tunic window must lie nearer its own table colour by.
-    const TUNIC_MARGIN_FLOOR: f32 = 0.02;
+    /// Measured 0.040 / 0.077 on the shipped tunics; with every dwarf painted red, dwarf 0 reads
+    /// 0.020. The floor sits between.
+    const TUNIC_MARGIN_FLOOR: f32 = 0.03;
     /// Mean per-channel change the centre window must show between the two selections.
     const WINDOW_CHANGE_FLOOR: f32 = 5.0;
     let flags = |id: &'static str| {
