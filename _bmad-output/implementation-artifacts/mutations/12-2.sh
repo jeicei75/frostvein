@@ -82,3 +82,11 @@ old = '    DOF_APERTURE_F_STOPS * (boot / focal_distance).powi(2).max(1.0)\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let _ = (boot, focal_distance);\n    DOF_APERTURE_F_STOPS\n'))
 PY
+
+mutation "tui dwarf glyph ignores his tunic colour" tui a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = '                match entity.identity {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                match None::<protocol::Identity> {\n'))
+PY

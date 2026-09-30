@@ -350,10 +350,20 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         {
             framebuffer.cells[index] = if dwarf_counts.get(&index).copied().unwrap_or(0) > 1 {
                 crowd_cell()
-            } else if item_counts.get(&index).copied().unwrap_or(0) > 0 {
-                carrier_cell()
             } else {
-                entity_cell(entity.kind, entity.state)
+                let cell = if item_counts.get(&index).copied().unwrap_or(0) > 0 {
+                    carrier_cell()
+                } else {
+                    entity_cell(entity.kind, entity.state)
+                };
+                // 12.2 (Wolf): a named dwarf wears his tunic colour; job state leaves his glyph.
+                match entity.identity {
+                    Some(identity) => Cell {
+                        fg: dwarf_colour(identity.colour),
+                        ..cell
+                    },
+                    None => cell,
+                }
             };
         }
     }
@@ -1128,6 +1138,62 @@ mod tests {
                 .filter(|cell| cell.glyph == '☺')
                 .count(),
             1
+        );
+    }
+
+    /// 12.2 (Wolf at the seat): a named dwarf's glyph wears his tunic colour, carrying or not, so
+    /// the map tells the five apart. Job state no longer shows on a named dwarf's glyph.
+    #[test]
+    fn a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour() {
+        let dims = Dims { x: 5, y: 3, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.items = vec![Item {
+            id: 9,
+            pos: [3, 1, 1],
+        }];
+        let named = |id, x, colour| Entity {
+            id,
+            kind: EntityKind::Dwarf,
+            pos: [x, 1, 1],
+            state: JobState::Walk,
+            light: None,
+            identity: Some(protocol::Identity {
+                name: protocol::DwarfName::Ori,
+                colour,
+            }),
+        };
+        snapshot.entities = vec![
+            named(1, 1, protocol::DwarfColour::Blue),
+            named(2, 3, protocol::DwarfColour::Red),
+            Entity {
+                id: 3,
+                kind: EntityKind::Dwarf,
+                pos: [4, 1, 1],
+                state: JobState::Walk,
+                light: None,
+                identity: None,
+            },
+        ];
+
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+
+        assert_eq!(
+            framebuffer.cell(1, 1),
+            Cell {
+                glyph: '☺',
+                fg: dwarf_colour(protocol::DwarfColour::Blue),
+            }
+        );
+        assert_eq!(
+            framebuffer.cell(3, 1),
+            Cell {
+                glyph: carrier_cell().glyph,
+                fg: dwarf_colour(protocol::DwarfColour::Red),
+            }
+        );
+        assert_eq!(
+            framebuffer.cell(4, 1),
+            entity_cell(EntityKind::Dwarf, JobState::Walk)
         );
     }
 

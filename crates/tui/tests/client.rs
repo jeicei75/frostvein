@@ -1443,6 +1443,7 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
 /// `render` in isolation: a walking dwarf must actually reach the capture wearing the walk
 /// colour. Nothing tested this end to end before, which is how the story's own colour
 /// evidence came to be taken from a capture that had no colour in it at all.
+/// Since 12.2 only a NAMELESS dwarf wears a job colour; a named one wears his tunic.
 #[test]
 fn a_walking_dwarf_reaches_the_capture_wearing_the_walk_colour() {
     let (stdout, _) = capture_walking_dwarf(false);
