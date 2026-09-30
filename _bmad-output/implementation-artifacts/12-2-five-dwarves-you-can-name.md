@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1's creation
 
 # Story 12.2: Five Dwarves You Can Name
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -250,6 +250,16 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
   Tell him old `frostvein.save` files will not load (Ctrl+S a fresh one first). Then run the
   full `scripts/gate.sh` at `RUST_TEST_THREADS=1` ([[gate-ooms-at-default-parallelism]]).
 
+- [ ] **Task 9: tui dwarf glyphs in tunic colour (Wolf's seat ruling, 2026-09-30).** At (d) Wolf: the tui dwarves
+  are all orange/yellow; draw them in their colours. The glyph colour was job state (FR22/FR4), three orange-brown
+  shades he could not tell apart; Wolf RULED tunic colour, job state leaves a named dwarf's glyph.
+  - [x] A named dwarf's `☺` and carrier `☻` take `dwarf_colour`; crowd `⚇` and a nameless dwarf are unchanged.
+        Test `a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour`: RED (walk orange
+        (214,154,78) where blue was due), then GREEN.
+  - [x] Mutation row 11 in `12-2.sh` KILLED; two 3.3 rows re-pointed (the carrier choice is now nested) and KILLED.
+  - [x] FR22 amended in `epics.md`; seat card (d) updated.
+  - [ ] Wolf sees the five colours on the tui map.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -373,7 +383,11 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
   is (top-right, under the clock), and a 22 px tunic-coloured word on a dark sky is easy to miss. (b) sharp at the
   closest zoom: yes. (c) Escape empties the name and restores the camp-focused DoF: yes. (d) the tui roster: yes.
   Wolf's idea at (d): colour the tui dwarf glyphs by tunic too. Not built in 12.2, because the glyph colour already
-  carries job state and a later Epic 12 story adds profession colour.
+  carries job state and a later Epic 12 story adds profession colour. **Wolf then RULED it in (Task 9): tunic colour,
+  job state dropped from a named dwarf's glyph.**
+- Task 9 on `e59b1af`: new test RED then GREEN; `12-2.sh` row 11 + the two re-pointed 3.3 rows (carrier never drawn,
+  carrier over crowd) run alone with `RUST_TEST_THREADS=1 scripts/mutate.sh`: 3/3 KILLED. The tui walk-colour client
+  test still holds: its dwarf is nameless.
 
 ### Completion Notes List
 
@@ -390,11 +404,13 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 - `crates/gui/src/{ingest.rs,pick.rs,project.rs,appearance.rs}`, `crates/gui/tests/{headless.rs,pixel_guard.rs}`
 - Mutation tables re-pointed: `mutations/{10-10-take-the-camera-where-you-want-it,11-2-the-miniature,5-3-a-window-onto-the-valley,8-3-master-of-time-and-the-skeleton-walks-in-3d}.sh`
 - Task 7/8 files: `mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`
+- Task 9: `crates/tui/src/{view.rs,palette.rs}`, `crates/tui/tests/client.rs` (doc line), `mutations/{12-2,3-3-the-haul-and-the-skeleton-walks}.sh`, `planning-artifacts/epics.md` (FR22)
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-09-30 | Task 9 (Wolf's seat ruling): named dwarves' tui glyphs in tunic colour, job state off them; FR22 amended. Status back to `in-progress` until Wolf sees it. |
 | 2026-09-30 | Task 8: Wolf's seat passed (a)-(d). Status to `review`. |
 | 2026-09-29 | Tasks 1-7 done (Sonnet 5.5 dev agents, Opus 5.5 orchestrator). #136 RED 0.385 to GREEN 1.000; `12-2.sh` 10/10 KILLED; #136 commented; full gate GREEN on `2d12195` (4170 s, `RUST_TEST_THREADS=1`). Seat card written; Task 8's sitting still open. |
 | 2026-09-29 | Task 0: Wolf approved the draft, the no-selection DoF rule and the no-old-saves rule, all unchanged. |

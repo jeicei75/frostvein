@@ -7,12 +7,12 @@ Launch the daemon in WSL with `simd 7451`. In PowerShell from the Windows checko
 On the default seed the five are (id, name, tunic):
 Nain purple, Ori green, Bifur red, Frar gold, Dori blue. Hexes: red `#B23A34`, gold `#D6A42C`, green `#3E924C`, blue `#3C62BA`, purple `#804CA8`.
 
-(a) At your usual working zoom, name each dwarf by his tunic colour, without clicking. Then click each one: the HUD line shows his name in his tunic colour (`Nain` purple, `Ori` green, `Bifur` red, `Frar` gold, `Dori` blue). Does the colour you guessed match the name shown?
+(a) At your usual working zoom, name each dwarf by his tunic colour, without clicking. Then click each one: the HUD line (top-right, just under the clock) shows his name in his tunic colour (`Nain` purple, `Ori` green, `Bifur` red, `Frar` gold, `Dori` blue). Does the colour you guessed match the name shown?
 
 (b) Select one dwarf, then wheel in to the closest zoom. He should stay sharp the whole way, head to boots (#136).
 
 (c) Press Escape. The name line empties and the depth of field goes back to the camp-focused look (sharp camp, soft far ridge).
 
-(d) Look at the attached tui. The row above `tick` lists `Nain  Ori  Bifur  Frar  Dori`, each in the same colour as his gui tunic, ordered by id. The `☺` glyphs on the map keep their job-state colours.
+(d) Look at the attached tui. The row above `tick` lists `Nain  Ori  Bifur  Frar  Dori`, each in the same colour as his gui tunic, ordered by id. Each dwarf's `☺` on the map (and `☻` while he carries a stone) is drawn in his tunic colour too (Task 9, Wolf's ruling at the first sitting); a `⚇` crowd keeps its own colour.
 
 Wolf: can you tell the five apart at a glance, and is he sharp at the closest zoom?
