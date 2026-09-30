@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1's creation
 
 # Story 12.2: Five Dwarves You Can Name
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -239,7 +239,7 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
   - [x] Comment on #136: the cause as measured, the fix, and the no-selection rule. It closes via
         the PR (`Closes #136`; the whole issue is fixed). Posted:
         https://github.com/jeicei75/frostvein/issues/136#issuecomment-5896512247
-- [ ] **Task 8: seat (AC8), then the full gate.** Write `12-2-signoff/vehicle-card.md` in the
+- [x] **Task 8: seat (AC8), then the full gate.** Write `12-2-signoff/vehicle-card.md` in the
   seat's launch form: in WSL `simd 7451`; in PowerShell
   `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')`; attach `tui 7451` in WSL. Steps:
   - (a) Wolf names all five by tunic colour at working zoom, then checks by clicking each one to
@@ -368,6 +368,12 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 - Task 4 mutation finding: focusing the FEET (the pre-#136 point) is NOT killed by the #136 pixel guard, because the widened aperture leaves the figure sharp either way (ratio 1.000). The unit test `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` kills it (tolerance tightened 0.25 to 0.03 with a discrimination assert), and an unscaled aperture is killed by the pixel guard (ratio 0.468).
 - Task 7 mutation table `mutations/12-2.sh` (`64e9237`, `a9d89d5`), run with `RUST_TEST_THREADS=1 scripts/mutate.sh`, all 10 KILLED: 1 identity from `spawn_rng` by `spawn_positions_for_seed_42_are_pinned`; 2 `from_save` ignores identity by `save_load_then_tick_matches_never_saved`; 3 one colour by `five_dwarves_on_walkable_surface`; 4 bridge `identity: None` by `save_then_load_rewinds_every_client`; 5 no roster by `the_roster_row_names_each_dwarf_in_his_colour_and_follows_an_identity_swap`; 6 one material and 7 reconcile ignores identity change, both by `a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it`; 8 HUD never shows the name by `the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears`; 9 DoF focus on `translation` by `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` (not the pixel guard); 10 aperture unscaled by the pixel guard `a_selected_dwarf_at_the_closest_zoom_is_sharp_with_dof_on`. Row 10 targets an `#[ignore]`d test, so it needs mutate.sh's `ignored` argument (the first run reported NOT-RUN).
 - Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` on `2d12195`, **GREEN, 4170 s**.
+- Task 8 seat (AC8), Wolf, 2026-09-30, on the pushed branch: (a) names by tunic colour, and the HUD name on click: yes
+  ("names are ok"). He first reported he could not see the name and then found it: the card never said WHERE the line
+  is (top-right, under the clock), and a 22 px tunic-coloured word on a dark sky is easy to miss. (b) sharp at the
+  closest zoom: yes. (c) Escape empties the name and restores the camp-focused DoF: yes. (d) the tui roster: yes.
+  Wolf's idea at (d): colour the tui dwarf glyphs by tunic too. Not built in 12.2, because the glyph colour already
+  carries job state and a later Epic 12 story adds profession colour.
 
 ### Completion Notes List
 
@@ -389,6 +395,7 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 
 | Date | Change |
 | --- | --- |
+| 2026-09-30 | Task 8: Wolf's seat passed (a)-(d). Status to `review`. |
 | 2026-09-29 | Tasks 1-7 done (Sonnet 5.5 dev agents, Opus 5.5 orchestrator). #136 RED 0.385 to GREEN 1.000; `12-2.sh` 10/10 KILLED; #136 commented; full gate GREEN on `2d12195` (4170 s, `RUST_TEST_THREADS=1`). Seat card written; Task 8's sitting still open. |
 | 2026-09-29 | Task 0: Wolf approved the draft, the no-selection DoF rule and the no-old-saves rule, all unchanged. |
 | 2026-09-29 | Story created on `16be274`. RED observed live: the wire carries no identity and the tui shows no names. #136 premise corrected: DoF already follows the selection, but focuses his feet with an aperture tuned for boot distance. Look draft rendered from the real GLB (`12-2-signoff/`). |
