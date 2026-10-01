@@ -1829,6 +1829,51 @@ fn a_sealed_off_pile_cell_does_not_cycle_a_stone_forever() {
     );
 }
 
+/// #132 in its haul form: every idle dwarf's delivery search for the sealed pile floods the whole
+/// valley, so without reusing that component across dwarves the shared budget runs out on the
+/// haul job every tick and the dig queued behind it is never attempted.
+#[test]
+fn a_sealed_off_pile_cell_does_not_starve_a_reachable_dig() {
+    let (mut world, _pile, _walls) = sealed_pile_world();
+    for _ in 0..100 {
+        world.step();
+    }
+    assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+    let worker = world.dwarves()[0].1;
+    let target = Pos {
+        x: worker.x + 1,
+        ..worker
+    };
+    assert!(world.set_tile(
+        Pos {
+            z: target.z - 1,
+            ..target
+        },
+        Tile::Solid(Material::Stone),
+    ));
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    let designated_at = world.tick();
+    for _ in 0..40 {
+        world.step();
+        let dig = world
+            .jobs()
+            .into_iter()
+            .find(|job| job.target == target)
+            .expect("the dig is queued")
+            .id;
+        if world.claims().iter().any(|(_, job)| *job == Some(dig)) {
+            return;
+        }
+    }
+    panic!(
+        "the reachable dig was not claimed within 40 ticks of designation (tick {designated_at})"
+    );
+}
+
 /// Positive control for the test above: the same fixture with one wall opened onto open ground
 /// hauls the stone into the pile, so the sealed test cannot pass because hauling is simply broken.
 #[test]
