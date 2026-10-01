@@ -142,8 +142,71 @@ Control (same recipe minus step 1, fresh daemon): `(45,62,12)` dug by tick 482. 
     Record the pick-up/drop cycle it shows (counts, ticks) in the Debug Log.
   - [x] Fix so the cycle stops while FR8 holds (the haul job stays queued and is retried, never
     dropped). The fix design is confirmed with the orchestrator before it lands.
-  - [ ] Mutation row(s) for the fix in `12-3.sh`. The `:760` NOTE is replaced by what the fix does.
+  - [x] Mutation row(s) for the fix in `12-3.sh`. The `:760` NOTE is replaced by what the fix does.
   - Wolf question 1 (ramp-shielded empty-goal digs) RULED **leave as FR8** (Wolf, 2026-10-01).
+
+### Review Findings
+
+Review run 1 (2026-10-01) on `19fce82` vs `bbf1518`. There were four layers, and every one ran cargo
+with its own `CARGO_TARGET_DIR`. None timed out. Blind Hunter (Sonnet) took `crates/sim-core/src`.
+Edge Case Hunter (Sonnet) took `crates/sim-core/tests` and `mutations/`. The Acceptance Auditor and
+Feature Auditor (Opus) took the whole diff. Severity runs HIGH (feature) / MED (edge+blind) / LOW
+(auditor), set at triage. There were 0 HIGH findings. 3 were dismissed: the budget test's
+`all(retry_after == 0)` is covered by its control run; an unwalkable-start component only ever
+misses a skip; and a forest-wide drag queues the reachable dig behind about 500 reachable crown
+jobs, which is FIFO by design (12.7).
+
+| # | Layer | Sev | Route | Finding |
+| --- | --- | --- | --- | --- |
+| 1 | accept | MED | decision -> #159 + patch | Multi-component budget residual |
+| 2 | edge+accept | MED | patch | AC2 assertion weaker than AC2 |
+| 3 | accept+orchestrator | LOW | patch | Task 7 record stale (unticked subtask, Completion Note, File List) |
+| 4 | feature | LOW | patch | `deferred-work.md` says the crown class is "fixed" |
+| 5 | blind | LOW | defer | Haul pays two searches per successful claim |
+| 6 | blind | LOW | patch (in-function) | Dead `!explored.is_empty()` guards |
+| 7 | accept | LOW | defer | Q2 mid-walk residual recorded only in a code NOTE |
+| 8 | edge+accept | LOW | defer | AC3 test soft spots |
+| 9 | edge | LOW | defer | Fixture prerequisites assumed, not asserted |
+
+- [x] [Review][Decision] Multi-component budget residual — **RESOLVED (Wolf, option 2): filed #159 (`bug` + `route:story`); NOTE extended + defer, below. Reason: unreachable on today's worlds.** When the dwarves stand in several
+  components whose sizes sum to more than `MAX_ASTAR_NODES`, or in one component larger than it,
+  the last flood exhausts the budget on EVERY tick. Job 0 is then never stamped, and nothing behind
+  it is attempted. That is #132's freeze in a form this fix does not close. The amended
+  `claim_jobs_bounds_aggregate_astar_expansions_per_tick` builds exactly this case (five 11,000-cell
+  plates), and the next tick repeats it identically. It cannot happen on today's worlds: the
+  dwarves' component is about 16k cells, and a walled-in dwarf adds only a small one. It needs
+  digging to grow the walkable area past about 50k. The `// NOTE:` at `lib.rs:452` names only the
+  single-component case, and the Key decision's "≤18,336, measured" holds for a fresh world only.
+- [x] [Review][Patch] Extend the budget NOTE to the summed bound and drop the dead guards (from decision 1) [crates/sim-core/src/lib.rs:452,511,531] —
+  The NOTE must say the bound is the SUM of the idle dwarves' distinct components (#159), not one component.
+  The two `!explored.is_empty()` guards in the same function go too (finding 6).
+- [x] [Review][Patch] AC2 assertion weaker than AC2 [crates/sim-core/tests/scenario.rs:826] —
+  `retry_after > designated_at` also passes for a job last stamped up to 19 ticks BEFORE
+  designation. "Re-stamped after designation" is `retry_after > designated_at + 20`
+  (`RETRY_COOLDOWN` is private to `lib.rs`). Re-mutate row 2 afterwards and confirm it still dies
+  on this assertion.
+- [x] [Review][Patch] Task 7 record stale [12-3-no-dwarf-stuck-after-digging.md:145,302,308-317] —
+  The "Mutation row(s)" subtask is unticked, but rows 4 and 5 exist and are KILLED (the auditor
+  re-killed them by hand). The `:760` NOTE is replaced (`lib.rs:812-813`). The Completion Note still
+  says "left for the later mutation step". The File List lists `lib.rs`/`scenario.rs` twice and
+  omits `metrics/12-3-…md` and `metrics/.session-cursors.json`.
+- [x] [Review][Patch] `deferred-work.md` overclaims [_bmad-output/implementation-artifacts/deferred-work.md:434] —
+  It says the crown class "is fixed in 12.3". What is fixed is the job-market STARVATION. The crown
+  marks themselves stay designated and retried forever under FR8 until 12.7 stops dig taking tree
+  tiles.
+**Patch pass closure table** (in-session, Wolf option 1, 2026-10-01; code in `15fd2b8`):
+
+| Item | Fix written for | Then tested | Named fixture / sabotage |
+| --- | --- | --- | --- |
+| Summed-bound NOTE + dead guards | the reader of `claim_jobs` (#159); the guards were unreachable | the old anchor: `3-2-the-dig.sh` "unreachable lower id starves a reachable dwarf", re-pointed at the guard-free block | that row re-run on `15fd2b8`: KILLED at `lib.rs:3185` (`an_unreachable_lower_id_does_not_starve_a_reachable_dwarf`); sim-core lib 63/63 |
+| AC2 `> designated_at + 20` | a stamp made 1-19 ticks BEFORE designation no longer passes | the old failure: `12-3.sh` row 2 "component skip not counted as attempted", re-run alone on `15fd2b8` | KILLED, and it dies on the STRENGTHENED assertion itself (`scenario.rs:828`, `retry_after=0`), not an earlier one. NOT constructed: a mutant whose stamps stop exactly at designation (the only case the old bound let through) |
+| Task 7 record | the subtask checkbox, Completion Note and File List | read against `12-3.sh` rows 4-5 and `git diff --stat main...HEAD` | rows 4/5 KILLED (Debug Log; re-killed by hand by the Acceptance Auditor) |
+| `deferred-work.md` crown wording | "fixed" → starvation fixed; marks stay until 12.7 | the Feature Auditor's live GREEN, `[[52,64,12],[65,56,13]]` | `(65,56,13)` is still designated after the fix |
+
+- [x] [Review][Defer] Haul pays two searches per successful claim [crates/sim-core/src/lib.rs:501-540] — deferred, a cost this change introduced but not a starvation risk
+- [x] [Review][Defer] Q2 mid-walk residual only in a code NOTE [crates/sim-core/src/lib.rs:812-813] — deferred, recorded in deferred-work.md
+- [x] [Review][Defer] AC3 test soft spots [crates/sim-core/tests/scenario.rs:263-271] — deferred, test hardening
+- [x] [Review][Defer] Fixture prerequisites assumed, not asserted [crates/sim-core/tests/scenario.rs:105-117, ~1844] — deferred, test hardening
 
 ### Scenario test skeleton (Task 0)
 
@@ -299,7 +362,7 @@ Sonnet 5.5 subagents x2 (Tasks 0-3; Task 7 reproduce, then fix), orchestrated an
 - **Tasks 4-6.** No new instrument code: the existing `tui --frame --z 12` `marks:` line showed GREEN, RED under mutation row 1, and GREEN again (Debug Log). `12-3.sh` has five rows, all KILLED. `deferred-work.md`'s never-cleared-digs entry now names the ramp-shielded class (Wolf Q1: leave as FR8) and #132's crown class (fixed here). Task 6's `:760` NOTE item was overtaken by Wolf pulling Q2 in: Task 7 replaced the NOTE with what the fix does.
 - **Added test beyond the skeleton:** `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig`, written because mutation row 5 survived. It pins that the delivery-disjoint clause is load-bearing for the budget, not just tidiness.
 - **AC6 (#132 closes):** closes via the PR's `Closes #132`. The red-then-green record is the Debug Log above. No comment posted on the issue.
-- **Task 7 (Wolf Q2).** `claim_jobs` now, for a `Haul` job, also computes the delivery goals (`work_positions(.., Some(item))`, the `free` set). The component skip fires when a known component holding the dwarf misses the pick-up goals OR the delivery goals; otherwise it searches dwarf to `free` first on the shared budget (completed failure records the component and skips; exhausted breaks as before), discards that path, then runs the existing dwarf to stone search. Valid because `astar_neighbours` is symmetric. `attempted` stays true on every skip/failure, so `retry_after` is still stamped (FR8). Residual, named in the replaced `:778` NOTE: a pile sealed off mid-walk can still cost one pick-up/drop per retry. `release_claim`/#153 untouched. Mutation row subtask left for the later mutation step.
+- **Task 7 (Wolf Q2).** `claim_jobs` now, for a `Haul` job, also computes the delivery goals (`work_positions(.., Some(item))`, the `free` set). The component skip fires when a known component holding the dwarf misses the pick-up goals OR the delivery goals; otherwise it searches dwarf to `free` first on the shared budget (completed failure records the component and skips; exhausted breaks as before), discards that path, then runs the existing dwarf to stone search. Valid because `astar_neighbours` is symmetric. `attempted` stays true on every skip/failure, so `retry_after` is still stamped (FR8). Residual, named in the replaced `:778` NOTE: a pile sealed off mid-walk can still cost one pick-up/drop per retry. `release_claim`/#153 untouched. Mutation rows 4 (delivery pre-search) and 5 (delivery clause of the component skip) are in `12-3.sh`, both KILLED (Debug Log, Task 5).
 
 - **Task 3: both release guards were GREEN on first run, no second defect.** AC3 scenario `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on`: holder (Id 2) in `Work` on `T`, `T - z1` set Empty, claim gone within 2 steps, channel job and designation kept, a second reachable dig designated at tick 26 was dug at tick 260. AC4 unit `a_holder_whose_every_work_position_is_walled_off_mid_walk_lets_go_in_one_step`: claim `None` after one `step`, job kept, `retry_after = tick + 20`, designation kept. (An idle dwarf's `JobState` after release is not asserted: `wander` can set `Walk` in the same step.)
 - **Task 1.** `astar_with_budget` now returns `(Option<path>, exhausted, explored)`; `explored` is the start's whole walkable component on a COMPLETED failure, empty otherwise. `claim_jobs` keeps a per-call `Vec<BTreeSet<Pos>>` of those components and, before searching from a dwarf, skips (still `attempted`, no budget) when the dwarf's position is in a known component that the job's goals miss. No resource, no cross-tick state, no `SaveState` change. `// NOTE:` records the assumption that a component fits in `MAX_ASTAR_NODES`.
@@ -307,13 +370,12 @@ Sonnet 5.5 subagents x2 (Tasks 0-3; Task 7 reproduce, then fix), orchestrated an
 
 ### File List
 
-- `crates/sim-core/src/lib.rs` (`claim_jobs`, `astar_with_budget`, Task 2 test, AC4 test)
-- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` (two rows re-pointed at the new `astar_with_budget` return shape)
-- `crates/sim-core/tests/scenario.rs` (AC1/AC2 test, AC3 test, Task 7 sealed-pile test + control)
-- `crates/sim-core/src/lib.rs` also: Task 7 delivery check in `claim_jobs`, `work_positions` NOTE
-- `crates/sim-core/tests/scenario.rs` also: `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig`
+- `crates/sim-core/src/lib.rs` (`claim_jobs` component skip + Task 7 delivery check, `astar_with_budget`, `work_positions` NOTE, Task 2 test, AC4 test)
+- `crates/sim-core/tests/scenario.rs` (AC1/AC2 test, AC3 test, Task 7 sealed-pile test + control, `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig`)
 - `_bmad-output/implementation-artifacts/mutations/12-3.sh` (NEW, 5 rows)
-- `_bmad-output/implementation-artifacts/deferred-work.md` (never-cleared-digs entry)
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` (two rows re-pointed at the new `astar_with_budget` return shape)
+- `_bmad-output/implementation-artifacts/deferred-work.md` (never-cleared-digs entry; review deferrals)
+- `_bmad-output/implementation-artifacts/metrics/12-3-no-dwarf-stuck-after-digging.md` (NEW), `metrics/.session-cursors.json`
 - `_bmad-output/implementation-artifacts/12-3-no-dwarf-stuck-after-digging.md`, `sprint-status.yaml`
 
 ## Change Log
