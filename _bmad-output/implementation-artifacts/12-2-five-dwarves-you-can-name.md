@@ -150,7 +150,8 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
   - [x] `tui/src/palette.rs`: `pub fn dwarf_colour(colour: protocol::DwarfColour) -> Rgb`, an
         exhaustive `match` using the approved hexes. Pin it in `every_look_is_pinned` (`:200`).
         **The `☺` glyph keeps its job-state colour**; the pinned state colours and `WALK_SGR`
-        (`tests/client.rs:1353`) must not change.
+        (`tests/client.rs:1353`) must not change. *(Superseded by Task 9 for a named dwarf: he is `☻` in his
+        tunic colour. A nameless dwarf keeps `☺` and its job-state colour.)*
   - [x] `view.rs::render` (`:228`): `map_h = h - 3`, and the roster row goes at `h-3`. Draw each
         name with `dwarf_colour` as `fg`, joined by two spaces, ascending by id, truncated to `w`.
         A dwarf with `identity: None` is skipped. The second `map_h` site (`:626`, the camera
@@ -353,8 +354,10 @@ Dismissed (8):
 
 - Do not put a `String` on the wire. The name is a closed enum (AD-6), which keeps `Entity` and
   `SavedDwarf` `Copy`. The spelling lives only in `client-core::dwarf_name_text`.
-- Do not recolour the tui's `☺`, the carrier `☻` or the crowd `⚇`. The roster row is the tui's
-  whole identity display (NFR10 display parity; no new tui input).
+- ~~Do not recolour the tui's `☺`, the carrier `☻` or the crowd `⚇`. The roster row is the tui's
+  whole identity display (NFR10 display parity; no new tui input).~~ *Superseded by Task 9 (Wolf's
+  rulings, 2026-09-30 and 2026-10-01): a named dwarf is `☻` in his tunic colour. The crowd `⚇` and a
+  nameless dwarf are unchanged, and there is still no new tui input.*
 - Do not add floating name labels, outlines or a selection ring in the gui. The draft specifies
   one HUD line.
 - Do not touch DoF with no selection, the boot framing, or any DoF constant the no-selection path
@@ -409,7 +412,7 @@ shows no `identity`, and the tui roster row is empty. Restore, and both are back
 
 The gui instrument cannot run until Task 4 builds it. Recipe (the Task 4 guards automate it; one
 fresh daemon per capture):
-`gui <port> --headless --static-world --lights-steady --subdiv 4 --select 0 --distance 4 --capture /abs/on.png`,
+`gui <port> --headless --static-world --lights-steady --subdiv 4 --select 0 --distance 4 --frames 160 --capture /abs/on.png`,
 then the same command with `--fx-off dof` → `/abs/off.png`.
 - RED: the centre-window sharpness ratio is < 0.8.
 - GREEN: it is ≥ 0.8.
@@ -493,6 +496,10 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 
 ### File List
 
+- Tasks 1-3: `crates/sim-core/src/{lib.rs,save.rs}`, `crates/sim-core/tests/{worldgen,save_load,scenario}.rs`,
+  `crates/protocol/src/lib.rs`, `crates/simd/src/{bridge.rs,main.rs}`, `crates/simd/tests/serve.rs`,
+  `crates/client-core/src/lib.rs`, `crates/tui/src/{palette.rs,view.rs}`, `crates/tui/tests/client.rs`, and every
+  `Entity { .. }` literal the new field broke; mutation tables re-pointed: `mutations/{2-2,6-2}-*.sh`
 - `crates/gui/src/{ingest.rs,pick.rs,project.rs,appearance.rs}`, `crates/gui/tests/{headless.rs,pixel_guard.rs}`
 - Mutation tables re-pointed: `mutations/{10-10-take-the-camera-where-you-want-it,11-2-the-miniature,5-3-a-window-onto-the-valley,8-3-master-of-time-and-the-skeleton-walks-in-3d}.sh`
 - Task 7/8 files: `mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`

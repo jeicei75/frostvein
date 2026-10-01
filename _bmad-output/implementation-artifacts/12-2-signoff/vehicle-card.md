@@ -13,6 +13,6 @@ Nain purple, Ori green, Bifur red, Frar gold, Dori blue. Hexes: red `#B23A34`, g
 
 (c) Press Escape. The name line empties and the depth of field goes back to the camp-focused look (sharp camp, soft far ridge).
 
-(d) Look at the attached tui. The row above `tick` lists `Nain  Ori  Bifur  Frar  Dori`, each in the same colour as his gui tunic, ordered by id. Each dwarf's `☺` on the map (and `☻` while he carries a stone) is drawn in his tunic colour too (Task 9, Wolf's ruling at the first sitting); a `⚇` crowd keeps its own colour.
+(d) Look at the attached tui. The row above `tick` lists `Nain  Ori  Bifur  Frar  Dori`, each in the same colour as his gui tunic, ordered by id. Each named dwarf is a `☻` on the map in his tunic colour, whether or not he carries a stone (Task 9, Wolf's rulings of 2026-09-30 and 2026-10-01: Windows Terminal paints `☺` as a yellow emoji); a `⚇` crowd keeps its own colour.
 
 Wolf: can you tell the five apart at a glance, and is he sharp at the closest zoom?
