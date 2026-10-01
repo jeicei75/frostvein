@@ -429,15 +429,18 @@ fn stream_frames(
         .spawn(move || read_messages(reader, message_tx))
         .context("could not spawn server reader thread")?;
 
-    // This mode exists to produce evidence, and colour is the only signal carrying job
-    // state. When crossterm drops every colour sequence the capture still looks perfectly
-    // well-formed, so a colour claim read off it is a claim about nothing — which has
-    // already happened once on this project. Refuse to be silently vacuous.
+    // This mode exists to produce evidence, and colour is the only signal carrying a named
+    // dwarf's tunic, the roster's colours and a nameless dwarf's job state. When crossterm
+    // drops every colour sequence the capture still looks perfectly well-formed, so a colour
+    // claim read off it is a claim about nothing — which has already happened once on this
+    // project. Refuse to be silently vacuous.
     if colour_is_suppressed() {
         eprintln!(
             "warning: NO_COLOR is set, so this capture contains no colour and cannot \
-             evidence dwarf job-state colours. Designation and zone markers remain evidenced \
-             because their glyphs are distinct. Re-run with NO_COLOR unset to check colours."
+             evidence dwarf colours: a named dwarf's tunic on the map and in the roster, or a \
+             nameless dwarf's job state. Roster names, designation and zone markers remain \
+             evidenced because their text and glyphs are distinct. Re-run with NO_COLOR \
+             unset to check colours."
         );
     }
 
