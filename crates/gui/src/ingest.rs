@@ -739,6 +739,7 @@ pub fn projection_systems(app: &mut App) {
                 setup_lighting_readout,
                 setup_clock_readout,
                 setup_name_readout,
+                refuse_select_of_a_missing_dwarf,
             ),
         )
         .add_systems(
@@ -2496,6 +2497,30 @@ fn dof_subject(
         .iter()
         .find(|(marker, _)| marker.0 == id)
         .map(|(_, transform)| transform.translation + Vec3::Y * (DWARF_HEIGHT_CELLS / 2.0))
+}
+
+/// Fails the run when `--select` names no dwarf in the connect snapshot.
+///
+/// The click path can only ever select a dwarf (`nearest_dwarf_to`); `--select` takes any id, and
+/// a missing one framed nothing while a campfire's framed the campfire -- an ordinary-looking
+/// capture of the wrong subject, with no log line. A `Startup` system, so it judges the startup
+/// selection only, against the snapshot the client connected with.
+fn refuse_select_of_a_missing_dwarf(
+    selected: Res<crate::pick::SelectedDwarf>,
+    mirror: Res<MirrorResource>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let Some(id) = selected.0 else {
+        return;
+    };
+    if !mirror
+        .0
+        .entities()
+        .any(|entity| entity.id == id && entity.kind == protocol::EntityKind::Dwarf)
+    {
+        eprintln!("--select {id}: no dwarf has that id in the daemon's snapshot");
+        exit.write(AppExit::error());
+    }
 }
 
 /// The aperture for a selected subject `focal_distance` away.
@@ -4872,14 +4897,6 @@ mod tests {
         );
     }
 
-    /// Depth of field must focus the SELECTED DWARF, not the rig's aim point.
-    ///
-    /// `frame_selected_dwarf` centres him with `CameraRig::frame_render_point`, which writes the
-    /// focus OFFSET from him by the composition push -- so `rig.focus` lands about 7.3 units short
-    /// of the dwarf at `SELECT_DISTANCE` (33 * 20/90). Focusing `rig.focus` therefore puts the
-    /// figure the operator just picked OUTSIDE the focal plane at the ruled f/0.05, while every
-    /// boot-framing measurement stays correct, because at boot the subject IS the aim point.
-    /// Wolf reported it from the seat, 2026-09-21.
     /// `--select` must reach the live selection, and an explicit `--distance` must survive it:
     /// `frame_selected_dwarf` drops the zoom to `SELECT_DISTANCE` on the frame the selection
     /// changes, and the startup selection is a change on frame one.
@@ -4958,6 +4975,69 @@ mod tests {
         );
     }
 
+    /// `--select` of an id that is not a drawn dwarf must fail the run, not shoot the unselected
+    /// frame: a missing id framed nothing and a campfire id framed the campfire, both silently.
+    #[test]
+    fn select_of_a_missing_or_non_dwarf_id_fails_the_run() {
+        let camp = || Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![
+                protocol::Entity {
+                    id: 2,
+                    kind: protocol::EntityKind::Dwarf,
+                    pos: [1, 0, 0],
+                    state: protocol::JobState::Idle,
+                    light: None,
+                    identity: None,
+                },
+                protocol::Entity {
+                    id: 5,
+                    kind: protocol::EntityKind::Campfire,
+                    pos: [0, 0, 0],
+                    state: protocol::JobState::Idle,
+                    light: Some(protocol::LightKind::Campfire),
+                    identity: None,
+                },
+            ],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let exit_after_one_frame = |id: &str| {
+            let (mut app, _sender, _server) = configured_app_with_snapshot(
+                &["--capture", "x.png", "--frames", "1", "--select", id],
+                camp(),
+            );
+            app.update();
+            app.should_exit()
+        };
+        assert!(
+            exit_after_one_frame("2").is_none(),
+            "a real dwarf's id must run on"
+        );
+        for id in ["99", "5"] {
+            assert!(
+                exit_after_one_frame(id).is_some_and(|exit| exit.is_error()),
+                "--select {id} names no dwarf and must fail the run"
+            );
+        }
+    }
+
+    /// Depth of field must focus the SELECTED DWARF, not the rig's aim point.
+    ///
+    /// `frame_selected_dwarf` centres him with `CameraRig::frame_render_point`, which writes the
+    /// focus OFFSET from him by the composition push -- so `rig.focus` lands about 7.3 units short
+    /// of the dwarf at `SELECT_DISTANCE` (33 * 20/90). Focusing `rig.focus` therefore puts the
+    /// figure the operator just picked OUTSIDE the focal plane at the ruled f/0.05, while every
+    /// boot-framing measurement stays correct, because at boot the subject IS the aim point.
+    /// Wolf reported it from the seat, 2026-09-21.
+    ///
+    /// And clearing the selection must hand DoF back: the aim point and the tuned f/0.05, or an
+    /// Escape keeps the widened close-range aperture (AC7, "behaves exactly as today").
     #[test]
     fn depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point() {
         let snapshot = Snapshot {
@@ -5040,6 +5120,31 @@ mod tests {
             (aperture - expected).abs() / expected < 0.05,
             "the selected aperture must scale with the focal distance: f/{aperture} at {to_dwarf}, \
              expected about f/{expected}"
+        );
+
+        // Escape: the no-selection rule again, from where the selection left the camera.
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(None));
+        app.update();
+        let (rig_aim, focal, aperture) = {
+            let world = app.world_mut();
+            let mut q = world.query::<(&CameraRig, &super::DepthOfField)>();
+            let (rig, dof) = q.single(world).expect("one camera");
+            let camera = rig.transform().translation;
+            (
+                camera.distance(super::world_to_render_f32(rig.focus)),
+                dof.focal_distance,
+                dof.aperture_f_stops,
+            )
+        };
+        assert!(
+            (focal - rig_aim).abs() < 0.03,
+            "a cleared selection must focus the rig's aim point again: focal_distance={focal}, \
+             aim point {rig_aim} (the dwarf was {to_dwarf})"
+        );
+        assert!(
+            (aperture - 0.05).abs() < 1e-6,
+            "a cleared selection must restore the tuned f/0.05, not keep f/{aperture}"
         );
     }
 

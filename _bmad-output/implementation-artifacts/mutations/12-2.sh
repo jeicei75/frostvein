@@ -98,3 +98,35 @@ old = "                        glyph: '☻',\n                        fg: dwarf_
 assert s.count(old) == 1
 p.write_text(s.replace(old, "                        glyph: '☺',\n                        fg: dwarf_colour(identity.colour),\n"))
 PY
+
+mutation "deselect keeps the selected focal distance" gui depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '                dof.focal_distance = dof_focal_distance(transform.translation(), rig);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let _ = rig;\n'))
+PY
+
+mutation "deselect keeps the widened aperture" gui depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '                dof.aperture_f_stops = DOF_APERTURE_F_STOPS;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "--select of a missing dwarf runs on" gui select_of_a_missing_or_non_dwarf_id_fails_the_run <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        eprintln!("--select {id}: no dwarf has that id in the daemon\'s snapshot");\n        exit.write(AppExit::error());\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        eprintln!("--select {id}: no dwarf has that id in the daemon\'s snapshot");\n'))
+PY
+
+mutation "--select accepts a campfire id" gui select_of_a_missing_or_non_dwarf_id_fails_the_run <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '        .any(|entity| entity.id == id && entity.kind == protocol::EntityKind::Dwarf)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .any(|entity| entity.id == id)\n'))
+PY
