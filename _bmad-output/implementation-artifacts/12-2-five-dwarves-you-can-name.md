@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1's creation
 
 # Story 12.2: Five Dwarves You Can Name
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -250,7 +250,7 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
   Tell him old `frostvein.save` files will not load (Ctrl+S a fresh one first). Then run the
   full `scripts/gate.sh` at `RUST_TEST_THREADS=1` ([[gate-ooms-at-default-parallelism]]).
 
-- [ ] **Task 9: tui dwarf glyphs in tunic colour (Wolf's seat ruling, 2026-09-30).** At (d) Wolf: the tui dwarves
+- [x] **Task 9: tui dwarf glyphs in tunic colour (Wolf's seat ruling, 2026-09-30).** At (d) Wolf: the tui dwarves
   are all orange/yellow; draw them in their colours. The glyph colour was job state (FR22/FR4), three orange-brown
   shades he could not tell apart; Wolf RULED tunic colour, job state leaves a named dwarf's glyph.
   - [x] A named dwarf's `☺` and carrier `☻` take `dwarf_colour`; crowd `⚇` and a nameless dwarf are unchanged.
@@ -263,7 +263,8 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
         face that ignores the colour, while `☻` (not an emoji character) took it in his terminal. Wolf RULED: a
         named dwarf is `☻` in his tunic colour, carry state dropped from it too. Test RED (`☺` where `☻` was due)
         then GREEN on `66e6ed4`; new `12-2.sh` row 12 + row 11 run alone: 2/2 KILLED. FR22 and README amended.
-  - [ ] Wolf sees the five colours on the tui map.
+  - [x] Wolf sees the five colours on the tui map (2026-10-01: "yes"). Red, blue and purple read dim on the near-black
+        background (contrast ~3.3:1 vs gold 8.7, green 5.1); parked, not tuned here.
 
 ## Dev Notes
 
@@ -415,6 +416,7 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 
 | Date | Change |
 | --- | --- |
+| 2026-10-01 | Task 9 closed: Wolf confirmed the five `☻` colours. Status to `review`. |
 | 2026-10-01 | Task 9: Wolf saw five yellow `☺` (the terminal's emoji font ignores the colour); named dwarves are now `☻` in tunic colour, carry state off them too. FR22 amended again. |
 | 2026-09-30 | Task 9 (Wolf's seat ruling): named dwarves' tui glyphs in tunic colour, job state off them; FR22 amended. Status back to `in-progress` until Wolf sees it. |
 | 2026-09-30 | Task 8: Wolf's seat passed (a)-(d). Status to `review`. |
