@@ -833,6 +833,89 @@ fn unreachable_digs_never_starve_a_reachable_one() {
     }
 }
 
+/// FR51: a channel worker whose own ground is removed under it lets go of the job and the crew goes
+/// on with other work. The channel job and its designation stay (Wolf's 2026-08-06 ruling).
+#[test]
+fn a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let dwarf = world.dwarves()[0].1;
+    let t = Pos {
+        x: dwarf.x + 2,
+        ..dwarf
+    };
+    let below = Pos { z: t.z - 1, ..t };
+    assert!(is_standable(&world, t));
+    assert!(matches!(world.tile(below), Some(Tile::Solid(_))));
+    assert!(matches!(
+        world.tile(Pos {
+            z: below.z - 1,
+            ..t
+        }),
+        Some(Tile::Solid(_))
+    ));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(t, t),
+    });
+    let holder = loop {
+        assert!(world.tick() < 200, "the channel was never worked");
+        world.step();
+        if let Some((id, _, JobState::Work, _)) = world
+            .dwarves()
+            .into_iter()
+            .find(|(_, pos, state, _)| *pos == t && *state == JobState::Work)
+        {
+            break id;
+        }
+    };
+    assert!(world.set_tile(below, Tile::Empty));
+
+    let reachable = Pos {
+        x: 45,
+        y: 62,
+        z: 12,
+    };
+    assert_eq!(world.tile(reachable), Some(Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(reachable, reachable),
+    });
+    let removed_at = world.tick();
+    for _ in 0..2 {
+        world.step();
+    }
+    assert_eq!(
+        world.claims().into_iter().find(|(id, _)| *id == holder),
+        Some((holder, None)),
+        "the holder must let go within 2 ticks of losing its support"
+    );
+    assert!(world.tick() <= removed_at + 2);
+    assert!(
+        world
+            .jobs()
+            .iter()
+            .any(|job| job.kind == JobKind::Channel && job.target == t)
+    );
+    assert!(
+        world
+            .designations()
+            .contains(&(t, DesignationKind::Channel))
+    );
+
+    for _ in 0..600 {
+        if world.tile(reachable) == Some(Tile::Empty) {
+            break;
+        }
+        world.step();
+    }
+    assert_eq!(world.tile(reachable), Some(Tile::Empty));
+    assert!(
+        world
+            .designations()
+            .contains(&(t, DesignationKind::Channel))
+    );
+}
+
 #[test]
 fn cancelling_a_claimed_dig_releases_the_dwarf_without_touching_the_tile() {
     let mut world = World::generate(42, Dims::DEFAULT);

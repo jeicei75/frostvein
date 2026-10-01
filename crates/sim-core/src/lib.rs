@@ -3921,6 +3921,81 @@ mod tests {
     }
 
     #[test]
+    fn a_holder_whose_every_work_position_is_walled_off_mid_walk_lets_go_in_one_step() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let target = Pos { x: 15, y: 10, z: 1 };
+        let only_work_position = Pos { x: 14, y: 10, z: 1 };
+        for x in 10..=14 {
+            for (pos, tile) in [
+                (Pos { x, y: 10, z: 0 }, Tile::Solid(Material::Stone)),
+                (Pos { x, y: 10, z: 1 }, Tile::Empty),
+            ] {
+                assert!(world.set_tile(pos, tile));
+            }
+        }
+        assert!(world.set_tile(Pos { z: 0, ..target }, Tile::Solid(Material::Stone)));
+        assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+        for (dx, dy) in [(1, 0), (0, -1), (0, 1)] {
+            assert!(world.set_tile(
+                Pos {
+                    x: target.x + dx,
+                    y: target.y + dy,
+                    z: target.z,
+                },
+                Tile::Solid(Material::Stone),
+            ));
+        }
+        let holder = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("holder exists")
+            .id();
+        *world.ecs.get_mut::<Pos>(holder).unwrap() = Pos { x: 11, y: 10, z: 1 };
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        world
+            .ecs
+            .resource_mut::<super::Designations>()
+            .0
+            .insert(target, super::DesignationKind::Dig);
+        world.ecs.get_mut::<super::CurrentJob>(holder).unwrap().0 = Some(job.id);
+        world.ecs.entity_mut(holder).insert((
+            super::Path(vec![
+                Pos { x: 12, y: 10, z: 1 },
+                Pos { x: 13, y: 10, z: 1 },
+                only_work_position,
+            ]),
+            super::WorkProgress(0),
+        ));
+
+        // The terrain change and the path wipe `execute_jobs` does after any sim dig.
+        assert!(
+            world
+                .ecs
+                .resource_mut::<Terrain>()
+                .set_tile(only_work_position, Tile::Solid(Material::Stone))
+        );
+        super::clear_paths(&mut world.ecs);
+        world.step();
+
+        assert_eq!(world.claims()[0].1, None);
+        let jobs = world.jobs();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].retry_after, world.tick() + 20);
+        assert_eq!(
+            world.designations(),
+            vec![(target, super::DesignationKind::Dig)]
+        );
+    }
+
+    #[test]
     fn stepping_advances_the_world_tick_once() {
         let mut world = World::generate(42, Dims::DEFAULT);
 

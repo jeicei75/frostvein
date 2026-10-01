@@ -108,7 +108,7 @@ Control (same recipe minus step 1, fresh daemon): `(45,62,12)` dug by tick 482. 
   goes red under the fix. Re-fixture it so it still proves that one tick's claim-time A* expansions
   stay ≤ `MAX_ASTAR_NODES`, e.g. with reachable-but-long searches, or dwarves in separate large
   components. Record the amendment and its reason in Completion Notes.
-- [ ] **Task 3 — release guards (AC3, AC4).** These are expected green on the current code; they pin
+- [x] **Task 3 — release guards (AC3, AC4).** These are expected green on the current code; they pin
   behaviour the fix must not break. If either goes red, it is a second defect and is fixed here.
   - Scenario test (AC3): use the channel-on-`T` fixture from "Found at creation". Wait for a dwarf in
     `Work` on `T`, `set_tile(T - z1, Empty)` (the cell below `T - z1` is soil on `DEFAULT_SEED` when
@@ -282,13 +282,15 @@ recipe aimed wrong. The crown trigger dies when 12.7 stops dig taking tree tiles
 
 ### Completion Notes List
 
+- **Task 3: both release guards were GREEN on first run, no second defect.** AC3 scenario `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on`: holder (Id 2) in `Work` on `T`, `T - z1` set Empty, claim gone within 2 steps, channel job and designation kept, a second reachable dig designated at tick 26 was dug at tick 260. AC4 unit `a_holder_whose_every_work_position_is_walled_off_mid_walk_lets_go_in_one_step`: claim `None` after one `step`, job kept, `retry_after = tick + 20`, designation kept. (An idle dwarf's `JobState` after release is not asserted: `wander` can set `Walk` in the same step.)
 - **Task 1.** `astar_with_budget` now returns `(Option<path>, exhausted, explored)`; `explored` is the start's whole walkable component on a COMPLETED failure, empty otherwise. `claim_jobs` keeps a per-call `Vec<BTreeSet<Pos>>` of those components and, before searching from a dwarf, skips (still `attempted`, no budget) when the dwarf's position is in a known component that the job's goals miss. No resource, no cross-tick state, no `SaveState` change. `// NOTE:` records the assumption that a component fits in `MAX_ASTAR_NODES`.
 - **Task 2 amendment.** `claim_jobs_bounds_aggregate_astar_expansions_per_tick` asserted jobs 5..9 were never attempted (the starvation shape); under the fix those jobs are stamped for free, so it went red as predicted. Re-fixtured: each of the five dwarves stands on its own 11,000-cell plate (separate components), so five floods cost 55,000 > `MAX_ASTAR_NODES`. Run one: four floods fit, the fifth hits the budget, so no job is stamped. Control run (fifth plate shrunk): all ten jobs stamped, proving the system ran. Checked that raising `MAX_ASTAR_NODES` to 500,000 turns it red.
 
 ### File List
 
-- `crates/sim-core/src/lib.rs` (`claim_jobs`, `astar_with_budget`, Task 2 test)
-- `crates/sim-core/tests/scenario.rs` (AC1/AC2 test)
+- `crates/sim-core/src/lib.rs` (`claim_jobs`, `astar_with_budget`, Task 2 test, AC4 test)
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` (two rows re-pointed at the new `astar_with_budget` return shape)
+- `crates/sim-core/tests/scenario.rs` (AC1/AC2 test, AC3 test)
 
 ## Change Log
 
