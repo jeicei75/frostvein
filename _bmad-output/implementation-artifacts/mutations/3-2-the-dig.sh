@@ -785,9 +785,7 @@ old = '''                let path = match astar_with_budget(
                 ) {
                     (Some(path), false, _) => path,
                     (None, false, explored) => {
-                        if !explored.is_empty() {
-                            components.push(explored);
-                        }
+                        components.push(explored);
                         continue;
                     }
                     (None, true, _) => break 'jobs,

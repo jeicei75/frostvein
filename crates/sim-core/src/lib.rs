@@ -449,8 +449,9 @@ fn claim_jobs(
     let mut astar_nodes_remaining = MAX_ASTAR_NODES;
     // Walkable components that a COMPLETED failed search has already flooded this call (#132).
     // Per call only: terrain can change between ticks, so nothing is cached across them.
-    // NOTE: assumes a component fits in `MAX_ASTAR_NODES`; a larger one never completes, so it is
-    // never recorded and is re-flooded (budget-bounded) every tick.
+    // NOTE: assumes the idle dwarves' distinct components SUM to at most `MAX_ASTAR_NODES`. Past
+    // that, the last flood exhausts the budget every tick, so the job it was attempting is never
+    // stamped and starves the jobs behind it (#159). One ~16k component today.
     let mut components: Vec<BTreeSet<Pos>> = Vec::new();
 
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
@@ -508,9 +509,7 @@ fn claim_jobs(
                     ) {
                         (Some(_), false, _) => {}
                         (None, false, explored) => {
-                            if !explored.is_empty() {
-                                components.push(explored);
-                            }
+                            components.push(explored);
                             continue;
                         }
                         (None, true, _) => break 'jobs,
@@ -528,9 +527,7 @@ fn claim_jobs(
                 ) {
                     (Some(path), false, _) => path,
                     (None, false, explored) => {
-                        if !explored.is_empty() {
-                            components.push(explored);
-                        }
+                        components.push(explored);
                         continue;
                     }
                     (None, true, _) => break 'jobs,

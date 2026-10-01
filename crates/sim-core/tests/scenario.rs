@@ -823,8 +823,10 @@ fn unreachable_digs_never_starve_a_reachable_one() {
             .iter()
             .find(|job| job.target == target)
             .expect("an unreachable dig stays queued");
+        // A stamp at tick t sets t + RETRY_COOLDOWN (20); more than designated_at + 20 means the
+        // stamp itself came after designation.
         assert!(
-            job.retry_after > designated_at,
+            job.retry_after > designated_at + 20,
             "job {:?} at {:?} was never retried: retry_after={}",
             job.id,
             target,
