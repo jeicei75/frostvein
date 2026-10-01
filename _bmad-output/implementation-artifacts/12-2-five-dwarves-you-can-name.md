@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1's creation
 
 # Story 12.2: Five Dwarves You Can Name
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -287,31 +287,31 @@ after it).
   purple and 0.2128 from gold. Margins are 0.0397 and 0.0766 against a floor of 0.03; the all-red sabotage reads
   0.020. The Debug Log records the `--clock 8` move but not the rule change, and the guard's doc comment still
   states the spec's rule.
-- [ ] [Review][Patch] Record the `--select` guard's relative rule as a deviation in the Debug Log, and make the guard's
+- [x] [Review][Patch] Record the `--select` guard's relative rule as a deviation in the Debug Log, and make the guard's
   doc comment say what it checks (from the decision above). [crates/gui/tests/pixel_guard.rs:705-708, this file Debug Log]
-- [ ] [Review][Patch] Pin the deselect reset (edge, LOW, latent silent failure). Nothing asserts that clearing the
+- [x] [Review][Patch] Pin the deselect reset (edge, LOW, latent silent failure). Nothing asserts that clearing the
   selection restores the no-selection focal distance and `DOF_APERTURE_F_STOPS`. Dropping the reset leaves every
   test green, and an Escape would keep the widened aperture, breaking AC7's "behaves exactly as today".
   Extend `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` to clear the selection and assert both
   values, then add a `12-2.sh` row. [crates/gui/src/ingest.rs:2527]
-- [ ] [Review][Patch] `--select` of an id that is not a drawn dwarf is a silent no-op (edge, MED, instrument).
+- [x] [Review][Patch] `--select` of an id that is not a drawn dwarf is a silent no-op (edge, MED, instrument).
   `--select 99` or `--select 4294967295` captures an ordinary unselected frame with no log line. A non-dwarf id such
   as the campfire's would frame the campfire. The click path checks for a dwarf (`nearest_dwarf_to`) and `--select`
   does not. Fix: refuse loudly, so a capture asked to select a missing or non-dwarf id fails rather than shooting
   the unselected frame. [crates/gui/src/ingest.rs:1214, crates/gui/src/pick.rs:225]
-- [ ] [Review][Patch] The tui's `NO_COLOR` warning still says the colour carries job state (feature, LOW,
+- [x] [Review][Patch] The tui's `NO_COLOR` warning still says the colour carries job state (feature, LOW,
   misreports an instrument). Since Task 9, colour carries each named dwarf's tunic and the roster. [crates/tui/src/main.rs:439]
-- [ ] [Review][Patch] `same_seed_and_commands_remain_deterministic` does not compare `identities()`, though Task 1
+- [x] [Review][Patch] `same_seed_and_commands_remain_deterministic` does not compare `identities()`, though Task 1
   is ticked for it (accept, LOW, false record). [crates/sim-core/tests/scenario.rs:1406]
-- [ ] [Review][Patch] A doc comment is on the wrong test (edge, LOW). The `--select` test was inserted under
+- [x] [Review][Patch] A doc comment is on the wrong test (edge, LOW). The `--select` test was inserted under
   `depth_of_field_focuses_…`'s #136 doc comment, so that comment now heads the `--select` test.
   [crates/gui/src/ingest.rs:4874]
-- [ ] [Review][Patch] Some records still describe the pre-`☻` rule (accept, LOW). The seat card's (d) still says
+- [x] [Review][Patch] Some records still describe the pre-`☻` rule (accept, LOW). The seat card's (d) still says
   "`☺` … (and `☻` while he carries a stone)". Scope guardrail 2 and Task 3's "`☺` keeps its job-state colour" are
   not marked superseded by Task 9. [12-2-signoff/vehicle-card.md (d), this file :152, :275]
-- [ ] [Review][Patch] The README is missing `--select <id>` from the gui flag table and the roster row from the tui
+- [x] [Review][Patch] The README is missing `--select <id>` from the gui flag table and the roster row from the tui
   paragraph (accept, LOW). [README.md:249-266]
-- [ ] [Review][Patch] Record fixes (accept+feature, LOW):
+- [x] [Review][Patch] Record fixes (accept+feature, LOW):
   - The File List omits the Tasks 1-3 files.
   - The Verification recipe's gui command lacks the `--frames` that a capture requires.
   [this file, File List and Verification]
@@ -347,6 +347,23 @@ Dismissed (8):
 - The HUD line being easy to miss: the seat passed, and the card now says where it is.
 - The full gate on HEAD: it is the next step, not a code finding.
 - The README File List: folded into the record-fixes item.
+
+Patch pass 1, 2026-10-01 (fresh session, `2fac78e`..`0833033`). All 9 patches landed. Full gate
+`RUST_TEST_THREADS=1 scripts/gate.sh` on `0833033`: **GREEN, exit 0, 3004 s**. New `12-2.sh` rows 13-17 run alone:
+5/5 KILLED, each on the assertion it names. No row is REWORK: this is the first patch round, so no earlier
+round's fix is being re-closed.
+
+| Item | Side written for | Side tested | Pre-existing-state fixture |
+| --- | --- | --- | --- |
+| `--select` guard records its relative rule | the record (doc + Debug Log) | the code: the doc now restates the guard's `margin_a`/`margin_b` asserts, and the guard passed in the full gate | the shipped `--clock 8` frame figures from the review (window [0.4275, 0.2947, 0.2778]) |
+| Deselect reset pinned | clearing a selection | the selected side too: the body-focus and scaled-aperture asserts still pass first, then the cleared side | the camera left where `frame_selected_dwarf` put it, DoF at the selected values (`depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point`); rows 13-14 KILLED |
+| `--select` of no dwarf fails the run | a missing id (99) and a non-dwarf id (campfire 5) | a real dwarf's id (2) runs on; on the real daemon, the two pixel guards select dwarves 0 and 2 and pass in the full gate | `select_of_a_missing_or_non_dwarf_id_fails_the_run`'s connect snapshot of a dwarf plus a campfire; rows 15-16 KILLED |
+| tui `NO_COLOR` warning | the named-dwarf world (tunic + roster) | the nameless dwarf's job-state clause kept; the client test reading the warning (`stderr.contains("NO_COLOR")`) passes | `tests/client.rs` NO_COLOR capture (`capture_walking_dwarf` with `no_color`) |
+| `same_seed_and_commands…` compares `identities()` | identity determinism | that it holds on the real seed-42 worldgen for 200 ticks, and fails when two same-seed worlds draw different identities | `World::generate(42, Dims::DEFAULT)` pair; row 17 KILLED at the new line, inside the tick loop |
+| #136 doc comment back on its test | the DoF test | the `--select` test keeps only its own comment | n/a, comment only |
+| Records describe the `☻` rule | seat card (d), Task 3, guardrail 2 | read against `view.rs`'s named/nameless arms and the Task 9 rulings | `12-2-signoff/vehicle-card.md` as Wolf sat it; nameless `☺` kept in both |
+| README `--select` + roster row | the gui flag table, the tui paragraph | read against `parse_args_from`, `refuse_select_of_a_missing_dwarf` and `view.rs`'s roster at `h-3` | README as on `27824a9` |
+| Record fixes (File List, recipe `--frames`) | the File List / Verification | the recipe's `--frames 160` is the harness's `FRAMES` (`pixel_guard.rs:30`) | the Tasks 1-3 commits `1b4f8c7`..`00c9314` |
 
 ## Dev Notes
 
@@ -480,6 +497,7 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
   Wolf's idea at (d): colour the tui dwarf glyphs by tunic too. Not built in 12.2, because the glyph colour already
   carries job state and a later Epic 12 story adds profession colour. **Wolf then RULED it in (Task 9): tunic colour,
   job state dropped from a named dwarf's glyph.**
+- Patch pass 1 mutations, `12-2.sh` rows 13-17 run alone with `RUST_TEST_THREADS=1 scripts/mutate.sh`, 5/5 KILLED: 13 deselect keeps the focal distance and 14 deselect keeps the widened aperture, both by `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` (its two new cleared-selection asserts); 15 `--select` of a missing dwarf runs on and 16 `--select` accepts a campfire id, both by `select_of_a_missing_or_non_dwarf_id_fails_the_run`; 17 same seed draws different identities by `same_seed_and_commands_remain_deterministic` (the new `identities()` line).
 - Task 9 on `e59b1af`: new test RED then GREEN; `12-2.sh` row 11 + the two re-pointed 3.3 rows (carrier never drawn,
   carrier over crowd) run alone with `RUST_TEST_THREADS=1 scripts/mutate.sh`: 3/3 KILLED. The tui walk-colour client
   test still holds: its dwarf is nameless.
@@ -509,6 +527,7 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 
 | Date | Change |
 | --- | --- |
+| 2026-10-01 | Patch pass 1: 9/9 review patches landed (`2fac78e`..`0833033`); `--select` of no dwarf now fails the run; deselect DoF reset pinned; `12-2.sh` rows 13-17 KILLED; full gate GREEN on `0833033` (3004 s). Status to `review` for round 2. |
 | 2026-10-01 | Code review run 1 on `1068bb0` (4 layers): 0 HIGH; Wolf took decision 1 (accept the relative `--select` guard, record it), left 9 patches as action items, 10 deferred. Status to `in-progress`. |
 | 2026-10-01 | Task 9 closed: Wolf confirmed the five `☻` colours. Status to `review`. |
 | 2026-10-01 | Task 9: Wolf saw five yellow `☺` (the terminal's emoji font ignores the colour); named dwarves are now `☻` in tunic colour, carry state off them too. FR22 amended again. |
