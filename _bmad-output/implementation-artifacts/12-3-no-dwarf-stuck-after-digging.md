@@ -137,12 +137,12 @@ Control (same recipe minus step 1, fresh daemon): `(45,62,12)` dug by tick 482. 
 
 - [ ] **Task 7 — Wolf question 2, PULLED IN (Wolf, 2026-10-01).** The sealed-off stockpile cell
   pick-up/drop loop (`lib.rs:760` NOTE; 12.1 handover `12-1-stones-stay-out-of-the-fire.md:320-322`).
-  - Reproduce first (M2-27): a scenario test, red on the unfixed code and recorded as red, where the
+  - [x] Reproduce first (M2-27): a scenario test, red on the unfixed code and recorded as red, where the
     only free zone cell is standable but sealed off from every dwarf, and a stone is reachable.
     Record the pick-up/drop cycle it shows (counts, ticks) in the Debug Log.
-  - Fix so the cycle stops while FR8 holds (the haul job stays queued and is retried, never
+  - [x] Fix so the cycle stops while FR8 holds (the haul job stays queued and is retried, never
     dropped). The fix design is confirmed with the orchestrator before it lands.
-  - Mutation row(s) for the fix in `12-3.sh`. The `:760` NOTE is replaced by what the fix does.
+  - [ ] Mutation row(s) for the fix in `12-3.sh`. The `:760` NOTE is replaced by what the fix does.
   - Wolf question 1 (ramp-shielded empty-goal digs) RULED **leave as FR8** (Wolf, 2026-10-01).
 
 ### Scenario test skeleton (Task 0)
@@ -279,8 +279,12 @@ recipe aimed wrong. The crown trigger dies when 12.7 stops dig taking tree tiles
 
 - **Task 0 RED** (unfixed `702446e` code; `cargo test -p sim-core --test scenario unreachable_digs_never_starve_a_reachable_one`, 22 s): `the reachable dig was not claimed within 40 ticks of designation`. Probe at tick 141 (designated at 100): the 200 unreachable jobs' distinct `retry_after` values were frozen at `[0, 26..33, 36, 37]` (none re-stamped since the first ticks); the reachable job `JobId(200)` target `(45,62,12)` had `retry_after: 0`, never attempted.
 - **Task 1 GREEN**: same test, 12.6 s: reachable dig claimed at designation +6, dug at +204.
+- **Task 7 RED** (unfixed `19823ac` code; `cargo test -q -p sim-core --test scenario a_sealed_off`): fixture seed 42, stone 10 at `(66,61,25)`, one-cell pile at `stone + (0,6)` walled on all four sides (cells asserted standable first). 7 pick-ups in 400 ticks at 140 (dwarf 1), 271, 299, 327, 355, 383, 411 (dwarf 0), a steady 28-tick period; 7 drops one tick after each, all at the stone's own tile `(66,61,25)`; `retry_after` stamps `{0,161,292,320,348,376,404,432}` (job kept and re-stamped, FR8 holds). Control `an_opened_pile_cell_receives_the_stone` (one wall opened) passes: stone ends on the pile.
+- **Task 7 GREEN**: same test asserts 0 pick-ups and passes; control still passes; `cargo test -q -p sim-core` all green.
 
 ### Completion Notes List
+
+- **Task 7 (Wolf Q2).** `claim_jobs` now, for a `Haul` job, also computes the delivery goals (`work_positions(.., Some(item))`, the `free` set). The component skip fires when a known component holding the dwarf misses the pick-up goals OR the delivery goals; otherwise it searches dwarf to `free` first on the shared budget (completed failure records the component and skips; exhausted breaks as before), discards that path, then runs the existing dwarf to stone search. Valid because `astar_neighbours` is symmetric. `attempted` stays true on every skip/failure, so `retry_after` is still stamped (FR8). Residual, named in the replaced `:778` NOTE: a pile sealed off mid-walk can still cost one pick-up/drop per retry. `release_claim`/#153 untouched. Mutation row subtask left for the later mutation step.
 
 - **Task 3: both release guards were GREEN on first run, no second defect.** AC3 scenario `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on`: holder (Id 2) in `Work` on `T`, `T - z1` set Empty, claim gone within 2 steps, channel job and designation kept, a second reachable dig designated at tick 26 was dug at tick 260. AC4 unit `a_holder_whose_every_work_position_is_walled_off_mid_walk_lets_go_in_one_step`: claim `None` after one `step`, job kept, `retry_after = tick + 20`, designation kept. (An idle dwarf's `JobState` after release is not asserted: `wander` can set `Walk` in the same step.)
 - **Task 1.** `astar_with_budget` now returns `(Option<path>, exhausted, explored)`; `explored` is the start's whole walkable component on a COMPLETED failure, empty otherwise. `claim_jobs` keeps a per-call `Vec<BTreeSet<Pos>>` of those components and, before searching from a dwarf, skips (still `attempted`, no budget) when the dwarf's position is in a known component that the job's goals miss. No resource, no cross-tick state, no `SaveState` change. `// NOTE:` records the assumption that a component fits in `MAX_ASTAR_NODES`.
@@ -290,7 +294,8 @@ recipe aimed wrong. The crown trigger dies when 12.7 stops dig taking tree tiles
 
 - `crates/sim-core/src/lib.rs` (`claim_jobs`, `astar_with_budget`, Task 2 test, AC4 test)
 - `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` (two rows re-pointed at the new `astar_with_budget` return shape)
-- `crates/sim-core/tests/scenario.rs` (AC1/AC2 test, AC3 test)
+- `crates/sim-core/tests/scenario.rs` (AC1/AC2 test, AC3 test, Task 7 sealed-pile test + control)
+- `crates/sim-core/src/lib.rs` also: Task 7 delivery check in `claim_jobs`, `work_positions` NOTE
 
 ## Change Log
 

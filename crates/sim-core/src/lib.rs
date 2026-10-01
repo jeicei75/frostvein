@@ -464,6 +464,18 @@ fn claim_jobs(
         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
         // set serves every candidate.
         let goals = work_positions(&terrain, &blocked, &zones.0, &items, job, None);
+        // A haul's delivery leg: the stone must also have somewhere reachable to go (#132).
+        let delivery = match job.kind {
+            JobKind::Haul { item } => Some(work_positions(
+                &terrain,
+                &blocked,
+                &zones.0,
+                &items,
+                job,
+                Some(item),
+            )),
+            _ => None,
+        };
         let mut attempted = false;
         let mut assigned = false;
         for (entity, id, pos, current, carrying) in &mut dwarves {
@@ -479,11 +491,33 @@ fn claim_jobs(
             {
                 attempted = true;
                 // A component belongs to its start: it proves nothing for a dwarf outside it.
-                if components
-                    .iter()
-                    .any(|component| component.contains(*pos) && goals.is_disjoint(component))
-                {
+                if components.iter().any(|component| {
+                    component.contains(*pos)
+                        && (goals.is_disjoint(component)
+                            || delivery.as_ref().is_some_and(|d| d.is_disjoint(component)))
+                }) {
                     continue;
+                }
+                if let Some(delivery) = &delivery {
+                    match astar_with_budget(
+                        &terrain,
+                        &blocked,
+                        **pos,
+                        delivery,
+                        &mut astar_nodes_remaining,
+                    ) {
+                        (Some(_), false, _) => {}
+                        (None, false, explored) => {
+                            if !explored.is_empty() {
+                                components.push(explored);
+                            }
+                            continue;
+                        }
+                        (None, true, _) => break 'jobs,
+                        (Some(_), true, _) => {
+                            unreachable!("a completed search cannot exhaust its budget")
+                        }
+                    }
                 }
                 let path = match astar_with_budget(
                     &terrain,
@@ -775,7 +809,8 @@ fn work_positions(
             let free: BTreeSet<Pos> = zones
                 .iter()
                 .copied()
-                // NOTE: a standable zone cell sealed off from every dwarf can still cause retries (#132).
+                // NOTE: `claim_jobs` checks delivery reachability at claim time, so a sealed cell never
+                // starts a pick-up; one sealed off mid-walk can still cost a pick-up/drop per retry (#132).
                 .filter(|pos| is_walkable(terrain, blocked, *pos) && !stored.contains(pos))
                 .collect();
             if carrying.is_some() {

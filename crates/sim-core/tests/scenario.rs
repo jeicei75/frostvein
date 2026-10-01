@@ -1747,3 +1747,100 @@ fn a_dwarf_that_travelled_to_a_distant_job_still_wanders_afterwards() {
         );
     }
 }
+
+/// A world with one stone and a one-cell stockpile whose cell is standable but walled in on all four
+/// sides. Returns the world, the pile cell and its four walls.
+fn sealed_pile_world() -> (World, Pos, Vec<Pos>) {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let stone = dig_one_stone(&mut world);
+    // The pile cell and its four walls, well clear of the dwarves and the stone.
+    let pile = Pos {
+        y: stone.y + 6,
+        ..stone
+    };
+    let walls: Vec<Pos> = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        .iter()
+        .map(|(dx, dy)| Pos {
+            x: pile.x + dx,
+            y: pile.y + dy,
+            ..pile
+        })
+        .collect();
+    for cell in std::iter::once(&pile).chain(&walls) {
+        assert!(
+            is_standable(&world, *cell),
+            "fixture cell {cell:?} was not open ground: {:?}",
+            world.tile(*cell)
+        );
+    }
+    for wall in &walls {
+        assert!(world.set_tile(*wall, Tile::Solid(Material::Stone)));
+    }
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+    assert_eq!(world.zones().len(), 1);
+    (world, pile, walls)
+}
+
+/// Issue #132 / 12.1 handover: the only free pile cell is standable but sealed off from every
+/// dwarf. The pick-up leg's goal set is non-empty (`free` is), so a dwarf used to claim, carry the
+/// stone, fail to path to the pile, and have `release_claim` drop it — every 20 ticks, forever.
+#[test]
+fn a_sealed_off_pile_cell_does_not_cycle_a_stone_forever() {
+    let (mut world, _pile, _walls) = sealed_pile_world();
+
+    let mut pickups = Vec::new();
+    let mut drops = Vec::new();
+    let mut stamps = BTreeSet::new();
+    let mut held = false;
+    for _ in 0..400 {
+        world.step();
+        let carriers: Vec<_> = world
+            .carrying()
+            .into_iter()
+            .filter(|(_, item)| item.is_some())
+            .collect();
+        let now_held = !carriers.is_empty();
+        if now_held && !held {
+            pickups.push((world.tick(), carriers[0].0));
+        }
+        if !now_held && held {
+            drops.push((world.tick(), world.items()[0].1));
+        }
+        held = now_held;
+        let job = world.jobs()[0];
+        assert_eq!(
+            job.kind,
+            JobKind::Haul { item: 10 },
+            "FR8: the haul job was dropped"
+        );
+        stamps.insert(job.retry_after);
+    }
+    println!("pickups {pickups:?}\ndrops {drops:?}\nretry_after stamps {stamps:?}");
+    assert!(
+        pickups.is_empty(),
+        "the stone was picked up {} times: {pickups:?}, dropped {drops:?}",
+        pickups.len()
+    );
+    assert!(
+        stamps.len() > 1,
+        "FR8: the job was never retried: {stamps:?}"
+    );
+}
+
+/// Positive control for the test above: the same fixture with one wall opened onto open ground
+/// hauls the stone into the pile, so the sealed test cannot pass because hauling is simply broken.
+#[test]
+fn an_opened_pile_cell_receives_the_stone() {
+    let (mut world, pile, walls) = sealed_pile_world();
+    assert!(world.set_tile(walls[0], Tile::Empty));
+    for _ in 0..600 {
+        world.step();
+        if world.jobs().is_empty() {
+            break;
+        }
+    }
+    assert!(world.jobs().is_empty(), "never hauled once opened");
+    assert_eq!(world.items(), vec![(sim_core::Id(10), pile)]);
+}
