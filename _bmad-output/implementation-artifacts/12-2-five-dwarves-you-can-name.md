@@ -258,6 +258,11 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
         (214,154,78) where blue was due), then GREEN.
   - [x] Mutation row 11 in `12-2.sh` KILLED; two 3.3 rows re-pointed (the carrier choice is now nested) and KILLED.
   - [x] FR22 amended in `epics.md`; seat card (d) updated.
+  - [x] 2026-10-01, Wolf at the seat: "only yellow dwarves". The escapes carried the five tunic colours (live
+        capture, `--z 9`, 3 frames x 5); Windows Terminal paints the emoji-capable `☺` (U+263A) as a yellow emoji
+        face that ignores the colour, while `☻` (not an emoji character) took it in his terminal. Wolf RULED: a
+        named dwarf is `☻` in his tunic colour, carry state dropped from it too. Test RED (`☺` where `☻` was due)
+        then GREEN on `66e6ed4`; new `12-2.sh` row 12 + row 11 run alone: 2/2 KILLED. FR22 and README amended.
   - [ ] Wolf sees the five colours on the tui map.
 
 ## Dev Notes
@@ -404,12 +409,13 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 - `crates/gui/src/{ingest.rs,pick.rs,project.rs,appearance.rs}`, `crates/gui/tests/{headless.rs,pixel_guard.rs}`
 - Mutation tables re-pointed: `mutations/{10-10-take-the-camera-where-you-want-it,11-2-the-miniature,5-3-a-window-onto-the-valley,8-3-master-of-time-and-the-skeleton-walks-in-3d}.sh`
 - Task 7/8 files: `mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`
-- Task 9: `crates/tui/src/{view.rs,palette.rs}`, `crates/tui/tests/client.rs` (doc line), `mutations/{12-2,3-3-the-haul-and-the-skeleton-walks}.sh`, `planning-artifacts/epics.md` (FR22)
+- Task 9: `crates/tui/src/{view.rs,palette.rs}`, `crates/tui/tests/client.rs` (doc line), `mutations/{12-2,3-3-the-haul-and-the-skeleton-walks}.sh`, `planning-artifacts/epics.md` (FR22), `README.md` (glyph legend)
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-10-01 | Task 9: Wolf saw five yellow `☺` (the terminal's emoji font ignores the colour); named dwarves are now `☻` in tunic colour, carry state off them too. FR22 amended again. |
 | 2026-09-30 | Task 9 (Wolf's seat ruling): named dwarves' tui glyphs in tunic colour, job state off them; FR22 amended. Status back to `in-progress` until Wolf sees it. |
 | 2026-09-30 | Task 8: Wolf's seat passed (a)-(d). Status to `review`. |
 | 2026-09-29 | Tasks 1-7 done (Sonnet 5.5 dev agents, Opus 5.5 orchestrator). #136 RED 0.385 to GREEN 1.000; `12-2.sh` 10/10 KILLED; #136 commented; full gate GREEN on `2d12195` (4170 s, `RUST_TEST_THREADS=1`). Seat card written; Task 8's sitting still open. |
