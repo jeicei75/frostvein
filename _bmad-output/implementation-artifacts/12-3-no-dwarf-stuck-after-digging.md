@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default
 
 # Story 12.3: No Dwarf Stuck After Digging
 
-Status: review
+Status: done
 
 ## Story
 
@@ -203,6 +203,10 @@ jobs, which is FIFO by design (12.7).
 | Task 7 record | the subtask checkbox, Completion Note and File List | read against `12-3.sh` rows 4-5 and `git diff --stat main...HEAD` | rows 4/5 KILLED (Debug Log; re-killed by hand by the Acceptance Auditor) |
 | `deferred-work.md` crown wording | "fixed" → starvation fixed; marks stay until 12.7 | the Feature Auditor's live GREEN, `[[52,64,12],[65,56,13]]` | `(65,56,13)` is still designated after the fix |
 
+After the patches: **FULL GATE GREEN** `RUST_TEST_THREADS=1 scripts/gate.sh` on `cc3a9af`, `GATE GREEN  4458s`.
+Layer caches reaped (`scripts/reap-build-caches.sh --tmp-only --force`): 8 directories, 8.6 GB.
+Review $9.38 (202 turns, recorded).
+
 - [x] [Review][Defer] Haul pays two searches per successful claim [crates/sim-core/src/lib.rs:501-540] — deferred, a cost this change introduced but not a starvation risk
 - [x] [Review][Defer] Q2 mid-walk residual only in a code NOTE [crates/sim-core/src/lib.rs:812-813] — deferred, recorded in deferred-work.md
 - [x] [Review][Defer] AC3 test soft spots [crates/sim-core/tests/scenario.rs:263-271] — deferred, test hardening
@@ -385,3 +389,4 @@ Sonnet 5.5 subagents x2 (Tasks 0-3; Task 7 reproduce, then fix), orchestrated an
 | 2026-10-01 | Story created on `bbf1518`. #132 reproduced at creation (sim probe and live daemon): A* budget starvation behind an unreachable job; suspect 2 does not reproduce |
 | 2026-10-01 | Dev started on `story-12-3-no-dwarf-stuck-after-digging`. Wolf ruled Q1 leave as FR8, Q2 pulled in as Task 7; dev delegated to Sonnet 5.5 subagents |
 | 2026-10-01 | Dev done: #132 fixed (per-call component reuse in `claim_jobs`), Wolf Q2 fixed (haul delivery reachability at claim time), AC3/AC4 guards, budget test re-fixtured, 5/5 mutations KILLED, live RED/GREEN recorded; full gate green on `e03787d`. Status -> review |
+| 2026-10-01 | Review run 1: 0 HIGH. 4 patches applied (`15fd2b8`, `cc3a9af`). The multi-component budget residual was filed as #159 (Wolf). Full gate green on `cc3a9af`. Status -> done |
