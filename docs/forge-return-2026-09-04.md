@@ -87,6 +87,10 @@ The real question is whether frostvein wants the *skill*. It ran a review-patch 
 (seven findings, one pass, full gate green), so the capability is being exercised without it.
 **Wolf's call. Recorded rather than quietly adopted.**
 
+**Decided 2026-10-01: Wolf said install it.** The forge's skill was copied into `.claude/skills/bmad-review-patch/`
+(local, like every installed skill: `.claude/` is gitignored), and this TEMPLATE was adapted to frostvein's
+seat, gate and mutation tooling. First use: story 12.2's nine review patches.
+
 ## 5. What was verified here
 
 - `python3 -m unittest discover -s _bmad/scripts/tests` — **78 tests OK**, including the 11 new
