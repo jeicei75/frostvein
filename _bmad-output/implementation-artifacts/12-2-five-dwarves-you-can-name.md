@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1's creation
 
 # Story 12.2: Five Dwarves You Can Name
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -266,6 +266,87 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
   - [x] Wolf sees the five colours on the tui map (2026-10-01: "yes"). Red, blue and purple read dim on the near-black
         background (contrast ~3.3:1 vs gold 8.7, green 5.1); parked, not tuned here.
 
+### Review Findings
+
+Code review run 1, 2026-10-01, on `1068bb0` (diff `main...HEAD`, 39 files). Four layers, none timed out, and every
+layer ran cargo (1.97.1) in its own target dir: Blind Hunter (sonnet), Edge Case Hunter (sonnet), Acceptance
+Auditor (opus), Feature Auditor (opus). Each finding below carries its layer and severity. **Executed and seen:**
+wire identity in the snapshot and deltas; emitter lines byte-identical to main's daemon; save/load refusals (old
+save, duplicate name or colour); the tui roster and `☻` tunic colours; tunic colours on the rendered GLB; a
+re-colour after a live load; #136 ratio 1.000; `12-2.sh` rows 1-12 KILLED (re-run in /tmp copies). **Seat-only, and
+closed at the seat:** AC6 on screen (Wolf saw the selected dwarf's name under the clock, 2026-09-30) and AC8 (seat card
+(a)-(d) passed 2026-09-30; the tui `☻` colours 2026-10-01). No gui code changed after that sitting. **Not yet done:** a full gate on HEAD (the last one was `2d12195`; Task 9 changed tui code
+after it).
+
+- [x] [Review][Decision] **Resolved 2026-10-01, Wolf: "1": accept the relative rule, record it as a deviation and
+  correct the guard's doc comment (now a patch item below).** The `--select` colour guard checks a weaker rule than Task 4 asked for (accept, MED). Task 4
+  says each window must read nearer its own dwarf's table colour than the other dwarf's. The guard checks something
+  else: that window A is nearer table A than window B is (`pixel_guard.rs:762-766`). The spec's rule fails on the
+  real frame: at `--clock 8`, the red dwarf's window [0.4275, 0.2947, 0.2778] lies 0.2334 from red, 0.2129 from
+  purple and 0.2128 from gold. Margins are 0.0397 and 0.0766 against a floor of 0.03; the all-red sabotage reads
+  0.020. The Debug Log records the `--clock 8` move but not the rule change, and the guard's doc comment still
+  states the spec's rule.
+- [ ] [Review][Patch] Record the `--select` guard's relative rule as a deviation in the Debug Log, and make the guard's
+  doc comment say what it checks (from the decision above). [crates/gui/tests/pixel_guard.rs:705-708, this file Debug Log]
+- [ ] [Review][Patch] Pin the deselect reset (edge, LOW, latent silent failure). Nothing asserts that clearing the
+  selection restores the no-selection focal distance and `DOF_APERTURE_F_STOPS`. Dropping the reset leaves every
+  test green, and an Escape would keep the widened aperture, breaking AC7's "behaves exactly as today".
+  Extend `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` to clear the selection and assert both
+  values, then add a `12-2.sh` row. [crates/gui/src/ingest.rs:2527]
+- [ ] [Review][Patch] `--select` of an id that is not a drawn dwarf is a silent no-op (edge, MED, instrument).
+  `--select 99` or `--select 4294967295` captures an ordinary unselected frame with no log line. A non-dwarf id such
+  as the campfire's would frame the campfire. The click path checks for a dwarf (`nearest_dwarf_to`) and `--select`
+  does not. Fix: refuse loudly, so a capture asked to select a missing or non-dwarf id fails rather than shooting
+  the unselected frame. [crates/gui/src/ingest.rs:1214, crates/gui/src/pick.rs:225]
+- [ ] [Review][Patch] The tui's `NO_COLOR` warning still says the colour carries job state (feature, LOW,
+  misreports an instrument). Since Task 9, colour carries each named dwarf's tunic and the roster. [crates/tui/src/main.rs:439]
+- [ ] [Review][Patch] `same_seed_and_commands_remain_deterministic` does not compare `identities()`, though Task 1
+  is ticked for it (accept, LOW, false record). [crates/sim-core/tests/scenario.rs:1406]
+- [ ] [Review][Patch] A doc comment is on the wrong test (edge, LOW). The `--select` test was inserted under
+  `depth_of_field_focuses_…`'s #136 doc comment, so that comment now heads the `--select` test.
+  [crates/gui/src/ingest.rs:4874]
+- [ ] [Review][Patch] Some records still describe the pre-`☻` rule (accept, LOW). The seat card's (d) still says
+  "`☺` … (and `☻` while he carries a stone)". Scope guardrail 2 and Task 3's "`☺` keeps its job-state colour" are
+  not marked superseded by Task 9. [12-2-signoff/vehicle-card.md (d), this file :152, :275]
+- [ ] [Review][Patch] The README is missing `--select <id>` from the gui flag table and the roster row from the tui
+  paragraph (accept, LOW). [README.md:249-266]
+- [ ] [Review][Patch] Record fixes (accept+feature, LOW):
+  - The File List omits the Tasks 1-3 files.
+  - The Verification recipe's gui command lacks the `--frames` that a capture requires.
+  [this file, File List and Verification]
+- [x] [Review][Defer] Tunic materials are built from `targets[0]`'s material only and applied to every dwarf mesh
+  [crates/gui/src/project.rs:~3114] — deferred, latent (blind LOW): the r17 GLB has one material and one mesh.
+- [x] [Review][Defer] The atlas size and format are not checked against `TUNIC_CELLS` [crates/gui/src/project.rs:~3000]
+  — deferred, latent (blind LOW): the atlas is 512² sRGB today.
+- [x] [Review][Defer] A first tunic build that fails is never retried [crates/gui/src/project.rs:3140-3166]
+  — deferred, latent (blind+feature LOW): it logs once, and today the atlas is always readable.
+- [x] [Review][Defer] The ancestor walk is capped at 8 levels with no signal [crates/gui/src/project.rs:~3128]
+  — deferred, latent (blind LOW).
+- [x] [Review][Defer] `ProjectedTunic` is never removed when an id's identity becomes `None`
+  [crates/gui/src/project.rs:1773] — deferred, latent (blind+feature LOW): the daemon always names a dwarf.
+- [x] [Review][Defer] `to_save`'s `filter_map` drops a dwarf that lacks `Identity` [crates/sim-core/src/lib.rs:~1331]
+  — deferred, pre-existing shape (blind LOW): both spawn sites insert it.
+- [x] [Review][Defer] No golden pin of the identities for a seed [crates/sim-core/tests/worldgen.rs] — deferred (blind
+  LOW): a `rand` bump would rename every seed's dwarves without a test failing.
+- [x] [Review][Defer] The bridge's name and colour arms have no independent oracle [crates/simd/src/bridge.rs:170-199]
+  — deferred (edge LOW): a swapped pair would stay green. All 21 arms were checked by eye.
+- [x] [Review][Defer] Delta identity is untested, and 6-2's snapshot and delta rows now sabotage one site
+  [crates/simd/tests/serve.rs, mutations/6-2-lanterns-in-the-dark.sh] — deferred (accept LOW): seen live, 5/5.
+- [x] [Review][Defer] The roster's mid-name truncation and its skipping of nameless dwarves are unpinned
+  [crates/tui/src/view.rs:~429-443] — deferred (edge LOW): correct live at 6 sizes.
+
+Review cost $18.96 (320 turns; 4 subagent transcripts are 79.2% of tokens). Reaped 104.1 GB of `/tmp` build dirs (52.1 GB free space reclaimed).
+
+Dismissed (8):
+- `--distance` disabling the click-zoom live: false. `--distance requires --capture` (`ingest.rs:1274`).
+- `--select` zoom depending on the first frame: the two-update test covers it.
+- The named glyph losing carry and job state: Wolf ruled it (Task 9).
+- A refused load being silent in the clients: AC3 and NFR11 ask for a daemon log line.
+- The selected DoF look being nearly off: accepted at the seat, (b) and (c).
+- The HUD line being easy to miss: the seat passed, and the card now says where it is.
+- The full gate on HEAD: it is the next step, not a code finding.
+- The README File List: folded into the record-fixes item.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -416,6 +497,7 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 
 | Date | Change |
 | --- | --- |
+| 2026-10-01 | Code review run 1 on `1068bb0` (4 layers): 0 HIGH; Wolf took decision 1 (accept the relative `--select` guard, record it), left 9 patches as action items, 10 deferred. Status to `in-progress`. |
 | 2026-10-01 | Task 9 closed: Wolf confirmed the five `☻` colours. Status to `review`. |
 | 2026-10-01 | Task 9: Wolf saw five yellow `☺` (the terminal's emoji font ignores the colour); named dwarves are now `☻` in tunic colour, carry state off them too. FR22 amended again. |
 | 2026-09-30 | Task 9 (Wolf's seat ruling): named dwarves' tui glyphs in tunic colour, job state off them; FR22 amended. Status back to `in-progress` until Wolf sees it. |
