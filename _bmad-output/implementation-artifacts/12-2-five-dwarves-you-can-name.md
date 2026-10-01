@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1's creation
 
 # Story 12.2: Five Dwarves You Can Name
 
-Status: review
+Status: done
 
 ## Story
 
@@ -254,7 +254,8 @@ here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
 - [x] **Task 9: tui dwarf glyphs in tunic colour (Wolf's seat ruling, 2026-09-30).** At (d) Wolf: the tui dwarves
   are all orange/yellow; draw them in their colours. The glyph colour was job state (FR22/FR4), three orange-brown
   shades he could not tell apart; Wolf RULED tunic colour, job state leaves a named dwarf's glyph.
-  - [x] A named dwarf's `☺` and carrier `☻` take `dwarf_colour`; crowd `⚇` and a nameless dwarf are unchanged.
+  - [x] ~~A named dwarf's `☺` and carrier `☻` take `dwarf_colour`~~ (superseded 2026-10-01 by the `☻` ruling in the
+        last subtask: a named dwarf is `☻` in `dwarf_colour`); crowd `⚇` and a nameless dwarf are unchanged.
         Test `a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour`: RED (walk orange
         (214,154,78) where blue was due), then GREEN.
   - [x] Mutation row 11 in `12-2.sh` KILLED; two 3.3 rows re-pointed (the carrier choice is now nested) and KILLED.
@@ -364,6 +365,85 @@ round's fix is being re-closed.
 | Records describe the `☻` rule | seat card (d), Task 3, guardrail 2 | read against `view.rs`'s named/nameless arms and the Task 9 rulings | `12-2-signoff/vehicle-card.md` as Wolf sat it; nameless `☺` kept in both |
 | README `--select` + roster row | the gui flag table, the tui paragraph | read against `parse_args_from`, `refuse_select_of_a_missing_dwarf` and `view.rs`'s roster at `h-3` | README as on `27824a9` |
 | Record fixes (File List, recipe `--frames`) | the File List / Verification | the recipe's `--frames 160` is the harness's `FRAMES` (`pixel_guard.rs:30`) | the Tasks 1-3 commits `1b4f8c7`..`00c9314` |
+
+Code review run 2, 2026-10-01, on `6def196` (diff `ae01a47..6def196`, the patch pass; `ae01a47`'s tooling install
+excluded by choice). Four layers, none timed out, every layer ran cargo 1.97.1 in its own target dir: Blind Hunter
+(sonnet), Edge Case Hunter (sonnet), Acceptance Auditor (opus), Feature Auditor (opus).
+**Delta vs run 1:**
+- NEW findings: 1 (MED). It sits in Task 4's code, which run 1 reviewed and missed; this patch pass did not touch it.
+- REWORK (run-1 fixes half-closed): 4, all LOW records or docs: items 1, 7, 8 and 9 each left a sibling site.
+- Severity: 0 HIGH, 1 MED, 4 LOW.
+- **Stopping rule:** no HIGH among the new findings, so the static audit ENDS here. The next spend goes to the live
+  gate, not to a run 3.
+
+**Closure-table audit:** rows 13-17 were re-run in a /tmp copy and each was KILLED by the named test at the new
+assertion. Row 13 panics at `ingest.rs:5140`, row 14 at `:5144`, row 15 at `:5022`, row 16 at `:5023` and row 17 at
+`scenario.rs:1438`. All 9 items are CLOSED in substance.
+
+**Executed and seen:**
+- `gui --select 99`, `5` (the campfire), `6` (a torch) and `4294967295` each exit 1, write no PNG and log
+  `--select N: no dwarf has that id in the daemon's snapshot`. This holds both with `--capture` and live (headless).
+- `--select 1` and `--select 2` run on.
+- `NO_COLOR=1 tui` prints the new warning; every clause in it is true of the frame.
+
+**Unit-proven only:** Esc → DoF reset. No headless instrument can press a key.
+
+- [x] [Review][Defer] **Resolved 2026-10-01, Wolf: "3": filed as #157, left for a later story** (the seat never
+  used `--select`; AC8 passed with a real click). `--select` frames a dwarf the slice hides (feature, MED, observed; Task 4 code, not this
+  pass). `gui 7495 --headless --capture a2.png --frames 160 --select 2`, with no `--z`, shoots a frame that is about
+  two-thirds a flat blue-grey cut plane, and Bifur is not visible. Adding `--z 9` shows the camp and the dwarf.
+  - "As if clicked" is untrue: a click can only pick a dwarf you can see, while `--select` does not move the slice to
+    his level.
+  - Every guard passes `--distance 4`, so none exercises the default `SELECT_DISTANCE` frame.
+  - The README row (`README.md:257`) does not mention it.
+  - Options: (a) `--select` also sets the slice to the dwarf's z, unless `--z` is given; (b) a README note only:
+    "pair with `--z 9` on the shipped seed"; (c) file an issue and leave it for a later story.
+  [crates/gui/src/pick.rs:~225, crates/gui/src/ingest.rs:1499, README.md:257]
+- [x] [Review][Patch] REWORK of item 8: the README's tui row description is wrong at its base, so the new roster
+  sentence points at the status row (feature+accept, LOW, misdirects an operator).
+  - "The bottom row reports the tick…" is false: the hint is at `h-1`, the status at `h-2` and the roster at `h-3`
+    (`view.rs:429,445,454`).
+  - Fix: name the three rows in order from the bottom: hint, status, roster. [README.md:69-70]
+- [x] [Review][Patch] REWORK of item 1: the `TUNIC_MARGIN_FLOOR` doc still states the absolute rule ("must lie
+  nearer its own table colour by"). Only the test's doc comment was corrected (edge+accept, LOW).
+  [crates/gui/tests/pixel_guard.rs:726]
+- [x] [Review][Patch] REWORK of item 7: Task 9's first subtask still reads "A named dwarf's `☺` and carrier `☻` take
+  `dwarf_colour`", ticked and not marked superseded by the `☻` ruling four lines below (accept, LOW).
+  [this file, Task 9 first subtask]
+- [x] [Review][Patch] REWORK of item 9: the File List does not name `crates/tui/src/main.rs`, which the patch pass
+  changed (accept, LOW). [this file, File List]
+- [x] [Review][Defer] A refused capture leaves an older PNG at the `--capture` path untouched (feature LOW) —
+  deferred, pre-existing: every capture failure before the screenshot does the same. The exit code (1) and the
+  stderr line are the signal, and every harness reads the exit code. [crates/gui/src/ingest.rs:2508]
+- [x] [Review][Defer] The README says the tui opens at z 19, while a live run opened at `z 18/31` (feature side
+  note, LOW, not investigated) — deferred, pre-existing, outside this diff. [README.md:73]
+
+Patch pass for run 2, 2026-10-01, in the review session (Wolf: "1"). All 4 landed. All four are REWORK: each
+re-closes a run-1 item that was left with a stale sibling. Only text changed (a README paragraph, a test-constant doc
+comment, story records), so no mutation row applies. The code last passed the full gate on `0833033`.
+
+| Item | Side written for | Side tested | Pre-existing-state fixture |
+| --- | --- | --- | --- |
+| REWORK item 8: README tui rows | the roster sentence | the base sentence too: the status row and the hint row, read against `view.rs` `roster_y = h - 3`, `status_y = h - 2`, `hint_y = h - 1` | the live tui tail seen by the run-2 auditor (`tui 7493 --frames 3 --z 9`): roster, `tick …`, hint |
+| REWORK item 1: `TUNIC_MARGIN_FLOOR` doc | the constant's doc | the asserts it bounds: `margin_a`/`margin_b` = the OTHER window's distance minus his own | `pixel_guard.rs` on `6def196` (the first doc fix had corrected only the test's doc comment) |
+| REWORK item 7: Task 9 first subtask | the `☺` subtask | the `☻` ruling subtask and `view.rs`'s named arm (`glyph: '☻'`) | this file on `6def196` |
+| REWORK item 9: File List | the patch pass's files | `git diff --name-only ae01a47..6def196`: all 7 non-record paths now listed | this file on `6def196` |
+
+Dismissed (9):
+- `identities()` could compare `[] == []` (blind): row 17 proves the list is populated, and worldgen pins five.
+- A dwarf in the snapshot but not drawn would pass the refusal (edge): no such state exists at startup, and it was
+  not reproducible.
+- Row 17's counter leaves the first world unmutated (blind): the test builds two worlds, which differ
+  deterministically.
+- After Esc the frame goes soft at distance 20 (feature): AC7's "behaves exactly as today" mandates f/0.05 at the
+  aim point.
+- `--select` refusal also ends a live run (accept): recorded as "fails the run" in the README, the Change Log and
+  the closure table.
+- The determinism test catches only nondeterminism (accept): the golden pin is already deferred from run 1.
+- The `NO_COLOR` text is unpinned (accept): the closure table discloses it.
+- The single-assignment hop between the Esc test and the DoF test (feature): both halves are pinned.
+- `--select 2` exit 101 (edge): the known near-white ceiling on lavapipe. The PNG was saved, and another daemon's
+  `--select 2` passed.
 
 ## Dev Notes
 
@@ -522,11 +602,15 @@ and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at
 - Mutation tables re-pointed: `mutations/{10-10-take-the-camera-where-you-want-it,11-2-the-miniature,5-3-a-window-onto-the-valley,8-3-master-of-time-and-the-skeleton-walks-in-3d}.sh`
 - Task 7/8 files: `mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`
 - Task 9: `crates/tui/src/{view.rs,palette.rs}`, `crates/tui/tests/client.rs` (doc line), `mutations/{12-2,3-3-the-haul-and-the-skeleton-walks}.sh`, `planning-artifacts/epics.md` (FR22), `README.md` (glyph legend)
+- Patch pass 1: `crates/gui/src/ingest.rs`, `crates/gui/tests/pixel_guard.rs`, `crates/sim-core/tests/scenario.rs`,
+  `crates/tui/src/main.rs`, `mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`, `README.md`
+- Review run 2 patches: `README.md` (tui rows), `crates/gui/tests/pixel_guard.rs` (doc comment)
 
 ## Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-10-01 | Code review run 2 on `6def196` (the patch pass): 0 HIGH, 1 MED (`--select` frames a dwarf the slice hides, Task 4 code) filed as #157 per Wolf, 4 LOW REWORK record fixes applied in-session. Status `done`. |
 | 2026-10-01 | Patch pass 1: 9/9 review patches landed (`2fac78e`..`0833033`); `--select` of no dwarf now fails the run; deselect DoF reset pinned; `12-2.sh` rows 13-17 KILLED; full gate GREEN on `0833033` (3004 s). Status to `review` for round 2. |
 | 2026-10-01 | Code review run 1 on `1068bb0` (4 layers): 0 HIGH; Wolf took decision 1 (accept the relative `--select` guard, record it), left 9 patches as action items, 10 deferred. Status to `in-progress`. |
 | 2026-10-01 | Task 9 closed: Wolf confirmed the five `☻` colours. Status to `review`. |

@@ -2493,7 +2493,7 @@ development_status:
   #     and unreachable, so dwarves pick up and drop the same stone endlessly (98 pick-ups, 0
   #     deliveries) and stack stones beside the fire. Refusal RED observed live in the tui.
   #   Refusal shape decided here for all of M3: a typed `refusals` list on the next delta.
-  12-2-five-dwarves-you-can-name: review
+  12-2-five-dwarves-you-can-name: done
   #   Created 2026-09-29 on 16be274. RED observed live: no identity on the wire, no names in the tui.
   #     #136 premise corrected: DoF already follows the selection but focuses his FEET with an
   #     aperture tuned at boot distance. Look draft (tunic recolour of the real GLB) in 12-2-signoff/;

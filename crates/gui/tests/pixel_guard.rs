@@ -723,7 +723,8 @@ fn select_frames_a_different_dwarf_per_id_and_wears_his_own_colour() {
     /// at distance 4, read off the captures. NOTE: tied to `DEFAULT_SEED`'s dwarf positions.
     const TUNIC_A: (usize, usize, usize, usize) = (614, 304, 646, 332);
     const TUNIC_B: (usize, usize, usize, usize) = (592, 266, 628, 300);
-    /// Chromaticity distance each tunic window must lie nearer its own table colour by.
+    /// Chromaticity margin by which each tunic window must lie nearer its own table colour than
+    /// the OTHER dwarf's window does (the relative rule; see the doc comment above).
     /// Measured 0.040 / 0.077 on the shipped tunics; with every dwarf painted red, dwarf 0 reads
     /// 0.020. The floor sits between.
     const TUNIC_MARGIN_FLOOR: f32 = 0.03;

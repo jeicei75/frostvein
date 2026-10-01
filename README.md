@@ -66,8 +66,9 @@ Terrain is one z-level at a time in 24-bit colour — snow `░`, ice `▒`, soi
 ramps `▲`, tree trunks `│`, foliage `♠` — with dwarves on top, torches `†` and a
 campfire `♨` beneath them. A named dwarf is `☻` in his tunic colour; a nameless one is `☺`,
 or `☻` where he shares a cell with a stone; `⚇` marks two dwarves sharing one cell. Where a tile is empty the ground up to three levels below shows through,
-dimmed with depth. The bottom row reports the tick, the speed, the z-level and the dwarf
-count. The row above it is the roster: each dwarf's name, ascending by id, in his tunic colour.
+dimmed with depth. The bottom row is the key hint; the row above it reports the tick, the
+speed, the z-level and the dwarf count; the row above that is the roster: each dwarf's name,
+ascending by id, in his tunic colour.
 
 **The camp is not on the level you open at.** The dwarves, the campfire and the torches all
 sit at z 9 on the shipped seed, while the most-standable-ground rule opens you at z 19 — a

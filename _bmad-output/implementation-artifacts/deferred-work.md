@@ -2367,3 +2367,15 @@ the story, and one of them is also issue #125.
   6-2's snapshot and delta dwarf rows now sabotage the same `dwarf_entities` site. It was seen live, 5/5 dwarves.
 - **The tui roster's truncation and nameless-skip are unpinned** (edge LOW; `crates/tui/src/view.rs:~429-443`).
   Correct live at six terminal sizes.
+
+## Deferred from: code review of 12-2-five-dwarves-you-can-name, run 2 (2026-10-01)
+
+- **A refused `gui` capture leaves an older PNG at the `--capture` path untouched** (feature LOW, pre-existing
+  shape). `cp a2.png stale.png; gui ... --capture stale.png --select 99` exits 1 and the md5 is unchanged. Every
+  capture failure before the screenshot does the same; the exit code is the signal and the harnesses read it. A
+  script checking only "PNG exists" would grade the old frame (`crates/gui/src/ingest.rs:2508`).
+- **README says the tui opens at z 19; a live run on 2026-10-01 opened at `z 18/31`** (feature side note, LOW, not
+  investigated: possibly the most-standable level moving as dwarves dig, or a stale line) (`README.md:73`).
+- **`gui --select` frames a dwarf the slice hides unless `--z` is given** (feature MED, Task 4 code) — Wolf ruled
+  2026-10-01: filed as **#157**, left for a later story (the seat never used `--select`; AC8 passed with a click).
+  THE ISSUE IS THE STATE.
