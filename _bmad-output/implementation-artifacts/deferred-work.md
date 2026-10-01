@@ -426,6 +426,13 @@ below as "what one layer found", not as "what is wrong with 3.3".
   the known unreachable-target class (a tile with no standable work position), which 3.2 ruled is
   retried forever rather than dropped, but it was not chased. **Revisit if** a player ever reports
   designations that never clear, or alongside the channel-orphan item above.
+  **Chased in 12.3 (2026-10-01):** most likely the ramp-shielded empty-goal class — hill tiles at
+  the dig's z behind a strip of `Ramp` tiles, whose same-z `Dig` work positions are empty, so the
+  job is retried forever at no cost (`scripts/task6-designate.py` drains 79 -> 50 the same way).
+  Wolf ruled it **leave as FR8** (12.3 question 1). The other never-clear class, digs with
+  non-empty but unreachable work positions (tree crowns), starved the whole job market (#132); 12.3
+  fixed the STARVATION only. The crown marks themselves still never clear: they stay designated and
+  retried under FR8 until 12.7 stops dig taking tree tiles.
 
 - **The glyph client may be near its visual ceiling** — LAYER: Wolf, at 3.3's AC17 sign-off
   (2026-08-07). Verdict on the finished haul loop: "looks ok for 2d tui game atm ... not sure how much
@@ -2379,3 +2386,24 @@ the story, and one of them is also issue #125.
 - **`gui --select` frames a dwarf the slice hides unless `--z` is given** (feature MED, Task 4 code) — Wolf ruled
   2026-10-01: filed as **#157**, left for a later story (the seat never used `--select`; AC8 passed with a click).
   THE ISSUE IS THE STATE.
+
+## Deferred from: code review of 12-3-no-dwarf-stuck-after-digging (2026-10-01)
+
+- **A haul pays two A* searches per successful claim** (blind LOW; `crates/sim-core/src/lib.rs:501-540`). The
+  delivery pre-search (dwarf to `free`) succeeds, its path is discarded, and then the pick-up search runs on the
+  same 50k budget. A far stockpile in open terrain costs both legs every time it is claimed. It is not a starvation
+  risk (a completed failure records its component), and the cost was not measured.
+- **The claim-time budget still starves when the dwarves' components SUM past `MAX_ASTAR_NODES`** (accept MED).
+  Wolf ruled at review 2026-10-01: filed as **#159**, NOTE extended. It cannot happen on today's worlds (one ~16k
+  component). THE ISSUE IS THE STATE.
+- **A stockpile cell sealed off MID-WALK still costs one pick-up/drop per retry** (accept LOW; `lib.rs:812-813`
+  NOTE). 12.3's Q2 fix checks delivery reachability only at claim time. A wire instrument cannot see the cycle
+  (feature layer: zero visible moves on both `bbf1518` and the branch), so only scenario tests show it.
+- **AC3 scenario test soft spots** (edge+accept LOW; `crates/sim-core/tests/scenario.rs:263-271`). It never
+  asserts the holder held `Some(channel job)` before the support was removed. That is implied by the single
+  queued job, but if the claim were already `None` the 2-tick release assertion would be vacuous. Also,
+  `assert!(world.tick() <= removed_at + 2)` is tautological after exactly two steps.
+- **Fixture prerequisites are assumed, not asserted** (edge LOW). In the AC1 plate (`scenario.rs:105-117`), the
+  odd-row floor cells are not asserted standable or unreachable from the valley. In
+  `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig` (~`:1844`), the target and floor are overwritten
+  without a prior-state assertion. Today the live RED and the mutation rows carry the discrimination.

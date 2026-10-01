@@ -712,6 +712,212 @@ fn unreachable_job_stays_queued_and_retries_after_twenty_ticks() {
     assert!(world.items().is_empty());
 }
 
+/// #132: an unreachable dig whose work positions are standable made every idle dwarf's A* flood the
+/// whole walkable component, so a handful of them ate the tick's shared budget, skipped the
+/// `retry_after` stamp, and starved every job queued behind them.
+#[test]
+fn unreachable_digs_never_starve_a_reachable_one() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    // A sky plate far above the terrain: stone at z24, and at z25 alternating rows of standable
+    // floor and stone targets. Each target's work positions are the floor cells beside it, which
+    // are standable but unreachable from the valley.
+    let (x0, y0) = (40, 40);
+    let mut targets = Vec::new();
+    for y in y0..y0 + 20 {
+        for x in x0..x0 + 20 {
+            let under = Pos { x, y, z: 24 };
+            let top = Pos { x, y, z: 25 };
+            assert_eq!(world.tile(under), Some(Tile::Empty));
+            assert_eq!(world.tile(top), Some(Tile::Empty));
+            assert!(world.set_tile(under, Tile::Solid(Material::Stone)));
+            if (y - y0) % 2 == 0 {
+                assert!(world.set_tile(top, Tile::Solid(Material::Stone)));
+                targets.push(top);
+            }
+        }
+    }
+    assert_eq!(targets.len(), 200);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(
+            Pos {
+                x: x0,
+                y: y0,
+                z: 25,
+            },
+            Pos {
+                x: x0 + 19,
+                y: y0 + 19,
+                z: 25,
+            },
+        ),
+    });
+    for _ in 0..100 {
+        world.step();
+    }
+    assert_eq!(world.jobs().len(), 200);
+    assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+
+    let reachable = Pos {
+        x: 45,
+        y: 62,
+        z: 12,
+    };
+    assert_eq!(world.tile(reachable), Some(Tile::Solid(Material::Stone)));
+    assert!(
+        [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            .into_iter()
+            .any(|(dx, dy)| is_standable(
+                &world,
+                Pos {
+                    x: reachable.x + dx,
+                    y: reachable.y + dy,
+                    ..reachable
+                }
+            )),
+        "the reachable dig needs a standable neighbour"
+    );
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(reachable, reachable),
+    });
+    let designated_at = world.tick();
+
+    let mut claimed_at = None;
+    let mut dug_at = None;
+    for _ in 0..600 {
+        world.step();
+        if claimed_at.is_none() {
+            let job = world.jobs().into_iter().find(|job| job.target == reachable);
+            if job.is_some_and(|job| world.claims().iter().any(|(_, held)| *held == Some(job.id))) {
+                claimed_at = Some(world.tick());
+            }
+        }
+        if world.tile(reachable) == Some(Tile::Empty) {
+            dug_at = Some(world.tick());
+            break;
+        }
+        if claimed_at.is_none() {
+            assert!(
+                world.tick() <= designated_at + 40,
+                "the reachable dig was not claimed within 40 ticks of designation"
+            );
+        }
+    }
+    let claimed_at = claimed_at.expect("the reachable dig was never claimed");
+    assert!(claimed_at <= designated_at + 40);
+    let dug_at = dug_at.expect("the reachable dig was not dug within 600 ticks");
+    println!(
+        "claimed +{} dug +{}",
+        claimed_at - designated_at,
+        dug_at - designated_at
+    );
+
+    // LAST, so no earlier assertion absorbs a mutation of the stamp: FR8, every unreachable dig is
+    // still designated and queued, and was retried after the reachable dig was designated.
+    let designations = world.designations();
+    let jobs = world.jobs();
+    for target in targets {
+        assert!(designations.contains(&(target, DesignationKind::Dig)));
+        let job = jobs
+            .iter()
+            .find(|job| job.target == target)
+            .expect("an unreachable dig stays queued");
+        // A stamp at tick t sets t + RETRY_COOLDOWN (20); more than designated_at + 20 means the
+        // stamp itself came after designation.
+        assert!(
+            job.retry_after > designated_at + 20,
+            "job {:?} at {:?} was never retried: retry_after={}",
+            job.id,
+            target,
+            job.retry_after
+        );
+    }
+}
+
+/// FR51: a channel worker whose own ground is removed under it lets go of the job and the crew goes
+/// on with other work. The channel job and its designation stay (Wolf's 2026-08-06 ruling).
+#[test]
+fn a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let dwarf = world.dwarves()[0].1;
+    let t = Pos {
+        x: dwarf.x + 2,
+        ..dwarf
+    };
+    let below = Pos { z: t.z - 1, ..t };
+    assert!(is_standable(&world, t));
+    assert!(matches!(world.tile(below), Some(Tile::Solid(_))));
+    assert!(matches!(
+        world.tile(Pos {
+            z: below.z - 1,
+            ..t
+        }),
+        Some(Tile::Solid(_))
+    ));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(t, t),
+    });
+    let holder = loop {
+        assert!(world.tick() < 200, "the channel was never worked");
+        world.step();
+        if let Some((id, _, JobState::Work, _)) = world
+            .dwarves()
+            .into_iter()
+            .find(|(_, pos, state, _)| *pos == t && *state == JobState::Work)
+        {
+            break id;
+        }
+    };
+    assert!(world.set_tile(below, Tile::Empty));
+
+    let reachable = Pos {
+        x: 45,
+        y: 62,
+        z: 12,
+    };
+    assert_eq!(world.tile(reachable), Some(Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(reachable, reachable),
+    });
+    let removed_at = world.tick();
+    for _ in 0..2 {
+        world.step();
+    }
+    assert_eq!(
+        world.claims().into_iter().find(|(id, _)| *id == holder),
+        Some((holder, None)),
+        "the holder must let go within 2 ticks of losing its support"
+    );
+    assert!(world.tick() <= removed_at + 2);
+    assert!(
+        world
+            .jobs()
+            .iter()
+            .any(|job| job.kind == JobKind::Channel && job.target == t)
+    );
+    assert!(
+        world
+            .designations()
+            .contains(&(t, DesignationKind::Channel))
+    );
+
+    for _ in 0..600 {
+        if world.tile(reachable) == Some(Tile::Empty) {
+            break;
+        }
+        world.step();
+    }
+    assert_eq!(world.tile(reachable), Some(Tile::Empty));
+    assert!(
+        world
+            .designations()
+            .contains(&(t, DesignationKind::Channel))
+    );
+}
+
 #[test]
 fn cancelling_a_claimed_dig_releases_the_dwarf_without_touching_the_tile() {
     let mut world = World::generate(42, Dims::DEFAULT);
@@ -1542,4 +1748,146 @@ fn a_dwarf_that_travelled_to_a_distant_job_still_wanders_afterwards() {
              wander radius and can never move again"
         );
     }
+}
+
+/// A world with one stone and a one-cell stockpile whose cell is standable but walled in on all four
+/// sides. Returns the world, the pile cell and its four walls.
+fn sealed_pile_world() -> (World, Pos, Vec<Pos>) {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let stone = dig_one_stone(&mut world);
+    // The pile cell and its four walls, well clear of the dwarves and the stone.
+    let pile = Pos {
+        y: stone.y + 6,
+        ..stone
+    };
+    let walls: Vec<Pos> = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        .iter()
+        .map(|(dx, dy)| Pos {
+            x: pile.x + dx,
+            y: pile.y + dy,
+            ..pile
+        })
+        .collect();
+    for cell in std::iter::once(&pile).chain(&walls) {
+        assert!(
+            is_standable(&world, *cell),
+            "fixture cell {cell:?} was not open ground: {:?}",
+            world.tile(*cell)
+        );
+    }
+    for wall in &walls {
+        assert!(world.set_tile(*wall, Tile::Solid(Material::Stone)));
+    }
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+    assert_eq!(world.zones().len(), 1);
+    (world, pile, walls)
+}
+
+/// Issue #132 / 12.1 handover: the only free pile cell is standable but sealed off from every
+/// dwarf. The pick-up leg's goal set is non-empty (`free` is), so a dwarf used to claim, carry the
+/// stone, fail to path to the pile, and have `release_claim` drop it — every 20 ticks, forever.
+#[test]
+fn a_sealed_off_pile_cell_does_not_cycle_a_stone_forever() {
+    let (mut world, _pile, _walls) = sealed_pile_world();
+
+    let mut pickups = Vec::new();
+    let mut drops = Vec::new();
+    let mut stamps = BTreeSet::new();
+    let mut held = false;
+    for _ in 0..400 {
+        world.step();
+        let carriers: Vec<_> = world
+            .carrying()
+            .into_iter()
+            .filter(|(_, item)| item.is_some())
+            .collect();
+        let now_held = !carriers.is_empty();
+        if now_held && !held {
+            pickups.push((world.tick(), carriers[0].0));
+        }
+        if !now_held && held {
+            drops.push((world.tick(), world.items()[0].1));
+        }
+        held = now_held;
+        let job = world.jobs()[0];
+        assert_eq!(
+            job.kind,
+            JobKind::Haul { item: 10 },
+            "FR8: the haul job was dropped"
+        );
+        stamps.insert(job.retry_after);
+    }
+    println!("pickups {pickups:?}\ndrops {drops:?}\nretry_after stamps {stamps:?}");
+    assert!(
+        pickups.is_empty(),
+        "the stone was picked up {} times: {pickups:?}, dropped {drops:?}",
+        pickups.len()
+    );
+    assert!(
+        stamps.len() > 1,
+        "FR8: the job was never retried: {stamps:?}"
+    );
+}
+
+/// #132 in its haul form: every idle dwarf's delivery search for the sealed pile floods the whole
+/// valley, so without reusing that component across dwarves the shared budget runs out on the
+/// haul job every tick and the dig queued behind it is never attempted.
+#[test]
+fn a_sealed_off_pile_cell_does_not_starve_a_reachable_dig() {
+    let (mut world, _pile, _walls) = sealed_pile_world();
+    for _ in 0..100 {
+        world.step();
+    }
+    assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+    let worker = world.dwarves()[0].1;
+    let target = Pos {
+        x: worker.x + 1,
+        ..worker
+    };
+    assert!(world.set_tile(
+        Pos {
+            z: target.z - 1,
+            ..target
+        },
+        Tile::Solid(Material::Stone),
+    ));
+    assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    let designated_at = world.tick();
+    for _ in 0..40 {
+        world.step();
+        let dig = world
+            .jobs()
+            .into_iter()
+            .find(|job| job.target == target)
+            .expect("the dig is queued")
+            .id;
+        if world.claims().iter().any(|(_, job)| *job == Some(dig)) {
+            return;
+        }
+    }
+    panic!(
+        "the reachable dig was not claimed within 40 ticks of designation (tick {designated_at})"
+    );
+}
+
+/// Positive control for the test above: the same fixture with one wall opened onto open ground
+/// hauls the stone into the pile, so the sealed test cannot pass because hauling is simply broken.
+#[test]
+fn an_opened_pile_cell_receives_the_stone() {
+    let (mut world, pile, walls) = sealed_pile_world();
+    assert!(world.set_tile(walls[0], Tile::Empty));
+    for _ in 0..600 {
+        world.step();
+        if world.jobs().is_empty() {
+            break;
+        }
+    }
+    assert!(world.jobs().is_empty(), "never hauled once opened");
+    assert_eq!(world.items(), vec![(sim_core::Id(10), pile)]);
 }
