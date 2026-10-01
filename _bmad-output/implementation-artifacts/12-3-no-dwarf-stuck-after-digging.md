@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default
 
 # Story 12.3: No Dwarf Stuck After Digging
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -283,7 +283,7 @@ Sonnet 5.5 subagents x2 (Tasks 0-3; Task 7 reproduce, then fix), orchestrated an
 - **Task 1 GREEN**: same test, 12.6 s: reachable dig claimed at designation +6, dug at +204.
 - **Task 7 RED** (unfixed `19823ac` code; `cargo test -q -p sim-core --test scenario a_sealed_off`): fixture seed 42, stone 10 at `(66,61,25)`, one-cell pile at `stone + (0,6)` walled on all four sides (cells asserted standable first). 7 pick-ups in 400 ticks at 140 (dwarf 1), 271, 299, 327, 355, 383, 411 (dwarf 0), a steady 28-tick period; 7 drops one tick after each, all at the stone's own tile `(66,61,25)`; `retry_after` stamps `{0,161,292,320,348,376,404,432}` (job kept and re-stamped, FR8 holds). Control `an_opened_pile_cell_receives_the_stone` (one wall opened) passes: stone ends on the pile.
 - **Task 7 GREEN**: same test asserts 0 pick-ups and passes; control still passes; `cargo test -q -p sim-core` all green.
-- **Task 4 instrument** (`scripts`-free recipe from Verification, fresh daemon each run, debug build):
+- **Task 4 instrument** (the Verification recipe, fresh daemon each run, debug build):
   - GREEN on `4947aac`: `marks: z 12 designations=1 of 1 zones=0 of 0` / `tick 753 designations [[52, 64, 12], [65, 56, 13]]`
   - Deliberate RED (mutation row 1 applied, simd rebuilt): `marks: z 12 designations=2 of 2 zones=0 of 0` / `tick 474 designations [[45, 62, 12], [52, 64, 12], [65, 56, 13]]`
   - Restored (`b571790`), rebuilt: `marks: z 12 designations=1 of 1 zones=0 of 0` / `tick 753 designations [[52, 64, 12], [65, 56, 13]]`
@@ -292,6 +292,7 @@ Sonnet 5.5 subagents x2 (Tasks 0-3; Task 7 reproduce, then fix), orchestrated an
   - Added `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig` (#132's haul form: five idle dwarves each flooding the valley for the sealed pile exhaust the budget, and a reachable dig behind the haul is never attempted), re-pointed row 5 at it (`b571790`). Re-run: **5/5 KILLED**.
   - Per-assertion check (trap 1), each row applied by hand on committed code: row 1 dies on `the reachable dig was not claimed within 40 ticks of designation` (scenario.rs:801); row 2 dies on the LAST assertion, `job JobId(20) at Pos { x: 42, y: 40, z: 25 } was never retried: retry_after=0` (scenario.rs:826), so no earlier assert absorbs it.
   - `scripts/audit-mutations.py`: clean.
+- **FULL GATE GREEN** on `e03787d`: `RUST_TEST_THREADS=1 scripts/gate.sh`, `GATE GREEN  4221s` (pixel guards 3970 s).
 
 ### Completion Notes List
 
@@ -321,3 +322,4 @@ Sonnet 5.5 subagents x2 (Tasks 0-3; Task 7 reproduce, then fix), orchestrated an
 | --- | --- |
 | 2026-10-01 | Story created on `bbf1518`. #132 reproduced at creation (sim probe and live daemon): A* budget starvation behind an unreachable job; suspect 2 does not reproduce |
 | 2026-10-01 | Dev started on `story-12-3-no-dwarf-stuck-after-digging`. Wolf ruled Q1 leave as FR8, Q2 pulled in as Task 7; dev delegated to Sonnet 5.5 subagents |
+| 2026-10-01 | Dev done: #132 fixed (per-call component reuse in `claim_jobs`), Wolf Q2 fixed (haul delivery reachability at claim time), AC3/AC4 guards, budget test re-fixtured, 5/5 mutations KILLED, live RED/GREEN recorded; full gate green on `e03787d`. Status -> review |

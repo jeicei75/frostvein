@@ -1,4 +1,30 @@
 {
+  "0331c9b7-1075-4c51-9cc5-09cba006485d.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 406720,
+        "cache_read": 10705512,
+        "input": 200,
+        "output": 76655
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 319965,
+        "cache_read": 7287578,
+        "input": 190,
+        "output": 5367
+      }
+    },
+    "cache_creation": 726685,
+    "cache_read": 17993090,
+    "input": 390,
+    "last_ts": "2026-10-01T16:05:04.167Z",
+    "marked_at": null,
+    "output": 82022,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 189
+  },
   "03e36670-b55b-4e0a-9ab8-f512226c5c33.jsonl": {
     "cache_creation": 277584,
     "cache_read": 2549205,
