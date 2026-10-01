@@ -1435,6 +1435,7 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.jobs(), second.jobs());
         assert_eq!(first.claims(), second.claims());
         assert_eq!(first.carrying(), second.carrying());
+        assert_eq!(first.identities(), second.identities());
         assert_eq!(first.items(), second.items());
         assert_eq!(first.emitters(), second.emitters());
         assert_eq!(first.tiles(), second.tiles());
