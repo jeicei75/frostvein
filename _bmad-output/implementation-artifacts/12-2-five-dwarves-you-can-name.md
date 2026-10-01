@@ -429,6 +429,9 @@ comment, story records), so no mutation row applies. The code last passed the fu
 | REWORK item 7: Task 9 first subtask | the `☺` subtask | the `☻` ruling subtask and `view.rs`'s named arm (`glyph: '☻'`) | this file on `6def196` |
 | REWORK item 9: File List | the patch pass's files | `git diff --name-only ae01a47..6def196`: all 7 non-record paths now listed | this file on `6def196` |
 
+Review run 2 cost $12.07 (287 turns; 4 subagent transcripts are 71.6% of tokens), its patch pass $0.75. Fast gate
+GREEN on `3421fe0`. Reaped 112.5 GB of `/tmp` build dirs (56.9 GB free space reclaimed).
+
 Dismissed (9):
 - `identities()` could compare `[] == []` (blind): row 17 proves the list is populated, and worldgen pins five.
 - A dwarf in the snapshot but not drawn would pass the refusal (edge): no such state exists at startup, and it was
