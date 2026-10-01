@@ -63,9 +63,9 @@ per tick from there.
 
 You open at the **centre of the map**, on the z-level with the most standable ground.
 Terrain is one z-level at a time in 24-bit colour — snow `░`, ice `▒`, soil `▓`, stone `█`,
-ramps `▲`, tree trunks `│`, foliage `♠` — with dwarves `☺` on top, torches `†` and a
-campfire `♨` beneath them, `☻` where a dwarf shares a cell with a stone and `⚇` where two
-dwarves share one. Where a tile is empty the ground up to three levels below shows through,
+ramps `▲`, tree trunks `│`, foliage `♠` — with dwarves on top, torches `†` and a
+campfire `♨` beneath them. A named dwarf is `☻` in his tunic colour; a nameless one is `☺`,
+or `☻` where he shares a cell with a stone; `⚇` marks two dwarves sharing one cell. Where a tile is empty the ground up to three levels below shows through,
 dimmed with depth. The bottom row reports the tick, the speed, the z-level and the dwarf
 count.
 

@@ -356,11 +356,13 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
                 } else {
                     entity_cell(entity.kind, entity.state)
                 };
-                // 12.2 (Wolf): a named dwarf wears his tunic colour; job state leaves his glyph.
+                // 12.2 (Wolf): a named dwarf is `☻` in his tunic colour; job and carry state leave
+                // his glyph. Not `☺`: it is emoji-capable, and Windows Terminal paints it as a
+                // yellow emoji face that ignores the colour.
                 match entity.identity {
                     Some(identity) => Cell {
+                        glyph: '☻',
                         fg: dwarf_colour(identity.colour),
-                        ..cell
                     },
                     None => cell,
                 }
@@ -1141,8 +1143,8 @@ mod tests {
         );
     }
 
-    /// 12.2 (Wolf at the seat): a named dwarf's glyph wears his tunic colour, carrying or not, so
-    /// the map tells the five apart. Job state no longer shows on a named dwarf's glyph.
+    /// 12.2 (Wolf at the seat): a named dwarf is `☻` in his tunic colour, carrying or not, so the
+    /// map tells the five apart. Job and carry state no longer show on a named dwarf's glyph.
     #[test]
     fn a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour() {
         let dims = Dims { x: 5, y: 3, z: 3 };
@@ -1180,7 +1182,7 @@ mod tests {
         assert_eq!(
             framebuffer.cell(1, 1),
             Cell {
-                glyph: '☺',
+                glyph: '☻',
                 fg: dwarf_colour(protocol::DwarfColour::Blue),
             }
         );

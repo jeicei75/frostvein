@@ -100,7 +100,7 @@ pub fn entity_cell(kind: EntityKind, state: JobState) -> Cell {
 }
 
 /// The dwarf's tunic colour, from the approved 12.2 look draft. Used for the roster row and, on
-/// Wolf's seat ruling, for a named dwarf's `☺`/`☻` glyph (job state no longer shows on it).
+/// Wolf's seat ruling, for a named dwarf's `☻` glyph (job and carry state no longer show on it).
 pub fn dwarf_colour(colour: DwarfColour) -> Rgb {
     match colour {
         DwarfColour::Red => (0xB2, 0x3A, 0x34),

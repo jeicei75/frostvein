@@ -90,3 +90,11 @@ old = '                match entity.identity {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                match None::<protocol::Identity> {\n'))
 PY
+
+mutation "named tui dwarf drawn as the emoji-capable smiley" tui a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = "                        glyph: '☻',\n                        fg: dwarf_colour(identity.colour),\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, "                        glyph: '☺',\n                        fg: dwarf_colour(identity.colour),\n"))
+PY
