@@ -118,24 +118,24 @@ Control (same recipe minus step 1, fresh daemon): `(45,62,12)` dug by tick 482. 
     (`lib.rs:3813`). Give a holder a path, wall off its every work position with `set_tile`, then call
     `clear_paths` the way `execute_jobs` does after a sim dig (`lib.rs:1065`). Assert the claim is
     `None` after one `step`, the job remains, and its `retry_after = tick + 20`.
-- [ ] **Task 4 — instrument (existing, cited; no new code).** The human-visible instrument is
+- [x] **Task 4 — instrument (existing, cited; no new code).** The human-visible instrument is
   `tui --frame --z 12`. It prints `marks: z 12 designations=N of M` to stderr (`tui/src/main.rs:207`;
   tally pinned by `view.rs:711`, key names by `main.rs:568`). The snapshot's `designations` list
   backs it up. Run the Verification recipe after the fix (GREEN), then with mutation row 1 applied
   (deliberate RED: `2 of 2` again), then restored. Paste all three outputs into the Debug Log.
-- [ ] **Task 5 — mutations.** `_bmad-output/implementation-artifacts/mutations/12-3.sh` (NEW), run
+- [x] **Task 5 — mutations.** `_bmad-output/implementation-artifacts/mutations/12-3.sh` (NEW), run
   alone after commit with `RUST_TEST_THREADS=1 scripts/mutate.sh`:
   1. remove the component skip (always search) → AC1 test fails on the claim bound;
   2. skip without counting as `attempted` → AC2 assertion fails (`retry_after` never re-stamped);
   3. treat the first failed component as covering every dwarf → `an_unreachable_lower_id_does_not_starve_a_reachable_dwarf` fails.
   Re-point any older row whose anchor the fix moves; `scripts/audit-mutations.py` and the pre-commit
   hook report rot.
-- [ ] **Task 6 — record.** Mark `deferred-work.md:424-428` with what was found: the two never-cleared
+- [x] **Task 6 — record.** Mark `deferred-work.md:424-428` with what was found: the two never-cleared
   digs were most likely the ramp-shielded empty-goal class, and that class is now Wolf question 1.
   Update `lib.rs:760`'s `#132` NOTE to the ruling on Wolf question 2. Full gate:
   `RUST_TEST_THREADS=1 scripts/gate.sh`, green before review.
 
-- [ ] **Task 7 — Wolf question 2, PULLED IN (Wolf, 2026-10-01).** The sealed-off stockpile cell
+- [x] **Task 7 — Wolf question 2, PULLED IN (Wolf, 2026-10-01).** The sealed-off stockpile cell
   pick-up/drop loop (`lib.rs:760` NOTE; 12.1 handover `12-1-stones-stay-out-of-the-fire.md:320-322`).
   - [x] Reproduce first (M2-27): a scenario test, red on the unfixed code and recorded as red, where the
     only free zone cell is standable but sealed off from every dwarf, and a stone is reachable.
@@ -275,15 +275,29 @@ recipe aimed wrong. The crown trigger dies when 12.7 stops dig taking tree tiles
 
 ### Agent Model Used
 
+Sonnet 5.5 subagents x2 (Tasks 0-3; Task 7 reproduce, then fix), orchestrated and verified by Opus 5.5, which also did Tasks 4-6, the Task 7 mutation rows and the added haul-starvation test.
+
 ### Debug Log References
 
 - **Task 0 RED** (unfixed `702446e` code; `cargo test -p sim-core --test scenario unreachable_digs_never_starve_a_reachable_one`, 22 s): `the reachable dig was not claimed within 40 ticks of designation`. Probe at tick 141 (designated at 100): the 200 unreachable jobs' distinct `retry_after` values were frozen at `[0, 26..33, 36, 37]` (none re-stamped since the first ticks); the reachable job `JobId(200)` target `(45,62,12)` had `retry_after: 0`, never attempted.
 - **Task 1 GREEN**: same test, 12.6 s: reachable dig claimed at designation +6, dug at +204.
 - **Task 7 RED** (unfixed `19823ac` code; `cargo test -q -p sim-core --test scenario a_sealed_off`): fixture seed 42, stone 10 at `(66,61,25)`, one-cell pile at `stone + (0,6)` walled on all four sides (cells asserted standable first). 7 pick-ups in 400 ticks at 140 (dwarf 1), 271, 299, 327, 355, 383, 411 (dwarf 0), a steady 28-tick period; 7 drops one tick after each, all at the stone's own tile `(66,61,25)`; `retry_after` stamps `{0,161,292,320,348,376,404,432}` (job kept and re-stamped, FR8 holds). Control `an_opened_pile_cell_receives_the_stone` (one wall opened) passes: stone ends on the pile.
 - **Task 7 GREEN**: same test asserts 0 pick-ups and passes; control still passes; `cargo test -q -p sim-core` all green.
+- **Task 4 instrument** (`scripts`-free recipe from Verification, fresh daemon each run, debug build):
+  - GREEN on `4947aac`: `marks: z 12 designations=1 of 1 zones=0 of 0` / `tick 753 designations [[52, 64, 12], [65, 56, 13]]`
+  - Deliberate RED (mutation row 1 applied, simd rebuilt): `marks: z 12 designations=2 of 2 zones=0 of 0` / `tick 474 designations [[45, 62, 12], [52, 64, 12], [65, 56, 13]]`
+  - Restored (`b571790`), rebuilt: `marks: z 12 designations=1 of 1 zones=0 of 0` / `tick 753 designations [[52, 64, 12], [65, 56, 13]]`
+- **Task 5 mutations** (`RUST_TEST_THREADS=1 scripts/mutate.sh .../mutations/12-3.sh`, run alone after commit):
+  - First run on `0582159`: rows 1-4 KILLED, row 5 ("component skip ignores the delivery leg") SURVIVED against the sealed-pile cycle test. The clause only saves floods, so that test could not see it.
+  - Added `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig` (#132's haul form: five idle dwarves each flooding the valley for the sealed pile exhaust the budget, and a reachable dig behind the haul is never attempted), re-pointed row 5 at it (`b571790`). Re-run: **5/5 KILLED**.
+  - Per-assertion check (trap 1), each row applied by hand on committed code: row 1 dies on `the reachable dig was not claimed within 40 ticks of designation` (scenario.rs:801); row 2 dies on the LAST assertion, `job JobId(20) at Pos { x: 42, y: 40, z: 25 } was never retried: retry_after=0` (scenario.rs:826), so no earlier assert absorbs it.
+  - `scripts/audit-mutations.py`: clean.
 
 ### Completion Notes List
 
+- **Tasks 4-6.** No new instrument code: the existing `tui --frame --z 12` `marks:` line showed GREEN, RED under mutation row 1, and GREEN again (Debug Log). `12-3.sh` has five rows, all KILLED. `deferred-work.md`'s never-cleared-digs entry now names the ramp-shielded class (Wolf Q1: leave as FR8) and #132's crown class (fixed here). Task 6's `:760` NOTE item was overtaken by Wolf pulling Q2 in: Task 7 replaced the NOTE with what the fix does.
+- **Added test beyond the skeleton:** `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig`, written because mutation row 5 survived. It pins that the delivery-disjoint clause is load-bearing for the budget, not just tidiness.
+- **AC6 (#132 closes):** closes via the PR's `Closes #132`. The red-then-green record is the Debug Log above. No comment posted on the issue.
 - **Task 7 (Wolf Q2).** `claim_jobs` now, for a `Haul` job, also computes the delivery goals (`work_positions(.., Some(item))`, the `free` set). The component skip fires when a known component holding the dwarf misses the pick-up goals OR the delivery goals; otherwise it searches dwarf to `free` first on the shared budget (completed failure records the component and skips; exhausted breaks as before), discards that path, then runs the existing dwarf to stone search. Valid because `astar_neighbours` is symmetric. `attempted` stays true on every skip/failure, so `retry_after` is still stamped (FR8). Residual, named in the replaced `:778` NOTE: a pile sealed off mid-walk can still cost one pick-up/drop per retry. `release_claim`/#153 untouched. Mutation row subtask left for the later mutation step.
 
 - **Task 3: both release guards were GREEN on first run, no second defect.** AC3 scenario `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on`: holder (Id 2) in `Work` on `T`, `T - z1` set Empty, claim gone within 2 steps, channel job and designation kept, a second reachable dig designated at tick 26 was dug at tick 260. AC4 unit `a_holder_whose_every_work_position_is_walled_off_mid_walk_lets_go_in_one_step`: claim `None` after one `step`, job kept, `retry_after = tick + 20`, designation kept. (An idle dwarf's `JobState` after release is not asserted: `wander` can set `Walk` in the same step.)
@@ -296,6 +310,10 @@ recipe aimed wrong. The crown trigger dies when 12.7 stops dig taking tree tiles
 - `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` (two rows re-pointed at the new `astar_with_budget` return shape)
 - `crates/sim-core/tests/scenario.rs` (AC1/AC2 test, AC3 test, Task 7 sealed-pile test + control)
 - `crates/sim-core/src/lib.rs` also: Task 7 delivery check in `claim_jobs`, `work_positions` NOTE
+- `crates/sim-core/tests/scenario.rs` also: `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig`
+- `_bmad-output/implementation-artifacts/mutations/12-3.sh` (NEW, 5 rows)
+- `_bmad-output/implementation-artifacts/deferred-work.md` (never-cleared-digs entry)
+- `_bmad-output/implementation-artifacts/12-3-no-dwarf-stuck-after-digging.md`, `sprint-status.yaml`
 
 ## Change Log
 

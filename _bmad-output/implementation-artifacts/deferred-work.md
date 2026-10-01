@@ -426,6 +426,12 @@ below as "what one layer found", not as "what is wrong with 3.3".
   the known unreachable-target class (a tile with no standable work position), which 3.2 ruled is
   retried forever rather than dropped, but it was not chased. **Revisit if** a player ever reports
   designations that never clear, or alongside the channel-orphan item above.
+  **Chased in 12.3 (2026-10-01):** most likely the ramp-shielded empty-goal class — hill tiles at
+  the dig's z behind a strip of `Ramp` tiles, whose same-z `Dig` work positions are empty, so the
+  job is retried forever at no cost (`scripts/task6-designate.py` drains 79 -> 50 the same way).
+  Wolf ruled it **leave as FR8** (12.3 question 1). The other never-clear class, digs with
+  non-empty but unreachable work positions (tree crowns), starved the whole job market (#132) and
+  is fixed in 12.3.
 
 - **The glyph client may be near its visual ceiling** — LAYER: Wolf, at 3.3's AC17 sign-off
   (2026-08-07). Verdict on the finished haul loop: "looks ok for 2d tui game atm ... not sure how much
