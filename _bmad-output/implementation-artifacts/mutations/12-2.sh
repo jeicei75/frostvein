@@ -130,3 +130,15 @@ old = '        .any(|entity| entity.id == id && entity.kind == protocol::EntityK
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        .any(|entity| entity.id == id)\n'))
 PY
+
+mutation "same seed draws different identities per world" sim-core same_seed_and_commands_remain_deterministic <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        let mut identity_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_IDENTITY);\n'
+assert s.count(old) == 1
+new = ('        static WORLDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);\n'
+       '        let mut identity_rng = ChaCha8Rng::seed_from_u64(\n'
+       '            seed ^ STREAM_IDENTITY ^ WORLDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed),\n'
+       '        );\n')
+p.write_text(s.replace(old, new))
+PY
