@@ -704,8 +704,13 @@ fn tunic_hex(colour: &str) -> [u8; 3] {
 }
 
 /// The instrument test for `--select`, and AC5 on the rendered model: two captures that select
-/// different dwarves must frame different dwarves, so the centre window changes, and each frame's
-/// torso must read nearer its own dwarf's approved tunic colour than the other's.
+/// different dwarves must frame different dwarves, so the centre window changes, and each dwarf's
+/// tunic window must lie nearer his own approved tunic colour than the OTHER dwarf's window does.
+///
+/// That is a RELATIVE rule, weaker than Task 4's "nearer its own table colour than the other's",
+/// and it is the one Wolf accepted (12.2 review, 2026-10-01): the absolute rule fails on the real
+/// frame, where the red dwarf's window [0.4275, 0.2947, 0.2778] lies 0.2334 from red but 0.2129
+/// from purple and 0.2128 from gold. The relative rule still kills an all-red sabotage (0.020).
 ///
 /// Distance 4 and DoF off, so neither the selection zoom nor blur is in the comparison. One fresh
 /// daemon per capture (the world is the same: a fresh daemon freezes at the same tick and seeds
