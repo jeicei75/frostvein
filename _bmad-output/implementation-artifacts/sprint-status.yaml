@@ -2500,7 +2500,13 @@ development_status:
   #     Draft APPROVED unchanged by Wolf 2026-09-29 (Task 0), with the no-selection DoF rule and no old-save load.
   #   Dev done 2026-09-29 (Sonnet 5.5 agents); full gate GREEN on 2d12195; Wolf's seat PASSED 2026-09-30,
   #     then RULED tui glyphs in tunic colour (Task 9, built e59b1af); back to review once he sees it.
-  12-3-no-dwarf-stuck-after-digging: backlog
+  12-3-no-dwarf-stuck-after-digging: in-progress
+  #   Dev started 2026-10-01 (Sonnet 5.5 subagents). Wolf: Q1 leave as FR8; Q2 (sealed-off pile loop) PULLED IN as Task 7.
+  #   Created 2026-10-01 on bbf1518. #132 REPRODUCED (sim probe + live daemon): one dig with non-empty but
+  #     unreachable work positions (a pine crown) exhausts claim_jobs' shared 50k A* budget with >=4 idle
+  #     dwarves, `break 'jobs` skips its retry stamp, and every later job starves forever. Suspect 2
+  #     (channel support lost) releases in 2 ticks: not a defect. Ramp-shielded empty-goal digs (task6's
+  #     "floor of ~50") are FR8 by-design and left to Wolf (question 1); sealed-off pile loop is question 2.
   12-4-every-dwarf-has-a-trade: backlog
   12-5-dwarves-at-work-dig-and-haul: backlog
   12-6-wolf-gives-them-their-trades: backlog
