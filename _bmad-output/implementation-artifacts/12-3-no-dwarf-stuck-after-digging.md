@@ -89,10 +89,10 @@ Control (same recipe minus step 1, fresh daemon): `(45,62,12)` dug by tick 482. 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — RED first (AC1, AC2).** Add the scenario test to
+- [x] **Task 0 — RED first (AC1, AC2).** Add the scenario test to
   `crates/sim-core/tests/scenario.rs` (skeleton below) and run it on the unfixed code. Paste the
   failing assertion and the frozen `retry_after` values into the Debug Log.
-- [ ] **Task 1 — the fix in `claim_jobs` (AC1, AC2).** An unreachable job must cost a bounded amount
+- [x] **Task 1 — the fix in `claim_jobs` (AC1, AC2).** An unreachable job must cost a bounded amount
   per tick, however many there are, and must still be stamped `retry_after = tick + RETRY_COOLDOWN`
   every time it is attempted. Recommended shape (see Key decisions):
   - A failed search that ran to completion has explored the whole walkable component of its start.
@@ -103,7 +103,7 @@ Control (same recipe minus step 1, fresh daemon): `(45,62,12)` dug by tick 482. 
     spends no budget.
   - Components live only for one `claim_jobs` call: no resource, no cross-tick cache (AD-5), no
     `SaveState` change (AD-11).
-- [ ] **Task 2 — amend the budget test (AC5).** `claim_jobs_bounds_aggregate_astar_expansions_per_tick`
+- [x] **Task 2 — amend the budget test (AC5).** `claim_jobs_bounds_aggregate_astar_expansions_per_tick`
   asserts that jobs 5..9 are never attempted. That is the starvation shape this story removes, so it
   goes red under the fix. Re-fixture it so it still proves that one tick's claim-time A* expansions
   stay ≤ `MAX_ASTAR_NODES`, e.g. with reachable-but-long searches, or dwarves in separate large
@@ -277,9 +277,18 @@ recipe aimed wrong. The crown trigger dies when 12.7 stops dig taking tree tiles
 
 ### Debug Log References
 
+- **Task 0 RED** (unfixed `702446e` code; `cargo test -p sim-core --test scenario unreachable_digs_never_starve_a_reachable_one`, 22 s): `the reachable dig was not claimed within 40 ticks of designation`. Probe at tick 141 (designated at 100): the 200 unreachable jobs' distinct `retry_after` values were frozen at `[0, 26..33, 36, 37]` (none re-stamped since the first ticks); the reachable job `JobId(200)` target `(45,62,12)` had `retry_after: 0`, never attempted.
+- **Task 1 GREEN**: same test, 12.6 s: reachable dig claimed at designation +6, dug at +204.
+
 ### Completion Notes List
 
+- **Task 1.** `astar_with_budget` now returns `(Option<path>, exhausted, explored)`; `explored` is the start's whole walkable component on a COMPLETED failure, empty otherwise. `claim_jobs` keeps a per-call `Vec<BTreeSet<Pos>>` of those components and, before searching from a dwarf, skips (still `attempted`, no budget) when the dwarf's position is in a known component that the job's goals miss. No resource, no cross-tick state, no `SaveState` change. `// NOTE:` records the assumption that a component fits in `MAX_ASTAR_NODES`.
+- **Task 2 amendment.** `claim_jobs_bounds_aggregate_astar_expansions_per_tick` asserted jobs 5..9 were never attempted (the starvation shape); under the fix those jobs are stamped for free, so it went red as predicted. Re-fixtured: each of the five dwarves stands on its own 11,000-cell plate (separate components), so five floods cost 55,000 > `MAX_ASTAR_NODES`. Run one: four floods fit, the fifth hits the budget, so no job is stamped. Control run (fifth plate shrunk): all ten jobs stamped, proving the system ran. Checked that raising `MAX_ASTAR_NODES` to 500,000 turns it red.
+
 ### File List
+
+- `crates/sim-core/src/lib.rs` (`claim_jobs`, `astar_with_budget`, Task 2 test)
+- `crates/sim-core/tests/scenario.rs` (AC1/AC2 test)
 
 ## Change Log
 

@@ -712,6 +712,127 @@ fn unreachable_job_stays_queued_and_retries_after_twenty_ticks() {
     assert!(world.items().is_empty());
 }
 
+/// #132: an unreachable dig whose work positions are standable made every idle dwarf's A* flood the
+/// whole walkable component, so a handful of them ate the tick's shared budget, skipped the
+/// `retry_after` stamp, and starved every job queued behind them.
+#[test]
+fn unreachable_digs_never_starve_a_reachable_one() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    // A sky plate far above the terrain: stone at z24, and at z25 alternating rows of standable
+    // floor and stone targets. Each target's work positions are the floor cells beside it, which
+    // are standable but unreachable from the valley.
+    let (x0, y0) = (40, 40);
+    let mut targets = Vec::new();
+    for y in y0..y0 + 20 {
+        for x in x0..x0 + 20 {
+            let under = Pos { x, y, z: 24 };
+            let top = Pos { x, y, z: 25 };
+            assert_eq!(world.tile(under), Some(Tile::Empty));
+            assert_eq!(world.tile(top), Some(Tile::Empty));
+            assert!(world.set_tile(under, Tile::Solid(Material::Stone)));
+            if (y - y0) % 2 == 0 {
+                assert!(world.set_tile(top, Tile::Solid(Material::Stone)));
+                targets.push(top);
+            }
+        }
+    }
+    assert_eq!(targets.len(), 200);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(
+            Pos {
+                x: x0,
+                y: y0,
+                z: 25,
+            },
+            Pos {
+                x: x0 + 19,
+                y: y0 + 19,
+                z: 25,
+            },
+        ),
+    });
+    for _ in 0..100 {
+        world.step();
+    }
+    assert_eq!(world.jobs().len(), 200);
+    assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+
+    let reachable = Pos {
+        x: 45,
+        y: 62,
+        z: 12,
+    };
+    assert_eq!(world.tile(reachable), Some(Tile::Solid(Material::Stone)));
+    assert!(
+        [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            .into_iter()
+            .any(|(dx, dy)| is_standable(
+                &world,
+                Pos {
+                    x: reachable.x + dx,
+                    y: reachable.y + dy,
+                    ..reachable
+                }
+            )),
+        "the reachable dig needs a standable neighbour"
+    );
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(reachable, reachable),
+    });
+    let designated_at = world.tick();
+
+    let mut claimed_at = None;
+    let mut dug_at = None;
+    for _ in 0..600 {
+        world.step();
+        if claimed_at.is_none() {
+            let job = world.jobs().into_iter().find(|job| job.target == reachable);
+            if job.is_some_and(|job| world.claims().iter().any(|(_, held)| *held == Some(job.id))) {
+                claimed_at = Some(world.tick());
+            }
+        }
+        if world.tile(reachable) == Some(Tile::Empty) {
+            dug_at = Some(world.tick());
+            break;
+        }
+        if claimed_at.is_none() {
+            assert!(
+                world.tick() <= designated_at + 40,
+                "the reachable dig was not claimed within 40 ticks of designation"
+            );
+        }
+    }
+    let claimed_at = claimed_at.expect("the reachable dig was never claimed");
+    assert!(claimed_at <= designated_at + 40);
+    let dug_at = dug_at.expect("the reachable dig was not dug within 600 ticks");
+    println!(
+        "claimed +{} dug +{}",
+        claimed_at - designated_at,
+        dug_at - designated_at
+    );
+
+    // LAST, so no earlier assertion absorbs a mutation of the stamp: FR8, every unreachable dig is
+    // still designated and queued, and was retried after the reachable dig was designated.
+    let designations = world.designations();
+    let jobs = world.jobs();
+    for target in targets {
+        assert!(designations.contains(&(target, DesignationKind::Dig)));
+        let job = jobs
+            .iter()
+            .find(|job| job.target == target)
+            .expect("an unreachable dig stays queued");
+        assert!(
+            job.retry_after > designated_at,
+            "job {:?} at {:?} was never retried: retry_after={}",
+            job.id,
+            target,
+            job.retry_after
+        );
+    }
+}
+
 #[test]
 fn cancelling_a_claimed_dig_releases_the_dwarf_without_touching_the_tile() {
     let mut world = World::generate(42, Dims::DEFAULT);

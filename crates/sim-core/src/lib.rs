@@ -447,6 +447,11 @@ fn claim_jobs(
         .map(|(id, pos)| (id.0, *pos))
         .collect();
     let mut astar_nodes_remaining = MAX_ASTAR_NODES;
+    // Walkable components that a COMPLETED failed search has already flooded this call (#132).
+    // Per call only: terrain can change between ticks, so nothing is cached across them.
+    // NOTE: assumes a component fits in `MAX_ASTAR_NODES`; a larger one never completes, so it is
+    // never recorded and is re-flooded (budget-bounded) every tick.
+    let mut components: Vec<BTreeSet<Pos>> = Vec::new();
 
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
     'jobs: for job in jobs_in_order {
@@ -473,6 +478,13 @@ fn claim_jobs(
                         .saturating_add(reaction_delay(seed.0, **id, job.id))
             {
                 attempted = true;
+                // A component belongs to its start: it proves nothing for a dwarf outside it.
+                if components
+                    .iter()
+                    .any(|component| component.contains(*pos) && goals.is_disjoint(component))
+                {
+                    continue;
+                }
                 let path = match astar_with_budget(
                     &terrain,
                     &blocked,
@@ -480,10 +492,15 @@ fn claim_jobs(
                     &goals,
                     &mut astar_nodes_remaining,
                 ) {
-                    (Some(path), false) => path,
-                    (None, false) => continue,
-                    (None, true) => break 'jobs,
-                    (Some(_), true) => {
+                    (Some(path), false, _) => path,
+                    (None, false, explored) => {
+                        if !explored.is_empty() {
+                            components.push(explored);
+                        }
+                        continue;
+                    }
+                    (None, true, _) => break 'jobs,
+                    (Some(_), true, _) => {
                         unreachable!("a completed search cannot exhaust its budget")
                     }
                 };
@@ -662,9 +679,9 @@ fn astar_with_budget(
     from: Pos,
     goals: &BTreeSet<Pos>,
     nodes_remaining: &mut usize,
-) -> (Option<Vec<Pos>>, bool) {
+) -> (Option<Vec<Pos>>, bool, BTreeSet<Pos>) {
     if goals.is_empty() {
-        return (None, false);
+        return (None, false, BTreeSet::new());
     }
     let mut open = BinaryHeap::from([Reverse((astar_heuristic(from, goals), from))]);
     let mut came_from = BTreeMap::new();
@@ -676,7 +693,7 @@ fn astar_with_budget(
             continue;
         }
         if *nodes_remaining == 0 {
-            return (None, true);
+            return (None, true, BTreeSet::new());
         }
         *nodes_remaining -= 1;
         if goals.contains(&current) {
@@ -687,7 +704,7 @@ fn astar_with_budget(
                 cursor = came_from[&cursor];
             }
             path.reverse();
-            return (Some(path), false);
+            return (Some(path), false, BTreeSet::new());
         }
 
         for neighbour in astar_neighbours(terrain, blocked, current) {
@@ -702,7 +719,8 @@ fn astar_with_budget(
             }
         }
     }
-    (None, false)
+    // A completed failure has flooded `from`'s whole walkable component: hand it back.
+    (None, false, costs.into_keys().collect())
 }
 
 fn astar(
@@ -3152,41 +3170,47 @@ mod tests {
         assert!(world.jobs().is_empty());
     }
 
+    // 12.3 amendment: the old fixture (one shared floor, five dwarves) now has each failed flood
+    // reused as a known component, so jobs 5..9 are stamped for free and the "jobs 5..9 never
+    // attempted" shape this test used to pin is gone. Each dwarf now stands on its own 11,000-cell
+    // plate (a separate component), so five floods would cost 55,000 > MAX_ASTAR_NODES.
     #[test]
     fn claim_jobs_bounds_aggregate_astar_expansions_per_tick() {
         let mut world = World::generate(42, Dims::DEFAULT);
         let dims = world.dims();
         let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
-        for y in 0..40 {
-            for x in 0..50 {
-                tiles[super::worldgen::index(dims, x, y, 1)] = Tile::Empty;
+        // Plate k is the floor at z = 1 + 2k, stone above and below, so no plate touches another.
+        for plate in 0..5_u32 {
+            for y in 0..100 {
+                for x in 0..110 {
+                    tiles[super::worldgen::index(dims, x, y, 1 + 2 * plate)] = Tile::Empty;
+                }
             }
         }
         for job in 0..10_u32 {
-            let target = Pos {
-                x: 2 + 2 * job as i32,
+            let work = Pos {
+                x: 3 + 2 * job as i32,
                 y: 2,
-                z: 10,
+                z: 20,
             };
-            tiles[super::worldgen::index(
-                dims,
-                (target.x + 1) as u32,
-                target.y as u32,
-                target.z as u32,
-            )] = Tile::Empty;
+            tiles[super::worldgen::index(dims, work.x as u32, work.y as u32, work.z as u32)] =
+                Tile::Empty;
         }
         world.ecs.resource_mut::<Terrain>().tiles = tiles;
 
-        let dwarves: Vec<_> = world
+        let mut dwarves: Vec<_> = world
             .ecs
             .iter_entities()
+            .filter(|entity| entity.contains::<super::Dwarf>())
             .filter_map(|entity| Some((*entity.get::<super::Id>()?, entity.id())))
             .collect();
-        for (id, entity) in dwarves {
+        dwarves.sort();
+        assert_eq!(dwarves.len(), 5);
+        for (plate, (_, entity)) in dwarves.into_iter().enumerate() {
             *world.ecs.get_mut::<Pos>(entity).unwrap() = Pos {
-                x: id.0 as i32,
+                x: 0,
                 y: 0,
-                z: 1,
+                z: 1 + 2 * plate as i32,
             };
         }
         for job in 0..10_u32 {
@@ -3196,7 +3220,7 @@ mod tests {
                 target: Pos {
                     x: 2 + 2 * job as i32,
                     y: 2,
-                    z: 10,
+                    z: 20,
                 },
                 created_tick: 0,
                 retry_after: 0,
@@ -3206,20 +3230,25 @@ mod tests {
         let mut schedule = bevy_ecs::schedule::Schedule::default();
         schedule.add_systems(super::claim_jobs);
 
+        // Four floods (44,000) fit; the fifth hits the budget, so job 0 is cut short and unstamped,
+        // and nothing behind it is attempted.
         schedule.run(&mut world.ecs);
-
-        let retried: Vec<_> = world
-            .jobs()
-            .into_iter()
-            .filter(|job| job.retry_after == 120)
-            .map(|job| job.id)
-            .collect();
-        assert_eq!(
-            retried,
-            vec![JobId(0), JobId(1), JobId(2), JobId(3), JobId(4)],
+        assert!(
+            world.jobs().iter().all(|job| job.retry_after == 0),
             "one tick may expand at most MAX_ASTAR_NODES across all failed claim searches"
         );
-        assert!(world.jobs()[5..].iter().all(|job| job.retry_after == 0));
+
+        // Control, so the assertion above is not an inert system: shrink the fifth plate and all
+        // five floods (about 44,000 + 2) fit, so every job is stamped.
+        for y in 1..100 {
+            for x in 0..110 {
+                world.ecs.resource_mut::<Terrain>().tiles[super::worldgen::index(dims, x, y, 9)] =
+                    Tile::Solid(Material::Stone);
+            }
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 200;
+        schedule.run(&mut world.ecs);
+        assert!(world.jobs().iter().all(|job| job.retry_after == 220));
     }
 
     #[test]

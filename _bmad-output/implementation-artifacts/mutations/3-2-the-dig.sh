@@ -369,7 +369,7 @@ mutation "A-star ignores the node cap" sim-core astar_stops_at_the_node_cap <<'P
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''        if *nodes_remaining == 0 {
-            return (None, true);
+            return (None, true, BTreeSet::new());
         }
         *nodes_remaining -= 1;
 '''
@@ -783,10 +783,15 @@ old = '''                let path = match astar_with_budget(
                     &goals,
                     &mut astar_nodes_remaining,
                 ) {
-                    (Some(path), false) => path,
-                    (None, false) => continue,
-                    (None, true) => break 'jobs,
-                    (Some(_), true) => {
+                    (Some(path), false, _) => path,
+                    (None, false, explored) => {
+                        if !explored.is_empty() {
+                            components.push(explored);
+                        }
+                        continue;
+                    }
+                    (None, true, _) => break 'jobs,
+                    (Some(_), true, _) => {
                         unreachable!("a completed search cannot exhaust its budget")
                     }
                 };
